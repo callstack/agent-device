@@ -4,6 +4,7 @@ import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import * as diagnostics from '@agent-device/host-kit/diagnostics';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import './test-utils/android-host-test-setup.ts';
 
@@ -279,7 +280,10 @@ test.each([
                 assert.ok(error instanceof AppError);
                 assert.equal(error.code, 'COMMAND_FAILED');
                 assert.deepEqual(error.details, {
-                  reason: 'android-app-close-timeout',
+                  reason:
+                    phase === 'process'
+                      ? 'android-app-close-unconfirmed'
+                      : 'android-app-close-timeout',
                   phase,
                   packageName: 'com.example.app',
                   timeoutMs: 2_000,
@@ -494,3 +498,176 @@ test('closeAndroidApp reports an unanswered pidof after force-stop instead of an
   );
   assert.equal(pidofCalls, 2);
 });
+
+test('closeAndroidApp cannot confirm closure from two unknown final process probes', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  let pidofCalls = 0;
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          if (args[1] === 'dumpsys') {
+            return {
+              stdout: 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n',
+              stderr: '',
+              exitCode: 0,
+            };
+          }
+          if (args[1] !== 'pidof') return { stdout: '', stderr: '', exitCode: 0 };
+          pidofCalls += 1;
+          return pidofCalls === 1
+            ? { stdout: '', stderr: '', exitCode: 1 }
+            : { stdout: '', stderr: 'error: device offline', exitCode: 1 };
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        const rejection = assert.rejects(
+          closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+          (error: unknown) =>
+            error instanceof AppError &&
+            error.details?.reason === 'android-app-close-unconfirmed' &&
+            error.details?.phase === 'process',
+        );
+        await Promise.all([rejection, vi.runAllTimersAsync()]);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.each([
+  ['unknown', ['gone', 'unknown', 'gone', 'gone'], 350],
+  ['a reappearing process', ['gone', 'running', 'gone', 'gone'], 350],
+  ['an initial unknown', ['unknown', 'gone', 'gone'], 200],
+] as const)('closeAndroidApp needs a new gone pair after %s', async (_, states, closedAt) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  let pidofCalls = 0;
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          if (args[1] === 'dumpsys') {
+            return {
+              stdout: 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n',
+              stderr: '',
+              exitCode: 0,
+            };
+          }
+          if (args[1] !== 'pidof') return { stdout: '', stderr: '', exitCode: 0 };
+          const state = pidofCalls++ === 0 ? 'gone' : states[pidofCalls - 2];
+          assert.ok(state, 'no probe is dispatched after the explicit gone pair');
+          return {
+            stdout: state === 'running' ? '12345\n' : '',
+            stderr: state === 'unknown' ? 'error: device offline' : '',
+            exitCode: state === 'running' ? 0 : 1,
+          };
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        await Promise.all([
+          closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+          vi.runAllTimersAsync(),
+        ]);
+      },
+    );
+    assert.equal(pidofCalls, states.length + 1);
+    assert.equal(Date.now(), closedAt);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.each([0, 900])(
+  'openAndroidApp bounds a hanging final probe after %ims and refuses to launch without closure proof',
+  async (firstProbeMs) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const recorded = vi.spyOn(diagnostics, 'emitDiagnostic');
+    const budgets: Array<number | undefined> = [];
+    let pidofCalls = 0;
+    let launches = 0;
+    try {
+      await withAndroidAdbProvider(
+        {
+          exec: async (args, options) => {
+            if (args[1] === 'dumpsys') {
+              return {
+                stdout: 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n',
+                stderr: '',
+                exitCode: 0,
+              };
+            }
+            if (args[1] === 'am' && args[2] === 'start') launches += 1;
+            if (args[1] !== 'pidof') return { stdout: '', stderr: '', exitCode: 0 };
+            if (++pidofCalls === 1) return { stdout: '', stderr: '', exitCode: 1 };
+            budgets.push(options?.timeoutMs);
+            if (firstProbeMs > 0 && pidofCalls === 2) {
+              await new Promise((resolve) => setTimeout(resolve, firstProbeMs));
+              return { stdout: '', stderr: '', exitCode: 1 };
+            }
+            // The existing executor owns terminating the command when its supplied budget ends.
+            await new Promise((_, reject) => {
+              setTimeout(
+                () =>
+                  reject(
+                    new AppError('COMMAND_FAILED', 'probe timed out', {
+                      timeoutMs: options?.timeoutMs ?? 10_000,
+                    }),
+                  ),
+                options?.timeoutMs ?? 10_000,
+              );
+            });
+            throw new Error('a timed-out probe cannot return a result');
+          },
+        },
+        { serial: ANDROID_EMULATOR.id },
+        async () => {
+          const rejection = assert.rejects(
+            openAndroidApp(ANDROID_EMULATOR, 'com.example.app', { terminateRunningApp: true }),
+            (error: unknown) =>
+              error instanceof AppError &&
+              error.details?.reason === 'android-app-close-unconfirmed',
+          );
+          await Promise.all([rejection, vi.runAllTimersAsync()]);
+        },
+      );
+      assert.deepEqual(budgets, firstProbeMs > 0 ? [2_000, 950] : [2_000]);
+      assert.equal(Date.now(), 2_000);
+      assert.equal(launches, 0);
+      assert.deepEqual(
+        recorded.mock.calls
+          .map(([event]) => event)
+          .filter((event) => event.phase === 'android.close.process-probe'),
+        [
+          ...(firstProbeMs > 0
+            ? [
+                {
+                  phase: 'android.close.process-probe',
+                  durationMs: 900,
+                  data: { ordinal: 1, state: 'gone', elapsedMs: 900, remainingMs: 1_100 },
+                },
+              ]
+            : []),
+          {
+            phase: 'android.close.process-probe',
+            durationMs: firstProbeMs > 0 ? 950 : 2_000,
+            data: {
+              ordinal: firstProbeMs > 0 ? 2 : 1,
+              state: 'unknown',
+              elapsedMs: 2_000,
+              remainingMs: 0,
+            },
+          },
+        ],
+      );
+    } finally {
+      recorded.mockRestore();
+      vi.useRealTimers();
+    }
+  },
+);
