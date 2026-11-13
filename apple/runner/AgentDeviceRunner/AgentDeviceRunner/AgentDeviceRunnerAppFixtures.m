@@ -104,6 +104,36 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 }
 @end
 
+// `--two-stacks` shows two pushed navigation stacks, one above the other, so two hittable system
+// back buttons are on screen at once and neither is the one `back` should press.
+@interface AgentDeviceTwoStacksBackFixture : UIViewController
+@end
+
+@implementation AgentDeviceTwoStacksBackFixture
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.view.backgroundColor = UIColor.systemBackgroundColor;
+  UIStackView *stack = [UIStackView new];
+  stack.axis = UILayoutConstraintAxisVertical;
+  stack.distribution = UIStackViewDistributionFillEqually;
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:stack];
+  [NSLayoutConstraint activateConstraints:@[
+    [stack.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+    [stack.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+    [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+  ]];
+  for (NSInteger index = 0; index < 2; index++) {
+    AgentDeviceBackNavigationFixture *child = [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:NO
+                                                                                                  blockedBack:NO];
+    [self addChildViewController:child];
+    [stack addArrangedSubview:child.view];
+    [child didMoveToParentViewController:self];
+  }
+}
+@end
+
 @interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
@@ -438,10 +468,11 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
     self.alertFixtureStarted = YES;
     BOOL customBackItem = [NSProcessInfo.processInfo.arguments containsObject:@"--custom-back-item"];
     BOOL blockedBack = [NSProcessInfo.processInfo.arguments containsObject:@"--blocked-back"];
-    [self presentViewController:[[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem
-                                                                                    blockedBack:blockedBack]
-                       animated:NO
-                     completion:nil];
+    UIViewController *fixture = [NSProcessInfo.processInfo.arguments containsObject:@"--two-stacks"]
+        ? [AgentDeviceTwoStacksBackFixture new]
+        : [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem blockedBack:blockedBack];
+    fixture.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentViewController:fixture animated:NO completion:nil];
   }
   if (!self.alertFixtureStarted &&
       ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||

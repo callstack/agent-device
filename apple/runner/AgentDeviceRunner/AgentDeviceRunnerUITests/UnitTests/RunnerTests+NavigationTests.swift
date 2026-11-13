@@ -91,22 +91,94 @@ extension RunnerTests {
 
   /// An XCTest issue while the back button is looked up, such as a button gone mid-transition, means
   /// no button: back answers from the swipe path. An issue that escaped the read would fail this
-  /// test as it fails the command with a recorded failure.
+  /// test as it fails the command with a recorded failure. The swipe's own outcome is not asserted:
+  /// iOS 27 pops this fixture on the edge swipe even with its interactive pop turned off.
   @MainActor
   func testInAppBackWithAnIssueInTheButtonLookupAnswersFromTheSwipe() throws {
     _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    navigationBarBackReadIssueForTesting = .lookup
+    navigationBarBackReadIssueForTesting = (.lookup, Self.vanishedBackButtonIssue)
     defer { navigationBarBackReadIssueForTesting = nil }
 
     let response = try execute(command: try runnerCommandFixture(
       #"{"command":"backInApp","commandId":"back-lookup-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
     ))
 
-    XCTAssertTrue(response.ok, "the swipe answered: \(String(describing: response.error))")
+    XCTAssertNotEqual(response.error?.code, "XCTEST_RECORDED_FAILURE")
     let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
     XCTAssertEqual(trace.found, "unreadable")
     XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+  }
+
+  /// A hung query before the tap stays visible to XCTest, as `record(_:)` requires, and back sends
+  /// nothing: neither the button tap nor the swipe follows a hung query.
+  @MainActor
+  func testInAppBackWithAHungQueryInTheButtonLookupSendsNothing() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    defer { navigationBarBackReadIssueForTesting = nil }
+
+    let outcome = try expectingHungQueryRecorded {
+      navigationBarBackReadIssueForTesting = (.lookup, Self.hungQueryIssue)
+      return try performInAppBack(app: app)
+    }
+
+    guard case .refused(let payload) = outcome else { return XCTFail("a hung lookup must send nothing") }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNotDispatched)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "hung")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+    navigationBarBackReadIssueForTesting = nil
+    XCTAssertTrue(app.navigationBars["Detail"].exists, "nothing popped the detail screen")
+  }
+
+  /// A hung query after a delivered tap stays visible to XCTest, and back answers unverified at once
+  /// instead of querying the hung tree again.
+  @MainActor
+  func testInAppBackWithAHungQueryInTheConfirmationAnswersUnverified() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    defer { navigationBarBackReadIssueForTesting = nil }
+
+    let outcome = try expectingHungQueryRecorded {
+      navigationBarBackReadIssueForTesting = (.confirmation, Self.hungQueryIssue)
+      return try performInAppBack(app: app)
+    }
+
+    guard case .unconfirmed(let payload) = outcome else { return XCTFail("a hung confirmation must not read as performed") }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "hung")
+  }
+
+  /// Two hittable system back buttons, one per stack, are ambiguous: back presses neither and
+  /// answers from the swipe path.
+  @MainActor
+  func testInAppBackPressesNoneOfTwoNavigationBarBackButtons() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--two-stacks"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 2)
+
+    _ = try performInAppBack(app: app)
+
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "ambiguous")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+  }
+
+  /// A penalized XCTest snapshot channel is not read: back skips the button lookup and swipes.
+  @MainActor
+  func testInAppBackSkipsTheButtonLookupOnAPenalizedChannel() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    penalizeSnapshotXCTestChannel(bundleId: mainOwned.bundleId, reason: "navigation-test")
+    defer { clearSnapshotXCTestChannelPenalty(reason: "navigation-test") }
+
+    _ = try performInAppBack(app: app)
+
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "skipped")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+    XCTAssertEqual(trace.lookupMs, 0)
   }
 
   /// An XCTest issue in every read after a delivered tap proves nothing: back answers unverified and
@@ -115,7 +187,7 @@ extension RunnerTests {
   func testInAppBackWithAnIssueInTheConfirmationAnswersUnverified() throws {
     let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    navigationBarBackReadIssueForTesting = .confirmation
+    navigationBarBackReadIssueForTesting = (.confirmation, Self.vanishedBackButtonIssue)
     defer { navigationBarBackReadIssueForTesting = nil }
 
     let response = try execute(command: try runnerCommandFixture(
@@ -351,6 +423,27 @@ extension RunnerTests {
     XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
     return status
   }
+  static let vanishedBackButtonIssue = "Back button vanished during the navigation bar read"
+  static let hungQueryIssue = "Timed out while evaluating UI query."
+
+  /// Runs `body` and requires the hung query it records to reach XCTest exactly once.
+  @MainActor
+  private func expectingHungQueryRecorded<T>(_ body: () throws -> T) throws -> T {
+    let options = XCTExpectedFailure.Options()
+    var observed = 0
+    options.issueMatcher = { issue in
+      guard issue.compactDescription == Self.hungQueryIssue else { return false }
+      observed += 1
+      return true
+    }
+    var result: Result<T, Error>?
+    XCTExpectFailure("The hung query is the condition under test", options: options) {
+      result = Result { try body() }
+    }
+    XCTAssertEqual(observed, 1, "a hung query reaches XCTest once, and no query follows it")
+    return try XCTUnwrap(result).get()
+  }
+
   @MainActor
   private func launchBackNavigationFixture(_ arguments: [String]) throws -> XCUIElement {
     app.launchArguments = arguments

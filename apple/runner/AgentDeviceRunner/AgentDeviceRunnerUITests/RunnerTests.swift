@@ -219,9 +219,9 @@ final class RunnerTests: XCTestCase {
   var litPanelWindowWalkIssueForTesting = false
 
 #if os(iOS)
-  /// Records an XCTest issue during every navigation bar read of this phase of iOS `back`, as a back
-  /// button that vanishes mid-transition does.
-  var navigationBarBackReadIssueForTesting: NavigationBarBackReadPhase?
+  /// Records an XCTest issue with this description during every navigation bar read of this phase
+  /// of iOS `back`, as a back button that vanishes mid-transition, or a hung query, does.
+  var navigationBarBackReadIssueForTesting: (phase: NavigationBarBackReadPhase, description: String)?
 
   /// What the last iOS `back` saw of the navigation bar back button, so a test can tell the button
   /// path from the swipe when both navigate.
@@ -324,6 +324,14 @@ final class RunnerTests: XCTestCase {
     "Failed to get matching snapshot",
     "Failed to resolve query"
   ]
+
+  /// XCTest's wording for a query that hung. It must keep reaching `record(_:)`: a read that holds
+  /// its issues records this one again.
+  static let hungQueryIssueWording = "Timed out while evaluating UI query"
+
+  static func isHungQueryIssueDescription(_ description: String) -> Bool {
+    description.contains(hungQueryIssueWording)
+  }
 
   /// True for the one recorded-issue class the runner deliberately mutes: an AX-server error
   /// (`kAXError*`, deliberately covering kAXErrorIllegalArgument and its sibling codes) inside one

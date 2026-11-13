@@ -107,32 +107,41 @@ extension RunnerTests {
     _ = pressTvRemote(.menu)
     return .performed
 #elseif os(iOS)
-    // One line on every exit, a refusal before the swipe and a thrown error included.
+    // The swipe logs one line on every exit, a refusal before it and a thrown error included. The
+    // button path logs its own line on every exit, a thrown tap included.
     var trace = BackSwipeTrace()
+    func logSwipe(_ line: String) { NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", line) }
+    let resolved: SynthesizedCoordinateContext?
     do {
-      guard let context = try synthesizedCoordinateContext(app: app) else {
-        let outcome = InAppBackOutcome.refused(Self.backScreenRefusal(.unresolvedWindow))
-        NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", trace.logLine(outcome: outcome))
-        return outcome
-      }
-      if let pressed = try pressNavigationBarBackButton(app: app, context: context) {
-        return pressed
-      }
+      resolved = try synthesizedCoordinateContext(app: app)
+    } catch {
+      logSwipe(trace.logLine(name: "error", code: String(describing: type(of: error))))
+      throw error
+    }
+    guard let context = resolved else {
+      let outcome = InAppBackOutcome.refused(Self.backScreenRefusal(.unresolvedWindow))
+      logSwipe(trace.logLine(outcome: outcome))
+      return outcome
+    }
+    if let pressed = try pressNavigationBarBackButton(app: app, context: context) {
+      return pressed
+    }
+    do {
       let outcome = try verifiedBackSwipe(app: app, context: context, trace: &trace)
-      NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", trace.logLine(outcome: outcome))
+      logSwipe(trace.logLine(outcome: outcome))
       return outcome
     } catch {
-      NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", trace.logLine(name: "error", code: String(describing: type(of: error))))
+      logSwipe(trace.logLine(name: "error", code: String(describing: type(of: error))))
       throw error
     }
 #else
-    // visionOS has no edge swipe that pops a navigation stack. The daemon refuses it at the back
-    // capability fact, so this answers only a direct runner request, with nothing sent.
+    // visionOS has no back command. The daemon refuses it at the back capability fact, so this
+    // answers only a direct runner request, with nothing sent.
     return .refused(
       ErrorPayload(
         code: RunnerWireErrorCode.backSwipeNotDispatched,
-        message: "visionOS has no back gesture",
-        hint: "iOS back is a left-edge swipe; visionOS has none. Press the visible back control by its ref."
+        message: "visionOS has no back command",
+        hint: "Press the visible back control by its ref."
       )
     )
 #endif
@@ -177,8 +186,9 @@ extension RunnerTests {
   /// Presses the navigation bar's system back button when exactly one hittable one is on screen,
   /// and confirms that the bar changed. It is read only where the tree answers queries: on a tree
   /// XCTest cannot serialize, the query would grind through XCTest's retries, so back swipes there.
-  /// Two candidates, such as a sheet over a stack, are ambiguous and fall back to the swipe too. Nil
-  /// when nothing was sent, so the swipe is still safe; a delivered tap is never followed by a swipe.
+  /// Two candidates, such as a sheet over a stack, are ambiguous and fall back to the swipe too, as
+  /// does a bar still moving after the read budget. Nil when nothing was sent, so the swipe is still
+  /// safe; a delivered tap is never followed by a swipe. A hung XCTest query answers without either.
   @MainActor
   private func pressNavigationBarBackButton(
     app: XCUIApplication,
@@ -194,45 +204,58 @@ extension RunnerTests {
     }
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
-    let frames = navigationBarBackButtonFrames(app: app)
-    let before = frames?.count == 1 ? readNavigationBarBackState(app: app, phase: .lookup) : nil
+    let lookup = stillNavigationBarBackButton(app: app, deadlineMs: started + Self.navigationBarBackReadBudgetMs)
     trace.lookupMs = currentUptimeMs() - started
-    guard let frames, frames.count == 1 else {
-      trace.found = frames == nil ? "unreadable" : frames!.isEmpty ? "no" : "ambiguous"
+    let before: NavigationBarBackState
+    let frame: CGRect
+    switch lookup {
+    case .still(let state, let button):
+      before = state
+      frame = button
+    case .notFound(let found):
+      trace.found = found
       return nil
-    }
-    guard let before else {
-      trace.found = "unreadable"
-      return nil
+    case .hung:
+      trace.found = "hung"
+      return .refused(Self.navigationBarBackHungLookup)
     }
     trace.found = "yes"
-    let frame = frames[0]
     // The synthesized tap returns once the touch is delivered; an XCTest tap would also wait out the
-    // pop animation, which the bar check below reads sooner.
+    // pop animation, which the bar check below reads sooner. On iOS a readable tree's XCTest tap
+    // either runs or throws, so its fallback needs no outcome check.
     switch try performSynthesizedTapGesture(app: app, x: frame.midX, y: frame.midY, context: context) {
     case .performed:
       break
     case .xctestFallback:
-      let fallback = try performGesture(app) { try tapAt(app: app, x: frame.midX, y: frame.midY, context: context) }
-      // A refused XCTest tap sent nothing either.
-      guard case .performed = fallback.outcome else { return nil }
+      _ = try performGesture(app) { try tapAt(app: app, x: frame.midX, y: frame.midY, context: context) }
     case .refused:
       return nil
     }
     trace.pressed = true
     let tapped = currentUptimeMs()
-    let confirmed = navigationBarBackStateChanged(app: app, from: before)
+    let confirmation = navigationBarBackConfirmation(
+      app: app,
+      from: before,
+      deadlineMs: tapped + Self.navigationBarBackReadBudgetMs
+    )
     trace.confirmMs = currentUptimeMs() - tapped
-    trace.confirmed = confirmed
-    return confirmed ? .performed : .unconfirmed(Self.navigationBarBackUnverified)
+    trace.confirmed = confirmation.logToken
+    switch confirmation {
+    case .changed: return .performed
+    case .unchanged: return .unconfirmed(Self.navigationBarBackUnverified)
+    case .hung: return .unconfirmed(Self.navigationBarBackHungConfirmation)
+    }
   }
 
   /// What the back button path saw, logged as one line on every exit.
   struct NavigationBarBackTrace {
-    /// `skipped` when the tree was not read, `unreadable` when a read failed, `no`, `ambiguous`, or `yes`.
+    /// `skipped` when the tree was not read, `unreadable` when a read failed, `hung` when an XCTest
+    /// query hung, `moving` when the bar did not hold still within the read budget, `no`,
+    /// `ambiguous`, or `yes`.
     var found = "skipped"
     var pressed = false
-    var confirmed: Bool?
+    /// `yes`, `no`, or `hung`; nil until a tap was delivered.
+    var confirmed: String?
     var lookupMs = 0.0
     var confirmMs: Double?
 
@@ -241,24 +264,29 @@ extension RunnerTests {
       return [
         "found=\(found)",
         "pressed=\(pressed ? "yes" : "no")",
-        "confirmed=\(confirmed.map { $0 ? "yes" : "no" } ?? "-")",
+        "confirmed=\(confirmed ?? "-")",
         "lookupMs=\(ms(lookupMs))",
         "confirmMs=\(ms(confirmMs))",
       ].joined(separator: " ")
     }
   }
 
-  /// Each navigation bar's identifier (the top screen's title in UIKit and SwiftUI stacks) with the
-  /// label and frame of its system back buttons. A pop removes, moves, or relabels the pressed button
-  /// or retitles its bar, so a change of this state is the evidence that the tap navigated.
+  /// Each navigation bar's identifier, the labels of its static texts (its title), and the label and
+  /// frame of its system back buttons, in bar order, so the bar count counts too. A pop removes,
+  /// moves, or relabels the pressed button, or retitles its bar, so a change of this state is the
+  /// evidence that the tap navigated. A pop that changes none of these, such as one between two
+  /// screens with the same title in a bar with a fixed identifier and an unlabeled back button,
+  /// answers unverified.
   struct NavigationBarBackState: Equatable {
     let entries: [String]
+    let backButtonFrames: [CGRect]
   }
 
-  /// The pause between two reads of the bar after the tap, and how long they may run before the
-  /// outcome is reported unconfirmed. Only a tap that did not navigate spends the whole budget.
-  static let navigationBarBackConfirmInterval: TimeInterval = 0.05
-  static let navigationBarBackConfirmBudgetMs = 1000.0
+  /// The pause between two reads of the bar, and how long reads may start, both before the tap
+  /// while the bar settles and after it while the pop is confirmed. Only a bar that never holds
+  /// still, or a tap that did not navigate, spends the whole budget.
+  static let navigationBarBackReadInterval: TimeInterval = 0.05
+  static let navigationBarBackReadBudgetMs = 1000.0
 
   static let navigationBarBackUnverified = ErrorPayload(
     code: RunnerWireErrorCode.backSwipeUnverified,
@@ -266,16 +294,96 @@ extension RunnerTests {
     hint: "Take a snapshot to see where the app is."
   )
 
-  /// Whether a later read of the bar differs from `before` within the confirmation budget. A read
-  /// that fails proves nothing, so it never confirms.
+  static let navigationBarBackHungConfirmation = ErrorPayload(
+    code: RunnerWireErrorCode.backSwipeUnverified,
+    message: "back pressed the navigation bar back button, but an XCTest query on the navigation bar hung afterwards. This is an unknown outcome.",
+    hint: "Take a snapshot to see where the app is."
+  )
+
+  static let navigationBarBackHungLookup = ErrorPayload(
+    code: RunnerWireErrorCode.backSwipeNotDispatched,
+    message: "back sent nothing: an XCTest query on the navigation bar hung before the back button or the swipe.",
+    hint: "Take a snapshot to check that the app responds, then retry back."
+  )
+
+  /// What the read before the tap found: a still bar with its one hittable back button, no button
+  /// to press (with the trace's `found` value), or a hung query.
+  enum NavigationBarBackLookup {
+    case still(NavigationBarBackState, button: CGRect)
+    case notFound(String)
+    case hung
+  }
+
+  /// Reads the hittable back buttons, then the bar state until two reads in a row agree and the
+  /// button's frame is in them, so a push still animating is not read as the state a pop changes.
+  /// Each round re-reads the buttons. Reads start only until `deadlineMs`.
   @MainActor
-  private func navigationBarBackStateChanged(app: XCUIApplication, from before: NavigationBarBackState) -> Bool {
-    let started = currentUptimeMs()
-    repeat {
-      if let after = readNavigationBarBackState(app: app, phase: .confirmation), after != before { return true }
-      if currentUptimeMs() - started >= Self.navigationBarBackConfirmBudgetMs { return false }
-      sleepFor(Self.navigationBarBackConfirmInterval)
-    } while true
+  private func stillNavigationBarBackButton(app: XCUIApplication, deadlineMs: Double) -> NavigationBarBackLookup {
+    var previous: NavigationBarBackState?
+    while true {
+      let button: CGRect
+      switch navigationBarBackButtonFrames(app: app, deadlineMs: deadlineMs) {
+      case .hung: return .hung
+      case .unreadable: return .notFound("unreadable")
+      case .read(let frames) where frames.isEmpty: return .notFound("no")
+      case .read(let frames) where frames.count > 1: return .notFound("ambiguous")
+      case .read(let frames): button = frames[0]
+      }
+      if previous == nil {
+        switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
+        case .hung: return .hung
+        case .unreadable: return .notFound("unreadable")
+        case .read(let state): previous = state
+        }
+      }
+      let current: NavigationBarBackState
+      switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
+      case .hung: return .hung
+      case .unreadable: return .notFound("unreadable")
+      case .read(let state): current = state
+      }
+      if current == previous, current.backButtonFrames.contains(button) {
+        return .still(current, button: button)
+      }
+      if currentUptimeMs() >= deadlineMs { return .notFound("moving") }
+      previous = current
+      sleepFor(Self.navigationBarBackReadInterval)
+    }
+  }
+
+  enum NavigationBarBackConfirmation {
+    case changed
+    case unchanged
+    case hung
+
+    var logToken: String {
+      switch self {
+      case .changed: return "yes"
+      case .unchanged: return "no"
+      case .hung: return "hung"
+      }
+    }
+  }
+
+  /// Whether a later read of the bar differs from `before`. Reads start only until `deadlineMs`; a
+  /// read in flight then finishes, or ends at XCTest's own query timeout, which is a hung query. A
+  /// read that fails proves nothing, so it never confirms.
+  @MainActor
+  private func navigationBarBackConfirmation(
+    app: XCUIApplication,
+    from before: NavigationBarBackState,
+    deadlineMs: Double
+  ) -> NavigationBarBackConfirmation {
+    while true {
+      switch readNavigationBarBackState(app: app, phase: .confirmation, deadlineMs: deadlineMs) {
+      case .read(let after) where after != before: return .changed
+      case .hung: return .hung
+      case .read, .unreadable: break
+      }
+      let remainingMs = deadlineMs - currentUptimeMs()
+      if remainingMs <= 0 { return .unchanged }
+      sleepFor(min(Self.navigationBarBackReadInterval, remainingMs / 1000))
+    }
   }
 
   @MainActor
@@ -291,28 +399,40 @@ extension RunnerTests {
     case confirmation
   }
 
-  /// Runs one read of the bar with its XCTest issues held. A button gone mid-transition or a hung
-  /// query records an issue, and an unheld issue would turn the command into a recorded failure.
-  /// Nil when the read recorded an issue or raised an exception.
+  /// One read of the bar: its value, a read that proved nothing, or an XCTest query that hung.
+  enum NavigationBarBackRead<Value> {
+    case read(Value)
+    case unreadable
+    case hung
+  }
+
+  /// Runs one read of the bar with its XCTest issues held. A button gone mid-transition records an
+  /// issue that the read explains: the read proves nothing. A hung query is recorded again, as
+  /// `record(_:)` requires, and no further query is sent into it.
   @MainActor
-  private func heldNavigationBarRead<T>(_ phase: NavigationBarBackReadPhase, _ read: () -> T?) -> T? {
+  private func heldNavigationBarRead<T>(_ phase: NavigationBarBackReadPhase, _ read: () -> T?) -> NavigationBarBackRead<T> {
     var value: T?
     let held = holdingRecordedIssues {
       value = read()
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-      if navigationBarBackReadIssueForTesting == phase {
-        record(XCTIssue(type: .assertionFailure, compactDescription: "Back button vanished during the navigation bar read"))
+      if let injected = navigationBarBackReadIssueForTesting, injected.phase == phase {
+        record(XCTIssue(type: .assertionFailure, compactDescription: injected.description))
       }
 #endif
     }
-    guard held.issues.isEmpty, held.exceptionMessage == nil else { return nil }
-    return value
+    let hung = held.issues.filter { Self.isHungQueryIssueDescription($0.compactDescription) }
+    hung.forEach { record($0) }
+    if !hung.isEmpty { return .hung }
+    guard held.issues.isEmpty, held.exceptionMessage == nil, let value else { return .unreadable }
+    return .read(value)
   }
 
-  /// The frames of the hittable system back buttons; nil when the tree did not answer.
+  /// The frames of the hittable system back buttons; unreadable when the tree did not answer or the
+  /// read budget had run out.
   @MainActor
-  private func navigationBarBackButtonFrames(app: XCUIApplication) -> [CGRect]? {
-    heldNavigationBarRead(.lookup) {
+  private func navigationBarBackButtonFrames(app: XCUIApplication, deadlineMs: Double) -> NavigationBarBackRead<[CGRect]> {
+    guard currentUptimeMs() < deadlineMs else { return .unreadable }
+    return heldNavigationBarRead(.lookup) {
       guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
       let frames = bars
         .flatMap { $0.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex }
@@ -322,34 +442,43 @@ extension RunnerTests {
     }
   }
 
-  /// One XCTest snapshot per bar, so a read after the tap costs a query per bar rather than one per
-  /// attribute. Nil when the tree did not answer.
+  /// One XCTest snapshot per bar, so a read costs a query per bar rather than one per attribute.
+  /// Unreadable when the tree did not answer or the read budget ran out before a bar's snapshot.
   @MainActor
   private func readNavigationBarBackState(
     app: XCUIApplication,
-    phase: NavigationBarBackReadPhase
-  ) -> NavigationBarBackState? {
+    phase: NavigationBarBackReadPhase,
+    deadlineMs: Double
+  ) -> NavigationBarBackRead<NavigationBarBackState> {
     heldNavigationBarRead(phase) {
       guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
       var entries: [String] = []
+      var backButtonFrames: [CGRect] = []
       for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
-        guard let snapshot = try? bar.snapshot() else { return nil }
-        entries.append(Self.navigationBarBackEntry(snapshot))
+        guard currentUptimeMs() < deadlineMs, let snapshot = try? bar.snapshot() else { return nil }
+        let entry = Self.navigationBarBackEntry(snapshot)
+        entries.append(entry.entry)
+        backButtonFrames.append(contentsOf: entry.backButtonFrames)
       }
-      return NavigationBarBackState(entries: entries)
+      return NavigationBarBackState(entries: entries, backButtonFrames: backButtonFrames)
     }
   }
 
-  static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> String {
+  static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> (entry: String, backButtonFrames: [CGRect]) {
+    var texts: [String] = []
     var buttons: [String] = []
+    var frames: [CGRect] = []
     var pending = bar.children
     while let element = pending.popLast() {
       if element.identifier == navigationBarBackButtonIdentifier {
         buttons.append("\(element.label)\u{1F}\(NSCoder.string(for: element.frame))")
+        frames.append(element.frame)
+      } else if element.elementType == .staticText {
+        texts.append(element.label)
       }
       pending.append(contentsOf: element.children)
     }
-    return ([bar.identifier] + buttons).joined(separator: "\u{1E}")
+    return (([bar.identifier] + texts + buttons).joined(separator: "\u{1E}"), frames)
   }
 
   @MainActor
