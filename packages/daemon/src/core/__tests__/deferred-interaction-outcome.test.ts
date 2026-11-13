@@ -10,6 +10,7 @@ import {
   type DeferredOutcomeSnapshotAttempt,
 } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../session-state.ts';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   deliverySnapshot,
@@ -193,20 +194,39 @@ test('the first capture after an open does not count the Window root as first-sc
   assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
 });
 
-test('the first capture after an open settles a producer-marked sparse read on its quiet pair', async () => {
+test('the first capture after an open waits through a root-only tree whatever its quality verdict', async () => {
+  const root = makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ]);
+  const rootOnlyReads: SnapshotState[] = [
+    // The runner's verdict on a tree holding only its roots.
+    { ...root, snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' } },
+    // A runner that predates verdicts publishes the same tree with none.
+    { nodes: root.nodes, createdAt: root.createdAt, backend: 'xctest' },
+  ];
+  for (const rootOnly of rootOnlyReads) {
+    vi.useFakeTimers();
+    const session = makeSession('ios');
+    markPostOpenStabilization(session, 'observable');
+    const home = homeScreenSnapshot();
+    const { capture } = scriptedCapture([rootOnly, rootOnly, rootOnly, rootOnly, home, home]);
+
+    const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pendingResult;
+
+    assert.equal(result?.snapshot, home);
+    assert.equal(result?.snapshot.postGestureOutcome, undefined);
+  }
+});
+
+test('the first capture after an open settles a sparse read that holds content beyond its roots', async () => {
   vi.useFakeTimers();
   const session = makeSession('ios');
   markPostOpenStabilization(session, 'observable');
   const sparse = {
-    ...makeSnapshotState([
-      {
-        index: 0,
-        type: 'Application',
-        label: 'App',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-    ]),
-    snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' } as const,
+    ...homeScreenSnapshot(),
+    snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'budget' } as const,
   };
   const { capture, calls } = scriptedCapture([sparse, sparse]);
 
@@ -216,6 +236,25 @@ test('the first capture after an open settles a producer-marked sparse read on i
 
   assert.equal(calls(), 2);
   assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
+test('an open supersedes the stabilization a scroll still owed on the screen it replaced', () => {
+  const session = makeSession('ios');
+  session.snapshot = homeScreenSnapshot();
+  markDeferredInteractionOutcome({
+    session,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: undefined,
+  });
+  assert.ok(pendingSurfaceStabilization(session)?.baseline);
+
+  markPostOpenStabilization(session, 'observable');
+
+  const pending = pendingSurfaceStabilization(session);
+  assert.equal(pending?.action, 'open');
+  assert.equal(pending?.readiness, 'first-screen');
+  assert.equal(pending?.baseline, undefined);
 });
 
 test('the first capture after an open marks a tree that never showed a first screen as loading', async () => {

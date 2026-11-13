@@ -24,7 +24,6 @@ import {
 } from './interaction-surface-signature.ts';
 import {
   runPostGestureStabilityLoop,
-  type FirstScreenContent,
   type PostGestureStabilityOutcome,
 } from '@agent-device/capture-kit/post-gesture-stability';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
@@ -230,7 +229,12 @@ export function movingTargetBaseline(
  * reports no verdict launched no app, such as a URL or deep link, and does not mark. No baseline: the
  * pre-open tree is a different surface, so the open is never reported as having no effect.
  *
- * Apple only: {@link readFirstScreenContent} tells the first screen from a launch surface by the
+ * The record replaces whatever the session's deferred surface held. A scroll's owed stabilization
+ * judged the scroll against its pre-action tree, and a moving-target baseline describes where the
+ * previous action's targets were. The open launched or foregrounded an app, so both describe a screen
+ * the open replaced: a verdict against them would charge the open's effect to the earlier action.
+ *
+ * Apple only: the first-screen rule tells the first screen from a launch surface by the
  * Application and Window roots, and an Android tree has no root node to tell them apart.
  */
 export function markPostOpenStabilization(
@@ -388,24 +392,13 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
-        readFirstScreen: (value) => readFirstScreenContent(readSnapshot(value)),
+        countFirstScreenContent: (value) =>
+          readSnapshot(value).nodes.filter((node) => !isViewportRootNode(node)).length,
       },
     });
   } finally {
     clearSurfaceStabilization(session);
   }
-}
-
-/**
- * What one capture shows of a launched app's first screen: the nodes it holds besides the
- * Application and Window roots, or `unverifiable` when the producer reported a sparse read.
- */
-function readFirstScreenContent(
-  snapshot: Pick<SnapshotState, 'nodes' | 'snapshotQuality'>,
-): FirstScreenContent {
-  if (snapshot.snapshotQuality?.state === 'sparse') return { kind: 'unverifiable' };
-  const contentNodes = snapshot.nodes.filter((node) => !isViewportRootNode(node)).length;
-  return { kind: 'measured', contentNodes };
 }
 
 /** The stabilized attempt as a capture result: the tree carries the gesture's outcome as its own fact. */

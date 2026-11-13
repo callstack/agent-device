@@ -5,7 +5,6 @@ import type { ObservationClock } from './observe-until.ts';
 import {
   formatPostGestureOutcomeWarning,
   runPostGestureStabilityLoop,
-  type FirstScreenContent,
   type PostGestureBaseline,
   type PostGesturePreActionBaseline,
   type PostGestureStabilityDecision,
@@ -26,7 +25,7 @@ type Surface = Readonly<{
   signature: readonly string[];
   costMs: number;
   backend?: string;
-  firstScreen?: FirstScreenContent;
+  firstScreenContent?: number;
 }>;
 
 // The negative half of these lines is type-level: each @ts-expect-error fails `pnpm typecheck`
@@ -100,7 +99,7 @@ function hooksFor(
       same(baseline.signature, quiet.signature) ? 'unchanged' : 'changed',
     surfacesIdentical: same,
     summarizeDivergence: () => ({}),
-    readFirstScreen: (value) => value.firstScreen ?? { kind: 'measured', contentNodes: 20 },
+    countFirstScreenContent: (value) => value.firstScreenContent ?? 20,
   };
 }
 
@@ -235,7 +234,7 @@ function launchSurface(name: string, contentNodes: number, costMs = 50): Surface
   return {
     signature: [name, String(contentNodes)],
     costMs,
-    firstScreen: { kind: 'measured', contentNodes },
+    firstScreenContent: contentNodes,
   };
 }
 
@@ -338,24 +337,6 @@ test('a launch whose populated tree never quiets reports it unsettled, not loadi
   });
 
   assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
-});
-
-test('an unverifiable capture settles a launch on its quiet pair instead of waiting as loading', async () => {
-  const clock = fakeClock();
-  const unreadable: Surface = {
-    signature: ['root'],
-    costMs: 50,
-    firstScreen: { kind: 'unverifiable' },
-  };
-
-  const outcome = await runPostGestureStabilityLoop({
-    pending: LAUNCH,
-    hooks: hooksFor(clock, [unreadable, unreadable]),
-    clock,
-  });
-
-  assert.equal(outcome.value, unreadable);
-  assert.equal(outcome.postGestureOutcome, undefined);
 });
 
 test('a gesture record never applies the first-screen rule to an empty tree', async () => {

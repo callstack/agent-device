@@ -67,23 +67,16 @@ const FIRST_SCREEN_SPARSE_CONTENT_NODES = 4;
 const FIRST_SCREEN_SPARSE_QUIET_MS = 1_500;
 
 /**
- * What one capture shows of a launched app's first screen: the nodes it holds besides the
- * Application and Window roots, or `unverifiable` when the producer reported a sparse read. An
- * accessibility failure does not prove an empty UI, so it cannot hold the loop as a loading screen.
+ * Whether a quiet pair can stand as a launched app's first screen, from the nodes it holds besides
+ * the Application and Window roots. A tree with no such node is a launch or loading surface and never
+ * qualifies, whatever quality verdict the producer gave it: the iOS runner marks exactly that
+ * root-only tree sparse, and a runner that predates verdicts publishes it with none. A sparse tree
+ * qualifies once it has stayed unchanged for {@link FIRST_SCREEN_SPARSE_QUIET_MS}. Any other tree
+ * qualifies at once.
  */
-export type FirstScreenContent =
-  | Readonly<{ kind: 'measured'; contentNodes: number }>
-  | Readonly<{ kind: 'unverifiable' }>;
-
-/**
- * Whether a quiet pair can stand as a launched app's first screen. A tree with no content is a
- * launch or loading surface and never qualifies. A sparse tree qualifies once it has stayed
- * unchanged for {@link FIRST_SCREEN_SPARSE_QUIET_MS}. Any other tree qualifies at once.
- */
-function isFirstScreenReady(content: FirstScreenContent, quietForMs: number): boolean {
-  if (content.kind === 'unverifiable') return true;
-  if (content.contentNodes === 0) return false;
-  if (content.contentNodes > FIRST_SCREEN_SPARSE_CONTENT_NODES) return true;
+function isFirstScreenReady(contentNodes: number, quietForMs: number): boolean {
+  if (contentNodes === 0) return false;
+  if (contentNodes > FIRST_SCREEN_SPARSE_CONTENT_NODES) return true;
   return quietForMs >= FIRST_SCREEN_SPARSE_QUIET_MS;
 }
 
@@ -157,8 +150,11 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   surfacesIdentical: (baseline: S, current: S) => boolean;
   /** Why `surfacesIdentical` said no, for the veto diagnostic. */
   summarizeDivergence: (baseline: S, current: S) => Record<string, number>;
-  /** What one attempt shows of a launched app's first screen. Read only for a launch record. */
-  readFirstScreen: (value: T) => FirstScreenContent;
+  /**
+   * How many nodes one attempt holds besides the Application and Window roots. Read only for a
+   * launch record.
+   */
+  countFirstScreenContent: (value: T) => number;
 };
 
 export type PostGestureStabilityOutcome<T> = {
@@ -253,7 +249,10 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   let quietSinceMs = startedAt;
   const firstScreen = pending.readiness === 'first-screen';
   const firstScreenReady = (value: T): boolean =>
-    isFirstScreenReady(hooks.readFirstScreen(value), lastPairAgreed ? now() - quietSinceMs : 0);
+    isFirstScreenReady(
+      hooks.countFirstScreenContent(value),
+      lastPairAgreed ? now() - quietSinceMs : 0,
+    );
   let surfaceCache: CapturedSurface<T, S> | undefined;
 
   const surfaceOf = (value: T): CapturedSurface<T, S> => {
