@@ -59,7 +59,7 @@ export function publishOpenSession(params: {
     clearSessionSnapshot(session);
     return store.refresh(existingRef);
   }
-  return store.publish(sessionName, {
+  const draft: SessionState = {
     name: resolvePublicSessionName(req),
     sessionScope: req.internal?.resolvedSessionScope ?? resolveSessionScope(req),
     device,
@@ -70,6 +70,8 @@ export function publishOpenSession(params: {
     actions: [],
     lease: resolveSessionLeaseForRequest({ req }),
     deviceClaim,
-    ...(bootedByOpen === true ? { bootedByOpen: true as const } : {}),
-  });
+  };
+  const ref = store.publish(sessionName, draft);
+  if (bootedByOpen === true) store.markOpenBootedDevice(ref);
+  return ref;
 }
