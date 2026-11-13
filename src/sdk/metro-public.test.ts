@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
@@ -73,7 +74,45 @@ test('public prepareMetroRuntime runs without a daemon or CLI host around it', a
   const { prepareMetroRuntime } = await import('./metro.ts');
 
   await assert.rejects(
-    prepareMetroRuntime({}),
+    prepareMetroRuntime({}, { env: {}, cwd: process.cwd() }),
     (error: unknown) => (error as { code?: string }).code === 'INVALID_ARGS',
   );
+});
+
+test('public Metro preparation resolves concurrent runtime files against each explicit cwd', async () => {
+  const { prepareMetroRuntime } = await import('./metro.ts');
+  const { createServer } = await import('node:http');
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { mkdtempForTestSync, closeLoopbackServer } = await import('@agent-device/test-kit');
+  const server = createServer((_req, res) => res.end('packager-status:running'));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const roots = [mkdtempForTestSync('sdk-metro-first-'), mkdtempForTestSync('sdk-metro-second-')];
+  try {
+    const results = await Promise.all(
+      roots.map((cwd) =>
+        prepareMetroRuntime(
+          {
+            kind: 'react-native',
+            publicBaseUrl: `http://127.0.0.1:${address.port}`,
+            metroPort: address.port,
+            installDependenciesIfNeeded: false,
+            runtimeFilePath: 'runtime.json',
+          },
+          { env: {}, cwd },
+        ),
+      ),
+    );
+    for (const [index, result] of results.entries()) {
+      const runtimePath = join(roots[index]!, 'runtime.json');
+      assert.equal(result.projectRoot, roots[index]);
+      assert.equal(result.runtimeFilePath, runtimePath);
+      assert.equal(JSON.parse(readFileSync(runtimePath, 'utf8')).reused, true);
+    }
+  } finally {
+    await closeLoopbackServer(server);
+  }
 });

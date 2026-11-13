@@ -111,7 +111,7 @@ function createGuardedDevice(params: {
         return { ok: true };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',
@@ -665,7 +665,7 @@ test('a ref from a full-tree frame is re-observed in that presentation, not renu
         return { ok: true };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',
