@@ -595,7 +595,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "keyboardDismiss produced no result"))
       }
       if result.wasVisible && !result.dismissed {
-        return Response(ok: false, error: keyboardDismissRefusal(dismissControlFound: result.dismissControlFound))
+        return Response(ok: false, error: keyboardDismissRefusal(dispatchedDismissal: result.dispatchedDismissal))
       }
       return Response(
         ok: true,

@@ -32,7 +32,7 @@ enum RunnerKeyboardDismissMechanism: String {
 }
 
 /// One `keyboard dismiss` attempt, plus the fact that decides how a refusal is classified:
-/// `dismissControlFound` says whether the runner ever dispatched a dismissal.
+/// `dispatchedDismissal` says whether the runner ever dispatched a dismissal.
 struct RunnerKeyboardDismissOutcome {
   let wasVisible: Bool
   let dismissed: Bool
@@ -40,7 +40,7 @@ struct RunnerKeyboardDismissOutcome {
   let mechanism: RunnerKeyboardDismissMechanism?
   /// Whether a dismissal was dispatched — the keyboard's own control was tapped, or the tvOS remote's
   /// Menu press landed. Only its absence proves the command sent nothing.
-  let dismissControlFound: Bool
+  let dispatchedDismissal: Bool
 }
 
 /// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
@@ -210,7 +210,7 @@ extension RunnerTests {
         dismissed: false,
         visible: false,
         mechanism: nil,
-        dismissControlFound: false
+        dispatchedDismissal: false
       )
     }
 
@@ -225,7 +225,7 @@ extension RunnerTests {
       mechanism: tvVisible ? nil : .dismissKey,
       // `pressTvRemote` answers false only on a build that has no remote to press, so on tvOS the
       // Menu press went out and the refusal that follows did dispatch: it keeps the generic code.
-      dismissControlFound: pressedMenu
+      dispatchedDismissal: pressedMenu
     )
 #else
     if tapKeyboardDismissControl(app: app) {
@@ -242,7 +242,7 @@ extension RunnerTests {
         dismissed: !visible,
         visible: visible,
         mechanism: visible ? nil : .dismissKey,
-        dismissControlFound: true
+        dispatchedDismissal: true
       )
     }
 
@@ -257,7 +257,7 @@ extension RunnerTests {
       dismissed: false,
       visible: isKeyboardVisible(app: app),
       mechanism: nil,
-      dismissControlFound: false
+      dispatchedDismissal: false
     )
 #endif
   }
@@ -267,8 +267,8 @@ extension RunnerTests {
   /// nothing and is the runner's own typed refusal (`KEYBOARD_DISMISS_UNAVAILABLE`, so the host
   /// publishes its `details.reason` instead of leaving callers to read the prose), while a control
   /// that was tapped and left the keys up did dispatch and keeps the generic code.
-  func keyboardDismissRefusal(dismissControlFound: Bool) -> ErrorPayload {
-    if dismissControlFound {
+  func keyboardDismissRefusal(dispatchedDismissal: Bool) -> ErrorPayload {
+    if dispatchedDismissal {
       return ErrorPayload(
         code: "UNSUPPORTED_OPERATION",
         message: "Unable to dismiss the keyboard: a dismiss mechanism ran and the keyboard stayed visible",

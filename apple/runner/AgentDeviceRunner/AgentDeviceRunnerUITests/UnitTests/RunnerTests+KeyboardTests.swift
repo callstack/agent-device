@@ -144,11 +144,11 @@ extension RunnerTests {
   /// that was tapped and left the keys up did dispatch and keeps the generic code. The host reads the
   /// first code's literal to publish `details.reason`, so it is pinned here as the wire value.
   func testKeyboardDismissRefusalNamesItsOwnCodeOnlyWhenNothingWasDispatched() {
-    let notDispatched = keyboardDismissRefusal(dismissControlFound: false)
+    let notDispatched = keyboardDismissRefusal(dispatchedDismissal: false)
     XCTAssertEqual(notDispatched.code, "KEYBOARD_DISMISS_UNAVAILABLE")
     XCTAssertNotNil(notDispatched.hint)
 
-    let dispatched = keyboardDismissRefusal(dismissControlFound: true)
+    let dispatched = keyboardDismissRefusal(dispatchedDismissal: true)
     XCTAssertEqual(dispatched.code, "UNSUPPORTED_OPERATION")
     XCTAssertNotNil(dispatched.hint)
     XCTAssertNotEqual(dispatched.code, notDispatched.code)

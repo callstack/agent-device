@@ -365,30 +365,37 @@ const BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE = 'BACK_SWIPE_NOT_DISPATCHED';
 
 /**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
- * `COMMAND_FAILED` unless their row names the code the caller already reads the family under, and
- * survive as `details.runnerErrorCode`, which is what family policy reads: `RUNNER_BUSY` for
- * retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet, the scroll keyboard
- * refusal for a surface the runner declined to swipe under the keys, the retriable
- * `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app, and the
- * keyboard-dismiss refusal, which stays `UNSUPPORTED_OPERATION` because that is the code
- * `keyboard dismiss` already refuses with.
+ * `COMMAND_FAILED` unless `DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES` names the code the caller already
+ * reads the family under, and survive as `details.runnerErrorCode`, which is what family policy
+ * reads: `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there
+ * yet, the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and
+ * the retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
  */
 const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
   string,
-  Readonly<{ wireCode?: AppErrorCode; retriable?: true }>
+  Readonly<{ retriable?: true }>
 > = new Map([
   [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
   [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
-  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, { wireCode: 'UNSUPPORTED_OPERATION' }],
+  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, {}],
   [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, {}],
   [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, {}],
   [BACK_SWIPE_NO_CHANGE_RUNNER_CODE, {}],
   [BACK_SWIPE_UNVERIFIED_RUNNER_CODE, {}],
   [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, {}],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
+]);
+
+/**
+ * Diagnostic-only codes that keep the wire code their command already refuses with instead of
+ * `COMMAND_FAILED`: the keyboard-dismiss refusal stays `UNSUPPORTED_OPERATION`, the code
+ * `keyboard dismiss` already refuses with.
+ */
+const DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES: ReadonlyMap<string, AppErrorCode> = new Map([
+  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
 ]);
 
 /**
@@ -477,12 +484,14 @@ export function classifyRunnerReportedError(
     runnerErrorCode === undefined
       ? undefined
       : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
+  const wireCode =
+    runnerErrorCode === undefined
+      ? undefined
+      : DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES.get(runnerErrorCode);
   const reason =
     runnerErrorCode === undefined ? undefined : RUNNER_REPORTED_ERROR_REASONS.get(runnerErrorCode);
   return Object.freeze({
-    code: diagnosticOnly
-      ? (diagnosticOnly.wireCode ?? 'COMMAND_FAILED')
-      : toAppErrorCode(runnerErrorCode),
+    code: diagnosticOnly ? (wireCode ?? 'COMMAND_FAILED') : toAppErrorCode(runnerErrorCode),
     details: Object.freeze({
       runnerErrorCode,
       ...(diagnosticOnly?.retriable === true ? { retriable: true as const } : {}),
