@@ -414,7 +414,7 @@ agent-device get attrs @e1
 - `viewport: { width, height }` names the box node rects are measured in; see [Coordinates and viewport](/docs/snapshots#coordinates-and-viewport).
 - `--scope <text|@ref>` re-roots the snapshot at the first matching node; see [Scope a snapshot](/docs/snapshots#scope-a-snapshot).
 - `--actions` lists custom accessibility actions an element merged away (iOS simulator only, rejected with `--raw`); see [Snapshots](/docs/snapshots).
-- `diff snapshot` (alias `snapshot --diff`) compares with the previous session baseline, then updates it.
+- `diff snapshot` (alias `snapshot --diff`) compares with the previous session baseline, then updates it. It compares only trees read with the same `-i`, `-d`, `-s`, `--raw` and `--actions`: when the stored snapshot was read in another view, the capture starts a new baseline (`baselineInitialized: true`) instead of listing the view change as changes.
 
 ## Wait and alerts
 
@@ -498,6 +498,10 @@ agent-device gesture tap 80 300 200 450 --count 20 --pause-ms 100 # repeated two
 If rotation stops repeated iOS presses, inspect the screen before continuing with the remaining presses.
 
 A successful `click` or `press` means the action was sent to where the command found the target. It does not confirm that the element received it or that the screen changed. When the next step depends on it, add `--verify` (reports `changedFromBefore`), add `--settle` (returns the diff once the UI goes quiet), or follow with `wait <selector>`. Before retrying a failed interaction, see [Retry after a failed command](#retry-after-a-failed-command).
+
+`--settle` compares trees in the view of the refs you last read. After a full `snapshot`, it reads the full tree and issues full-tree refs; after `snapshot -i`, it reads the interactive view. It also preserves `-d`, `-s`, `--raw` and `--actions`. This holds for `press`, `click`, `fill`, `longpress`, `scroll` and `back`, including ref, selector and coordinate targets.
+
+Standalone `--verify` captures in the pre-action tree's view, which can differ from the last ref frame when a selector resolves a fresh tree. With `--settle --verify`, verification reuses the settled capture and reports `changedFromBefore` only when the two views match or a known surface transition occurred. Without a populated baseline, post-action captures use the interactive view.
 
 A `click` or `press` whose target the daemon resolves to a point (`@ref` or selector) re-checks that target's position before dispatching when the session's previous action animated the screen, and dispatches where it came to rest. When that check cannot confirm a stable position — the target was still moving, or a re-check could not measure it — the command refuses with `target_still_moving` and `dispatched: no`: nothing was dispatched, the point the command resolved is in `error.details.rect`, and where the target was last seen is in `error.details.movedToRect` when that last look measured one. Run `wait <selector>` on the target and retry the same command, or add `--settle` so the action waits for the UI to go quiet. A refused `@ref` press needs a fresh `snapshot -i` and a selector, because the wait retires the ref. Two dispatch paths hand off before the check: a press at raw coordinates has no resolved target to re-check, and a dispatch the backend performs on the element itself — `click @ref` on a backend with element dispatch, or a Maestro non-hittable coordinate fallback — goes to that backend rather than through a resolved point. The re-check stops when the request is canceled or reaches its deadline, and nothing is dispatched (`dispatched: no`): a canceled request fails with `details.reason: request_canceled`, and a request out of time with `details.reason: daemon_request_timeout`.
 
