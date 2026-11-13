@@ -158,7 +158,7 @@ test('an entry outside the installed package is refused', () => {
       name: 'traversal',
       version: '1.0.0',
       type: 'module',
-      exports: { './agent-device': './../outside.js' },
+      exports: { './agent-device': './../../outside.js' },
     }),
   );
   assert.throws(

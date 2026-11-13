@@ -23,9 +23,9 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`. A missing or
   stale record reads as a stopped daemon; an unreadable or invalid one never does.
 - The plugin set is fixed for a daemon's lifetime. A plugin change takes effect on the next daemon.
-- A store package is discovered only through its exports: `./agent-device`, or the package root when
-  that subpath is absent. Nothing is read from `package.json` to choose an entry or to declare a
-  provider, connection capabilities, or credential variables (#3759).
+- A store package is discovered through its package targets: the `./agent-device` export, else the
+  root export, which is `main` for a package that declares no `exports`. Nothing is read from
+  `package.json` to declare a provider, connection capabilities, or credential variables (#3759).
 
 ## Context
 

@@ -31,7 +31,7 @@ export type PluginCandidate = Readonly<{
   source: PluginSource;
   package?: string;
   version?: string;
-  /** Claims `provider` without loading it, so a later candidate with that id is a duplicate. */
+  /** Claims `provider` before its load settles, so a later candidate with that id is a duplicate. Dormant candidates claim it without loading. */
   provider?: string;
   /** Claims `provider` without registering or listing: a built-in that is not configured. */
   dormant?: boolean;

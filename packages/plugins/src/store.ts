@@ -242,9 +242,10 @@ async function stagePlugin(
 }
 
 /**
- * Installs, updates or removes one plugin selection. A package is accepted when its entry loads as
- * a plugin; a provider-id clash with another plugin or a built-in is the registry's to settle when
- * the daemon next composes its plugins.
+ * Installs, updates or removes one plugin selection. Install checks the staged package's identity
+ * and version and resolves its entry to a readable file; the factory first runs when the daemon next
+ * composes its plugins. A provider-id clash with another plugin or a built-in is the registry's to
+ * settle then, by first claim.
  */
 export async function changePlugin(
   action: PluginAction,

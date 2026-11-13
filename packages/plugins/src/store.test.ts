@@ -205,13 +205,13 @@ test('a duplicate provider id is settled by the registry when the store composes
       ['second', false, 'duplicate_provider'],
     ],
   );
-  // A built-in identity claims the id first, so a store package cannot take it either.
+  // A dormant built-in claims the id first, so a store package cannot take it either.
   const { home: otherHome, env: otherEnv } = pluginHome();
-  selectV2Plugin(otherHome, 'cloud', v2RegistrationSource('cloud'));
-  const cloud = await listPlugins(otherEnv, ['cloud']);
+  selectV2Plugin(otherHome, 'limrun-plugin', v2RegistrationSource('limrun'));
+  const limrun = await listPlugins(otherEnv, ['limrun']);
   assert.deepEqual(
-    cloud.map(({ name, compatible, error }) => [name, compatible, error?.reason]),
-    [['cloud', false, 'reserved_provider']],
+    limrun.map(({ name, compatible, error }) => [name, compatible, error?.reason]),
+    [['limrun-plugin', false, 'duplicate_provider']],
   );
 });
 

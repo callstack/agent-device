@@ -132,7 +132,7 @@ connection: {
 
 ### Package for installation
 
-Bundle the plugin implementation and ship ready-to-run ESM: installation disables lifecycle scripts. Bundle shared helpers with the plugin; `AppError` carries a shared brand so the host preserves its code and details across package copies. Import types with `import type` to keep them out of the runtime dependency graph.
+Bundle the plugin implementation and ship ready-to-run ESM: installation disables lifecycle scripts. Bundle shared helpers with the plugin; `AppError` carries a shared brand so the host preserves its code and details across package copies. Import types with `import type` to keep them out of the runtime dependency graph. A published plugin package names `./agent-device` in its `exports`: that is the subpath the host's loader and the publish checks read, so don't ship a plugin only through the root export or `main`.
 
 ## Migrating from a version 1 manifest
 
@@ -141,7 +141,7 @@ Earlier plugin packages declared `agentDevicePlugin` with `apiVersion: 1` in `pa
 To move a package:
 
 1. Export the factory from `./agent-device` instead of naming an entry file in the manifest, and drop `agentDevicePlugin` from `package.json`.
-2. Return the manifest's values from the factory: `provider` stays `provider`, `credentialVariables` becomes `credentials: { variables: [...] }`, and the `connection` object goes on the plugin next to `setup`.
+2. Return the manifest's values from the factory: `provider` stays `provider`, `credentialVariables` becomes `credentials: { variables: [...] }`, and the manifest's `connection` becomes `connection.capabilities`, with the `resolve` and `verify` the v1 entry returned for `connection` moved into that same `connection` object next to `setup`.
 3. Return `apiVersion: 2` and keep the default export a function; the host calls it with the selection's options and `setup` receives the `ProviderPluginHost` the v1 entry used to receive first.
 
 ```diff
@@ -159,4 +159,4 @@ To move a package:
 +});
 ```
 
-A package that still ships the old manifest loads when it also exports `./agent-device`, and the manifest is then ignored. A package whose default export isn't a v2 plugin is listed as `failed` with `incompatible_plugin` and the daemon starts without it.
+A package that still ships the old manifest loads when it also exports `./agent-device`, and the manifest is then ignored. A plugin object with an `apiVersion` other than 2 is listed as `failed` with `incompatible_plugin`, and a default export that is not a plugin factory with `invalid_plugin`; the daemon starts without either.
