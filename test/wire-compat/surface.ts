@@ -81,6 +81,10 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER',
         'buildDaemonHttpUrl',
         'buildDaemonHttpBaseUrl',
+        'resolveHttpRequestBaseUrl',
+        'nodeHttpRequestUrl',
+        'normalizeDaemonPublicOrigin',
+        'containsInvalidHttpUrlCharacter',
       ),
       ...from(
         DAEMON_HTTP,
@@ -115,7 +119,12 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         // Carries the 308 resumable-upload framing (status, headers).
         'handleResumableUpload',
         'handleUploadFinalize',
-        'resolveHttpRequestBaseUrl',
+      ),
+      ...from(
+        DAEMON_PROXY,
+        'rewrittenUploadPreflightResponse',
+        'rewriteUploadDirectUrl',
+        'rewriteUploadPreflightResponse',
       ),
       ...from(
         ARTIFACT_HTTP,
@@ -157,7 +166,9 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
     // instead, which is what the gate exists to prevent.
     uncovered:
       'createDaemonHttpServer dispatch wiring, and the /health and /rpc path literals inside it: ' +
-      'a moved route 404s at connect time rather than misparsing, so it stays reviewer-owned.',
+      'a moved route 404s at connect time rather than misparsing, so it stays reviewer-owned. ' +
+      'The daemon selection of configured publicOrigin versus validated ingress origin also ' +
+      'stays reviewer-owned; the origin constructors and proxy ticket rewrite are digested.',
   },
   {
     adrBullet: 'Authentication semantics required to authorize RPC, upload, or artifact requests.',

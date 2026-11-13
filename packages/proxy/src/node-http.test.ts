@@ -5,7 +5,7 @@ import { Socket } from 'node:net';
 import { Readable } from 'node:stream';
 import { TLSSocket } from 'node:tls';
 import { expect, test } from 'vitest';
-import type { DaemonProxy } from './daemon-proxy.ts';
+import { createDaemonProxyServer, type DaemonProxy } from './daemon-proxy.ts';
 import { serveProxyRequest } from './node-http.ts';
 
 async function serveThroughListener(
@@ -28,6 +28,7 @@ async function serveThroughListener(
     method: 'GET',
     url: '/agent-device/health',
     headers: { host },
+    rawHeaders: ['Host', host],
     socket,
   }) as unknown as IncomingMessage;
   const res = Object.assign(new EventEmitter(), {
@@ -97,3 +98,97 @@ test('a method Fetch refuses is answered with 404 instead of a dropped socket', 
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('real HTTP ingress refuses invalid targets and Host before forwarding', async () => {
+  let calls = 0;
+  const server = http.createServer(
+    (req, res) =>
+      void serveProxyRequest(
+        {
+          instanceId: 'test',
+          handle: async () => {
+            calls++;
+            return new Response(null, { status: 204 });
+          },
+        },
+        req,
+        res,
+      ),
+  );
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const { connect } = await import('node:net');
+    for (const request of [
+      'GET / HTTP/1.1\r\nConnection: close\r\n\r\n',
+      'GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\nConnection: close\r\n\r\n',
+      'GET / HTTP/1.1\r\nHost: user@host\r\nConnection: close\r\n\r\n',
+      'GET http://evil/ HTTP/1.1\r\nHost: good\r\nConnection: close\r\n\r\n',
+      'GET //evil/path HTTP/1.1\r\nHost: good\r\nConnection: close\r\n\r\n',
+      'GET /path#fragment HTTP/1.1\r\nHost: good\r\nConnection: close\r\n\r\n',
+    ]) {
+      const response = await new Promise<string>((resolve, reject) => {
+        const socket = connect(port, '127.0.0.1', () => socket.write(request));
+        let data = '';
+        socket.on('data', (chunk) => {
+          data += chunk;
+        });
+        socket.on('end', () => resolve(data));
+        socket.on('error', reject);
+      });
+      expect(response).toMatch(/^HTTP\/1\.1 400/);
+    }
+    expect(calls).toBe(0);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test.each([undefined, 'https://public.example:8443'])(
+  'real HTTP preflight uses configured or socket origin %s',
+  async (publicOrigin) => {
+    let calls = 0;
+    const server = createDaemonProxyServer({
+      upstreamBaseUrl: 'http://daemon',
+      upstreamToken: 'daemon-secret',
+      clientToken: 'client-secret',
+      publicOrigin,
+      upstreamFetch: async () => {
+        calls++;
+        return Response.json({
+          uploadId: 'id',
+          upload: {
+            url: 'http://daemon/upload/direct/id?part=1',
+            headers: { authorization: 'Bearer daemon-secret' },
+          },
+        });
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const url = `http://127.0.0.1:${port}/agent-device/upload/preflight`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer client-secret',
+          'x-forwarded-proto': 'https, http',
+          'x-forwarded-host': 'evil.example',
+        },
+        body: '{}',
+      });
+      const payload = (await response.json()) as {
+        upload: { url: string; headers: Record<string, string> };
+      };
+      expect(payload.upload.url).toBe(
+        `${publicOrigin ?? `http://127.0.0.1:${port}`}/agent-device/upload/direct/id?part=1`,
+      );
+      expect(payload.upload.headers.authorization).toBe('Bearer client-secret');
+      expect(JSON.stringify(payload)).not.toContain('daemon-secret');
+      expect((await fetch(url, { method: 'POST', body: '{}' })).status).toBe(401);
+      expect(calls).toBe(1);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { TLSSocket } from 'node:tls';
+import { nodeHttpRequestUrl } from '@agent-device/contracts/daemon-http';
 import type { DaemonProxy } from './daemon-proxy.ts';
 
 export async function serveProxyRequest(
@@ -36,10 +37,7 @@ function endWithStatus(res: ServerResponse, status: number): void {
 
 /** `null` when the Host header and path do not form a URL that Fetch accepts. */
 function requestUrl(req: IncomingMessage): URL | null {
-  const scheme = req.socket instanceof TLSSocket ? 'https' : 'http';
-  const url = URL.parse(req.url ?? '/', `${scheme}://${req.headers.host ?? '127.0.0.1'}`);
-  if (!url || url.username || url.password) return null;
-  return url;
+  return nodeHttpRequestUrl(req.url, req.rawHeaders, req.socket instanceof TLSSocket);
 }
 
 function toWebRequest(url: URL, req: IncomingMessage, res: ServerResponse): Request {

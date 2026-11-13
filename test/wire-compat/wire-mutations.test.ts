@@ -50,6 +50,55 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'upload ticket: the response wrapper drops the configured origin',
+    file: 'packages/proxy/src/daemon-proxy.ts',
+    name: 'rewrittenUploadPreflightResponse',
+    from: 'text, request, uploadHeaders, publicOrigin',
+    to: 'text, request, uploadHeaders, undefined',
+  },
+  {
+    breakClass: 'upload origin: socket TLS is ignored',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'resolveHttpRequestBaseUrl',
+    from: "secure ? 'https' : 'http'",
+    to: "'http'",
+  },
+  {
+    breakClass: 'upload origin: a configured non-HTTP scheme is accepted',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'normalizeDaemonPublicOrigin',
+    from: '^https?:',
+    to: '^(?:https?|ftp):',
+  },
+  {
+    breakClass: 'HTTP ingress: network-path request targets are accepted',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'nodeHttpRequestUrl',
+    from: "target.startsWith('//')",
+    to: 'false',
+  },
+  {
+    breakClass: 'HTTP ingress: control characters are accepted',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'containsInvalidHttpUrlCharacter',
+    from: 'code <= 32',
+    to: 'code < 0',
+  },
+  {
+    breakClass: 'upload ticket: configured public origin is ignored',
+    file: 'packages/proxy/src/daemon-proxy.ts',
+    name: 'rewriteUploadDirectUrl',
+    from: 'publicOrigin ?? requestUrl.origin',
+    to: 'requestUrl.origin',
+  },
+  {
+    breakClass: 'upload ticket: the direct-upload field is renamed',
+    file: 'packages/proxy/src/daemon-proxy.ts',
+    name: 'rewriteUploadPreflightResponse',
+    from: '    upload: {',
+    to: '    renamedUpload: {',
+  },
+  {
     breakClass: 'request metadata: the device pin field is removed',
     file: 'packages/contracts/src/daemon-wire-request.ts',
     name: 'DaemonWireRequestMeta',

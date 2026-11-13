@@ -487,8 +487,10 @@ Device cloud interfaces:
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
-    agent-device proxy --port 4310
     cloudflared tunnel --url http://127.0.0.1:4310
+    # In a second terminal, after the tunnel reports its public name:
+    agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
+  Forwarding headers do not set upload ticket origins. For an ephemeral tunnel, obtain its public name, then configure and restart the proxy.
   On the remote client:
     export AGENT_DEVICE_SESSION=checkout-agent
     agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
@@ -594,7 +596,7 @@ Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
-  Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
+  Use agent-device proxy for direct tunnel access to a Mac you control. Expose the proxy through cloudflared/ngrok, configure --public-origin with the public tunnel origin, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   Use Limrun, BrowserStack, AWS Device Farm, TestMu AI, and Revyl through local provider profiles; they do not accept a remote agent-device daemon URL.
   Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. TestMu AI uses LT_USERNAME and LT_ACCESS_KEY. Revyl uses REVYL_API_KEY, with REVYL_API_URL to point at another Revyl backend. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
   A local daemon keeps the Limrun, BrowserStack, TestMu AI, and Revyl credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.

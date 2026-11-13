@@ -1,7 +1,10 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
-import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
+import {
+  buildDaemonHttpBaseUrl,
+  normalizeDaemonPublicOrigin,
+} from '@agent-device/contracts/daemon-http';
 import { ensureProxyUpstreamDaemon } from '@agent-device/daemon-client';
 import { AppError } from '@agent-device/kernel/errors';
 import { colorize, supportsColor } from '@agent-device/command-output';
@@ -32,6 +35,14 @@ export const proxyCommand: ClientCommandHandler = async ({
 };
 
 async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise<ProxyStartup> {
+  let publicOrigin: string | undefined;
+  if (flags.publicOrigin !== undefined) {
+    try {
+      publicOrigin = normalizeDaemonPublicOrigin(flags.publicOrigin);
+    } catch (error) {
+      throw new AppError('INVALID_ARGS', 'Invalid --public-origin', {}, error);
+    }
+  }
   const daemon = await ensureProxyUpstreamDaemon({ stateDir: flags.stateDir, host: clientHost });
   const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.httpPort);
   const token = resolveProxyClientToken(flags);
@@ -39,6 +50,7 @@ async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise
     upstreamBaseUrl,
     upstreamToken: daemon.token,
     clientToken: token,
+    publicOrigin,
   });
   const host = flags.proxyHost?.trim() || '127.0.0.1';
   const port = flags.proxyPort ?? 0;
