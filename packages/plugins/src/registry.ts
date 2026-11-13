@@ -20,12 +20,9 @@ import {
 } from '@agent-device/contracts/plugin-inventory';
 import { describePluginFailure } from './inventory.ts';
 import { isProviderId } from './discovery.ts';
-import {
-  PLUGIN_REASONS,
-  ROUTING_PROVIDER_IDENTITIES,
-  type PluginFailureReason,
-} from './manifest.ts';
+import { ROUTING_PROVIDER_IDENTITIES } from './contract.ts';
 import { assertProviderRuntime, invalidPlugin, validateAgentDevicePlugin } from './validate.ts';
+import { PLUGIN_REASONS, type PluginFailureReason } from './reasons.ts';
 
 /**
  * One plugin a source offers the registry. Sources differ only in how a candidate loads; the
@@ -35,11 +32,11 @@ export type PluginCandidate = Readonly<{
   source: PluginSource;
   package?: string;
   version?: string;
-  /** Known before the plugin loads, such as a v1 manifest; a load failure still claims it. */
+  /** Claims `provider` before its load settles, so a later candidate with that id is a duplicate. Dormant candidates claim it without loading. */
   provider?: string;
   /** Claims `provider` without registering or listing: a built-in that is not configured. */
   dormant?: boolean;
-  /** The `options` the store passes to the host, which a v1 plugin reads. */
+  /** The `options` the store passes to the host when it calls the factory. */
   hostOptions?: Record<string, unknown>;
   /** Returns the unvalidated plugin, or throws the reason it cannot load. */
   load(): Promise<unknown> | unknown;
