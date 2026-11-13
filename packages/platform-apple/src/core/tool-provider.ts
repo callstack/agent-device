@@ -63,7 +63,7 @@ async function runSimctlCommand(
  * `Underlying error (…)` line is indented and is never this line.
  */
 const SIMCTL_ERROR_HEADER =
-  /^An error was encountered processing the command \(domain=([^,]+), code=(-?\d+)\):\s*$/m;
+  /^An error was encountered processing the command \(domain=([^,]+), code=(-?\d+)\):[\t ]*(?:\r?\n|$)/;
 
 /**
  * `NSPOSIXErrorDomain` code 60 is macOS `ETIMEDOUT`: the tool's own answer that the screenshot

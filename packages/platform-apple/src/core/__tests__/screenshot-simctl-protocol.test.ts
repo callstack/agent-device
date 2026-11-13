@@ -115,6 +115,15 @@ test('the typed reason survives a changed human message and an unrelated exit co
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });
 
+test('the adapter accepts a leading protocol header with CRLF line endings', async () => {
+  const { error } = await captureScreenshot(() =>
+    commandFailed(protocolTimeout().replaceAll('\n', '\r\n'), 60),
+  );
+
+  assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
+});
+
 test('the adapter keeps every exec failure detail beside the reason it stamped', async () => {
   const { error } = await captureScreenshot(() =>
     commandFailed(protocolTimeout(), 60, 'Detected file type from extension: PNG\n'),
@@ -214,6 +223,14 @@ test('the adapter ignores a header that simctl did not print at the top level', 
   const cases: Array<[string, () => ExecResult]> = [
     ['nested underlying-error header only', () => commandFailed(nestedOnly, 149)],
     ['header printed on stdout instead of stderr', () => commandFailed('', 60, stdoutOnly)],
+    [
+      'matching header after a diagnostic preamble',
+      () => commandFailed(`Diagnostic preamble\n${protocolTimeout()}`, 60),
+    ],
+    [
+      'matching header after an unrelated top-level error',
+      () => commandFailed(`${nestedOnly}\n${protocolTimeout()}`, 149),
+    ],
   ];
 
   for (const [label, answer] of cases) {
