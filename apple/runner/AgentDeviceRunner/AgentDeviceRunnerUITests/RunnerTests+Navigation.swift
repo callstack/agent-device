@@ -384,9 +384,9 @@ extension RunnerTests {
     }
   }
 
-  /// Whether a later read of the bar differs from `before`. Reads start until `deadlineMs`, and one
-  /// final read starts after it and runs to the end, so the screen after the pop is always read: a
-  /// read of a bar that vanishes mid-pop can spend the whole budget in XCTest's retries. A read in
+  /// Whether a later read of the bar differs from `before`. Reads start until `deadlineMs`, and
+  /// unless one of them confirmed or hung, one final read starts after it with no deadline: a read
+  /// of a bar that vanishes mid-pop can spend the whole budget in XCTest's retries. A read in
   /// flight ends at XCTest's own query timeout, which is a hung query. A read that fails proves
   /// nothing, so it never confirms.
   @MainActor
@@ -398,7 +398,8 @@ extension RunnerTests {
     while true {
       let isFinalRead = currentUptimeMs() >= deadlineMs
       let readDeadlineMs = isFinalRead ? Double.infinity : deadlineMs
-      switch readNavigationBarBackState(app: app, phase: .confirmation, deadlineMs: readDeadlineMs) {
+      let phase: NavigationBarBackReadPhase = isFinalRead ? .finalConfirmation : .confirmation
+      switch readNavigationBarBackState(app: app, phase: phase, deadlineMs: readDeadlineMs) {
       case .read(let after) where Self.navigationBarBackPopped(from: before, to: after): return .changed
       case .hung: return .hung
       case .read, .unreadable: break
@@ -415,10 +416,12 @@ extension RunnerTests {
   }
 
   /// Which side of the tap a read of the bar is on: a held issue in the lookup means no button, so
-  /// back swipes; one in the confirmation proves nothing, so it never confirms.
+  /// back swipes; one in the confirmation proves nothing, so it never confirms. The final
+  /// confirmation read is the one read that starts after the confirmation budget.
   enum NavigationBarBackReadPhase {
     case lookup
     case confirmation
+    case finalConfirmation
   }
 
   /// One read of the bar: its value, a read that proved nothing, or an XCTest query that hung.

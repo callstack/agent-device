@@ -223,7 +223,7 @@ extension RunnerTests {
   func testInAppBackWithAnIssueInTheConfirmationAnswersUnverified() throws {
     let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    navigationBarBackReadForTesting = { $0 == .confirmation ? Self.vanishedBackButtonIssue : nil }
+    navigationBarBackReadForTesting = { $0 == .lookup ? nil : Self.vanishedBackButtonIssue }
     defer { navigationBarBackReadForTesting = nil }
 
     let response = try execute(command: try runnerCommandFixture(
@@ -238,26 +238,32 @@ extension RunnerTests {
   }
 
   /// A slow host can spend the whole confirmation budget on reads of the bar that is vanishing mid-pop,
-  /// each one an issue that proves nothing. The read after the budget sees the settled screen, so
-  /// the pop is confirmed, not left unverified.
+  /// each one an issue that proves nothing. Every read that starts in the budget fails here, so only
+  /// the read after the budget, which sees the settled screen, can confirm the pop.
   @MainActor
-  func testInAppBackConfirmsAPopWhoseReadsInTheBudgetAllFailOnASlowHost() throws {
+  func testInAppBackConfirmsAPopWhoseReadsInTheBudgetAllFail() throws {
     _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
     defer { endBackFixture() }
-    var confirmationReads = 0
+    var budgetReads = 0
+    var finalReads = 0
     navigationBarBackReadForTesting = { phase in
-      guard phase == .confirmation else { return nil }
-      confirmationReads += 1
-      guard confirmationReads <= 2 else { return nil }
-      Thread.sleep(forTimeInterval: 0.6)
-      return Self.vanishedBackButtonIssue
+      switch phase {
+      case .lookup: return nil
+      case .confirmation:
+        budgetReads += 1
+        return Self.vanishedBackButtonIssue
+      case .finalConfirmation:
+        finalReads += 1
+        return nil
+      }
     }
     defer { navigationBarBackReadForTesting = nil }
 
     guard case .performed = try performInAppBack(app: app) else {
       return XCTFail("a pop read after the budget must read as performed")
     }
-    XCTAssertEqual(confirmationReads, 3, "both reads in the budget failed, and one read followed it")
+    XCTAssertGreaterThan(budgetReads, 0, "the reads in the budget ran and failed")
+    XCTAssertEqual(finalReads, 1, "the one read after the budget confirmed the pop")
     XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
   }
 

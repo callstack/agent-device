@@ -155,8 +155,12 @@ and bar count, such as one between two screens whose back buttons have the same 
 back button whose title updates itself, misread as a navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
 before each bar's snapshot; a query in flight finishes or ends at XCTest's own query timeout.
-After the tap, one more read follows the 1 s and runs to its end, so the screen after the pop is
-always read: a snapshot of a bar that vanished mid-pop can spend the 1 s in XCTest's retries.
+After the tap, when no read in the 1 s saw a change or hung, the runner starts one more read after
+the 1 s, with no deadline of its own: a snapshot of a bar that vanished mid-pop can spend the 1 s in
+XCTest's retries, and this read can still see the screen after the pop. That read can also fail,
+which answers `BACK_SWIPE_UNVERIFIED`, or hang, which ends at XCTest's own query timeout and also
+answers `BACK_SWIPE_UNVERIFIED`. A read in flight can run well past the 1 s: one bar snapshot took
+about 2 s on a CI simulator.
 
 Every bar read holds its XCTest issues. A held issue means the read proved nothing. A hung query
 ("Timed out while evaluating UI query") is recorded again, and no further query follows it: before
