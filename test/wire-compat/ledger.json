@@ -3,8 +3,8 @@
   "declarations": {
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
-    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
+    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:fe22f0354df488fd2875606ef42b2b36bb69c3e50629a8db3dea947e668a8445",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:e4313ef470b48b7a5c30dc5edc21c9171ba1949a5325807fee9ee3aa15de3ec8",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
@@ -16,8 +16,8 @@
     "packages/contracts/src/request-progress.ts#RequestProgressEvent": "sha256:2516c4d0a4e831f779d68e692158b863f6b42c78a7eaac6607ebbffe2d4b6ce5",
     "packages/kernel/src/contracts.ts#CommandRpcParams": "sha256:3a400b0d815920d9cf4c6236531931f6ba6f9debf7ac26915e0116b493f1c97a",
     "packages/kernel/src/contracts.ts#DAEMON_LOCK_POLICIES": "sha256:625cc33bb574aa6119add45878a0f6adc445244edc2957737da975f91605c786",
-    "packages/kernel/src/contracts.ts#DaemonArtifact": "sha256:967c919d878b83b6e0324c56c1bf41e63b0c31c2e42cf41cd5a12902c2b5034a",
-    "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:b16ce8169a6314168b36b42cc3c042f722781b49695cb290674f4e5216d83b3b",
+    "packages/kernel/src/contracts.ts#DaemonArtifact": "sha256:97c02a4e5227ec00fe8470f053a55c1b39c56b64fac5048c0e95552eb0a5fd97",
+    "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:4a55e654d15d4719a579df4aa1929dda1d52a4acf4c71e9ff78814ad09d6d233",
     "packages/kernel/src/contracts.ts#DaemonArtifactType": "sha256:5e5017276fefe880b8ab32001888011d2e02a8670f0978afdb9b56a77ab37f09",
     "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:fe26e202e62d997cdd3855fd96002511783a6c26a9ce27210d7c6cc084c66e4e",
     "packages/kernel/src/contracts.ts#DaemonLockPolicy": "sha256:f33d0ce7200a7d97c11e91bd2889b5d9bc7f35935a5370a29930118d091468f4",
@@ -63,15 +63,15 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:a5cf6fd4a9abea34ec051f03d6e45e5aa248f480371fdf22f93de06622a57b47",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:b38df93a38bba4b350da2a78486f032a7f9344954dd11b7c09035bbc35c13a91",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
-    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
-    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
+    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:988533d0330a12ea4fd21cbed0122bb816f776b68d7e7a18ccc464c34b58df6b",
+    "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:938e8bd8a1ab8ad2d36b69e0dc68726afb918cc5f3e0e6c9d7ba259435a6aa47",
     "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
-    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
+    "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink": "sha256:df4ca57ab9fdbb8839323dbf7a74e73153946f3a4bfab952efabb2c8bcaa53cd",
     "packages/daemon-client/src/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:fbb1ffa587ffb8b2975936fd35113c1970da16c58a713014df2c6ba885eecdd5",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7c4a77bcafe70cd4a79276617b76b425e21addce739b5203b7b53563ef864537",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
@@ -145,15 +145,15 @@
     "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:d744044d036a46221c3b8220179cc30e1e66b8619a4e5cd3f7dd5f8582817aba",
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
-    "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
+    "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:cab1f0866825eb9a40200a932cc8b654093bcac0e9b8d34ef4418bc3497f7b38",
     "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:2e71ca375778c131e99a645a16b1f491d8dd6a10a3198d696e6138e46b601785",
     "packages/remote/src/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
-    "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
+    "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:b285a8e29aa9477473a7e056726ef87f25256797ef560edd2bd2693117a9bfc6",
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
-    "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
+    "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:7ab1627c6008fcd90a9320a478ba5aef3c7b8edeb160166bfc66017e13397733",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:96e56a40e58e47ec50f9ed4bcb40e8b9a434a42241c3e6b4367a1e13cb8c9def",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:81108fcf523555906f39246996ec5055065340816ed10bf473aa3de30d611a4f",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -214,26 +214,6 @@
       "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it. Also adds the optional leaseRetainOnClose field, sent only on lease_allocate when the caller opts in: a released daemon ignores the unknown meta key and releases the lease on session close as before, and a released client never sends it. Adds the optional providerCredentialFingerprint field: a digest of the local caller's provider credential variables, which the daemon compares with its own on lease_allocate. A released daemon ignores the unknown meta key and allocates as before; a released client never sends it, so the new daemon skips the comparison. The client sends it only to a local daemon, and the remote HTTP surface strips it."
     },
     {
-      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
-      "digest": "sha256:b16ce8169a6314168b36b42cc3c042f722781b49695cb290674f4e5216d83b3b",
-      "rationale": "#2747 adds the 'screen-recording-contact-sheet' literal for the PNG that `record contact-sheet` publishes beside the recording it read. DaemonArtifactType already widens to `(string & {})`, so an artifactType value outside the known set was always valid on the wire; the literal only sharpens the type hint for code that opts into recognizing it. A released peer that does not know it never requests that field in a download and parses the artifact record by its `field`, so it carries the sheet as an unknown artifact instead of failing."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
-      "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
-      "digest": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
-      "rationale": "#2246 selects a file or directory destination once. Directory downloads stage and safely extract beside the destination, propagate timeout cancellation through both operations, and atomically rename the complete top-level entry; returning that local path is client-only state. The GET /artifacts/:id request and response framing, and every existing file artifact call site's behavior, are unchanged."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
-      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
-    },
-    {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload",
       "digest": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
       "rationale": "Adds the optional providerCredentialFingerprint parameter to agent_device.lease.allocate, forwarded only when the request meta carries one, which the client sets only for a local daemon. A released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request without a fingerprint keeps the previous payload byte-for-byte. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. It now composes the envelope through buildDaemonRpcRequest in @agent-device/contracts/lease-scope, which takes the request id from its caller; the client supplies the id it supplied before (the request meta id, else a fresh one), so envelope construction preserves method, params and id. Separately, credential fingerprint lookup now trims the provider name on both client and daemon. A whitespace-spelled provider can therefore add a fingerprint that the released client omitted; this changes fingerprint presence, not the envelope or optional parameter contract."
@@ -264,11 +244,6 @@
       "rationale": "Inlined `decodeURIComponent`+catch replaced by the shared `decodeUriSegment` (packages/daemon/src/server/http-request-target.ts), which is listed and byte-identical in behaviour: the same artifact ids decode, and an undecodable id still resolves to the empty id the route rejects."
     },
     {
-      "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:fbb1ffa587ffb8b2975936fd35113c1970da16c58a713014df2c6ba885eecdd5",
-      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. The handler waits for file readiness before setting headers and starting the pipeline, so open errors use the existing JSON error response. Setup errors clear artifact-only headers first. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete streaming reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field. Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload. A response that has finished writing is not cancelled by its normal close event, so successful pipeline completion keeps its existing success semantics. Caller cancellation is normalized to the existing request_canceled error instead of forwarding caller-supplied reasons. Artifact expiry and download deadlines keep their existing reasons. The shared HTTP disconnect helper preserves typed cancellation on aborted requests and unfinished response closes. Directory preparation counts inventory and download callers together, so one disconnected download cannot abort an inventory caller's build; successful response fields and authorization stay unchanged."
-    },
-    {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
       "digest": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
       "rationale": "#3753 threads the daemon runtime's host environment into the same archive spawn from the inventory route. The JSON body it writes and the error path are unchanged; no peer-visible field moves."
@@ -296,7 +271,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -332,31 +307,6 @@
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequest",
       "digest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
       "rationale": "#2946 widens the options with an optional abort signal handed to node:http.request. The request line, headers built by buildUploadRequestHeaders, and piped payload are unchanged, so an older daemon's 200/308 handling is unaffected."
-    },
-    {
-      "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
-      "digest": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
-    },
-    {
-      "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
-      "digest": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
-    },
-    {
-      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth",
-      "digest": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
-    },
-    {
-      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink",
-      "digest": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
-    },
-    {
-      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
-      "digest": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
@@ -499,11 +449,6 @@
       "rationale": "The upload client refuses a redirect to another origin, including a 308 that carries a Location, instead of re-sending the daemon token or ticket headers and the artifact there. Same-origin redirects, the Location-less 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests. A direct-upload ticket that redirects cross-origin fails as a non-retryable direct upload, and uploadArtifact then takes the legacy /upload route on the daemon."
     },
     {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
-      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a record or trace stop or a perf stop or report, and any other artifact lands in cwd under the basename of its fileName. A released daemon echoes localPath equal to the registered destination for screenshot and test, and echoes an earlier destination only on those stop and report actions, so its artifacts land where they did before. The wire shape is unchanged."
-    },
-    {
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
       "digest": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
       "rationale": "The /rpc body limit is now DAEMON_REQUEST_MAX_BYTES (64 MiB), the one request limit the socket transport, the proxy default, and client writers share, raised from 1 MiB. A larger limit refuses nothing a released client sends; a new client refuses a request over 64 MiB before sending it, and a released daemon still answers anything between 1 MiB and 64 MiB with its own -32700 refusal, as before."
@@ -557,6 +502,71 @@
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
       "digest": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
       "rationale": "#4434 passes the origin validated by the HTTP ingress owner, or the explicitly configured publicOrigin, into the existing ticket producer. Protocol-2 clients receive the same uploadId and upload URL/header object, use the returned absolute URL, and keep the existing byte, range, authentication and finalize contracts. Forwarding headers no longer select authority under the documented operator migration; no wire field becomes required or changes interpretation."
+    },
+    {
+      "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
+      "digest": "sha256:fe22f0354df488fd2875606ef42b2b36bb69c3e50629a8db3dea947e668a8445",
+      "rationale": "Adds optional activeScriptArtifacts capability metadata. Released clients ignore this field and keep parsing existing health fields; a new client treats absence as unsupported and refuses remote ordinary recording before RPC. Protocol version and all existing fields are unchanged."
+    },
+    {
+      "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
+      "digest": "sha256:e4313ef470b48b7a5c30dc5edc21c9171ba1949a5325807fee9ee3aa15de3ec8",
+      "rationale": "Emits optional activeScriptArtifacts only when its caller opts in. Existing call sites keep their previous payload. Older peers ignore the additive field; daemon/proxy framing and protocol metadata are unchanged."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth",
+      "digest": "sha256:988533d0330a12ea4fd21cbed0122bb816f776b68d7e7a18ccc464c34b58df6b",
+      "rationale": "Adds an optional activeScriptArtifacts health field. Old health replies remain valid and mean unsupported recording; existing reachability, protocol, instance and upstream fields retain their meanings."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink",
+      "digest": "sha256:938e8bd8a1ab8ad2d36b69e0dc68726afb918cc5f3e0e6c9d7ba259435a6aa47",
+      "rationale": "Carries the optional activeScriptArtifacts field on an upstream health link, so the client consults the daemon behind a proxy rather than guessing from the proxy version. Missing metadata is still valid and existing link fields are unchanged."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readHealthLink",
+      "digest": "sha256:df4ca57ab9fdbb8839323dbf7a74e73153946f3a4bfab952efabb2c8bcaa53cd",
+      "rationale": "Reads activeScriptArtifacts only when explicitly true and otherwise preserves the previous parsed health shape. Existing version, service, protocol, instance and architecture parsing is unchanged; old replies continue to parse and do not enable recording."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifact",
+      "digest": "sha256:97c02a4e5227ec00fe8470f053a55c1b39c56b64fac5048c0e95552eb0a5fd97",
+      "rationale": "Adds optional force metadata for session-script artifacts, echoing the publication target overwrite grant to a later caller download. Older clients ignore the new field; existing artifacts omit it and retain their previous shape. Remote recording requires the new upstream capability."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
+      "digest": "sha256:4a55e654d15d4719a579df4aa1929dda1d52a4acf4c71e9ff78814ad09d6d233",
+      "rationale": "Adds the session-script literal to the existing open string artifact type. Existing artifact values remain valid. Older clients cannot initiate remote recording through the released client, and new clients require explicit upstream support before doing so."
+    },
+    {
+      "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
+      "digest": "sha256:7c4a77bcafe70cd4a79276617b76b425e21addce739b5203b7b53563ef864537",
+      "rationale": "Retains only the new session-script artifact kind until the existing artifact lifetime expires, permitting retry after caller publication failure. Existing artifact kinds keep their consume-on-download behavior. GET response framing, authorization, byte counts and content headers are unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
+      "digest": "sha256:b285a8e29aa9477473a7e056726ef87f25256797ef560edd2bd2693117a9bfc6",
+      "rationale": "Adds optional scriptForce client-local state selecting atomic script publication. It is never serialized in the HTTP request. Existing file and directory callers omit it, and their GET artifact framing stays unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
+      "digest": "sha256:7ab1627c6008fcd90a9320a478ba5aef3c7b8edeb160166bfc66017e13397733",
+      "rationale": "Forwards optional scriptForce to the local downloader. This changes only local filesystem publication for the new session-script kind; GET URL, token, tenant/lease headers and response framing are unchanged for every peer."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
+      "digest": "sha256:96e56a40e58e47ec50f9ed4bcb40e8b9a434a42241c3e6b4367a1e13cb8c9def",
+      "rationale": "Selects atomic no-clobber/authorized replacement for the new session-script artifact kind and reports its materialized caller path. Existing artifact kinds retain their previous transfer behavior. The optional force field is ignored by older peers and HTTP framing is unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
+      "digest": "sha256:81108fcf523555906f39246996ec5055065340816ed10bf473aa3de30d611a4f",
+      "rationale": "Allows only a savedScript/session-script artifact on session_save_script to echo the caller destination armed earlier. Other response destinations and existing capture completion paths are unchanged. HTTP framing is unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/artifact-download.ts#RemoteArtifactDownload",
+      "digest": "sha256:cab1f0866825eb9a40200a932cc8b654093bcac0e9b8d34ef4418bc3497f7b38",
+      "rationale": "Adds optional scriptForce state for client-side staged script publication. It is not a wire field and changes no GET request or response. Callers that omit it retain their prior file/directory transfer behavior."
     }
   ]
 }
