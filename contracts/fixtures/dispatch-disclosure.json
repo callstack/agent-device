@@ -302,6 +302,12 @@
     "dispatched": "unknown"
   },
   {
+    "id": "ios-runner.reply.KEYBOARD_DISMISS_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code KEYBOARD_DISMISS_UNAVAILABLE: `keyboard dismiss` refused because the visible keyboard exposes no dismiss key, before any tap",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.unlisted-code",
     "producer": "ios-runner",
     "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE, which the runner reports as \"the action may not have been performed\"",

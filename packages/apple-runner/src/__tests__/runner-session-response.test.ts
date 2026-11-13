@@ -10,13 +10,14 @@ import { isRetryableRunnerError } from '../runner-error-classification.ts';
 import type { RunnerLogAttempt } from '../runner-failure-diagnostics.ts';
 import { parseRunnerResponse } from '../runner-exchange.ts';
 
-test('parseRunnerResponse preserves runner unsupported-operation codes', async () => {
+test('parseRunnerResponse keeps the keyboard-dismiss refusal under the code the command reports', async () => {
   const response = new Response(
     JSON.stringify({
       ok: false,
       error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'Unable to dismiss the iOS keyboard without a safe native dismiss control',
+        code: 'KEYBOARD_DISMISS_UNAVAILABLE',
+        message:
+          'Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)',
       },
     }),
   );
@@ -26,8 +27,12 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
     () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
+      // The runner's own code stays off the wire: `keyboard dismiss` keeps refusing with the code it
+      // always refused with, and the reason is what tells the two ways the keyboard stays up apart.
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-      assert.match(error.message, /Unable to dismiss the iOS keyboard/i);
+      assert.equal(error.details?.reason, 'keyboard_dismiss_unavailable');
+      assert.equal(error.details?.runnerErrorCode, 'KEYBOARD_DISMISS_UNAVAILABLE');
+      assert.equal(error.details?.dispatched, 'no');
       return true;
     },
   );
@@ -40,8 +45,9 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint naming the occlusio
     JSON.stringify({
       ok: false,
       error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'Unable to dismiss the iOS keyboard without a safe native dismiss control',
+        code: 'KEYBOARD_DISMISS_UNAVAILABLE',
+        message:
+          'Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)',
         hint,
       },
     }),
@@ -54,9 +60,6 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint naming the occlusio
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
       assert.equal(error.details?.hint, hint);
-      assert.match(String(error.details?.hint), /tap_keyboard_occludes_target/);
-      assert.match(String(error.details?.hint), /center stays above the keys/i);
-      assert.match(String(error.details?.hint), /keyboard enter/i);
       return true;
     },
   );
