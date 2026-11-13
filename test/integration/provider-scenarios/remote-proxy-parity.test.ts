@@ -91,7 +91,11 @@ function scriptedTree() {
       },
       // More rows make this a populated first screen, so the first capture after open settles on one
       // quiet pair.
-      ...FIRST_SCREEN_NODES.slice(1).map((node, row) => ({ ...node, index: row + 2, parentIndex: 1 })),
+      ...FIRST_SCREEN_NODES.slice(1).map((node, row) => ({
+        ...node,
+        index: row + 2,
+        parentIndex: 1,
+      })),
     ],
     truncated: false,
   };
