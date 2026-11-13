@@ -6,7 +6,7 @@ import { mkdtempForTestSync } from './internal/tmp-dir.fixtures.ts';
 import { createLocalArtifactAdapter } from './local-artifact-adapter.ts';
 
 test('local artifact adapter marks command outputs and temp files by visibility', async () => {
-  const adapter = createLocalArtifactAdapter();
+  const adapter = createLocalArtifactAdapter({ cwd: process.cwd() });
   const output = await adapter.reserveOutput(undefined, {
     field: 'path',
     ext: '.png',

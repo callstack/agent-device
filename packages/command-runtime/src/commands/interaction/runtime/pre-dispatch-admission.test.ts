@@ -84,7 +84,7 @@ function createAdmissionDevice(params: {
   const stored = params.trees[0]!;
   const device = createAgentDevice({
     backend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       {
         name: 'default',

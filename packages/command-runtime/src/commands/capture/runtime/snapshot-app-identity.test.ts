@@ -28,7 +28,7 @@ async function snapshotWithForeground(
         ...sessionApp,
       }),
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: (record) => {
@@ -94,7 +94,7 @@ test('a repeated unchanged snapshot of a foreign foreground app is acknowledged 
         appBundleId: 'com.android.settings',
       }),
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => stored,
       set: (record) => {

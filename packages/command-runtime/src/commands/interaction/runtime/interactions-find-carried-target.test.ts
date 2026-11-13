@@ -65,7 +65,7 @@ function createDevice(stored: SnapshotState) {
         return {};
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: stored }]),
     policy: localCommandPolicy(),
   });

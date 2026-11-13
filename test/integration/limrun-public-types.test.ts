@@ -19,7 +19,7 @@ function ensureBuiltPackage(): void {
   });
 }
 
-test('compiled Limrun subpath preserves its downstream type surface', () => {
+test('compiled SDK subpaths require explicit hosts and preserve Limrun types', () => {
   ensureBuiltPackage();
 
   // Keep the fixture under the package root so TypeScript resolves the
@@ -49,9 +49,14 @@ test('compiled Limrun subpath preserves its downstream type surface', () => {
   LimrunDeviceSession,
   LimrunIosCommandExecution,
   LimrunIosDeviceSession,
-  LimrunRuntime,
   LimrunRuntimeOptions,
 } from 'agent-device/limrun';
+import { LimrunRuntime } from 'agent-device/limrun';
+import { runAndroidShell, runAndroidExecOut } from 'agent-device/android-adb';
+import { resolveAndroidArchivePackageName } from 'agent-device/artifacts';
+import { prepareMetroRuntime } from 'agent-device/metro';
+import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
+import { createLocalArtifactAdapter, type LocalArtifactAdapterOptions } from 'agent-device/io';
 
 declare const runtime: LimrunRuntime;
 declare const options: LimrunRuntimeOptions;
@@ -59,6 +64,32 @@ declare const session: LimrunDeviceSession;
 declare const iosSession: LimrunIosDeviceSession;
 declare const execution: LimrunIosCommandExecution;
 void [runtime, options, session, iosSession, execution];
+const host = { env: {}, cwd: '/workspace' };
+declare const device: Parameters<typeof runAndroidShell>[0];
+runAndroidShell(device, ['id'], host);
+runAndroidExecOut(device, ['id'], host);
+resolveAndroidArchivePackageName('app.apk', host);
+prepareMetroRuntime({}, host);
+resolveRemoteConfigProfile({ configPath: 'remote.json', ...host });
+createLocalArtifactAdapter({ cwd: host.cwd });
+new LimrunRuntime(options, host);
+// @ts-expect-error Android shell requires a host.
+runAndroidShell(device, ['id']);
+// @ts-expect-error Android exec-out requires a host.
+runAndroidExecOut(device, ['id']);
+// @ts-expect-error Archive inspection requires a host.
+resolveAndroidArchivePackageName('app.apk');
+// @ts-expect-error Metro requires a host.
+prepareMetroRuntime({});
+// @ts-expect-error Remote config requires env, including when it is empty.
+resolveRemoteConfigProfile({ configPath: 'remote.json', cwd: host.cwd });
+// @ts-expect-error Local artifact I/O requires cwd.
+createLocalArtifactAdapter();
+// @ts-expect-error Local artifact options require cwd.
+const missingCwd: LocalArtifactAdapterOptions = {};
+void missingCwd;
+// @ts-expect-error Limrun requires a host.
+new LimrunRuntime(options);
 `,
     );
 

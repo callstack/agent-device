@@ -20,7 +20,7 @@ test('runtime selectors forward public snapshot options to backend capture', asy
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -54,7 +54,7 @@ test('runtime visibility predicates request snapshot rects', async () => {
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -87,7 +87,7 @@ test('runtime focused predicate requests a full snapshot', async () => {
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -126,7 +126,7 @@ test('runtime focused predicate reads focused Android TV nodes from the full tre
         return { snapshot: options?.interactiveOnly ? interactiveSnapshot : fullSnapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: interactiveSnapshot }]),
     policy: localCommandPolicy(),
   });
@@ -189,7 +189,7 @@ test('runtime is absent uses one readAny capture without requesting rects', asyn
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -316,7 +316,7 @@ test('runtime is absent fails closed for a sparse capture and preserves the last
       platform: 'ios',
       captureSnapshot: async () => ({ snapshot: sparse }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });

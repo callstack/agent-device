@@ -214,10 +214,11 @@ import { LimrunRuntime } from 'agent-device/limrun';
 const apiKey = process.env.LIMRUN_API_KEY;
 if (!apiKey) throw new Error('LIMRUN_API_KEY is required');
 
-const runtime = new LimrunRuntime({
-  apiKey,
-  region: process.env.LIMRUN_REGION,
-});
+const host = { env: { ...process.env }, cwd: process.cwd() };
+const runtime = new LimrunRuntime(
+  { apiKey, region: process.env.LIMRUN_REGION },
+  host,
+);
 ```
 
 To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. The runtime never creates or deletes instances for a platform listed there.

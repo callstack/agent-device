@@ -30,7 +30,7 @@ test('runtime focused selector waits against a full snapshot', async () => {
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -95,7 +95,7 @@ function landmarkWaitDevice(captures: Array<ReturnType<typeof landmarkScreen>>) 
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: initial }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -239,7 +239,7 @@ async function landmarkRefusalAfter(
         return { snapshot: await finalCapture() };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: impostor }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(100),
