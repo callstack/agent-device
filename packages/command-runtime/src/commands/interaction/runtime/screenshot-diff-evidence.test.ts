@@ -177,13 +177,16 @@ test('press with expectScreenshotDiff reports a shape change without a ratio', a
 
 test('press with expectScreenshotDiff drops the evidence when a capture fails', async () => {
   let captureCount = 0;
+  const taps: Array<{ x: number; y: number }> = [];
   const device = createInteractionDevice(selectorSnapshot(), {
     captureScreenshot: async () => {
       captureCount += 1;
       if (captureCount === 1) throw new Error('screen capture unavailable');
       return { path: '/unused/after.png' };
     },
-    tap: async () => ({ ok: true }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
   });
 
   const result = await device.interactions.press(
@@ -194,10 +197,11 @@ test('press with expectScreenshotDiff drops the evidence when a capture fails', 
     },
   );
 
-  // No pair, no claim — and the dispatch itself still succeeds.
+  // No pair, no claim — the tap still crossed, and the readback says nothing.
   assert.equal('screenshotDiff' in result, false);
   assert.equal('warning' in result ? result.warning : undefined, undefined);
   assert.deepEqual(captureCount, 1);
+  assert.deepEqual(taps, [{ x: 10, y: 20 }]);
 });
 
 test('press without a screenshot backend drops the evidence and still taps', async () => {
@@ -246,4 +250,29 @@ test('press with expectScreenshotDiff routes a ref target through the runtime pa
   assert.deepEqual(refTaps, []);
   assert.ok(result.screenshotDiff);
   assert.equal(result.screenshotDiff?.changedFromBefore, true);
+});
+
+test('a corrupted after-frame yields no evidence instead of failing a delivered tap', async () => {
+  const corrupted = Buffer.from('not a png at all');
+  const backend = framePlanBackend([
+    { bytes: solidPngBuffer(8, 8, { r: 0, g: 0, b: 0 }) },
+    { bytes: corrupted },
+  ]);
+  const taps: Array<{ x: number; y: number }> = [];
+  const device = createInteractionDevice(selectorSnapshot(), {
+    ...backend,
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  const result = await device.interactions.press(
+    { kind: 'point', x: 10, y: 20 },
+    { session: 'default', expectScreenshotDiff: true },
+  );
+
+  // The tap crossed the device; the unreadable readback claims nothing.
+  assert.equal(taps.length, 1);
+  assert.equal(result.screenshotDiff, undefined);
+  assert.equal(result.warning, undefined);
 });

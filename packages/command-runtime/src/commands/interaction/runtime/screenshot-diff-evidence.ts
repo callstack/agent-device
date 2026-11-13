@@ -60,7 +60,9 @@ export async function dispatchWithScreenshotPair<T>(
   try {
     result = await dispatch();
   } catch (error) {
-    if (before) await before.cleanup();
+    // The evidence lane owns nothing after a resolved dispatch, and a failed
+    // dispatch rethrows its own error even if the frame cleanup fails.
+    if (before) await before.cleanup().catch(() => {});
     throw error;
   }
   return {
@@ -145,23 +147,43 @@ async function compareScreenshotPair(
   options: CommandContext,
   before: TemporaryFile,
 ): Promise<ScreenshotPairOutcome> {
+  // Nothing after a resolved dispatch may throw out of this lane: a decode,
+  // read, import or cleanup failure yields no evidence, because a throwing
+  // readback would report a delivered tap as failed and a PIN caller would
+  // re-enter the digit.
   try {
-    await sleep(runtime, AFTER_FRAME_SETTLE_MS);
+    return await compareScreenshotPairInner(runtime, options, before);
+  } catch {
+    return {};
+  }
+}
+
+async function compareScreenshotPairInner(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  before: TemporaryFile,
+): Promise<ScreenshotPairOutcome> {
+  try {
+    // A request canceled after the dispatch stops waiting for the after-frame.
+    await sleep(runtime, AFTER_FRAME_SETTLE_MS, options.signal);
     const after = await capturePairScreenshotFrame(runtime, options, 'after');
     if (!after) return {};
     try {
-      const [{ computePngChangedPixelRatio }, { decodePng }] = await Promise.all([
+      const [{ computePngChangedPixelRatio }, { decodePngAsync }] = await Promise.all([
         import('@agent-device/capture-kit/png-changed-pixel-ratio'),
-        import('@agent-device/capture-kit/png'),
+        import('@agent-device/capture-kit/png-worker-client'),
       ]);
       const [beforeBytes, afterBytes] = await Promise.all([
         fs.readFile(before.path),
         fs.readFile(after.path),
       ]);
-      const ratio = computePngChangedPixelRatio(
-        decodePng(beforeBytes, 'the press before-screenshot'),
-        decodePng(afterBytes, 'the press after-screenshot'),
-      );
+      // The decodes run in the codec worker: full-resolution frames never sit
+      // on the event loop.
+      const [beforePng, afterPng] = await Promise.all([
+        decodePngAsync(beforeBytes, 'the press before-screenshot'),
+        decodePngAsync(afterBytes, 'the press after-screenshot'),
+      ]);
+      const ratio = computePngChangedPixelRatio(beforePng, afterPng);
       if (ratio.status === 'dimension_mismatch') {
         return { evidence: { changedFromBefore: true } };
       }
@@ -179,9 +201,9 @@ async function compareScreenshotPair(
             }),
       };
     } finally {
-      await after.cleanup();
+      await after.cleanup().catch(() => {});
     }
   } finally {
-    await before.cleanup();
+    await before.cleanup().catch(() => {});
   }
 }

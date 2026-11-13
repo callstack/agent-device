@@ -75,7 +75,9 @@ test('expectScreenshotDiff CLI flags are scoped to press and click', () => {
 test('expectScreenshotDiff metadata fields are scoped to press and click', () => {
   for (const command of [...SCREENSHOT_DIFF_COMMANDS, ...OUT_OF_SCOPE_COMMANDS]) {
     const metadata = findCommandMetadata(command);
-    if (!metadata) continue;
+    if (!metadata) {
+      throw new Error(`listed command ${command} carries no metadata; the guard cannot audit it`);
+    }
     const properties = metadata.inputSchema.properties ?? {};
     assert.equal(
       Object.hasOwn(properties, 'expectScreenshotDiff'),
