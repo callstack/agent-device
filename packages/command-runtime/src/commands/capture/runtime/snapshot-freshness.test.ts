@@ -17,7 +17,7 @@ function snapshotDevice(
   };
   return createAgentDevice({
     backend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: { get: () => session, set: () => {} },
     policy: localCommandPolicy(),
     clock: { now: () => 1_500, sleep: async () => {} },

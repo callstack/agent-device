@@ -64,7 +64,7 @@ function deviceWithSessionTree(snapshot: ReturnType<typeof makeSnapshotState> | 
         taps.push(point);
       },
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });

@@ -32,7 +32,7 @@ function textWaitDevice(params: {
       ...(params.findText ? { findText: params.findText } : {}),
       readText: params.readText ?? (async () => ({ text: '' })),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: params.clock ?? createFakeClock(),
@@ -217,7 +217,7 @@ test('runtime wait passes its polling deadline signal to snapshot capture', asyn
       platform: 'ios',
       captureSnapshot: capture,
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });

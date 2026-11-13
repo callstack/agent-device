@@ -27,7 +27,7 @@ for (const authority of ['runtime', 'command'] as const) {
     const reason = new Error(`${authority} wait canceled`);
     const device = createAgentDevice({
       backend: { platform: 'ios' } satisfies AgentDeviceBackend,
-      artifacts: createLocalArtifactAdapter(),
+      artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
       sessions: createMemorySessionStore(),
       policy: localCommandPolicy(),
       clock: {
