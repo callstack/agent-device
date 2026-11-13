@@ -247,7 +247,7 @@ const provider = {
     };
   },
   release: async (lease: { id: string }) => {
-    await createAgentDeviceClient({}).leases.release({ ...scope, leaseId: lease.id });
+    await createAgentDeviceClient({ session: `lease-${lease.id}` }).leases.release({ ...scope, leaseId: lease.id });
   },
 };
 ```

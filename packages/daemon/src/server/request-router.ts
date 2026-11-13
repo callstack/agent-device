@@ -22,11 +22,11 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   type ResponseCost,
   errorResponse,
-  namesSessionExplicitly,
   noActiveSessionError,
   type DaemonResponse,
   type DaemonResponseData,
 } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import type {

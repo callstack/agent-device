@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { namesSessionExplicitly } from './contracts.ts';
+import { namesSessionExplicitly } from './record.ts';
 
 test('a client that set the explicit-session meta names its session', () => {
   assert.equal(namesSessionExplicitly({ meta: { sessionExplicit: true } }), true);

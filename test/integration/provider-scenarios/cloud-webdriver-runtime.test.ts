@@ -223,6 +223,7 @@ test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its
 
     try {
       const capture = daemon.client().capture.snapshot({
+        session: 'default',
         signal: controller.signal,
         ...leaseClientOptions(lease.leaseId),
       });

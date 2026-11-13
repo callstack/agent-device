@@ -86,6 +86,7 @@ Configure the client directly when your Node.js process manages the AWS credenti
 import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
+  session: 'checkout-android',
   leaseProvider: 'aws-device-farm',
   awsProjectArn: process.env.AWS_DEVICE_FARM_PROJECT_ARN,
   awsDeviceArn: process.env.AWS_DEVICE_FARM_DEVICE_ARN,

@@ -247,6 +247,38 @@ test('socket transport refuses a non-string positional before dispatch', async (
   }
 });
 
+test.for([
+  ['omitted', undefined, 'default', true],
+  ['blank', '  ', '  ', true],
+  ['named', 'agent-a', 'agent-a', undefined],
+] as const)(
+  'the socket records a session that is %s',
+  async ([_label, session, resolvedSession, sessionOmitted], t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
+    const observedRequests: DaemonRequest[] = [];
+    const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+      observedRequests.push(req);
+      return { ok: true, data: {} };
+    });
+
+    try {
+      const client = await connectSocket(await listenNetServer(server));
+      await writeSocketRequests(
+        client,
+        [JSON.stringify({ token: 'token', session, command: 'session_list', positionals: [] })],
+        1,
+      );
+      client.destroy();
+      assert.equal(observedRequests.length, 1);
+      assert.equal(observedRequests[0]?.session, resolvedSession);
+      assert.equal(observedRequests[0]?.internal?.sessionOmitted, sessionOmitted);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
+
 // A socket client that vanishes mid-request must cancel that connection's
 // in-flight request via its request-scoped signal — never through a global
 // Apple-runner abort, and never touching another connection's request.
