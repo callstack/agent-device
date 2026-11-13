@@ -93,7 +93,7 @@ export function readFirstScreenContent(
  * launch or loading surface and never qualifies. A sparse tree qualifies once it has stayed
  * unchanged for {@link FIRST_SCREEN_SPARSE_QUIET_MS}. Any other tree qualifies at once.
  */
-export function isFirstScreenReady(content: FirstScreenContent, quietForMs: number): boolean {
+function isFirstScreenReady(content: FirstScreenContent, quietForMs: number): boolean {
   if (content.kind === 'unverifiable') return true;
   if (content.contentNodes === 0) return false;
   if (content.contentNodes > FIRST_SCREEN_SPARSE_CONTENT_NODES) return true;
