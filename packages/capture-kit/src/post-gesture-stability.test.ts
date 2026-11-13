@@ -339,6 +339,20 @@ test('a launch whose populated tree never quiets reports it unsettled, not loadi
   assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
 });
 
+test('a launch whose small first screen keeps changing reports it unsettled, not loading', async () => {
+  const clock = fakeClock();
+  const frames = Array.from({ length: 60 }, (_, frame) => launchSurface(`tick ${frame}`, 2));
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, frames),
+    clock,
+  });
+
+  assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
+  assert.ok(clock.now() >= 10_000, `gave up after ${clock.now()}ms`);
+});
+
 test('a gesture record never applies the first-screen rule to an empty tree', async () => {
   const clock = fakeClock();
   const empty = launchSurface('empty', 0);
