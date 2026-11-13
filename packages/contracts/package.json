@@ -555,6 +555,10 @@
     "./wait": {
       "types": "./src/wait.ts",
       "default": "./src/wait.ts"
+    },
+    "./replay-divergence-data": {
+      "types": "./src/replay-divergence-data.ts",
+      "default": "./src/replay-divergence-data.ts"
     }
   },
   "devDependencies": {

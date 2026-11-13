@@ -8,7 +8,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
+import { formatReplayDivergenceReport } from '@agent-device/contracts/replay-divergence-data';
 import { collapseWarningText } from '../output-common.ts';
 
 /**

@@ -5,7 +5,6 @@
   "type": "module",
   "description": "The client side of the daemon wire: transport and JSON-RPC framing, request cancellation and progress, local daemon launch, ensure, attach and stop, and remote daemon health. Internal workspace package bundled into the published agent-device artifact.",
   "dependencies": {
-    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/daemon-contracts": "workspace:*",

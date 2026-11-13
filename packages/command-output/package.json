@@ -6,7 +6,6 @@
   "type": "module",
   "description": "Shared CLI and MCP command presentation: per-family output formatters, warning routing, color, human error lines, and result serialization. Takes terminal facts as explicit input and performs no process I/O.",
   "dependencies": {
-    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/command-surface": "workspace:*",
