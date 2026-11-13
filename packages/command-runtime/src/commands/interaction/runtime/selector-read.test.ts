@@ -52,7 +52,7 @@ test('runtime get selector target captures fresh snapshot without a stored sessi
       },
       readText: async () => ({ text: 'Fresh text' }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });
@@ -159,7 +159,7 @@ test('runtime selectors pass runtime signal to backend snapshot capture', async 
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     signal: controller.signal,
@@ -216,7 +216,7 @@ test('runtime web find text does not pass locator text as browser selector scope
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
   });
@@ -266,7 +266,7 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
         quality: sparseSnapshot.snapshotQuality,
       }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
     clock: {
@@ -311,7 +311,7 @@ test('runtime find wait skips hidden-content hint derivation on every poll (#127
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock: {
@@ -368,7 +368,7 @@ test('runtime find wait cancels and joins a capture that consumes its full deadl
         });
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });
@@ -438,7 +438,7 @@ function waitDeviceWithCaptures(captures: Array<() => ReturnType<typeof landmark
         return { snapshot: produce() };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -533,7 +533,7 @@ test('runtime wait reports a stalled final capture after earlier unreadable verd
         });
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -579,7 +579,7 @@ test('runtime wait does not call a deadline-truncated poll stalled after a reada
         });
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
     clock: createFakeClock(),
@@ -617,7 +617,7 @@ function failingWaitDevice(produceError: () => Error): {
         throw produceError();
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),

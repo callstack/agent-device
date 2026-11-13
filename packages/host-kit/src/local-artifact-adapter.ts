@@ -1,4 +1,3 @@
-import { captureHostEnvironment } from './process.ts';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,10 +7,8 @@ import type {
   LocalArtifactAdapterOptions,
 } from '@agent-device/contracts/artifact-adapter';
 
-export function createLocalArtifactAdapter(
-  options: LocalArtifactAdapterOptions = {},
-): ArtifactAdapter {
-  const cwd = options.cwd ?? captureHostEnvironment(process).cwd;
+export function createLocalArtifactAdapter(options: LocalArtifactAdapterOptions): ArtifactAdapter {
+  const cwd = options.cwd;
   const tempDir = options.tempDir ?? os.tmpdir();
   const rootDir = options.rootDir ? resolveLocalPath(options.rootDir, cwd) : undefined;
 
