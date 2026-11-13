@@ -833,8 +833,45 @@ test('a burst without an explicit path keeps every frame in one temp root', asyn
   const frames = result.frames as Array<{ path: string }>;
   expect(frames).toHaveLength(2);
   expect(path.dirname(frames[0]!.path)).toBe(path.dirname(frames[1]!.path));
+  expect(new Set(frames.map((frame) => frame.path)).size).toBe(2);
   expect(fs.existsSync(frames[0]!.path)).toBe(true);
   expect(fs.existsSync(frames[1]!.path)).toBe(true);
+});
+
+test('a burst that fails past frame 1 leaves no implicit temp root behind', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const req = screenshotRequest({ flags: { count: 3 } });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  if (!resolved.ok) throw new Error('screenshot admission must succeed');
+  fixture.captureScreenshot.mockImplementationOnce(async () => ({}));
+  fixture.captureScreenshot.mockRejectedValueOnce(new Error('second frame capture failed'));
+
+  await expect(executeResult(resolved, session, req, req.flags)).rejects.toThrow(
+    'second frame capture failed',
+  );
+  expect(fixture.captureScreenshot).toHaveBeenCalledTimes(2);
+
+  // The implicit root that held frame 1 is gone. Another concurrent run could
+  // own its own root, so this checks the one this burst created — the dirname
+  // the failure reported, not a global sweep.
+  let frameOneDir: string | undefined;
+  try {
+    frameOneDir = path.dirname(fixture.captureScreenshot.mock.calls[0]![0]!.outPath);
+  } catch {
+    frameOneDir = undefined;
+  }
+  expect(frameOneDir).toBeDefined();
+  expect(fs.existsSync(frameOneDir!)).toBe(false);
 });
 
 test('burst admission refuses crop, overlay, and misbounded flags before any device work', async () => {
@@ -887,6 +924,10 @@ test('a cancelled request stops the burst before the next frame', async () => {
   if (!resolved.ok) throw new Error('screenshot admission must succeed');
 
   const controller = new AbortController();
+  fixture.captureScreenshot.mockImplementation(async () => {
+    controller.abort();
+    return {};
+  });
   const execution = resolved.execute(
     executionParams(session, req, {
       count: req.flags?.count,
@@ -894,9 +935,10 @@ test('a cancelled request stops the burst before the next frame', async () => {
       signal: controller.signal,
     }),
   );
-  controller.abort();
   await expect(execution).rejects.toThrow();
-  expect(fixture.captureScreenshot.mock.calls.length).toBeLessThan(3);
+  // The abort lands in the first capture's callback, so exactly one frame may
+  // complete before the plan rejects; a later-frame cancellation would show 2.
+  expect(fixture.captureScreenshot.mock.calls.length).toBe(1);
 });
 
 /** A command surface whose every capture reports the given warnings, so a burst frames them. */
@@ -959,7 +1001,7 @@ test('a burst keeps the warnings array within one note per frame', async () => {
           frame += 1;
           return {
             ...(await forwarded.capture.screenshot(options)),
-            warnings: [`frame ${frame} note one`, `frame ${frame} note two`],
+            warnings: ['the frames share one note', `frame ${frame} contributes its own`],
           };
         },
       },
@@ -977,5 +1019,8 @@ test('a burst keeps the warnings array within one note per frame', async () => {
   });
 
   const result = await executeResult(resolved, session, req, req.flags);
-  expect(result.warnings).toEqual(['frame 1 note one', 'frame 1 note two']);
+  // The shared note collapses to one entry and frame 1 contributes its own;
+  // the bound (count 2) then stops frame 2's note — proving the aggregation
+  // consumed frame 2's list against the shared budget, not just frame 1's.
+  expect(result.warnings).toEqual(['the frames share one note', 'frame 1 contributes its own']);
 });

@@ -85,17 +85,31 @@ test('normalizeScreenshotCaptureResult carries the burst frames the daemon repor
 
 test('normalizeScreenshotCaptureResult keeps only frames with a path and a wall clock, within the burst bound', () => {
   const frames: unknown[] = [
+    { path: '/tmp/burst/f-0.png', capturedAtMs: 0 },
+    // Malformed INSIDE the bound: a missing wall clock filters out and the
+    // frames behind it slide forward to fill the slot.
+    { path: '/tmp/burst/f-1.png', capturedAtMs: Number.NaN },
     ...Array.from({ length: SCREENSHOT_BURST_LIMITS.maxCount }, (_, index) => ({
-      path: `/tmp/burst/f-${index}.png`,
-      capturedAtMs: index,
+      path: `/tmp/burst/extra-${index}.png`,
+      capturedAtMs: 100 + index,
     })),
     { capturedAtMs: 9_999 },
     { path: '/tmp/burst/extra.png' },
     'frame',
   ];
   const result = normalizeScreenshotCaptureResult({ path: '/tmp/burst/f-0.png', frames }, 'qa');
-  assert.equal(result.frames?.length, SCREENSHOT_BURST_LIMITS.maxCount);
+  // The truncation cuts the raw list at the bound first; the malformed entry
+  // inside it then filters out, so the kept total is one below the bound.
+  assert.equal(result.frames?.length, SCREENSHOT_BURST_LIMITS.maxCount - 1);
   assert.deepEqual(result.frames?.[0], { path: '/tmp/burst/f-0.png', capturedAtMs: 0 });
+  // The malformed inside-the-bound frame is filtered, and the frame behind it
+  // slid forward into the slot with its own path and a finite wall clock.
+  assert.equal(
+    result.frames?.some((frame) => frame.path === '/tmp/burst/f-1.png'),
+    false,
+  );
+  assert.equal(result.frames?.[1]?.path, '/tmp/burst/extra-0.png');
+  assert.equal(Number.isFinite(result.frames?.[1]?.capturedAtMs), true);
 });
 
 test('normalizeScreenshotCaptureResult omits empty and absent frames', () => {

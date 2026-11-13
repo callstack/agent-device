@@ -86,7 +86,9 @@ function readScreenshotBurstFrames(value: unknown): ScreenshotBurstFrame[] | und
 function readScreenshotBurstFrame(frame: unknown): ScreenshotBurstFrame | undefined {
   if (!isRecord(frame)) return undefined;
   if (typeof frame.path !== 'string' || frame.path.length === 0) return undefined;
-  if (typeof frame.capturedAtMs !== 'number') return undefined;
+  if (typeof frame.capturedAtMs !== 'number' || !Number.isFinite(frame.capturedAtMs)) {
+    return undefined;
+  }
   return {
     path: frame.path,
     capturedAtMs: frame.capturedAtMs,

@@ -158,7 +158,33 @@ function restrictRemoteBatchSteps(request: DaemonRequest): DaemonRequest {
 }
 
 function restrictRemoteCaptureOutput(request: DaemonRequest): DaemonRequest {
-  const { path: _path, out: _out, outPath: _outPath, ...input } = request.input ?? {};
+  const {
+    path: _path,
+    out: _out,
+    outPath: _outPath,
+    count: _count,
+    intervalMs: _intervalMs,
+    ...input
+  } = request.input ?? {};
+  // A burst writes every frame beside the --out path on the daemon host, and a
+  // remote client can only download the one artifact the response names — so a
+  // remote burst would return one usable frame and leak the rest. Refusing
+  // beats shipping N-1 unreadable paths.
+  if (
+    request.command === 'screenshot' &&
+    ((request.input as Record<string, unknown> | undefined)?.count !== undefined ||
+      request.flags?.count !== undefined)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'A remote screenshot request cannot run a burst: only the first frame would come back as a downloadable artifact.',
+      {
+        reason: 'REMOTE_SCREENSHOT_BURST_DENIED',
+        retriable: false,
+        hint: 'Run a local daemon against the device for a burst, or capture single screenshots and download each artifact by ID.',
+      },
+    );
+  }
   return {
     ...request,
     positionals: remoteCapturePositionals(request),

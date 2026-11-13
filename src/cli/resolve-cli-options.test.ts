@@ -224,6 +224,36 @@ test('a typed --count still arms a screenshot burst', () => {
   assert.equal(parsed.flags.count, 5);
 });
 
+test('a configured intervalMs is removed from a screenshot request like the count', () => {
+  fs.writeFileSync(
+    path.join(projectConfigDirWithCount(), 'agent-device.json'),
+    JSON.stringify({ count: 3, intervalMs: 250 }),
+  );
+
+  const parsed = resolveCliOptions(['screenshot'], {
+    cwd: projectConfigDirWithCount(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.count, undefined);
+  assert.equal(parsed.flags.intervalMs, undefined);
+});
+
+test('a screenshot naming --crop-on beside a configured count is not refused as a burst', () => {
+  fs.writeFileSync(
+    path.join(projectConfigDirWithCount(), 'agent-device.json'),
+    JSON.stringify({ count: 3 }),
+  );
+
+  const parsed = resolveCliOptions(['screenshot', '--crop-on', 'role=button label=Save'], {
+    cwd: projectConfigDirWithCount(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.count, undefined);
+  assert.equal(parsed.flags.screenshotCropOn, 'role=button label=Save');
+});
+
 test('the same project count keeps tuning press, which reads a configured repeat count', () => {
   const parsed = resolveCliOptions(['press', '@e1'], {
     cwd: projectConfigDirWithCount(),

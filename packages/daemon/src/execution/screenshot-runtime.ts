@@ -301,23 +301,36 @@ async function executeBurstScreenshot(
       : path.join(tempRoot!, `screenshot-${String(index).padStart(4, '0')}.png`);
   const frames: ScreenshotBurstFrame[] = [];
   const warnings: string[] = [];
-  for (let index = 1; index <= burst.count; index += 1) {
-    signal?.throwIfAborted();
-    if (index > 1 && burst.intervalMs > 0) await sleep(burst.intervalMs, signal);
-    const captured = await captureScreenshotArtifact({
-      createCommandSurface: params.createCommandSurface,
-      session: params.session,
-      sessionName: params.sessionName,
-      outPath: frameDestination(index),
-      dispatchContext,
-      captureScreenshot: params.runtime.captureScreenshot,
-    });
-    appendBurstWarnings(warnings, captured.warnings, burst.count);
-    frames.push({
-      path: captured.path,
-      capturedAtMs: Date.now(),
-      ...(captured.displayRotation ? { displayRotation: captured.displayRotation } : {}),
-    });
+  try {
+    for (let index = 1; index <= burst.count; index += 1) {
+      signal?.throwIfAborted();
+      if (index > 1 && burst.intervalMs > 0) {
+        await sleep(burst.intervalMs, signal);
+        // The sleep resolves on an abort too, so this check is what stops a
+        // canceled request from dispatching the next frame.
+        signal?.throwIfAborted();
+      }
+      const captured = await captureScreenshotArtifact({
+        createCommandSurface: params.createCommandSurface,
+        session: params.session,
+        sessionName: params.sessionName,
+        outPath: frameDestination(index),
+        dispatchContext,
+        captureScreenshot: params.runtime.captureScreenshot,
+      });
+      appendBurstWarnings(warnings, captured.warnings, burst.count);
+      frames.push({
+        path: captured.path,
+        capturedAtMs: Date.now(),
+        ...(captured.displayRotation ? { displayRotation: captured.displayRotation } : {}),
+      });
+    }
+  } catch (error) {
+    // A failed or canceled burst leaves no implicit root behind; an explicit
+    // --out path keeps whatever the caller named.
+    if (tempRoot !== undefined)
+      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
   }
   const first = frames[0]!;
   return {
