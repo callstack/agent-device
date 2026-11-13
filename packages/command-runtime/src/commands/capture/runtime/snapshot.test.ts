@@ -29,7 +29,7 @@ test('runtime snapshot captures nodes and updates the session baseline', async (
       appName: 'Demo',
       appBundleId: 'com.example.demo',
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: (record) => {
@@ -108,7 +108,7 @@ test('runtime snapshot recognizes equivalent bounds and still updates its baseli
         comparisonSafe: true,
       }),
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => stored,
       set: (record) => {
@@ -165,7 +165,7 @@ test('runtime snapshot forwards interactive capture options', async () => {
         };
       },
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: () => {},
@@ -198,7 +198,7 @@ test('runtime diff snapshot initializes and then compares against session baseli
     backend: createSnapshotBackend(() => ({
       snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'After' }]),
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => session,
       set: (record) => {
@@ -222,7 +222,7 @@ test('runtime diff snapshot initializes baseline when no previous snapshot exist
     backend: createSnapshotBackend(() => ({
       snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Initial' }]),
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: (record) => {
@@ -632,7 +632,7 @@ test('runtime snapshot stale-drop warning uses the runtime clock', async () => {
         createdAt: 3_500,
       }),
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => session,
       set: (record) => {
@@ -678,7 +678,7 @@ test('runtime snapshot stale-drop warning uses backend snapshot timestamps when 
     backend: createSnapshotBackend(() => ({
       snapshot: currentSnapshot,
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => session,
       set: (record) => {
@@ -724,7 +724,7 @@ test('runtime snapshot stale-drop warning falls back to runtime clock on backend
     backend: createSnapshotBackend(() => ({
       snapshot: currentSnapshot,
     })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => session,
       set: (record) => {
@@ -759,7 +759,7 @@ function createSnapshotBackend(
 function createSnapshotOnlyDevice(result: BackendSnapshotResult) {
   return createAgentDevice({
     backend: createSnapshotBackend(() => result),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: () => {},
@@ -928,7 +928,7 @@ test('runtime snapshot carries backend clickability evidence through presentatio
   let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
   const device = createAgentDevice({
     backend: createSnapshotBackend(() => ({ snapshot: state })),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: {
       get: () => undefined,
       set: (record) => {

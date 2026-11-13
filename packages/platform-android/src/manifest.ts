@@ -24,28 +24,30 @@ const TYPE_STRING = 0x03;
 const NO_INDEX = 0xffffffff;
 
 const utf16Decoder = new TextDecoder('utf-16le');
-let aaptPathCache: string | null | undefined;
 
 export async function resolveAndroidArchivePackageName(
   archivePath: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<string | undefined> {
   for (const entry of ['AndroidManifest.xml', 'base/manifest/AndroidManifest.xml']) {
-    const manifest = await readZipEntry(archivePath, entry, signal);
+    const manifest = await readZipEntry(archivePath, entry, signal, cwd);
     if (!manifest) continue;
     const packageName = parseAndroidManifestPackageName(manifest);
     if (packageName) return packageName;
   }
-  return await resolveAndroidArchivePackageNameWithAapt(archivePath, signal);
+  return await resolveAndroidArchivePackageNameWithAapt(archivePath, signal, cwd);
 }
 
 async function readZipEntry(
   archivePath: string,
   entry: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<Buffer | undefined> {
   try {
     const result = await runCmd('unzip', ['-p', archivePath, entry], {
+      cwd,
       allowFailure: true,
       binaryStdout: true,
       timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
@@ -324,11 +326,13 @@ function readUtf16Length(chunk: Buffer, offset: number): PoolLength | undefined 
 async function resolveAndroidArchivePackageNameWithAapt(
   archivePath: string,
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<string | undefined> {
   signal?.throwIfAborted();
   const aaptPath = await resolveAaptPath();
   if (!aaptPath) return undefined;
   const result = await runCmd(aaptPath, ['dump', 'badging', archivePath], {
+    cwd,
     allowFailure: true,
     timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
     signal,
@@ -339,10 +343,6 @@ async function resolveAndroidArchivePackageNameWithAapt(
 }
 
 async function resolveAaptPath(): Promise<string | undefined> {
-  if (aaptPathCache !== undefined) {
-    return aaptPathCache ?? undefined;
-  }
-
   try {
     const files = requireAndroidAdbHost().files;
     const { hostPlatform } = await import('@agent-device/host-kit/process');
@@ -357,7 +357,6 @@ async function resolveAaptPath(): Promise<string | undefined> {
           const candidate = path.join(buildToolsDir, version, 'aapt');
           // SDK roots can come from env vars; reject relative roots before returning an executable.
           if (path.isAbsolute(candidate) && (await files.isExecutable(candidate))) {
-            aaptPathCache = candidate;
             return candidate;
           }
         }
@@ -369,6 +368,5 @@ async function resolveAaptPath(): Promise<string | undefined> {
     // Ignore SDK lookup failures and fall back to undefined.
   }
 
-  aaptPathCache = null;
   return undefined;
 }
