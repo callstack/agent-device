@@ -23,7 +23,13 @@
  */
 export type SessionScriptTarget =
   | Readonly<{ kind: 'default'; force: boolean }>
-  | Readonly<{ kind: 'explicit'; path: string; force: boolean; clientPath?: string }>;
+  | Readonly<{
+      kind: 'explicit';
+      path: string;
+      force: boolean;
+      clientPath?: string;
+      remote?: boolean;
+    }>;
 
 /**
  * ADR 0012 decision 6 repair status.
@@ -99,7 +105,12 @@ export const NO_SCRIPT_PUBLICATION: SessionScriptPublicationState = { kind: 'non
  */
 export function resolveScriptTarget(
   previous: SessionScriptTarget | undefined,
-  requested: Readonly<{ path?: string | undefined; force: boolean; clientPath?: string }>,
+  requested: Readonly<{
+    path?: string | undefined;
+    force: boolean;
+    clientPath?: string;
+    remote?: boolean;
+  }>,
 ): SessionScriptTarget {
   if (requested.path === undefined) {
     // A bare re-arm is not a retarget: the previous target — explicit path included — survives
@@ -116,6 +127,7 @@ export function resolveScriptTarget(
       (requested.clientPath !== undefined && previous.clientPath === requested.clientPath));
   return {
     kind: 'explicit',
+    remote: requested.remote ?? (previous?.kind === 'explicit' ? previous.remote : undefined),
     path: requested.path,
     force: requested.force || retainsAuthorization,
     clientPath:
@@ -202,7 +214,12 @@ export function isScriptPublished(state: SessionScriptPublicationState): boolean
 
 /** ADR 0016: `open --save-script` on a fresh session arms ordinary authoring. */
 export function armAuthoring(
-  requested: Readonly<{ path?: string | undefined; force: boolean; clientPath?: string }>,
+  requested: Readonly<{
+    path?: string | undefined;
+    force: boolean;
+    clientPath?: string;
+    remote?: boolean;
+  }>,
 ): SessionScriptPublicationState {
   return { kind: 'authoring', status: 'armed', target: resolveScriptTarget(undefined, requested) };
 }
@@ -232,6 +249,7 @@ export function markAuthoringPublished(
     target: {
       kind: 'explicit',
       path: writtenPath,
+      remote: state.target.kind === 'explicit' ? state.target.remote : undefined,
       force: state.target.force,
       clientPath: state.target.kind === 'explicit' ? state.target.clientPath : undefined,
     },

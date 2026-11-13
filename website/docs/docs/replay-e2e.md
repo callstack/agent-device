@@ -72,7 +72,7 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 
 - Missing parent directories are created.
 - With a local daemon, the script is written on the daemon host.
-- With a remote daemon that advertises `activeScriptArtifacts` in `/health`, a fresh `open --save-script=journey.ad` arms recording. Run `session save-script` to download the `.ad` to that caller-side path while keeping the session open. An already-open unarmed session cannot export earlier history.
+- With a remote daemon that includes `active-script-artifacts` in its `/health` capabilities, a fresh `open --save-script=journey.ad` arms recording. Run `session save-script` to download the `.ad` to that caller-side path while keeping the session open. An already-open unarmed session cannot export earlier history.
 - A bare remote `open --save-script` chooses `recording-<timestamp>.ad` in the caller working directory.
 - Publish before closing. Remote `close --save-script` and `replay --save-script` remain unsupported; plain `close` discards an unpublished remote recording and does not download a script.
 - The daemon allocates its own output path and returns the published script as an authenticated artifact. The client downloads atomically and preserves an existing output unless `--force` authorizes replacement. If download or local publication fails, repeat `session save-script` while the artifact is retained. Use `--force` to replace an existing caller file, or name another caller destination. The retry downloads the same immutable script; it does not record later actions. The error also reports an artifact ID for direct authenticated download. Script artifacts remain downloadable for the existing 15-minute artifact lifetime.

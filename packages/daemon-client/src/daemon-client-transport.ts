@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
@@ -5,9 +6,11 @@ import net from 'node:net';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type {
-  DaemonPaths,
-  DaemonTransportPreference,
+import {
+  readDaemonCapabilities,
+  type DaemonCapability,
+  type DaemonPaths,
+  type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonHttpProgressResponse,
@@ -18,6 +21,8 @@ import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
   DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -106,7 +111,6 @@ const NO_REQUEST_GUARD: RequestGuard = {
   refuseIfAborted: () => {},
   guard: async <T>(send: () => Promise<T>) => await send(),
 };
-
 export function createRequestGuard(params: {
   signal: AbortSignal | undefined;
   requestId?: string;
@@ -143,7 +147,6 @@ export function createRequestGuard(params: {
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
 const DAEMON_ENDPOINT_UNAVAILABLE_REASON = 'daemon_endpoint_unavailable';
-
 export function isDaemonTransportUnavailableError(error: unknown): boolean {
   return (
     error instanceof AppError &&
@@ -161,7 +164,6 @@ function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): App
     { reason: DAEMON_ENDPOINT_UNAVAILABLE_REASON, transport },
   );
 }
-
 export type RemoteDaemonHealth = {
   reachable: boolean;
   statusCode?: number;
@@ -170,7 +172,7 @@ export type RemoteDaemonHealth = {
   rpcProtocolVersion?: number;
   instanceId?: string;
   hostArch?: string;
-  activeScriptArtifacts?: boolean;
+  capabilities?: readonly DaemonCapability[];
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
@@ -179,9 +181,8 @@ export type RemoteDaemonHealth = {
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'activeScriptArtifacts'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
 >;
-
 export async function canConnect(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
@@ -197,7 +198,6 @@ export async function canConnect(
         Date.now() < deadline
     : false;
 }
-
 async function canConnectWithTransport(
   info: DaemonInfo,
   transport: ResolvedDaemonTransport,
@@ -207,7 +207,6 @@ async function canConnectWithTransport(
     ? await canConnectHttp(info, timeoutMs)
     : await canConnectSocket(info.port, timeoutMs);
 }
-
 export function canConnectSocket(
   port: number | undefined,
   timeoutMs = LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
@@ -237,7 +236,6 @@ export function canConnectSocket(
 function canConnectHttp(info: DaemonInfo, timeoutMs: number): Promise<boolean> {
   return readDaemonHttpHealth(info, timeoutMs).then((health) => health.reachable);
 }
-
 export async function readRemoteDaemonHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
@@ -277,7 +275,6 @@ function daemonHttpEndpoint(info: DaemonInfo, route: 'health' | 'rpc'): string |
       ? `http://127.0.0.1:${info.httpPort}/${route}`
       : null;
 }
-
 async function readDaemonHttpHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
@@ -378,10 +375,9 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
     ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
-    ...(parsed.activeScriptArtifacts === true ? { activeScriptArtifacts: true } : {}),
+    capabilities: readDaemonCapabilities(parsed.capabilities),
   };
 }
-
 export async function sendRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -401,7 +397,6 @@ export async function sendRequest(
     throw discloseRequestFailure(transport.failure, req, transport.sent);
   }
 }
-
 async function recoverFromTimeout(
   error: unknown,
   info: DaemonInfo,
@@ -443,7 +438,6 @@ function classifyTransportFailure(
       return undefined;
   }
 }
-
 async function sendRequestWithFallback(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -477,7 +471,6 @@ async function sendRequestWithFallback(
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, fallback, options);
   }
 }
-
 async function retryAfterRemoteInstanceMismatch(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -502,7 +495,7 @@ async function retryAfterRemoteInstanceMismatch(
       daemonBaseUrl: info.baseUrl,
     });
   }
-  info.remoteActiveScriptArtifacts = (health.upstream ?? health).activeScriptArtifacts === true;
+  info.capabilities = (health.upstream ?? health).capabilities;
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
   cacheRemoteDaemonHealth(info, health);
@@ -543,7 +536,6 @@ function isRemoteTransportFailure(error: unknown): boolean {
       error.details?.reason === 'daemon_response_read_failure')
   );
 }
-
 async function sendRequestWithTransport(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -649,7 +641,6 @@ function handleTransportError(
     err instanceof Error ? err : undefined,
   );
 }
-
 async function sendSocketRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -788,7 +779,6 @@ function isRemoteInstanceMismatchResponse(
 ): boolean {
   return statusCode === 409 && headers[DAEMON_HTTP_INSTANCE_MISMATCH_HEADER] === 'true';
 }
-
 async function sendHttpRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
@@ -807,6 +797,9 @@ async function sendHttpRequest(
   };
   if (info.baseUrl) {
     Object.assign(headers, buildDaemonHttpAuthHeaders(info.token));
+    if (req.flags?.saveScript || req.command === INTERNAL_COMMANDS.sessionSaveScript) {
+      headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER] = DAEMON_HTTP_PUBLIC_NETWORK_ACCESS;
+    }
     Object.assign(headers, buildRemoteInstancePreconditionHeaders(info));
   }
   const transport = await loadNodeHttpRequester(rpcUrl.protocol);
@@ -970,7 +963,6 @@ function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
     remoteHealthCache = undefined;
   }
 }
-
 export async function cachedRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     return await remoteHealthCache.health;

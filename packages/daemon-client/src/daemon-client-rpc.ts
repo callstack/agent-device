@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -212,8 +213,8 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
 export function assertRemoteActiveScriptArtifacts(info: DaemonInfo, req: DaemonWireRequest): void {
   if (
     info.baseUrl &&
-    info.remoteActiveScriptArtifacts !== true &&
-    (req.flags?.saveScript || req.command === 'session_save_script')
+    !info.capabilities?.includes('active-script-artifacts') &&
+    (req.flags?.saveScript || req.command === INTERNAL_COMMANDS.sessionSaveScript)
   ) {
     throw new AppError(
       'INVALID_ARGS',
@@ -221,7 +222,7 @@ export function assertRemoteActiveScriptArtifacts(info: DaemonInfo, req: DaemonW
       {
         reason: 'remote_active_script_artifacts_unsupported',
         daemonRequestSent: false,
-        hint: 'Use a daemon and proxy that advertise activeScriptArtifacts in the upstream health response. Keep the owning integration in control of upgrades.',
+        hint: 'Use a daemon and proxy that advertise the active-script-artifacts capability in the upstream health response. Keep the owning integration in control of upgrades.',
       },
     );
   }

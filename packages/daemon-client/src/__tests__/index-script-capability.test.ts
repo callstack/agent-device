@@ -8,13 +8,17 @@ test.each([
   { name: 'legacy daemon', health: {}, supported: false },
   {
     name: 'upgraded proxy with legacy daemon',
-    health: { activeScriptArtifacts: true, upstream: {} },
+    health: { capabilities: ['active-script-artifacts'], upstream: {} },
     supported: false,
   },
-  { name: 'upgraded daemon', health: { activeScriptArtifacts: true }, supported: true },
+  {
+    name: 'upgraded daemon',
+    health: { capabilities: ['active-script-artifacts'] },
+    supported: true,
+  },
   {
     name: 'forwarding proxy with upgraded daemon',
-    health: { upstream: { activeScriptArtifacts: true } },
+    health: { upstream: { capabilities: ['active-script-artifacts'] } },
     supported: true,
   },
 ])('remote recording negotiates $name before dispatch', async ({ health, supported }) => {

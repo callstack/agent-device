@@ -128,7 +128,7 @@ export class SessionScriptWriter {
       !activePublication &&
       state?.kind === 'authoring' &&
       state.target.kind === 'explicit' &&
-      state.target.clientPath
+      state.target.remote === true
     ) {
       return { written: false };
     }

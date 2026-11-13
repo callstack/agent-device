@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
@@ -103,7 +104,7 @@ function prepareRemoteScriptOutput(
   clientPaths: Record<string, string>,
   host: HostEnvironment,
 ): DaemonWireRequest['flags'] {
-  const active = req.command === 'session_save_script';
+  const active = req.command === INTERNAL_COMMANDS.sessionSaveScript;
   if (flags?.saveScript && req.command !== 'open') {
     throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
       reason: 'remote_script_lifecycle_unsupported',
@@ -125,12 +126,11 @@ function prepareRemoteScriptOutput(
     });
   }
   clientPaths.savedScript = localPath;
-  const daemonPath = buildRemoteTempArtifactPath('script', '.ad');
   if (active) {
-    positionals[0] = daemonPath;
+    if (positionals.length === 1) positionals.length = 0;
     return flags;
   }
-  return { ...flags, saveScript: daemonPath };
+  return { ...flags, saveScript: true };
 }
 
 async function prepareRemoteInstallPackage(
@@ -472,7 +472,7 @@ export async function materializeRemoteArtifacts(
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
     nextData[artifact.field] = materializedPath;
-    if (artifact.field === 'savedScript' && req.command === 'session_save_script') {
+    if (artifact.field === 'savedScript' && req.command === INTERNAL_COMMANDS.sessionSaveScript) {
       nextData.message = `Published script: ${materializedPath}`;
     }
     nextArtifacts.push({
@@ -493,7 +493,7 @@ export async function materializeRemoteArtifacts(
 function finishesEarlierClientCapture(req: DaemonWireRequest, artifact: DaemonArtifact): boolean {
   const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
   switch (req.command) {
-    case 'session_save_script':
+    case INTERNAL_COMMANDS.sessionSaveScript:
       return artifact.field === 'savedScript' && artifact.artifactType === 'session-script';
     case 'record':
     case 'trace':

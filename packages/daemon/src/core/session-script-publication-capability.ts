@@ -93,11 +93,13 @@ export function applyRecordedSaveScriptFlags(
   flags: CommandFlags,
   hostCwd: string,
   clientPath?: string,
+  remote?: boolean,
 ): void {
   if (!flags.saveScript) return;
   if (isAuthoringAborted(publicationState(session))) return;
   const requested = {
     clientPath,
+    remote,
     path:
       typeof flags.saveScript === 'string'
         ? expandSessionPath(flags.saveScript, hostCwd)
@@ -129,7 +131,12 @@ export function applyRecordedSaveScriptFlags(
  */
 export function retargetActivePublication(
   session: SessionState,
-  params: { explicitPath?: string; liveForce: boolean | undefined; clientPath?: string },
+  params: {
+    explicitPath?: string;
+    liveForce: boolean | undefined;
+    clientPath?: string;
+    remote?: boolean;
+  },
   hostCwd: string,
 ): void {
   const state = publicationState(session);
@@ -138,6 +145,7 @@ export function retargetActivePublication(
     ...state,
     target: resolveScriptTarget(state.target, {
       clientPath: params.clientPath,
+      remote: params.remote,
       path:
         params.explicitPath !== undefined
           ? expandSessionPath(params.explicitPath, hostCwd)

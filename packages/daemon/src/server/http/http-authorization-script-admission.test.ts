@@ -18,17 +18,16 @@ function restrict(request: Omit<DaemonRequest, 'token' | 'session'>) {
 test.each(['open', 'session_save_script'])(
   'public %s allocates its script output on the daemon',
   (command) => {
-    const proposed = buildRemoteTempArtifactPath('script', '.ad');
     const active = command === 'session_save_script';
     const result = restrict({
       command,
-      positionals: active ? [proposed] : [],
-      flags: active ? {} : { saveScript: proposed },
+      positionals: [],
+      flags: active ? {} : { saveScript: true },
       meta: { clientArtifactPaths: { savedScript: '/caller/out.ad' } },
     });
     const allocated = active ? result.positionals[0] : result.flags?.saveScript;
     expect(typeof allocated).toBe('string');
-    expect(allocated).not.toBe(proposed);
+    expect(result.internal?.remoteScriptDelivery).toBe(true);
     expect(isRemoteTempArtifactPath(allocated as string, 'script', '.ad')).toBe(true);
     expect(result.meta?.clientArtifactPaths?.savedScript).toBe('/caller/out.ad');
   },

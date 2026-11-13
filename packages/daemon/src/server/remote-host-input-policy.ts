@@ -1,4 +1,3 @@
-import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
@@ -63,12 +62,15 @@ function assertRemoteHostToolingInputs(
       Object.hasOwn(record, 'saveScript') &&
       (record !== request.flags ||
         request.command !== 'open' ||
-        !(typeof script === 'string' && isRemoteTempArtifactPath(script, 'script', '.ad'))),
+        !(
+          script === true ||
+          (request.internal?.remoteScriptDelivery === true && typeof script === 'string')
+        )),
   );
   const invalidPublication =
     request.command === INTERNAL_COMMANDS.sessionSaveScript &&
     (request.input?.path !== undefined ||
-      request.positionals.some((value) => !isRemoteTempArtifactPath(value, 'script', '.ad')));
+      (request.positionals.length > 0 && request.internal?.remoteScriptDelivery !== true));
   if (invalidScript) throw remoteHostInputDenied('saveScript');
   if (hostPath || invalidPublication) {
     throw remoteHostInputDenied(hostPath ?? 'command');

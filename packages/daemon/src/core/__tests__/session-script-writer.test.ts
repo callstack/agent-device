@@ -968,7 +968,12 @@ test('teardown discards an unpublished caller-owned recording without writing on
     scriptPublication: {
       kind: 'authoring',
       status: 'armed',
-      target: { kind: 'explicit', path: target, clientPath: '/caller/journey.ad', force: false },
+      target: {
+        kind: 'explicit',
+        path: target,
+        remote: true,
+        force: false,
+      },
     },
     actions: [action({ command: 'open', positionals: ['Demo'] })],
   });

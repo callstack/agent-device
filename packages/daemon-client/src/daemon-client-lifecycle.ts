@@ -254,8 +254,7 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
   };
   const health = await cachedRemoteDaemonHealth(remoteInfo);
   if (health.reachable) {
-    remoteInfo.remoteActiveScriptArtifacts =
-      (health.upstream ?? health).activeScriptArtifacts === true;
+    remoteInfo.capabilities = (health.upstream ?? health).capabilities;
     remoteInfo.remoteInstanceId = health.instanceId;
     remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
     return { info: remoteInfo, startedByClient: false };

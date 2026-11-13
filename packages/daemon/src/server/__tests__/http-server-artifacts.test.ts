@@ -314,6 +314,7 @@ test.for([
     const artifactId = trackDownloadableArtifact({
       artifactPath,
       artifactType,
+      retainAfterDownload: artifactType === 'session-script',
       fileName: 'session-log.txt',
     });
     const server = await createDaemonHttpServer({

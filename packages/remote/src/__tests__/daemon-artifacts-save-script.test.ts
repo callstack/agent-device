@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
 const REMOTE = { baseUrl: 'http://remote.example.test', token: 'test' };
@@ -27,10 +26,8 @@ test.each(['open', 'session_save_script'])(
       createTestHostEnvironment(),
     );
     expect(result.clientArtifactPaths?.savedScript).toBe(path.join(root, requested));
-    const daemonPath = active ? result.positionals[0] : result.flags?.saveScript;
-    expect(typeof daemonPath).toBe('string');
-    expect(isRemoteTempArtifactPath(daemonPath as string, 'script', '.ad')).toBe(true);
-    expect(daemonPath).not.toContain(root);
+    expect(result.positionals).toEqual(active ? [] : ['Demo']);
+    expect(result.flags?.saveScript).toBe(active ? undefined : true);
   },
 );
 

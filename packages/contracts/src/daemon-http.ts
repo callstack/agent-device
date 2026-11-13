@@ -154,7 +154,7 @@ export type DaemonHealthPayload = {
   instanceId?: string;
   hostArch?: string;
   /** The daemon can publish session scripts as downloadable artifacts. */
-  activeScriptArtifacts?: boolean;
+  capabilities?: readonly string[];
   /** The lease backends this daemon admits; a host checks it before relying on one. */
   leaseBackends?: readonly string[];
   upstream?: unknown;
@@ -167,7 +167,7 @@ export function buildDaemonHealthPayload(
     upstream?: unknown;
     instanceId?: string;
     hostArch?: string;
-    activeScriptArtifacts?: boolean;
+    capabilities?: readonly string[];
     leaseBackends?: readonly string[];
   } = {},
 ): DaemonHealthPayload {
@@ -178,7 +178,7 @@ export function buildDaemonHealthPayload(
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
-    ...(options.activeScriptArtifacts === true ? { activeScriptArtifacts: true } : {}),
+    ...(options.capabilities !== undefined ? { capabilities: options.capabilities } : {}),
     ...(options.leaseBackends !== undefined ? { leaseBackends: options.leaseBackends } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };

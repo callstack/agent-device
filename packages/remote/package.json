@@ -6,6 +6,7 @@
   "description": "Remote-daemon client plumbing: remote config profiles and their provenance, the persisted remote connection state, request artifact upload/download, and remote diagnostics localization. Internal workspace package bundled into the published agent-device artifact.",
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/daemon-contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",

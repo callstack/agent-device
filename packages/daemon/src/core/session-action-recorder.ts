@@ -26,6 +26,7 @@ import type { TargetEvidenceMode } from '@agent-device/selectors/target-evidence
 export type RecordActionEntry = {
   command: string;
   clientScriptPath?: string;
+  remoteScriptDelivery?: boolean;
   positionals: string[];
   flags: CommandFlags;
   runtime?: SessionRuntimeHints;
@@ -67,7 +68,13 @@ export function recordActionEntry(
   if (isSensitiveFillText(entry.flags) && entry.flags.recordAs === undefined) return undefined;
   if (isExcludedRepairSegmentObservation(session, entry)) return undefined;
   if (entry.flags)
-    applyRecordedSaveScriptFlags(session, entry.flags, hostCwd, entry.clientScriptPath);
+    applyRecordedSaveScriptFlags(
+      session,
+      entry.flags,
+      hostCwd,
+      entry.clientScriptPath,
+      entry.remoteScriptDelivery,
+    );
   const fillLiteral = readRecordedFillLiteral(entry);
   // #1398: register the literal only AFTER protecting this SAME entry, so a
   // fill's own recording is never passed through the session-wide substring

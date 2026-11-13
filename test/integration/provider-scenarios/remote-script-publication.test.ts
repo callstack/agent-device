@@ -1,3 +1,5 @@
+import { buildDaemonRpcRequest } from '@agent-device/contracts/lease-scope';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,6 +56,17 @@ for (const publication of ['active', 'active-force', 'retry-existing'] as const)
           assert.equal(retry.actionCount, published.actionCount);
           assert.equal(retry.savedScript, destination);
           const text = fs.readFileSync(destination, 'utf8');
+          const alternate = path.join(root, 'alternate.ad');
+          fs.writeFileSync(alternate, 'protected');
+          await assert.rejects(
+            client.sessions.saveScript({ path: alternate }),
+            (error: unknown) =>
+              (error as { details?: { reason?: string } }).details?.reason ===
+              'script_target_exists',
+          );
+          assert.equal(fs.readFileSync(alternate, 'utf8'), 'protected');
+          await client.sessions.saveScript({ path: alternate, force: true });
+          assert.equal(fs.readFileSync(alternate, 'utf8'), text);
           assert.match(text, /open/);
           assert.match(text, /agent-device:target-v1/);
           assert.equal(text.includes(root), false);
@@ -120,3 +133,59 @@ async function recordRemoteJourney(
   }
   await client.command.wait({ selector: 'label="Apps"', ...world.selection });
 }
+
+test('raw remote RPC without caller path hints returns authenticated retained script IDs', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'raw-client' });
+    const root = mkdtempForTestSync('raw-script-');
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'raw-client',
+      session: 'raw-author',
+      stateDir: root,
+    });
+    const rpc = async (
+      command: string,
+      positionals: string[],
+      flags: DaemonWireRequest['flags'],
+    ) => {
+      const response = await fetch(`${proxy.baseUrl}/rpc`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer raw-client', 'content-type': 'application/json' },
+        body: JSON.stringify(
+          buildDaemonRpcRequest(
+            { token: 'raw-client', session: 'raw-author', command, positionals, flags },
+            { id: command, includeTokenParam: false },
+          ),
+        ),
+      });
+      assert.equal(response.status, 200);
+      const reply = await response.json();
+      assert.equal(reply.result.ok, true, JSON.stringify(reply));
+      return reply.result.data;
+    };
+    try {
+      await rpc('open', ['settings'], { ...world.selection, saveScript: true });
+      await client.command.wait({ selector: 'label="Apps"', ...world.selection });
+      const published = await rpc('session_save_script', [], {});
+      const artifact = published.artifacts.find(
+        (entry: { artifactType: string }) => entry.artifactType === 'session-script',
+      );
+      assert.ok(artifact?.artifactId);
+      assert.equal(artifact.path, undefined);
+      const denied = await fetch(`${proxy.baseUrl}/artifacts/${artifact.artifactId}`);
+      assert.notEqual(denied.status, 200);
+      const downloaded = await fetch(`${proxy.baseUrl}/artifacts/${artifact.artifactId}`, {
+        headers: { authorization: 'Bearer raw-client' },
+      });
+      assert.equal(downloaded.status, 200);
+      assert.match(await downloaded.text(), /agent-device:target-v1/);
+      const retry = await rpc('session_save_script', [], {});
+      assert.equal(retry.artifacts[0].artifactId, artifact.artifactId);
+      await client.sessions.close();
+      world.assertNoHostAdbCalls();
+    } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);

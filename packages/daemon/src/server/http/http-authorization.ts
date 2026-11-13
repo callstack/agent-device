@@ -74,20 +74,27 @@ function restrictRemoteHttpRequest(
     ...(request.meta ? { meta } : {}),
     internal: { ...request.internal, publicNetworkOnly: true },
   });
-  // The HTTP boundary allocates the host path. The repeated core admission below only validates it.
-  if (typeof restricted.flags?.saveScript === 'string') {
+  return allocateRemoteScriptOutput(restricted);
+}
+
+function allocateRemoteScriptOutput(request: DaemonRequest): DaemonRequest {
+  if (request.command === 'open' && request.flags?.saveScript) {
     return {
-      ...restricted,
-      flags: { ...restricted.flags, saveScript: buildRemoteTempArtifactPath('script', '.ad') },
+      ...request,
+      internal: { ...request.internal, remoteScriptDelivery: true },
+      flags: { ...request.flags, saveScript: buildRemoteTempArtifactPath('script', '.ad') },
     };
   }
-  if (
-    restricted.command === INTERNAL_COMMANDS.sessionSaveScript &&
-    restricted.positionals.length > 0
-  ) {
-    return { ...restricted, positionals: [buildRemoteTempArtifactPath('script', '.ad')] };
+  if (request.command === INTERNAL_COMMANDS.sessionSaveScript) {
+    return {
+      ...request,
+      internal: { ...request.internal, remoteScriptDelivery: true },
+      ...(request.positionals.length === 0 && request.meta?.clientArtifactPaths?.savedScript
+        ? { positionals: [buildRemoteTempArtifactPath('script', '.ad')] }
+        : {}),
+    };
   }
-  return restricted;
+  return request;
 }
 
 async function runHttpAuthHook(
