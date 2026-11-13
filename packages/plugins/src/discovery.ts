@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
-import { readPluginManifest, resolvePluginEntry, type PluginManifest } from './manifest.ts';
 
 const PROVIDER_ID = /^[a-z][a-z0-9-]*$/;
 
@@ -10,29 +9,19 @@ export function isProviderId(value: unknown): value is string {
   return typeof value === 'string' && PROVIDER_ID.test(value);
 }
 
-/** The subpath a v2 plugin package exports; its default export is the plugin factory. */
+/** The subpath a plugin package exports; its default export is the plugin factory. */
 const PLUGIN_ENTRY_SUBPATH = './agent-device';
 
-export type PluginPackageEntry =
-  | Readonly<{ kind: 'v2'; file: string }>
-  | Readonly<{ kind: 'v1'; manifest: PluginManifest }>;
-
 /**
- * Chooses how an installed package loads, without evaluating it. The `./agent-device` export wins;
- * a package that lacks that subpath and declares `agentDevicePlugin` is a v1 plugin dispatched by
- * its manifest; any other package falls back to its root export. A subpath that exists but does
- * not resolve is an error, never a reason to fall back.
+ * Chooses the file an installed package loads, without evaluating it. The `./agent-device` export
+ * wins; a package that lacks that subpath falls back to its root export. A subpath that exists but
+ * does not resolve is an error, never a reason to fall back.
  */
-export function discoverPluginEntry(directory: string): PluginPackageEntry {
+export function discoverPluginEntry(directory: string): string {
   const manifest = readPackageJson(directory);
   const subpath = resolveExport(manifest.exports, PLUGIN_ENTRY_SUBPATH);
-  if (subpath.status === 'resolved') {
-    return { kind: 'v2', file: resolvePluginEntry(directory, subpath.target) };
-  }
+  if (subpath.status === 'resolved') return resolvePluginEntry(directory, subpath.target);
   if (subpath.status === 'blocked') throw unresolvableEntry(directory, PLUGIN_ENTRY_SUBPATH);
-  if (manifest.agentDevicePlugin !== undefined) {
-    return { kind: 'v1', manifest: readPluginManifest(directory) };
-  }
   const root = resolveExport(manifest.exports, '.');
   if (root.status === 'blocked') throw unresolvableEntry(directory, '.');
   const target =
@@ -43,7 +32,30 @@ export function discoverPluginEntry(directory: string): PluginPackageEntry {
         ? `./${path.posix.normalize(manifest.main)}`
         : undefined;
   if (target === undefined) throw missingEntry(directory, PLUGIN_ENTRY_SUBPATH);
-  return { kind: 'v2', file: resolvePluginEntry(directory, target) };
+  return resolvePluginEntry(directory, target);
+}
+
+/**
+ * The entry a plugin package names: a readable file inside the package directory it is installed
+ * in. Traversal and a symlink out of that directory are refused.
+ */
+export function resolvePluginEntry(directory: string, target: string): string {
+  try {
+    const root = fs.realpathSync(directory);
+    const resolved = fs.realpathSync(path.resolve(directory, target));
+    if (
+      target.startsWith('./') &&
+      resolved.startsWith(`${root}${path.sep}`) &&
+      fs.statSync(resolved).isFile()
+    ) {
+      return resolved;
+    }
+  } catch {}
+  throw new AppError('INVALID_ARGS', 'Plugin entry must be a readable file inside its package', {
+    reason: 'plugin_load_failed',
+    directory,
+    entry: target,
+  });
 }
 
 export function readPackageJson(directory: string): Record<string, unknown> {

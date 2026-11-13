@@ -134,12 +134,29 @@ connection: {
 
 Bundle the plugin implementation and ship ready-to-run ESM: installation disables lifecycle scripts. Bundle shared helpers with the plugin; `AppError` carries a shared brand so the host preserves its code and details across package copies. Import types with `import type` to keep them out of the runtime dependency graph.
 
-## Version 1 plugins
+## Migrating from a version 1 manifest
 
-Packages that declare `agentDevicePlugin` with `apiVersion: 1` in `package.json` keep working. The host reads the manifest's `provider`, `entry`, `connection`, and `credentialVariables` before running any plugin code, then calls the default export with `ProviderPluginHost` and registers the `{ runtime, platformModule }` or `{ webDriver, connection? }` it returns. Support for this form ends in a later release; move to the `./agent-device` factory.
+Earlier plugin packages declared `agentDevicePlugin` with `apiVersion: 1` in `package.json`, and the host read `provider`, `entry`, `connection`, and `credentialVariables` from it before loading any code. That form is no longer supported: a store package is loaded only through its exports, and everything it declares comes from the object its factory returns.
 
-```json
-{"agentDevicePlugin": {"apiVersion": 1, "provider": "example", "entry": "./dist/plugin.mjs"}}
+To move a package:
+
+1. Export the factory from `./agent-device` instead of naming an entry file in the manifest, and drop `agentDevicePlugin` from `package.json`.
+2. Return the manifest's values from the factory: `provider` stays `provider`, `credentialVariables` becomes `credentials: { variables: [...] }`, and the `connection` object goes on the plugin next to `setup`.
+3. Return `apiVersion: 2` and keep the default export a function; the host calls it with the selection's options and `setup` receives the `ProviderPluginHost` the v1 entry used to receive first.
+
+```diff
+-{"agentDevicePlugin": {"apiVersion": 1, "provider": "example", "entry": "./dist/plugin.mjs"}}
++{"exports": {"./agent-device": { "import": "./dist/plugin.mjs" }}}
 ```
 
-A package that exports `./agent-device` is loaded as a version 2 plugin even if it also keeps the manifest, so one package can serve both old and new hosts.
+```diff
+-export default async (host) => ({ runtime, platformModule });
++export default () => ({
++  apiVersion: 2,
++  provider: 'example',
++  credentials: { variables: ['EXAMPLE_API_KEY'] },
++  setup: async (host) => ({ runtime, platformModule }),
++});
+```
+
+A package that still ships the old manifest loads when it also exports `./agent-device`, and the manifest is then ignored. A package whose default export isn't a v2 plugin is listed as `failed` with `incompatible_plugin` and the daemon starts without it.

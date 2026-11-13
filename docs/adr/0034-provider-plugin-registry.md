@@ -23,10 +23,9 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`. A missing or
   stale record reads as a stopped daemon; an unreadable or invalid one never does.
 - The plugin set is fixed for a daemon's lifetime. A plugin change takes effect on the next daemon.
-- v1 plugins (`agentDevicePlugin.apiVersion: 1`) without a `./agent-device` export are dispatched by
-  their manifest before any code runs and load through an adapter until 0.22 removes them (#3759).
-  A package that keeps the manifest and also exports `./agent-device` loads as v2; hosts without
-  v2 still read the manifest.
+- A store package is discovered only through its exports: `./agent-device`, or the package root when
+  that subpath is absent. Nothing is read from `package.json` to choose an entry or to declare a
+  provider, connection capabilities, or credential variables (#3759).
 
 ## Context
 
@@ -44,17 +43,15 @@ had to fake the store to load a plugin from its own dependencies (#3747).
   fingerprint.
 - **A package exports its entry as `./agent-device`.** The host resolves it with import
   conditions and falls back to the package root only when the subpath is absent. A subpath whose
-  import or setup throws never falls back. A v2 package needs no manifest.
+  import or setup throws never falls back. A plugin package needs no manifest.
 - **The registry owns identity, not the retired lists.** Duplicate ids and bundled ids are one
   question answered by claim order. Credential variables, per-backend narrowing and connect
-  capabilities are read from the registry's plugins, not from manifests. A v1 manifest still
-  supplies them for a v1 plugin.
+  capabilities are read from the registry's plugins, not from manifests.
 - **Failure is data.** A failed plugin is an inventory entry, not an exception. Behavior keys on
   `error.reason`, never on the message.
 - **A client reads a daemon's inventory from `daemon.json`.** The client credential fingerprint
-  takes variable names from it and falls back to v1 manifests. A v2 plugin declares its connect
-  capabilities in code, so a client loads the store, without setting up a runtime, before it reads
-  them.
+  takes variable names from it. A v2 plugin declares its connect capabilities in code, so a client
+  loads the store, without setting up a runtime, before it reads them.
 
 ## Daemon ownership
 

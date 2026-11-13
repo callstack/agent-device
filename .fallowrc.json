@@ -152,13 +152,8 @@
       "exports": ["*"]
     },
     {
-      // A published provider package's default export is its plugin contract; packages/plugins/src/load.ts imports the package by name at runtime and reads `default`.
+      // A published provider package's default export is its plugin contract; the plugin loader imports the installed package's resolved entry at runtime and reads `default`.
       "file": "packages/provider-*/src/index.ts",
-      "exports": ["default"]
-    },
-    {
-      // The version 1 entry a provider package's `agentDevicePlugin.entry` names; hosts without the version 2 contract import the built file and read `default`.
-      "file": "packages/provider-*/src/plugin.ts",
       "exports": ["default"]
     },
     {

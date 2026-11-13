@@ -5,14 +5,11 @@ import { test } from 'vitest';
 import { withPluginConnection } from './load.ts';
 import {
   pluginHome,
-  registrationSource,
-  selectPlugin,
   selectV2Plugin,
   v2RegistrationSource,
   webDriverPluginSource,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ProviderPluginHost } from './host.ts';
 import type { PluginRegistryPolicy } from './registry.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
@@ -51,17 +48,27 @@ async function startStore(env: NodeJS.ProcessEnv, builtin: readonly string[] = [
   return await startProviderRegistry(resolved, env, FAKE_POLICY);
 }
 
-test('a v1 store plugin loads through the adapter with options and the host error constructor', async () => {
+test('a store plugin loads its factory with the selection options and the host error constructor', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', registrationSource('example'));
+  selectV2Plugin(
+    home,
+    '@example/v2',
+    v2RegistrationSource('example').replace(
+      'options, hostEnv: host.env }',
+      'options, hostEnv: host.env, createError: host.createError }',
+    ),
+  );
   const registry = await startStore(env);
-  const runtime = registry.registrations[0]!.runtime as ProviderDeviceRuntime & ProviderPluginHost;
+  const runtime = registry.registrations[0]!.runtime as ProviderDeviceRuntime & {
+    options: unknown;
+    createError: (code: 'INVALID_ARGS', message: string) => unknown;
+  };
   assert.deepEqual(runtime.options, { region: 'eu' });
   assert.ok(runtime.createError('INVALID_ARGS', 'bad profile') instanceof AppError);
   await registry.close();
 });
 
-test('a v2 store plugin loads its factory with the selection options', async () => {
+test('a plugin package loads its factory with the selection options', async () => {
   const { home, env } = pluginHome();
   selectV2Plugin(home, '@example/v2', v2RegistrationSource('example'));
   const registry = await startStore(env);
@@ -84,10 +91,10 @@ test('a v2 store plugin loads its factory with the selection options', async () 
   await registry.close();
 });
 
-test('v1 and v2 store plugins register in package-name order whichever version they are', async () => {
+test('store plugins register in package-name order', async () => {
   const { home, env } = pluginHome();
   selectV2Plugin(home, 'b-plugin', v2RegistrationSource('second'));
-  selectPlugin(home, 'a-plugin', 'first', registrationSource('first'));
+  selectV2Plugin(home, 'a-plugin', v2RegistrationSource('first'));
   const registry = await startStore(env);
   assert.deepEqual(
     registry.inventory.map(({ provider, source, package: name }) => [provider, source, name]),
@@ -118,7 +125,17 @@ test('a broken plugin is listed as failed while its working neighbor registers',
     'e-setup-fails',
     `export default () => ({ apiVersion: 2, provider: 'setup-fails', credentials: { variables: [] }, setup: async () => { throw new Error('setup failed'); } });`,
   );
-  selectPlugin(home, 'f-bad-owner', 'bad-owner', registrationSource('other-id'));
+  selectV2Plugin(
+    home,
+    'f-bad-owner',
+    `export default () => ({
+      apiVersion: 2, provider: 'declared-id', credentials: { variables: [] },
+      setup: async () => ({
+        runtime: { provider: 'other-id', ownsDevice: () => false, getInteractor: () => undefined,
+          deviceInventoryProvider: async () => [], leaseLifecycle: {}, shutdown: async () => {} },
+        platformModule: { owner: { kind: 'provider-runtime', provider: 'other-id', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } } })
+    });`,
+  );
   const registry = await startStore(env);
 
   assert.deepEqual(
@@ -167,16 +184,16 @@ test('the first plugin to name a provider claims it even when it fails, and late
   await registry.close();
 });
 
-test('a v1 manifest is dispatched before any factory runs and an incompatible one is only listed', async () => {
+test('a package whose factory returns the v1 shape is listed as incompatible', async () => {
   const { home, env } = pluginHome();
-  const marker = path.join(home, 'evaluated');
-  selectPlugin(
+  selectV2Plugin(
     home,
-    'one',
-    'one',
-    `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'yes');`,
+    'v1-factory',
+    `export default () => ({
+       runtime: { provider: 'v1-factory', ownsDevice: () => false, getInteractor: () => undefined,
+         deviceInventoryProvider: async () => [], leaseLifecycle: {}, shutdown: async () => {} },
+       platformModule: { owner: { kind: 'provider-runtime', provider: 'v1-factory', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } } });`,
   );
-  selectPlugin(home, 'two', 'other', 'throw new Error("evaluated");', 2);
   const { resolveProviderPlugins, claimProviderIds } = await import('./registry.ts');
   const { storePluginCandidates } = await import('./store.ts');
   const resolved = await resolveProviderPlugins([
@@ -184,13 +201,11 @@ test('a v1 manifest is dispatched before any factory runs and an incompatible on
     ...(await storePluginCandidates(env)),
   ]);
 
-  assert.ok(!fs.existsSync(marker));
+  // A v1 package used to be dispatched from its manifest and registered; the contract version is
+  // now the only way in, so it is listed and skipped like any other incompatible plugin.
   assert.deepEqual(
     resolved.inventory().map(({ package: name, state, error }) => [name, state, error?.reason]),
-    [
-      ['one', 'active', undefined],
-      ['two', 'failed', 'incompatible_plugin'],
-    ],
+    [['v1-factory', 'failed', 'incompatible_plugin']],
   );
 });
 
@@ -231,16 +246,16 @@ test('entry discovery prefers ./agent-device and falls back to the root export o
 });
 
 test('startup failure of one plugin cleans up its constructed runtime and keeps the others', async () => {
-  for (const instance of ["'test'", 'undefined', '42', '" "']) {
+  for (const instance of ['null', 'undefined', '42', '" "']) {
     const { home, env } = pluginHome();
     const first = path.join(home, 'first-shutdown');
     const invalid = path.join(home, 'invalid-shutdown');
-    selectPlugin(home, 'one', 'one', registrationSource('one', first));
-    const source = registrationSource(instance === "'test'" ? 'wrong' : 'two', invalid).replace(
+    selectV2Plugin(home, 'one', v2RegistrationSource('one', { shutdownFile: first }));
+    const source = v2RegistrationSource('two', { shutdownFile: invalid }).replace(
       "instance: 'test'",
       `instance: ${instance}`,
     );
-    selectPlugin(home, 'two', 'two', source);
+    selectV2Plugin(home, 'two', source);
     const registry = await startStore(env);
     assert.deepEqual(
       registry.registrations.map(({ provider }) => provider),
@@ -307,49 +322,7 @@ test('a frozen runtime registers untouched, serves its facets, and is shut down 
   assert.equal(fs.readFileSync(log, 'utf8'), 'runtime;dispose;');
 });
 
-test('connection callbacks run from a v1 plugin and always release its runtime', async () => {
-  const { home, env } = pluginHome();
-  const marker = path.join(home, 'shutdown');
-  const source = registrationSource('example', marker).replace(
-    'platformModule:',
-    "connection: { resolve: () => ({ profile: { leaseProvider: 'example', platform: 'android' } }), verify: async () => { throw host.createError('COMMAND_FAILED', 'verification failed'); } }, platformModule:",
-  );
-  selectPlugin(home, 'example', 'example', source);
-  selectPlugin(home, 'unrelated', 'unrelated', 'throw new Error("unrelated plugin evaluated");');
-  const manifestPath = path.join(
-    home,
-    'plugins',
-    JSON.parse(fs.readFileSync(path.join(home, 'config.json'), 'utf8')).plugins.example
-      .installation,
-    'node_modules/example/package.json',
-  );
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  manifest.agentDevicePlugin.connection = LOCAL_CONNECTION;
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
-  const flags = { json: false, help: false, version: false };
-
-  const profile = await withPluginConnection(
-    'example',
-    ['limrun'],
-    env,
-    async (connection) => await connection.resolve({ flags, stateDir: home, cwd: home, env }),
-  );
-  assert.equal(profile.profile.platform, 'android');
-  assert.ok(fs.existsSync(marker));
-  fs.unlinkSync(marker);
-  await assert.rejects(
-    withPluginConnection(
-      'example',
-      ['limrun'],
-      env,
-      async (connection) => await connection.verify({ flags, env }),
-    ),
-    { code: 'COMMAND_FAILED' },
-  );
-  assert.ok(fs.existsSync(marker));
-});
-
-test('a v2 plugin connection runs without setting up any runtime', async () => {
+test('a plugin connection runs without setting up any runtime', async () => {
   const { home, env } = pluginHome();
   const marker = path.join(home, 'setup-ran');
   selectV2Plugin(
@@ -397,7 +370,7 @@ const LOCAL_CONNECTION = {
 test('a WebDriver descriptor is adapted by the policy, and a mismatched provider never reaches it', async () => {
   const { home, env } = pluginHome();
   const source = webDriverPluginSource('example');
-  selectPlugin(home, 'example', 'example', source);
+  selectV2Plugin(home, 'example', source);
   const registry = await startStore(env, []);
   assert.deepEqual(
     registry.registrations.map(({ provider, runtime }) => [provider, runtime.provider]),
@@ -408,7 +381,12 @@ test('a WebDriver descriptor is adapted by the policy, and a mismatched provider
 
   adaptedDescriptors.length = 0;
   const other = pluginHome();
-  selectPlugin(other.home, 'example', 'wrong', source);
+  selectV2Plugin(
+    other.home,
+    'example',
+    // The descriptor names a provider the plugin did not declare.
+    source.replace('"provider":"example","endpoint"', '"provider":"wrong","endpoint"'),
+  );
   const mismatched = await startStore(other.env, []);
   assert.deepEqual(mismatched.registrations, []);
   assert.equal(mismatched.inventory[0]!.error?.reason, 'invalid_plugin');
@@ -418,7 +396,7 @@ test('a WebDriver descriptor is adapted by the policy, and a mismatched provider
 test('a factory returning a primitive is listed as an invalid plugin', async () => {
   for (const value of ['42', '"runtime"', 'true']) {
     const { home, env } = pluginHome();
-    selectPlugin(home, 'example', 'example', `export default () => ${value};`);
+    selectV2Plugin(home, 'example', `export default () => ${value};`);
     const registry = await startStore(env, []);
     assert.deepEqual(registry.registrations, []);
     assert.equal(registry.inventory[0]!.state, 'failed');
