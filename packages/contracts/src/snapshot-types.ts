@@ -79,6 +79,11 @@ export type AndroidSnapshotBackendMetadata = {
   cacheInvalidated?: boolean;
   captureMode?: string;
   systemSurfaceOnly?: boolean;
+  /**
+   * Package of the foreground application window the snapshot helper captured: active or focused,
+   * at the highest layer, and not owned by the system. Absent when the helper saw none.
+   */
+  foregroundWindowPackage?: string;
   windowCount?: number;
   /**
    * `AccessibilityWindowInfo` types of the listed windows the helper could not serialize because

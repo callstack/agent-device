@@ -92,6 +92,9 @@ function isAndroidApplicationWindow(node: AndroidNode): boolean {
   return node.windowType === ANDROID_WINDOW_TYPE_APPLICATION;
 }
 
-function isAndroidForegroundWindow(node: AndroidNode): boolean {
+/** A window the user is in: active or focused. Shared with the snapshot header's foreground app. */
+export function isAndroidForegroundWindow(
+  node: Pick<AndroidNode, 'windowActive' | 'windowFocused'>,
+): boolean {
   return node.windowActive === true || node.windowFocused === true;
 }

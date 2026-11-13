@@ -810,9 +810,7 @@ test('snapshotAndroid keeps helper output when application and system windows ar
     appBundleId: 'io.example.fabric',
   });
 
-  assert.equal(result.androidSnapshot.backend, 'android-helper');
-  assert.equal(
-    result.nodes.some((node) => node.label === 'Fabric dashboard'),
-    true,
-  );
+  const { backend, foregroundWindowPackage } = result.androidSnapshot;
+  assert.deepEqual([backend, foregroundWindowPackage], ['android-helper', 'io.example.fabric']);
+  assert.ok(result.nodes.some((node) => node.label === 'Fabric dashboard'));
 });

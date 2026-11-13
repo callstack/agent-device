@@ -234,15 +234,22 @@ function nextSnapshotSession(
   };
 }
 
+/**
+ * The app the response header names: the foreground application window the Android snapshot
+ * helper captured, such as the launcher after a failed open, else the session app. The session
+ * keeps its app.
+ */
 function snapshotAppFields(capture: SnapshotCapture): {
   appName?: string;
   appBundleId?: string;
 } {
-  const appName = capture.result.appName ?? capture.session?.appName;
-  const appBundleId = capture.result.appBundleId ?? capture.session?.appBundleId;
+  const sessionApp = capture.result.appBundleId ?? capture.session?.appBundleId;
+  const shownApp = capture.annotations.androidSnapshot?.foregroundWindowPackage ?? sessionApp;
+  const appName =
+    shownApp === sessionApp ? (capture.result.appName ?? capture.session?.appName) : shownApp;
   return {
-    ...(appName || appBundleId ? { appName: appName ?? appBundleId } : {}),
-    ...(appBundleId ? { appBundleId } : {}),
+    ...(appName || shownApp ? { appName: appName ?? shownApp } : {}),
+    ...(shownApp ? { appBundleId: shownApp } : {}),
   };
 }
 

@@ -5,6 +5,7 @@ import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import { ANDROID_WINDOW_TYPE_APPLICATION } from './ui-hierarchy-node.ts';
+import { isAndroidForegroundWindow } from './ui-hierarchy-visibility.ts';
 
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
@@ -44,10 +45,19 @@ export function classifyAndroidHelperContent(
   xml: string,
   metadata: AndroidSnapshotBackendMetadata,
   options: { foregroundAppPackage?: string } = {},
-): AndroidHelperContentClassification {
+): AndroidHelperContentClassification & { foregroundWindowPackage?: string } {
   if (metadata.backend !== 'android-helper') return { outcome: 'ok' };
-
   const summary = summarizeAndroidHelperXml(xml, options.foregroundAppPackage);
+  const content = classifyAndroidHelperSummary(summary, metadata);
+  return summary.foregroundWindow
+    ? { ...content, foregroundWindowPackage: summary.foregroundWindow.packageName }
+    : content;
+}
+
+function classifyAndroidHelperSummary(
+  summary: AndroidHelperXmlSummary,
+  metadata: AndroidSnapshotBackendMetadata,
+): AndroidHelperContentClassification {
   if (isEmptyHelperOutput(summary, metadata)) {
     return unusable(
       summary,
@@ -201,6 +211,11 @@ type AndroidHelperXmlSummary = {
   foregroundAppPackage?: string;
   foregroundAppMeaningfulNodeCount?: number;
   windowTypes: number[];
+  /**
+   * The non-system application window the presentation keeps as foreground: active or focused, at
+   * the highest layer. A stale application window under it is not foreground.
+   */
+  foregroundWindow?: { packageName: string; layer: number };
 };
 
 type AndroidHelperXmlSummaryState = Omit<AndroidHelperXmlSummary, 'windowTypes'> & {
@@ -280,7 +295,18 @@ function recordAndroidHelperWindowNode(
   if (node.windowType === ANDROID_WINDOW_TYPE_APPLICATION) {
     summary.applicationWindowRootCount += 1;
     if (summary.currentWindowSystemOwned) summary.systemApplicationWindowRootCount += 1;
+    else recordAndroidForegroundWindow(summary, node);
   }
+}
+
+function recordAndroidForegroundWindow(
+  summary: AndroidHelperXmlSummaryState,
+  node: AndroidUiNodeMetadata,
+): void {
+  if (node.packageName === null || !isAndroidForegroundWindow(node)) return;
+  const layer = node.windowLayer ?? -1;
+  if (summary.foregroundWindow && summary.foregroundWindow.layer >= layer) return;
+  summary.foregroundWindow = { packageName: node.packageName, layer };
 }
 
 function recordAndroidHelperMeaningfulNode(
@@ -370,6 +396,7 @@ function finalizeAndroidHelperXmlSummary(
         }
       : {}),
     windowTypes: [...summary.windowTypes].sort((a, b) => a - b).slice(0, MAX_REPORTED_WINDOW_TYPES),
+    ...(summary.foregroundWindow ? { foregroundWindow: summary.foregroundWindow } : {}),
   };
 }
 
