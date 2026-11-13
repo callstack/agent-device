@@ -32,6 +32,7 @@ import {
 } from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
+  assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
 } from '../sessions/request-admission.ts';
@@ -307,6 +308,7 @@ export async function createRequestExecutionScope(params: {
       : undefined;
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
+    assertProviderLeaseRequestNamesSession(scopedReq, sessionStore.get(sessionName));
     assertRequestLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
@@ -398,6 +400,7 @@ export async function createRequestExecutionScope(params: {
         try {
           const existingRef = sessionStore.lookup(sessionName);
           const session = existingRef?.session;
+          assertProviderLeaseRequestNamesSession(scopedReq, session);
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
             : undefined;

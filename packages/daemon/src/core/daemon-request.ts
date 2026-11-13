@@ -47,6 +47,12 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
   /**
+   * The caller named no session. Set by `resolveRequestSessionAtIntake`, because the defaulted name
+   * cannot be told apart from a chosen one afterwards, and copied onto batch steps by
+   * `session-batch`.
+   */
+  sessionOmitted?: true;
+  /**
    * ADR 0014 / #1654: the complete ref/node/tree target a mutating `find`
    * resolved against its fresh capture. Its presence both marks the ref as
    * find-owned (so admission/staleness policy is skipped) and supplies the node
