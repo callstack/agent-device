@@ -18,6 +18,7 @@ export {
   readHostDirectory,
   readHostDirectorySync,
   readHostSymbolicLinkSync,
+  realHostPathSync,
   readHostTextFile,
   readHostTextFileSync,
   removeHostDirectory,

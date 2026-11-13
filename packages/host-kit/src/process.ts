@@ -1,3 +1,5 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+
 export {
   captureHostEnvironment,
   type HostEnvironmentSource,
@@ -56,3 +58,13 @@ export {
   type OwnerLiveness,
   readCurrentOwnerIdentity,
 } from './internal/owner-identity.ts';
+
+/** Observes actual executable paths. Missing entries are unknown, not proof of exit. */
+export async function readProcessExecutablePaths(
+  pids: Iterable<number>,
+  host: HostEnvironment,
+  timeoutMs?: number,
+): Promise<ReadonlyMap<number, string>> {
+  const observer = await import('./internal/process-executable-path.ts');
+  return await observer.readProcessExecutablePaths(pids, host, timeoutMs);
+}

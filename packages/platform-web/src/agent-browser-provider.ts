@@ -683,7 +683,7 @@ async function finalizeAgentBrowserProcessRecord(params: {
         return;
       }
       if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
-        await recordManagedAgentBrowserProcesses(params.status, store);
+        await recordManagedAgentBrowserProcesses(params.status, store, params.options.host);
       }
     } catch (error) {
       emitDiagnostic({

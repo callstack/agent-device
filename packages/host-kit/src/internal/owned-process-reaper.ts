@@ -137,7 +137,12 @@ function isOpenWebSessionSkip(
   record: OwnedProcessRecord,
   policy: ReapPolicy,
 ): boolean {
-  return scope === 'daemon' && record.purpose === 'managed-web-browser' && policy.openWebSession;
+  return (
+    scope === 'daemon' &&
+    (record.purpose === 'managed-web-browser' ||
+      record.purpose === 'verified-managed-web-browser') &&
+    policy.openWebSession
+  );
 }
 
 type ReapOutcome = 'terminated' | 'missing' | 'unconfirmed' | 'survived';
