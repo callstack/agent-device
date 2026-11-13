@@ -44,9 +44,10 @@ extension RunnerTests {
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
-  /// A screen that changes on its own every 0.5 s is never still for the required span (the contact
-  /// allowance, one 0.25 s delay, and the slowest capture, over 0.5 s on a simulator), so it never
-  /// settles and back reports an unknown outcome instead of crediting the swipe.
+  /// A screen that changes on its own every 0.3 s, three verification delays apart, is never still
+  /// for the required span (the contact allowance, one 0.1 s delay, and the slowest capture, about
+  /// 0.4 s on a simulator), so it never settles and back reports an unknown outcome instead of
+  /// crediting the swipe.
   @MainActor
   func testInAppBackOnAScreenChangingSlowerThanOneDelayIsNotPerformed() throws {
     _ = try launchBackFixture(["--agent-device-back-regression", "--slow-toggle"])
@@ -56,6 +57,34 @@ extension RunnerTests {
       return XCTFail("a screen that toggles on its own must not read as performed")
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+  }
+
+  /// The navigation bar's system back button is pressed from the live tree: the fixture's
+  /// interactive pop is off, so only that button can pop the detail screen.
+  @MainActor
+  func testInAppBackPressesTheNavigationBarBackButton() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a visible navigation bar back button must be pressed")
+    }
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
+  /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,
+  /// and the swipe that changes nothing reports so.
+  @MainActor
+  func testInAppBackNeverPressesABarButtonOnlyTitledBack() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--custom-back-item"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a bar button titled Back must not count as the back button")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
+    XCTAssertEqual(status.label, "Navigation root")
   }
 
   @MainActor
@@ -267,6 +296,17 @@ extension RunnerTests {
     return status
   }
   @MainActor
+  private func launchBackNavigationFixture(_ arguments: [String]) throws -> XCUIElement {
+    app.launchArguments = arguments
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
+    XCTAssertTrue(app.navigationBars.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    return app.staticTexts["agent-device-back-navigation-status"]
+  }
+
+  @MainActor
   private func endBackFixture() {
     invalidateCachedTarget(reason: "unit_test_cleanup")
     app.terminate()
@@ -437,16 +477,6 @@ extension RunnerTests {
     let slow = Self.backSwipeRequiredStillMs(maxCaptureMs: 600)
     XCTAssertEqual(slow - fast, 500)
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
-  }
-
-  /// A screen that moved between settling and the swipe has no baseline to credit a change against.
-  func testBackSwipeBaselineHoldsOnlyWhenSettledAndUnmovedBeforeTheSwipe() {
-    let baseline = grid(100)
-    let moved = grid(255)
-
-    XCTAssertTrue(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: baseline))
-    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: moved))
-    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: false, baseline: baseline, justBefore: baseline))
   }
 
   func testBackSwipeOutcomeNamesNoChangeAndAnUnsampledScreenApart() {

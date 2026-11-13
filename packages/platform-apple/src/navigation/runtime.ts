@@ -35,8 +35,8 @@ const backVisionOsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'iOS back is a left-edge swipe; visionOS has none. Press the visible back control by its ref.',
 } as const);
-/** tvOS presses the remote's Menu button, macOS taps the window back control, and iOS swipes from
- * the left edge. watchOS and visionOS have no back. */
+/** tvOS presses the remote's Menu button, macOS taps the window back control, and iOS presses the
+ * navigation bar back button or swipes from the left edge. watchOS and visionOS have no back. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
   const os = resolveDeviceAppleOs(device);
