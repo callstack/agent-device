@@ -456,6 +456,7 @@ type InteractionCommandName = InteractionCommandMetadata['name'];
 
 const clickCommandFacet = defineCommandFacet({
   name: 'click',
+  effect: 'destructive',
   text: {
     summary: 'Click or tap a UI target',
   },
@@ -468,6 +469,7 @@ const clickCommandFacet = defineCommandFacet({
 
 const pressCommandFacet = defineCommandFacet({
   name: 'press',
+  effect: 'destructive',
   text: {
     summary: 'Short-press a UI target',
     cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
@@ -481,6 +483,7 @@ const pressCommandFacet = defineCommandFacet({
 
 const fillCommandFacet = defineCommandFacet({
   name: 'fill',
+  effect: 'destructive',
   text: {
     summary: 'Replace text in a UI input',
     cliDetail:
@@ -495,6 +498,7 @@ const fillCommandFacet = defineCommandFacet({
 
 const longPressCommandFacet = defineCommandFacet({
   name: 'longpress',
+  effect: 'destructive',
   text: {
     summary: 'Hold a UI target to open a context menu',
     cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
@@ -508,6 +512,7 @@ const longPressCommandFacet = defineCommandFacet({
 
 const hoverCommandFacet = defineCommandFacet({
   name: 'hover',
+  effect: 'write',
   text: {
     summary: 'Hover the pointer over a UI target (web only)',
     cliDetail:
@@ -522,6 +527,7 @@ const hoverCommandFacet = defineCommandFacet({
 
 const swipeCommandFacet = defineCommandFacet({
   name: 'swipe',
+  effect: 'write',
   text: {
     summary: 'Fling between coordinates',
     cliDetail:
@@ -536,6 +542,7 @@ const swipeCommandFacet = defineCommandFacet({
 
 const focusCommandFacet = defineCommandFacet({
   name: 'focus',
+  effect: 'write',
   text: {
     summary: 'Focus input at screen coordinates',
   },
@@ -548,6 +555,7 @@ const focusCommandFacet = defineCommandFacet({
 
 const typeCommandFacet = defineCommandFacet({
   name: 'type',
+  effect: 'destructive',
   text: {
     summary: 'Append text to the focused input',
   },
@@ -560,6 +568,7 @@ const typeCommandFacet = defineCommandFacet({
 
 const scrollCommandFacet = defineCommandFacet({
   name: 'scroll',
+  effect: 'write',
   text: {
     summary: 'Scroll in a direction or to an edge',
     cliDetail:
@@ -574,6 +583,7 @@ const scrollCommandFacet = defineCommandFacet({
 
 const getCommandFacet = defineCommandFacet({
   name: 'get',
+  effect: 'write',
   text: {
     summary: 'Read element text or attributes',
   },
@@ -586,6 +596,7 @@ const getCommandFacet = defineCommandFacet({
 
 const isCommandFacet = defineCommandFacet({
   name: 'is',
+  effect: 'write',
   text: {
     summary: 'Check a UI predicate on a selector',
   },
@@ -598,6 +609,7 @@ const isCommandFacet = defineCommandFacet({
 
 const findCommandFacet = defineCommandFacet({
   name: 'find',
+  effect: 'destructive',
   text: {
     summary: 'Find an element and act',
   },
@@ -610,6 +622,7 @@ const findCommandFacet = defineCommandFacet({
 
 const gestureCommandFacet = defineCommandFacet({
   name: 'gesture',
+  effect: 'destructive',
   text: {
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
     cliDetail:

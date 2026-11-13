@@ -10,7 +10,7 @@ const DEBUG_COMMAND_NAME = 'debug';
 const DEBUG_ACTION_VALUES = ['symbols'] as const;
 
 const debugCommandDescription =
-  'Symbolicate Apple crash artifacts with matching dSYM UUIDs. This debug namespace is intentionally narrow: use logs for app logs, network for HTTP evidence, perf for performance samples, record/trace for media and traces, and react-devtools for React Native components and render profiles.';
+  'Symbolicate Apple crash artifacts with matching dSYM UUIDs. This command handles Apple crash symbolication only.';
 
 export const debugCommandMetadata = defineFieldCommandMetadata(
   DEBUG_COMMAND_NAME,
@@ -44,6 +44,7 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
 
 export const debugCommandFacet = defineCommandFacet({
   name: DEBUG_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Symbolicate Apple crash artifacts',
   },

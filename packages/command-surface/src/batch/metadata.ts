@@ -13,7 +13,7 @@ import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
 } from '@agent-device/command-registry/batch-policy';
-import { type CommandMetadata, type JsonSchema } from '../command-contract.ts';
+import { type CommandInputMetadata, type JsonSchema } from '../command-contract.ts';
 import {
   customField,
   enumField,
@@ -42,7 +42,7 @@ export type BatchInput = InferCommandInput<CommandFieldMap> & {
 
 export function createBatchCommandMetadata(
   nestedCommands: readonly string[] = STRUCTURED_BATCH_COMMAND_NAMES,
-): CommandMetadata<'batch', BatchInput> {
+): CommandInputMetadata<'batch', BatchInput> {
   const fields = batchFields(nestedCommands);
   return defineFieldCommandMetadata(
     'batch',

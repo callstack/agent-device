@@ -33,7 +33,7 @@ export const VIEWPORT_COMMAND_OUTPUT_SCHEMAS = {
 
 const viewportCommandMetadata = defineFieldCommandMetadata(
   'viewport',
-  'Resize the active web viewport before taking snapshots or screenshots. Useful for fixed-layout or 100vh apps where changing the viewport reveals different content.',
+  'Resize the active web viewport before taking snapshots or screenshots. Resizing can reveal different content in fixed-layout or 100vh apps.',
   {
     width: requiredField(integerField('Viewport width in CSS pixels.', { min: 1 })),
     height: requiredField(integerField('Viewport height in CSS pixels.', { min: 1 })),
@@ -56,6 +56,7 @@ const viewportDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.viewport, (inp
 
 export const viewportCommandFacet = defineCommandFacet({
   name: 'viewport',
+  effect: 'write',
   text: {
     summary: 'Resize the active web viewport for the current session',
   },

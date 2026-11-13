@@ -85,7 +85,7 @@ const pushCommandMetadata = defineFieldCommandMetadata(
 
 const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'trigger-app-event',
-  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Call this only for event names and payload shapes the app documents.',
+  'Ask the app to handle an app-defined automation or test event, with an optional structured payload. Supported event names and payload shapes are defined by the app.',
   {
     event: requiredField(
       stringField('Name of an app-defined automation or test event the app documents.'),
@@ -129,6 +129,7 @@ const triggerAppEventDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.trigger
 
 const pushCommandFacet = defineCommandFacet({
   name: 'push',
+  effect: 'destructive',
   text: {
     summary: 'Deliver a push notification payload',
   },
@@ -141,6 +142,7 @@ const pushCommandFacet = defineCommandFacet({
 
 const triggerAppEventCommandFacet = defineCommandFacet({
   name: 'trigger-app-event',
+  effect: 'destructive',
   text: {
     summary: 'Invoke an app-defined automation event',
   },

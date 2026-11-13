@@ -7,7 +7,7 @@
  *   summary      what is this command, in a list of ninety?
  *   description  what does it do, and when should I reach for it?
  *   cliDetail    what else does a terminal user need — flags, argument shapes, examples?
- *   mcpDetail    what else does a model need — sequencing, cross-tool hints?
+ *   mcpDetail    what else does an MCP caller need about this command's behavior?
  *
  * `--help`, the command list, the MCP tool description and `explain` are all projections of
  * these four, computed where they are rendered rather than written back into the schema. That
@@ -25,7 +25,7 @@ export type CommandText = {
   description: string;
   /** Appended to the `--help` body only: flags, positional syntax, terminal examples. */
   cliDetail?: string;
-  /** Appended to the MCP tool description only: when-to-use and sequencing hints. */
+  /** Appended to the MCP tool description only: command behavior and input details. */
   mcpDetail?: string;
 };
 

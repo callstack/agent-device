@@ -21,7 +21,7 @@ import { AppError } from '@agent-device/kernel/errors';
 const ALERT_COMMAND_NAME = 'alert';
 
 const alertCommandDescription =
-  "Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. Apple XCTest and Limrun iOS choose recognized English labels by preference (Allow While Using App before Allow Once); on iOS simulators, including Limrun, the runner also recognizes the device's preferred languages' wording of those labels from the OS permission-prompt strings, on any alert; equal-ranked choices and unknown labels refuse, including a lone unknown button. Open, Done, and Confirm… accept; Keep Browsing, Deny, and Skip dismiss. On the Apple XCUITest runner, dismiss taps only a recognized decline label (Cancel, Don't Allow, Ask App Not to Track, and similar) or the close element of a popover whose accessibility marker reads exactly \"dismiss popup\"; when no button fits the action, accept and dismiss answer ALERT_BUTTON_NOT_FOUND having tapped nothing — read labels with alert get, then press the button by label. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.";
+  "Inspect, wait for, accept, or dismiss a platform alert. The get action reads alert content; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. Apple XCTest and Limrun iOS choose recognized English labels by preference (Allow While Using App before Allow Once); on iOS simulators, including Limrun, the runner also recognizes the device's preferred languages' wording of those labels from the OS permission-prompt strings, on any alert; equal-ranked choices and unknown labels refuse, including a lone unknown button. Open, Done, and Confirm… accept; Keep Browsing, Deny, and Skip dismiss. On the Apple XCUITest runner, dismiss taps only a recognized decline label (Cancel, Don't Allow, Ask App Not to Track, and similar) or the close element of a popover whose accessibility marker reads exactly \"dismiss popup\"; when no button fits the action, accept and dismiss answer ALERT_BUTTON_NOT_FOUND having tapped nothing. The get action exposes labels for explicit button targeting. A get result with status none reports no alert. An alert-not-found refusal means no alert was found and no button was pressed. An alert-wait-timeout means no actionable alert resolved within the wait window. A refusal with dispatched: no means no button was activated. After a press, an unconfirmed outcome leaves the resulting alert state unknown.";
 
 const alertCommandMetadata = defineFieldCommandMetadata(
   ALERT_COMMAND_NAME,
@@ -48,6 +48,7 @@ export const alertDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.alert, (in
 
 export const alertCommandFacet = defineCommandFacet({
   name: ALERT_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Inspect, accept, or dismiss a platform alert',
   },

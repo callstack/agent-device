@@ -61,6 +61,7 @@ function buildBatchCliDetail(): string {
 
 const batchCommandFacet = defineCommandFacet({
   name: 'batch',
+  effect: 'destructive',
   text: {
     summary: 'Run multiple commands',
     cliDetail: buildBatchCliDetail(),

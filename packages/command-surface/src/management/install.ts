@@ -28,7 +28,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const installCommandMetadata = defineFieldCommandMetadata(
   'install',
-  'Install an app binary from a local path. Provide an app identifier with the path when the target needs explicit app selection; use reinstall to replace an already installed app. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup.',
+  'Install an app binary from a local path. An app identifier alongside the path selects the app explicitly when required by the target. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup.',
   {
     app: stringField('Optional app identifier hint.'),
     appPath: requiredField(stringField('Path to app binary.')),
@@ -38,7 +38,7 @@ const installCommandMetadata = defineFieldCommandMetadata(
 
 const reinstallCommandMetadata = defineFieldCommandMetadata(
   'reinstall',
-  'Replace an installed app with a binary from a local path. Use this when preserving the same app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall.',
+  'Replace an installed app with a binary from a local path. This preserves the app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall.',
   {
     app: requiredField(stringField()),
     appPath: requiredField(stringField('Path to app binary.')),
@@ -133,6 +133,7 @@ const installFromSourceDaemonWriter: DaemonWriter = (input) =>
 
 const installCommandFacet = defineCommandFacet({
   name: 'install',
+  effect: 'destructive',
   text: {
     summary: 'Install an app binary from a path',
     cliDetail:
@@ -147,6 +148,7 @@ const installCommandFacet = defineCommandFacet({
 
 const reinstallCommandFacet = defineCommandFacet({
   name: 'reinstall',
+  effect: 'destructive',
   text: {
     summary: 'Replace an installed app with a new build',
   },
@@ -159,6 +161,7 @@ const reinstallCommandFacet = defineCommandFacet({
 
 const uninstallCommandFacet = defineCommandFacet({
   name: 'uninstall',
+  effect: 'destructive',
   text: {
     summary: 'Remove an installed app',
   },
@@ -171,6 +174,7 @@ const uninstallCommandFacet = defineCommandFacet({
 
 const installFromSourceCommandFacet = defineCommandFacet({
   name: 'install-from-source',
+  effect: 'destructive',
   text: {
     summary: 'Install app builds from URLs or CI artifacts',
   },

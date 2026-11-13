@@ -286,7 +286,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
 const appStateCommandDescription =
   'Show foreground app/activity (Android and HarmonyOS; iOS and macOS answer per session)';
 const backCommandDescription =
-  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required. On iOS both modes swipe from the left edge and succeed only when the app screen changes. Reason back_swipe_no_change: the swipe was sent and the screen did not change; press the visible back or close control. Reason back_swipe_unverified: the swipe may or may not have navigated, because the screen kept changing before it or could not be sampled after it; check with snapshot. Reason back_swipe_not_dispatched, or a screen that cannot be sampled before the swipe, means nothing was sent. An app with a left-edge drawer may open the drawer instead. Press a visible back or close control by its ref directly.';
+  'Navigate back in the app or through system navigation. The in-app mode targets the app navigation stack; system targets platform back behavior. On iOS both modes swipe from the left edge and succeed only when the app screen changes. Reason back_swipe_no_change: the swipe was sent and the screen did not change; a visible back or close control is an alternative. Reason back_swipe_unverified: the swipe may or may not have navigated, because the screen kept changing before it or could not be sampled after it; the resulting screen is unconfirmed. Reason back_swipe_not_dispatched, or a screen that cannot be sampled before the swipe, means nothing was sent. An app with a left-edge drawer may open the drawer instead. A visible back or close control can be targeted directly by its ref.';
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription =
@@ -296,12 +296,12 @@ const foldGuidance = {
   permissions: 'Device Hub and host Accessibility permission are not required.',
 } as const;
 
-const foldCommandDescription = `Fold or unfold a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator into the closed, half-open, or open pose. iOS sends a ${foldGuidance.hingeEvent}, then reads the hinge angle back inside the simulator to confirm it, and can follow timestamped angle keyframes; Android sets the emulator console posture, then confirms the device state the guest commits and reports the angle read from the hinge sensor, which can differ from the AVD profile's per-posture angles, and dismisses the lock screen a fold to the cover display can raise. On iOS a pose change moves the app to a different panel with a different point size; on Android a fold to or from closed moves the app between the cover and inner displays, and any pose change can reshape the app window, whose size the next snapshot reports. Either way every ref and coordinate from before it is stale: re-snapshot after this command. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator and emulator only; iOS requires the iOS simulator SDK; ${foldGuidance.permissions} An iOS simulator in a scoped simulator set folds the same way as one in the default set.`;
+const foldCommandDescription = `Fold or unfold a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator into the closed, half-open, or open pose. iOS sends a ${foldGuidance.hingeEvent}, then reads the hinge angle back inside the simulator to confirm it, and can follow timestamped angle keyframes; Android sets the emulator console posture, then confirms the device state the guest commits and reports the angle read from the hinge sensor, which can differ from the AVD profile's per-posture angles, and dismisses the lock screen a fold to the cover display can raise. On iOS a pose change moves the app to a different panel with a different point size; on Android a fold to or from closed moves the app between the cover and inner displays, and any pose change can reshape the app window, whose size the next snapshot reports. Either way every ref and coordinate from before it is stale. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator and emulator only; iOS requires the iOS simulator SDK; ${foldGuidance.permissions} An iOS simulator in a scoped simulator set folds the same way as one in the default set.`;
 
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
-  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
+  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
@@ -310,10 +310,10 @@ const tvRemoteCommandDescription =
   'Press or long-press a TV remote button on Android TV, tvOS, or Vega OS. Android TV also supports volume, power, media, channel, guide, captions, input, color keys, and android-keycode:N. tvOS and Vega OS support up, down, left, right, select, menu, home, and back. Phones and WebDriver sessions are unsupported. The aliases ok, center, and enter map to select.';
 
 const hardwareButtonCommandDescription =
-  'Press a phone hardware button once: volume-up, volume-down, power, mute, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, or media-fast-forward. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the OS decides what the key does — which audio stream a volume press moves, which media session a media key reaches, and whether the HUD shows, is device behavior this command does not claim. Power toggles the Android screen; sleep and wake are the explicit Android events that turn it off or on without toggling, and after a press that turns it off, later commands may hit a locked screen. Android (ADB-backed and Appium) presses all eleven on phones and tablets; a physical iPhone or iPad presses volume only through the local runner or Appium, never power, mute, sleep, wake, or media. iOS Simulators, Android TV and tvOS targets refuse: on TV targets use tv-remote.';
+  'Press a phone hardware button once: volume-up, volume-down, power, mute, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, or media-fast-forward. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the OS decides what the key does — which audio stream a volume press moves, which media session a media key reaches, and whether the HUD shows, is device behavior this command does not claim. Power toggles the Android screen; sleep and wake are the explicit Android events that turn it off or on without toggling, and after a press that turns it off, later commands may hit a locked screen. Android (ADB-backed and Appium) presses all eleven on phones and tablets; a physical iPhone or iPad presses volume only through the local runner or Appium, never power, mute, sleep, wake, or media. iOS Simulators, Android TV and tvOS targets refuse this command.';
 
 const telephonyCommandDescription =
-  'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
+  'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app and invalidate earlier UI observations.';
 
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
@@ -626,6 +626,7 @@ export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
+  effect: 'write',
   description: appStateCommandDescription,
   text: {
     summary: 'Show the foreground app and activity',
@@ -635,6 +636,7 @@ const appStateCommandFacet = defineParameterlessCommandFacet({
 
 const backCommandFacet = defineCommandFacet({
   name: BACK_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Navigate back in the app or system',
   },
@@ -647,6 +649,7 @@ const backCommandFacet = defineCommandFacet({
 
 const homeCommandFacet = defineParameterlessCommandFacet({
   name: HOME_COMMAND_NAME,
+  effect: 'write',
   description: homeCommandDescription,
   text: {
     summary: 'Go to the device home screen',
@@ -656,6 +659,7 @@ const homeCommandFacet = defineParameterlessCommandFacet({
 
 const orientationCommandFacet = defineCommandFacet({
   name: ORIENTATION_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Set device orientation',
   },
@@ -668,6 +672,7 @@ const orientationCommandFacet = defineCommandFacet({
 
 const foldCommandFacet = defineCommandFacet({
   name: FOLD_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Fold or unfold a foldable iPhone simulator or Android emulator',
     cliDetail: `iPhone Duo simulators and foldable Android emulators. iOS sends a ${foldGuidance.hingeEvent} and confirms the hinge angle inside the simulator; Android sets the emulator console posture and confirms the device state. Refs and coordinates do not survive a pose change.`,
@@ -681,6 +686,7 @@ const foldCommandFacet = defineCommandFacet({
 
 const appSwitcherCommandFacet = defineParameterlessCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
+  effect: 'write',
   description: appSwitcherCommandDescription,
   text: {
     summary: 'Open the device app switcher',
@@ -690,6 +696,7 @@ const appSwitcherCommandFacet = defineParameterlessCommandFacet({
 
 const keyboardCommandFacet = defineCommandFacet({
   name: KEYBOARD_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Inspect, press, or dismiss the device keyboard',
   },
@@ -702,6 +709,7 @@ const keyboardCommandFacet = defineCommandFacet({
 
 const clipboardCommandFacet = defineCommandFacet({
   name: CLIPBOARD_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Read or write device clipboard text',
   },
@@ -714,6 +722,7 @@ const clipboardCommandFacet = defineCommandFacet({
 
 const actionButtonCommandFacet = defineParameterlessCommandFacet({
   name: ACTION_BUTTON_COMMAND_NAME,
+  effect: 'destructive',
   description: actionButtonCommandDescription,
   text: {
     summary: 'Press the iPhone or iPad Action Button',
@@ -725,6 +734,7 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
 
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Press a TV remote navigation, media, or hardware button',
     cliDetail:
@@ -739,6 +749,7 @@ const tvRemoteCommandFacet = defineCommandFacet({
 
 const hardwareButtonCommandFacet = defineCommandFacet({
   name: HARDWARE_BUTTON_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Press a phone hardware button once',
     cliDetail:
@@ -753,6 +764,7 @@ const hardwareButtonCommandFacet = defineCommandFacet({
 
 const telephonyCommandFacet = defineCommandFacet({
   name: TELEPHONY_COMMAND_NAME,
+  effect: 'destructive',
   text: {
     summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
     cliDetail:

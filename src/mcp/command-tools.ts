@@ -130,6 +130,8 @@ function toolInputAudience(metadata: AdmissionMetadata): InputAudienceMap {
 /** `outputSchemas` advertises each typed tool's outputSchema; only a structured host returns data that matches it. */
 export function listCommandTools(options: { outputSchemas: boolean }): Array<{
   name: string;
+  title: string;
+  annotations: { readOnlyHint: boolean; destructiveHint: boolean };
   description: string;
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
@@ -144,6 +146,11 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
     const advertised = advertisedInputSchema(definition.name, definition);
     return {
       name: definition.name,
+      title: definition.title,
+      annotations: {
+        readOnlyHint: definition.effect === 'read',
+        destructiveHint: definition.effect === 'destructive',
+      },
       description: withTimeoutNote(definition.name, mcpBody(definition)),
       inputSchema: advertised,
       // Only typed commands carry an outputSchema; untyped tools stay

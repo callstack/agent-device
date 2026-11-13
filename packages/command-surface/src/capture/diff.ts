@@ -63,7 +63,7 @@ export const DIFF_COMMAND_OUTPUT_SCHEMAS = {
 } satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'diff'>;
 
 const diffCommandDescription =
-  'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.';
+  'Compare accessibility snapshots or screenshots to identify UI changes. Snapshot comparisons report semantic tree changes; screenshot comparisons report pixel differences.';
 
 const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCommandDescription, {
   kind: requiredField(jsonSchemaField<'snapshot'>({ type: 'string', const: 'snapshot' })),
@@ -111,6 +111,7 @@ const diffDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.diff, (input) => [
 
 export const diffCommandFacet = defineCommandFacet({
   name: DIFF_COMMAND_NAME,
+  effect: 'write',
   text: {
     summary: 'Diff snapshot or screenshot',
     cliDetail:

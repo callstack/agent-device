@@ -77,12 +77,13 @@ const doctorDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.doctor);
 
 export const doctorCommandFacet = defineCommandFacet({
   name: 'doctor',
+  effect: 'write',
   text: {
     summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
     cliDetail:
       'Metro reachability is inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
     mcpDetail:
-      'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
+      'On iOS simulators it also warms the XCTest runner build cache in the background when missing.',
   },
   metadata: doctorCommandMetadata,
   run: (client, input) => client.command.doctor(input),

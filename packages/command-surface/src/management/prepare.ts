@@ -119,6 +119,7 @@ const prepareDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.prepare, (input
 
 export const prepareCommandFacet = defineCommandFacet({
   name: 'prepare',
+  effect: 'destructive',
   text: {
     summary: 'Pre-warm platform helpers before automation',
   },

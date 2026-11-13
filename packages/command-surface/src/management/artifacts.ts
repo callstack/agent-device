@@ -34,6 +34,7 @@ const artifactsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.artifacts);
 
 export const artifactsCommandFacet = defineCommandFacet({
   name: 'artifacts',
+  effect: 'read',
   text: {
     summary: 'List daemon or cloud provider session artifacts',
   },

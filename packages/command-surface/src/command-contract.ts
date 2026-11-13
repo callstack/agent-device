@@ -24,13 +24,24 @@ export type JsonSchema = {
   commandInputFor?: string;
 };
 
-export type CommandMetadata<Name extends string, Input> = {
+/**
+ * Read changes no device, app, session, or host state: no boot, foreground change, or artifact write.
+ * Write covers non-destructive updates.
+ */
+export type CommandEffect = 'read' | 'write' | 'destructive';
+
+export type CommandMetadata<Name extends string, Input> = CommandInputMetadata<Name, Input> & {
+  title: string;
+  effect: CommandEffect;
+};
+
+export type CommandInputMetadata<Name extends string, Input> = {
   name: Name;
   description: string;
   /**
    * MCP-only tail appended to `description` for the MCP tool surface. Stored as the tail alone
    * so `description` remains the single home of the canonical body for CLI help, `explain`,
-   * the executable definition, and docs. Compose with `composeMcpDescription`.
+   * the executable definition, and docs. Compose with `mcpBody`.
    */
   mcpDetail?: string;
   inputSchema: JsonSchema;
@@ -66,8 +77,8 @@ export type CommandMetadata<Name extends string, Input> = {
 };
 
 export function defineCommandMetadata<Name extends string, Input>(
-  definition: CommandMetadata<Name, Input>,
-): CommandMetadata<Name, Input> {
+  definition: CommandInputMetadata<Name, Input>,
+): CommandInputMetadata<Name, Input> {
   return definition;
 }
 
