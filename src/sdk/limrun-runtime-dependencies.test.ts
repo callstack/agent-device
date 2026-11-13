@@ -36,7 +36,10 @@ vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) 
 
 test('Limrun construction defers operation and opposite-platform helper modules', async () => {
   const { LimrunRuntime } = await import('../provider-limrun-runtime.ts');
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+  const runtime = new LimrunRuntime(
+    { apiKey: 'lim_test_key' },
+    { env: process.env, cwd: process.cwd() },
+  );
 
   assert.deepEqual(moduleLoads, {
     androidAppHelpers: 0,

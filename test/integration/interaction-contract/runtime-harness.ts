@@ -53,7 +53,7 @@ export function createContractDevice(
       performGesture: overrides.performGesture,
       resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     policy: localCommandPolicy(),
     ...(overrides.clock ? { clock: overrides.clock } : {}),
   });

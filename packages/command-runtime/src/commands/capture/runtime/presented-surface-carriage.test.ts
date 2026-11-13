@@ -61,7 +61,7 @@ async function captureWith(result: BackendSnapshotResult) {
   };
   const device = createAgentDevice({
     backend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });
