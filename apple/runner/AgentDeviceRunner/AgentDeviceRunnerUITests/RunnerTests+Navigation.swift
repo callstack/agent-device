@@ -299,7 +299,7 @@ extension RunnerTests {
 
   static let navigationBarBackUnverified = ErrorPayload(
     code: RunnerWireErrorCode.backSwipeUnverified,
-    message: "back pressed the navigation bar back button, but the navigation bar's back buttons did not change within 1 s. This is an unknown outcome.",
+    message: "back pressed the navigation bar back button, but the navigation bar's back buttons did not change within 1 s or on one more read after it. This is an unknown outcome.",
     hint: "Take a snapshot to see where the app is."
   )
 

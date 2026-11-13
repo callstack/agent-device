@@ -186,7 +186,7 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 | `APP_SCREEN_WINDOW_UNRESOLVED`, `APP_SCREEN_UNRESOLVED`, `APP_SCREEN_CAPTURE_UNRENDERABLE`, `APP_SCREEN_OFF_LIT_PANEL` | The screen could not be sampled before the swipe. | Nothing |
 | `BACK_SWIPE_NOT_DISPATCHED` | The swipe was refused before any touch went down, an XCTest query on the navigation bar hung before the tap, or the platform has no back command (visionOS; the daemon refuses it first). | Nothing |
 | `BACK_SWIPE_NO_CHANGE` | The swipe was sent and the sampled grid (48×96 grayscale cells, with the top 7 rows always left out; in portrait they hold the status bar and Dynamic Island, and in landscape the iPhone status bar is hidden and the Dynamic Island sits at a side edge, outside those rows) changed in at most 1% of the remaining cells by more than 24 of 256 levels. | The swipe |
-| `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
+| `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or on one more read after it or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
 0.05 s pause between captures plus each capture's own time, that agree for as long as the gap the swipe will be credited across: a contact
