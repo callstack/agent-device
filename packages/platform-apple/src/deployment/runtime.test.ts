@@ -601,6 +601,21 @@ test('reinstall keeps the installed app when cancelled during preparation', asyn
   expect(events).toEqual(['prepare']);
 });
 
+test('reinstall releases the prepared replacement when cancelled after preparation', async () => {
+  const controller = new AbortController();
+  const cancellation = new Error('cancelled after preparation');
+  const { events, reinstall } = reinstallHarness({
+    signal: controller.signal,
+    prepare: async () => {
+      controller.abort(cancellation);
+    },
+  });
+
+  await expect(reinstall()).rejects.toBe(cancellation);
+
+  expect(events).toEqual(['prepare', 'cleanup']);
+});
+
 test('reinstall releases the prepared replacement when uninstall fails', async () => {
   const { events, reinstall } = reinstallHarness({ uninstallExitCode: 1 });
 
