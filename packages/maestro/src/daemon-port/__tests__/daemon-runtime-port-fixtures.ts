@@ -1,5 +1,8 @@
 import { createTestHostEnvironment } from '@agent-device/test-kit';
-import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
+import {
+  emitDiagnostic,
+  registerDiagnosticSensitiveValue,
+} from '@agent-device/host-kit/diagnostics';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -25,10 +28,11 @@ export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
 ): Pick<
   CreateDaemonMaestroRuntimeOperationsOptions,
-  'flags' | 'publicNetworkOnly' | 'host' | 'registerSensitiveValue'
+  'flags' | 'publicNetworkOnly' | 'host' | 'registerSensitiveValue' | 'emitDiagnostic'
 > {
   return {
     host: createTestHostEnvironment(),
+    emitDiagnostic,
     registerSensitiveValue: registerDiagnosticSensitiveValue,
     publicNetworkOnly: false,
     ...overrides,

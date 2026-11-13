@@ -245,7 +245,7 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   testIme: flags.testIme,
 });
 
-export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
+export const replayDaemonWriter: AsyncDaemonWriter = async (input, host, deps) => {
   const inputPath = requiredDaemonString(input.path, 'replay requires path');
   const replayBackend = readReplayBackend(input);
   const replayShellEnv = collectReplayClientShellEnv(host.env);
@@ -260,6 +260,7 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
     // the daemon executes only what arrives in this bundle.
     replayScriptSource: await loadReplayScriptSourceBundle({
       hostEnv: host.env,
+      resolveReplayBackend: deps?.resolveReplayBackend,
       inputPath,
       cwd: readReplayClientCwd(input, host.cwd),
       replayBackend,
@@ -276,7 +277,7 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
   });
 };
 
-export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
+export const testDaemonWriter: AsyncDaemonWriter = async (input, host, deps) => {
   const inputs = input.paths ?? [];
   const replayBackend = readReplayBackend(input);
   const cwd = readReplayClientCwd(input, host.cwd);
@@ -295,6 +296,7 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
         async (inputPath) =>
           await loadReplayScriptSourceBundle({
             hostEnv: host.env,
+            resolveReplayBackend: deps?.resolveReplayBackend,
             inputPath,
             cwd,
             replayBackend,

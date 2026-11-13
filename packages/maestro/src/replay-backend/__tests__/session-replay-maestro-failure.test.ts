@@ -78,6 +78,7 @@ test('the failure response hands the host the step, its warnings, and its sugges
 
   await buildTypedMaestroFailureResponse(
     {
+      emitDiagnostic: () => {},
       registerSensitiveValue: () => {},
       appendTraceEvent: () => {},
       buildBuiltinVars: () => ({}),

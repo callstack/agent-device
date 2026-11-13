@@ -25,7 +25,7 @@ function files(directory) {
   });
 }
 
-test('packed core excludes the engine and the managed plugin works without workspace dependencies', async () => {
+test('packed core excludes the engine and the managed plugin works without workspace dependencies', async (t) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-package-'));
   try {
     const coreTarball = path.join(
@@ -109,6 +109,24 @@ test('packed core excludes the engine and the managed plugin works without works
     assert.equal(exported.success, true);
     assert.match(exported.data.yaml, /com.example.app/);
     await assertPackagedRunScriptChildren(plugin, scratch);
+    for (const mode of ['diagnostics', 'worker-ownership', 'embedded-worker']) {
+      await t.test(`packed runtime ${mode}`, () => {
+        const output = run(
+          process.execPath,
+          [
+            '--experimental-strip-types',
+            path.join(root, 'packages/maestro/test/packed-runtime.mjs'),
+            plugin,
+            scratch,
+            mode,
+            core,
+          ],
+          consumer,
+          env,
+        );
+        process.stdout.write(output);
+      });
+    }
     const entry = manifest.exports['./agent-device'].import;
     const broken = path.join(plugin, entry);
     fs.renameSync(broken, `${broken}.missing`);

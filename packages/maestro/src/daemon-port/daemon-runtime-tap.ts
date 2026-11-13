@@ -12,7 +12,6 @@ import {
   type MaestroTargetMatch,
   type MaestroTargetQuery,
 } from '@agent-device/maestro';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { pointInsideRect } from '@agent-device/kernel/rect-center';
 import {
   withMaestroScreenshotBaseline,
@@ -93,6 +92,7 @@ export async function tapTargetAndSettle(
 
   if (options.platform === 'ios') {
     await withMaestroScreenshotBaseline({
+      emitDiagnostic: options.emitDiagnostic,
       signal: context.signal,
       capture: async (path) => {
         metrics.screenshotCaptures += 1;
@@ -232,7 +232,7 @@ async function clickSelector(
   expectedPoint: { x: number; y: number },
   flags: MaestroClickOptions,
 ): Promise<void> {
-  emitDiagnostic({
+  options.emitDiagnostic({
     level: 'debug',
     phase: 'maestro_tap_dispatch',
     data: { kind: 'selector', selectorKey: selector.key, expectedPoint },
@@ -261,7 +261,7 @@ export async function clickMaestroTargetPoint(
   flags: MaestroClickOptions,
 ): Promise<void> {
   if (!point) throw new AppError('COMMAND_FAILED', 'Maestro target did not resolve to a point.');
-  emitDiagnostic({
+  options.emitDiagnostic({
     level: 'debug',
     phase: 'maestro_tap_dispatch',
     data: { kind: 'point', point },

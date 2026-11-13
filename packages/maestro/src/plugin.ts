@@ -6,14 +6,26 @@ function maestroPlugin(): ReplayEnginePlugin {
     apiVersion: 2,
     kind: 'replay-backend',
     backend: 'maestro',
-    setup: () => ({
-      replayBackend: {
-        create: async (host) =>
-          (
-            await import('./replay-backend/replay-maestro-backend.ts')
-          ).maestroReplayBackendPlugin.create(host),
-      },
-    }),
+    setup: () => {
+      let releasePngWorker: (() => Promise<void>) | undefined;
+      return {
+        replayBackend: {
+          create: async (host) => {
+            const [{ maestroReplayBackendPlugin }, { retainPngWorker }] = await Promise.all([
+              import('./replay-backend/replay-maestro-backend.ts'),
+              import('@agent-device/capture-kit/png-worker-client'),
+            ]);
+            releasePngWorker ??= retainPngWorker((reason) =>
+              host.emitDiagnostic({ level: 'warn', phase: 'png_worker_unavailable', data: reason }),
+            );
+            return await maestroReplayBackendPlugin.create(host);
+          },
+        },
+        dispose: async () => {
+          await releasePngWorker?.();
+        },
+      };
+    },
   };
 }
 

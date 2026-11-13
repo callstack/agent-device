@@ -1,6 +1,5 @@
 import type { ReplayBackendId } from '@agent-device/ad-script';
-import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
-import type { ReplayBackendResolver } from '@agent-device/plugins/replay-backend';
+import type { ReplayBackend, ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { AppError } from '@agent-device/kernel/errors';
 
 const backendResolverKey = Symbol('replay-backend-resolver');
@@ -19,8 +18,15 @@ export async function bindReplayBackendResolver(resolve: ReplayBackendResolver):
 /** Resolves against the current daemon's plugins, without consulting another host's store. */
 export async function getReplayBackend(id: ReplayBackendId): Promise<ReplayBackend> {
   const resolve = (await binding()).resolve;
-  const { AppError } = await import('@agent-device/kernel/errors');
   if (!resolve) throw await missingReplayBackend(id);
+  return await resolveBackend(id, resolve);
+}
+
+async function resolveBackend(
+  id: ReplayBackendId,
+  resolve: ReplayBackendResolver,
+): Promise<ReplayBackend> {
+  const { AppError } = await import('@agent-device/kernel/errors');
   const { createReplayBackendHost } = await import('./replay-backend-host.ts');
   try {
     return await resolve(id, createReplayBackendHost(), await backendPackage(id));
@@ -31,13 +37,14 @@ export async function getReplayBackend(id: ReplayBackendId): Promise<ReplayBacke
   }
 }
 
-/** Loads client-side source collection or export in a scope that always disposes its plugin. */
+/** Uses the embedded registry, or owns a client-side store scope until the task settles. */
 export async function withReplayBackend<T>(
   id: ReplayBackendId,
   env: NodeJS.ProcessEnv,
   run: (backend: ReplayBackend) => Promise<T> | T,
+  resolve?: ReplayBackendResolver,
 ): Promise<T> {
-  if ((await binding()).resolve) return await run(await getReplayBackend(id));
+  if (resolve) return await run(await resolveBackend(id, resolve));
   const scope = await openReplayBackend(id, env);
   try {
     return await run(scope.backend);

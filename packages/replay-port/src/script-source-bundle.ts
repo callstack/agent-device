@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { resolveUserPath } from '@agent-device/host-kit/file';
@@ -11,6 +12,7 @@ export type ReplayScriptSourceRequest = {
   cwd: string;
   replayBackend?: string;
   hostEnv: NodeJS.ProcessEnv;
+  resolveReplayBackend?: ReplayBackendResolver;
   env?: Readonly<Record<string, string>>;
 };
 
@@ -28,13 +30,17 @@ export async function loadReplayScriptSourceBundle(
   // backend's engine sits one thunk behind it (#3377).
   const files = await (
     await import('@agent-device/replay-port/replay-backend-registry')
-  ).withReplayBackend(backendId, params.hostEnv, (backend) =>
-    backend.collectSourceFiles({
-      entryPath: entry,
-      entrySource,
-      env: params.env,
-      readSource: tryReadScriptFile,
-    }),
+  ).withReplayBackend(
+    backendId,
+    params.hostEnv,
+    (backend) =>
+      backend.collectSourceFiles({
+        entryPath: entry,
+        entrySource,
+        env: params.env,
+        readSource: tryReadScriptFile,
+      }),
+    params.resolveReplayBackend,
   );
   return finishBundle(entry, files, params.inputPath);
 }

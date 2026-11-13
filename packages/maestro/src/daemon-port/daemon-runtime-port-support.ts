@@ -1,3 +1,4 @@
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import path from 'node:path';
@@ -25,6 +26,7 @@ export type MaestroDaemonOperationInvoke = (
 
 export type CreateDaemonMaestroRuntimeOperationsOptions = {
   readonly host: HostEnvironment;
+  readonly emitDiagnostic: ReplayBackendHost['emitDiagnostic'];
   readonly registerSensitiveValue: (value: string) => void;
   readonly invoke: MaestroDaemonOperationInvoke;
   /** The runtime envelope every operation carries: platform, target, device, and recording flags. */

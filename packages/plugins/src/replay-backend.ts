@@ -1,8 +1,4 @@
-import type {
-  ReplayBackend,
-  ReplayBackendHost,
-  ReplayBackendPlugin,
-} from '@agent-device/contracts/replay-backend';
+import type { ReplayBackendPlugin } from '@agent-device/contracts/replay-backend';
 import type { ProviderPluginHost } from './host.ts';
 
 /** A managed v2 replay engine. The host retains sessions, dispatch, cancellation and cleanup. */
@@ -18,8 +14,4 @@ export type ReplayEngineSetup = Readonly<{
   dispose?(): Promise<void> | void;
 }>;
 
-export type ReplayBackendResolver = (
-  id: string,
-  host: ReplayBackendHost,
-  packageName?: string,
-) => Promise<ReplayBackend>;
+export type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';

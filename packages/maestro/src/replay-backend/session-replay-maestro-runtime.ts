@@ -352,6 +352,7 @@ function createMaestroReplayPort(params: {
   };
   return createDaemonMaestroRuntimePort({
     host: command.host,
+    emitDiagnostic: params.host.emitDiagnostic,
     registerSensitiveValue: params.host.registerSensitiveValue,
     invoke: (operation) => invoke(maestroOperationDispatchRequest(replay, operation)),
     flags: maestroRuntimeDeviceFlags(device, platform, req.flags, publicNetworkOnly),

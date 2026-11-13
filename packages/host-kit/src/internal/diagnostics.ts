@@ -6,9 +6,14 @@ import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-
-/** The severity an event is recorded with. */
-export type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
+import type {
+  DiagnosticEventInput,
+  DiagnosticLevel,
+} from '@agent-device/contracts/host-diagnostics';
+export type {
+  DiagnosticEventInput,
+  DiagnosticLevel,
+} from '@agent-device/contracts/host-diagnostics';
 
 type DiagnosticEvent = {
   ts: string;
@@ -135,13 +140,6 @@ export type ResourceDiagnostic = Readonly<{
   resourcePath: string;
   data: Readonly<Record<string, unknown>>;
 }>;
-
-export type DiagnosticEventInput = {
-  level?: DiagnosticLevel;
-  phase: string;
-  durationMs?: number;
-  data?: Record<string, unknown>;
-};
 
 /**
  * Encodes diagnostic data for JSON-only ports, preserving bigints as decimal strings.

@@ -1,3 +1,4 @@
+import type { DiagnosticEventInput } from './host-diagnostics.ts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -230,6 +231,7 @@ export type ReplayBackendDeviceBinding = Readonly<{
  * session policy is a member; stateless workspace packages stay direct imports of the plugin.
  */
 export type ReplayBackendHost = Readonly<{
+  emitDiagnostic(event: DiagnosticEventInput): void;
   registerSensitiveValue(value: string): void;
   /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
   appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
@@ -273,3 +275,10 @@ export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
 export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
   create(host: ReplayBackendHost): ReplayBackend<TId> | Promise<ReplayBackend<TId>>;
 }>;
+
+/** Resolves a backend from one managed plugin registry. */
+export type ReplayBackendResolver = (
+  id: string,
+  host: ReplayBackendHost,
+  packageName?: string,
+) => Promise<ReplayBackend>;

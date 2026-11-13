@@ -341,6 +341,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     waitForAnimationToEnd: async (input, context) => {
       const visualStabilityReached = await waitForMaestroAnimationToEnd({
+        emitDiagnostic: options.emitDiagnostic,
         timeoutMs: input.timeoutMs ?? MAESTRO_RUNTIME_ADAPTER_POLICY.animationWaitTimeoutMs,
         now: options.dependencies.now,
         signal: context.signal,
