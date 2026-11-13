@@ -30,9 +30,21 @@ export function hasFindExists(commandValidation, subject) {
   return commandValidation.some((command) => {
     const positionals = findPositionals(command);
     if (!positionals) return false;
-    const { action, query } = parseFindArgs(positionals);
-    return action === 'exists' && (subject === undefined || query.toLowerCase().includes(subject));
+    const parsed = tryParseFindArgs(positionals);
+    return (
+      parsed?.action === 'exists' &&
+      (subject === undefined || parsed.query.toLowerCase().includes(subject))
+    );
   });
+}
+
+/** An unsupported action is a plan the model got wrong, not a read-only find, so it scores false. */
+function tryParseFindArgs(positionals) {
+  try {
+    return parseFindArgs(positionals);
+  } catch {
+    return undefined;
+  }
 }
 
 /** A find command's positionals: parsed when it validated, else its tokens without flags. */
