@@ -14,7 +14,7 @@ import {
   STALE_REF_SAMPLE,
   sampleText,
 } from './help-conformance-sample-outputs.mjs';
-import { findExistsSource } from './help-conformance-expectations.mjs';
+import { hasFindExists } from './help-conformance-expectations.mjs';
 
 // Raw-coordinate fallback the quiz cases forbid: a click/fill/press targeting
 // bare numbers instead of a ref or selector.
@@ -183,7 +183,8 @@ export const CASES = [
       { id: 'activatesWithSelect', pattern: /\btv-remote\s+press\s+select\b/i },
       {
         id: 'verifiesOutcome',
-        pattern: new RegExp(String.raw`\b(?:is\s+focused|wait)\b|${findExistsSource()}`, 'i'),
+        test: ({ joined, commandValidation }) =>
+          /\b(?:is\s+focused|wait)\b/i.test(joined) || hasFindExists(commandValidation),
       },
     ],
     forbidden: [
@@ -245,10 +246,9 @@ export const CASES = [
       { id: 'usesWebPlatform', pattern: /--platform\s+web\b/i },
       {
         id: 'verifiesWelcomeText',
-        pattern: new RegExp(
-          String.raw`\b(?:wait|is)\b[^\n]*welcome|${findExistsSource('welcome')}`,
-          'i',
-        ),
+        test: ({ joined, commandValidation }) =>
+          /\b(?:wait|is)\b[^\n]*welcome/i.test(joined) ||
+          hasFindExists(commandValidation, 'welcome'),
       },
     ],
     forbidden: [
@@ -326,10 +326,9 @@ export const CASES = [
       },
       {
         id: 'verifiesFirstScreen',
-        pattern: new RegExp(
-          String.raw`\b(?:wait|is|get)\b[^\n]*orders|${findExistsSource('orders')}`,
-          'i',
-        ),
+        test: ({ joined, commandValidation }) =>
+          /\b(?:wait|is|get)\b[^\n]*orders/i.test(joined) ||
+          hasFindExists(commandValidation, 'orders'),
       },
     ],
     forbidden: [
@@ -388,7 +387,8 @@ export const CASES = [
       },
       {
         id: 'verifiesLoginSucceeded',
-        pattern: new RegExp(String.raw`\b(?:wait|is|get)\b|${findExistsSource()}`, 'i'),
+        test: ({ joined, commandValidation }) =>
+          /\b(?:wait|is|get)\b/i.test(joined) || hasFindExists(commandValidation),
       },
       { id: 'publishesWithoutClosing', pattern: /\bagent-device\s+session\s+save-script\b/i },
     ],

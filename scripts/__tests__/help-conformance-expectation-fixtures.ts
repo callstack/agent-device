@@ -166,8 +166,8 @@ export const EXPECTATION_FIXTURES: Record<string, ExpectationFixture> = {
       { id: 'existsInFindQuery', commands: ['agent-device find text "Sent exists"'] },
       { id: 'findFillsExists', commands: ['agent-device find text Sent fill exists'] },
     ],
-    // An escaped quote inside the query still reads as one query.
-    metamorphic: { commands: [String.raw`agent-device find text "Welcome \"back\"" exists`] },
+    // A single-word query with an apostrophe is canonicalized without quotes.
+    metamorphic: { commands: [`agent-device find text "Today's" exists`] },
   },
   usesDogfoodEvidence: {
     passing: {
