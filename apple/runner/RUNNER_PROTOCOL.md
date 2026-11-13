@@ -137,10 +137,10 @@ than silently applied:
 `backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
 call, for the navigation bar's system back button: a button with the identifier `BackButton` inside a
 navigation bar. It taps that button with a synthesized tap only when exactly one live, hittable
-candidate is found in a readable tree, and two reads in a row of the bar state, started at least
-0.05 s apart, agree and contain that button's frame; each round re-reads the buttons. The match
+candidate is found in a readable tree, and two reads in a row of the bar state, with a 0.05 s pause
+between them, agree and contain that button's frame; each round re-reads the buttons. The match
 places the snapshot frames at the window's screen origin, because a placed iPad window reports them
-from its own top-left, and allows 0.5 pt per edge for fractional frame values. No other button
+from its own top-left. No other button
 counts, whatever its label.
 The bar state is the labels of each navigation bar's `BackButton` children, one list per bar in
 bar order, and the frames of those buttons; one XCTest snapshot per bar. The still check before the
@@ -180,7 +180,7 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 | `APP_SCREEN_WINDOW_UNRESOLVED`, `APP_SCREEN_UNRESOLVED`, `APP_SCREEN_CAPTURE_UNRENDERABLE`, `APP_SCREEN_OFF_LIT_PANEL` | The screen could not be sampled before the swipe. | Nothing |
 | `BACK_SWIPE_NOT_DISPATCHED` | The swipe was refused before any touch went down, an XCTest query on the navigation bar hung before the tap, or the platform has no back command (visionOS; the daemon refuses it first). | Nothing |
 | `BACK_SWIPE_NO_CHANGE` | The swipe was sent and the sampled grid (48×96 grayscale cells, with the top 7 rows always left out; in portrait they hold the status bar and Dynamic Island, and in landscape the iPhone status bar is hidden and the Dynamic Island sits at a side edge, outside those rows) changed in at most 1% of the remaining cells by more than 24 of 256 levels. | The swipe |
-| `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar did not change within 1 s or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
+| `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
 0.05 s pause between captures plus each capture's own time, that agree for as long as the gap the swipe will be credited across: a contact

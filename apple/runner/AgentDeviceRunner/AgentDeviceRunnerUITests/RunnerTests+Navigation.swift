@@ -291,12 +291,6 @@ extension RunnerTests {
     after.backButtonLabels != before.backButtonLabels
   }
 
-  /// One read of the bar state, with the time the read started.
-  struct TimedNavigationBarBackState {
-    let state: NavigationBarBackState
-    let startedMs: Double
-  }
-
   /// The pause between two reads of the bar, and how long reads may start, both before the tap
   /// while the bar settles and after it while the pop is confirmed. Only a bar that never holds
   /// still, or a tap that did not navigate, spends the whole budget.
@@ -305,7 +299,7 @@ extension RunnerTests {
 
   static let navigationBarBackUnverified = ErrorPayload(
     code: RunnerWireErrorCode.backSwipeUnverified,
-    message: "back pressed the navigation bar back button, but the navigation bar did not change within 1 s. This is an unknown outcome.",
+    message: "back pressed the navigation bar back button, but the navigation bar's back buttons did not change within 1 s. This is an unknown outcome.",
     hint: "Take a snapshot to see where the app is."
   )
 
@@ -329,8 +323,8 @@ extension RunnerTests {
     case hung
   }
 
-  /// Reads the hittable back buttons, then the bar state until two reads in a row, at least one read
-  /// interval apart, agree and the button's frame is in them, so a push still animating is not read
+  /// Reads the hittable back buttons, then the bar state until two reads in a row, one read interval
+  /// apart, agree and the button's frame is in them, so a push still animating is not read
   /// as the state a pop changes. Each round re-reads the buttons. Reads start only until `deadlineMs`.
   @MainActor
   private func stillNavigationBarBackButton(
@@ -338,7 +332,7 @@ extension RunnerTests {
     geometry: SurfaceGeometry,
     deadlineMs: Double
   ) -> NavigationBarBackLookup {
-    var previous: TimedNavigationBarBackState?
+    var previous: NavigationBarBackState?
     while true {
       let button: CGRect
       switch navigationBarBackButtonFrames(app: app, deadlineMs: deadlineMs) {
@@ -348,36 +342,20 @@ extension RunnerTests {
       case .read(let frames) where frames.count > 1: return .notFound("ambiguous")
       case .read(let frames): button = frames[0]
       }
-      let startedMs = currentUptimeMs()
-      let current: TimedNavigationBarBackState
+      let current: NavigationBarBackState
       switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
       case .hung: return .hung
       case .unreadable: return .notFound("unreadable")
-      case .read(let state): current = TimedNavigationBarBackState(state: state, startedMs: startedMs)
+      case .read(let state): current = state
       }
-      if let previous,
-        Self.navigationBarBackStateHeldStill(from: previous, to: current),
-        Self.navigationBarBackState(current.state, holdsButton: button, geometry: geometry) {
-        return .still(current.state, button: button)
+      if current == previous, Self.navigationBarBackState(current, holdsButton: button, geometry: geometry) {
+        return .still(current, button: button)
       }
       if currentUptimeMs() >= deadlineMs { return .notFound("moving") }
       previous = current
       sleepFor(Self.navigationBarBackReadInterval)
     }
   }
-
-  /// Whether two reads show a still bar: they agree, and they started at least one read interval
-  /// apart, so two reads drawn in one animation frame never pass for a still bar.
-  static func navigationBarBackStateHeldStill(
-    from earlier: TimedNavigationBarBackState,
-    to later: TimedNavigationBarBackState
-  ) -> Bool {
-    later.state == earlier.state && later.startedMs - earlier.startedMs >= navigationBarBackReadInterval * 1000
-  }
-
-  /// How far, in points, each edge of a snapshot frame placed in screen space may sit from the live
-  /// frame, so fractional frame values that XCTest rounds differently still match.
-  static let navigationBarBackFrameTolerance: CGFloat = 0.5
 
   /// Whether `state` holds the live button. A live frame is in screen points, and a snapshot frame
   /// is in the window's own space, which a placed iPad window starts off the screen origin (#3899).
@@ -388,10 +366,7 @@ extension RunnerTests {
   ) -> Bool {
     state.backButtonFrames.contains { frame in
       let origin = geometry.screenPoint(from: SurfacePoint<WindowContentSpace>(frame.origin)).point
-      let placed = CGRect(origin: origin, size: frame.size)
-      return [
-        (placed.minX, button.minX), (placed.minY, button.minY), (placed.maxX, button.maxX), (placed.maxY, button.maxY),
-      ].allSatisfy { abs($0.0 - $0.1) <= navigationBarBackFrameTolerance }
+      return CGRect(origin: origin, size: frame.size) == button
     }
   }
 
