@@ -102,9 +102,9 @@ async function deployAndroidApp(
   install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
   if (input.replaceExisting) {
-    // Reinstall resolves its fuzzy target during uninstall. Keep the old whole-operation
-    // cache boundary here in the Android deployment owner: clear before boot/resolve/uninstall
-    // and after materialization/install, including partial failures.
+    // Reinstall resolves its fuzzy target before uninstall. Keep the whole-operation cache
+    // boundary here in the Android deployment owner: clear before boot/resolve/prepare/uninstall
+    // and after install, including partial failures.
     return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
       let artifact: MaterializedAppSource | undefined;
       try {
@@ -112,11 +112,13 @@ async function deployAndroidApp(
           await ensureAndroidReady(host, device, { headless: false }, signal);
         }
         const packageName = await host.androidDeployment.resolveAppPackage(device, input.app);
-        await uninstallAndroidPackage(host, device, packageName, signal);
+        // Prepare before the destructive uninstall so a materialization failure keeps the app.
         artifact = await host.androidDeployment.prepareArtifact(
           { source: { kind: 'path', path: input.appPath } },
           { resolveIdentity: false, signal },
         );
+        signal.throwIfAborted();
+        await uninstallAndroidPackage(host, device, packageName, signal);
         if (install) await install(artifact, signal);
         else
           await installAndroidArtifact(host, device, artifact.installablePath, undefined, signal);
