@@ -269,7 +269,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Snapshot: name the affordances merged inside an element (iOS sim); not directly invokable — reach them via the detail screen, labeled children, or coordinates',
     inputDescription:
-      "List the custom actions an element merged away, such as a card's reply control. For planning only: they cannot be invoked, so reach the control another way. iOS simulator only; costs one accessibility round trip per merged element.",
+      "List the custom actions an element merged away, such as a card's reply control. Not invocable: reach the control via its detail screen, a labeled element elsewhere, or its rect. iOS simulator only; costs one accessibility round trip per merged element.",
     projectConfig: true,
     recorded: true,
   },

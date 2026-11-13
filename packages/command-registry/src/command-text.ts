@@ -11,9 +11,10 @@
  *   searchHint   which words would a model searching for this tool type that the text lacks?
  *
  * `--help`, the command list, the MCP tool description and `explain` are all projections of
- * these four, computed where they are rendered rather than written back into the schema. That
+ * the first four, computed where they are rendered rather than written back into the schema. That
  * is deliberate: the field this replaced was authored on some commands and generated on others,
- * which is how surfaces silently drifted apart.
+ * which is how surfaces silently drifted apart. `searchHint` renders nowhere in that text; it
+ * goes only to the MCP tool's `_meta`.
  *
  * Because `cliDetail` is the only field carrying terminal vocabulary, and the MCP surface never
  * reads it, MCP descriptions stay free of flags and positional syntax structurally rather than

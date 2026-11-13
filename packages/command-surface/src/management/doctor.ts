@@ -80,7 +80,7 @@ export const doctorCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
-    searchHint: 'diagnose doctor health check setup troubleshoot',
+    searchHint: 'health check setup troubleshoot',
     cliDetail:
       'Metro reachability is inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
     mcpDetail:

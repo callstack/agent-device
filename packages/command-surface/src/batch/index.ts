@@ -51,7 +51,7 @@ const BATCH_MCP_DETAIL = [
   "steps is an array of {command, input} objects; input takes the same arguments as that command's own tool (ref, selector, or x and y for targets; settle: true for the settled diff).",
   'Steps run serially in one session; onError: "stop" halts at the first failing step, and the result reports the steps that ran.',
   'The whole batch has a 60-second work budget; split longer walks.',
-  `Example steps, in order: ${BATCH_STEP_EXAMPLES.map((step) => JSON.stringify(step)).join(', ')}.`,
+  `Example steps, in order (refs such as @e12 come from the last snapshot or settled diff): ${BATCH_STEP_EXAMPLES.map((step) => JSON.stringify(step)).join(', ')}.`,
 ].join(' ');
 
 /**
@@ -81,7 +81,7 @@ const batchCommandFacet = defineCommandFacet({
   text: {
     summary: 'Run multiple commands',
     mcpDetail: BATCH_MCP_DETAIL,
-    searchHint: 'batch sequence steps multi-step walk chain several taps in one call',
+    searchHint: 'sequence chain several taps',
     cliDetail: buildBatchCliDetail(),
   },
   metadata: batchCommandMetadata,

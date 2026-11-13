@@ -97,7 +97,7 @@ export const waitCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Wait for a duration, text, selector, strict absence, or stable UI',
-    searchHint: 'wait until appear disappear sleep verify assert visible text',
+    searchHint: 'disappear sleep assert visible',
   },
   metadata: waitCommandMetadata,
   run: (client, input) => client.command.wait(waitInputToOptions(input)),

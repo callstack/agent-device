@@ -40,7 +40,7 @@ export const reactNativeCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Run React Native automation helpers',
-    searchHint: 'react native rn expo helpers',
+    searchHint: 'rn expo',
   },
   metadata: reactNativeCommandMetadata,
   run: (client, input) => client.command.reactNative(input),

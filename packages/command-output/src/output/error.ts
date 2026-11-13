@@ -1,6 +1,7 @@
 import {
   AppError,
   defaultHintForCode,
+  defaultHintReadsLog,
   normalizeError,
   readDispatchDisclosure,
   readErrorCandidateViews,
@@ -30,7 +31,7 @@ export type HumanErrorOptions = {
    * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
    * an agent reading a tool result: the typed `details.reason` joins the code and the message
    * stays one line. The diagnostics log path is left out unless the recovery step is the code's
-   * default, which tells the reader to read that log.
+   * default and that default tells the reader to read the log.
    */
   reader?: 'terminal' | 'model';
   /** The failing command's synopsis, such as `agent-device fill <target> <text>`. */
@@ -69,7 +70,7 @@ export function formatHumanError(
       fullMessage: truncated && !forModel,
       candidateViews: inlineCandidates ? [] : candidateViews,
       showDetails: options.showDetails,
-      logLine: !forModel || normalized.hint === defaultHintForCode(normalized.code),
+      logLine: !forModel || hintReadsLog(normalized),
     }),
   };
 }
@@ -124,10 +125,21 @@ function nextStep(
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
-/** The typed `details.reason`, when the throw site classified the failure. */
+function hintReadsLog(normalized: NormalizedError): boolean {
+  return (
+    normalized.hint === defaultHintForCode(normalized.code) && defaultHintReadsLog(normalized.code)
+  );
+}
+
+const REASON_LIMIT = 80;
+
+/** The typed `details.reason`, when the throw site classified the failure, as one bounded line. */
 function readReason(normalized: NormalizedError): string | undefined {
-  const reason = normalized.details?.reason;
-  return typeof reason === 'string' && reason.length > 0 ? reason : undefined;
+  const raw = normalized.details?.reason;
+  if (typeof raw !== 'string') return undefined;
+  const reason = oneLine(raw);
+  if (reason.length === 0) return undefined;
+  return reason.length > REASON_LIMIT ? `${reason.slice(0, REASON_LIMIT)}…` : reason;
 }
 
 function formatBody(

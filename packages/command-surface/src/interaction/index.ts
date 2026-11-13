@@ -459,7 +459,7 @@ const clickCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Click or tap a UI target',
-    searchHint: 'tap press button link web mouse',
+    searchHint: 'press button link web mouse',
   },
   metadata: metadata('click'),
   run: (client, input) => client.interactions.click(toClickOptions(input)),
@@ -473,7 +473,7 @@ const pressCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Short-press a UI target',
-    searchHint: 'tap click touch button ref selector coordinates',
+    searchHint: 'tap click touch button',
     cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
   },
   metadata: metadata('press'),
@@ -488,7 +488,7 @@ const fillCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Replace text in a UI input',
-    searchHint: 'type enter text input field form textbox',
+    searchHint: 'enter form textbox',
     cliDetail:
       'Every positional after an @ref is the replacement text, so fill @e57 good morning enters "good morning"; quote the text when the shell must preserve exact whitespace. Clear a field with an empty text argument: fill @e57 "" (the argument must be present — fill @e57 alone is a missing argument, not a clear). When visible label text also matches a non-input element, constrain the target with editable=true, for example fill \'label="Email" editable=true\' "qa@example.com". To keep a secret out of argv, omit the text and pipe it in: printf %s "$PASSWORD" | fill @e57 --text-stdin (max 64 KiB, one trailing newline removed). On web, a coordinate fill selects the clicked field in the page and refuses with COMMAND_FAILED and details.reason text_entry_focus_not_observed, before it sends any text or key, when the click did not reach an editable text field it can reach: a read-only, disabled, date, checkbox, or select control, a field in a cross-origin frame, a sandboxed frame without allow-same-origin, or a closed shadow root, or a click that missed. The click has already landed, so run snapshot -i again and fill the field it reports by ref (fill @e2 text); a selector fill reaches the same coordinate path and hits the same limits.',
   },
@@ -504,7 +504,7 @@ const longPressCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Hold a UI target to open a context menu',
-    searchHint: 'long press hold context menu',
+    searchHint: 'long press',
     cliDetail: 'Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
   },
   metadata: metadata('longpress'),
@@ -519,7 +519,7 @@ const hoverCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Hover the pointer over a UI target (web only)',
-    searchHint: 'mouse over pointer reveal menu',
+    searchHint: 'mouse menu',
     cliDetail:
       'The pointer stays where hover left it: read the revealed UI (--settle or snapshot -i) and act on it before another click or hover moves the pointer away.',
   },
@@ -535,7 +535,7 @@ const swipeCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Fling between coordinates',
-    searchHint: 'swipe drag fling gesture coordinates',
+    searchHint: 'drag gesture',
     cliDetail:
       'The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
   },
@@ -551,7 +551,7 @@ const focusCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Focus input at screen coordinates',
-    searchHint: 'focus input field cursor',
+    searchHint: 'field cursor',
   },
   metadata: metadata('focus'),
   run: (client, input) => client.interactions.focus(input as FocusOptions),
@@ -565,7 +565,7 @@ const typeCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Append text to the focused input',
-    searchHint: 'type keys keyboard input text append',
+    searchHint: 'keys keyboard',
   },
   metadata: metadata('type'),
   run: (client, input) => client.interactions.type(input as TypeTextOptions),
@@ -579,7 +579,7 @@ const scrollCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Scroll in a direction or to an edge',
-    searchHint: 'scroll swipe down up list find off-screen element',
+    searchHint: 'swipe down list',
     cliDetail:
       'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture.',
   },
@@ -595,7 +595,7 @@ const getCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Read element text or attributes',
-    searchHint: 'read text value attribute label',
+    searchHint: 'value label',
   },
   metadata: metadata('get'),
   run: (client, input) => client.interactions.get(toGetOptions(input)),
@@ -609,7 +609,7 @@ const isCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Check a UI predicate on a selector',
-    searchHint: 'assert check visible hidden exists enabled selected',
+    searchHint: 'assert enabled',
   },
   metadata: metadata('is'),
   run: (client, input) => client.interactions.is(input as IsOptions),
@@ -623,7 +623,7 @@ const findCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Find an element and act',
-    searchHint: 'search locate element text click',
+    searchHint: 'search locate',
   },
   metadata: metadata('find'),
   run: (client, input) => client.interactions.find(input as FindOptions),
@@ -637,7 +637,7 @@ const gestureCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
-    searchHint: 'gesture multi-touch pinch zoom drag pan',
+    searchHint: 'multi-touch zoom',
     cliDetail:
       'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
   },

@@ -679,6 +679,11 @@ export function defaultHintForCode(code: string): string {
   return codeRecoveryHint(code) ?? 'Read the diagnostics log for the failing step.';
 }
 
+/** Whether the code's default recovery step tells the reader to read the diagnostics log. */
+export function defaultHintReadsLog(code: string): boolean {
+  return code === 'UNKNOWN' || codeRecoveryHint(code) === undefined;
+}
+
 function codeRecoveryHint(code: string): string | undefined {
   switch (code) {
     case 'INVALID_ARGS':

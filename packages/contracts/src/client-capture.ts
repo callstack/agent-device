@@ -33,8 +33,8 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
   Omit<SnapshotCommandOptionFields, 'customActions'> & {
     /**
      * List the custom actions an element merged away, such as a card's reply control.
-     * For planning only: they cannot be invoked, so reach the control another way. iOS
-     * simulator only; costs one accessibility round trip per merged element.
+     * Not invocable: reach the control via its detail screen, a labeled element elsewhere,
+     * or its rect. iOS simulator only; costs one accessibility round trip per merged element.
      */
     customActions?: SnapshotCommandOptionFields['customActions'];
     timeoutMs?: number;

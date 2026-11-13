@@ -143,7 +143,7 @@ test('MCP command tool executor renders JSON text when requested', async () => {
   );
 });
 
-test('default MCP errors retain possible dispatch and observe-first recovery, and leave out the log path', async () => {
+test('default MCP errors retain possible dispatch and observe-first recovery, and keep the log path the default step reads', async () => {
   const executor = executorReturning(undefined, () => {
     const error = new AppError('COMMAND_FAILED', 'press reply was lost', {
       dispatched: 'unknown',
@@ -179,5 +179,31 @@ test('MCP errors with a specific recovery step leave out the log path', async ()
   assert.equal(
     result.content[0]?.text,
     'Error (COMMAND_FAILED, runner_reply_lost): press reply was lost. Next: Run snapshot, then press the target again.',
+  );
+});
+
+test('MCP errors whose default recovery step does not read the log leave out the log path', async () => {
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('INVALID_ARGS', 'missing ref', { logPath: '/tmp/agent-device/press.log' });
+  });
+
+  const result = await executor.execute('press', {});
+
+  assert.doesNotMatch(result.content[0]?.text ?? '', /Log:/);
+});
+
+test('MCP errors keep a multi-line typed reason on the summary line', async () => {
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('COMMAND_FAILED', 'press failed', {
+      reason: 'runner\n  reply lost',
+      hint: 'Run snapshot, then press the target again.',
+    });
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  assert.match(
+    result.content[0]?.text ?? '',
+    /^Error \(COMMAND_FAILED, runner reply lost\): press failed\./,
   );
 });

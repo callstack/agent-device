@@ -26,6 +26,16 @@ test('every tool declares search keywords', () => {
   }
 });
 
+test('search keywords add only words the tool name and description lack', () => {
+  for (const tool of tools) {
+    const text = new Set(`${tool.name} ${tool.description}`.toLowerCase().split(/[^a-z0-9]+/));
+    const repeated = (tool._meta['anthropic/searchHint'] ?? '')
+      .split(/\s+/)
+      .filter((word) => text.has(word.toLowerCase()));
+    assert.deepEqual(repeated, [], `${tool.name} searchHint repeats its text`);
+  }
+});
+
 // Always-loaded schemas land in every run's first prompt, so their total size is a per-run cost.
 const ALWAYS_LOADED_BUDGET_BYTES = 26 * 1024;
 

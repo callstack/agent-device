@@ -31,9 +31,12 @@ const verifyField = () =>
 
 const settleFields = () => ({
   settle: booleanField(
-    'Wait for the UI to go quiet, then return the settled UI diff in this response. Best-effort; never fails the action.',
+    'Once the UI goes quiet, return the diff vs the pre-action tree. Best-effort; never fails the action.',
   ),
-  settleQuietMs: integerField('Settle: quiet window in milliseconds (default 500).', { min: 0 }),
+  settleQuietMs: integerField(
+    'Settle: quiet window in ms (default 500, 300 on iOS simulator; broad iOS screen swaps hold at least 1500).',
+    { min: 0 },
+  ),
   timeoutMs: integerField('Settle: wait deadline in milliseconds (default 10000).', { min: 1 }),
 });
 
