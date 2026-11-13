@@ -9,7 +9,12 @@ import {
   ownerIdentityMatches,
   type OwnerIdentity,
 } from './owner-identity.ts';
-import { readProcessStartTime } from './host-process.ts';
+import {
+  readProcessStartTime,
+  readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
+  readProcessIdentityFacts,
+} from './host-process.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 afterEach(() => {
@@ -81,3 +86,20 @@ test('proves two owners differ only when the evidence is there', () => {
     false,
   );
 });
+
+test.skipIf(process.platform !== 'linux')(
+  'real Linux process reads share the kernel lifetime token',
+  async () => {
+    const token = readProcessStartTime(process.pid);
+    assert.match(token ?? '', /^linux:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}:\d+$/);
+    assert.equal(
+      readHostProcessIdentityObservations([process.pid]).get(process.pid)?.startTime,
+      token,
+    );
+    assert.equal(
+      (await readHostProcessIdentityObservationsAsync([process.pid])).get(process.pid)?.startTime,
+      token,
+    );
+    assert.equal((await readProcessIdentityFacts(process.pid)).startTime, token);
+  },
+);

@@ -243,3 +243,17 @@ test('an empty or undecodable record is not dead and needs no probe', async () =
   );
   assert.equal(mockObservations.mock.calls.length, 0);
 });
+
+test.each([
+  ['Mon Aug 10 20:00:00 2026', 'linux:11111111-1111-4111-8111-111111111111:12345'],
+  ['linux:11111111-1111-4111-8111-111111111111:12345', 'Mon Aug 10 20:00:00 2026'],
+])(
+  'incomparable process lifetimes prove neither a live nor a dead browser fleet',
+  async (recorded, observed) => {
+    mockIsProcessAlive.mockReturnValue(true);
+    mockObservations.mockResolvedValue(new Map([[11, { state: 'Ss', startTime: observed }]]));
+    const store = storeReturning([daemonEntry([record(11, recorded)])]);
+    assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
+    assert.equal(await managedWebBrowserProcessRecordIsDead(store), false);
+  },
+);

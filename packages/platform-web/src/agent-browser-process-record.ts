@@ -10,6 +10,7 @@ import {
   hostProcessId,
   hostPlatform,
   isProcessAlive,
+  processStartTimesDiffer,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
   readProcessIdentities,
@@ -234,9 +235,12 @@ async function readRecordedProcessLiveness(
     // A pid the process table does not name is gone only when the signal probe agrees; a table
     // that answered nothing (a failed `ps`) leaves it unobserved.
     if (observation === undefined) return isProcessAlive(record.pid) ? 'unobserved' : 'not-alive';
-    return !observation.state.startsWith('Z') && observation.startTime === record.startTime
-      ? 'alive'
-      : 'not-alive';
+    if (
+      observation.state.startsWith('Z') ||
+      processStartTimesDiffer(observation.startTime, record.startTime)
+    )
+      return 'not-alive';
+    return observation.startTime === record.startTime ? 'alive' : 'unobserved';
   });
 }
 
