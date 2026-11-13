@@ -1,4 +1,4 @@
-import { installWorkspaceMaestro } from '../../scripts/install-workspace-maestro.ts';
+import { installWorkspaceReplayPlugins } from '../../scripts/install-workspace-replay-plugins.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -48,6 +48,6 @@ export function installIsolatedCliTestEnv(
 
 export function installedMaestroCliTestEnv(): Record<string, string> {
   const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-maestro-') };
-  installWorkspaceMaestro(env, true);
+  installWorkspaceReplayPlugins(env, true);
   return env;
 }

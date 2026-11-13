@@ -1,4 +1,4 @@
-import { runReplayTestSuite } from '@agent-device/replay-test';
+import { getReplayExecution } from './replay-backend-registry.ts';
 /** Runs the replay-test scheduler and its nested replay attempts. */
 
 import { randomUUID } from 'node:crypto';
@@ -195,7 +195,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
     return errorResponse(appErr.code, appErr.message);
   }
   const sourceBundlesByPath = new Map(sourceBundles.map((bundle) => [bundle.entry, bundle]));
-  const outcome = await runReplayTestSuite({
+  const outcome = await (await getReplayExecution()).runReplayTestSuite({
     request: suiteRequest,
     // The host owns the request-global progress sink; the scheduler receives only the
     // narrow emit capability (#1478 P3b).

@@ -86,7 +86,7 @@
     "agent-device": "bin/agent-device.mjs"
   },
   "scripts": {
-    "build": "pnpm --filter @agent-device/maestro build && tsdown",
+    "build": "pnpm --filter @agent-device/maestro build && pnpm --filter @agent-device/replay build && tsdown",
     "clean:daemon": "node --experimental-strip-types scripts/clean-daemon.ts",
     "daemon:state-dir": "node --experimental-strip-types scripts/print-daemon-state-dir.ts",
     "explain:command": "node --experimental-strip-types scripts/explain-command.ts",

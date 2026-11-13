@@ -1,3 +1,4 @@
+import replayPlugin from '../packages/replay/src/plugin.ts';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -162,7 +163,7 @@ test.each(['replay', 'test', 'batch-test'] as const)(
       await state.run(async () => {
         const f = fixture();
         const { plugin, calls } = await trackedPlugin();
-        const host = await startAgentDevice({ ...f, plugins: [plugin] });
+        const host = await startAgentDevice({ ...f, plugins: [plugin, replayPlugin()] });
         const input = { path: f.entry, platform: 'ios' as const, backend: 'maestro' };
         const testInput = { paths: [f.entry], platform: 'ios' as const, backend: 'maestro' };
         try {

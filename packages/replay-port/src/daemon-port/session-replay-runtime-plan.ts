@@ -1,4 +1,4 @@
-import { inspectAdReplay } from '@agent-device/ad-replay';
+import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
@@ -89,6 +89,7 @@ export type PreparedReplayPlan = {
 };
 
 export function prepareReplayPlan(params: {
+  inspectAdReplay: ReplayExecution['inspectAdReplay'];
   req: DaemonWireRequest;
   /** The command's runtime host; variable sources read environment and cwd from it. */
   host: HostEnvironment;
@@ -116,7 +117,7 @@ export function prepareReplayPlan(params: {
   const backendRejection = validateReplayBackendFlag(req);
   if (backendRejection) return { ok: false, response: backendRejection };
 
-  const { manifest, replayReq } = inspectReplayPlanManifest(req, script, dispatch);
+  const { manifest, replayReq } = inspectReplayPlanManifest(req, script, dispatch, params.inspectAdReplay);
   const { metadata, actions, actionLines, planDigest } = manifest;
   const preEntrySession = sessionStore.get();
   const entryIndexResult = resolveReplayPlanEntryIndex({
@@ -179,6 +180,7 @@ function inspectReplayPlanManifest(
   req: DaemonWireRequest,
   script: string,
   dispatch: ReplayDispatchOptions | undefined,
+  inspectAdReplay: ReplayExecution['inspectAdReplay'],
 ): { manifest: AdReplayManifest; replayReq: ReplayDispatchRequest } {
   const manifest = inspectAdReplay(script, {
     platform: req.flags?.platform,

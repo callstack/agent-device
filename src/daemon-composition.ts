@@ -93,6 +93,7 @@ export async function composeDaemonRuntimeDeps(
 ): Promise<
   DaemonRuntimeDeps & {
     resolveReplayBackend: import('@agent-device/contracts/replay-backend').ReplayBackendResolver;
+    resolveReplayExecution: import('@agent-device/plugins/replay-execution').ReplayExecutionResolver;
   }
 > {
   const {
@@ -120,7 +121,11 @@ export async function composeDaemonRuntimeDeps(
   try {
     const { bindReplayBackendResolver } =
       await import('@agent-device/replay-port/replay-backend-registry');
-    await bindReplayBackendResolver(providerComposition.resolveReplayBackend);
+    await bindReplayBackendResolver(
+      providerComposition.resolveReplayBackend,
+      providerComposition.resolveReplayExecution,
+      providerCandidates === undefined ? host.env : undefined,
+    );
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
@@ -170,6 +175,7 @@ export async function composeDaemonRuntimeDeps(
       shutdownProviderRuntimes: providerComposition.shutdown,
       pluginInventory: providerComposition.inventory,
       resolveReplayBackend: providerComposition.resolveReplayBackend,
+      resolveReplayExecution: providerComposition.resolveReplayExecution,
       leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
       providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,

@@ -1,4 +1,4 @@
-import type { ReplayBackendId } from '@agent-device/ad-script';
+import type { ReplayFormat } from '@agent-device/ad-script';
 import type { ReplayBackendDeclaration } from '@agent-device/contracts/replay-backend';
 
 export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
@@ -60,13 +60,21 @@ Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`,
  * other than the one its id loads.
  */
 const REPLAY_BACKEND_DECLARATIONS: {
-  readonly [TId in ReplayBackendId]: ReplayBackendDeclaration<TId>;
+  readonly [TId in ReplayFormat]: ReplayBackendDeclaration<TId>;
 } = {
+  ad: {
+    id: 'ad',
+    package: '@agent-device/replay',
+    help: {
+      summary: 'Native .ad replay and test suites (plugin, install separately)',
+      body: 'Install agent-device plugins add @agent-device/replay on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.',
+    },
+  },
   maestro: maestroReplayBackendDeclaration,
 };
 
 export function getReplayBackendDeclaration(
-  id: ReplayBackendId,
-): ReplayBackendDeclaration<ReplayBackendId> {
+  id: ReplayFormat,
+): ReplayBackendDeclaration<ReplayFormat> {
   return REPLAY_BACKEND_DECLARATIONS[id];
 }

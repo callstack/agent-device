@@ -139,6 +139,10 @@
     "./source-discovery": {
       "types": "./src/source-discovery.ts",
       "default": "./src/source-discovery.ts"
+    },
+    "./replay-plugin-admission": {
+      "types": "./src/daemon-port/replay-plugin-admission.ts",
+      "default": "./src/daemon-port/replay-plugin-admission.ts"
     }
   },
   "devDependencies": {

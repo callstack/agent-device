@@ -1,4 +1,5 @@
-import type { ReplayBackendId } from '@agent-device/ad-script';
+import type { ReplayExecution, ReplayExecutionResolver } from '@agent-device/plugins/replay-execution';
+import type { ReplayBackendId, ReplayFormat } from '@agent-device/ad-script';
 import type { ReplayBackend, ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { AppError } from '@agent-device/kernel/errors';
 
@@ -7,12 +8,51 @@ async function binding() {
   const { runtimeSlot } = await import('@agent-device/host-kit/runtime-slots');
   return runtimeSlot(backendResolverKey, () => ({
     resolve: undefined as ReplayBackendResolver | undefined,
+    execution: undefined as ReplayExecutionResolver | undefined,
+    storeEnv: undefined as NodeJS.ProcessEnv | undefined,
   }));
 }
 
 /** Binds the fixed plugin set of the current daemon runtime. Its registry owns disposal. */
-export async function bindReplayBackendResolver(resolve: ReplayBackendResolver): Promise<void> {
-  (await binding()).resolve = resolve;
+export async function bindReplayBackendResolver(
+  resolve: ReplayBackendResolver,
+  execution?: ReplayExecutionResolver,
+  storeEnv?: NodeJS.ProcessEnv,
+): Promise<void> {
+  Object.assign(await binding(), { resolve, execution, storeEnv });
+}
+
+/** Resolves native replay and suite execution from this runtime's fixed plugin set. */
+export async function getReplayExecution(): Promise<ReplayExecution> {
+  const state = await binding();
+  if (!state.execution) throw await missingReplayBackend('ad');
+  try {
+    return await state.execution(await backendPackage('ad'));
+  } catch (error) {
+    throw await recoverReplayPluginError('ad', error, state.storeEnv);
+  }
+}
+
+async function recoverReplayPluginError(
+  id: ReplayFormat,
+  error: unknown,
+  storeEnv?: NodeJS.ProcessEnv,
+): Promise<unknown> {
+  const { AppError } = await import('@agent-device/kernel/errors');
+  if (!(error instanceof AppError) || error.details?.reason !== 'plugin-not-installed') return error;
+  const packageName = await backendPackage(id);
+  if (storeEnv) {
+    const { storePluginCandidates } = await import('@agent-device/plugins/store');
+    const selected = await storePluginCandidates(storeEnv);
+    if (selected.some((candidate) => candidate.package === packageName)) {
+      return new AppError('INVALID_ARGS', 'The running daemon retains an older plugin set.', {
+        reason: 'daemon-plugin-set-stale',
+        package: packageName,
+        hint: 'Finish your sessions and restart the daemon on its host, then retry the original invocation with all its arguments. An embedded host must close and recreate its runtime.',
+      });
+    }
+  }
+  return await missingReplayBackend(id);
 }
 
 /** Resolves against the current daemon's plugins, without consulting another host's store. */
@@ -26,14 +66,11 @@ async function resolveBackend(
   id: ReplayBackendId,
   resolve: ReplayBackendResolver,
 ): Promise<ReplayBackend> {
-  const { AppError } = await import('@agent-device/kernel/errors');
   const { createReplayBackendHost } = await import('./replay-backend-host.ts');
   try {
     return await resolve(id, createReplayBackendHost(), await backendPackage(id));
   } catch (error) {
-    if (error instanceof AppError && error.details?.reason === 'plugin-not-installed')
-      throw await missingReplayBackend(id);
-    throw error;
+    throw await recoverReplayPluginError(id, error, (await binding()).storeEnv);
   }
 }
 
@@ -87,7 +124,7 @@ export async function openReplayBackend(id: ReplayBackendId, env: NodeJS.Process
   }
 }
 
-async function missingReplayBackend(id: ReplayBackendId): Promise<AppError> {
+async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
   const { AppError } = await import('@agent-device/kernel/errors');
   const packageName = await backendPackage(id);
   const installCommand = `agent-device plugins add ${packageName}`;
@@ -104,6 +141,6 @@ async function missingReplayBackend(id: ReplayBackendId): Promise<AppError> {
   );
 }
 
-async function backendPackage(id: ReplayBackendId): Promise<string> {
+async function backendPackage(id: ReplayFormat): Promise<string> {
   return (await import('./replay-backend-declarations.ts')).getReplayBackendDeclaration(id).package;
 }

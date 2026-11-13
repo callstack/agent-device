@@ -1,5 +1,5 @@
 import { normalizeError } from '@agent-device/kernel/errors';
-import { runAdReplay } from '@agent-device/ad-replay';
+import { getReplayExecution } from './replay-backend-registry.ts';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import type { ReplayCommandResult } from '@agent-device/contracts/replay';
@@ -88,7 +88,9 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       command,
     });
     if (backendResponse) return backendResponse;
+    const execution = await getReplayExecution();
     const planPreparation = prepareReplayPlan({
+      inspectAdReplay: execution.inspectAdReplay,
       req,
       host,
       sessionName,
@@ -136,7 +138,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
     });
-    const outcome = await runAdReplay(
+    const outcome = await execution.runAdReplay(
       {
         actions,
         entryIndex,

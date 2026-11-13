@@ -275,6 +275,15 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     const unsupportedDeviceSpec = deviceSpecFlagsResponse(req);
     if (unsupportedDeviceSpec) return unsupportedDeviceSpec;
 
+    if (req.command === 'replay' || req.command === 'test') {
+      try {
+        const { requireReplayPlugins } = await import('@agent-device/replay-port/replay-plugin-admission');
+        await requireReplayPlugins(req);
+      } catch (error) {
+        return finalizeThrownRequestError(error);
+      }
+    }
+
     let scope: RequestExecutionScope | undefined;
     let response: DaemonResponse;
     const platformRequestScope = createPlatformRequestScope(req);

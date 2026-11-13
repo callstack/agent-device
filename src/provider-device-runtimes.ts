@@ -11,6 +11,7 @@ import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
+  resolveReplayExecution: import('@agent-device/plugins/replay-execution').ReplayExecutionResolver;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
   /** Every plugin the registry saw, built-in or not, active or failed. */
@@ -55,6 +56,7 @@ export async function createEmbeddedProviderRuntimeComposition(
     ),
     inventory: registry.inventory,
     resolveReplayBackend: registry.resolveReplayBackend,
+    resolveReplayExecution: registry.resolveReplayExecution,
     shutdown: registry.close,
   });
 }
