@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { runCmd } from '@agent-device/host-kit/command';
 import { assertFlatToolCall, assertRpcOk } from './assertions.ts';
 import {
   createIosBottomTabsSnapshotWorld,
@@ -404,23 +405,22 @@ test('Provider-backed integration iOS physical reinstall uses scripted devicectl
         appPath,
       ]);
 
-      const callsBeforeCorrupt = appleTool.calls.length;
-      const corruptIpa = path.join(path.dirname(appPath), 'corrupt.ipa');
-      fs.writeFileSync(corruptIpa, 'not a zip archive');
-      const corrupt = await daemon.callCommand('reinstall', ['com.example.demo', corruptIpa], {
+      const callsBeforeInvalidArchive = appleTool.calls.length;
+      const archiveDirectory = path.dirname(appPath);
+      fs.writeFileSync(path.join(archiveDirectory, 'README.txt'), 'no app bundle');
+      const invalidIpa = path.join(archiveDirectory, 'no-app.ipa');
+      await runCmd('zip', ['-q', invalidIpa, 'README.txt'], { cwd: archiveDirectory });
+      const invalid = await daemon.callCommand('reinstall', ['com.example.demo', invalidIpa], {
         platform: 'ios',
         udid: PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
       });
-      assert.notEqual(corrupt.statusCode, 200, JSON.stringify(corrupt.json));
-      assert.match(
-        corrupt.json?.error?.message ?? '',
-        /End of central directory record signature not found/,
-      );
-      const laterCalls = appleTool.calls.slice(callsBeforeCorrupt);
+      assert.equal(invalid.statusCode, 400, JSON.stringify(invalid.json));
+      assert.equal(invalid.json?.error?.data?.code, 'INVALID_ARGS', JSON.stringify(invalid.json));
+      const laterCalls = appleTool.calls.slice(callsBeforeInvalidArchive);
       assert.equal(
         laterCalls.some((call) => call.includes('uninstall') || call.includes('install')),
         false,
-        `Corrupt replacement must not reach uninstall or install: ${JSON.stringify(laterCalls)}`,
+        `Archive without an app must not reach uninstall or install: ${JSON.stringify(laterCalls)}`,
       );
     },
   );
