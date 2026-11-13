@@ -210,8 +210,9 @@ export async function managedWebBrowserProcessRecordIsLive(
 
 /**
  * Whether the daemon-scoped record names processes and every one of them was observed not alive:
- * gone, a zombie, or under another start time than the record carries. An empty, undecodable, or
- * unanswered record, or a process the probe could not observe, is unknown evidence, not dead.
+ * gone, a zombie, or under a comparable different start time. An empty, undecodable, or unanswered
+ * record, an incomparable start time, or a process the probe could not observe is unknown evidence,
+ * not dead.
  */
 export async function managedWebBrowserProcessRecordIsDead(
   store: OwnedProcessRecordStore,
