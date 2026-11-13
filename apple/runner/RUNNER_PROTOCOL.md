@@ -134,42 +134,90 @@ than silently applied:
 { "command": "backInApp", "appBundleId": "com.example.app" }
 ```
 
-`backInApp` is the only back command. On iOS the runner answers it with the left-edge back swipe and
-verifies a change of the app's screen. Its failure codes are:
+`backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
+call, for the navigation bar's system back button: a button with the identifier `BackButton` inside a
+navigation bar. It taps that button with a synthesized tap only when exactly one live, hittable
+candidate is found in a readable tree, and two reads in a row of the bar state, with a 0.05 s pause
+between them, agree and contain that button's frame; each round re-reads the buttons. The match
+places the snapshot frames at the window's screen origin, because a placed iPad window reports them
+from its own top-left. No other button
+counts, whatever its label.
+The bar state is the labels of each navigation bar's `BackButton` children, one list per bar in
+bar order, and the frames of those buttons; one XCTest snapshot per bar. The still check before the
+tap compares labels and frames. Bar titles and identifiers are left out, because a bar can retitle
+itself (a countdown) without navigating. After the tap it reads that state again with a 0.05 s
+pause between reads. Only these changes from the state read before the tap answer `ok`: the number
+of bars, the number of `BackButton` children (such as none at the root), or a `BackButton` label.
+Frames are left out after the tap, because a tap that navigates nowhere can still move the button
+(a large-title collapse, a bar button that appears). A pop that keeps the same `BackButton` labels
+and bar count, such as one between two screens whose back buttons have the same title, answers
+`BACK_SWIPE_UNVERIFIED`; so can a pop on a
+back button whose title updates itself, misread as a navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
+never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
+before each bar's snapshot; a query in flight finishes or ends at XCTest's own query timeout.
+After the tap, when no read in the 1 s saw a change or hung, the runner starts one more read after
+the 1 s, with no deadline of its own: a snapshot of a bar that vanished mid-pop can spend the 1 s in
+XCTest's retries, and this read can still see the screen after the pop. That read can also fail,
+which answers `BACK_SWIPE_UNVERIFIED`, or hang, which ends at XCTest's own query timeout and also
+answers `BACK_SWIPE_UNVERIFIED`. A read in flight can run well past the 1 s: one bar snapshot took
+about 2 s on a CI simulator.
+
+Every bar read holds its XCTest issues. A held issue means the read proved nothing. A hung query
+("Timed out while evaluating UI query") is recorded again, and no further query follows it: before
+the tap the runner answers `BACK_SWIPE_NOT_DISPATCHED` with nothing sent, and after it
+`BACK_SWIPE_UNVERIFIED`.
+
+The runner swipes instead when no tap was sent:
+
+- The tree read is skipped: the window resolution marked the tree unreadable, accessibility is
+  unavailable, or the XCTest snapshot channel is penalized for the app.
+- The read fails or XCTest rejects one of its queries.
+- No candidate is found, or two or more are (such as a sheet over a stack).
+- The bar state does not hold still within 1 s.
+- The synthesized tap is refused before anything is sent.
+
+A tap whose outcome is unknown after it may have been sent throws, and neither the bar check nor
+the swipe follows. The swipe verifies a change of the app's screen. When XCTest cannot resolve the
+app's window, it samples the sole screen only on an iPhone, or on an iPad while the app provably
+fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure codes are:
 
 | Code | When | Sent |
 | --- | --- | --- |
 | `APP_SCREEN_WINDOW_UNRESOLVED`, `APP_SCREEN_UNRESOLVED`, `APP_SCREEN_CAPTURE_UNRENDERABLE`, `APP_SCREEN_OFF_LIT_PANEL` | The screen could not be sampled before the swipe. | Nothing |
-| `BACK_SWIPE_NOT_DISPATCHED` | The swipe was refused before any touch went down, or the platform has no back gesture (visionOS; the daemon refuses it first). | Nothing |
+| `BACK_SWIPE_NOT_DISPATCHED` | The swipe was refused before any touch went down, an XCTest query on the navigation bar hung before the tap, or the platform has no back command (visionOS; the daemon refuses it first). | Nothing |
 | `BACK_SWIPE_NO_CHANGE` | The swipe was sent and the sampled grid (48×96 grayscale cells, with the top 7 rows always left out; in portrait they hold the status bar and Dynamic Island, and in landscape the iPhone status bar is hidden and the Dynamic Island sits at a side edge, outside those rows) changed in at most 1% of the remaining cells by more than 24 of 256 levels. | The swipe |
-| `BACK_SWIPE_UNVERIFIED` | The swipe may have run; the outcome is unknown. | Possibly the swipe |
+| `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or on one more read after it or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
-The settle window is a run of samples taken 0.25 s apart that agree for as long as the gap the
-swipe will be credited across: a contact allowance, one 0.25 s delay, and the slowest capture seen
-while settling. A slow host therefore settles for longer. The swipe is then resolved up to its
-contact, and one more sample, taken right before the swipe, must still match the run:
+The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
+0.05 s pause between captures plus each capture's own time, that agree for as long as the gap the swipe will be credited across: a contact
+allowance, one 0.1 s delay, and the slowest capture seen while settling. A slow host therefore
+settles for longer. The last sample of that run is the one the change is measured from, and the
+swipe follows it at once:
 
-| Platform | Resolved before the last sample | Left in the gap | Contact allowance |
+| Platform | Resolved before settling | Left in the gap | Contact allowance |
 | --- | --- | --- | --- |
 | Simulator | the edge-touch plan, its display, and the HID touchscreen sender | the 100 ms edge contact | 0.2 s |
 | Device | the synthesized fling plan (2 pt inside the leading edge to 0.9 of the width, no hold), with every tree and window read it needs | the 200 ms fling | 0.4 s |
 
-On both, every tree and window read happens during that preparation, before the just-before sample.
+On both, every tree and window read happens during that preparation, before the first sample.
 
-Settling takes at most 8 samples, so the wait before the swipe is at most 1.75 s of delays plus
-eight captures, then the preparation and the last sample: about 2.6 s with the 0.1 s captures of a
-local simulator, and about 5 s with the 0.4 s captures measured on one physical iPhone (iPhone 17 Pro,
-iOS 27.0.1; https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541). Usually a still screen
-settles after 3 samples.
+Settling samples for at most 2 s, plus the capture in flight. On a slow host the budget grows to the first capture, the still span, and one more pause and capture, so a still screen settles instead of always answering `BACK_SWIPE_UNVERIFIED`. A still screen usually settles after
+4 samples, about 0.45 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
+on one physical iPhone (iPhone 17 Pro, iOS 27.0.1;
+https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541) the still span is 0.9 s.
 
-Only a change from the last sample to the sample after the swipe counts, and only when the time
+Only a change from the last sample to the sample taken 0.1 s after the swipe counts, and only when the time
 between those two does not exceed the time the screen had been still; otherwise the result is
 `BACK_SWIPE_UNVERIFIED`. Then the swipe may or may not have navigated: run `snapshot` to see the
 current screen before acting again. A screen that animates on its own more slowly than the settle
 window can still be misread as a back navigation; any finite window has that limit, so also run
 `snapshot` after `back` on a screen with auto-advancing content.
 
-Each iOS back logs one runner line, `AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION`, on every exit, with its
+Each iOS back whose window context resolved logs one `AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON`
+line on every exit of the button path, a thrown tap included, with `found` (`skipped`,
+`unreadable`, `hung`, `moving`, `no`, `ambiguous`, or `yes`), `pressed`, `confirmed` (`yes`, `no`,
+`hung`, or `-` before a tap), `lookupMs` (`0` when the read was
+skipped), and `confirmMs`. Each swipe logs one runner line, `AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION`, on every exit, with its
 `outcome` (`performed`, `refused`, `unconfirmed`, or `error` for a thrown failure), `code`, `changed`, `stableMs`, `justBeforeToAfterMs`, `gestureMs`, `maxCaptureMs`,
 `settleSamples`, and `settled`.
 

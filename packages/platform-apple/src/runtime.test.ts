@@ -528,7 +528,7 @@ function expectNavigationAndKeyboardFacts(
   if (device.appleOs === 'visionos') {
     expect(binding.facts.operations.back).toMatchObject({
       reason: 'unsupported-platform-leaf',
-      hint: expect.stringContaining('visionOS has none'),
+      hint: expect.stringContaining('visionOS has no back command'),
     });
   }
 

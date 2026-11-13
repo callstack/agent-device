@@ -39,6 +39,117 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @interface AgentDeviceRunnerFixtureViewController : AgentDeviceRunnerViewController
 @end
 
+// A real navigation stack for `back`. `--agent-device-back-navigation-bar` pushes a detail screen,
+// so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
+// pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
+// nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
+// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
+// "Back" on the root, which is not the system back button and must never be pressed. The root's
+// label reports what happened.
+@interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
+@property(nonatomic, strong) UILabel *status;
+@property(nonatomic, strong) NSTimer *titleTimer;
+@end
+
+@implementation AgentDeviceBackNavigationFixture
+- (instancetype)initWithCustomBackItem:(BOOL)customBackItem blockedBack:(BOOL)blockedBack {
+  UIViewController *root = [UIViewController new];
+  root.title = @"Root";
+  root.view.backgroundColor = UIColor.systemBackgroundColor;
+  self = [super initWithRootViewController:root];
+  if (!self) return nil;
+  UILabel *status = [UILabel new];
+  status.text = @"Navigation root";
+  status.accessibilityIdentifier = @"agent-device-back-navigation-status";
+  status.translatesAutoresizingMaskIntoConstraints = NO;
+  [root.view addSubview:status];
+  [NSLayoutConstraint activateConstraints:@[
+    [status.centerXAnchor constraintEqualToAnchor:root.view.centerXAnchor],
+    [status.centerYAnchor constraintEqualToAnchor:root.view.centerYAnchor],
+  ]];
+  self.status = status;
+  self.modalPresentationStyle = UIModalPresentationFullScreen;
+  if (customBackItem) {
+    root.navigationItem.leftBarButtonItem =
+        [[UIBarButtonItem alloc] initWithTitle:@"Back" style:UIBarButtonItemStylePlain target:self
+                                        action:@selector(customBackPressed)];
+  } else {
+    UIViewController *detail = [UIViewController new];
+    detail.title = @"Detail";
+    detail.view.backgroundColor = UIColor.systemTealColor;
+    if (blockedBack) {
+      if (@available(iOS 16.0, *)) {
+        BOOL shifting = [NSProcessInfo.processInfo.arguments containsObject:@"--shifting-back"];
+        __weak UINavigationController *weakSelf = self;
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
+          if (shifting) weakSelf.additionalSafeAreaInsets = UIEdgeInsetsMake(30, 0, 0, 0);
+        }];
+      }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
+      __block NSInteger remaining = 59;
+      __weak UIViewController *weakDetail = detail;
+      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer) {
+        remaining = remaining > 0 ? remaining - 1 : 59;
+        weakDetail.title = [NSString stringWithFormat:@"0:%02ld", (long)remaining];
+      }];
+    }
+    [self pushViewController:detail animated:NO];
+  }
+  return self;
+}
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.interactivePopGestureRecognizer.enabled = NO;
+  self.delegate = self;
+}
+
+- (void)customBackPressed {
+  self.status.text = @"Custom back pressed";
+}
+
+- (void)navigationController:(UINavigationController *)navigationController
+       didShowViewController:(UIViewController *)viewController
+                    animated:(BOOL)animated {
+  // Only the pushed stack ever shows its root again, and only by popping the detail screen.
+  if (viewController == self.viewControllers.firstObject && viewController.navigationItem.leftBarButtonItem == nil) {
+    self.status.text = @"Back pressed";
+  }
+}
+@end
+
+// `--two-stacks` shows two pushed navigation stacks, one above the other, so two hittable system
+// back buttons are on screen at once and neither is the one `back` should press.
+@interface AgentDeviceTwoStacksBackFixture : UIViewController
+@end
+
+@implementation AgentDeviceTwoStacksBackFixture
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.view.backgroundColor = UIColor.systemBackgroundColor;
+  UIStackView *stack = [UIStackView new];
+  stack.axis = UILayoutConstraintAxisVertical;
+  stack.distribution = UIStackViewDistributionFillEqually;
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:stack];
+  [NSLayoutConstraint activateConstraints:@[
+    [stack.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+    [stack.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+    [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+  ]];
+  for (NSInteger index = 0; index < 2; index++) {
+    AgentDeviceBackNavigationFixture *child = [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:NO
+                                                                                                  blockedBack:NO];
+    [self addChildViewController:child];
+    [stack addArrangedSubview:child.view];
+    [child didMoveToParentViewController:self];
+  }
+}
+@end
+
 @interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
@@ -423,6 +534,17 @@ static NSTimeInterval AgentDeviceKeyboardBusyWindow(void) {
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
   if (!self.alertFixtureStarted &&
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-navigation-bar"]) {
+    self.alertFixtureStarted = YES;
+    BOOL customBackItem = [NSProcessInfo.processInfo.arguments containsObject:@"--custom-back-item"];
+    BOOL blockedBack = [NSProcessInfo.processInfo.arguments containsObject:@"--blocked-back"];
+    UIViewController *fixture = [NSProcessInfo.processInfo.arguments containsObject:@"--two-stacks"]
+        ? [AgentDeviceTwoStacksBackFixture new]
+        : [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem blockedBack:blockedBack];
+    fixture.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentViewController:fixture animated:NO completion:nil];
+  }
+  if (!self.alertFixtureStarted &&
       ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"])) {
     self.alertFixtureStarted = YES;
@@ -662,12 +784,12 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         }
       }];
     }
-    // `--slow-toggle` repaints the whole screen every 0.5 s, slower than one verification delay, as
+    // `--slow-toggle` repaints the whole screen every 0.3 s, slower than one verification delay, as
     // a carousel does: one quiet pair of samples must not pass it for settled.
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
       __weak UIView *view = self.view;
       [self.animationTimer invalidate];
-      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
+      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer *timer) {
         view.backgroundColor = [view.backgroundColor isEqual:UIColor.blackColor] ? UIColor.whiteColor : UIColor.blackColor;
       }];
     }
