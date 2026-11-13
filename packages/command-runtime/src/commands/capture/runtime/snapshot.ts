@@ -136,13 +136,11 @@ export const diffSnapshotCommand: RuntimeCommand<
   }
   const capture = await captureRuntimeSnapshot(runtime, options);
   const flattenForDiff = options.interactiveOnly === true;
-  // A diff compares one view: the stored tree, else the ref frame, read in the requested
-  // presentation. With neither, the capture initializes the baseline (#4486).
-  const previousSnapshot = [capture.session?.snapshot, capture.session?.refFrameSnapshot].find(
-    (stored) =>
-      stored !== undefined &&
-      isSameSnapshotPresentation(stored.presentation, capture.snapshot.presentation),
-  );
+  const stored = capture.session?.snapshot;
+  const previousSnapshot =
+    stored && isSameSnapshotPresentation(stored.presentation, capture.snapshot.presentation)
+      ? stored
+      : undefined;
   const nextSession = nextSnapshotSession(options.session, capture);
 
   if (!previousSnapshot) {

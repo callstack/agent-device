@@ -319,10 +319,13 @@ test('scroll --settle keeps the ref frame view when the stored tree was read in 
   const session = makeIosSession(sessionName);
   setSessionSnapshot(
     session,
-    buildSnapshotState(snapshotPayload({ nodes: BEFORE_NODES }), { snapshotInteractiveOnly: true }),
+    buildSnapshotState(snapshotPayload({ nodes: BEFORE_NODES, presentedSurface: 'absent' }), {
+      snapshotInteractiveOnly: true,
+    }),
   );
   activateCompleteRefFrame(session);
   setSessionSnapshot(session, buildSnapshotState(snapshotPayload({ nodes: AFTER_NODES }), {}));
+  markSessionSnapshotOutdated(session);
   sessionStore.publish(sessionName, session);
   mockCommandDispatch([AFTER_NODES]);
 
@@ -339,6 +342,7 @@ test('scroll --settle keeps the ref frame view when the stored tree was read in 
   expect(settleObservationCalls[0]?.baseline.nodes).toEqual(
     expect.arrayContaining([expect.objectContaining({ label: 'Continue' })]),
   );
+  expect(settleObservationCalls[0]?.baseline.presentedSurface).toBeUndefined();
 });
 
 test('back --settle attaches the observation alongside the command result', async () => {

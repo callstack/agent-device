@@ -84,17 +84,19 @@ type GenericSettleContext = {
  * otherwise returns the observer this dispatch owes — with the pre-action
  * baseline already captured.
  */
-export function planGenericSettleObservation(
+export async function planGenericSettleObservation(
   params: GenericSettleContext & { command: string; flags: CommandFlags | undefined },
-): GenericSettlePlan {
+): Promise<GenericSettlePlan> {
   if (!commandSupportsSettleObservation(params.command)) return {};
   const invalidSettleFlags = settleFlagGuardResponse(params.command, params.flags);
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  // The stored tree answers when it shares the ref frame's view; otherwise the frame does (#4486).
-  const baseline = postActionBaseline({
-    frame: storedTreeBaseline(refFrameTree(params.session)),
+  const { presentedSurface: _unverified, ...frame } = surfaceScopedNodes(
+    refFrameTree(params.session),
+  );
+  const baseline = await postActionBaseline({
+    frame,
     candidates: [storedTreeBaseline(params.session.snapshot)],
   });
   return { observe: async () => await observeSettled(params, settle, baseline) };

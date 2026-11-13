@@ -748,7 +748,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     ...selection,
   });
   assert.equal(diff.mode, 'snapshot');
-  assert.equal(diff.baselineInitialized, false);
+  assert.equal(diff.baselineInitialized, true);
   assert.deepEqual(diff.summary, { additions: 0, removals: 0, unchanged: 3 });
 
   const rotate = await client.command.orientation({

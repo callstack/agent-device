@@ -159,7 +159,12 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
-      params.broadTransitionBaseline?.presentation ?? DEFAULT_POST_ACTION_PRESENTATION,
+      params.broadTransitionBaseline?.presentation ?? {
+        ...DEFAULT_POST_ACTION_PRESENTATION,
+        depth: options.depth,
+        scope: options.scope,
+        raw: options.raw,
+      },
       preferredBackend,
     );
     if (read.kind !== 'captured') return unfinished(read);

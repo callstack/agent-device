@@ -1,9 +1,6 @@
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
-import {
-  isSameSnapshotPresentation,
-  type SnapshotPresentation,
-} from '@agent-device/kernel/snapshot';
+import type { SnapshotPresentation } from '@agent-device/kernel/snapshot';
 
 /** The view a post-action read captures in when its baseline recorded none. */
 export const DEFAULT_POST_ACTION_PRESENTATION: SnapshotPresentation = { interactiveOnly: true };
@@ -51,12 +48,13 @@ export function surfaceScopedNodes(
  *
  * Every settle route picks its baseline here, so none can compare an interactive read with a full one.
  */
-export function postActionBaseline(params: {
+export async function postActionBaseline(params: {
   /** The ref frame, as the caller admits it as a baseline. */
   frame: SurfaceScopedNodes | undefined;
   /** Pre-action trees in the caller's order of preference. */
   candidates: readonly (SurfaceScopedNodes | undefined)[];
-}): SurfaceScopedNodes {
+}): Promise<SurfaceScopedNodes> {
+  const { isSameSnapshotPresentation } = await import('@agent-device/kernel/snapshot');
   const { frame } = params;
   const view = frame && frame.nodes.length > 0 ? frame.presentation : undefined;
   const candidate = params.candidates.find(

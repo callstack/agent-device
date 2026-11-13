@@ -1,12 +1,51 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
+import type {
+  AgentDeviceBackend,
+  BackendSnapshotOptions,
+  BackendSnapshotResult,
+} from '@agent-device/contracts/backend';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
+
+test('runtime wait stable preserves the requested scope, depth and raw view', async () => {
+  const captures: Array<BackendSnapshotOptions | undefined> = [];
+  const snapshot = selectorReadSnapshot();
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async (_context, options) => {
+        captures.push(options);
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    scope: 'Contact details',
+    depth: 2,
+    raw: true,
+    target: { kind: 'stable', quietMs: 25, timeoutMs: 1_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  assert.ok(captures.length >= 2);
+  for (const capture of captures) {
+    assert.equal(capture?.interactiveOnly, true);
+    assert.equal(capture?.scope, 'Contact details');
+    assert.equal(capture?.depth, 2);
+    assert.equal(capture?.raw, true);
+  }
+});
 
 test('runtime wait stable settles after two unchanged captures', async () => {
   const snapshot = selectorReadSnapshot();

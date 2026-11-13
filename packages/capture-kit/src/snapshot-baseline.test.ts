@@ -58,21 +58,24 @@ test.each([
     'frame',
   ],
   ['interactive frame, candidate with no recorded view', INTERACTIVE, undefined, 'candidate'],
-] as const)('%s: the %s answers', (_case, framePresentation, candidatePresentation, expected) => {
-  const baseline = postActionBaseline({
-    frame: frame(framePresentation),
-    candidates: [tree('candidate', candidatePresentation)],
-  });
-  expect(baseline.nodes[0]?.label).toBe(expected);
-});
+] as const)(
+  '%s: the %s answers',
+  async (_case, framePresentation, candidatePresentation, expected) => {
+    const baseline = await postActionBaseline({
+      frame: frame(framePresentation),
+      candidates: [tree('candidate', candidatePresentation)],
+    });
+    expect(baseline.nodes[0]?.label).toBe(expected);
+  },
+);
 
-test('without a frame the first non-empty candidate answers, in its own view', () => {
-  const baseline = postActionBaseline({
+test('without a frame the first non-empty candidate answers, in its own view', async () => {
+  const baseline = await postActionBaseline({
     frame: undefined,
     candidates: [undefined, { nodes: [] }, tree('candidate', FULL)],
   });
   expect(baseline).toEqual(tree('candidate', FULL));
-  expect(postActionBaseline({ frame: undefined, candidates: [] })).toEqual({ nodes: [] });
+  expect(await postActionBaseline({ frame: undefined, candidates: [] })).toEqual({ nodes: [] });
 });
 
 function tree(label: string, presentation: SurfaceScopedNodes['presentation']): SurfaceScopedNodes {

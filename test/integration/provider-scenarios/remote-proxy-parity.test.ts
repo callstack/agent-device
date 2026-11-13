@@ -374,7 +374,7 @@ function assertScriptOutcomes(responses: DaemonResponse[]): void {
   assert.equal(open?.ok, true);
   assert.equal(snapshot?.ok, true);
   assert.equal(raw?.ok, true);
-  assert.equal(baselineInitialized(diff), false);
+  assert.equal(baselineInitialized(diff), true);
   assert.equal(missingRef?.ok, false);
   assert.equal(
     baselineInitialized(freshDiff),

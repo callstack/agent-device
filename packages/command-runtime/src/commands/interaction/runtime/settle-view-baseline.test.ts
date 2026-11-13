@@ -55,7 +55,10 @@ const INTERACTIVE: SnapshotPresentation = { interactiveOnly: true };
 function viewOf(options: BackendSnapshotOptions | undefined): SnapshotPresentation {
   return {
     ...(options?.interactiveOnly === true ? { interactiveOnly: true } : {}),
-    ...(options?.scope ? { scope: options.scope } : {}),
+    ...(options?.scope !== undefined ? { scope: options.scope } : {}),
+    ...(options?.depth !== undefined ? { depth: options.depth } : {}),
+    ...(options?.raw !== undefined ? { raw: options.raw } : {}),
+    ...(options?.customActions !== undefined ? { customActions: options.customActions } : {}),
   };
 }
 
@@ -105,8 +108,7 @@ test('a ref press after a full snapshot settles on the full tree and reports no 
   const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
   assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly !== true));
-  assert.equal(result.settle?.diff?.summary.removals, 0);
-  assert.equal(result.settle?.diff?.summary.additions, 0);
+  assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
 });
 
 test('a ref press after snapshot -i settles on the interactive view and lists what left', async () => {
@@ -121,14 +123,23 @@ test('a ref press after snapshot -i settles on the interactive view and lists wh
   assert.deepEqual(removed(result.settle?.diff?.lines).length, 1);
 });
 
-test('a ref press after a scoped snapshot settles in that scope', async () => {
-  const { device, views } = createDevice({
-    frame: screen(DIALOG, { interactiveOnly: true, scope: 'Device name' }),
+test.each([
+  { interactiveOnly: true, scope: 'Device name' },
+  { depth: 2 },
+  { raw: true },
+  { customActions: true },
+])('a ref press preserves snapshot presentation %j when settling', async (presentation) => {
+  const { device, views } = createDevice({ frame: screen(DIALOG, presentation) });
+
+  const result = await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
+
+  assert.ok(views.length > 0);
+  for (const view of views) assert.deepEqual(view, presentation);
+  assert.deepEqual(result.settle?.diff?.summary, {
+    additions: 0,
+    removals: 0,
+    unchanged: presentation.interactiveOnly ? 3 : 4,
   });
-
-  await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
-
-  assert.ok(views.length > 0 && views.every((view) => view.scope === 'Device name'));
 });
 
 test('a selector press resolved on the full tree still diffs in the ref frame view', async () => {
@@ -166,4 +177,19 @@ test('diff snapshot -i after a full snapshot starts a baseline instead of listin
   const again = await device.capture.diffSnapshot({ session: 'default', interactiveOnly: true });
   assert.equal(again.baselineInitialized, false);
   assert.deepEqual(again.summary, { additions: 0, removals: 0, unchanged: 3 });
+});
+
+test('diff snapshot starts a baseline when only an older ref frame matches the requested view', async () => {
+  const { device } = createDevice({ frame: screen(DIALOG, INTERACTIVE) });
+  // Selector reads replace the operational snapshot without issuing a new ref frame.
+  await device.selectors.get({
+    session: 'default',
+    target: selector('label=Dialog'),
+    property: 'text',
+  });
+
+  const result = await device.capture.diffSnapshot({ session: 'default', interactiveOnly: true });
+
+  assert.equal(result.baselineInitialized, true);
+  assert.deepEqual(result.summary, { additions: 0, removals: 0, unchanged: 3 });
 });
