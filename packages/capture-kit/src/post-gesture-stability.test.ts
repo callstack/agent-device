@@ -3,7 +3,10 @@ import { beforeEach, test, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ObservationClock } from './observe-until.ts';
 import {
+  formatPostGestureOutcomeWarning,
+  readFirstScreenContent,
   runPostGestureStabilityLoop,
+  type FirstScreenContent,
   type PostGestureBaseline,
   type PostGesturePreActionBaseline,
   type PostGestureStabilityDecision,
@@ -20,7 +23,12 @@ beforeEach(() => {
   vi.mocked(emitDiagnostic).mockClear();
 });
 
-type Surface = Readonly<{ signature: readonly string[]; costMs: number; backend?: string }>;
+type Surface = Readonly<{
+  signature: readonly string[];
+  costMs: number;
+  backend?: string;
+  firstScreen?: FirstScreenContent;
+}>;
 
 // The negative half of these lines is type-level: each @ts-expect-error fails `pnpm typecheck`
 // the moment the baseline union would accept a post-action reading as pre-action evidence again
@@ -93,6 +101,7 @@ function hooksFor(
       same(baseline.signature, quiet.signature) ? 'unchanged' : 'changed',
     surfacesIdentical: same,
     summarizeDivergence: () => ({}),
+    readFirstScreen: (value) => value.firstScreen ?? { kind: 'measured', contentNodes: 20 },
   };
 }
 
@@ -217,4 +226,171 @@ test('an effect that lands after a rebase keeps the loop polling until the moved
   assert.equal(outcome.postGestureOutcome, undefined);
   assert.equal(diagnostics('post_gesture_snapshot_baseline_rebased').length, 1);
   assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 0);
+});
+
+// --- first-screen readiness after an app launch ---
+
+const LAUNCH = { action: 'open', positionals: [], readiness: 'first-screen' as const };
+
+function launchSurface(name: string, contentNodes: number, costMs = 50): Surface {
+  return {
+    signature: [name, String(contentNodes)],
+    costMs,
+    firstScreen: { kind: 'measured', contentNodes },
+  };
+}
+
+test('a launch keeps polling through a quiet loading tree until the first screen appears', async () => {
+  const clock = fakeClock();
+  const loading = launchSurface('loading', 0);
+  const home = launchSurface('home', 20);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, [...Array.from({ length: 12 }, () => loading), home, home]),
+    clock,
+  });
+
+  assert.equal(outcome.value, home);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.ok(clock.now() > 1_500, `a quiet loading tree settled after ${clock.now()}ms`);
+});
+
+test('a launch that reads a populated first screen returns on its first quiet pair', async () => {
+  const clock = fakeClock();
+  const home = launchSurface('home', 20);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, [home, home]),
+    clock,
+  });
+
+  assert.equal(outcome.value, home);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.ok(clock.now() < 500, `settled after ${clock.now()}ms`);
+});
+
+test('a sparse first screen settles once it stays unchanged, far inside the launch budget', async () => {
+  const clock = fakeClock();
+  const oneButton = launchSurface('one-button', 1);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(
+      clock,
+      Array.from({ length: 20 }, () => oneButton),
+    ),
+    clock,
+  });
+
+  assert.equal(outcome.value, oneButton);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.ok(clock.now() >= 1_500, `a sparse tree settled after only ${clock.now()}ms`);
+  assert.ok(clock.now() < 2_500, `a sparse tree waited ${clock.now()}ms`);
+});
+
+test('a sparse tree that keeps changing does not settle on a quiet pair', async () => {
+  const clock = fakeClock();
+  const progress = [10, 10, 40, 40, 70, 70, 100, 100].map((percent) =>
+    launchSurface(`downloading ${percent}%`, 1),
+  );
+  const home = launchSurface('home', 20);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, [...progress, home, home]),
+    clock,
+  });
+
+  assert.equal(outcome.value, home);
+});
+
+test('a launch whose budget expires on a loading tree reports the app as loading', async () => {
+  const clock = fakeClock();
+  const loading = launchSurface('loading', 0);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(
+      clock,
+      Array.from({ length: 60 }, () => loading),
+    ),
+    clock,
+  });
+
+  assert.equal(outcome.value, loading);
+  assert.deepEqual(outcome.postGestureOutcome, {
+    kind: 'loading',
+    gesture: { action: 'open', positionals: [] },
+  });
+  assert.ok(clock.now() >= 10_000 && clock.now() < 10_500, `gave up after ${clock.now()}ms`);
+  assert.match(formatPostGestureOutcomeWarning(outcome.postGestureOutcome!), /still loading/);
+});
+
+test('a launch whose populated tree never quiets reports it unsettled, not loading', async () => {
+  const clock = fakeClock();
+  const frames = Array.from({ length: 60 }, (_, frame) => launchSurface(`frame ${frame}`, 20));
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, frames),
+    clock,
+  });
+
+  assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
+});
+
+test('an unverifiable capture settles a launch on its quiet pair instead of waiting as loading', async () => {
+  const clock = fakeClock();
+  const unreadable: Surface = {
+    signature: ['root'],
+    costMs: 50,
+    firstScreen: { kind: 'unverifiable' },
+  };
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, [unreadable, unreadable]),
+    clock,
+  });
+
+  assert.equal(outcome.value, unreadable);
+  assert.equal(outcome.postGestureOutcome, undefined);
+});
+
+test('a gesture record never applies the first-screen rule to an empty tree', async () => {
+  const clock = fakeClock();
+  const empty = launchSurface('empty', 0);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: PENDING,
+    hooks: hooksFor(clock, [empty, empty]),
+    clock,
+  });
+
+  assert.equal(outcome.value, empty);
+  assert.equal(outcome.postGestureOutcome, undefined);
+});
+
+test('first-screen content excludes the Application and Window roots and distrusts sparse reads', () => {
+  const root = { index: 0, ref: 'e1', type: 'Application' };
+  const window = { index: 1, ref: 'e2', type: 'Window', parentIndex: 0 };
+  const button = { index: 2, ref: 'e3', type: 'Button', label: 'Continue', parentIndex: 1 };
+
+  assert.deepEqual(readFirstScreenContent({ nodes: [root, window] }), {
+    kind: 'measured',
+    contentNodes: 0,
+  });
+  assert.deepEqual(readFirstScreenContent({ nodes: [root, window, button] }), {
+    kind: 'measured',
+    contentNodes: 1,
+  });
+  assert.deepEqual(
+    readFirstScreenContent({
+      nodes: [root],
+      snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' },
+    }),
+    { kind: 'unverifiable' },
+  );
 });

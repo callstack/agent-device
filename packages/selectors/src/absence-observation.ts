@@ -1,4 +1,8 @@
-import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
+import {
+  extractNodeText,
+  isPostGestureRestUnproven,
+  normalizeType,
+} from '@agent-device/contracts/snapshot';
 import {
   readNodeLocalIdentity,
   TARGET_ANNOTATION_MAX_FIELD_BYTES,
@@ -98,7 +102,7 @@ export function classifyAbsenceObservation(
   }
   if (matchCount === 0) {
     return {
-      kind: snapshot.postGestureOutcome?.kind === 'unsettled' ? 'unsettled' : 'absent',
+      kind: isPostGestureRestUnproven(snapshot.postGestureOutcome) ? 'unsettled' : 'absent',
       matches: 0,
     };
   }

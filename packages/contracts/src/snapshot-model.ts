@@ -147,11 +147,39 @@ export type PostGestureAction = { action: string; positionals: string[] };
 /**
  * `unsettled`: the surface was still changing when the stabilization deadline expired.
  * `no-effect`: the settled surface still matches the pre-gesture tree (#1600).
+ * `loading`: an app launch's budget expired before its tree showed a first screen; the tree may be
+ * a launch or loading surface.
  */
 export type PostGestureOutcome = {
-  kind: 'unsettled' | 'no-effect';
+  kind: 'unsettled' | 'no-effect' | 'loading';
   gesture: PostGestureAction;
 };
+
+const POST_GESTURE_OUTCOME_KINDS: ReadonlySet<string> = new Set<PostGestureOutcome['kind']>([
+  'unsettled',
+  'no-effect',
+  'loading',
+]);
+
+/** Reads a published post-gesture outcome off the wire; anything malformed is no outcome. */
+export function readPostGestureOutcome(value: unknown): PostGestureOutcome | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { kind, gesture } = value as Record<string, unknown>;
+  if (typeof kind !== 'string' || !POST_GESTURE_OUTCOME_KINDS.has(kind)) return undefined;
+  if (typeof gesture !== 'object' || gesture === null) return undefined;
+  const { action, positionals } = gesture as Record<string, unknown>;
+  if (typeof action !== 'string' || !Array.isArray(positionals)) return undefined;
+  if (!positionals.every((positional) => typeof positional === 'string')) return undefined;
+  return { kind: kind as PostGestureOutcome['kind'], gesture: { action, positionals } };
+}
+
+/**
+ * Whether a tree with this outcome may not show the surface at rest: it was still changing, or the
+ * launched app was still loading. Such a tree proves no absence and serves no cache.
+ */
+export function isPostGestureRestUnproven(outcome: PostGestureOutcome | undefined): boolean {
+  return outcome?.kind === 'unsettled' || outcome?.kind === 'loading';
+}
 
 /**
  * A capture taken at once to recover or widen `previous` reads the same moment after the same

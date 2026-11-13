@@ -81,6 +81,7 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(result.viewport ? { viewport: result.viewport } : {}),
     ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
+    ...(result.postGestureOutcome ? { postGestureOutcome: result.postGestureOutcome } : {}),
     ...publicSnapshotCaptureAnnotations({
       ...result,
       ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),
