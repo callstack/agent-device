@@ -19,6 +19,7 @@ import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-
 import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 import {
+  createPluginClose,
   describeUnfinishedShutdownWork,
   reportDaemonClose,
   type ShutdownReport,
@@ -257,4 +258,27 @@ test('a clean close disposes the state composition declared in the entered handl
 
   expect(report.platformOwners).toBe('closed');
   expect(disposeState).toHaveBeenCalledOnce();
+});
+
+test('a failed lazy backend still retains cleanup ownership when disposal is pending', async () => {
+  vi.useFakeTimers();
+  try {
+    const close = createPluginClose({
+      close: () => new Promise(() => {}),
+      timeoutMs: 50,
+      inventory: [
+        {
+          backend: 'maestro',
+          source: 'store',
+          state: 'failed',
+          error: { code: 'COMMAND_FAILED', message: 'load failed', reason: 'plugin_load_failed' },
+          credentials: { variables: [], byBackend: {} },
+        },
+      ],
+    }).close();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(await close).toEqual({ disposed: [], failed: [], pending: ['replay-backend:maestro'] });
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -37,13 +37,13 @@ export type PluginCleanupStep =
  * What closing the registry did for one registered plugin. A plugin without `dispose` has nothing to
  * dispose, which reads as `ok`.
  */
-export type PluginCleanupOutcome = Readonly<{
-  provider?: string;
-  backend?: string;
-  source: PluginSource;
-  shutdown: PluginCleanupStep;
-  dispose: PluginCleanupStep;
-}>;
+export type PluginCleanupOutcome = Readonly<
+  ({ provider: string; backend?: never } | { backend: string; provider?: never }) & {
+    source: PluginSource;
+    shutdown: PluginCleanupStep;
+    dispose: PluginCleanupStep;
+  }
+>;
 
 export const NO_PLUGIN_CREDENTIALS: PluginInventoryCredentials = Object.freeze({
   variables: Object.freeze([]),

@@ -12,6 +12,7 @@ export async function maestroScriptSourceBundleFor(
   filePath: string,
 ): Promise<ReplayScriptSourceBundle> {
   return await loadReplayScriptSourceBundle({
+    hostEnv: process.env,
     inputPath: filePath,
     cwd: process.cwd(),
     replayBackend: 'maestro',

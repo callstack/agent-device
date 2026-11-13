@@ -163,7 +163,9 @@ export function createPluginClose(params: {
   let closing: Promise<ShutdownReport['plugins']> | undefined;
   const activePlugins = () =>
     params.inventory.flatMap((entry) =>
-      entry.state === 'active' ? [{ provider: entry.provider, backend: entry.backend }] : [],
+      entry.state === 'active' || entry.backend !== undefined
+        ? [{ provider: entry.provider, backend: entry.backend }]
+        : [],
     );
   return {
     close: () =>

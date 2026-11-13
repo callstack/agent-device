@@ -298,11 +298,12 @@ async function resolveRegisteredReplayBackend(
 
 async function cleanUpReplaySlot(slot: Slot): Promise<PluginCleanupOutcome[]> {
   const setup = slot.replaySetup;
-  if (!setup) return [];
+  const plugin = slot.replayPlugin;
+  if (!setup || !plugin) return [];
   await slot.replayLoading?.catch(() => {});
   return [
     {
-      backend: slot.backend,
+      backend: plugin.backend,
       source: slot.candidate.source,
       shutdown: { status: 'ok' },
       dispose: await attempt(async () => await setup.dispose?.()),

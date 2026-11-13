@@ -10,7 +10,7 @@ export type ReplayScriptSourceRequest = {
   inputPath: string;
   cwd: string;
   replayBackend?: string;
-  hostEnv?: NodeJS.ProcessEnv;
+  hostEnv: NodeJS.ProcessEnv;
   env?: Readonly<Record<string, string>>;
 };
 
@@ -28,7 +28,7 @@ export async function loadReplayScriptSourceBundle(
   // backend's engine sits one thunk behind it (#3377).
   const files = await (
     await import('@agent-device/replay-port/replay-backend-registry')
-  ).withReplayBackend(backendId, params.hostEnv ?? process.env, (backend) =>
+  ).withReplayBackend(backendId, params.hostEnv, (backend) =>
     backend.collectSourceFiles({
       entryPath: entry,
       entrySource,

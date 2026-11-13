@@ -141,3 +141,25 @@ test('the registry rejects the wrong runtime id and cleans up an invalid setup',
   expect(dispose).toHaveBeenCalledTimes(1);
   await registry.close();
 });
+
+test('one backend disposer cannot delay another backend disposer', async () => {
+  const first = engine('first');
+  const second = engine('second');
+  let release!: () => void;
+  first.dispose.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([candidate(first.plugin), candidate(second.plugin)]),
+    {},
+    policy,
+  );
+  const closing = registry.close();
+  await Promise.resolve();
+  expect(second.dispose).toHaveBeenCalledTimes(1);
+  release();
+  expect(await closing).toHaveLength(2);
+});
