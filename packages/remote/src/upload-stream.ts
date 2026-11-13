@@ -1,16 +1,22 @@
 import fs from 'node:fs';
-import type { IncomingHttpHeaders } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
+import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
   type UploadProgressStage,
 } from './upload-progress.ts';
 import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
+import {
+  createTransferPhaseWatchdog,
+  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+  TRANSFER_CONNECT_TIMEOUT_MS,
+  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
+} from './transfer-phase-budget.ts';
 
 const MAX_UPLOAD_REDIRECTS = 5;
 const UPLOAD_STREAM_RETRYABLE_DETAIL = 'uploadStreamRetryable';
@@ -83,9 +89,32 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
+  // One watchdog for this attempt: connecting, then writing the body, then waiting for headers, then
+  // reading the response. A redirect or a resume is a NEW attempt and starts fresh phase timers, but
+  // it inherits `options.signal`, so the preparation aggregate the caller opened still expires it.
+  const watchdog = createTransferPhaseWatchdog(options.signal);
+  watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
+  let bodyBytesStarted = false;
+  const noteBodyBytes = () => {
+    // Nothing can reach the socket before the connection exists, so the first uploaded byte is also
+    // the moment the connect ceiling stops applying and the body-inactivity budget takes over.
+    if (!bodyBytesStarted) {
+      bodyBytesStarted = true;
+      watchdog.arm('request-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+    }
+    watchdog.touchBody();
+  };
   let upload: Promise<void> | undefined;
   return await new Promise<UploadStreamResponse>((resolve, reject) => {
     let responseReceived = false;
+    const settle = (result: UploadStreamResponse) => {
+      watchdog.dispose();
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      watchdog.dispose();
+      reject(error);
+    };
     const req = transport.request(
       {
         protocol: options.url.protocol,
@@ -96,18 +125,23 @@ async function streamFileToHttpRequestAttempt(options: {
         headers,
         // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
         // already piped at a device this client no longer holds the lease on.
-        ...(options.signal ? { signal: options.signal } : {}),
+        // This is the attempt's phase budget combined with the caller's signal, so an expired phase
+        // destroys the socket exactly like a cancellation does.
+        signal: watchdog.signal,
       },
       (res) => {
         responseReceived = true;
+        // The response has started; from here the budget that matters is silence between body bytes.
+        watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
         if (options.signal) addAbortSignal(options.signal, res);
-        void readNodeHttpResponseBody(res)
+        addAbortSignal(watchdog.signal, res);
+        void readUploadResponseBody(res, () => watchdog.touchBody())
           .then((body) => {
             const statusCode = res.statusCode ?? 500;
             const location = res.headers.location;
             if (location && isUploadRedirectStatus(statusCode)) {
               if (options.redirectCount >= MAX_UPLOAD_REDIRECTS) {
-                reject(
+                fail(
                   new AppError('COMMAND_FAILED', 'Artifact upload exceeded redirect limit', {
                     maxRedirects: MAX_UPLOAD_REDIRECTS,
                     url: options.url.toString(),
@@ -119,7 +153,7 @@ async function streamFileToHttpRequestAttempt(options: {
               // The request headers carry the daemon token or a signed ticket, and the body is the
               // artifact: neither may follow a hop to an origin the caller did not choose.
               if (redirectedUrl.origin !== options.url.origin) {
-                reject(
+                fail(
                   new AppError(
                     'COMMAND_FAILED',
                     'Artifact upload refused a cross-origin redirect',
@@ -136,7 +170,7 @@ async function streamFileToHttpRequestAttempt(options: {
                 ...options,
                 url: redirectedUrl,
                 redirectCount: options.redirectCount + 1,
-              }).then(resolve, reject);
+              }).then(settle, fail);
               return;
             }
 
@@ -145,7 +179,7 @@ async function streamFileToHttpRequestAttempt(options: {
               : undefined;
             if (resumeOffset !== undefined) {
               if (resumeOffset >= payloadSize) {
-                resolve({
+                settle({
                   statusCode: 200,
                   statusMessage: 'Upload already complete',
                   body: '',
@@ -153,7 +187,7 @@ async function streamFileToHttpRequestAttempt(options: {
                 return;
               }
               if (resumeOffset <= options.startOffset) {
-                reject(
+                fail(
                   new AppError('COMMAND_FAILED', 'Artifact upload resume did not advance', {
                     offset: resumeOffset,
                     previousOffset: options.startOffset,
@@ -165,18 +199,18 @@ async function streamFileToHttpRequestAttempt(options: {
               void streamFileToHttpRequestAttempt({
                 ...options,
                 startOffset: resumeOffset,
-              }).then(resolve, reject);
+              }).then(settle, fail);
               return;
             }
 
-            resolve({
+            settle({
               statusCode,
               statusMessage: res.statusMessage,
               body,
             });
           })
           .catch((error: unknown) =>
-            reject(options.signal?.aborted ? options.signal.reason : error),
+            fail(watchdog.signal.aborted ? watchdog.signal.reason : error),
           );
       },
     );
@@ -185,11 +219,13 @@ async function streamFileToHttpRequestAttempt(options: {
       if (responseReceived) return;
       // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
       // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
-      if (options.signal?.aborted) {
-        reject(options.signal.reason);
+      // An expired phase answers the same way — it is this client's own deadline, not a transport
+      // failure a retry or a legacy fallback could fix.
+      if (watchdog.signal.aborted) {
+        fail(watchdog.signal.reason);
         return;
       }
-      reject(
+      fail(
         new AppError(
           'COMMAND_FAILED',
           options.errorMessage,
@@ -201,34 +237,61 @@ async function streamFileToHttpRequestAttempt(options: {
         ),
       );
     });
-    upload = pipeline(
-      fs.createReadStream(options.payloadPath, { start: options.startOffset }),
-      createUploadProgressTransform({
-        stage: options.progress?.stage ?? 'legacy',
-        fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
-        startOffset: options.startOffset,
-        totalBytes: payloadSize,
-        onProgress: options.progress?.onProgress,
-      }),
-      req,
-      { signal: options.signal },
-    ).catch((err: unknown) => {
+    upload = (async () => {
+      await pipeline(
+        fs.createReadStream(options.payloadPath, { start: options.startOffset }),
+        createUploadProgressTransform({
+          stage: options.progress?.stage ?? 'legacy',
+          fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
+          startOffset: options.startOffset,
+          totalBytes: payloadSize,
+          onProgress: options.progress?.onProgress,
+          onBytes: noteBodyBytes,
+        }),
+        req,
+        { signal: watchdog.signal },
+      );
+      // Everything the server can be waiting for is now written, so the header wait starts here and
+      // a body still draining never spends its 30-second budget.
+      if (!responseReceived) watchdog.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
+    })().catch((err: unknown) => {
       if (responseReceived) return;
       req.destroy();
-      if (options.signal?.aborted) {
-        reject(options.signal.reason);
+      if (watchdog.signal.aborted) {
+        fail(watchdog.signal.reason);
         return;
       }
       const error = err instanceof Error ? err : new Error(String(err));
-      reject(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
+      fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
   }).finally(async () => {
+    watchdog.dispose();
     await upload;
   });
 }
 
 function retryableUploadStreamDetail(options: { retryable?: boolean }): Record<string, true> {
   return options.retryable === true ? { [UPLOAD_STREAM_RETRYABLE_DETAIL]: true } : {};
+}
+
+/**
+ * Reads a response body as text, reporting each chunk so an inactivity budget can tell a slow
+ * transfer from a stalled one.
+ *
+ * The shared host-kit reader is deliberately not reused here: it has no notion of progress, and
+ * widening it for one transfer family would move an unrelated transport owner's surface.
+ */
+function readUploadResponseBody(res: IncomingMessage, onBytes: () => void): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    let body = '';
+    res.setEncoding('utf8');
+    res.on('data', (chunk: string) => {
+      onBytes();
+      body += chunk;
+    });
+    res.on('end', () => resolve(body));
+    res.on('error', reject);
+  });
 }
 
 function emitUploadAttemptStarted(

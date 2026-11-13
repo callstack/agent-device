@@ -9,8 +9,15 @@ import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-cli
 import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
 import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
+import { isTransferPhaseTimeoutError } from './transfer-phase-budget.ts';
 
-const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
+/**
+ * Ceiling for the two small control-plane calls that bracket an upload (`preflight`, `finalize`).
+ * Their payload is a few hundred bytes of JSON, so one window covers reaching the daemon and getting
+ * the answer; the artifact bytes themselves are budgeted per phase in `transfer-phase-budget.ts`.
+ */
+const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
+
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 
 type UploadArtifactOptions = {
@@ -157,6 +164,10 @@ async function tryDirectUploadWithResume(options: {
     // A canceled upload resumes for no reason: the thing it was uploaded for is already gone, and
     // re-preflighting would ask the daemon for a fresh ticket to send bytes nobody is waiting on.
     if (options.signal?.aborted) throw error;
+    // An expired phase is this client's own deadline, not a transport break. Restarting the
+    // sequence would only buy a second attempt permission it never had, so the typed evidence for
+    // the phase that ran out is what the caller sees.
+    if (isTransferPhaseTimeoutError(error)) throw error;
     if (!shouldRetryDirectUpload(error)) return undefined;
     return await retryDirectUpload(options, uploadOnce);
   }
@@ -197,7 +208,10 @@ async function retryDirectUpload(
   if (retryPreflight?.kind === 'direct-upload') {
     try {
       return await uploadOnce(retryPreflight);
-    } catch {
+    } catch (error) {
+      // As above: an expired phase is this client's own deadline, so it must not buy the legacy
+      // fallback a third attempt at the same bytes.
+      if (isTransferPhaseTimeoutError(error)) throw error;
       return undefined;
     }
   }
@@ -283,7 +297,7 @@ async function requestUploadPreflight(options: {
     // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
     redirect: 'error',
     headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_CONTROL_PLANE_TIMEOUT_MS),
     body: JSON.stringify({
       uploadAttemptId: options.uploadAttemptId,
       sha256: options.artifact.sha256,
@@ -308,8 +322,12 @@ async function requestUploadPreflight(options: {
 }
 
 /**
- * The signal one upload request runs under: the caller's cancellation and the request's own
- * timeout, whichever fires first.
+ * The signal one small control-plane request runs under: the caller's cancellation and this
+ * request's own ceiling, whichever fires first.
+ *
+ * `preflight` and `finalize` carry a few hundred bytes of JSON that the transport writes with the
+ * request, so their ceiling is the same 30 seconds the artifact transfer spends getting connected and
+ * reading headers, and there is no separate body phase to time.
  */
 function combineUploadSignals(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -418,9 +436,9 @@ async function finalizeDirectUpload(options: {
     // As with preflight: the route never redirects, and a redirect must not carry the token.
     redirect: 'error',
     headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_CONTROL_PLANE_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),
-  }).catch((error) => {
+  }).catch((error: unknown) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
     if (options.signal?.aborted) throw error;

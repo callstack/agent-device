@@ -164,14 +164,14 @@
     "packages/remote/src/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "packages/remote/src/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "packages/remote/src/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
+    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:e8966f79d0518aa8d592113ff290efbde16120fd00ce8bb8648f243c38d0d173",
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
-    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
+    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:e5f67a9a7799913f04cc9386291296a3d9fe13658776d2f4812a582c2e9befd5",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
-    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
+    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:0f55d5c81abc9010ecdbb852da81793515abab7c4d54e9f7c8b7f502e79a54a6",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
-    "packages/remote/src/upload-client.ts#uploadLegacyArtifact": "sha256:3acabacbdea5b7da7f3d8e6e87496728eb3b1df122c490751a9edabc1e9c9adc",
+    "packages/remote/src/upload-client.ts#uploadLegacyArtifact": "sha256:887c6a1b18dd16a51dbad89f3b8ac99727ed8fae87759c5d806f22f326a15da1",
     "packages/remote/src/upload-stream.ts#MAX_UPLOAD_REDIRECTS": "sha256:12ff46dfe33a1dce95bdb79c90c17a3ba4f3919e7dc4b3a1b04590fff430f79f",
     "packages/remote/src/upload-stream.ts#UploadStreamResponse": "sha256:724e284c2a6bd7b4b3a49b1d8c61c8923d6cc24777c3d76224a69d190e56adce",
     "packages/remote/src/upload-stream.ts#buildUploadRequestHeaders": "sha256:827576b13a9f3e6cea445119a6a29b2ac5eaa23b66436cf810b2d09765c82a4c",
@@ -180,8 +180,8 @@
     "packages/remote/src/upload-stream.ts#isUploadResumeStatus": "sha256:9f730ccd1c3401c326f8df67d1fd8243fef757357a38a1f53736df2b90bd8fdc",
     "packages/remote/src/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
     "packages/remote/src/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
-    "packages/remote/src/upload-stream.ts#streamFileToHttpRequest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
-    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
+    "packages/remote/src/upload-stream.ts#streamFileToHttpRequest": "sha256:3ac8f379c4b508b0c28c4f41f920b40f8cc0406afcd5b2290326c4cfb9168adb",
+    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:e4a67c0061c8d0999c475a4a2e8876b6c407da08e3f9b94018a772a6acc72283",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
@@ -330,8 +330,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequest",
-      "digest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
-      "rationale": "#2946 widens the options with an optional abort signal handed to node:http.request. The request line, headers built by buildUploadRequestHeaders, and piped payload are unchanged, so an older daemon's 200/308 handling is unaffected."
+      "digest": "sha256:3ac8f379c4b508b0c28c4f41f920b40f8cc0406afcd5b2290326c4cfb9168adb",
+      "rationale": "#4441 replaces the one 5-minute timer over a whole upload with the preparation aggregate that bounds it, and hands that aggregate's signal to the attempt. The request a peer parses is unchanged: same route, method, the headers buildUploadRequestHeaders produces, the piped payload and the 200/308 handling. What moved is when this client stops sending, and the ceiling is now shorter rather than longer, so a protocol-2 daemon or proxy answers the same requests and simply sees a stalled leg torn down sooner."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
@@ -440,13 +440,13 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#tryDirectUploadWithResume",
-      "digest": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+      "digest": "sha256:0f55d5c81abc9010ecdbb852da81793515abab7c4d54e9f7c8b7f502e79a54a6",
+      "rationale": "#4441 ends the direct-upload sequence when a transfer phase's own budget expires, instead of re-preflighting for a fresh ticket or falling back, because a second attempt would be permission that budget already refused. Preflight, ticket PUT and finalize requests are unchanged in route, method, headers and body, so a protocol-2 daemon parses everything it parsed before; it just receives no further legs once the caller's aggregate has expired."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadLegacyArtifact",
-      "digest": "sha256:3acabacbdea5b7da7f3d8e6e87496728eb3b1df122c490751a9edabc1e9c9adc",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+      "digest": "sha256:887c6a1b18dd16a51dbad89f3b8ac99727ed8fae87759c5d806f22f326a15da1",
+      "rationale": "#4441 drops the hint that named the removed 5-minute timeout, and an expired transfer phase is no longer treated as a transport break, so this route is not re-entered by a fallback after the client's own budget ended the attempt. The POST /upload request itself is unchanged: same method, headers, chunked body and response parsing. A protocol-2 daemon sees the identical request in every case that completes, and no further request in a stalled one."
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl",
@@ -495,8 +495,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
-      "digest": "sha256:b49e17dab9a638f3e547af01717aad52264e20334d62489608bf2c7f9a238838",
-      "rationale": "The upload client refuses a redirect to another origin, including a 308 that carries a Location, instead of re-sending the daemon token or ticket headers and the artifact there. Same-origin redirects, the Location-less 308 resume contract, and the redirect limit are unchanged. A released daemon or proxy answers its upload routes on its own origin, so it parses the same requests. A direct-upload ticket that redirects cross-origin fails as a non-retryable direct upload, and uploadArtifact then takes the legacy /upload route on the daemon."
+      "digest": "sha256:e4a67c0061c8d0999c475a4a2e8876b6c407da08e3f9b94018a772a6acc72283",
+      "rationale": "#4441 runs each attempt under a sequential phase watchdog (connect, body inactivity, response headers) and fails with the expired phase's own typed evidence instead of a transport error, and reads the response through a reader that reports bytes rather than the shared host-kit one. Bytes on the wire are unchanged: same route, method, headers, body framing, resume-offset handling and redirect limit. Only this client's own send deadline moved, so a protocol-2 peer parses exactly what it parsed before."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
@@ -510,13 +510,13 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:ed644d7e59c4703e3b7a05dda769b3f0554dc481598ba01906a131c543d68ffc",
-      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected preflight falls back to the legacy /upload route, as any failed preflight does."
+      "digest": "sha256:e5f67a9a7799913f04cc9386291296a3d9fe13658776d2f4812a582c2e9befd5",
+      "rationale": "#4441 renames the constant naming this call's ceiling from UPLOAD_PREFLIGHT_TIMEOUT_MS to UPLOAD_CONTROL_PLANE_TIMEOUT_MS because it governs finalize as well. The value is the same 30 seconds the released client used, and the request body, headers, route and redirect refusal are byte-for-byte unchanged, so a released daemon or proxy parses the identical request."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:8cd172a169aa5e54695d9185fa259d93c71b82938455398b83e7e4e214578df2",
-      "rationale": "The request now uses fetch with redirect: 'error', so no redirect is followed: fetch keeps x-agent-device-token on a cross-origin hop. The request body, headers, and route are unchanged. A released daemon or proxy never redirects this route, so it parses the same requests. A redirected finalize fails with COMMAND_FAILED, and uploadArtifact then takes the legacy /upload route."
+      "digest": "sha256:e8966f79d0518aa8d592113ff290efbde16120fd00ce8bb8648f243c38d0d173",
+      "rationale": "#4441 renames the constant naming this call's 30-second ceiling and annotates a caught error; neither reaches the wire. The request body, headers, route and redirect refusal are unchanged, and a released daemon or proxy never redirects this route, so it parses the identical request."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",
