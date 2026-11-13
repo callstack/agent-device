@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 import ObjectiveC.runtime
@@ -626,6 +627,30 @@ extension RunnerTests {
     let slow = Self.backSwipeRequiredStillMs(maxCaptureMs: 600)
     XCTAssertEqual(slow - fast, 500)
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
+  }
+
+  /// #3899: a placed iPad window's snapshot frames start at the window's own origin, while the live
+  /// button frame is in screen points. The still bar holds the live button only through the window's
+  /// screen origin.
+  func testNavigationBarBackStateHoldsTheLiveButtonOfAPlacedWindow() {
+    let snapshotButton = CGRect(x: 8, y: 54, width: 44, height: 44)
+    let state = NavigationBarBackState(entries: ["Detail"], backButtonFrames: [snapshotButton])
+    let placed = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 224, y: 128, width: 386, height: 954)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+    let liveButton = CGRect(x: 232, y: 182, width: 44, height: 44)
+
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: liveButton, geometry: placed))
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: placed))
+
+    let fullScreen = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 402, height: 874)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
   }
 
   /// A still screen settles before the budget runs out at any capture time: the settle loop's

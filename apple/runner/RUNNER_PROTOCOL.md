@@ -138,7 +138,9 @@ than silently applied:
 call, for the navigation bar's system back button: a button with the identifier `BackButton` inside a
 navigation bar. It taps that button with a synthesized tap only when exactly one live, hittable
 candidate is found in a readable tree, and two reads in a row of the bar state agree and contain
-that button's frame; each round re-reads the buttons. No other button counts, whatever its label.
+that button's frame; each round re-reads the buttons. The match places the snapshot frames at the
+window's screen origin, because a placed iPad window reports them from its own top-left. No other
+button counts, whatever its label.
 The bar state is every navigation bar's identifier, the labels of its static texts, and the label
 and frame of its `BackButton` children, in bar order, one XCTest snapshot per bar. After the tap it
 reads that state again with a 0.05 s pause between reads. A change from the state read before the

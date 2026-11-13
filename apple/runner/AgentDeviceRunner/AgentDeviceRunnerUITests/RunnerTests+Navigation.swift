@@ -204,7 +204,11 @@ extension RunnerTests {
     }
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
-    let lookup = stillNavigationBarBackButton(app: app, deadlineMs: started + Self.navigationBarBackReadBudgetMs)
+    let lookup = stillNavigationBarBackButton(
+      app: app,
+      geometry: context.geometry,
+      deadlineMs: started + Self.navigationBarBackReadBudgetMs
+    )
     trace.lookupMs = currentUptimeMs() - started
     let before: NavigationBarBackState
     let frame: CGRect
@@ -318,7 +322,11 @@ extension RunnerTests {
   /// button's frame is in them, so a push still animating is not read as the state a pop changes.
   /// Each round re-reads the buttons. Reads start only until `deadlineMs`.
   @MainActor
-  private func stillNavigationBarBackButton(app: XCUIApplication, deadlineMs: Double) -> NavigationBarBackLookup {
+  private func stillNavigationBarBackButton(
+    app: XCUIApplication,
+    geometry: SurfaceGeometry,
+    deadlineMs: Double
+  ) -> NavigationBarBackLookup {
     var previous: NavigationBarBackState?
     while true {
       let button: CGRect
@@ -342,12 +350,25 @@ extension RunnerTests {
       case .unreadable: return .notFound("unreadable")
       case .read(let state): current = state
       }
-      if current == previous, current.backButtonFrames.contains(button) {
+      if current == previous, Self.navigationBarBackState(current, holdsButton: button, geometry: geometry) {
         return .still(current, button: button)
       }
       if currentUptimeMs() >= deadlineMs { return .notFound("moving") }
       previous = current
       sleepFor(Self.navigationBarBackReadInterval)
+    }
+  }
+
+  /// Whether `state` holds the live button. A live frame is in screen points, and a snapshot frame
+  /// is in the window's own space, which a placed iPad window starts off the screen origin (#3899).
+  static func navigationBarBackState(
+    _ state: NavigationBarBackState,
+    holdsButton button: CGRect,
+    geometry: SurfaceGeometry
+  ) -> Bool {
+    state.backButtonFrames.contains { frame in
+      let origin = geometry.screenPoint(from: SurfacePoint<WindowContentSpace>(frame.origin)).point
+      return CGRect(origin: origin, size: frame.size) == button
     }
   }
 
