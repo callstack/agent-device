@@ -66,6 +66,10 @@ export function isLeaseAdmissionExempt(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.leaseAdmissionExempt === true;
 }
 
+export function ignoresSessionLease(command: string): boolean {
+  return getDaemonCommandDescriptor(command)?.ignoresSessionLease === true;
+}
+
 export function isAppLeaseAllowed(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.appLease === 'allowed';
 }

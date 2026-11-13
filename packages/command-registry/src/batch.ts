@@ -6,7 +6,6 @@ import {
   type DaemonResponse,
   type ResponseLevel,
   isNonDefaultResponseLevel,
-  namesSessionExplicitly,
 } from '@agent-device/kernel/contracts';
 import {
   AppError,
@@ -14,7 +13,7 @@ import {
   BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
   type DaemonError,
 } from '@agent-device/kernel/errors';
-import { isRecord } from '@agent-device/kernel/record';
+import { isRecord, namesSessionExplicitly } from '@agent-device/kernel/record';
 import {
   DEFAULT_BATCH_MAX_STEPS,
   assertBatchStepCount,

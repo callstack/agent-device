@@ -51,6 +51,7 @@ test('Provider-backed integration proxy materializes tenant-owned test artifacts
             id: 'tenant-artifact-lease',
             method: 'agent_device.lease.allocate',
             params: {
+              session: 'default',
               tenantId: TENANT,
               runId: 'artifact-run',
               backend: 'android-instance',
