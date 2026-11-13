@@ -175,6 +175,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'lease',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       ...ADMISSION_AND_LOCK_EXEMPT,
     },
     timeoutPolicy: LEASE_ALLOCATE_TIMEOUT_POLICY,
@@ -192,6 +193,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'lease',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       ...ADMISSION_AND_LOCK_EXEMPT,
       appLease: 'allowed',
     },
@@ -210,6 +212,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'lease',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       ...ADMISSION_AND_LOCK_EXEMPT,
       appLease: 'allowed',
     },
@@ -252,6 +255,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'session',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       sessionKind: 'inventory',
       ...REQUEST_EXECUTION_EXEMPT,
     },
@@ -292,6 +296,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'session',
       refFrameEffect: 'preserve',
+      ignoresSessionLease: true,
       sessionKind: 'inventory',
       lockPolicySelectorOverride: true,
       ...REQUEST_EXECUTION_EXEMPT,
