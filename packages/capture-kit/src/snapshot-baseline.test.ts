@@ -57,7 +57,8 @@ test.each([
     { interactiveOnly: true, scope: 'Composer' },
     'frame',
   ],
-  ['interactive frame, candidate with no recorded view', INTERACTIVE, undefined, 'candidate'],
+  ['interactive frame, candidate with default full view', INTERACTIVE, undefined, 'frame'],
+  ['full frame, candidate with default full view', FULL, undefined, 'candidate'],
 ] as const)(
   '%s: the %s answers',
   async (_case, framePresentation, candidatePresentation, expected) => {

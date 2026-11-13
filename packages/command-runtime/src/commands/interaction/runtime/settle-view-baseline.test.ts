@@ -44,8 +44,11 @@ function dialogNodes(labels: readonly string[], wrapper: boolean) {
 }
 
 /** The screen as each view reads it: the full tree keeps a wrapper the interactive view omits. */
-function screen(labels: readonly string[], presentation: SnapshotPresentation): SnapshotState {
-  const full = presentation.interactiveOnly !== true;
+function screen(
+  labels: readonly string[],
+  presentation: SnapshotPresentation | undefined,
+): SnapshotState {
+  const full = presentation?.interactiveOnly !== true;
   return { ...makeSnapshotState(dialogNodes(labels, full)), presentation };
 }
 
@@ -102,14 +105,17 @@ function createDevice(params: {
 const removed = (lines: Array<{ kind: string; text: string }> | undefined) =>
   (lines ?? []).filter((line) => line.kind === 'removed').map((line) => line.text);
 
-test('a ref press after a full snapshot settles on the full tree and reports no false removals', async () => {
-  const { device, views } = createDevice({ frame: screen(DIALOG, FULL) });
+test.each([FULL, undefined])(
+  'a ref press after a full snapshot (%j) settles without false removals',
+  async (presentation) => {
+    const { device, views } = createDevice({ frame: screen(DIALOG, presentation) });
 
-  const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
+    const result = await device.interactions.press(ref('@e3'), { session: 'default', settle: {} });
 
-  assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly !== true));
-  assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
-});
+    assert.ok(views.length > 0 && views.every((view) => view.interactiveOnly !== true));
+    assert.deepEqual(result.settle?.diff?.summary, { additions: 0, removals: 0, unchanged: 4 });
+  },
+);
 
 test('a ref press after snapshot -i settles on the interactive view and lists what left', async () => {
   const { device, views } = createDevice({
@@ -155,14 +161,20 @@ test('a selector press resolved on the full tree still diffs in the ref frame vi
   assert.deepEqual(removed(result.settle?.diff?.lines), []);
 });
 
-test('verify after a full snapshot reads the full tree, so an unchanged screen reads unchanged', async () => {
-  const { device, views } = createDevice({ frame: screen(DIALOG, FULL) });
+test.each([FULL, undefined])(
+  'verify after a full snapshot (%j) reads unchanged content in the full view',
+  async (presentation) => {
+    const { device, views } = createDevice({ frame: screen(DIALOG, presentation) });
 
-  const result = await device.interactions.press(ref('@e3'), { session: 'default', verify: true });
+    const result = await device.interactions.press(ref('@e3'), {
+      session: 'default',
+      verify: true,
+    });
 
-  assert.deepEqual(views, [FULL]);
-  assert.equal(result.evidence?.changedFromBefore, false);
-});
+    assert.deepEqual(views, [FULL]);
+    assert.equal(result.evidence?.changedFromBefore, false);
+  },
+);
 
 test('diff snapshot -i after a full snapshot starts a baseline instead of listing the view change', async () => {
   const { device } = createDevice({ frame: screen(DIALOG, FULL) });

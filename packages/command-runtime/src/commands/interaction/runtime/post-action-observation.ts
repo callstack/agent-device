@@ -6,9 +6,12 @@ import type {
   SettleParams,
 } from '@agent-device/contracts/interaction';
 import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
-import { summarizePostActionEvidence } from './post-action-surface.ts';
 import {
-  DEFAULT_POST_ACTION_PRESENTATION,
+  resolvePostActionSurfaceChange,
+  summarizePostActionEvidence,
+} from './post-action-surface.ts';
+import {
+  postActionPresentation,
   surfaceScopedNodes,
 } from '@agent-device/capture-kit/snapshot-baseline';
 import { captureSelectorSnapshot } from './selector-read-shared.ts';
@@ -85,14 +88,14 @@ async function observeAfterInteraction(
       ...params.settle,
       resolved,
     });
-    // The evidence compares one view: a pre-action tree read in another view than the settle
-    // capture makes no changedFromBefore claim (#4486).
+    // A surface transition is evidence in every view; node digests compare only within one view.
     const baseline =
       outcome.settledCapture &&
-      isSameSnapshotPresentation(
-        resolved.preAction?.presentation,
-        outcome.settledCapture.presentation,
-      )
+      (resolvePostActionSurfaceChange(resolved.preAction, outcome.settledCapture) ||
+        isSameSnapshotPresentation(
+          resolved.preAction?.presentation,
+          outcome.settledCapture.presentation,
+        ))
         ? resolved.preAction
         : undefined;
     const evidence = params.verify ? settleEvidence(outcome.settledCapture, baseline) : undefined;
@@ -119,7 +122,7 @@ async function captureVerifyEvidence(
     const capture = await captureSelectorSnapshot(runtime, options, {
       updateSession: true,
       includeRects: true,
-      presentation: resolved.preAction?.presentation ?? DEFAULT_POST_ACTION_PRESENTATION,
+      presentation: postActionPresentation(resolved.preAction),
     });
     return summarizePostActionEvidence(surfaceScopedNodes(capture.snapshot), resolved.preAction);
   } catch {

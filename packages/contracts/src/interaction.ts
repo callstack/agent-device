@@ -163,7 +163,7 @@ export type SurfaceScopedNodes = {
   presentedSurface?: PresentedSurface;
   /**
    * The presentation the capture read (`-i`, `-s`, `-d`, `--raw`, `--actions`). A post-action read
-   * captures in it, so the diff compares one view (#4486). Absent when the producer recorded none.
+   * captures in it, so the diff compares one view (#4486). Absent means the default full tree.
    */
   presentation?: SnapshotPresentation;
 };

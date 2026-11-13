@@ -117,12 +117,13 @@ test('press --settle attaches no diff across a sheet-to-app surface change and d
   assert.match(settle.hint ?? '', /different surfaces/);
 });
 
-test('press --settle --verify reports one app-to-sheet surface change on both payloads', async () => {
-  const before = buttonSnapshot();
-  const sheet = webSignInSheetSnapshot(WEB_SIGN_IN_SHEET_LABELS);
+test('press --settle --verify reports a surface change even when the selector and frame views differ', async () => {
+  const before = { ...buttonSnapshot(), presentation: { interactiveOnly: true } };
+  const frame = { ...before, presentation: {} };
+  const sheet = { ...webSignInSheetSnapshot(WEB_SIGN_IN_SHEET_LABELS), presentation: {} };
   let captures = 0;
   const device = createSettleDevice({
-    stored: before,
+    stored: frame,
     captureSnapshot: () => {
       captures += 1;
       return { snapshot: captures === 1 ? before : sheet };

@@ -4,7 +4,7 @@ import type {
   SnapshotPresentation,
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
-import { DEFAULT_POST_ACTION_PRESENTATION } from '@agent-device/capture-kit/snapshot-baseline';
+import { postActionPresentation } from '@agent-device/capture-kit/snapshot-baseline';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
@@ -159,12 +159,14 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
-      params.broadTransitionBaseline?.presentation ?? {
-        ...DEFAULT_POST_ACTION_PRESENTATION,
-        depth: options.depth,
-        scope: options.scope,
-        raw: options.raw,
-      },
+      params.broadTransitionBaseline
+        ? postActionPresentation(params.broadTransitionBaseline)
+        : {
+            ...postActionPresentation(undefined),
+            depth: options.depth,
+            scope: options.scope,
+            raw: options.raw,
+          },
       preferredBackend,
     );
     if (read.kind !== 'captured') return unfinished(read);

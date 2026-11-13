@@ -2,8 +2,12 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { SnapshotPresentation } from '@agent-device/kernel/snapshot';
 
-/** The view a post-action read captures in when its baseline recorded none. */
-export const DEFAULT_POST_ACTION_PRESENTATION: SnapshotPresentation = { interactiveOnly: true };
+/** Reproduce a populated baseline's view; without one, capture the interactive view. */
+export function postActionPresentation(
+  baseline: SurfaceScopedNodes | undefined,
+): SnapshotPresentation {
+  return baseline?.presentation ?? (baseline?.nodes.length ? {} : { interactiveOnly: true });
+}
 
 /**
  * Mints the one baseline value a post-action comparison carries: the captured nodes together with the
@@ -61,7 +65,7 @@ export async function postActionBaseline(params: {
     (baseline) =>
       baseline !== undefined &&
       baseline.nodes.length > 0 &&
-      isSameSnapshotPresentation(baseline.presentation, view),
+      (!frame?.nodes.length || isSameSnapshotPresentation(baseline.presentation, view)),
   );
   return candidate ?? frame ?? { nodes: [] };
 }
