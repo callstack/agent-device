@@ -68,9 +68,13 @@ function planted(files: Record<string, string>): ReturnType<typeof loadLanes> {
 }
 
 test('a command repeating a script body verbatim credits that script', () => {
-  const body = model.scripts['check:package'] as string;
-  assert.deepEqual(verbatimScripts(body, model.scripts), ['check:package']);
-  assert.deepEqual(verbatimScripts('node scripts/something-else.ts', model.scripts), []);
+  const scripts = {
+    verify: 'node scripts/verify.ts',
+    combined: 'node scripts/verify.ts && node scripts/other.ts',
+  };
+  assert.deepEqual(verbatimScripts(scripts.verify, scripts), ['verify']);
+  assert.deepEqual(verbatimScripts(scripts.combined, scripts), ['verify']);
+  assert.deepEqual(verbatimScripts('node scripts/something-else.ts', scripts), []);
 });
 
 test('path filters use GitHub glob semantics', () => {
