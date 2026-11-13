@@ -7,7 +7,8 @@ const { mockIsProcessAlive, mockIsProcessZombie, mockReadProcessStartTime } = vi
   mockReadProcessStartTime: vi.fn(),
 }));
 
-vi.mock('./host-process.ts', () => ({
+vi.mock('./host-process.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./host-process.ts')>()),
   isProcessAlive: mockIsProcessAlive,
   isProcessZombie: mockIsProcessZombie,
   readProcessStartTime: mockReadProcessStartTime,
@@ -57,6 +58,14 @@ test('a definite start-time mismatch classifies as owner-process-reused', () => 
     classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'start-a' } }),
     'owner-process-reused',
   );
+});
+
+test.each([
+  ['Mon Aug 10 20:00:00 2026', 'linux:11111111-1111-4111-8111-111111111111:12345'],
+  ['linux:11111111-1111-4111-8111-111111111111:12345', 'Mon Aug 10 20:00:00 2026'],
+])('an owner with an incomparable start-time format retains its resource', (recorded, observed) => {
+  mockReadProcessStartTime.mockReturnValue(observed);
+  assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: recorded } }), 'live');
 });
 
 test('a null-start-time owner stays fail-closed while its pid is alive', () => {

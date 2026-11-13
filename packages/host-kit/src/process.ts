@@ -34,6 +34,7 @@ export {
   readProcessIdentities,
   readProcessIdentityFacts,
   readProcessStartTime,
+  processStartTimesDiffer,
   signalPidsBestEffort,
   stopProcessAndConfirmExit,
   uniquePositivePids,

@@ -75,7 +75,10 @@ test('a long-standing guard whose holder pid now has another start time is recla
   const reusedHolder = {
     ...DEAD_GUARD_HOLDER,
     pid: process.ppid,
-    startTime: 'Thu Jan  1 00:00:00 1970',
+    startTime:
+      process.platform === 'linux'
+        ? 'linux:00000000-0000-0000-0000-000000000000:0'
+        : 'Thu Jan  1 00:00:00 1970',
   };
   fs.writeFileSync(mutexPath, JSON.stringify(reusedHolder));
   stampDirectoryAbandoned(mutexPath);

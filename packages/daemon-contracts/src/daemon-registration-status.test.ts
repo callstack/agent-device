@@ -116,7 +116,10 @@ test('a record whose process is gone or was replaced is not a running daemon', (
     token: 't',
     port: 1,
     pid: owner.pid,
-    processStartTime: 'Thu Jan  1 00:00:00 1970',
+    processStartTime:
+      process.platform === 'linux'
+        ? 'linux:00000000-0000-0000-0000-000000000000:0'
+        : 'Thu Jan  1 00:00:00 1970',
     plugins: [ACTIVE],
   });
   expect(readDaemonStatus(resolveDaemonPaths(stateDir)).state).toBe('stopped');

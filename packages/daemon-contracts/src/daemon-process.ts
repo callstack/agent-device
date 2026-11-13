@@ -1,5 +1,6 @@
 import {
   isProcessAlive,
+  processStartTimesDiffer,
   isProcessPid,
   readHostProcessIdentityObservations,
   readProcessCommand,
@@ -83,7 +84,7 @@ export async function waitForDaemonExit(
     return (
       Boolean(
         observed?.state.startsWith('Z') ||
-        (observed?.startTime && observed.startTime !== identity.startTime),
+        processStartTimesDiffer(observed?.startTime, identity.startTime),
       ) || !isProcessAlive(identity.pid)
     );
   };
