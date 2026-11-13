@@ -15,6 +15,7 @@ import {
   isReadOnlyRequest,
   resolveDaemonRequestResultDeadlineMs,
 } from '../../core/daemon-command-registry.ts';
+import { resolveRequestSessionAtIntake } from '../../core/request-session-intake.ts';
 import {
   clearRequestAbortRegistration,
   isRequestCanceled,
@@ -219,7 +220,7 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   if (isRecord(request.meta)) {
     request.meta = { ...request.meta, devicePin: readDevicePin(request.meta.devicePin) };
   }
-  return request as DaemonRequest;
+  return { ...request, ...resolveRequestSessionAtIntake(request) } as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {
