@@ -90,6 +90,22 @@ extension RunnerTests {
     XCTAssertTrue(app.navigationBars["Detail"].exists)
   }
 
+  /// A bar title that counts down on its own is not a navigation: a tap that navigates nowhere on
+  /// such a bar reports an unknown outcome, though the title changes within the confirmation window.
+  @MainActor
+  func testInAppBackDoesNotCreditATickingBarTitleToAPressedBackButton() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back", "--ticking-title"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a ticking bar title must not confirm a back button tap that navigated nowhere")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 1)
+  }
+
   /// An XCTest issue while the back button is looked up, such as a button gone mid-transition, means
   /// no button: back answers from the swipe path. An issue that escaped the read would fail this
   /// test as it fails the command with a recorded failure. The swipe's own outcome is not asserted:
@@ -652,6 +668,41 @@ extension RunnerTests {
       orientation: RunnerInterfaceOrientation.portrait
     )
     XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
+  }
+
+  /// A snapshot frame placed in screen space matches a live frame up to half a point per edge, so
+  /// fractional frame values do not defeat the match; a button a point away is another button.
+  func testNavigationBarBackStateHoldsALiveButtonWithinHalfAPointPerEdge() {
+    let state = NavigationBarBackState(
+      entries: ["Root"],
+      backButtonFrames: [CGRect(x: 8.33, y: 54.67, width: 44.33, height: 44)]
+    )
+    let placed = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 224.5, y: 128, width: 386, height: 954)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: CGRect(x: 233, y: 182.5, width: 44, height: 44), geometry: placed))
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: CGRect(x: 232.5, y: 183, width: 44.5, height: 43.5), geometry: placed))
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: CGRect(x: 234, y: 182.5, width: 44, height: 44), geometry: placed))
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: CGRect(x: 233, y: 182.5, width: 45, height: 44), geometry: placed))
+  }
+
+  /// Two agreeing reads of the bar show a still bar only when they started at least one read
+  /// interval apart: two reads drawn in one animation frame of a push agree, but prove nothing.
+  func testNavigationBarBackStateHeldStillOnlyAcrossOneReadInterval() {
+    let bar = NavigationBarBackState(entries: ["Root"], backButtonFrames: [CGRect(x: 8, y: 54, width: 44, height: 44)])
+    let moved = NavigationBarBackState(entries: ["Root"], backButtonFrames: [CGRect(x: 40, y: 54, width: 44, height: 44)])
+    let intervalMs = Self.navigationBarBackReadInterval * 1000
+    let first = TimedNavigationBarBackState(state: bar, startedMs: 1000)
+
+    let sameFrame = TimedNavigationBarBackState(state: bar, startedMs: 1000 + intervalMs / 2)
+    XCTAssertFalse(Self.navigationBarBackStateHeldStill(from: first, to: sameFrame))
+    let oneIntervalLater = TimedNavigationBarBackState(state: bar, startedMs: 1000 + intervalMs)
+    XCTAssertTrue(Self.navigationBarBackStateHeldStill(from: first, to: oneIntervalLater))
+    let movedLater = TimedNavigationBarBackState(state: moved, startedMs: 1000 + intervalMs)
+    XCTAssertFalse(Self.navigationBarBackStateHeldStill(from: first, to: movedLater))
   }
 #endif
 

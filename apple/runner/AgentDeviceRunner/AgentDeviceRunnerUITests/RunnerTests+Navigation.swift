@@ -275,15 +275,21 @@ extension RunnerTests {
     }
   }
 
-  /// Each navigation bar's identifier, the labels of its static texts (its title), and the label and
-  /// frame of its system back buttons, in bar order, so the bar count counts too. A pop removes,
-  /// moves, or relabels the pressed button, or retitles its bar, so a change of this state is the
-  /// evidence that the tap navigated. A pop that changes none of these, such as one between two
-  /// screens with the same title in a bar with a fixed identifier and an unlabeled back button,
-  /// answers unverified.
+  /// The label and frame of each navigation bar's system back buttons, one entry per bar in bar
+  /// order, so the bar count counts too. A pop removes, moves, or relabels the pressed button, or
+  /// removes its bar, so a change of this state is the evidence that the tap navigated. Bar titles
+  /// and identifiers are left out: a bar can retitle itself, such as a countdown, without any
+  /// navigation. A pop that leaves the back button as it was, such as one between two screens whose
+  /// back buttons have the same title, answers unverified.
   struct NavigationBarBackState: Equatable {
     let entries: [String]
     let backButtonFrames: [CGRect]
+  }
+
+  /// One read of the bar state, with the time the read started.
+  struct TimedNavigationBarBackState {
+    let state: NavigationBarBackState
+    let startedMs: Double
   }
 
   /// The pause between two reads of the bar, and how long reads may start, both before the tap
@@ -318,16 +324,16 @@ extension RunnerTests {
     case hung
   }
 
-  /// Reads the hittable back buttons, then the bar state until two reads in a row agree and the
-  /// button's frame is in them, so a push still animating is not read as the state a pop changes.
-  /// Each round re-reads the buttons. Reads start only until `deadlineMs`.
+  /// Reads the hittable back buttons, then the bar state until two reads in a row, at least one read
+  /// interval apart, agree and the button's frame is in them, so a push still animating is not read
+  /// as the state a pop changes. Each round re-reads the buttons. Reads start only until `deadlineMs`.
   @MainActor
   private func stillNavigationBarBackButton(
     app: XCUIApplication,
     geometry: SurfaceGeometry,
     deadlineMs: Double
   ) -> NavigationBarBackLookup {
-    var previous: NavigationBarBackState?
+    var previous: TimedNavigationBarBackState?
     while true {
       let button: CGRect
       switch navigationBarBackButtonFrames(app: app, deadlineMs: deadlineMs) {
@@ -337,27 +343,36 @@ extension RunnerTests {
       case .read(let frames) where frames.count > 1: return .notFound("ambiguous")
       case .read(let frames): button = frames[0]
       }
-      if previous == nil {
-        switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
-        case .hung: return .hung
-        case .unreadable: return .notFound("unreadable")
-        case .read(let state): previous = state
-        }
-      }
-      let current: NavigationBarBackState
+      let startedMs = currentUptimeMs()
+      let current: TimedNavigationBarBackState
       switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
       case .hung: return .hung
       case .unreadable: return .notFound("unreadable")
-      case .read(let state): current = state
+      case .read(let state): current = TimedNavigationBarBackState(state: state, startedMs: startedMs)
       }
-      if current == previous, Self.navigationBarBackState(current, holdsButton: button, geometry: geometry) {
-        return .still(current, button: button)
+      if let previous,
+        Self.navigationBarBackStateHeldStill(from: previous, to: current),
+        Self.navigationBarBackState(current.state, holdsButton: button, geometry: geometry) {
+        return .still(current.state, button: button)
       }
       if currentUptimeMs() >= deadlineMs { return .notFound("moving") }
       previous = current
       sleepFor(Self.navigationBarBackReadInterval)
     }
   }
+
+  /// Whether two reads show a still bar: they agree, and they started at least one read interval
+  /// apart, so two reads drawn in one animation frame never pass for a still bar.
+  static func navigationBarBackStateHeldStill(
+    from earlier: TimedNavigationBarBackState,
+    to later: TimedNavigationBarBackState
+  ) -> Bool {
+    later.state == earlier.state && later.startedMs - earlier.startedMs >= navigationBarBackReadInterval * 1000
+  }
+
+  /// How far, in points, each edge of a snapshot frame placed in screen space may sit from the live
+  /// frame, so fractional frame values that XCTest rounds differently still match.
+  static let navigationBarBackFrameTolerance: CGFloat = 0.5
 
   /// Whether `state` holds the live button. A live frame is in screen points, and a snapshot frame
   /// is in the window's own space, which a placed iPad window starts off the screen origin (#3899).
@@ -368,7 +383,10 @@ extension RunnerTests {
   ) -> Bool {
     state.backButtonFrames.contains { frame in
       let origin = geometry.screenPoint(from: SurfacePoint<WindowContentSpace>(frame.origin)).point
-      return CGRect(origin: origin, size: frame.size) == button
+      let placed = CGRect(origin: origin, size: frame.size)
+      return [
+        (placed.minX, button.minX), (placed.minY, button.minY), (placed.maxX, button.maxX), (placed.maxY, button.maxY),
+      ].allSatisfy { abs($0.0 - $0.1) <= navigationBarBackFrameTolerance }
     }
   }
 
@@ -486,7 +504,6 @@ extension RunnerTests {
   }
 
   static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> (entry: String, backButtonFrames: [CGRect]) {
-    var texts: [String] = []
     var buttons: [String] = []
     var frames: [CGRect] = []
     var pending = bar.children
@@ -494,12 +511,10 @@ extension RunnerTests {
       if element.identifier == navigationBarBackButtonIdentifier {
         buttons.append("\(element.label)\u{1F}\(NSCoder.string(for: element.frame))")
         frames.append(element.frame)
-      } else if element.elementType == .staticText {
-        texts.append(element.label)
       }
       pending.append(contentsOf: element.children)
     }
-    return (([bar.identifier] + texts + buttons).joined(separator: "\u{1E}"), frames)
+    return (buttons.joined(separator: "\u{1E}"), frames)
   }
 
   @MainActor

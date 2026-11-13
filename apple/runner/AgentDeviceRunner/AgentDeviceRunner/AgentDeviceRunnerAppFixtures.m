@@ -42,10 +42,13 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // A real navigation stack for `back`. `--agent-device-back-navigation-bar` pushes a detail screen,
 // so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
 // pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
-// nowhere. `--custom-back-item` instead puts a bar button titled "Back" on the root, which is not the
-// system back button and must never be pressed. The root's label reports what happened.
+// nowhere. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
+// "Back" on the root, which is not the system back button and must never be pressed. The root's
+// label reports what happened.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
+@property(nonatomic, strong) NSTimer *titleTimer;
 @end
 
 @implementation AgentDeviceBackNavigationFixture
@@ -78,6 +81,14 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
       if (@available(iOS 16.0, *)) {
         detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {}];
       }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
+      __block NSInteger remaining = 59;
+      __weak UIViewController *weakDetail = detail;
+      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer) {
+        remaining = remaining > 0 ? remaining - 1 : 59;
+        weakDetail.title = [NSString stringWithFormat:@"0:%02ld", (long)remaining];
+      }];
     }
     [self pushViewController:detail animated:NO];
   }
