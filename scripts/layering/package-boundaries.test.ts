@@ -675,9 +675,7 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
-  // Locks the export surface: `.` (the engine), the replay backend plugin (#3377) with its
-  // engine-free declaration, and the runScript HTTP helper. The eager-closure budget gate
-  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the plugin off `.`.
+  // Source test facades stay private to the workspace; package smoke pins the published host entry.
   assert.deepEqual([...maestroPackage.exportTargets.keys()].sort(), [
     '@agent-device/maestro',
     '@agent-device/maestro/agent-device',
