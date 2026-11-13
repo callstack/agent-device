@@ -16,6 +16,7 @@ export type PluginInventoryCredentials = Readonly<{
 
 type PluginInventoryIdentity = Readonly<{
   provider?: string;
+  backend?: string;
   source: PluginSource;
   package?: string;
   version?: string;
@@ -37,7 +38,8 @@ export type PluginCleanupStep =
  * dispose, which reads as `ok`.
  */
 export type PluginCleanupOutcome = Readonly<{
-  provider: string;
+  provider?: string;
+  backend?: string;
   source: PluginSource;
   shutdown: PluginCleanupStep;
   dispose: PluginCleanupStep;
@@ -79,6 +81,7 @@ function readEntry(value: unknown): PluginInventoryEntry | undefined {
   if (!credentials) return undefined;
   const identity = {
     ...(typeof value.provider === 'string' ? { provider: value.provider } : {}),
+    ...(typeof value.backend === 'string' ? { backend: value.backend } : {}),
     source: value.source,
     ...(typeof value.package === 'string' ? { package: value.package } : {}),
     ...(typeof value.version === 'string' ? { version: value.version } : {}),

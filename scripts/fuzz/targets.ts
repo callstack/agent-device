@@ -11,7 +11,13 @@ import { parseArgs } from '../../src/cli/parser/args.ts';
 import { validateSelectorExpression } from '@agent-device/selectors';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { readCliBatchStepsJson } from '@agent-device/command-surface';
-import { inspectMaestroFlow } from '@agent-device/maestro';
+import { openReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+
+const maestroScope = await openReplayBackend('maestro', process.env);
+process.once('beforeExit', async () => {
+  await maestroScope.close();
+});
+const inspectMaestroFlow = maestroScope.backend.inspectSource;
 import type { FuzzTarget } from './target-types.ts';
 import { acceptCase, makeValidationCheck, rejectCase } from './validation-case.ts';
 

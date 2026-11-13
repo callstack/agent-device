@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,11 +21,14 @@ const RUN_SCRIPT_CHILD_TIMEOUT_MS = 2 * RUN_SCRIPT_TIMEOUT_MS + 5_000;
  */
 export async function executeRunScriptFile(
   request: RunScriptRequest & { signal?: AbortSignal },
+  host: HostEnvironment,
 ): Promise<Record<string, string>> {
   const { signal, ...childRequest } = request;
   assertMaestroScriptsTrusted({ trustedScripts: !childRequest.publicNetworkOnly }, 'runScript');
   const result = await runCmd(process.execPath, resolveRunScriptChildArgs('run-script-child'), {
     stdin: JSON.stringify(childRequest),
+    env: host.env,
+    cwd: host.cwd,
     signal,
     timeoutMs: RUN_SCRIPT_CHILD_TIMEOUT_MS,
     // Its own process group, so a cancel or timeout also reaps an in-flight `http.post` child.

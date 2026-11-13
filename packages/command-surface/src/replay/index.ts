@@ -259,6 +259,7 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
     // client-collects-local-input move `replayShellEnv` already makes — and
     // the daemon executes only what arrives in this bundle.
     replayScriptSource: await loadReplayScriptSourceBundle({
+      hostEnv: host.env,
       inputPath,
       cwd: readReplayClientCwd(input, host.cwd),
       replayBackend,
@@ -293,6 +294,7 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
       discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
         async (inputPath) =>
           await loadReplayScriptSourceBundle({
+            hostEnv: host.env,
             inputPath,
             cwd,
             replayBackend,

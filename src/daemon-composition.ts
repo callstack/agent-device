@@ -114,6 +114,9 @@ export async function composeDaemonRuntimeDeps(
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
+    const { bindReplayBackendResolver } =
+      await import('@agent-device/replay-port/replay-backend-registry');
+    await bindReplayBackendResolver(providerComposition.resolveReplayBackend);
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,

@@ -41,6 +41,10 @@
     "./credential-fingerprint": {
       "types": "./src/credential-fingerprint.ts",
       "default": "./src/credential-fingerprint.ts"
+    },
+    "./replay-backend": {
+      "types": "./src/replay-backend.ts",
+      "default": "./src/replay-backend.ts"
     }
   },
   "devDependencies": {

@@ -1,3 +1,9 @@
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
+import type {
+  ReplayEnginePlugin,
+  ReplayEngineSetup,
+  ReplayBackendResolver,
+} from './replay-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
@@ -21,7 +27,14 @@ import {
 import { describePluginFailure } from './inventory.ts';
 import { isProviderId } from './discovery.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from './contract.ts';
-import { assertProviderRuntime, invalidPlugin, validateAgentDevicePlugin } from './validate.ts';
+import {
+  assertProviderRuntime,
+  invalidPlugin,
+  validateAgentDevicePlugin,
+  validateReplayEnginePlugin,
+  validateReplayEngineSetup,
+  validateReplayBackend,
+} from './validate.ts';
 
 /**
  * One plugin a source offers the registry. Sources differ only in how a candidate loads; the
@@ -75,6 +88,10 @@ type Slot = {
   candidate: PluginCandidate;
   provider?: string;
   plugin?: AgentDevicePlugin;
+  backend?: string;
+  replayPlugin?: ReplayEnginePlugin;
+  replaySetup?: ReplayEngineSetup;
+  replayLoading?: Promise<ReplayBackend>;
   failure?: unknown;
   registration?: ProviderRegistration;
 };
@@ -92,6 +109,7 @@ export type ResolvedProviderPlugins = Readonly<{
 
 export type ProviderRegistry = Readonly<{
   registrations: readonly ProviderRegistration[];
+  resolveReplayBackend: ReplayBackendResolver;
   claimedProviders: readonly string[];
   inventory: readonly PluginInventoryEntry[];
   /**
@@ -112,6 +130,7 @@ export async function resolveProviderPlugins(
 ): Promise<ResolvedProviderPlugins> {
   const slots: Slot[] = [];
   const claimed = new Set<string>();
+  const claimedBackends = new Set<string>();
   for (const candidate of candidates) {
     const slot: Slot = { candidate, provider: candidate.provider };
     slots.push(slot);
@@ -119,23 +138,11 @@ export async function resolveProviderPlugins(
       if (candidate.provider !== undefined) claimed.add(candidate.provider);
       continue;
     }
-    try {
-      const raw = await candidate.load();
-      slot.provider = readProviderId(raw) ?? candidate.provider;
-      slot.plugin = validateAgentDevicePlugin(raw);
-    } catch (error) {
-      slot.failure = asPluginFailure(error, 'plugin_load_failed');
-    }
-    if (slot.provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(slot.provider))
-      continue;
-    if (claimed.has(slot.provider)) {
-      slot.plugin = undefined;
-      slot.failure ??= new AppError('INVALID_ARGS', `Duplicate provider plugin: ${slot.provider}`, {
-        reason: 'duplicate_provider',
-        provider: slot.provider,
-      });
-    } else claimed.add(slot.provider);
+    await loadSlot(slot);
+    claimBackend(slot, claimedBackends);
+    claimProvider(slot, claimed);
   }
+
   return Object.freeze({
     connections: new Map(
       slots.flatMap(({ plugin, candidate }) =>
@@ -163,11 +170,13 @@ export async function startProviderRegistry(
   resolved: ResolvedProviderPlugins,
   env: NodeJS.ProcessEnv,
   policy: PluginRegistryPolicy,
+  scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
   for (const slot of resolved.slots) {
-    if (!slot.plugin || slot.failure !== undefined) continue;
+    if (slot.failure !== undefined) continue;
     try {
-      await setUpSlot(slot, slot.plugin, env, policy);
+      if (slot.replayPlugin) await setUpReplaySlot(slot, slot.replayPlugin, env);
+      else if (slot.plugin && scope === 'all') await setUpSlot(slot, slot.plugin, env, policy);
     } catch (error) {
       slot.failure = asPluginFailure(error, 'plugin_setup_failed');
       slot.registration = undefined;
@@ -176,12 +185,129 @@ export async function startProviderRegistry(
   const registrations = resolved.slots.flatMap(({ registration }) =>
     registration ? [registration] : [],
   );
+  let closed = false;
+  const inventory = [...resolved.inventory()];
   return Object.freeze({
     registrations,
     claimedProviders: resolved.claimedProviders,
-    inventory: resolved.inventory(),
-    close: once(async () => await Promise.all(registrations.map(cleanUp))),
+    inventory,
+    resolveReplayBackend: async (id, host, packageName) => {
+      if (closed)
+        throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
+          reason: 'plugin-registry-closed',
+        });
+      return await resolveRegisteredReplayBackend(resolved, inventory, id, host, packageName);
+    },
+    close: once(async () => {
+      closed = true;
+      const [providers, backends] = await Promise.all([
+        Promise.all(registrations.map(cleanUp)),
+        Promise.all(resolved.slots.map(cleanUpReplaySlot)),
+      ]);
+      return [...providers, ...backends.flat()];
+    }),
   });
+}
+
+async function loadSlot(slot: Slot): Promise<void> {
+  try {
+    const raw = await slot.candidate.load();
+    if (isRecord(raw) && raw.kind === 'replay-backend') {
+      slot.provider = undefined;
+      slot.backend = typeof raw.backend === 'string' ? raw.backend : undefined;
+      slot.replayPlugin = validateReplayEnginePlugin(raw);
+    } else {
+      slot.provider = readProviderId(raw) ?? slot.candidate.provider;
+      slot.plugin = validateAgentDevicePlugin(raw);
+    }
+  } catch (error) {
+    slot.failure = asPluginFailure(error, 'plugin_load_failed');
+  }
+}
+
+function claimBackend(slot: Slot, claimed: Set<string>): void {
+  if (slot.backend === undefined) return;
+  if (!claimed.has(slot.backend)) {
+    claimed.add(slot.backend);
+    return;
+  }
+  slot.replayPlugin = undefined;
+  slot.failure ??= new AppError('INVALID_ARGS', `Duplicate replay backend: ${slot.backend}`, {
+    reason: 'duplicate_replay_backend',
+    backend: slot.backend,
+  });
+}
+
+function claimProvider(slot: Slot, claimed: Set<string>): void {
+  if (slot.provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(slot.provider)) return;
+  if (!claimed.has(slot.provider)) {
+    claimed.add(slot.provider);
+    return;
+  }
+  slot.plugin = undefined;
+  slot.failure ??= new AppError('INVALID_ARGS', `Duplicate provider plugin: ${slot.provider}`, {
+    reason: 'duplicate_provider',
+    provider: slot.provider,
+  });
+}
+
+async function setUpReplaySlot(
+  slot: Slot,
+  plugin: ReplayEnginePlugin,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const result = await plugin.setup(createPluginHost(env, slot.candidate.hostOptions));
+  try {
+    slot.replaySetup = validateReplayEngineSetup(result);
+  } catch (error) {
+    await cleanUpRejectedSetup(result);
+    throw error;
+  }
+}
+
+async function resolveRegisteredReplayBackend(
+  resolved: ResolvedProviderPlugins,
+  inventory: PluginInventoryEntry[],
+  id: string,
+  host: import('@agent-device/contracts/replay-backend').ReplayBackendHost,
+  packageName?: string,
+): Promise<ReplayBackend> {
+  const slot =
+    resolved.slots.find((slot) => slot.backend === id) ??
+    resolved.slots.find(
+      (slot) => packageName !== undefined && slot.candidate.package === packageName,
+    );
+  if (!slot)
+    throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${id}`, {
+      reason: 'plugin-not-installed',
+      backend: id,
+    });
+  if (slot.failure !== undefined) throw slot.failure;
+  const setup = slot.replaySetup;
+  if (!setup) throw invalidPlugin(`Replay backend was not set up: ${id}`);
+  return await (slot.replayLoading ??= Promise.resolve().then(async () => {
+    try {
+      return validateReplayBackend(id, await setup.replayBackend.create(host));
+    } catch (error) {
+      slot.failure = asPluginFailure(error, 'plugin_load_failed');
+      inventory.splice(0, inventory.length, ...resolved.inventory());
+      throw slot.failure;
+    }
+  }));
+}
+
+async function cleanUpReplaySlot(slot: Slot): Promise<PluginCleanupOutcome[]> {
+  const setup = slot.replaySetup;
+  if (!setup) return [];
+  await slot.replayLoading?.catch(() => {});
+  return [
+    {
+      backend: slot.backend,
+      source: slot.candidate.source,
+      shutdown: { status: 'ok' },
+      dispose: await attempt(async () => await setup.dispose?.()),
+    },
+  ];
 }
 
 function withConnectionHost(
@@ -287,11 +413,12 @@ function describeSlot(slot: Slot): PluginInventoryEntry[] {
   if (candidate.dormant) return [];
   const base = {
     ...(slot.provider !== undefined ? { provider: slot.provider } : {}),
+    ...(slot.backend !== undefined ? { backend: slot.backend } : {}),
     source: candidate.source,
     ...(candidate.package !== undefined ? { package: candidate.package } : {}),
     ...(candidate.version !== undefined ? { version: candidate.version } : {}),
   };
-  if (slot.failure !== undefined || !plugin) {
+  if (slot.failure !== undefined || (!plugin && !slot.replayPlugin)) {
     return [
       {
         ...base,
@@ -306,9 +433,9 @@ function describeSlot(slot: Slot): PluginInventoryEntry[] {
       ...base,
       state: 'active',
       credentials: {
-        variables: [...plugin.credentials.variables],
+        variables: [...(plugin?.credentials.variables ?? [])],
         byBackend: Object.fromEntries(
-          Object.entries(plugin.credentials.byBackend ?? {}).map(([backend, names]) => [
+          Object.entries(plugin?.credentials.byBackend ?? {}).map(([backend, names]) => [
             backend,
             [...names],
           ]),

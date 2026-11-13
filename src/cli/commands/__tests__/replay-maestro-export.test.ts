@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
-import { inspectMaestroFlow } from '@agent-device/maestro';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -37,7 +36,6 @@ describe('exportReplayScriptToMaestro', () => {
           ]
         : [[{ openLink: link }]],
     );
-    expect(() => inspectMaestroFlow(output.data.yaml, 'flow.yaml')).not.toThrow();
 
     const written = await runCliCapture(['replay', 'export', sourcePath, '--out', outPath]);
 

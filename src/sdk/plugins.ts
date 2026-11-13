@@ -21,7 +21,13 @@ export type {
 export type PluginWebDriverSetup = ContractWebDriverSetup<CloudWebDriverProviderOptions>;
 export type PluginSetupResult = ContractSetupResult<CloudWebDriverProviderOptions>;
 export type AgentDevicePlugin = ContractPlugin<CloudWebDriverProviderOptions>;
+export type ManagedPlugin =
+  | AgentDevicePlugin
+  | import('@agent-device/plugins/replay-backend').ReplayEnginePlugin;
 export type AgentDevicePluginFactory<Options = Record<string, unknown>> = ContractPluginFactory<
   Options,
   CloudWebDriverProviderOptions
 >;
+
+export type { ReplayEnginePlugin, ReplayEngineSetup } from '@agent-device/plugins/replay-backend';
+export type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';

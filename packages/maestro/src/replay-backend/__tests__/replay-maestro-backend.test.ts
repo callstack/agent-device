@@ -7,6 +7,7 @@ import { maestroReplayBackendPlugin } from '../replay-maestro-backend.ts';
 // each test the behavior through the registry; what is pinned here is the adapter's own mapping.
 // None of these capabilities reach host services, so the host is never called.
 const unusedHost: ReplayBackendHost = {
+  registerSensitiveValue: () => {},
   appendTraceEvent: () => {
     throw new Error('host unused');
   },

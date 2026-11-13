@@ -87,6 +87,7 @@ export const SETUP_FILES = [
   'src/__tests__/hermetic-env-setup.ts',
   'src/__tests__/hermetic-signal-setup.ts',
   'src/__tests__/process-memo-setup.ts',
+  'src/__tests__/replay-plugin-setup.ts',
 ];
 
 export default defineConfig({

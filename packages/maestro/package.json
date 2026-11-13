@@ -4,36 +4,48 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Private Maestro compatibility engine for agent-device.",
-  "dependencies": {
+  "description": "Optional Maestro compatibility engine plugin for agent-device.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./run-script-http": {
+      "types": "./src/daemon-port/run-script-http.ts",
+      "default": "./src/daemon-port/run-script-http.ts"
+    },
+    "./agent-device": {
+      "types": "./src/plugin.ts",
+      "default": "./src/plugin.ts"
+    }
+  },
+  "devDependencies": {
+    "undici": "7.30.1",
+    "yaml": "^2.9.0",
+    "@agent-device/test-kit": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",
-    "@agent-device/selectors": "workspace:*"
+    "@agent-device/selectors": "workspace:*",
+    "agent-device": "workspace:*"
   },
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
-    "./replay-backend": {
-      "types": "./src/replay-backend/replay-maestro-backend.ts",
-      "default": "./src/replay-backend/replay-maestro-backend.ts"
-    },
-    "./replay-backend-declaration": {
-      "types": "./src/replay-backend/replay-maestro-declaration.ts",
-      "default": "./src/replay-backend/replay-maestro-declaration.ts"
-    },
-    "./run-script-http": {
-      "types": "./src/daemon-port/run-script-http.ts",
-      "default": "./src/daemon-port/run-script-http.ts"
-    }
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
   },
-  "devDependencies": {
-    "undici": "7.30.1",
-    "yaml": "^2.9.0"
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
   }
 }

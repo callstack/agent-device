@@ -22,18 +22,13 @@ describe('@agent-device/maestro facade', () => {
   test('keeps the plugin and helper off the engine entry and declares pure modules', () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(import.meta.dirname, '../package.json'), 'utf8'),
-    ) as { exports: Record<string, unknown>; sideEffects?: boolean };
-    // The runScript HTTP helper is a subpath, not part of the engine entry, and the replay
-    // backend plugin (#3377) is the only other way in: its engine-free declaration lets help list
-    // the backend without evaluating the engine. This pins the surface;
-    // scripts/__tests__/eager-closure-budgets.test.ts is what keeps `.` from starting to evaluate
-    // host-kit, capture-kit, or provision-kit.
-    expect(Object.keys(manifest.exports)).toEqual([
-      '.',
-      './replay-backend',
-      './replay-backend-declaration',
-      './run-script-http',
-    ]);
+    ) as {
+      exports: Record<string, unknown>;
+      publishConfig: { exports: Record<string, unknown> };
+      sideEffects?: boolean;
+    };
+    expect(Object.keys(manifest.exports)).toEqual(['.', './run-script-http', './agent-device']);
+    expect(Object.keys(manifest.publishConfig.exports)).toEqual(['./agent-device']);
     expect(manifest.sideEffects).toBe(false);
   });
 });

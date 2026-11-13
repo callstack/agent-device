@@ -1,4 +1,0 @@
-export {
-  MAESTRO_COMPAT_LIMITATIONS,
-  MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
-} from './support-matrix.ts';

@@ -5,7 +5,7 @@ import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry
 import {
   MAESTRO_COMPAT_LIMITATIONS,
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
-} from '@agent-device/maestro';
+} from '@agent-device/replay-port/replay-backend-declarations';
 
 const MAESTRO_COMPATIBILITY_ADR_URL =
   'https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md';

@@ -1,3 +1,5 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -21,8 +23,13 @@ export function makeSnapshot(
 /** The daemon-owned half of the port options: the runtime envelope flags and the network origin. */
 export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
-): Pick<CreateDaemonMaestroRuntimeOperationsOptions, 'flags' | 'publicNetworkOnly'> {
+): Pick<
+  CreateDaemonMaestroRuntimeOperationsOptions,
+  'flags' | 'publicNetworkOnly' | 'host' | 'registerSensitiveValue'
+> {
   return {
+    host: createTestHostEnvironment(),
+    registerSensitiveValue: registerDiagnosticSensitiveValue,
     publicNetworkOnly: false,
     ...overrides,
   };

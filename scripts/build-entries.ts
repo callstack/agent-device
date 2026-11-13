@@ -17,8 +17,6 @@ export const buildEntries = {
   'internal/bin': 'src/bin.ts',
   'internal/companion-tunnel': 'packages/react-native/src/companion/companion-tunnel.ts',
   'internal/daemon': 'src/daemon.ts',
-  'internal/run-script-child': 'packages/maestro/src/daemon-port/run-script-child.ts',
-  'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
   'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
   'internal/update-check-entry': 'src/cli/update-check-entry.ts',
 } as const;

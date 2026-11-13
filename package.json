@@ -86,7 +86,7 @@
     "agent-device": "bin/agent-device.mjs"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "pnpm --filter @agent-device/maestro build && tsdown",
     "clean:daemon": "node --experimental-strip-types scripts/clean-daemon.ts",
     "daemon:state-dir": "node --experimental-strip-types scripts/print-daemon-state-dir.ts",
     "explain:command": "node --experimental-strip-types scripts/explain-command.ts",
@@ -317,7 +317,6 @@
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/maestro": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/platform-harmonyos": "workspace:*",

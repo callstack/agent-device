@@ -8,7 +8,6 @@ import {
   type MaestroRuntimeOperations,
   type MaestroRuntimePort,
 } from '@agent-device/maestro';
-import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 import { stripUndefined } from '@agent-device/kernel/record';
@@ -138,7 +137,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
     delayMs?: number,
   ): Promise<void> => {
-    registerDiagnosticSensitiveValue(text);
+    options.registerSensitiveValue(text);
     await invokeMutation(
       { kind: 'typeText', text, ...(delayMs === undefined ? {} : { delayMs }) },
       context,
@@ -356,15 +355,18 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       artifactPaths: artifactPathsFromData(await invoke({ kind: 'screenshot', path: input.path })),
     }),
     runScript: async (input, context) => ({
-      outputEnv: await executeRunScriptFile({
-        scriptPath: resolveScriptPath(input.file, context, options.sourcePath),
-        publicNetworkOnly: options.publicNetworkOnly,
-        env: {
-          ...context.env,
-          ...(input.env ? stringifyEnvironment(input.env) : {}),
+      outputEnv: await executeRunScriptFile(
+        {
+          scriptPath: resolveScriptPath(input.file, context, options.sourcePath),
+          publicNetworkOnly: options.publicNetworkOnly,
+          env: {
+            ...context.env,
+            ...(input.env ? stringifyEnvironment(input.env) : {}),
+          },
+          signal: context.signal,
         },
-        signal: context.signal,
-      }),
+        options.host,
+      ),
     }),
   };
   return {

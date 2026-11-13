@@ -10,6 +10,18 @@ title: Run Maestro flows
 
 For recording and replaying native `.ad` scripts, see [Replay and E2E testing](/docs/replay-e2e).
 
+## Install Maestro support
+
+In agent-device 0.22, Maestro flows and export require the optional `@agent-device/maestro` plugin:
+
+```bash
+agent-device plugins add @agent-device/maestro
+```
+
+Install it on the client machine for source collection and export. When you use a remote daemon, install it on that daemon's host too. An embedded daemon uses the plugins supplied by its host application. Close your sessions and restart the daemon after changing its plugins, then retry your original command with all its arguments. Your flow syntax stays the same.
+
+If the plugin is missing, the error includes `plugin-not-installed` and the installation command. A selected package that fails loading or setup reports its own failure; agent-device does not install a replacement or switch engines. Use `agent-device plugins list --json` and `agent-device daemon status --json` to compare installed plugins with the running daemon's plugin set.
+
 ## Run a Maestro flow
 
 Pass `--maestro` to `replay` or `test`:
