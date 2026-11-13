@@ -645,13 +645,13 @@ test('records verified current and retained native roots and stable descendants'
 test('browser home roots require executable containment and marker roots require Chrome', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const otherStateDir = mkdtempForTestSync('agent-device-web-other-');
+  const previous = managedInstallPaths(stateDir, '0.27.1');
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
       host: { env: process.env, cwd: process.cwd() },
     });
-    const previous = managedInstallPaths(stateDir, '0.27.1');
     const other = managedInstallPaths(otherStateDir, '0.27.1');
     fs.mkdirSync(previous.installDir, { recursive: true });
     const otherBinary = nativeBinary(other.installDir);
@@ -711,6 +711,7 @@ test('browser home roots require executable containment and marker roots require
       201, 202, 209, 210, 213,
     ]);
   } finally {
+    fs.rmSync(previous.runtimeHomeDir, { recursive: true, force: true });
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(otherStateDir, { recursive: true, force: true });
   }
