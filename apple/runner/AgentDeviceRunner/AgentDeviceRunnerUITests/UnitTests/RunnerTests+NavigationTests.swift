@@ -45,19 +45,21 @@ extension RunnerTests {
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
-  /// A screen that changes on its own every 0.3 s, three verification delays apart, is never still
-  /// for the required span (the contact allowance, one 0.1 s delay, and the slowest capture, about
-  /// 0.4 s on a simulator), so it never settles and back reports an unknown outcome instead of
-  /// crediting the swipe.
+  /// A screen that repaints itself every 0.5 s, with a swipe that does nothing, is never still for
+  /// the required span (about 0.55 s on a simulator), so its own repaint after the swipe is never
+  /// read as a back. Each attempt starts at a different phase of the repaint timer.
   @MainActor
-  func testInAppBackOnAScreenChangingSlowerThanOneDelayIsNotPerformed() throws {
-    _ = try launchBackFixture(["--agent-device-back-regression", "--slow-toggle"])
+  func testInAppBackNeverCreditsASelfRepaintEveryHalfSecondToANoOpSwipe() throws {
+    _ = try launchBackFixture(["--slow-toggle"])
     defer { endBackFixture() }
 
-    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
-      return XCTFail("a screen that toggles on its own must not read as performed")
+    for offset in [0.0, 0.1, 0.2, 0.3, 0.4] {
+      sleepFor(offset)
+      guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+        return XCTFail("a repaint at offset \(offset) s must not read as a back")
+      }
+      XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified, "offset \(offset) s")
     }
-    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
   /// The navigation bar's system back button is pressed from the live tree: the fixture's
@@ -692,6 +694,15 @@ extension RunnerTests {
     let slow = Self.backSwipeRequiredStillMs(maxCaptureMs: 600)
     XCTAssertEqual(slow - fast, 500)
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
+  }
+
+  /// The still span outlasts a 0.5 s self-repaint at a simulator's 0.1 s capture, and stays longer
+  /// than the after-sample gap (contact, verification delay, capture), whatever the delay.
+  func testBackSwipeRequiredStillSpanOutlastsAHalfSecondRepaint() {
+    let required = Self.backSwipeRequiredStillMs(maxCaptureMs: 100)
+    XCTAssertGreaterThan(required, 500)
+    XCTAssertEqual(required, Self.backGestureAllowanceMs + Self.backSwipeStillMarginMs + 100)
+    XCTAssertGreaterThan(required, Self.backGestureAllowanceMs + Self.backSwipeVerificationDelay * 1000 + 100)
   }
 
 #if os(iOS)

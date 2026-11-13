@@ -189,9 +189,11 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 | `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or on one more read after it or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
-0.05 s pause between captures plus each capture's own time, that agree for as long as the gap the swipe will be credited across: a contact
-allowance, one 0.1 s delay, and the slowest capture seen while settling. A slow host therefore
-settles for longer. The last sample of that run is the one the change is measured from, and the
+0.05 s pause between captures plus each capture's own time, that agree for the still span: a contact
+allowance, a 0.25 s margin, and the slowest capture seen while settling, about 0.55 s on a simulator.
+The margin keeps a screen that repaints itself about every 0.5 s from looking still, so its next
+repaint is not read as the swipe's effect; it does not depend on the 0.1 s wait before the sample
+after the swipe. A slow host therefore settles for longer. The last sample of that run is the one the change is measured from, and the
 swipe follows it at once:
 
 | Platform | Resolved before settling | Left in the gap | Contact allowance |
@@ -202,9 +204,9 @@ swipe follows it at once:
 On both, every tree and window read happens during that preparation, before the first sample.
 
 Settling samples for at most 2 s, plus the capture in flight. On a slow host the budget grows to the first capture, the still span, and one more pause and capture, so a still screen settles instead of always answering `BACK_SWIPE_UNVERIFIED`. A still screen usually settles after
-4 samples, about 0.45 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
+5 samples, about 0.6 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
 on one physical iPhone (iPhone 17 Pro, iOS 27.0.1;
-https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541) the still span is 0.9 s.
+https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541) the still span is 1.05 s.
 
 Only a change from the last sample to the sample taken 0.1 s after the swipe counts, and only when the time
 between those two does not exceed the time the screen had been still; otherwise the result is
