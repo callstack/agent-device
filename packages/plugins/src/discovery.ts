@@ -39,7 +39,7 @@ export function discoverPluginEntry(directory: string): string {
  * The entry a plugin package names: a readable file inside the package directory it is installed
  * in. Traversal and a symlink out of that directory are refused.
  */
-export function resolvePluginEntry(directory: string, target: string): string {
+function resolvePluginEntry(directory: string, target: string): string {
   try {
     const root = fs.realpathSync(directory);
     const resolved = fs.realpathSync(path.resolve(directory, target));
