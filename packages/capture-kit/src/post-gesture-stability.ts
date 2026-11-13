@@ -340,10 +340,15 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   });
   // minPolls guarantees at least one judged value before an `expired` end can fire.
   const value = observed.last as T;
-  // Loading means no first screen at all; a first screen with content that never quieted is
-  // unsettled, and one whose last pair agreed returns as settled.
-  if (firstScreen && hooks.countFirstScreenContent(value) === 0) {
-    return { value, postGestureOutcome: postGestureOutcome('loading', pending) };
+  // Loading means no first screen at all. A first screen counts as settled at the deadline only
+  // under the same rule the loop uses (a small tree must have been quiet for the full window);
+  // otherwise it is unsettled.
+  if (firstScreen) {
+    if (hooks.countFirstScreenContent(value) === 0) {
+      return { value, postGestureOutcome: postGestureOutcome('loading', pending) };
+    }
+    if (lastPairAgreed && firstScreenReady(value)) return { value };
+    return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
   }
   if (lastPairAgreed) return { value };
   return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };

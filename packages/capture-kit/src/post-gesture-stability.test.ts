@@ -353,6 +353,25 @@ test('a launch whose small first screen keeps changing reports it unsettled, not
   assert.ok(clock.now() >= 10_000, `gave up after ${clock.now()}ms`);
 });
 
+test('a small first screen that quiets just before the deadline is unsettled, not settled', async () => {
+  const clock = fakeClock();
+  const hooks = {
+    ...hooksFor(clock, []),
+    // Changes on every read until 9.6 s, then holds: its last pair agrees, but it has been quiet
+    // for well under the 1.5 s window a small tree needs.
+    capture: async () => {
+      clock.advance(50);
+      const at = clock.now();
+      return at < 9_600 ? launchSurface(`tick ${at}`, 2, 0) : launchSurface('held', 2, 0);
+    },
+  };
+
+  const outcome = await runPostGestureStabilityLoop({ pending: LAUNCH, hooks, clock });
+
+  assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
+  assert.ok(clock.now() >= 10_000, `gave up after ${clock.now()}ms`);
+});
+
 test('a gesture record never applies the first-screen rule to an empty tree', async () => {
   const clock = fakeClock();
   const empty = launchSurface('empty', 0);
