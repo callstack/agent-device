@@ -262,6 +262,26 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
 // claimed its resolver could not follow workspace specifiers, which stopped
 // being true (it resolves @agent-device/* through each exports map), so an
 // extraction into packages/ no longer takes its own dead code out of scope.
+const replayBackendOwnership: OwnershipRule = ({ file }) =>
+  file.startsWith('packages/maestro/') ||
+  file.startsWith('packages/replay-port/') ||
+  /^packages\/plugins\/src\/(?:registry|replay-backend|store|discovery)\./.test(file)
+    ? [
+        reason(
+          'maestro-conformance',
+          file,
+          'own:replay-backend-conformance',
+          'managed replay backends retain the generated conformance oracle',
+        ),
+        reason(
+          'maestro-differential',
+          file,
+          'own:replay-backend-differential',
+          'installed replay backends retain live outcome and timing invariants',
+        ),
+      ]
+    : [];
+
 const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
   if (!isTs || !/^packages\/[^/]+\/src\//.test(file)) return [];
   const selections = [
@@ -689,6 +709,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   macosCoverageOwnership,
   testAppOwnership,
   replayCompatOwnership,
+  replayBackendOwnership,
   daemonWireCompatOwnership,
   buildOwnership,
   nativeDupesOwnership,

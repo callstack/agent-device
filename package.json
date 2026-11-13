@@ -165,7 +165,7 @@
     "depgraph:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/depgraph/model.test.ts scripts/depgraph/entries.test.ts scripts/depgraph/import-graph.test.ts scripts/depgraph/affected.test.ts scripts/depgraph/structure-summary.test.ts tools/depgraph-view/*.test.mjs",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
-    "check:package": "node --experimental-strip-types scripts/check-package.ts",
+    "check:package": "node --experimental-strip-types scripts/check-package.ts && node --experimental-strip-types scripts/node-test-tmpdir.ts --test packages/maestro/test/package-smoke.mjs",
     "check:command-docs": "vitest run --project unit-core test/repo-guards/command-doc-coverage.test.ts",
     "check:adr-citations": "vitest run --project unit-core test/repo-guards/adr-citations.test.ts",
     "check:capabilities-matrix": "vitest run --project unit-core test/repo-guards/capability-matrix.test.ts",

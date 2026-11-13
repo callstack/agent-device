@@ -176,7 +176,12 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'replay-port',
     roots: ['packages/replay-port/src/'],
-    forbiddenTargetRoots: [DAEMON_SOURCE_ROOT, 'src/providers/', 'src/compat/'],
+    forbiddenTargetRoots: [
+      DAEMON_SOURCE_ROOT,
+      'src/providers/',
+      'src/compat/',
+      'packages/maestro/',
+    ],
   },
   {
     name: 'daemon-session-lifecycle',

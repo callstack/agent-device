@@ -147,6 +147,7 @@ export function workspacePackagesFromManifests(
     const manifest = JSON.parse(manifests.get(manifestFile)!) as {
       name?: string;
       private?: boolean;
+      publishConfig?: { exports?: unknown };
       exports?:
         | string
         | Record<string, { default?: string; import?: string; require?: string } | string>;
@@ -179,14 +180,16 @@ export function workspacePackagesFromManifests(
           ),
       ),
     );
-    const workspaceDependencyField = manifest.private === true ? 'dependencies' : 'devDependencies';
+    const bundledForPublication =
+      manifest.private !== true || manifest.publishConfig?.exports !== undefined;
+    const workspaceDependencyField = bundledForPublication ? 'devDependencies' : 'dependencies';
     const workspaceDependencies = new Set(
       Object.entries(manifest[workspaceDependencyField] ?? {})
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
     );
     const workspaceDevDependencies = new Set(
-      manifest.private === true
+      !bundledForPublication
         ? Object.entries(manifest.devDependencies ?? {})
             .filter(([, range]) => range.startsWith('workspace:'))
             .map(([name]) => name)
