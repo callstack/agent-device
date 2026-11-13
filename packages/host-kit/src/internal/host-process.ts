@@ -237,6 +237,16 @@ function readLinuxProcessStartToken(pid: number): string | null {
   }
 }
 
+/** Positive proof of different lifetimes; unreadable or mixed-format records prove nothing. */
+export function processStartTimesDiffer(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
+  return left !== right;
+}
+
 export function readProcessStartTime(pid: number): string | null {
   return readProcessField(pid, 'lstart=');
 }
@@ -767,7 +777,7 @@ export function judgeProcessIdentity(
 ): ProcessIdentityVerdict {
   if (facts.zombie) return 'exited';
   const { startTime, matches } = expected;
-  if (startTime && facts.startTime && facts.startTime !== startTime) return 'reassigned';
+  if (processStartTimesDiffer(startTime, facts.startTime)) return 'reassigned';
   const commandMatches = facts.command === null || !matches ? undefined : matches(facts.command);
   if (!startTime && commandMatches === false) return 'reassigned';
   if (!startTime && !matches) return 'unverified';
