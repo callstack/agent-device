@@ -36,20 +36,13 @@ export function createUploadProgressTransform(options: {
   startOffset: number;
   totalBytes: number;
   onProgress?: UploadProgressSink;
-  /**
-   * Called for every chunk this side has actually handed on, which is the only thing that counts as
-   * transfer progress. Reporting to `onProgress` is throttled; this is not, so a trickle too small
-   * to be worth a UI line still proves the connection carries bytes.
-   */
-  onBytes?: (byteLength: number) => void;
 }): Transform {
-  const { stage, fileName, startOffset, totalBytes, onProgress, onBytes } = options;
+  const { stage, fileName, startOffset, totalBytes, onProgress } = options;
   let transferredBytes = startOffset;
   const stepBytes = uploadProgressStepBytes(totalBytes);
   let nextReportAt = Math.min(totalBytes, startOffset + stepBytes);
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
-      onBytes?.(chunk.byteLength);
       transferredBytes = Math.min(totalBytes, transferredBytes + chunk.byteLength);
       if (transferredBytes >= nextReportAt) {
         onProgress?.({

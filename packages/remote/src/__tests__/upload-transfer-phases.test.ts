@@ -1,7 +1,7 @@
 // Phase budgets applied to a real artifact upload over loopback (#4441).
 //
 // The budgets in `transfer-phase-budget.ts` are minutes long, so every case here drives a controlled
-// clock and parks the request body chunk by chunk. That combination is the point: a transfer that
+// clock and parks the request body a quota at a time. That combination is the point: a transfer that
 // keeps moving must survive budget after budget, and one that stops moving must be ended by the ONE
 // budget that ran out. A mocked transport could show neither, because the backpressure that makes
 // "still progressing" mean something belongs to the real socket.
@@ -36,14 +36,17 @@ test('a body that keeps moving outlives the body-inactivity ceiling', async () =
   const daemon = await startParkedUploadDaemon();
   const upload = startUpload({
     baseUrl: daemon.baseUrl,
-    // Sixteen megabytes is far past what loopback buffers absorb, so the windows below are paid for
-    // by bytes the peer really takes rather than by a socket that swallowed the whole file.
+    // Sixteen megabytes is far past what a handful of windows can drain, so every window below is
+    // paid for by bytes the peer really takes rather than by a socket that swallowed the file.
     artifactPath: createArtifactFile(16 * MEBIBYTE),
   });
   try {
+    // Eight ceilings' worth of budget, one release-and-wait per window. Each window is paid for only
+    // after the peer really took bytes, so this stays cheap in real time while still spending twice
+    // the inactivity ceiling the transfer has to outlive.
     const progress = await spendProgressWindows(daemon, upload, {
-      windows: 400,
-      windowMs: 1_000,
+      windows: 8,
+      windowMs: TRANSFER_CONNECT_TIMEOUT_MS,
     });
 
     assert.equal(progress.progressedInEveryWindow, true);
