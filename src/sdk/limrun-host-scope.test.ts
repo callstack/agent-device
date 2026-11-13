@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { beforeAll, test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { createLimrunRuntimeDependencies } from './limrun-runtime-dependencies.ts';
+
+beforeAll(async () => {
+  if (process.platform !== 'win32') await import('@agent-device/platform-apple/install-artifact');
+});
 
 test.skipIf(process.platform === 'win32')(
   'Limrun ADB callbacks retain their owning host outside and across concurrent foreign scopes',
