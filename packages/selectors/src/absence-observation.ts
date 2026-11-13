@@ -107,13 +107,14 @@ export function classifyAbsenceObservation(
       },
     };
   }
-  if (matchCount === 0) {
-    const outcome = snapshot.postGestureOutcome;
-    const unproven = outcome ? ABSENCE_UNPROVEN_BY_OUTCOME[outcome.kind] : undefined;
-    if (unproven) return { kind: unproven, matches: 0 };
-    return { kind: 'absent', matches: 0 };
-  }
+  if (matchCount === 0) return zeroMatchObservation(snapshot.postGestureOutcome);
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
+}
+
+/** A zero-match capture proves absence unless its post-gesture outcome left the screen unproven. */
+function zeroMatchObservation(outcome: PostGestureOutcome | undefined): AbsenceObservation {
+  const unproven = outcome ? ABSENCE_UNPROVEN_BY_OUTCOME[outcome.kind] : undefined;
+  return unproven ? { kind: unproven, matches: 0 } : { kind: 'absent', matches: 0 };
 }
 
 /**
