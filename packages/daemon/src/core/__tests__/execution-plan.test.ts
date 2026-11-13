@@ -47,3 +47,25 @@ test('batch steps carry the steps still ahead of them through the internal chann
     { command: 'snapshot', remaining: [] },
   ]);
 });
+
+test.each([
+  ['keep', { sessionOmitted: true } as const, true],
+  ['do not gain', undefined, undefined],
+])('batch steps %s the marker for an unnamed session', async (_label, internal, sessionOmitted) => {
+  const seen: unknown[] = [];
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: [{ command: 'snapshot' }] },
+    ...(internal ? { internal } : {}),
+  };
+
+  await runBatchCommands(req, 'default', async (stepRequest) => {
+    seen.push(stepRequest.internal?.sessionOmitted);
+    return { ok: true, data: {} };
+  });
+
+  assert.deepEqual(seen, [sessionOmitted]);
+});
