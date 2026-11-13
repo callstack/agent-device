@@ -45,18 +45,18 @@ extension RunnerTests {
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
-  /// A screen that repaints itself every 0.5 s, with a swipe that does nothing, is never still for
+  /// A screen that repaints itself every 0.45 s, with a swipe that does nothing, is never still for
   /// the required span (about 0.55 s on a simulator), so its own repaint after the swipe is never
-  /// read as a back. Each attempt starts at a different phase of the repaint timer.
+  /// read as a back. Attempt k starts k * 0.09 s after a repaint, five phases across the cycle.
   @MainActor
-  func testInAppBackNeverCreditsASelfRepaintEveryHalfSecondToANoOpSwipe() throws {
+  func testInAppBackNeverCreditsASlowSelfRepaintToANoOpSwipe() throws {
     _ = try launchBackFixture(["--slow-toggle"])
     defer { endBackFixture() }
 
-    for offset in [0.0, 0.1, 0.2, 0.3, 0.4] {
-      sleepFor(offset)
+    for offset in (0..<5).map({ Double($0) * Self.slowTogglePeriod / 5 }) {
+      waitForSlowToggleOffset(offset)
       guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
-        return XCTFail("a repaint at offset \(offset) s must not read as a back")
+        return XCTFail("a repaint \(offset) s before the attempt must not read as a back")
       }
       XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified, "offset \(offset) s")
     }
@@ -475,6 +475,13 @@ extension RunnerTests {
     wait(for: [performed], timeout: 1)
   }
 
+  /// Waits until `offset` seconds have passed since the `--slow-toggle` fixture's last repaint.
+  private func waitForSlowToggleOffset(_ offset: TimeInterval) {
+    let sinceRepaint = Date().timeIntervalSince1970.truncatingRemainder(dividingBy: Self.slowTogglePeriod)
+    let wait = offset - sinceRepaint
+    sleepFor(wait < 0 ? wait + Self.slowTogglePeriod : wait)
+  }
+
   /// Launches the runner app and waits for its fixture surface. With
   /// `--agent-device-back-regression` a left-edge swipe sets the status to "Back performed", and
   /// without it the app ignores the swipe.
@@ -696,11 +703,17 @@ extension RunnerTests {
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
   }
 
-  /// The still span outlasts a 0.5 s self-repaint at a simulator's 0.1 s capture, and stays longer
-  /// than the after-sample gap (contact, verification delay, capture), whatever the delay.
+  /// The `--slow-toggle` fixture's repaint period; it repaints on whole multiples of it of the wall
+  /// clock, which this process shares.
+  static let slowTogglePeriod: TimeInterval = 0.45
+
+  /// The still span outlasts a 0.5 s self-repaint at a simulator's 0.1 s capture, and the
+  /// `--slow-toggle` fixture's period by at least 100 ms. It stays longer than the after-sample gap
+  /// (contact, verification delay, capture), whatever the delay.
   func testBackSwipeRequiredStillSpanOutlastsAHalfSecondRepaint() {
     let required = Self.backSwipeRequiredStillMs(maxCaptureMs: 100)
     XCTAssertGreaterThan(required, 500)
+    XCTAssertGreaterThanOrEqual(required, Self.slowTogglePeriod * 1000 + 100)
     XCTAssertEqual(required, Self.backGestureAllowanceMs + Self.backSwipeStillMarginMs + 100)
     XCTAssertGreaterThan(required, Self.backGestureAllowanceMs + Self.backSwipeVerificationDelay * 1000 + 100)
   }
