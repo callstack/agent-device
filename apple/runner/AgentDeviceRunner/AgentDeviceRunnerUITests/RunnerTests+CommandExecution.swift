@@ -587,7 +587,13 @@ extension RunnerTests {
       }
       return Response(ok: true, data: DataPayload(message: command.command.rawValue))
     case .keyboardDismiss:
-      let result = dismissKeyboard(app: activeApp)
+      var dismissal: (wasVisible: Bool, dismissed: Bool, visible: Bool, mechanism: RunnerKeyboardDismissMechanism?)?
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
+        dismissal = dismissKeyboard(app: activeApp)
+      }
+      guard let result = dismissal else {
+        return Response(ok: false, error: ErrorPayload(message: "keyboardDismiss produced no result"))
+      }
       if result.wasVisible && !result.dismissed {
         return Response(
           ok: false,
@@ -610,7 +616,13 @@ extension RunnerTests {
         )
       )
     case .keyboardReturn:
-      let result = pressKeyboardReturn(app: activeApp)
+      var press: (wasVisible: Bool, pressed: Bool, visible: Bool)?
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .preEventSkipped) {
+        press = pressKeyboardReturn(app: activeApp)
+      }
+      guard let result = press else {
+        return Response(ok: false, error: ErrorPayload(message: "keyboardReturn produced no result"))
+      }
       if !result.pressed {
         return Response(
           ok: false,

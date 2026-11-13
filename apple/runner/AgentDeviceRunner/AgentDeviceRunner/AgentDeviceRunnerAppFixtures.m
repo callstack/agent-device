@@ -75,6 +75,9 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
+@property(nonatomic, weak) UITextField *keyboardBusyField;
+@property(nonatomic, strong) UILabel *keyboardBusyAnswer;
+@property(nonatomic, strong) NSTimer *keyboardBusyBackstop;
 @end
 
 // A one-time-code field that announces how many digits it holds instead of the digits, the way
@@ -249,6 +252,57 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   self.alertActionStatus.transform = CGAffineTransformIdentity;
   [self.alertActivationBusyBackstop invalidate];
   self.alertActivationBusyBackstop = nil;
+}
+
+// The keyboard counterpart of the busy alert: the field starts the same never-ending UIView animation
+// when it takes focus, so XCTest sees work in flight for as long as the keyboard is up. Its Done
+// accessory and its return key record whether they landed while the app was still busy. The backstop
+// passed after `--agent-device-keyboard-busy` ends the busy state, so a command that waits for the app
+// to idle before it taps still finishes, and records "after busy" instead of outlasting the test.
+static NSTimeInterval AgentDeviceKeyboardBusyWindow(void) {
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger flag = [arguments indexOfObject:@"--agent-device-keyboard-busy"];
+  return flag + 1 < arguments.count ? arguments[flag + 1].doubleValue : 0;
+}
+
+- (void)startKeyboardBusy {
+  if (self.keyboardBusyBackstop != nil) {
+    return;
+  }
+  self.keyboardBusyBackstop = [NSTimer scheduledTimerWithTimeInterval:AgentDeviceKeyboardBusyWindow()
+                                                               target:self
+                                                             selector:@selector(stopKeyboardBusy)
+                                                             userInfo:nil
+                                                              repeats:NO];
+  [UIView animateWithDuration:0.4
+                          delay:0
+                        options:(UIViewAnimationOptionRepeat | UIViewAnimationOptionAutoreverse)
+                     animations:^{
+                       self.keyboardBusyAnswer.transform = CGAffineTransformMakeTranslation(0, 8);
+                     }
+                     completion:nil];
+}
+
+- (void)stopKeyboardBusy {
+  [self.keyboardBusyAnswer.layer removeAllAnimations];
+  self.keyboardBusyAnswer.transform = CGAffineTransformIdentity;
+  [self.keyboardBusyBackstop invalidate];
+  self.keyboardBusyBackstop = nil;
+}
+
+- (void)recordKeyboardBusyAnswer:(NSString *)control {
+  self.keyboardBusyAnswer.text = [NSString
+      stringWithFormat:@"%@ %@", control, self.keyboardBusyBackstop != nil ? @"while busy" : @"after busy"];
+  [self stopKeyboardBusy];
+  [self.keyboardBusyField resignFirstResponder];
+}
+
+- (void)keyboardBusyDonePressed {
+  [self recordKeyboardBusyAnswer:@"Done"];
+}
+
+- (void)keyboardBusyReturnPressed {
+  [self recordKeyboardBusyAnswer:@"Return"];
 }
 
 // A banner from this app, shown over its own alert and re-posted before the previous one expires so
@@ -650,6 +704,43 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [busyAnswer.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
     ]];
     self.alertActivationBusyAnswer = busyAnswer;
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-keyboard-busy"]) {
+    UITextField *field = [[UITextField alloc] init];
+    field.accessibilityIdentifier = @"agent-device-keyboard-busy-input";
+    field.placeholder = @"Busy while editing";
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+    accessory.items = @[
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
+      [[UIBarButtonItem alloc] initWithTitle:@"Done"
+                                       style:UIBarButtonItemStyleDone
+                                      target:self
+                                      action:@selector(keyboardBusyDonePressed)],
+    ];
+    field.inputAccessoryView = accessory;
+    [field addTarget:self action:@selector(startKeyboardBusy) forControlEvents:UIControlEventEditingDidBegin];
+    [field addTarget:self
+                  action:@selector(keyboardBusyReturnPressed)
+        forControlEvents:UIControlEventEditingDidEndOnExit];
+    field.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:field];
+    UILabel *answer = [[UILabel alloc] init];
+    answer.text = @"Unanswered";
+    answer.accessibilityIdentifier = @"agent-device-keyboard-busy-answer";
+    answer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:answer];
+    [NSLayoutConstraint activateConstraints:@[
+      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      [field.widthAnchor constraintEqualToConstant:240],
+      [field.heightAnchor constraintEqualToConstant:44],
+      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
+    ]];
+    self.keyboardBusyField = field;
+    self.keyboardBusyAnswer = answer;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {
