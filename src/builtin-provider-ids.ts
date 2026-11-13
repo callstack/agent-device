@@ -1,5 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/manifest';
+import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 import { CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS } from '@agent-device/provider-webdriver/providers';
 
 export const LIMRUN_ID = 'limrun';

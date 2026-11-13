@@ -15,7 +15,8 @@ import { resolveConnectProviderProfile } from '../cli/connection/connect-provide
 import {
   mkdtempForTestSync,
   pluginHome,
-  selectPlugin,
+  selectV2Plugin,
+  v2RegistrationSource,
   bindTestCommandHost,
 } from '@agent-device/test-kit';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
@@ -50,20 +51,16 @@ const mockedVerifyWebDriverConnection = vi.mocked(verifyTestMuConnection);
 
 beforeEach(() => {
   const { home } = pluginHome();
-  selectPlugin(home, manifest.name, 'testmu', 'export default () => {};');
-  const { installation } = JSON.parse(fs.readFileSync(path.join(home, 'config.json'), 'utf8'))
-    .plugins[manifest.name];
-  const manifestPath = path.join(
+  // The store declares the plugin installed with TestMu's capabilities; the mocked loader above
+  // supplies the workspace factory those assertions exercise.
+  selectV2Plugin(
     home,
-    'plugins',
-    installation,
-    'node_modules',
     manifest.name,
-    'package.json',
+    v2RegistrationSource('testmu', {
+      extra: `connection: { capabilities: ${JSON.stringify(testmu().connection?.capabilities)}, resolve() {}, verify() {} },`,
+      credentials: '{ variables: ["LT_USERNAME", "LT_ACCESS_KEY"] }',
+    }),
   );
-  const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
-  fs.writeFileSync(manifestPath, JSON.stringify(declared));
   vi.stubEnv('AGENT_DEVICE_HOME', home);
   mockedVerifyWebDriverConnection.mockImplementation(async (options) => {
     assert.equal(options.provider, 'testmu');

@@ -4,7 +4,12 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { pluginHome, selectPlugin, beginStdoutCapture } from '@agent-device/test-kit';
+import {
+  pluginHome,
+  selectV2Plugin,
+  v2RegistrationSource,
+  beginStdoutCapture,
+} from '@agent-device/test-kit';
 import { parseArgs, parseRawArgs, usageForCommand } from '../../parser/args.ts';
 
 vi.mock('../../../provider-device-runtimes.ts', () => {
@@ -15,17 +20,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('plugins list and remove route through the CLI and emits JSON without daemon access or plugin evaluation', async () => {
+test('plugins list and remove route through the CLI and emits JSON without daemon access or setup', async () => {
   const { home } = pluginHome();
   vi.stubEnv('AGENT_DEVICE_HOME', home);
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', path.join(home, 'state'));
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
-  const marker = path.join(home, 'evaluated');
-  selectPlugin(
+  const marker = path.join(home, 'setup');
+  selectV2Plugin(
     home,
     'example',
-    'example',
-    `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'yes');`,
+    `import fs from 'node:fs';
+     export default () => ({
+       apiVersion: 2, provider: 'example', credentials: { variables: [] },
+       setup: async () => { fs.writeFileSync(${JSON.stringify(marker)}, 'yes'); throw new Error('must not set up'); },
+     });`,
   );
   const sendToDaemon = vi.fn(async () => {
     throw new Error('unexpected daemon access');
@@ -40,7 +48,7 @@ test('plugins list and remove route through the CLI and emits JSON without daemo
     const result = JSON.parse(stdout);
     assert.equal(result.success, true);
     assert.deepEqual(result.data.plugins, [
-      { name: 'example', version: '1.2.3', provider: 'example', compatible: true },
+      { name: 'example', version: '2.0.0', provider: 'example', compatible: true },
     ]);
     assert.equal(sendToDaemon.mock.calls.length, 0);
     await runCli(['plugins', 'remove', 'example', '--json'], { sendToDaemon });
@@ -87,7 +95,7 @@ test('plugins list reports the running daemon inventory next to the store select
       plugins: [failed],
     }),
   );
-  selectPlugin(home, 'example', 'example', 'export default () => {};');
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const stdoutCapture = beginStdoutCapture();
   try {
     await runCli(['plugins', 'list', '--json'], {
@@ -161,7 +169,7 @@ test('plugins list names a plugin the running daemon did not register', async ()
       ],
     }),
   );
-  selectPlugin(home, 'example', 'example', 'export default () => {};');
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const text = await listPluginsAsText(home, stateDir);
   assert.match(text, /example@.* \(example\)/);
   assert.match(text, /The running daemon did not register example: bad plugin/);

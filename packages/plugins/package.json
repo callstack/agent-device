@@ -30,10 +30,6 @@
       "types": "./src/load.ts",
       "default": "./src/load.ts"
     },
-    "./manifest": {
-      "types": "./src/manifest.ts",
-      "default": "./src/manifest.ts"
-    },
     "./registry": {
       "types": "./src/registry.ts",
       "default": "./src/registry.ts"
