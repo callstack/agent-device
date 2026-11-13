@@ -310,7 +310,7 @@ test('native ref fast path proceeds untouched when the session has no snapshot',
         return { ref: target.ref.replace(/^@/, '') };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
   });
@@ -334,7 +334,7 @@ test('runtime interactions pass runtime signal to backend primitives', async () 
         signal = context.signal;
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     policy: localCommandPolicy(),
     signal: controller.signal,
   });
@@ -785,7 +785,7 @@ test('coordinate tap with no session snapshot has no warning', async () => {
       platform: 'ios',
       tap: async () => ({ ok: true }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
   });

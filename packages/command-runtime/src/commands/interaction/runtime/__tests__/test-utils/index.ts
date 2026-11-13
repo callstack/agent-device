@@ -390,7 +390,7 @@ export function createInteractionDevice(
         ? async (...args) => (await overrides.confirmOffscreenTargetVisible?.(...args)) ?? null
         : undefined,
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       { name: 'default', snapshot, metadata: overrides.sessionMetadata },
     ]),
@@ -636,7 +636,7 @@ export function createSelectorDevice(
         options.captureSnapshot ? await options.captureSnapshot() : { snapshot },
       readText: async () => ({ text: options.readText ?? '' }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
     clock: options.clock ?? {

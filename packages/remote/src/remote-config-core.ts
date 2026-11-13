@@ -5,18 +5,12 @@ import {
   getRemoteConfigEnvNames,
   getRemoteConfigFieldSpec,
   type RemoteConfigProfile,
+  type RemoteConfigProfileOptions,
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { parseSourceValue, type EnvMap } from '@agent-device/kernel/source-value';
-
-/** The remote-config location and the host environment it resolves against. */
-export type HostRemoteConfigProfileOptions = {
-  configPath: string;
-  cwd: string;
-  env: EnvMap;
-};
 
 // Deliberately narrower than `resolveRemoteConfigProfile`: this reads only
 // what the config *file itself* declares, with no ambient environment
@@ -25,7 +19,7 @@ export type HostRemoteConfigProfileOptions = {
 // somewhere") must use this, not the env-merged resolver, or provenance is
 // lost — an env var is global and cannot say which endpoint it belongs to.
 export function readRemoteConfigFile(
-  options: HostRemoteConfigProfileOptions,
+  options: RemoteConfigProfileOptions,
 ): ResolvedRemoteConfigProfile {
   const { env } = options;
   const resolvedPath = resolveRemoteConfigPath(options);
@@ -117,13 +111,13 @@ function mergeRemoteConfigProfile(
   return merged;
 }
 
-export function resolveRemoteConfigPath(options: HostRemoteConfigProfileOptions): string {
+export function resolveRemoteConfigPath(options: RemoteConfigProfileOptions): string {
   const { env } = options;
   return resolveUserPath(options.configPath, { cwd: options.cwd, env });
 }
 
 export function resolveRemoteConfigProfile(
-  options: HostRemoteConfigProfileOptions,
+  options: RemoteConfigProfileOptions,
 ): ResolvedRemoteConfigProfile {
   const loaded = readRemoteConfigFile(options);
   return {

@@ -17,9 +17,6 @@ const PROCESS_ENTRIES = new Set([
   'packages/react-native/src/companion/client-companion-tunnel-worker.ts',
   'packages/maestro/src/daemon-port/run-script-child.ts',
   'packages/maestro/src/daemon-port/run-script-http-child.ts',
-  // Released SDK defaults; #3759 removes these captures in 0.22.
-  'packages/host-kit/src/local-artifact-adapter.ts',
-  'src/sdk/host.ts',
   'src/mcp/command-tools.ts',
   'packages/daemon-client/src/index.ts',
   'packages/daemon-client/src/daemon-client-ensure.ts',

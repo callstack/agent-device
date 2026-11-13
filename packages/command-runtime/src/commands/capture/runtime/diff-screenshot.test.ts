@@ -36,7 +36,7 @@ test('runtime diff screenshot captures live current image and cleans temporary c
         fs.writeFileSync(outPath, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
         return { path: outPath };
       }),
-      artifacts: createLocalArtifactAdapter(),
+      artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
       sessions,
       policy: localCommandPolicy(),
     });
@@ -74,7 +74,7 @@ test('runtime diff screenshot compares supplied current image without backend ca
       backend: createScreenshotBackend(() => {
         throw new Error('capture should not be called');
       }),
-      artifacts: createLocalArtifactAdapter(),
+      artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
       sessions,
       policy: localCommandPolicy(),
     });
@@ -97,7 +97,7 @@ test('runtime diff screenshot rejects overlay refs with supplied current image',
     backend: createScreenshotBackend(() => {
       throw new Error('capture should not be called');
     }),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });
@@ -125,7 +125,7 @@ test('runtime diff screenshot enforces the normalized comparison pixel budget', 
       backend: createScreenshotBackend(() => {
         throw new Error('capture should not be called');
       }),
-      artifacts: createLocalArtifactAdapter(),
+      artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
       sessions,
       policy: localCommandPolicy({ maxImagePixels: 50 }),
     });
@@ -172,7 +172,7 @@ test('runtime diff screenshot keeps the screen mask on current and overlay captu
             : {}),
         };
       }),
-      artifacts: createLocalArtifactAdapter(),
+      artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
       sessions,
       policy: localCommandPolicy(),
     });
@@ -238,7 +238,7 @@ test('runtime diff refuses a screen mask for saved images before reading or capt
     backend: createScreenshotBackend(() => {
       throw new Error('must not capture');
     }),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions,
     policy: localCommandPolicy(),
   });
