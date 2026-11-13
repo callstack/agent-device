@@ -55,9 +55,9 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
+import { remoteSessionRequiredError } from '@agent-device/contracts/lease-scope';
 import {
   claimRemoteConnectionDefaults,
-  remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';

@@ -7,7 +7,7 @@ import {
 import { retiredScreenshotMaxSizeFlagError } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
