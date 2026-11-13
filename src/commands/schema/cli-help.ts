@@ -114,7 +114,7 @@ Session ordering:
 
 Read-only and waits:
 ${WAIT_FAILURE_CONTRACT}
-  snapshot/get/is/find answer read-only questions; snapshot -i is for refs. --settle confirms local UI quieted; delayed results use wait text "Expected result" or wait <selector> instead of polling; strict disappearance uses wait absent <selector>.
+  snapshot/get/is answer read-only questions; snapshot -i is for refs. --settle confirms local UI quieted; delayed results use wait text "Expected result" or wait <selector> instead of polling; strict disappearance uses wait absent <selector>.
   wait stable [quietMs] [timeoutMs] (defaults 500/10000) is the fallback for open/relaunch/navigation, or an intentionally-unsettled mutation -- not after a --settle whose diff already shows the change. Ambiguous find: add --first or --last.
 
 Navigation:
@@ -122,12 +122,12 @@ Navigation:
 
 Validation and evidence:
   Nearby mutation diff: diff snapshot -i; with no prior snapshot it initializes the baseline (zero changes) instead of failing.
-  Named expectations need the exact text/selector via wait/is/get/find -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
+  Named expectations need the exact text/selector via wait/is/get -- a bare screenshot/snapshot is not verification. Before declaring a task done, confirm the requested end state is actually visible on the current screen, scrolling it into view if needed; get text alone, or stopping one screen early, is not enough.
   When an action only reveals or reaches a target, verify the exact target named, not just the action. Prefer testIDs/ids/selectors over visible text. Icon/tappable proof: screenshot --overlay-refs; if snapshot is sparse/AX-unavailable, use plain screenshot and coordinates, then retry snapshot -i on another screen.
   iOS merged: child ref => press it; else press parent @ref --settle. Names are not selectors.
   Perf/memory/log/network/trace/crash: help debugging. Recording, save-script, batch, replay repair: help scripting.
 
-React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
+React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, wait text "Home"; open --relaunch for native reset.
 
 Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground except native macOS app opens (background); --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners/daemons self-idle after 5 minutes; stale leases self-reclaim. open device claims reclaim other worktrees' warm runners; "already owned by another agent-device daemon" = owner outside claim arbitration. Env vars: help physical-device.
 

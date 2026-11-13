@@ -3,7 +3,12 @@
 // `./help-conformance-plan-validator.mjs`; keep it in step with the exports there.
 export type PlanCommandIssue = { kind: string; error: string };
 
-export type PlanAgentCommand = { command: string; positionals: string[] };
+export type PlanAgentCommand = {
+  command: string;
+  positionals: string[];
+  /** A `find` command's action and query, as `parseFindArgs` reads them. */
+  find?: { action: string; query: string };
+};
 
 export type PlanCommandValidation = {
   command: string;

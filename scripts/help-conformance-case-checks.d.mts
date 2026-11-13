@@ -4,9 +4,17 @@ import type { PlanCommandValidation } from './help-conformance-plan-validator.mj
 
 export type CasePatternCheck = { id: string; pattern: RegExp };
 
+/** The plan a check reads: its canonical text and each command's tokens and parse. */
+export type CaseCheckContext = {
+  joined: string;
+  commandValidation: readonly PlanCommandValidation[];
+};
+
+export type CaseTestCheck = { id: string; test: (context: CaseCheckContext) => boolean };
+
 export type CaseChecks = {
   expectations?: readonly string[];
-  matchers?: readonly CasePatternCheck[];
+  matchers?: readonly (CasePatternCheck | CaseTestCheck)[];
   forbidden?: readonly CasePatternCheck[];
 };
 

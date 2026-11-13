@@ -1,4 +1,8 @@
-import { opensAndCloses, usesValidationPrep } from './help-conformance-expectations.mjs';
+import {
+  hasFindExists,
+  opensAndCloses,
+  usesValidationPrep,
+} from './help-conformance-expectations.mjs';
 
 const EXPECTATION_SCORERS = {
   validPlanCommands: ({ commands, commandValidation }) =>
@@ -17,7 +21,8 @@ const EXPECTATION_SCORERS = {
   // that can tell whether the model actually chained.
   usesConfidentChaining: ({ commands }) => commands.some((command) => /&&/.test(command)),
   noWaitStable: ({ joined }) => !joined.includes('wait stable'),
-  verifiesNamedExpectation: ({ joined }) => /\b(wait|is|get|find)\b/.test(joined),
+  verifiesNamedExpectation: ({ joined, commandValidation }) =>
+    /\b(?:wait|is|get)\b/.test(joined) || hasFindExists(commandValidation),
   usesDogfoodEvidence: ({ joined }) =>
     /(?:\bscreenshot\b|\brecord\b|\blogs\b|\bnetwork\b|\bperf\b|\btrace\b|dogfood-output)/i.test(
       joined,
@@ -59,9 +64,9 @@ function resolveChecks(testCase) {
     id,
     test: (context) => scoreExpectation(id, context),
   }));
-  const matched = (testCase.matchers ?? []).map(({ id, pattern }) => ({
+  const matched = (testCase.matchers ?? []).map(({ id, pattern, test }) => ({
     id,
-    test: (context) => pattern.test(context.joined),
+    test: test ?? ((context) => pattern.test(context.joined)),
   }));
   const forbidden = (testCase.forbidden ?? []).map(({ id, pattern }) => ({
     id,
