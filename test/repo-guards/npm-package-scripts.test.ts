@@ -102,7 +102,7 @@ test('publishing cannot skip the package gate', () => {
     'node --experimental-strip-types scripts/check-package.ts',
     'node --experimental-strip-types scripts/node-test-tmpdir.ts --test packages/maestro/test/package-smoke.mjs',
   ]);
-  assert.match(packagedCliWorkflow, /run: node --test packages\/maestro\/test\/package-smoke\.mjs/);
+  assert.match(packagedCliWorkflow, /with: \{ gate: package \}/);
   assert.match(
     packagedCliWorkflow,
     /run: node --experimental-strip-types scripts\/check-package\.ts/,
