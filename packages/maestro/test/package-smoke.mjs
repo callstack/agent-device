@@ -1,5 +1,7 @@
+import http from 'node:http';
+import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,7 +25,7 @@ function files(directory) {
   });
 }
 
-test('packed core excludes the engine and the managed plugin works without workspace dependencies', () => {
+test('packed core excludes the engine and the managed plugin works without workspace dependencies', async () => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-package-'));
   try {
     const coreTarball = path.join(
@@ -106,17 +108,7 @@ test('packed core excludes the engine and the managed plugin works without works
     );
     assert.equal(exported.success, true);
     assert.match(exported.data.yaml, /com.example.app/);
-    const childScript = path.join(scratch, 'output.js');
-    fs.writeFileSync(childScript, 'output.result = VALUE;');
-    const child = execFileSync(process.execPath, [path.join(plugin, 'dist/run-script-child.mjs')], {
-      input: JSON.stringify({
-        scriptPath: childScript,
-        env: { VALUE: 'packed-helper' },
-        publicNetworkOnly: false,
-      }),
-      encoding: 'utf8',
-    });
-    assert.deepEqual(JSON.parse(child), { outputEnv: { 'output.result': 'packed-helper' } });
+    await assertPackagedRunScriptChildren(plugin, scratch);
     const entry = manifest.exports['./agent-device'].import;
     const broken = path.join(plugin, entry);
     fs.renameSync(broken, `${broken}.missing`);
@@ -141,3 +133,35 @@ test('packed core excludes the engine and the managed plugin works without works
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+async function assertPackagedRunScriptChildren(plugin, scratch) {
+  const alias = path.join(scratch, 'plugin-alias');
+  fs.symlinkSync(plugin, alias, 'dir');
+  const server = http.createServer((_request, response) =>
+    response.end('x'.repeat(2 * 1024 * 1024)),
+  );
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const scriptPath = path.join(scratch, 'http.js');
+    fs.writeFileSync(scriptPath, 'output.size = http.post(SERVER_URL).body.length');
+    for (const directory of [plugin, alias]) {
+      const result = promisify(execFile)(
+        process.execPath,
+        [path.join(directory, 'dist/run-script-child.mjs')],
+        { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
+      );
+      result.child.stdin.end(
+        JSON.stringify({
+          scriptPath,
+          env: { SERVER_URL: `http://127.0.0.1:${server.address().port}/` },
+          publicNetworkOnly: false,
+        }),
+      );
+      assert.deepEqual(JSON.parse((await result).stdout), {
+        outputEnv: { 'output.size': String(2 * 1024 * 1024) },
+      });
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
