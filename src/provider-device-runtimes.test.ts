@@ -42,7 +42,11 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
 
   try {
     firstDaemon = await startPublicDaemonRuntime({ stateDir, env });
-    const client = createAgentDeviceClient({ stateDir, daemonTransport: 'http' });
+    const client = createAgentDeviceClient({
+      stateDir,
+      daemonTransport: 'http',
+      session: 'agent-a',
+    });
     const lease = await client.leases.allocate({
       tenant: 'team-a',
       runId: 'run-a',

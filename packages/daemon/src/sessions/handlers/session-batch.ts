@@ -17,6 +17,7 @@ export async function runBatchCommands(
         webSession: req.internal?.webSession,
         ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
         ...(req.internal?.scriptDelivery ? { scriptDelivery: req.internal.scriptDelivery } : {}),
+        ...(req.internal?.sessionOmitted ? { sessionOmitted: true } : {}),
         executionPlan: { remainingSteps: context.remainingSteps },
       },
     });
