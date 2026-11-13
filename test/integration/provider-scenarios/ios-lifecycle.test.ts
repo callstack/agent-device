@@ -412,7 +412,10 @@ test('Provider-backed integration iOS physical reinstall uses scripted devicectl
         udid: PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
       });
       assert.notEqual(corrupt.statusCode, 200, JSON.stringify(corrupt.json));
-      assert.ok(corrupt.json?.error, JSON.stringify(corrupt.json));
+      assert.match(
+        corrupt.json?.error?.message ?? '',
+        /End of central directory record signature not found/,
+      );
       const laterCalls = appleTool.calls.slice(callsBeforeCorrupt);
       assert.equal(
         laterCalls.some((call) => call.includes('uninstall') || call.includes('install')),

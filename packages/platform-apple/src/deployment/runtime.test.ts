@@ -610,14 +610,14 @@ test('reinstall releases the prepared replacement when uninstall fails', async (
 });
 
 test('clears a concurrently repopulated fuzzy resolution after a preparation-failed Apple reinstall', async () => {
-  const cachedResolutions = new Map([['Maps', 'com.example.stale-before-uninstall']]);
+  const cachedResolutions = new Map([['Maps', 'com.example.stale-before-resolution']]);
   let nextResolution = 'com.example.current';
   const resolveFuzzyTarget = vi.fn(async (target: string) => {
     const resolved = cachedResolutions.get(target) ?? nextResolution;
     cachedResolutions.set(target, resolved);
     return resolved;
   });
-  const invalidateDuringUninstall = async <Result>(operation: () => Promise<Result>) => {
+  const invalidateDuringResolution = async <Result>(operation: () => Promise<Result>) => {
     cachedResolutions.clear();
     try {
       return await operation();
@@ -627,7 +627,7 @@ test('clears a concurrently repopulated fuzzy resolution after a preparation-fai
   };
   const resolveAppBundleId = vi.fn(
     async (_device: DeviceInfo, app: string) =>
-      await invalidateDuringUninstall(async () => {
+      await invalidateDuringResolution(async () => {
         const bundleId = await resolveFuzzyTarget(app);
         expect(bundleId).toBe('com.example.current');
         return bundleId;
@@ -635,7 +635,7 @@ test('clears a concurrently repopulated fuzzy resolution after a preparation-fai
   );
   const prepareArtifact = vi.fn(async () => {
     const repopulate = Promise.resolve().then(async () => {
-      nextResolution = 'com.example.stale-after-uninstall';
+      nextResolution = 'com.example.stale-during-preparation';
       await resolveFuzzyTarget('Maps');
     });
     await repopulate;
@@ -670,9 +670,6 @@ test('clears a concurrently repopulated fuzzy resolution after a preparation-fai
     }),
   ).rejects.toThrow('replacement artifact is invalid');
 
-  // The low-level uninstall scope clears its own cache, but a resolution racing artifact
-  // preparation can repopulate it. The whole reinstall scope must clear that stale value even
-  // when preparation fails before any install attempt.
   expect(cachedResolutions).toEqual(new Map());
   expect(withInvalidatedAppResolutionCache).toHaveBeenCalledOnce();
   expect(resolveFuzzyTarget).toHaveBeenCalledTimes(2);
