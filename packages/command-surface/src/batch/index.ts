@@ -6,6 +6,9 @@ import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/typ
 import { commonToClientOptions } from '../common-input-fields.ts';
 import { createBatchCommandMetadata, type BatchCommandStep, type BatchInput } from './metadata.ts';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
+import { COMPOSITE_TIMEOUT_POLICIES } from '@agent-device/command-registry/timeout-policy';
+
+const BATCH_DEADLINE_SECONDS = (COMPOSITE_TIMEOUT_POLICIES.batch.daemonDeadlineMs ?? 0) / 1000;
 
 const batchCommandMetadata = createBatchCommandMetadata();
 
@@ -50,7 +53,7 @@ const BATCH_MCP_DETAIL = [
   'Use it for a known multi-step walk, such as press A, press B, back, instead of one tool call per step.',
   "steps is an array of {command, input} objects; input takes the same arguments as that command's own tool (ref, selector, or x and y for targets; settle: true for the settled diff).",
   'Steps run serially in one session; onError: "stop" halts at the first failing step, and the result reports the steps that ran.',
-  'The whole batch has a 60-second work budget; split longer walks.',
+  `The daemon stops the whole batch after ${BATCH_DEADLINE_SECONDS} seconds; split longer walks.`,
   `Example steps, in order (refs such as @e12 come from the last snapshot or settled diff): ${BATCH_STEP_EXAMPLES.map((step) => JSON.stringify(step)).join(', ')}.`,
 ].join(' ');
 
