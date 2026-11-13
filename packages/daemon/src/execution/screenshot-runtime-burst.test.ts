@@ -4,10 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
-import {
-  ANDROID_EMULATOR,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
+import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
