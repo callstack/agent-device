@@ -440,7 +440,10 @@ test('simulator push failure surfaces the simctl stderr excerpt', async () => {
 test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint', async () => {
   const resolveAppBundleId = vi.fn(async () => 'com.example.app');
   const executor = {
-    prepareArtifact: vi.fn(),
+    prepareArtifact: vi.fn(async () => ({
+      installablePath: '/tmp/replacement.app',
+      cleanup: async () => {},
+    })),
     resolveAppBundleId,
     withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
   } as AppleAppDeploymentExecutor;
@@ -525,40 +528,88 @@ test.each([
   },
 );
 
-test('preserves Apple reinstall partial-failure ordering', async () => {
-  const order: string[] = [];
-  const resolveAppBundleId = vi.fn(async () => {
-    order.push('uninstall');
-    return 'com.example.replaced';
+function reinstallHarness(options: {
+  prepare?: (signal: AbortSignal) => Promise<void>;
+  uninstallExitCode?: number;
+  signal?: AbortSignal;
+}) {
+  const events: string[] = [];
+  const signal = options.signal ?? new AbortController().signal;
+  const executor: AppleAppDeploymentExecutor = {
+    withInvalidatedAppResolutionCache: async (_device, operation) => await operation(),
+    resolveAppBundleId: async () => 'com.example.replaced',
+    prepareArtifact: (async (
+      _input: unknown,
+      { signal: prepareSignal }: { signal: AbortSignal },
+    ) => {
+      events.push('prepare');
+      await options.prepare?.(prepareSignal);
+      return {
+        installablePath: '/tmp/App.app',
+        cleanup: async () => {
+          events.push('cleanup');
+        },
+      };
+    }) as AppleAppDeploymentExecutor['prepareArtifact'],
+  };
+  const run = xcrunLikeRun((request) => {
+    if (request.args[0] === 'uninstall') {
+      events.push('uninstall');
+      return { stdout: '', stderr: 'boom', exitCode: options.uninstallExitCode ?? 0 };
+    }
+    if (request.args[0] === 'install') events.push('install');
+    return bootedSimulatorListResult(request);
   });
-  const prepareArtifact = vi.fn(async () => {
-    order.push('prepare');
-    throw new Error('replacement artifact is invalid');
-  });
-  const executor = {
-    prepareArtifact,
-    resolveAppBundleId,
-    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
-  } as AppleAppDeploymentExecutor;
-  const host = deploymentHost(executor);
   const operations = createAppleAppDeploymentOperations({
-    host,
+    host: deploymentHost(executor, run),
     device: appleDevice(),
-    signal: new AbortController().signal,
+    signal,
   });
-
-  await expect(
-    operations.deployApp?.({
+  const reinstall = () =>
+    operations.deployApp!({
       app: 'com.example.replaced',
       appPath: '/tmp/replacement.app',
       replaceExisting: true,
-    }),
-  ).rejects.toThrow('replacement artifact is invalid');
+    });
+  return { events, reinstall };
+}
 
-  expect(order).toEqual(['uninstall', 'prepare']);
+test('reinstall keeps the installed app when the replacement cannot be prepared', async () => {
+  const { events, reinstall } = reinstallHarness({
+    prepare: async () => {
+      throw new Error('replacement artifact is invalid');
+    },
+  });
+
+  await expect(reinstall()).rejects.toThrow('replacement artifact is invalid');
+
+  expect(events).toEqual(['prepare']);
 });
 
-test('clears a concurrently repopulated fuzzy resolution after a partial-failed Apple reinstall', async () => {
+test('reinstall keeps the installed app when cancelled during preparation', async () => {
+  const controller = new AbortController();
+  const { events, reinstall } = reinstallHarness({
+    signal: controller.signal,
+    prepare: async (signal) => {
+      controller.abort(new Error('cancelled'));
+      signal.throwIfAborted();
+    },
+  });
+
+  await expect(reinstall()).rejects.toThrow('cancelled');
+
+  expect(events).toEqual(['prepare']);
+});
+
+test('reinstall releases the prepared replacement when uninstall fails', async () => {
+  const { events, reinstall } = reinstallHarness({ uninstallExitCode: 1 });
+
+  await expect(reinstall()).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+
+  expect(events).toEqual(['prepare', 'uninstall', 'cleanup']);
+});
+
+test('clears a concurrently repopulated fuzzy resolution after a preparation-failed Apple reinstall', async () => {
   const cachedResolutions = new Map([['Maps', 'com.example.stale-before-uninstall']]);
   let nextResolution = 'com.example.current';
   const resolveFuzzyTarget = vi.fn(async (target: string) => {
@@ -686,7 +737,7 @@ test.each([
 );
 
 test.each([false, true])(
-  'reinstall clears the old app before preparing and installing with a hosted installer: %s',
+  'reinstall prepares the replacement before clearing the old app and installing with a hosted installer: %s',
   async (hosted) => {
     const events: string[] = [];
     const artifact = {
@@ -741,8 +792,8 @@ test.each([false, true])(
     ).toEqual({ bundleId: 'com.example.app', launchTarget: 'com.example.app' });
     expect(events).toEqual([
       'invalidate-before',
-      'uninstall',
       'materialize',
+      'uninstall',
       hosted ? 'hosted-install' : 'native-install',
       'cleanup',
       'invalidate-after',

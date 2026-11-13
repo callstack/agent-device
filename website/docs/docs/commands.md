@@ -685,6 +685,7 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 ```
 
 - `reinstall <app> <path>` uninstalls and installs in one command, for login/logout resets and deterministic test setup. Device coverage, formats, and remote upload match `install`.
+- On iOS, `reinstall` reads the new build before it removes the installed app, so a build that is invalid or unreadable leaves the app and its data in place. If the install itself fails after the uninstall, the app stays removed.
 
 ## App uninstall
 

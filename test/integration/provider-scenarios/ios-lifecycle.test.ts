@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { assertFlatToolCall, assertRpcOk } from './assertions.ts';
@@ -402,6 +403,22 @@ test('Provider-backed integration iOS physical reinstall uses scripted devicectl
         PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
         appPath,
       ]);
+
+      const callsBeforeCorrupt = appleTool.calls.length;
+      const corruptIpa = path.join(path.dirname(appPath), 'corrupt.ipa');
+      fs.writeFileSync(corruptIpa, 'not a zip archive');
+      const corrupt = await daemon.callCommand('reinstall', ['com.example.demo', corruptIpa], {
+        platform: 'ios',
+        udid: PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
+      });
+      assert.notEqual(corrupt.statusCode, 200, JSON.stringify(corrupt.json));
+      assert.ok(corrupt.json?.error, JSON.stringify(corrupt.json));
+      const laterCalls = appleTool.calls.slice(callsBeforeCorrupt);
+      assert.equal(
+        laterCalls.some((call) => call.includes('uninstall') || call.includes('install')),
+        false,
+        `Corrupt replacement must not reach uninstall or install: ${JSON.stringify(laterCalls)}`,
+      );
     },
   );
 });
