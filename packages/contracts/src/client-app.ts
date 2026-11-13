@@ -92,9 +92,10 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     /**
      * Include an initial interactive snapshot in a fresh open response. On iOS,
      * a launched app's snapshot polls for its first screen for up to 10s (a
-     * capture started before then still completes and is judged); when it is
-     * still loading, the snapshot carries postGestureOutcome.kind "loading" and a
-     * warning. With no app argument, discover the sole running
+     * capture started before then still completes and is judged); if it runs out,
+     * the snapshot carries postGestureOutcome.kind "loading" (no first screen yet)
+     * or "unsettled" (a first screen that kept changing) and a warning. With no
+     * app argument, discover the sole running
      * app on the sole booted iOS simulator; ambiguous environments fail closed.
      */
     foreground?: boolean;

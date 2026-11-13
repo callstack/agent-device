@@ -413,7 +413,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'open: keep normal app/device selection and return an initial snapshot of the first screen; without an app, resolve the sole running app on the sole booted iOS simulator',
     inputDescription:
-      'Include an initial interactive snapshot in a fresh open response. On iOS, a launched app\'s snapshot polls for its first screen for up to 10s (a capture started before then still completes and is judged); when it is still loading, the snapshot carries postGestureOutcome.kind "loading" and a warning. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
+      'Include an initial interactive snapshot in a fresh open response. On iOS, a launched app\'s snapshot polls for its first screen for up to 10s (a capture started before then still completes and is judged); if it runs out, the snapshot carries postGestureOutcome.kind "loading" (no first screen yet) or "unsettled" (a first screen that kept changing) and a warning. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
     projectConfig: false,
     recorded: false,
   },
