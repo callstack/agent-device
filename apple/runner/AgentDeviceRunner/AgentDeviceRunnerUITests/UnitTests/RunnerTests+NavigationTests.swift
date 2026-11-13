@@ -69,6 +69,7 @@ extension RunnerTests {
     guard case .performed = try performInAppBack(app: app) else {
       return XCTFail("a visible navigation bar back button must be pressed")
     }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true, "the button, not the swipe, popped")
     let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
@@ -86,6 +87,46 @@ extension RunnerTests {
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
     XCTAssertTrue(app.navigationBars["Detail"].exists)
+  }
+
+  /// An XCTest issue while the back button is looked up, such as a button gone mid-transition, means
+  /// no button: back answers from the swipe path. An issue that escaped the read would fail this
+  /// test as it fails the command with a recorded failure.
+  @MainActor
+  func testInAppBackWithAnIssueInTheButtonLookupAnswersFromTheSwipe() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    navigationBarBackReadIssueForTesting = .lookup
+    defer { navigationBarBackReadIssueForTesting = nil }
+
+    let response = try execute(command: try runnerCommandFixture(
+      #"{"command":"backInApp","commandId":"back-lookup-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
+    ))
+
+    XCTAssertTrue(response.ok, "the swipe answered: \(String(describing: response.error))")
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "unreadable")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+  }
+
+  /// An XCTest issue in every read after a delivered tap proves nothing: back answers unverified and
+  /// never swipes after the tap. An escaped issue would fail this test.
+  @MainActor
+  func testInAppBackWithAnIssueInTheConfirmationAnswersUnverified() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    navigationBarBackReadIssueForTesting = .confirmation
+    defer { navigationBarBackReadIssueForTesting = nil }
+
+    let response = try execute(command: try runnerCommandFixture(
+      #"{"command":"backInApp","commandId":"back-confirmation-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
+    ))
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    navigationBarBackReadIssueForTesting = nil
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed, "the tap itself was delivered")
   }
 
   /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,

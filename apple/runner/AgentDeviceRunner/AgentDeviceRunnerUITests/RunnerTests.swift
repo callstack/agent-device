@@ -218,6 +218,16 @@ final class RunnerTests: XCTestCase {
   /// Records an XCTest issue during the lit-panel window walk, as a window that vanishes mid-walk does.
   var litPanelWindowWalkIssueForTesting = false
 
+#if os(iOS)
+  /// Records an XCTest issue during every navigation bar read of this phase of iOS `back`, as a back
+  /// button that vanishes mid-transition does.
+  var navigationBarBackReadIssueForTesting: NavigationBarBackReadPhase?
+
+  /// What the last iOS `back` saw of the navigation bar back button, so a test can tell the button
+  /// path from the swipe when both navigate.
+  var lastNavigationBarBackTraceForTesting: NavigationBarBackTrace?
+#endif
+
   static let injectedTapFailureFlagPathForTesting =
     "/tmp/agent-device-inject-tap-recorded-failure-for-testing"
 

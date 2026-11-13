@@ -186,11 +186,16 @@ extension RunnerTests {
   ) throws -> InAppBackOutcome? {
     var trace = NavigationBarBackTrace()
     // One line on every exit, a thrown tap included.
-    defer { NSLog("AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON %@", trace.logLine) }
+    defer {
+      NSLog("AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON %@", trace.logLine)
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      lastNavigationBarBackTraceForTesting = trace
+#endif
+    }
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
     let frames = navigationBarBackButtonFrames(app: app)
-    let before = frames?.count == 1 ? readNavigationBarBackState(app: app) : nil
+    let before = frames?.count == 1 ? readNavigationBarBackState(app: app, phase: .lookup) : nil
     trace.lookupMs = currentUptimeMs() - started
     guard let frames, frames.count == 1 else {
       trace.found = frames == nil ? "unreadable" : frames!.isEmpty ? "no" : "ambiguous"
@@ -267,7 +272,7 @@ extension RunnerTests {
   private func navigationBarBackStateChanged(app: XCUIApplication, from before: NavigationBarBackState) -> Bool {
     let started = currentUptimeMs()
     repeat {
-      if let after = readNavigationBarBackState(app: app), after != before { return true }
+      if let after = readNavigationBarBackState(app: app, phase: .confirmation), after != before { return true }
       if currentUptimeMs() - started >= Self.navigationBarBackConfirmBudgetMs { return false }
       sleepFor(Self.navigationBarBackConfirmInterval)
     } while true
@@ -279,34 +284,60 @@ extension RunnerTests {
     return !isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
   }
 
-  /// The frames of the hittable system back buttons; nil when the tree did not answer: a root walk
-  /// that failed, or a query XCTest rejected.
+  /// Which side of the tap a read of the bar is on: a held issue in the lookup means no button, so
+  /// back swipes; one in the confirmation proves nothing, so it never confirms.
+  enum NavigationBarBackReadPhase {
+    case lookup
+    case confirmation
+  }
+
+  /// Runs one read of the bar with its XCTest issues held. A button gone mid-transition or a hung
+  /// query records an issue, and an unheld issue would turn the command into a recorded failure.
+  /// Nil when the read recorded an issue or raised an exception.
+  @MainActor
+  private func heldNavigationBarRead<T>(_ phase: NavigationBarBackReadPhase, _ read: () -> T?) -> T? {
+    var value: T?
+    let held = holdingRecordedIssues {
+      value = read()
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      if navigationBarBackReadIssueForTesting == phase {
+        record(XCTIssue(type: .assertionFailure, compactDescription: "Back button vanished during the navigation bar read"))
+      }
+#endif
+    }
+    guard held.issues.isEmpty, held.exceptionMessage == nil else { return nil }
+    return value
+  }
+
+  /// The frames of the hittable system back buttons; nil when the tree did not answer.
   @MainActor
   private func navigationBarBackButtonFrames(app: XCUIApplication) -> [CGRect]? {
-    let rejectedBefore = rejectedAxSnapshotQueryCount()
-    guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
-    let frames = bars
-      .flatMap { $0.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex }
-      .filter { $0.isHittable }
-      .map(\.frame)
-    guard rejectedAxSnapshotQueryCount() == rejectedBefore, frames.allSatisfy(SnapshotGeometry.isPositiveFinite)
-    else { return nil }
-    return frames
+    heldNavigationBarRead(.lookup) {
+      guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
+      let frames = bars
+        .flatMap { $0.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex }
+        .filter { $0.isHittable }
+        .map(\.frame)
+      return frames.allSatisfy(SnapshotGeometry.isPositiveFinite) ? frames : nil
+    }
   }
 
   /// One XCTest snapshot per bar, so a read after the tap costs a query per bar rather than one per
   /// attribute. Nil when the tree did not answer.
   @MainActor
-  private func readNavigationBarBackState(app: XCUIApplication) -> NavigationBarBackState? {
-    let rejectedBefore = rejectedAxSnapshotQueryCount()
-    guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
-    var entries: [String] = []
-    for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
-      guard let snapshot = try? bar.snapshot() else { return nil }
-      entries.append(Self.navigationBarBackEntry(snapshot))
+  private func readNavigationBarBackState(
+    app: XCUIApplication,
+    phase: NavigationBarBackReadPhase
+  ) -> NavigationBarBackState? {
+    heldNavigationBarRead(phase) {
+      guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
+      var entries: [String] = []
+      for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
+        guard let snapshot = try? bar.snapshot() else { return nil }
+        entries.append(Self.navigationBarBackEntry(snapshot))
+      }
+      return NavigationBarBackState(entries: entries)
     }
-    guard rejectedAxSnapshotQueryCount() == rejectedBefore else { return nil }
-    return NavigationBarBackState(entries: entries)
   }
 
   static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> String {
@@ -319,12 +350,6 @@ extension RunnerTests {
       pending.append(contentsOf: element.children)
     }
     return ([bar.identifier] + buttons).joined(separator: "\u{1E}")
-  }
-
-  private func rejectedAxSnapshotQueryCount() -> Int {
-    suppressedIssueLock.lock()
-    defer { suppressedIssueLock.unlock() }
-    return suppressedAxSnapshotIssueCount
   }
 
   @MainActor
