@@ -798,7 +798,10 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSDate dateWithTimeIntervalSince1970:(floor(NSDate.date.timeIntervalSince1970 / period) + 1) * period];
     [self.animationTimer invalidate];
     self.animationTimer = [[NSTimer alloc] initWithFireDate:firstRepaint interval:period repeats:YES block:^(NSTimer *timer) {
-      long long step = llround(NSDate.date.timeIntervalSince1970 / period) % 8;
+      // NSTimer fires at or after its slot, never before: floor names the slot a late callback
+      // belongs to, so a late callback and the next on-time one never share a shade. The 1e-3
+      // keeps float error just below a slot boundary in that slot.
+      long long step = (long long)floor(NSDate.date.timeIntervalSince1970 / period + 1e-3) % 8;
       view.backgroundColor = [UIColor colorWithWhite:step / 7.0 alpha:1];
     }];
     [NSRunLoop.mainRunLoop addTimer:self.animationTimer forMode:NSRunLoopCommonModes];
