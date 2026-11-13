@@ -1,3 +1,4 @@
+import { installedMaestroCliTestEnv } from '../../../__tests__/cli-test-env.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
@@ -18,7 +19,8 @@ describe('exportReplayScriptToMaestro', () => {
     const open = withApp ? `com.example.app ${link} --relaunch` : link;
     fs.writeFileSync(sourcePath, `open ${open}\n`);
 
-    const result = await runCliCapture(['replay', 'export', sourcePath, '--json']);
+    const env = installedMaestroCliTestEnv();
+    const result = await runCliCapture(['replay', 'export', sourcePath, '--json'], { env });
 
     expect(result.code).toBeNull();
     expect(result.calls).toEqual([]);
@@ -37,7 +39,9 @@ describe('exportReplayScriptToMaestro', () => {
         : [[{ openLink: link }]],
     );
 
-    const written = await runCliCapture(['replay', 'export', sourcePath, '--out', outPath]);
+    const written = await runCliCapture(['replay', 'export', sourcePath, '--out', outPath], {
+      env,
+    });
 
     expect(written).toMatchObject({ code: null, calls: [], stderr: '', stdout: `${outPath}\n` });
     expect(fs.readFileSync(outPath, 'utf8')).toBe(output.data.yaml);

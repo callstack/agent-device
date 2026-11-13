@@ -109,7 +109,13 @@ test('packed core excludes the engine and the managed plugin works without works
     assert.equal(exported.success, true);
     assert.match(exported.data.yaml, /com.example.app/);
     await assertPackagedRunScriptChildren(plugin, scratch);
-    for (const mode of ['diagnostics', 'worker-ownership', 'embedded-worker']) {
+    for (const mode of [
+      'diagnostics',
+      'worker-ownership',
+      'embedded-worker',
+      'run-script-debug',
+      'run-script-env',
+    ]) {
       await t.test(`packed runtime ${mode}`, () => {
         const output = run(
           process.execPath,

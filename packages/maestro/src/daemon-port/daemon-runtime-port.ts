@@ -367,6 +367,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           signal: context.signal,
         },
         options.host,
+        options.runCommand,
       ),
     }),
   };

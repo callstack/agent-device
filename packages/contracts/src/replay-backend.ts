@@ -1,3 +1,4 @@
+import type { HostCommandRequest, HostCommandResult } from './platform-runtime-host.ts';
 import type { DiagnosticEventInput } from './host-diagnostics.ts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -232,6 +233,12 @@ export type ReplayBackendDeviceBinding = Readonly<{
  */
 export type ReplayBackendHost = Readonly<{
   emitDiagnostic(event: DiagnosticEventInput): void;
+  /** Executes a backend child with the host's subprocess lifecycle and diagnostic scope. */
+  runCommand(
+    request: Omit<HostCommandRequest, 'env' | 'cwd'> &
+      Readonly<{ host: HostEnvironment; stdin?: string; detached?: boolean }>,
+    signal?: AbortSignal,
+  ): Promise<HostCommandResult>;
   registerSensitiveValue(value: string): void;
   /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
   appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
@@ -276,7 +283,6 @@ export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
   create(host: ReplayBackendHost): ReplayBackend<TId> | Promise<ReplayBackend<TId>>;
 }>;
 
-/** Resolves a backend from one managed plugin registry. */
 export type ReplayBackendResolver = (
   id: string,
   host: ReplayBackendHost,

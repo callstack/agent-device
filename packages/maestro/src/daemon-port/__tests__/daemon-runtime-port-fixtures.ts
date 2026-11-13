@@ -1,3 +1,4 @@
+import { runCmd } from '@agent-device/host-kit/command';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import {
   emitDiagnostic,
@@ -28,11 +29,18 @@ export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
 ): Pick<
   CreateDaemonMaestroRuntimeOperationsOptions,
-  'flags' | 'publicNetworkOnly' | 'host' | 'registerSensitiveValue' | 'emitDiagnostic'
+  | 'flags'
+  | 'publicNetworkOnly'
+  | 'host'
+  | 'registerSensitiveValue'
+  | 'emitDiagnostic'
+  | 'runCommand'
 > {
   return {
     host: createTestHostEnvironment(),
     emitDiagnostic,
+    runCommand: ({ executable, args, host, ...options }, signal) =>
+      runCmd(executable, args, { ...options, ...host, signal }),
     registerSensitiveValue: registerDiagnosticSensitiveValue,
     publicNetworkOnly: false,
     ...overrides,

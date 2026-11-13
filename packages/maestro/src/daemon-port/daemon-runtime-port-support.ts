@@ -26,6 +26,7 @@ export type MaestroDaemonOperationInvoke = (
 
 export type CreateDaemonMaestroRuntimeOperationsOptions = {
   readonly host: HostEnvironment;
+  readonly runCommand: ReplayBackendHost['runCommand'];
   readonly emitDiagnostic: ReplayBackendHost['emitDiagnostic'];
   readonly registerSensitiveValue: (value: string) => void;
   readonly invoke: MaestroDaemonOperationInvoke;

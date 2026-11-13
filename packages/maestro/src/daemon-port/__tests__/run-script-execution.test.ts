@@ -1,3 +1,4 @@
+import { makeRuntimeEnvelope } from './daemon-runtime-port-fixtures.ts';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -14,7 +15,7 @@ import {
 } from './loopback.fixtures.ts';
 
 function executeRunScriptFile(request: Parameters<typeof runScriptFile>[0]) {
-  return runScriptFile(request, createTestHostEnvironment());
+  return runScriptFile(request, createTestHostEnvironment(), makeRuntimeEnvelope().runCommand);
 }
 
 async function withLoopbackServer(
@@ -248,6 +249,7 @@ test('script children resolve paths against the supplied embedded host working d
   const output = await runScriptFile(
     { scriptPath: 'setup.js', env: {}, publicNetworkOnly: false },
     createTestHostEnvironment({ cwd: root, env: {} }),
+    makeRuntimeEnvelope().runCommand,
   );
   expect(output).toEqual({ 'output.location': 'embedded-host' });
 });

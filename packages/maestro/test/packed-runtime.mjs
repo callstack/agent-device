@@ -7,9 +7,12 @@ import { syncBuiltinESMExports } from 'node:module';
 import { Session } from 'node:inspector/promises';
 import { PNG } from 'pngjs';
 import { resolveProviderPlugins, startProviderRegistry } from '../../plugins/src/registry.ts';
-import { emitDiagnostic, withDiagnosticsScope } from '../../host-kit/src/diagnostics.ts';
+import { withDiagnosticsScope } from '../../host-kit/src/diagnostics.ts';
+import { createReplayBackendHost } from '../../replay-port/src/daemon-port/replay-backend-host.ts';
 
 const [plugin, scratch, mode, core] = process.argv.slice(2);
+const scriptTrace = mode.startsWith('run-script-');
+const secret = 'packed-script-secret-value';
 const workers = [];
 const loadedPluginModules = [];
 const imports = new Session();
@@ -117,13 +120,7 @@ assert.deepEqual(
 imports.disconnect();
 const traceLogPath = path.join(scratch, `host-${mode}.ndjson`);
 const host = {
-  emitDiagnostic,
-  registerSensitiveValue() {},
-  appendTraceEvent() {},
-  buildBuiltinVars: () => ({}),
-  readScriptSourceFile: (bundle, file) => bundle.files[file],
-  scriptSourceRequiredMessage: 'source required',
-  requestSignal: () => undefined,
+  ...createReplayBackendHost(),
   resolveTargetDevice: () => {
     throw new Error('explicit platform needs no device discovery');
   },
@@ -137,9 +134,13 @@ const entry = path.join(scratch, 'packed-runtime.yaml');
 const png = PNG.sync.write(new PNG({ width: 2, height: 2 }));
 const calls = [];
 async function run(selected) {
-  const source =
-    'appId: com.example.app\n---\n- tapOn:\n    point: "10,20"\n- waitForAnimationToEnd:\n    timeout: 0\n';
-  const result = await withDiagnosticsScope({ debug: true, traceLogPath }, () =>
+  fs.writeFileSync(path.join(scratch, 'setup.js'), `output.value = SECRET === '${secret}'`);
+  const source = scriptTrace
+    ? `appId: com.example.app\n---\n- runScript:\n    file: setup.js\n    env:\n      SECRET: ${secret}\n- assertTrue: \${output.value}\n`
+    : 'appId: com.example.app\n---\n- tapOn:\n    point: "10,20"\n- waitForAnimationToEnd:\n    timeout: 0\n';
+  const debug = mode !== 'run-script-env';
+  const env = { AGENT_DEVICE_EXEC_TRACE: debug ? undefined : '1' };
+  const result = await withDiagnosticsScope({ debug, traceLogPath }, () =>
     selected.runReplay({
       request: {
         command: 'replay',
@@ -150,7 +151,7 @@ async function run(selected) {
           replayScriptSource: { entry, files: { [entry]: source } },
         },
       },
-      host: { env: {}, cwd: scratch },
+      host: { env, cwd: scratch },
       session: {
         name: 'packed',
         logPath: path.join(scratch, 'log'),
@@ -174,10 +175,29 @@ async function run(selected) {
 }
 try {
   await run(backend);
-  assert.equal(workers.length, 1, 'comparison must use the actual packed PNG worker');
-  assert.ok(workers[0].url.startsWith(fs.realpathSync(plugin)), workers[0].url);
-  assert.equal(workers[0].exited, false);
-  if (mode === 'diagnostics') {
+  if (!scriptTrace) {
+    assert.equal(workers.length, 1, 'comparison must use the actual packed PNG worker');
+    assert.ok(workers[0].url.startsWith(fs.realpathSync(plugin)), workers[0].url);
+    assert.equal(workers[0].exited, false);
+  }
+  if (scriptTrace) {
+    const log = fs.readFileSync(traceLogPath, 'utf8');
+    const events = log
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.phase === 'exec_command');
+    for (const event of ['spawn_start', 'spawn', 'exit', 'close', 'settled'])
+      assert.ok(
+        events.some((row) => row.data.event === event),
+        `missing host exec_command ${event}`,
+      );
+    assert.equal(new Set(events.map((row) => row.data.execId)).size, 1);
+    assert.equal(events.find((row) => row.data.event === 'settled').data.reason, 'success');
+    assert.ok(events.find((row) => row.data.event === 'spawn').data.pid > 0);
+    assert.ok(!log.includes(secret), 'host trace must not expose subprocess secrets');
+    assert.deepEqual(calls, [], 'runScript needs no device dispatch');
+  } else if (mode === 'diagnostics') {
     const events = fs
       .readFileSync(traceLogPath, 'utf8')
       .trim()
