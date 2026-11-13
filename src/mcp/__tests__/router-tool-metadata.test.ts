@@ -49,7 +49,7 @@ for (const structured of [false, true]) {
         name,
       );
     }
-    for (const name of ['get', 'is', 'snapshot', 'wait', 'doctor', 'screenshot', 'session']) {
+    for (const name of ['get', 'is', 'snapshot', 'wait', 'doctor', 'screenshot']) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {
@@ -59,7 +59,7 @@ for (const structured of [false, true]) {
         name,
       );
     }
-    for (const name of ['find', 'clipboard', 'batch', 'replay', 'test', 'shutdown']) {
+    for (const name of ['find', 'clipboard', 'session', 'batch', 'replay', 'test', 'shutdown']) {
       assert.deepEqual(
         tools.find((tool) => tool.name === name)?.annotations,
         {

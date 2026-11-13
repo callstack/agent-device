@@ -36,7 +36,7 @@ const sessionCliReader: CliReader = (positionals, flags) => ({
 
 export const sessionCommandFacet = defineCommandFacet({
   name: 'session',
-  effect: 'write',
+  effect: 'destructive',
   text: {
     summary: 'List sessions, show the state dir, or publish a script',
   },
