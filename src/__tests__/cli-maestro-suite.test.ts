@@ -29,6 +29,7 @@ test('test --maestro forwards Maestro backend and platform for directory suites'
           tests: [],
         },
       }),
+      { cwd: tmpDir },
     );
 
     assert.equal(result.code, null);
