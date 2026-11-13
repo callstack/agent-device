@@ -135,7 +135,7 @@ What a **Yes** does not claim:
 | --- | --- | --- | --- | --- | --- | --- |
 | [Open and close apps, URLs, and deep links](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Install and reinstall an app](/docs/commands#app-install-in-place) | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Uninstall an app](/docs/commands#app-uninstall) | Yes | Yes | Yes | Yes | No | No |
+| [Uninstall an app](/docs/commands#app-uninstall) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Install from a source URL](/docs/commands#app-install-from-source-url) | Yes | Yes | Yes | Yes | No | No |
 | [Installed app list](/docs/commands#app-state-and-app-lists) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Foreground app state](/docs/commands#app-state-and-app-lists) | Yes | Yes | Yes | Yes | Yes | Yes |

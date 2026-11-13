@@ -688,7 +688,8 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 agent-device uninstall com.example.app --platform android
 ```
 
-- `uninstall <app>` removes an installed app, for example to start a test without the app installed. Android (ADB), iOS simulators, and CoreDevice iOS devices are supported.
+- `uninstall <app>` removes an installed app, for example to start a test without the app installed. Android (ADB), iOS simulators, CoreDevice iOS devices, and HarmonyOS devices are supported.
+- On HarmonyOS, success keys on a second `bm dump -n` after the uninstall, because `bm` prints its verdict into stdout while exiting zero.
 - A package name or bundle id that is not installed succeeds with `wasInstalled: false`; another name that matches nothing installed fails with `APP_NOT_INSTALLED`.
 
 ## App install from source URL

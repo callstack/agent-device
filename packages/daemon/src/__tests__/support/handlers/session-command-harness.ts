@@ -275,6 +275,7 @@ function supportsReadiness(device: DeviceInfo): boolean {
 
 function deploymentAvailability(device: DeviceInfo) {
   const deploy = supportsDeployment(device);
+  const uninstallKinds = device.kind === 'emulator' || device.kind === 'device';
   return {
     deploy,
     source: deploy && (device.platform === 'apple' || device.platform === 'android'),
@@ -283,8 +284,7 @@ function deploymentAvailability(device: DeviceInfo) {
     uninstall:
       deploy &&
       ((device.platform === 'apple' && (device.kind === 'simulator' || device.kind === 'device')) ||
-        (device.platform === 'android' &&
-          (device.kind === 'emulator' || device.kind === 'device'))),
+        ((device.platform === 'android' || device.platform === 'harmonyos') && uninstallKinds)),
   };
 }
 
