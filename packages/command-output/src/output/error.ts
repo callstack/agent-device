@@ -1,5 +1,6 @@
 import {
   AppError,
+  defaultHintForCode,
   normalizeError,
   readDispatchDisclosure,
   readErrorCandidateViews,
@@ -25,6 +26,13 @@ export type HumanErrorView = {
 export type HumanErrorOptions = {
   /** Append the raw details dump (the `--debug` tier). */
   showDetails?: boolean;
+  /**
+   * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
+   * an agent reading a tool result: the typed `details.reason` joins the code and the message
+   * stays one line. The diagnostics log path is left out unless the recovery step is the code's
+   * default, which tells the reader to read that log.
+   */
+  reader?: 'terminal' | 'model';
   /** The failing command's synopsis, such as `agent-device fill <target> <text>`. */
   synopsis?: string;
 };
@@ -48,13 +56,20 @@ export function formatHumanError(
   const candidateViews = readErrorCandidateViews(normalized.details);
   const inlineCandidates =
     normalized.code === 'AMBIGUOUS_MATCH' ? readInlineCandidates(candidateViews) : undefined;
-  const { summary, truncated } = formatSummary(normalized, inlineCandidates, options.synopsis);
+  const forModel = options.reader === 'model';
+  const { summary, truncated } = formatSummary(
+    normalized,
+    inlineCandidates,
+    options.synopsis,
+    forModel,
+  );
   return {
     summary,
     body: formatBody(normalized, {
-      fullMessage: truncated,
+      fullMessage: truncated && !forModel,
       candidateViews: inlineCandidates ? [] : candidateViews,
       showDetails: options.showDetails,
+      logLine: !forModel || normalized.hint === defaultHintForCode(normalized.code),
     }),
   };
 }
@@ -63,6 +78,7 @@ function formatSummary(
   normalized: NormalizedError,
   inlineCandidates: string[] | undefined,
   synopsis: string | undefined,
+  withReason: boolean,
 ): { summary: string; truncated: boolean } {
   const dispatched = readDispatchDisclosure(normalized.details);
   const message = oneLine(normalized.message);
@@ -71,8 +87,10 @@ function formatSummary(
       ? `${message.slice(0, SUMMARY_MESSAGE_LIMIT)}…`
       : message;
   const next = nextStep(normalized, dispatched, inlineCandidates, synopsis);
+  const reason = withReason ? readReason(normalized) : undefined;
+  const label = reason ? `${normalized.code}, ${reason}` : normalized.code;
   const summary = [
-    `Error (${normalized.code}): ${withFullStop(shown)}`,
+    `Error (${label}): ${withFullStop(shown)}`,
     ...(dispatched ? [DISPATCH_SENTENCE[dispatched]] : []),
     ...(next ? [`Next: ${next}`] : []),
   ].join(' ');
@@ -106,9 +124,20 @@ function nextStep(
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
+/** The typed `details.reason`, when the throw site classified the failure. */
+function readReason(normalized: NormalizedError): string | undefined {
+  const reason = normalized.details?.reason;
+  return typeof reason === 'string' && reason.length > 0 ? reason : undefined;
+}
+
 function formatBody(
   normalized: NormalizedError,
-  options: { fullMessage: boolean; candidateViews: ErrorCandidateView[]; showDetails?: boolean },
+  options: {
+    fullMessage: boolean;
+    candidateViews: ErrorCandidateView[];
+    showDetails?: boolean;
+    logLine: boolean;
+  },
 ): string[] {
   const body: string[] = [];
   if (options.fullMessage) body.push(`Message: ${normalized.message}`);
@@ -124,7 +153,7 @@ function formatBody(
   }
   const candidateLines = formatErrorCandidateViews(options.candidateViews);
   if (candidateLines.length > 0) body.push(candidateLines.join('\n'));
-  const logLine = formatLogLine(normalized);
+  const logLine = options.logLine ? formatLogLine(normalized) : undefined;
   if (logLine) body.push(logLine);
   // ADR 0012: the divergence compact report always renders; --debug's raw
   // details dump below remains the full-object view.

@@ -270,7 +270,10 @@ test('frameworkTier is declared iff a command is public, and never elsewhere', (
 // adding a command.
 test("frameworkTier pins exactly the 'core' command set", () => {
   const core = commandDescriptors
-    .filter((descriptor) => resolveCommandFrameworkTier(descriptor.name) === 'core')
+    .filter((descriptor) => {
+      const tier = resolveCommandFrameworkTier(descriptor.name);
+      return tier === 'loop' || tier === 'core';
+    })
     .map((descriptor) => descriptor.name)
     .sort();
 
@@ -290,6 +293,26 @@ test("frameworkTier pins exactly the 'core' command set", () => {
     'snapshot',
     'swipe',
     'type',
+    'wait',
+  ]);
+});
+
+// The 'loop' tier is the part of the core set the MCP server marks always-loaded: its schemas
+// land in every run's first prompt, so widening it is a reviewed cost decision.
+test("frameworkTier pins exactly the 'loop' command set", () => {
+  const loop = commandDescriptors
+    .filter((descriptor) => resolveCommandFrameworkTier(descriptor.name) === 'loop')
+    .map((descriptor) => descriptor.name)
+    .sort();
+
+  assert.deepEqual(loop, [
+    'back',
+    'fill',
+    'open',
+    'press',
+    'screenshot',
+    'scroll',
+    'snapshot',
     'wait',
   ]);
 });

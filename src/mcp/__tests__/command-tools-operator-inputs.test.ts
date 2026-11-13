@@ -30,6 +30,10 @@ const OPERATOR_OWNED_KEYS = [
   'tenant',
   'runId',
   'leaseId',
+  // Diagnostics and response shaping: set once for the server, not per call.
+  'debug',
+  'cost',
+  'responseLevel',
 ] as const;
 
 // The rest of the shared common input: keys a model may write, because they
@@ -38,11 +42,9 @@ const MODEL_WRITABLE_COMMON_KEYS = [
   'session',
   'platform',
   'deviceTarget',
-  'target',
   'device',
   'udid',
   'serial',
-  'debug',
 ] as const;
 
 test('MCP tool schemas advertise no operator-owned inputs', () => {
@@ -86,6 +88,34 @@ test('MCP refuses every explicit operator-owned argument with guidance', async (
     );
   }
   assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
+});
+
+// The CLI and Node input keep the `target` spelling; a tool schema carries only deviceTarget.
+test('MCP neither advertises nor admits the target alias of deviceTarget', async () => {
+  for (const tool of listCommandTools({ outputSchemas: false })) {
+    assert.equal(
+      'target' in (tool.inputSchema.properties ?? {}),
+      false,
+      `${tool.name} advertises it`,
+    );
+  }
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return {};
+    },
+  });
+
+  const result = await executor.execute('wait', { target: 'tv' });
+
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0]?.text ?? '',
+    /target is not accepted as a tool argument\. Pass deviceTarget\./,
+  );
+  assert.deepEqual(calls, []);
 });
 
 test('MCP neither advertises nor admits the retired readiness budget', async () => {
@@ -220,6 +250,8 @@ test('MCP still resolves operator env values outside the model-writable surface'
   vi.stubEnv('AGENT_DEVICE_RUN_ID', 'operator-run');
   vi.stubEnv('AGENT_DEVICE_LEASE_ID', 'operator-lease');
   vi.stubEnv('AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST', 'emulator-5554');
+  vi.stubEnv('AGENT_DEVICE_COST', '1');
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'digest');
   const createdConfigs: Array<Record<string, unknown>> = [];
   const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
   const executor = createCommandToolExecutor({
@@ -242,6 +274,11 @@ test('MCP still resolves operator env values outside the model-writable surface'
   assert.equal(calls[0]?.input.leaseId, 'operator-lease');
   assert.equal(calls[0]?.input.androidDeviceAllowlist, 'emulator-5554');
   assert.equal(createdConfigs[0]?.stateDir, '/operator/state-dir');
+  assert.equal(createdConfigs[0]?.cost, true);
+  assert.equal(createdConfigs[0]?.responseLevel, 'digest');
+  // MCP controls configure the client; they never reach the command route.
+  assert.equal('cost' in (calls[0]?.input ?? {}), false);
+  assert.equal('responseLevel' in (calls[0]?.input ?? {}), false);
 });
 
 test('MCP neither advertises nor admits the CLI-only fill textStdin marker', async () => {

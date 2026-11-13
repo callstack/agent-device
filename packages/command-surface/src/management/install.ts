@@ -136,6 +136,7 @@ const installCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Install an app binary from a path',
+    searchHint: 'install app apk ipa binary',
     cliDetail:
       'A HarmonyOS .hap installs from its path alone, for example agent-device install ./build/entry-default-signed.hap --platform harmonyos.',
   },
@@ -151,6 +152,7 @@ const reinstallCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Replace an installed app with a new build',
+    searchHint: 'reinstall update app build apk ipa',
   },
   metadata: reinstallCommandMetadata,
   run: (client, input) => client.apps.reinstall(input),
@@ -164,6 +166,7 @@ const uninstallCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Remove an installed app',
+    searchHint: 'uninstall delete remove app',
   },
   metadata: uninstallCommandMetadata,
   run: (client, input) => client.apps.uninstall(input),
@@ -177,6 +180,7 @@ const installFromSourceCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Install app builds from URLs or CI artifacts',
+    searchHint: 'install download build url ci artifact',
   },
   metadata: installFromSourceCommandMetadata,
   run: (client, input) => client.apps.installFromSource(input),

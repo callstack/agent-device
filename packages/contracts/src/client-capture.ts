@@ -32,13 +32,9 @@ export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions &
   Omit<SnapshotCommandOptionFields, 'customActions'> & {
     /**
-     * Name the affordances an element merged away (iOS UIAccessibilityCustomAction,
-     * React Native accessibilityActions) — a card whose reply/options controls are not
-     * separate elements still lists them here. The names are for PLANNING, not
-     * invocation: there is no API to trigger them, so reach the affordance through the
-     * element detail screen, through the same control exposed as a labeled element
-     * elsewhere, or by coordinates from its rect. iOS simulator only; costs one
-     * accessibility round trip per merged element.
+     * List the custom actions an element merged away, such as a card's reply control.
+     * For planning only: they cannot be invoked, so reach the control another way. iOS
+     * simulator only; costs one accessibility round trip per merged element.
      */
     customActions?: SnapshotCommandOptionFields['customActions'];
     timeoutMs?: number;

@@ -94,7 +94,13 @@ export function defineCommandFacet<const TCommandName extends string, Input, Res
   // resolved text is what every surface renders from.
   const text = resolveFacetText(command.text, command.metadata.description);
   const mcpTail = text.mcpDetail ? { mcpDetail: text.mcpDetail } : {};
-  const metadata = { ...command.metadata, title: text.summary, effect: command.effect, ...mcpTail };
+  const metadata = {
+    ...command.metadata,
+    title: text.summary,
+    effect: command.effect,
+    searchHint: text.searchHint,
+    ...mcpTail,
+  };
   const definition: CommandDefinition<TCommandName, Result> = {
     name: metadata.name,
     description: metadata.description,

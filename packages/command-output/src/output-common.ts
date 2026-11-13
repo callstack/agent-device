@@ -38,6 +38,11 @@ export type CliOutputFormatterParams = {
   env: EnvMap;
   /** Whether the caller's stderr is a terminal; a formatter that colors status markers reads it. */
   stderrIsTTY: boolean;
+  /**
+   * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
+   * an agent reading a tool result, which gets no daemon-host state paths it would never open.
+   */
+  reader?: 'terminal' | 'model';
 };
 
 export type CliOutputFormatter = (

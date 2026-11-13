@@ -33,10 +33,26 @@ const batchCliReader: CliReader = (_positionals, flags) => ({
  * example nobody can run (#2062).
  */
 const BATCH_STEP_EXAMPLES: readonly BatchCommandStep[] = [
-  { command: 'snapshot', input: { interactiveOnly: true } },
   { command: 'press', input: { ref: '@e12', settle: true } },
+  { command: 'press', input: { selector: 'label=Settings', settle: true } },
   { command: 'fill', input: { selector: 'id="field-email"', text: 'qa@example.com' } },
+  { command: 'scroll', input: { direction: 'down', until: 'label=Privacy', settle: true } },
+  { command: 'back', input: { settle: true } },
+  { command: 'wait', input: { kind: 'text', text: 'Saved' } },
+  { command: 'snapshot', input: { interactiveOnly: true } },
 ];
+
+/**
+ * The MCP description: a model batches a walk it already knows from this text alone, without
+ * loading each step command's schema. The step examples are the same tested ones `help batch` prints.
+ */
+const BATCH_MCP_DETAIL = [
+  'Use it for a known multi-step walk, such as press A, press B, back, instead of one tool call per step.',
+  "steps is an array of {command, input} objects; input takes the same arguments as that command's own tool (ref, selector, or x and y for targets; settle: true for the settled diff).",
+  'Steps run serially in one session; onError: "stop" halts at the first failing step, and the result reports the steps that ran.',
+  'The whole batch has a 60-second work budget; split longer walks.',
+  `Example steps, in order: ${BATCH_STEP_EXAMPLES.map((step) => JSON.stringify(step)).join(', ')}.`,
+].join(' ');
 
 /**
  * `help batch` documented neither the step shape nor which commands batch accepts, so an agent
@@ -64,6 +80,8 @@ const batchCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Run multiple commands',
+    mcpDetail: BATCH_MCP_DETAIL,
+    searchHint: 'batch sequence steps multi-step walk chain several taps in one call',
     cliDetail: buildBatchCliDetail(),
   },
   metadata: batchCommandMetadata,

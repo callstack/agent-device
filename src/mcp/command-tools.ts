@@ -1,5 +1,6 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import {
+  aliasInputRefusal,
   COMMON_INPUT_AUDIENCE,
   commandInputExample,
   findCommandMetadata,
@@ -26,6 +27,7 @@ import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value'
 import { mcpBody } from '@agent-device/command-registry/command-text';
 import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
+  resolveCommandFrameworkTier,
   resolveCommandRecordsSessionAction,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
@@ -83,12 +85,20 @@ export type CommandToolExecutor = {
   errorResult: (error: unknown) => Promise<ToolResult>;
 };
 
-type McpOutputFormat = 'optimized' | 'json';
-
 type McpToolConfig = {
   client: AgentDeviceClientConfig;
-  outputFormat: McpOutputFormat;
 };
+
+/**
+ * A common alias (`target` for `deviceTarget`) yields to a command that declares the same key
+ * itself: `press` retired its own nested `target`, and that migration guidance must still answer.
+ */
+const COMMON_ALIAS_AUDIENCE: InputAudienceMap = Object.fromEntries(
+  Object.entries(COMMON_INPUT_AUDIENCE).filter(([, audience]) => audience.kind === 'alias'),
+);
+const COMMON_INPUT_AUDIENCE_EXCEPT_ALIASES: InputAudienceMap = Object.fromEntries(
+  Object.entries(COMMON_INPUT_AUDIENCE).filter(([, audience]) => audience.kind !== 'alias'),
+);
 
 /**
  * Every `operator` key any command declares. The deny side is deliberately
@@ -119,13 +129,24 @@ const DECLARED_OPERATOR_AUDIENCE: InputAudienceMap = Object.fromEntries(
  */
 function toolInputAudience(metadata: AdmissionMetadata): InputAudienceMap {
   return {
+    ...COMMON_ALIAS_AUDIENCE,
     ...metadata.inputAudience,
-    ...COMMON_INPUT_AUDIENCE,
+    ...COMMON_INPUT_AUDIENCE_EXCEPT_ALIASES,
     ...MCP_TOOL_CONFIG_AUDIENCE,
     ...CONFIG_LOADER_AUDIENCE,
     ...DECLARED_OPERATOR_AUDIENCE,
   };
 }
+
+/**
+ * Tool-loading hints Claude Code reads from a tool's `_meta`. A client that defers tool schemas
+ * loads an `alwaysLoad` tool up front instead of making the model search for it, and matches
+ * `searchHint` keywords when the model does search.
+ */
+type ToolLoadingMeta = {
+  'anthropic/searchHint'?: string;
+  'anthropic/alwaysLoad'?: true;
+};
 
 /** `outputSchemas` advertises each typed tool's outputSchema; only a structured host returns data that matches it. */
 export function listCommandTools(options: { outputSchemas: boolean }): Array<{
@@ -135,6 +156,7 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
   description: string;
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
+  _meta: ToolLoadingMeta;
 }> {
   return listMcpCommandMetadata().map((definition) => {
     // The registry is keyed by the typed-result commands only (CommandResultMap),
@@ -156,8 +178,21 @@ export function listCommandTools(options: { outputSchemas: boolean }): Array<{
       // Only typed commands carry an outputSchema; untyped tools stay
       // byte-identical to today (no key at all), additive-only.
       ...(outputSchema ? { outputSchema } : {}),
+      _meta: toolLoadingMeta(definition),
     };
   });
+}
+
+/** The `'loop'` framework tier is the always-loaded set; see `CommandFrameworkTier`. */
+function toolLoadingMeta(definition: CommandMetadata<string, unknown>): ToolLoadingMeta {
+  return {
+    ...(definition.searchHint === undefined
+      ? {}
+      : { 'anthropic/searchHint': definition.searchHint }),
+    ...(resolveCommandFrameworkTier(definition.name) === 'loop'
+      ? { 'anthropic/alwaysLoad': true as const }
+      : {}),
+  };
 }
 
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {
@@ -321,10 +356,7 @@ function readMcpToolConfig(
   record: Record<string, unknown>,
   binding: BindingSettings,
 ): McpToolConfig {
-  return {
-    client: { ...readClientConfig(record), ...readLockConfig(binding) },
-    outputFormat: readMcpOutputFormat(record.mcpOutputFormat),
-  };
+  return { client: { ...readClientConfig(record), ...readLockConfig(binding) } };
 }
 
 /** Only an active lock adds keys, so the default request shape stays untouched. */
@@ -338,7 +370,7 @@ function readLockConfig(binding: BindingSettings): AgentDeviceClientConfig {
 
 function readClientConfig(record: Record<string, unknown>): AgentDeviceClientConfig {
   const stateDir = record.stateDir;
-  const includeCost = record.includeCost;
+  const cost = record.cost;
   const responseLevel = record.responseLevel;
   const client: AgentDeviceClientConfig = {};
   if (stateDir !== undefined) {
@@ -347,13 +379,13 @@ function readClientConfig(record: Record<string, unknown>): AgentDeviceClientCon
     }
     client.stateDir = stateDir;
   }
-  if (includeCost !== undefined) {
-    if (typeof includeCost !== 'boolean') {
-      throw new AppError('INVALID_ARGS', 'Expected includeCost to be a boolean.');
+  if (cost !== undefined) {
+    if (typeof cost !== 'boolean') {
+      throw new AppError('INVALID_ARGS', 'Expected cost to be a boolean.');
     }
     // Only set when explicitly true so the default request shape is untouched
     // (cost rides on response.data → structuredContent only when opted in).
-    if (includeCost) client.cost = true;
+    if (cost) client.cost = true;
   }
   // Only set when it names a known level so the default request shape is
   // untouched (responseLevel rides on meta.responseLevel only when opted in).
@@ -372,14 +404,6 @@ function readResponseLevel(value: unknown): ResponseLevel | undefined {
     );
   }
   return level;
-}
-
-function readMcpOutputFormat(outputFormat: unknown): McpOutputFormat {
-  if (outputFormat === undefined) return 'optimized';
-  if (outputFormat !== 'optimized' && outputFormat !== 'json') {
-    throw new AppError('INVALID_ARGS', 'Expected mcpOutputFormat to be "optimized" or "json".');
-  }
-  return outputFormat;
 }
 
 function stripMcpConfigFields(input: Record<string, unknown>): Record<string, unknown> {
@@ -414,7 +438,7 @@ function advertisedInputSchema(
   return {
     ...schema,
     properties: Object.fromEntries(
-      Object.entries(schema.properties).filter(([key]) => audience[key]?.kind !== 'operator'),
+      Object.entries(schema.properties).filter(([key]) => audience[key] === undefined),
     ),
   };
 }
@@ -439,6 +463,9 @@ function findInadmissibleInput(
     if (keyAudience?.kind === 'retired') continue;
     if (keyAudience?.kind === 'operator') {
       return { message: operatorInputRefusal(key, keyAudience.source) };
+    }
+    if (keyAudience?.kind === 'alias') {
+      return { message: aliasInputRefusal(key, keyAudience.of) };
     }
     return {
       message: `${key} is not an accepted argument for the ${name} tool.`,
@@ -598,6 +625,7 @@ async function renderToolText(params: {
     result: params.result,
     env: params.env,
     stderrIsTTY: Boolean(process.stderr.isTTY),
+    reader: 'model',
   });
   if (typeof cliOutput?.text !== 'string') return renderJsonText(cliOutput?.data ?? params.result);
   return toolTextWithWarnings(params.name, cliOutput);
@@ -615,14 +643,10 @@ function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
   return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
 }
 
-/** Machine output requested: the JSON form, a leveled payload, or the cost that rides only on the data. */
+/** Machine output requested: a leveled payload, or the cost that rides only on the data. */
 function rendersJsonText(config: McpToolConfig): boolean {
   const { responseLevel, cost } = config.client;
-  return (
-    config.outputFormat === 'json' ||
-    (responseLevel !== undefined && responseLevel !== 'default') ||
-    cost === true
-  );
+  return (responseLevel !== undefined && responseLevel !== 'default') || cost === true;
 }
 
 function renderJsonText(value: unknown): string {

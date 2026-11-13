@@ -59,7 +59,7 @@ export const WAIT_COMMAND_OUTPUT_SCHEMAS = {
 } satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'wait'>;
 
 const waitCommandDescription =
-  'Wait for a duration, text, snapshot ref, selector to appear, selector to be strictly absent, or stable UI. Text matches a label, identifier, or value; an editable field never matches by its current value or by a label that only repeats it, so text you typed does not satisfy it. The strict absence target requires zero selector matches; stable waits until the UI stays quiet for the requested window.';
+  'Wait for a duration, text, snapshot ref, selector to appear, selector to be strictly absent, or stable UI. Text matches a label, identifier, or value; an editable field never matches by its current value or by a label that only repeats it, so text you typed does not satisfy it. The strict absence target requires zero selector matches; stable waits until the UI stays quiet for the requested window. Use it to verify an expected result, such as text that appears after a network call, instead of polling with snapshot.';
 
 const waitCommandMetadata = defineFieldCommandMetadata(WAIT_COMMAND_NAME, waitCommandDescription, {
   kind: enumField(WAIT_KIND_VALUES),
@@ -97,6 +97,7 @@ export const waitCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Wait for a duration, text, selector, strict absence, or stable UI',
+    searchHint: 'wait until appear disappear sleep verify assert visible text',
   },
   metadata: waitCommandMetadata,
   run: (client, input) => client.command.wait(waitInputToOptions(input)),

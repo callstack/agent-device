@@ -59,6 +59,7 @@ export const viewportCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Resize the active web viewport for the current session',
+    searchHint: 'viewport resize browser window size',
   },
   metadata: viewportCommandMetadata,
   run: (client, input) => client.command.viewport(input),

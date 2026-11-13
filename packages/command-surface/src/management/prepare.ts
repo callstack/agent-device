@@ -122,6 +122,7 @@ export const prepareCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Pre-warm platform helpers before automation',
+    searchHint: 'prepare warm up runner helpers',
   },
   metadata: prepareCommandMetadata,
   run: (client, input) => client.command.prepare(input),

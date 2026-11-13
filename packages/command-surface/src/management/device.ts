@@ -141,6 +141,7 @@ const devicesCommandFacet = defineCommandFacet({
   effect: 'read',
   text: {
     summary: 'List available devices and simulators',
+    searchHint: 'devices simulators emulators list udid serial',
   },
   metadata: devicesCommandMetadata,
   run: (client, input) => client.devices.list(input),
@@ -154,6 +155,7 @@ const capabilitiesCommandFacet = defineCommandFacet({
   effect: 'read',
   text: {
     summary: 'List supported commands for the selected device',
+    searchHint: 'capabilities supported commands device features',
     cliDetail: 'Select an explicit target with --platform/--device/--udid/--serial.',
   },
   metadata: capabilitiesCommandMetadata,
@@ -168,6 +170,7 @@ const bootCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Boot target device/simulator',
+    searchHint: 'boot start simulator emulator device',
   },
   metadata: bootCommandMetadata,
   run: (client, input) => client.devices.boot(input),
@@ -181,6 +184,7 @@ const shutdownCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Shutdown target simulator/emulator',
+    searchHint: 'shutdown stop simulator emulator',
     cliDetail: 'For an active session, use close --shutdown.',
   },
   metadata: shutdownCommandMetadata,

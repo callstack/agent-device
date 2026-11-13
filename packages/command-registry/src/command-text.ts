@@ -8,6 +8,7 @@
  *   description  what does it do, and when should I reach for it?
  *   cliDetail    what else does a terminal user need — flags, argument shapes, examples?
  *   mcpDetail    what else does an MCP caller need about this command's behavior?
+ *   searchHint   which words would a model searching for this tool type that the text lacks?
  *
  * `--help`, the command list, the MCP tool description and `explain` are all projections of
  * these four, computed where they are rendered rather than written back into the schema. That
@@ -27,6 +28,12 @@ export type CommandText = {
   cliDetail?: string;
   /** Appended to the MCP tool description only: command behavior and input details. */
   mcpDetail?: string;
+  /**
+   * Space-separated keywords a client's deferred-tool search matches besides the name and
+   * description: synonyms and task words a model types, such as "tap button" for press.
+   * Every MCP tool declares one; CLI-only commands need none.
+   */
+  searchHint?: string;
 };
 
 /**
@@ -34,7 +41,9 @@ export type CommandText = {
  * metadata already carries it — repeating it here would leave a shadowed copy behind, which is
  * exactly the dead-literal problem this file's predecessor had.
  */
-export type FacetCommandText = Omit<CommandText, 'description'>;
+export type FacetCommandText = Omit<CommandText, 'description' | 'searchHint'> & {
+  searchHint: string;
+};
 
 /** The `--help` body: canonical description plus any terminal-only detail. */
 export function helpBody(text: CommandText): string {
@@ -47,7 +56,10 @@ export function mcpBody(text: Pick<CommandText, 'description' | 'mcpDetail'>): s
 }
 
 /** Resolves a facet's authored text against the description its metadata already holds. */
-export function resolveFacetText(text: FacetCommandText, description: string): CommandText {
+export function resolveFacetText(
+  text: FacetCommandText,
+  description: string,
+): CommandText & FacetCommandText {
   return { ...text, description };
 }
 

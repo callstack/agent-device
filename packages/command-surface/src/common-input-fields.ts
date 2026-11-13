@@ -130,6 +130,7 @@ const COMMON_INPUT_FIELDS = {
       enum: DEVICE_TARGETS,
       description: 'Alias for deviceTarget.',
     },
+    audience: { kind: 'alias', of: 'deviceTarget' },
   },
   device: {
     schema: {
@@ -264,6 +265,10 @@ const COMMON_INPUT_FIELDS = {
   debug: {
     schema: { type: 'boolean', description: 'Enable debug diagnostics.' },
     read: (record) => optionalBoolean(record, 'debug'),
+    // Diagnostics for whoever debugs agent-device, not per-call work for a model.
+    audience: operatorAudience({
+      operatorPath: 'Run the same command from a terminal with --debug to see diagnostics.',
+    }),
   },
 } as const satisfies Record<
   keyof CommonCommandInput | 'target' | 'readinessTimeoutMs',
@@ -273,7 +278,7 @@ const COMMON_INPUT_FIELDS = {
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);
 
-/** Common keys no model-facing tool schema advertises or admits. */
+/** Common keys no model-facing tool schema advertises. */
 export const COMMON_INPUT_AUDIENCE: InputAudienceMap = Object.fromEntries(
   COMMON_INPUT_ROWS.flatMap(([key, field]) => (field.audience ? [[key, field.audience]] : [])),
 );

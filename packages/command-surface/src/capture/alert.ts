@@ -51,6 +51,7 @@ export const alertCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Inspect, accept, or dismiss a platform alert',
+    searchHint: 'dialog popup permission prompt allow deny system alert',
   },
   metadata: alertCommandMetadata,
   run: (client, input) => client.command.alert(input),

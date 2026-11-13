@@ -115,6 +115,11 @@ export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli';
 /**
  * Which default tool set a framework adapter (`agent-device/ai-sdk`, the
  * planned `@agent-device/eve` package) includes a public command in.
+ *  - `'loop'`     — the part of the core set nearly every run calls: launch,
+ *                   observe, act, navigate back, wait, scroll. A `'core'` set
+ *                   includes it, and the MCP server marks these tools
+ *                   always-loaded, so a client that defers tool schemas sends
+ *                   them in the first prompt instead of searching for them.
  *  - `'core'`     — the small, curated perceive/act loop a typical tool-calling
  *                   agent needs by default: launch, observe, interact, read,
  *                   verify, wait, navigate, and system-dialog handling.
@@ -128,7 +133,7 @@ export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli';
  * that command's descriptor facets instead of a separate hand-maintained list
  * in the adapter code; `resolveCommandFrameworkTier` reads it back.
  */
-export type CommandFrameworkTier = 'core' | 'extended';
+export type CommandFrameworkTier = 'loop' | 'core' | 'extended';
 
 type CommandCatalogFacetBase = {
   /**

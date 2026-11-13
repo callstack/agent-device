@@ -132,6 +132,7 @@ const pushCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Deliver a push notification payload',
+    searchHint: 'push notification apns fcm payload',
   },
   metadata: pushCommandMetadata,
   run: (client, input) => client.apps.push(input),
@@ -145,6 +146,7 @@ const triggerAppEventCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Invoke an app-defined automation event',
+    searchHint: 'app event trigger automation hook',
   },
   metadata: triggerAppEventCommandMetadata,
   run: (client, input) => client.apps.triggerEvent(input),

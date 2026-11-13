@@ -100,7 +100,7 @@ test('defaults to the core tool set and pins the session for every call', async 
 
   const schema = rawSchemaOf(tools, 'snapshot');
   assert.equal('session' in schema.properties, false, 'session is always hidden from the model');
-  assert.equal('mcpOutputFormat' in schema.properties, false, 'mcpOutputFormat is always hidden');
+  assert.equal('responseLevel' in schema.properties, false, 'responseLevel is always hidden');
   assert.ok('platform' in schema.properties, 'platform stays visible when not pinned');
 
   await executeOf(tools, 'snapshot')({ interactiveOnly: true });
@@ -113,7 +113,7 @@ test('MCP transport/config controls are hidden from the schema and cannot reach 
   const { tools } = await createAgentDeviceTools({ session: 'pinned-session' });
 
   const schema = rawSchemaOf(tools, 'snapshot');
-  for (const field of ['stateDir', 'includeCost', 'responseLevel', 'mcpOutputFormat']) {
+  for (const field of ['stateDir', 'cost', 'responseLevel']) {
     assert.equal(field in schema.properties, false, `${field} must not be model-visible`);
   }
 
@@ -126,9 +126,8 @@ test('MCP transport/config controls are hidden from the schema and cannot reach 
   )({
     interactiveOnly: true,
     stateDir: '/tmp/attacker-controlled-state-dir',
-    includeCost: true,
+    cost: true,
     responseLevel: 'full',
-    mcpOutputFormat: 'json',
     session: 'attacker-supplied-session',
   });
 
