@@ -229,9 +229,10 @@ Vega OS:
 
 Buttons:
   Examples: tv-remote longpress select; tv-remote press select --duration-ms 500. Syntax: tv-remote [press|longpress] <button> [--duration-ms <ms>]
-  All TV backends: up, down, left, right, select, menu, home, back.
+  Android TV, tvOS, and Vega OS: up, down, left, right, select, menu, home, back.
   Android TV also accepts volume-up, volume-down, mute, power, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, media-fast-forward, channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, and color-blue.
   android-keycode:<n> sends a raw Android TV keycode from 1 to 2147483647. tvOS and Vega OS refuse these additional buttons. Phones and WebDriver sessions refuse tv-remote. Power and sleep can turn the screen off; success confirms dispatch without waiting for an app or screen change.
+  The LG webOS and Samsung Tizen plugins accept up, down, left, right, select, back, media-rewind, and media-fast-forward; Tizen also accepts media-play-pause. They refuse every other button.
   ok, center, and enter are input aliases for select; command output still reports button: "select".
   longpress is CLI sugar for --duration-ms 500. --duration-ms overrides that preset.
   --duration-ms holds a tvOS or Vega OS remote button for that exact duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
