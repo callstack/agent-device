@@ -642,7 +642,7 @@ test('records verified current and retained native roots and stable descendants'
   }
 });
 
-test('retained Chrome home and marker roots require a Chrome executable and this state directory', async () => {
+test('browser home roots require executable containment and marker roots require Chrome', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const otherStateDir = mkdtempForTestSync('agent-device-web-other-');
   try {
@@ -662,6 +662,19 @@ test('retained Chrome home and marker roots require a Chrome executable and this
       'chrome-150',
       'chrome',
     );
+    const browserRoot = path.dirname(path.dirname(home));
+    const helper = path.join(path.dirname(home), 'Google Chrome Helper');
+    const crashpad = path.join(path.dirname(home), 'chrome_crashpad_handler');
+    const outside = path.join(stateDir, 'system-browser', 'Google Chrome');
+    const sibling = path.join(`${browserRoot}-other`, 'chrome');
+    for (const executable of [home, helper, crashpad, outside, sibling]) {
+      fs.mkdirSync(path.dirname(executable), { recursive: true });
+      fs.writeFileSync(executable, 'fixture');
+    }
+    const escaped = path.join(browserRoot, 'escaped-chrome');
+    const alias = path.join(stateDir, 'browser-alias');
+    fs.symlinkSync(outside, escaped);
+    fs.symlinkSync(home, alias);
     const marker = agentBrowserChromeLaunchMarker(previous);
     const rows: ProcessFixture[] = [
       { pid: 201, command: `/opt/Chromium ${marker}`, executable: '/opt/Chromium' },
@@ -674,14 +687,28 @@ test('retained Chrome home and marker roots require a Chrome executable and this
         command: `/opt/Chromium ${agentBrowserChromeLaunchMarker(other)}`,
         executable: '/opt/Chromium',
       },
+      { pid: 207, command: `${outside} ${home}`, executable: outside },
+      { pid: 208, ppid: 207, command: 'system browser helper' },
+      { pid: 209, command: `${helper} --type=renderer`, executable: helper },
+      { pid: 210, command: crashpad, executable: crashpad },
+      { pid: 211, command: `${escaped} ${home}`, executable: escaped },
+      { pid: 212, command: `${sibling} ${home}`, executable: sibling },
+      { pid: 213, command: alias, executable: alias },
+      { pid: 214, command: home, executable: path.join(browserRoot, 'missing-chrome') },
     ];
     observeProcesses(rows);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
-    expect(summary.pids).toEqual([201, 202]);
+    expect(summary.pids).toEqual([201, 202, 209, 210, 213]);
     expect(summary.processes.map(({ reason }) => reason)).toEqual([
       'launch-marker',
       'managed-browser-home',
+      'managed-browser-home',
+      'managed-browser-home',
+      'managed-browser-home',
+    ]);
+    expect(store.replace.mock.calls[0]?.[1].map(({ pid }: { pid: number }) => pid)).toEqual([
+      201, 202, 209, 210, 213,
     ]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

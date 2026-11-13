@@ -75,19 +75,38 @@ function matchManagedAgentBrowserProcess(
   ownership: ManagedFleetOwnership,
   executablePath: string | undefined,
 ): AgentBrowserProcessMatch | undefined {
-  if (!executablePath) return undefined;
+  if (!executablePath || processInfo.pid === hostProcessId()) return undefined;
   const executable = normalizePathSeparators(executablePath);
-  if (isChromeExecutable(executable)) {
-    const chrome = matchChromeProcess(processInfo, ownership);
-    if (chrome) return chrome;
-  }
   if (
-    processInfo.pid !== hostProcessId() &&
-    matchesManagedDaemonExecutable(executable, ownership.daemonEntries)
+    isChromeExecutable(executable) &&
+    ownership.launchMarkers.some((marker) => processInfo.command.includes(marker))
   ) {
+    return { process: processInfo, reason: 'launch-marker' };
+  }
+  if (isManagedBrowserExecutable(executable, ownership.browserHomeRoots)) {
+    return { process: processInfo, reason: 'managed-browser-home' };
+  }
+  if (matchesManagedDaemonExecutable(executable, ownership.daemonEntries)) {
     return { process: processInfo, reason: 'agent-browser-daemon' };
   }
   return undefined;
+}
+
+function isManagedBrowserExecutable(executable: string, roots: readonly string[]): boolean {
+  let resolvedExecutable: string;
+  try {
+    resolvedExecutable = normalizePathSeparators(realHostPathSync(executable));
+  } catch {
+    return false;
+  }
+  return roots.some((root) => {
+    try {
+      const resolvedRoot = normalizePathSeparators(realHostPathSync(root)).replace(/\/+$/, '');
+      return resolvedExecutable.startsWith(`${resolvedRoot}/`);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function matchesManagedDaemonExecutable(executable: string, entries: readonly string[]): boolean {
