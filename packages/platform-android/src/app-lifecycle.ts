@@ -220,7 +220,7 @@ async function startAndroidApp(
   if (resolved.type === 'intent') {
     return await openAndroidIntent(device, resolved.value, options);
   }
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value);
+  if (options.terminateRunningApp) await stopAndroidPackageForRelaunch(device, resolved.value);
   if (activity) {
     return await openAndroidPackageActivity(
       device,
@@ -357,7 +357,7 @@ async function openAndroidAppBoundDeepLink(
   }
   await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await requireAndroidPackageForOpen(device, app, 'app-bound open');
-  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved);
+  if (options.terminateRunningApp) await stopAndroidPackageForRelaunch(device, resolved);
   return await runAndroidShell(device, [
     'am',
     'start',
@@ -617,6 +617,28 @@ export async function openAndroidDevice(device: DeviceInfo): Promise<void> {
 
 export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<void> {
   await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'));
+}
+
+async function stopAndroidPackageForRelaunch(
+  device: DeviceInfo,
+  packageName: string,
+): Promise<void> {
+  await stopAndroidPackage(device, packageName).catch((error: unknown) => {
+    if (!passedAndroidRelaunchStopFences(error)) throw error;
+  });
+}
+
+/**
+ * A close refused only by its process fence, which runs after the foreground and exit fences passed.
+ * That is all a relaunch needs: the processes that ran before the stop are gone, and Android can
+ * restart a package at once for a provider or broadcast client (Settings on Android 17).
+ */
+export function passedAndroidRelaunchStopFences(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === 'android-app-close-timeout' &&
+    error.details.phase === 'process'
+  );
 }
 
 async function resolveAndroidPackageToEnd(
