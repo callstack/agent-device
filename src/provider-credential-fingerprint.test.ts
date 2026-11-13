@@ -1,15 +1,19 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { expect, test } from 'vitest';
 import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
 import { readDaemonProviderCredentials as daemonCredentialsFor } from './provider-credential-fingerprint.ts';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
-import { pluginHome, selectPluginManifest } from '@agent-device/test-kit';
+import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { BUILTIN_PROVIDER_IDS } from './builtin-provider-ids.ts';
 
 const inventory = await builtinPluginInventory();
-const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
-  fingerprintFor(provider, env, leaseBackend, inventory);
+const providerCredentialFingerprint = (
+  provider: string,
+  env: EnvMap,
+  leaseBackend?: string,
+  inventoryOverride?: readonly PluginInventoryEntry[],
+) => fingerprintFor(provider, env, leaseBackend, inventoryOverride ?? inventory);
 const readDaemonProviderCredentials = (env: EnvMap, stateDir: string) =>
   daemonCredentialsFor(env, stateDir, inventory);
 
@@ -127,65 +131,100 @@ test('a Limrun lease fingerprint covers only the leased platform and the account
   ).toBe(ios(rotatedAndroid));
 });
 
-function pluginWithCredentialVariables(credentialVariables?: string[], provider = 'example') {
-  const { home, env } = pluginHome();
-  selectPluginManifest(home, {
-    name: '@example/provider',
-    version: '1.2.3',
-    agentDevicePlugin: { apiVersion: 1, provider, entry: './plugin.js', credentialVariables },
-  });
-  return env;
+/** The inventory the daemon publishes: the built-ins claim their ids, then the store loads. */
+async function storeInventory(env: Record<string, string>) {
+  const { claimProviderIds, resolveProviderPlugins } =
+    await import('@agent-device/plugins/registry');
+  const { storePluginCandidates } = await import('@agent-device/plugins/store');
+  const resolved = await resolveProviderPlugins([
+    ...claimProviderIds(BUILTIN_PROVIDER_IDS),
+    ...(await storePluginCandidates(env)),
+  ]);
+  return resolved.inventory();
 }
 
-test('a plugin provider fingerprint hashes the variables its manifest declares', () => {
-  const home = pluginWithCredentialVariables(['EXAMPLE_USER', 'EXAMPLE_KEY']);
+function pluginWithCredentialVariables(credentialVariables?: string[], provider = 'example') {
+  const { home, env } = pluginHome();
+  selectV2Plugin(
+    home,
+    '@example/provider',
+    v2RegistrationSource(provider, {
+      credentials: `{ variables: ${JSON.stringify(credentialVariables ?? [])} }`,
+    }),
+  );
+  return { env: env as Record<string, string>, home };
+}
+
+test('a plugin provider fingerprint hashes the variables its factory declares', async () => {
+  const { env: home } = pluginWithCredentialVariables(['EXAMPLE_USER', 'EXAMPLE_KEY']);
+  const inventory = await storeInventory(home);
   const env = { ...home, EXAMPLE_USER: 'user', EXAMPLE_KEY: 'key-1' };
-  const fingerprint = providerCredentialFingerprint('example', env);
+  const fingerprint = providerCredentialFingerprint('example', env, undefined, inventory);
 
   expect(fingerprint).toMatch(/^v1:[0-9a-f]{16}$/);
-  expect(providerCredentialFingerprint('example', { ...env, UNRELATED: 'x' })).toBe(fingerprint);
-  expect(providerCredentialFingerprint('example', { ...env, EXAMPLE_KEY: 'key-2' })).not.toBe(
-    fingerprint,
-  );
-  expect(providerCredentialFingerprint('example', { ...env, EXAMPLE_KEY: 'key-1 ' })).not.toBe(
-    fingerprint,
-  );
-  expect(providerCredentialFingerprint('example', { ...home, EXAMPLE_USER: ' ' })).toBe(undefined);
-  expect(readDaemonProviderCredentials(env, '/state').fingerprint('example')).toBe(fingerprint);
+  expect(
+    providerCredentialFingerprint('example', { ...env, UNRELATED: 'x' }, undefined, inventory),
+  ).toBe(fingerprint);
+  expect(
+    providerCredentialFingerprint(
+      'example',
+      { ...env, EXAMPLE_KEY: 'key-2' },
+      undefined,
+      inventory,
+    ),
+  ).not.toBe(fingerprint);
+  expect(
+    providerCredentialFingerprint(
+      'example',
+      { ...env, EXAMPLE_KEY: 'key-1 ' },
+      undefined,
+      inventory,
+    ),
+  ).not.toBe(fingerprint);
+  expect(
+    providerCredentialFingerprint('example', { ...home, EXAMPLE_USER: ' ' }, undefined, inventory),
+  ).toBe(undefined);
 });
 
-test('a plugin provider without declared credential variables has no fingerprint', () => {
-  const env = { ...pluginWithCredentialVariables(), EXAMPLE_USER: 'user' };
-  expect(providerCredentialFingerprint('example', env)).toBe(undefined);
-  expect(providerCredentialFingerprint('other', env)).toBe(undefined);
+test('a plugin provider without declared credential variables has no fingerprint', async () => {
+  const { env: home } = pluginWithCredentialVariables();
+  const inventory = await storeInventory(home);
+  const env = { ...home, EXAMPLE_USER: 'user' };
+  expect(providerCredentialFingerprint('example', env, undefined, inventory)).toBe(undefined);
+  expect(providerCredentialFingerprint('other', env, undefined, inventory)).toBe(undefined);
 });
 
-test('a plugin declaration never adds a fingerprint to a bundled provider', () => {
-  const env = {
-    ...pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'aws-device-farm'),
-    AWS_ACCESS_KEY_ID: 'id',
-  };
+test('a plugin declaration never adds a fingerprint to a bundled provider', async () => {
+  const { env: home } = pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'aws-device-farm');
+  const inventory = await storeInventory(home);
+  const env = { ...home, AWS_ACCESS_KEY_ID: 'id' };
+  expect(providerCredentialFingerprint('aws-device-farm', env, undefined, inventory)).toBe(
+    undefined,
+  );
+  // The built-in's own answer is unchanged by the store package that claims its id.
   expect(providerCredentialFingerprint('aws-device-farm', env)).toBe(undefined);
 });
 
-function testMuPluginEnv(): Record<string, string> {
-  const manifest = path.resolve(import.meta.dirname, '../packages/provider-testmu/package.json');
+test('a store plugin declares per-backend credential variables in code', async () => {
   const { home, env } = pluginHome();
-  selectPluginManifest(home, JSON.parse(fs.readFileSync(manifest, 'utf8')));
-  return env;
-}
-
-test('the bundled TestMu AI plugin manifest fingerprints its LT credentials', () => {
-  const home = testMuPluginEnv();
-  const env = { ...home, LT_USERNAME: 'user', LT_ACCESS_KEY: 'key-1' };
-  const fingerprint = providerCredentialFingerprint('testmu', env);
-
-  expect(fingerprint).toMatch(/^v1:[0-9a-f]{16}$/);
-  expect(providerCredentialFingerprint('testmu', { ...env })).toBe(fingerprint);
-  expect(providerCredentialFingerprint('testmu', { ...env, LT_ACCESS_KEY: 'key-2' })).not.toBe(
-    fingerprint,
+  selectV2Plugin(
+    home,
+    '@example/backend',
+    v2RegistrationSource('example', {
+      credentials:
+        '{ variables: ["EXAMPLE_ACCOUNT"], byBackend: { "shared-session": ["EXAMPLE_POOL"] } }',
+    }),
   );
-  expect(providerCredentialFingerprint('testmu', home)).toBe(undefined);
-  expect(readDaemonProviderCredentials(env, '/state').fingerprint('testmu')).toBe(fingerprint);
-  expect(readDaemonProviderCredentials(home, '/state').fingerprint('testmu')).toBe(undefined);
+  const inventory = await storeInventory(env as Record<string, string>);
+  const envMap = { ...env, EXAMPLE_ACCOUNT: 'acct', EXAMPLE_POOL: 'pool-1' };
+  const fingerprint = (values: Record<string, string>, leaseBackend?: string) =>
+    providerCredentialFingerprint('example', values, leaseBackend, inventory);
+
+  // Without a backend the common variables answer; the pool belongs to one backend only.
+  expect(fingerprint(envMap)).toMatch(/^v1:[0-9a-f]{16}$/);
+  expect(fingerprint({ ...envMap, EXAMPLE_POOL: 'pool-2' })).toBe(fingerprint(envMap));
+  expect(fingerprint({ ...envMap, EXAMPLE_POOL: 'pool-2' }, 'shared-session')).not.toBe(
+    fingerprint(envMap, 'shared-session'),
+  );
+  expect(fingerprint({ EXAMPLE_ACCOUNT: 'acct' }, 'shared-session')).toBe(undefined);
 });

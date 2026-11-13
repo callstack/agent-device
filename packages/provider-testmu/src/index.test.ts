@@ -4,7 +4,6 @@ import type { ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import testmu from './index.ts';
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
-import manifest from '../package.json' with { type: 'json' };
 
 vi.mock('./testmu-connection-verification.ts', () => ({ verifyTestMuConnection: vi.fn() }));
 
@@ -119,12 +118,20 @@ test('connect uses the option credentials without an environment and verifies wi
   );
 });
 
-test('the v2 declaration matches the v1 manifest that hosts without the v2 contract read', () => {
-  const v1 = manifest.agentDevicePlugin;
-  assert.equal(testmu().provider, v1.provider);
-  assert.deepEqual(testmu().connection?.capabilities, v1.connection);
-  assert.deepEqual(testmu().credentials.variables, v1.credentialVariables);
-  assert.equal(v1.apiVersion, 1);
+test('the plugin declares its provider, capabilities and credential variables', () => {
+  const plugin = testmu();
+  assert.equal(plugin.apiVersion, 2);
+  assert.equal(plugin.provider, 'testmu');
+  assert.deepEqual(plugin.credentials, { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'] });
+  assert.deepEqual(plugin.connection?.capabilities, {
+    leaseKind: 'direct-device-provider',
+    requiresAppAttachment: false,
+    requiresRemoteDaemon: false,
+    supportsArtifacts: true,
+    supportsDeferredAppSelection: false,
+    supportsDirectPortReverse: false,
+    usesCloudWebDriverLease: true,
+  });
 });
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
