@@ -90,7 +90,7 @@ test('densifyGesturePath merges the profile grid into the canonical path and kee
     { offsetMs: 100, point: { x: 100, y: 0 } },
     { offsetMs: 200, point: { x: 100, y: 100 } },
   ];
-  const dense = densifyGesturePath(canonical, 200, 'default');
+  const dense = densifyGesturePath(canonical, 'default');
 
   // The 16 ms grid and the canonical offsets merge into one ascending timeline.
   const offsets = dense.map(({ offsetMs }) => offsetMs);
@@ -113,7 +113,7 @@ test('densifyGesturePath hands within-segment pacing to the progress hook and ke
     { offsetMs: 100, point: { x: 100, y: 0 } },
   ];
   const seen: Array<[number, number]> = [];
-  const dense = densifyGesturePath(canonical, 100, 'default', (progress, segmentDurationMs) => {
+  const dense = densifyGesturePath(canonical, 'default', (progress, segmentDurationMs) => {
     seen.push([progress, segmentDurationMs]);
     return progress * progress;
   });
@@ -133,13 +133,20 @@ test('densifyGesturePath hands within-segment pacing to the progress hook and ke
   assert.deepEqual(dense.at(-1)?.point, { x: 100, y: 0 });
 });
 
-test('densifyGesturePath refuses a duration that disagrees with the last canonical offset', () => {
-  const canonical = [
-    { offsetMs: 0, point: { x: 0, y: 0 } },
-    { offsetMs: 100, point: { x: 100, y: 0 } },
-  ];
+test('densifyGesturePath refuses a path of fewer than two timed samples', () => {
   assert.throws(
-    () => densifyGesturePath(canonical, 150, 'default'),
-    /must equal the last canonical sample offset/,
+    () => densifyGesturePath([{ offsetMs: 0, point: { x: 0, y: 0 } }], 'default'),
+    /at least two timed samples/,
+  );
+  assert.throws(
+    () =>
+      densifyGesturePath(
+        [
+          { offsetMs: 0, point: { x: 0, y: 0 } },
+          { offsetMs: 0, point: { x: 1, y: 0 } },
+        ],
+        'default',
+      ),
+    /at least two timed samples/,
   );
 });

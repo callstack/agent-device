@@ -471,26 +471,24 @@ export function sampleGestureOffsets(
 /**
  * Densifies a plan's own timed path onto one merged sampling grid: the profile grid and the
  * canonical offsets merge, every merged offset interpolates inside its canonical segment, and the
- * endpoints and duration stay the plan's. This is the one owner of the sampled-path rule; every
+ * endpoints and duration stay the plan's — the duration IS the last canonical offset, so a
+ * disagreeing duration cannot be written. This is the one owner of the sampled-path rule; every
  * transport lowering calls it instead of keeping its own merge-and-interpolate loop. The optional
  * progress hook lets a transport reshape within-segment pacing (Android's controlled scroll) while
  * the segment walk and the endpoint rule stay shared.
  */
 export function densifyGesturePath(
   canonical: readonly PointerTrajectorySample[],
-  durationMs: number,
   profile: GestureSamplingProfile,
   progress: (baseProgress: number, segmentDurationMs: number) => number = (p) => p,
 ): PointerTrajectorySample[] {
-  // The plan's last offset is its duration; a disagreement between the two
-  // arguments would extrapolate past the final sample or drop its endpoint.
-  const last = canonical.at(-1);
-  if (!last || last.offsetMs !== durationMs) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'gesture sample duration must equal the last canonical sample offset',
-      { reason: 'GESTURE_SAMPLE_DURATION_MISMATCH', durationMs },
-    );
+  // The walk reads each segment's end, so a path of fewer than two timed samples has no
+  // interpolable segment; the last offset is the duration the sampling grid builds on.
+  const durationMs = canonical.at(-1)?.offsetMs ?? 0;
+  if (canonical.length < 2 || !Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new AppError('INVALID_ARGS', 'gesture path needs at least two timed samples', {
+      reason: 'GESTURE_PATH_TOO_SHORT',
+    });
   }
   const offsets = [
     ...new Set([

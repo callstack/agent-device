@@ -62,14 +62,10 @@ export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTou
 
   const { releaseBehavior, ...gesturePlan } = plan;
   const [{ pointerId, samples: canonicalSamples }] = gesturePlan.pointers;
-  const dense = densifyGesturePath(
-    canonicalSamples,
-    plan.durationMs,
-    'android',
-    (progress, segmentDurationMs) =>
-      releaseBehavior === 'controlled'
-        ? controlledScrollProgress(progress, segmentDurationMs)
-        : progress,
+  const dense = densifyGesturePath(canonicalSamples, 'android', (progress, segmentDurationMs) =>
+    releaseBehavior === 'controlled'
+      ? controlledScrollProgress(progress, segmentDurationMs)
+      : progress,
   );
   // The sampler floors the frame count at three, so `dense` always holds at least four samples.
   const samples: AndroidTransportSamples = [dense[0]!, dense[1]!, dense[2]!, ...dense.slice(3)];
