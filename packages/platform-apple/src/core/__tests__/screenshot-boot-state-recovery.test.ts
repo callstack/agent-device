@@ -167,7 +167,7 @@ test('the re-capture that fails again reports its own failure and adds no second
   });
   const probe = await probeRecovery(device, {
     state: () => listingFor(device.id, 'Shutdown'),
-    captureError: (attempt) => (attempt === 1 ? CAPTURE_FAILURE : recaptureFailure),
+    captureError: (attempt: number) => (attempt === 1 ? CAPTURE_FAILURE : recaptureFailure),
   });
 
   assert.equal(probe.captureAttempts, 2);

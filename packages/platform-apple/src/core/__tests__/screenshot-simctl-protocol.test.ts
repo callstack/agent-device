@@ -144,7 +144,7 @@ test('the adapter keeps every exec failure detail beside the reason it stamped',
 
 test('the adapter reads the protocol header for a set-scoped screenshot call', async () => {
   const scopedDevice: DeviceInfo = { ...SIMULATOR, simulatorSetPath: '/tmp/tenant/set' };
-  const { error } = await withAppleToolProvider(
+  const outcome = await withAppleToolProvider(
     createLocalAppleToolProvider(),
     async () =>
       await withScriptedCommands(
@@ -161,7 +161,8 @@ test('the adapter reads the protocol header for a set-scoped screenshot call', a
       ),
   );
 
-  assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.ok('error' in outcome, 'the scoped screenshot command must fail');
+  assert.equal(details(outcome.error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
 });
 
 test('the same screenshot text without the protocol header stays unattributed', async () => {
@@ -317,7 +318,7 @@ test('the adapter does not parse a simctl subcommand it did not scope as a scree
   ] as const;
 
   for (const [label, args] of otherSubcommands) {
-    const { error } = await withAppleToolProvider(
+    const outcome = await withAppleToolProvider(
       createLocalAppleToolProvider(),
       async () =>
         await withScriptedCommands(
@@ -332,8 +333,9 @@ test('the adapter does not parse a simctl subcommand it did not scope as a scree
         ),
     );
 
+    assert.ok('error' in outcome, `${label} must report the scripted command failure`);
     assert.equal(
-      details(error).reason,
+      details(outcome.error).reason,
       undefined,
       `a ${label} failure is not a screenshot timeout`,
     );
