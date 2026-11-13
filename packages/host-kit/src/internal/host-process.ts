@@ -218,7 +218,8 @@ function parseHostProcessCommandRows(stdout: string): Array<{ pid: number; comma
   }));
 }
 
-function readLinuxProcessStartToken(pid: number): string | null {
+/** State and start token from one `/proc/<pid>/stat` read, so a reused pid cannot mix lifetimes. */
+function readLinuxProcessStat(pid: number): { state: string; startTime: string } | null {
   if (process.platform !== 'linux') return null;
   try {
     const bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
@@ -226,12 +227,14 @@ function readLinuxProcessStartToken(pid: number): string | null {
     // comm can contain spaces and closing parentheses; field 3 follows the last one.
     const end = stat.lastIndexOf(')');
     if (end < 0) return null;
-    const startTime = stat
+    const fields = stat
       .slice(end + 1)
       .trim()
-      .split(/\s+/)[19];
-    if (!bootId || !startTime || !/^\d+$/.test(startTime)) return null;
-    return `linux:${bootId}:${startTime}`;
+      .split(/\s+/);
+    const state = fields[0];
+    const startTime = fields[19];
+    if (!bootId || !state || !startTime || !/^\d+$/.test(startTime)) return null;
+    return { state, startTime: `linux:${bootId}:${startTime}` };
   } catch {
     return null;
   }
@@ -362,7 +365,9 @@ function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] 
     if (!match) continue;
     const pid = Number.parseInt(match[1]!, 10);
     if (!Number.isInteger(pid) || pid <= 0) continue;
-    rows.push({ pid, state: match[2]!, startTime: readLinuxProcessStartToken(pid) ?? match[3]! });
+    // On Linux both facts come from one /proc read; the ps row only covers other hosts.
+    const linux = readLinuxProcessStat(pid);
+    rows.push(linux ? { pid, ...linux } : { pid, state: match[2]!, startTime: match[3]! });
   }
   return rows;
 }
@@ -383,8 +388,8 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   if (isWindowsHostPlatform()) return readWindowsProcessField(pid, field);
   if (field === 'lstart=') {
-    const token = readLinuxProcessStartToken(pid);
-    if (token !== null) return token;
+    const token = readLinuxProcessStat(pid)?.startTime;
+    if (token !== undefined) return token;
   }
   try {
     const result = runCmdSync(hostPsCommand(), ['-p', String(pid), '-o', field], {

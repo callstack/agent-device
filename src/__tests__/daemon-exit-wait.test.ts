@@ -92,7 +92,7 @@ test.each([
   [OURS, 'linux:11111111-1111-4111-8111-111111111111:12345'],
   ['linux:11111111-1111-4111-8111-111111111111:12345', OURS],
 ])(
-  'a start-time format change does not prove daemon exit or authorize a signal',
+  'a start-time format change (recorded %s, observed %s) does not prove daemon exit or authorize a signal',
   async (recorded, observed) => {
     state.starts.set(PID, observed);
     expect(
