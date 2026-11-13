@@ -415,9 +415,8 @@ extension RunnerTests {
     return !isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
   }
 
-  /// Which side of the tap a read of the bar is on: a held issue in the lookup means no button, so
-  /// back swipes; one in the confirmation proves nothing, so it never confirms. The final
-  /// confirmation read is the one read that starts after the confirmation budget.
+  /// The phase a bar read belongs to: the lookup before the tap, a confirmation read after it, or the
+  /// final confirmation read. The read passes it to the test read hook.
   enum NavigationBarBackReadPhase {
     case lookup
     case confirmation
