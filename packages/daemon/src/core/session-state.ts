@@ -171,6 +171,13 @@ export type SessionState = {
     ownerStartTime: string | null;
   };
   device: DeviceInfo;
+  /**
+   * #4162: this session's `open` booted the local simulator or emulator it now holds, so a plain
+   * `close` stops it and leaves the device as the session found it. Recorded only when device
+   * selection reports the boot (`selection.bootOccurred`), which never happens for a provider or
+   * physical target, nor for a device that was already running. Written only by `publishOpenSession`.
+   */
+  bootedByOpen?: true;
   createdAt: number;
   surface?: SessionSurface;
   appBundleId?: string;

@@ -360,6 +360,7 @@ export async function handleSessionCloseCommands(
     requestedSaveScript: Boolean(req.flags?.saveScript),
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
+    implicitShutdownDeniedByPolicy: closed.implicitShutdownDeniedByPolicy,
   });
 }
 
@@ -386,6 +387,8 @@ type SessionCloseFinalization =
       kind: 'closed';
       providerData?: Record<string, unknown>;
       shutdownResult?: TargetShutdownResult;
+      /** #4162: the policy denied the stop this close owed its own boot, so the device kept running. */
+      implicitShutdownDeniedByPolicy: boolean;
     };
 
 // Everything between a settled repair decision and a success response:
@@ -425,6 +428,7 @@ async function runCloseTeardownAndRelease(params: {
     saveScriptError,
     shutdownPrepared,
     shutdownResult,
+    implicitShutdownDeniedByPolicy,
   } = await runSessionCloseTeardown({
     leaseRegistry,
     req,
@@ -483,6 +487,7 @@ async function runCloseTeardownAndRelease(params: {
     kind: 'closed',
     providerData: leaseRelease.providerData,
     shutdownResult: leaseRelease.shutdownResult ?? shutdownResult,
+    implicitShutdownDeniedByPolicy,
   };
 }
 
@@ -492,8 +497,16 @@ function buildCloseSuccessResponse(params: {
   requestedSaveScript: boolean;
   shutdownResult: TargetShutdownResult | undefined;
   providerData: Record<string, unknown> | undefined;
+  implicitShutdownDeniedByPolicy: boolean;
 }): DaemonResponse {
-  const { session, repair, requestedSaveScript, shutdownResult, providerData } = params;
+  const {
+    session,
+    repair,
+    requestedSaveScript,
+    shutdownResult,
+    providerData,
+    implicitShutdownDeniedByPolicy,
+  } = params;
   if (repair.aborted && requestedSaveScript) {
     return {
       ok: false,
@@ -510,19 +523,40 @@ function buildCloseSuccessResponse(params: {
   // an extra round-trip.
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
   const provider = providerData ? { provider: providerData } : {};
+  // #4162: the close owed this device a stop because its own open booted it, but the daemon's
+  // policy denies `device-shutdown`. The close still succeeded; say plainly what stayed up.
+  const keptRunning = implicitShutdownDeniedByPolicy
+    ? {
+        warnings: [
+          "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
+        ],
+      }
+    : {};
   const text = `Closed: ${session.name}`;
   if (shutdownResult) {
     return {
       ok: true,
       data: withSuccessText(
-        { session: session.name, shutdown: shutdownResult, ...savedScript, ...provider },
+        {
+          session: session.name,
+          shutdown: shutdownResult,
+          ...savedScript,
+          ...provider,
+          ...keptRunning,
+        },
         text,
       ),
     };
   }
   return {
     ok: true,
-    data: { session: session.name, ...successText(text), ...savedScript, ...provider },
+    data: {
+      session: session.name,
+      ...successText(text),
+      ...savedScript,
+      ...provider,
+      ...keptRunning,
+    },
   };
 }
 

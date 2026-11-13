@@ -31,6 +31,8 @@ export function publishOpenSession(params: {
   appBundleId?: string;
   appName?: string;
   deviceClaim?: DeviceClaimSessionOwnership;
+  /** #4162: this open booted the local virtual device, so its plain close owns stopping it. */
+  bootedByOpen?: boolean;
 }): SessionRef {
   const {
     req,
@@ -42,6 +44,7 @@ export function publishOpenSession(params: {
     appBundleId,
     appName,
     deviceClaim,
+    bootedByOpen,
   } = params;
   requireOpenSessionAdmission(store, sessionName, existingRef);
   if (existingRef) {
@@ -67,5 +70,6 @@ export function publishOpenSession(params: {
     actions: [],
     lease: resolveSessionLeaseForRequest({ req }),
     deviceClaim,
+    ...(bootedByOpen === true ? { bootedByOpen: true as const } : {}),
   });
 }

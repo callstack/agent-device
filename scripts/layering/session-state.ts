@@ -80,6 +80,9 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
     'packages/daemon/src/sessions/session-observability/internal/session-perf-runtime.ts',
   ],
   device: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
+  // #4162: the boot fact travels with the device it describes, so the open-state publisher that
+  // stores the device is the one writer. Close only reads it.
+  bootedByOpen: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   surface: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining

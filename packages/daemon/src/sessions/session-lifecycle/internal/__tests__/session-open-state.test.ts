@@ -56,3 +56,56 @@ test('a re-open of a session that never armed records nothing', () => {
   assert.equal(next.scriptPublication, undefined);
   assert.equal(isSessionRecording(next), false);
 });
+
+// --- #4162: the boot-ownership fact belongs to the open that published it ---
+//
+// Only a first open whose selection reported the boot records it. A re-open never adds or drops it,
+// so the session that found the device stopped still owes it a stop after any number of re-opens.
+
+function firstOpen(bootedByOpen: boolean | undefined) {
+  const store = makeSessionStore();
+  return store.requireCurrent(
+    publishOpenSession({
+      req: { token: 't', command: 'open', positionals: [], session: 's' },
+      sessionStore: store,
+      sessionName: 's',
+      device: IOS_SIMULATOR,
+      surface: 'app',
+      bootedByOpen,
+    }),
+  );
+}
+
+test('#4162: an open whose selection reported the boot records it on the new session', () => {
+  assert.equal(firstOpen(true).bootedByOpen, true);
+});
+
+test.each([false, undefined])(
+  '#4162: an open whose selection reported no boot records nothing',
+  (bootedByOpen) => {
+    assert.equal(firstOpen(bootedByOpen).bootedByOpen, undefined);
+  },
+);
+
+test.each([true, undefined])(
+  '#4162: a re-open leaves the boot ownership unchanged',
+  (bootedByOpen) => {
+    const store = makeSessionStore();
+    const existing = makeIosSession('s', bootedByOpen === undefined ? {} : { bootedByOpen });
+    const ref = store.publish(existing.name, existing);
+
+    const next = store.requireCurrent(
+      publishOpenSession({
+        req: { token: 't', command: 'open', positionals: [], session: existing.name },
+        sessionStore: store,
+        sessionName: existing.name,
+        existingRef: ref,
+        device: IOS_SIMULATOR,
+        surface: 'app',
+        bootedByOpen: true,
+      }),
+    );
+
+    assert.equal(next.bootedByOpen, bootedByOpen);
+  },
+);
