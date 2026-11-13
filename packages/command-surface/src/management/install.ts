@@ -38,7 +38,7 @@ const installCommandMetadata = defineFieldCommandMetadata(
 
 const reinstallCommandMetadata = defineFieldCommandMetadata(
   'reinstall',
-  'Replace an installed app with a binary from a local path. This preserves the app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall. On iOS, a corrupt .ipa that cannot be unpacked leaves the installed app in place. An invalid app bundle or another install failure after uninstall can still leave the app removed.',
+  'Replace an installed app with a binary from a local path. This preserves the app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall. On iOS, a corrupt .ipa that cannot be unpacked leaves the installed app in place. On Android, an archive that cannot be unpacked or contains no .apk or .aab also leaves it in place. An invalid app bundle, corrupt APK or another install failure after uninstall can still leave the app removed.',
   {
     app: requiredField(stringField()),
     appPath: requiredField(stringField('Path to app binary.')),

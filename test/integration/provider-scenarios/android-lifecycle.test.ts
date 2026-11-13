@@ -304,8 +304,7 @@ test('Provider-backed integration Android external ANR fails with actionable con
 });
 
 test('Provider-backed Android reinstall keeps the installed app when the archive has no installable', async () => {
-  const world = await createAndroidSettingsWorld();
-  try {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const payloadDir = path.join(world.tempRoot, 'no-installable-payload');
     fs.mkdirSync(payloadDir, { recursive: true });
     fs.writeFileSync(path.join(payloadDir, 'README.txt'), 'not an apk');
@@ -322,11 +321,10 @@ test('Provider-backed Android reinstall keeps the installed app when the archive
       world.daemon
         .client()
         .apps.reinstall({ app: 'com.example.demo', appPath: archivePath, ...world.selection }),
-      (error: unknown) =>
-        (error as { code?: string }).code === 'INVALID_ARGS' &&
-        String((error as Error).message).includes(
-          'Expected Android installable (.apk or .aab) source',
-        ),
+      {
+        code: 'INVALID_ARGS',
+        message: /Expected Android installable \(\.apk or \.aab\) source/,
+      },
     );
 
     const reinstallCalls = world.adbCalls.slice(callsBefore);
@@ -337,9 +335,7 @@ test('Provider-backed Android reinstall keeps the installed app when the archive
     );
     assert.equal(world.apkInstallCalls.length, 0);
     assert.equal(world.bundleInstallCalls.length, 0);
-  } finally {
-    await world.close();
-  }
+  });
 });
 
 async function runAndroidSetupAndInstallWorkflow(

@@ -102,9 +102,6 @@ async function deployAndroidApp(
   install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
   if (input.replaceExisting) {
-    // Reinstall resolves its fuzzy target before uninstall. Keep the whole-operation cache
-    // boundary here in the Android deployment owner: clear before boot/resolve/prepare/uninstall
-    // and after install, including partial failures.
     return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
       let artifact: MaterializedAppSource | undefined;
       try {
