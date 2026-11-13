@@ -4,7 +4,12 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  pluginHome,
+  selectV2Plugin,
+  v2RegistrationSource,
+} from '@agent-device/test-kit';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
@@ -15,9 +20,9 @@ import manifest from '@agent-device/revyl/package.json' with { type: 'json' };
 import { resolveConnectProviderProfile } from '../../connection/connect-provider-adapters.ts';
 import { connectWithGeneratedProviderProfile } from '../../../__tests__/test-utils/connect-command.ts';
 
-// Mirrors src/__tests__/cloud-connect-testmu.test.ts: the plugin store is told the Revyl plugin is
-// installed and its connection callbacks are loaded from the workspace source, so the assertions read
-// the HTTP the plugin really sends rather than a mock of it.
+// Mirrors src/__tests__/cloud-connect-testmu.test.ts: the store declares the Revyl plugin installed
+// and its connection callbacks are loaded from the workspace source, so the assertions read the HTTP
+// the plugin really sends rather than a mock of it.
 const mockedWithPluginConnection = vi.hoisted(() => vi.fn());
 
 vi.mock('@agent-device/plugins/load', () => ({
@@ -81,20 +86,16 @@ afterEach(async () => {
 
 beforeEach(() => {
   const { home } = pluginHome();
-  selectPlugin(home, manifest.name, 'revyl', 'export default () => {};');
-  const { installation } = JSON.parse(fs.readFileSync(path.join(home, 'config.json'), 'utf8'))
-    .plugins[manifest.name];
-  const manifestPath = path.join(
+  // The store declares the plugin installed with Revyl's capabilities; the mocked loader below
+  // supplies the workspace factory those assertions exercise.
+  selectV2Plugin(
     home,
-    'plugins',
-    installation,
-    'node_modules',
     manifest.name,
-    'package.json',
+    v2RegistrationSource('revyl', {
+      extra: `connection: { capabilities: ${JSON.stringify(revyl().connection?.capabilities)}, resolve() {}, verify() {} },`,
+      credentials: '{ variables: ["REVYL_API_KEY"] }',
+    }),
   );
-  const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
-  fs.writeFileSync(manifestPath, JSON.stringify(declared));
   vi.stubEnv('AGENT_DEVICE_HOME', home);
   vi.stubEnv('REVYL_API_KEY', 'rk_test');
   vi.stubEnv('REVYL_API_URL', '');

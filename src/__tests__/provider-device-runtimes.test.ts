@@ -3,16 +3,11 @@ import { test } from 'vitest';
 import { createDaemonProviderRuntimeComposition } from '../provider-device-runtimes.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  pluginHome,
-  registrationSource,
-  selectPlugin,
-  selectV2Plugin,
-} from '@agent-device/test-kit';
+import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', registrationSource('example'));
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -28,7 +23,7 @@ test('daemon composition registers installed provider runtimes and their lazy pl
 
 test('built-in providers register ahead of the store and an unconfigured Limrun still claims its id', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', registrationSource('example'));
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -51,7 +46,7 @@ test('built-in providers register ahead of the store and an unconfigured Limrun 
 
 test('daemon composition records Limrun as failed for a partial instance set and still loads every other provider', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', registrationSource('example'));
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: {
       ...env,
@@ -76,7 +71,7 @@ test('daemon composition records Limrun as failed for a partial instance set and
 test('a plugin claiming a built-in provider ID is recorded as failed and the built-in keeps the ID', async () => {
   for (const provider of ['limrun', 'browserstack', 'aws-device-farm']) {
     const { home, env } = pluginHome();
-    selectPlugin(home, 'example', provider, 'throw new Error("must not evaluate");');
+    selectV2Plugin(home, 'example', v2RegistrationSource(provider));
     const composition = await createDaemonProviderRuntimeComposition({
       env: env,
       cwd: process.cwd(),
@@ -89,6 +84,21 @@ test('a plugin claiming a built-in provider ID is recorded as failed and the bui
       composition.runtimes.filter((runtime) => runtime.provider === provider).length,
       provider === 'limrun' ? 0 : 1,
     );
+    await composition.shutdown();
+  }
+});
+
+test('a plugin claiming a routing identity is refused before the registry settles claims', async () => {
+  for (const provider of ['cloud', 'proxy']) {
+    const { home, env } = pluginHome();
+    selectV2Plugin(home, 'example', v2RegistrationSource(provider));
+    const composition = await createDaemonProviderRuntimeComposition({
+      env: env,
+      cwd: process.cwd(),
+    });
+    const plugin = composition.inventory.find(({ package: name }) => name === 'example');
+    assert.equal(plugin?.state, 'failed');
+    assert.equal(plugin?.error?.reason, 'reserved_provider');
     await composition.shutdown();
   }
 });

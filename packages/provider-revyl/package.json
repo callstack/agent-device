@@ -30,25 +30,6 @@
     "@agent-device/test-kit": "workspace:*",
     "agent-device": "workspace:*"
   },
-  "agentDevicePlugin": {
-    "apiVersion": 1,
-    "provider": "revyl",
-    "entry": "./dist/plugin.mjs",
-    "connection": {
-      "leaseKind": "direct-device-provider",
-      "requiresAppAttachment": false,
-      "requiresRemoteDaemon": false,
-      "supportsArtifacts": false,
-      "supportsDeferredAppSelection": false,
-      "supportsDirectPortReverse": false,
-      "usesCloudWebDriverLease": false,
-      "holdsCloudDevice": true
-    },
-    "credentialVariables": [
-      "REVYL_API_KEY",
-      "REVYL_API_URL"
-    ]
-  },
   "publishConfig": {
     "exports": {
       ".": {
