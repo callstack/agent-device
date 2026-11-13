@@ -90,13 +90,11 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     // `--foreground` FlagDefinition's `inputDescription`) verbatim, pinned to it by
     // `commands/command-input-option-field.test.ts`.
     /**
-     * Include an initial interactive snapshot in a fresh open response. On iOS,
-     * a launched app's snapshot polls for its first screen for up to 10s (a
-     * capture started before then still completes and is judged); if it runs out,
-     * the snapshot carries postGestureOutcome.kind "loading" (no first screen yet)
-     * or "unsettled" (a first screen that kept changing) and a warning. With no
-     * app argument, discover the sole running
-     * app on the sole booted iOS simulator; ambiguous environments fail closed.
+     * Include an initial interactive snapshot in a fresh open response. On a local iOS simulator it
+     * waits up to 10s for the app's first screen (physical devices and other backends skip the
+     * wait); on timeout it carries postGestureOutcome.kind "loading" or "unsettled" and a warning.
+     * With no app argument, discover the sole running app on the sole booted iOS simulator;
+     * ambiguous environments fail closed.
      */
     foreground?: boolean;
     saveScript?: boolean | string;

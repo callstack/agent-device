@@ -5,7 +5,7 @@ import {
   truncateToUtf8Bytes,
 } from '@agent-device/ad-script';
 import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { PostGestureOutcome, SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 export type AbsenceFirstMatch = {
   id?: string;
@@ -42,6 +42,15 @@ export const UNPROVABLE_ABSENCE_CAUSES = {
 } as const;
 
 export type UnprovableAbsenceKind = keyof typeof UNPROVABLE_ABSENCE_CAUSES;
+
+/** Which post-gesture outcomes leave a zero-match capture unable to prove absence; every kind must be listed. */
+const ABSENCE_UNPROVEN_BY_OUTCOME: Readonly<
+  Record<PostGestureOutcome['kind'], 'unsettled' | 'loading' | undefined>
+> = {
+  unsettled: 'unsettled',
+  loading: 'loading',
+  'no-effect': undefined,
+};
 
 export function isUnprovableAbsence(kind: unknown): kind is UnprovableAbsenceKind {
   return typeof kind === 'string' && Object.hasOwn(UNPROVABLE_ABSENCE_CAUSES, kind);
@@ -99,8 +108,9 @@ export function classifyAbsenceObservation(
     };
   }
   if (matchCount === 0) {
-    const outcome = snapshot.postGestureOutcome?.kind;
-    if (outcome === 'unsettled' || outcome === 'loading') return { kind: outcome, matches: 0 };
+    const outcome = snapshot.postGestureOutcome;
+    const unproven = outcome ? ABSENCE_UNPROVEN_BY_OUTCOME[outcome.kind] : undefined;
+    if (unproven) return { kind: unproven, matches: 0 };
     return { kind: 'absent', matches: 0 };
   }
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
