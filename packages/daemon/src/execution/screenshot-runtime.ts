@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import { sleep } from '@agent-device/host-kit/retry';
