@@ -6,21 +6,23 @@ The proxy authenticates clients with a bearer token. You do not need `agent-devi
 
 ## Start the proxy on the device host
 
-On the Mac with simulator or device access, run:
-
-```bash
-agent-device proxy --port 4310
-```
-
-The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
-
-Expose the proxy through your tunnel:
+On the Mac with simulator or device access, start a tunnel to the proxy's local port and keep that terminal open:
 
 ```bash
 cloudflared tunnel --url http://127.0.0.1:4310
-# or
-ngrok http 4310
 ```
+
+For ngrok, use `ngrok http 4310` instead.
+
+Read the public HTTPS origin printed by the tunnel. In a second terminal, start the proxy with that origin, replacing `https://example.trycloudflare.com` with yours:
+
+```bash
+agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
+```
+
+**`--public-origin` is required when the tunnel terminates TLS**, so app uploads use HTTPS. Use the scheme, host and optional port, without the `/agent-device` path. If the tunnel URL changes, restart the proxy with the new origin.
+
+The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
 
 By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network.
 
