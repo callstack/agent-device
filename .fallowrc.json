@@ -7,6 +7,8 @@
     "scripts/check-affected/command.ts",
     "packages/provider-testmu/test/package-smoke.mjs",
     "packages/maestro/test/package-smoke.mjs",
+    "packages/replay/test/package-smoke.mjs",
+    "packages/replay/test/packed-runtime.mjs",
     "packages/maestro/test/packed-runtime.mjs",
     "packages/maestro/tsdown.config.ts",
     "packages/maestro/src/plugin.ts",

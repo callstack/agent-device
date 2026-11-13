@@ -27,6 +27,9 @@ const LAZY_HTTP_MODULES = new Set(['node:http', 'node:https']);
  */
 function isLazyEngineModule(specifier: string): boolean {
   return (
+    ['@agent-device/replay', '@agent-device/ad-replay', '@agent-device/replay-test'].some(
+      (name) => specifier === name || specifier.startsWith(`${name}/`),
+    ) ||
     specifier === '@agent-device/maestro' ||
     (specifier.startsWith('@agent-device/maestro/') &&
       specifier !== '@agent-device/maestro/replay-backend-declaration')
@@ -34,6 +37,15 @@ function isLazyEngineModule(specifier: string): boolean {
 }
 
 test('the lazy engine set covers the plugin subpath but not its engine-free declaration', () => {
+  for (const name of [
+    '@agent-device/replay',
+    '@agent-device/ad-replay',
+    '@agent-device/replay-test',
+  ]) {
+    expect(isLazyEngineModule(name)).toBe(true);
+    expect(isLazyEngineModule(`${name}/agent-device`)).toBe(true);
+    expect(isLazyEngineModule(`${name}ish`)).toBe(false);
+  }
   expect(isLazyEngineModule('@agent-device/maestro')).toBe(true);
   expect(isLazyEngineModule('@agent-device/maestro/replay-backend')).toBe(true);
   expect(isLazyEngineModule('@agent-device/maestro/replay-backend-declaration')).toBe(false);
