@@ -914,7 +914,7 @@ agent-device keyboard dismiss
 ```
 
 - `keyboard status` (or `keyboard get`) reports keyboard visibility and a best-effort input type on Android emulators and devices.
-- `keyboard dismiss` taps a safe control such as `Done` when available and checks that the keyboard closed. It works on Android and, best-effort, on iOS simulators and devices. On iOS, when the keyboard exposes no dismiss control, it reports `UNSUPPORTED_OPERATION` with `error.details.reason: keyboard_dismiss_unavailable` and `dispatched: no`, because nothing was tapped; when a control was tapped and the keyboard stayed open, `error.details.reason` is absent and `dispatched` is `unknown`. On Android the refusal keeps `UNSUPPORTED_OPERATION` with no `reason` and reports its own `attempts` and IME fields. Either way, press a visible app control such as `Done` only when that is the intended fallback.
+- `keyboard dismiss` taps a safe control such as `Done` when available and checks that the keyboard closed. It works on Android and, best-effort, on iOS simulators and devices. Both report `UNSUPPORTED_OPERATION` when the keyboard stays up. On iOS, a keyboard that exposes no dismiss control adds `error.details.reason: keyboard_dismiss_unavailable` with `dispatched: no`, because nothing was tapped; one whose control was tapped and stayed open has no `reason` and `dispatched: unknown`. Android reports its own `attempts` and IME fields with no `reason`. Either way, press a visible app control such as `Done` only when that is the intended fallback.
 - Works with the session device or a device selector (`--platform`, `--device`, `--udid`, `--serial`).
 
 ## Performance diagnostics
