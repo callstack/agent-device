@@ -297,6 +297,41 @@ for (const probe of ['single', 'sync', 'async'] as const) {
   );
 }
 
+for (const [psState, procState, zombie] of [
+  ['Z', 'S', false],
+  ['S', 'Z', true],
+] as const) {
+  test.skipIf(process.platform !== 'linux')(
+    `Linux state follows the /proc read that gave the start token (ps ${psState}, /proc ${procState})`,
+    async () => {
+      // A pid reused between the ps snapshot and the /proc read must not pair one lifetime's
+      // start token with the other lifetime's state.
+      vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+        if (String(path) === '/proc/sys/kernel/random/boot_id') return 'test-boot\n';
+        if (String(path) === '/proc/4242/stat') {
+          return `4242 (a) ${procState} ${Array(18).fill('0').join(' ')} 5371442 0`;
+        }
+        throw new Error('ENOENT');
+      });
+      const row = `4242 ${psState} Mon Nov  9 23:54:54 2026\n`;
+      psReturns(row);
+      psAnswersIdentity({ identity: row, command: '4242 y\n' });
+      const expected = { state: procState, startTime: 'linux:test-boot:5371442' };
+
+      assert.deepEqual(readHostProcessIdentityObservations([4242]).get(4242), expected);
+      assert.deepEqual(
+        (await readHostProcessIdentityObservationsAsync([4242])).get(4242),
+        expected,
+      );
+      assert.deepEqual(await readProcessIdentityFacts(4242), {
+        startTime: 'linux:test-boot:5371442',
+        command: 'y',
+        zombie,
+      });
+    },
+  );
+}
+
 test.skipIf(process.platform !== 'linux')(
   'Linux identities fall back to lstart when proc is unreadable or malformed',
   async () => {
