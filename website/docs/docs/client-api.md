@@ -32,7 +32,7 @@ Entry points for driving devices from Node.js:
   - `startAgentDevice(options)`
   - types: `AgentDeviceHost`, `StartAgentDeviceOptions`
   - `ensureDaemon(options?)`
-  - `createLocalArtifactAdapter(options?)`
+  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `isUnreadableCaptureContentError(error)`: true when an Android helper capture found no readable
     app content yet (`empty-helper-output`, `system-window-only`, `content-poor-app-window`), for
@@ -47,7 +47,7 @@ Entry points for driving devices from Node.js:
   - types: `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`
   - types: `NormalizedError`, `AppErrorCode`, `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`
 - `agent-device/io`
-  - `createLocalArtifactAdapter(options?)`
+  - `createLocalArtifactAdapter({ cwd, rootDir?, tempDir? })`
   - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
     `FileOutputRef`, `LocalArtifactAdapterOptions`, `OutputVisibility`, `ReserveOutputOptions`,
     `ReservedOutputFile`, `ResolveInputOptions`, `ResolvedInputFile`, `TemporaryFile`
