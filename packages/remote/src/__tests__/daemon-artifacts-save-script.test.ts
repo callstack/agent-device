@@ -1,81 +1,118 @@
-/**
- * #1802, the write half of the caller/daemon file split.
- *
- * Reading was fixed by sending script sources with the request. Writing has no symmetric path:
- * `--save-script` publishes a healed `.ad` through the daemon's own `SessionScriptWriter`, at
- * session teardown, on the daemon's disk — next to a source path that does not exist there. A
- * remote request that would produce a file the caller can never see is refused here instead of
- * appearing to succeed.
- */
-import { createTestHostEnvironment } from '@agent-device/test-kit';
-import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import fs from 'node:fs';
+import path from 'node:path';
+import { expect, test } from 'vitest';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
-const REMOTE = { baseUrl: 'http://remote-mac.example.test:7777/agent-device', token: 'secret' };
-const LOCAL = { token: 'secret' };
-const NO_CANCELLATION = new AbortController().signal;
+const REMOTE = { baseUrl: 'http://remote.example.test', token: 'test' };
+const signal = new AbortController().signal;
 
-function replayRequest(saveScript?: boolean | string) {
-  return {
-    session: 'default',
-    command: 'replay',
-    positionals: ['./flows/login.ad'],
-    flags: saveScript === undefined ? {} : { saveScript },
-    meta: { cwd: '/repo' },
-  };
-}
+test.each(['open', 'session_save_script'])(
+  'remote %s separates the caller output from the daemon target',
+  async (command) => {
+    const root = mkdtempForTestSync('script-destination-');
+    const requested = 'output.ad';
+    const active = command === 'session_save_script';
+    const result = await prepareRemoteRequestArtifacts(
+      {
+        session: 'owned',
+        command,
+        positionals: active ? [requested] : ['Demo'],
+        flags: active ? {} : { saveScript: requested },
+        meta: { cwd: root },
+      },
+      REMOTE,
+      signal,
+      createTestHostEnvironment(),
+    );
+    expect(result.clientArtifactPaths?.savedScript).toBe(path.join(root, requested));
+    const daemonPath = active ? result.positionals[0] : result.flags?.saveScript;
+    expect(typeof daemonPath).toBe('string');
+    expect(isRemoteTempArtifactPath(daemonPath as string, 'script', '.ad')).toBe(true);
+    expect(daemonPath).not.toContain(root);
+  },
+);
 
-test('a remote daemon refuses --save-script, naming the caller/daemon split', async () => {
-  await assert.rejects(
-    async () =>
-      await prepareRemoteRequestArtifacts(
-        replayRequest(true),
-        REMOTE,
-        NO_CANCELLATION,
-        createTestHostEnvironment(),
-      ),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message.includes('written on the daemon host'),
-  );
+test.each(['replay', 'close'])('remote %s save-script stays unsupported', async (command) => {
+  await expect(
+    prepareRemoteRequestArtifacts(
+      { session: 'owned', command, positionals: [], flags: { saveScript: true } },
+      REMOTE,
+      signal,
+      createTestHostEnvironment(),
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'remote_script_lifecycle_unsupported' } });
 });
 
-test('a remote daemon refuses an explicit --save-script output path too', async () => {
-  await assert.rejects(
-    async () =>
-      await prepareRemoteRequestArtifacts(
-        replayRequest('./flows/login.healed.ad'),
-        REMOTE,
-        NO_CANCELLATION,
-        createTestHostEnvironment(),
-      ),
-    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
-  );
-});
-
-test('a local daemon leaves --save-script untouched', async () => {
-  const prepared = await prepareRemoteRequestArtifacts(
-    replayRequest(true),
-    LOCAL,
-    NO_CANCELLATION,
-    createTestHostEnvironment(),
-  );
-
-  assert.equal(prepared.flags?.saveScript, true);
-  assert.deepEqual(prepared.positionals, ['./flows/login.ad']);
-});
-
-test('a remote replay without --save-script passes through unchanged', async () => {
-  const prepared = await prepareRemoteRequestArtifacts(
-    replayRequest(),
+test('bare active publication preserves the earlier target', async () => {
+  const result = await prepareRemoteRequestArtifacts(
+    { session: 'owned', command: 'session_save_script', positionals: [], flags: {} },
     REMOTE,
-    NO_CANCELLATION,
+    signal,
     createTestHostEnvironment(),
   );
-
-  assert.deepEqual(prepared.positionals, ['./flows/login.ad']);
-  assert.equal(prepared.uploadedArtifactId, undefined);
+  expect(result.clientArtifactPaths).toBeUndefined();
 });
+
+test('existing client target refuses before dispatch unless force was granted', async () => {
+  const root = mkdtempForTestSync('script-existing-');
+  const destination = path.join(root, 'output.ad');
+  fs.writeFileSync(destination, 'original');
+  const req = {
+    session: 'owned',
+    command: 'open',
+    positionals: ['Demo'],
+    flags: { saveScript: destination },
+  };
+  await expect(
+    prepareRemoteRequestArtifacts(req, REMOTE, signal, createTestHostEnvironment()),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason: 'script_target_exists' } });
+  const forced = await prepareRemoteRequestArtifacts(
+    { ...req, flags: { ...req.flags, force: true } },
+    REMOTE,
+    signal,
+    createTestHostEnvironment(),
+  );
+  expect(forced.clientArtifactPaths?.savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('original');
+});
+
+test('local publication retains its path and flags', async () => {
+  const req = {
+    session: 'owned',
+    command: 'open',
+    positionals: ['Demo'],
+    flags: { saveScript: 'out.ad' },
+  };
+  const result = await prepareRemoteRequestArtifacts(
+    req,
+    { token: 'test' },
+    signal,
+    createTestHostEnvironment(),
+  );
+  expect(result.flags).toEqual(req.flags);
+  expect(result.clientArtifactPaths).toBeUndefined();
+});
+
+test.each(['open', 'session_save_script'])(
+  'remote %s expands home on the caller',
+  async (command) => {
+    const root = mkdtempForTestSync('script-home-');
+    const home = path.join(root, 'caller-home');
+    const active = command === 'session_save_script';
+    const result = await prepareRemoteRequestArtifacts(
+      {
+        session: 'owned',
+        command,
+        positionals: active ? ['~/journey.ad'] : ['Demo'],
+        flags: active ? {} : { saveScript: '~/journey.ad' },
+        meta: { cwd: root },
+      },
+      REMOTE,
+      signal,
+      createTestHostEnvironment({ env: { HOME: home } }),
+    );
+    expect(result.clientArtifactPaths?.savedScript).toBe(path.join(home, 'journey.ad'));
+  },
+);

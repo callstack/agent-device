@@ -23,6 +23,7 @@ import {
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import {
+  assertRemoteActiveScriptArtifacts,
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
   refuseOversizedDaemonRequest,
@@ -169,6 +170,7 @@ export type RemoteDaemonHealth = {
   rpcProtocolVersion?: number;
   instanceId?: string;
   hostArch?: string;
+  activeScriptArtifacts?: boolean;
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
@@ -177,7 +179,7 @@ export type RemoteDaemonHealth = {
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'activeScriptArtifacts'
 >;
 
 export async function canConnect(
@@ -376,6 +378,7 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
     ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
+    ...(parsed.activeScriptArtifacts === true ? { activeScriptArtifacts: true } : {}),
   };
 }
 
@@ -499,6 +502,7 @@ async function retryAfterRemoteInstanceMismatch(
       daemonBaseUrl: info.baseUrl,
     });
   }
+  info.remoteActiveScriptArtifacts = (health.upstream ?? health).activeScriptArtifacts === true;
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
   cacheRemoteDaemonHealth(info, health);
@@ -548,6 +552,7 @@ async function sendRequestWithTransport(
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
+  assertRemoteActiveScriptArtifacts(info, req);
   return transport === 'http'
     ? await sendHttpRequest(info, req, statePaths, timeoutMs, options)
     : await sendSocketRequest(info, req, timeoutMs, options);

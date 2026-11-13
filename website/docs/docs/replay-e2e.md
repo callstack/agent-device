@@ -71,7 +71,11 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 ```
 
 - Missing parent directories are created.
-- The script is written on the machine running the daemon, so `--save-script` is rejected when you use a remote daemon.
+- With a local daemon, the script is written on the daemon host.
+- With a remote daemon that advertises `activeScriptArtifacts` in `/health`, a fresh `open --save-script=journey.ad` arms recording. Run `session save-script` to download the `.ad` to that caller-side path while keeping the session open. An already-open unarmed session cannot export earlier history.
+- Publish before closing. Remote `close --save-script` and `replay --save-script` remain unsupported; plain `close` discards an unpublished remote recording and does not download a script.
+- The daemon allocates its own output path and returns the published script as an authenticated artifact. The client downloads atomically and preserves an existing output unless `--force` authorizes replacement. If download or local publication fails, the error reports an artifact ID for retry through the same authenticated endpoint and tenant/lease routing. Script artifacts remain downloadable for the existing 15-minute artifact lifetime.
+- Upgrade the client and owning daemon together. Through a proxy, the upstream daemon must advertise the capability. The client does not take over or restart an externally owned daemon. Remote batch steps do not arm or publish scripts.
 - For a bare file name that could be read as another argument, use `--save-script=workflow.ad` or a path-like value such as `./workflow.ad`.
 
 ## `.ad` line grammar

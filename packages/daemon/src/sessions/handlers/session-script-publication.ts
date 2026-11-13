@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -44,7 +45,11 @@ export function handleSessionScriptPublication(params: {
   }
   retargetActivePublication(
     session,
-    { explicitPath, liveForce: req.flags?.force },
+    {
+      explicitPath,
+      liveForce: req.flags?.force,
+      clientPath: req.meta?.clientArtifactPaths?.savedScript,
+    },
     sessionStore.host.cwd,
   );
 
@@ -63,11 +68,27 @@ export function handleSessionScriptPublication(params: {
   }
 
   markActivePublicationDone(session, result.path);
+  const state = session.scriptPublication;
+  const target = state?.kind === 'authoring' ? state.target : undefined;
   return {
     ok: true,
     data: {
       session: session.name,
       savedScript: result.path,
+      ...(target?.kind === 'explicit' && target.clientPath
+        ? {
+            artifacts: [
+              {
+                field: 'savedScript',
+                artifactType: 'session-script',
+                path: result.path,
+                localPath: target.clientPath,
+                fileName: path.basename(target.clientPath),
+                force: target.force,
+              },
+            ],
+          }
+        : {}),
       actionCount: result.actionCount,
       ...successText(`Published script: ${result.path}`),
     },

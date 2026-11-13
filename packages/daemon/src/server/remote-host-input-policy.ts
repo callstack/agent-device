@@ -1,3 +1,4 @@
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
@@ -5,7 +6,6 @@ import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 
 const HOST_PATH_FIELDS = [
-  'saveScript',
   'sessionSaveScript',
   'launchConsole',
   'baseline',
@@ -56,7 +56,21 @@ function assertRemoteHostToolingInputs(
   const hostPath = HOST_PATH_FIELDS.find((field) =>
     fields.some((record) => record && Object.hasOwn(record, field)),
   );
-  if (hostPath || request.command === INTERNAL_COMMANDS.sessionSaveScript) {
+  const script = request.flags?.saveScript;
+  const invalidScript = fields.some(
+    (record) =>
+      record &&
+      Object.hasOwn(record, 'saveScript') &&
+      (record !== request.flags ||
+        request.command !== 'open' ||
+        !(typeof script === 'string' && isRemoteTempArtifactPath(script, 'script', '.ad'))),
+  );
+  const invalidPublication =
+    request.command === INTERNAL_COMMANDS.sessionSaveScript &&
+    (request.input?.path !== undefined ||
+      request.positionals.some((value) => !isRemoteTempArtifactPath(value, 'script', '.ad')));
+  if (invalidScript) throw remoteHostInputDenied('saveScript');
+  if (hostPath || invalidPublication) {
     throw remoteHostInputDenied(hostPath ?? 'command');
   }
   const hostArgument = findRemoteFileUrlInput(request) ?? findRemoteHostArgument(request);
@@ -146,6 +160,12 @@ function restrictRemoteBatchSteps(request: DaemonRequest): DaemonRequest {
     flags.batchMaxSteps ?? DEFAULT_BATCH_MAX_STEPS,
   );
   flags.batchSteps = steps.map((step) => {
+    if (
+      step.flags?.saveScript !== undefined ||
+      step.command === INTERNAL_COMMANDS.sessionSaveScript
+    ) {
+      throw remoteHostInputDenied('saveScript');
+    }
     const restricted = restrictRemoteHostInputs({ ...request, ...step });
     return {
       ...step,
@@ -186,6 +206,6 @@ function remoteHostInputDenied(field: string): AppError {
     reason: 'REMOTE_HOST_INPUT_DENIED',
     field,
     retriable: false,
-    hint: 'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling or script publication.',
+    hint: 'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling.',
   });
 }

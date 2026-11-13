@@ -207,3 +207,22 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
     hint: 'Split the replay suite or flow into smaller runs.',
   });
 }
+
+/** Refuse unsupported script output before any mutating RPC, including after instance retry. */
+export function assertRemoteActiveScriptArtifacts(info: DaemonInfo, req: DaemonWireRequest): void {
+  if (
+    info.baseUrl &&
+    info.remoteActiveScriptArtifacts !== true &&
+    (req.flags?.saveScript || req.command === 'session_save_script')
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'The remote daemon does not support downloadable session scripts.',
+      {
+        reason: 'remote_active_script_artifacts_unsupported',
+        daemonRequestSent: false,
+        hint: 'Use a daemon and proxy that advertise activeScriptArtifacts in the upstream health response. Keep the owning integration in control of upgrades.',
+      },
+    );
+  }
+}

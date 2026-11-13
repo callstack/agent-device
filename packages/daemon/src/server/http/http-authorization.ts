@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 // May this HTTP caller reach this surface, and as which tenant? The auth hook
 // (loaded from the operator's environment), the token check, the tenant-trust
 // gate, and the remote-surface restrictions all answer here, for `/rpc` and
@@ -10,6 +11,7 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import {
+  buildRemoteTempArtifactPath,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   normalizeTenantId,
@@ -67,11 +69,25 @@ function restrictRemoteHttpRequest(
     providerCredentialFingerprint: _providerCredentialFingerprint,
     ...meta
   } = request.meta ?? {};
-  return restrictRemoteHostInputs({
+  const restricted = restrictRemoteHostInputs({
     ...request,
     ...(request.meta ? { meta } : {}),
     internal: { ...request.internal, publicNetworkOnly: true },
   });
+  // The HTTP boundary allocates the host path. The repeated core admission below only validates it.
+  if (typeof restricted.flags?.saveScript === 'string') {
+    return {
+      ...restricted,
+      flags: { ...restricted.flags, saveScript: buildRemoteTempArtifactPath('script', '.ad') },
+    };
+  }
+  if (
+    restricted.command === INTERNAL_COMMANDS.sessionSaveScript &&
+    restricted.positionals.length > 0
+  ) {
+    return { ...restricted, positionals: [buildRemoteTempArtifactPath('script', '.ad')] };
+  }
+  return restricted;
 }
 
 async function runHttpAuthHook(

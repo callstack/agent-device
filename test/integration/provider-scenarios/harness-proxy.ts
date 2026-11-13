@@ -214,7 +214,7 @@ function isAllowedUpstreamRoute(method: string | undefined, route: string): bool
       return /^\/upload\/direct\/[0-9a-f-]+$/i.test(route);
     case 'GET':
       return (
-        ['/artifacts', '/artifacts/'].includes(route) ||
+        ['/health', '/artifacts', '/artifacts/'].includes(route) ||
         /^\/artifacts\/[0-9a-f-]+$/i.test(route) ||
         /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
           route,

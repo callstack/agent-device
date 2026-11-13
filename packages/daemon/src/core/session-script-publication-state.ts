@@ -23,7 +23,7 @@
  */
 export type SessionScriptTarget =
   | Readonly<{ kind: 'default'; force: boolean }>
-  | Readonly<{ kind: 'explicit'; path: string; force: boolean }>;
+  | Readonly<{ kind: 'explicit'; path: string; force: boolean; clientPath?: string }>;
 
 /**
  * ADR 0012 decision 6 repair status.
@@ -98,7 +98,7 @@ export const NO_SCRIPT_PUBLICATION: SessionScriptPublicationState = { kind: 'non
  */
 export function resolveScriptTarget(
   previous: SessionScriptTarget | undefined,
-  requested: Readonly<{ path?: string | undefined; force: boolean }>,
+  requested: Readonly<{ path?: string | undefined; force: boolean; clientPath?: string }>,
 ): SessionScriptTarget {
   if (requested.path === undefined) {
     // A bare re-arm is not a retarget: the previous target — explicit path included — survives
@@ -109,8 +109,20 @@ export function resolveScriptTarget(
     return requested.force ? { ...base, force: true } : base;
   }
   const retainsAuthorization =
-    previous?.force === true && (previous.kind === 'default' || previous.path === requested.path);
-  return { kind: 'explicit', path: requested.path, force: requested.force || retainsAuthorization };
+    previous?.force === true &&
+    (previous.kind === 'default' ||
+      previous.path === requested.path ||
+      (requested.clientPath !== undefined && previous.clientPath === requested.clientPath));
+  return {
+    kind: 'explicit',
+    path: requested.path,
+    force: requested.force || retainsAuthorization,
+    clientPath:
+      requested.clientPath ??
+      (previous?.kind === 'explicit' && previous.path === requested.path
+        ? previous.clientPath
+        : undefined),
+  };
 }
 
 /**
@@ -189,7 +201,7 @@ export function isScriptPublished(state: SessionScriptPublicationState): boolean
 
 /** ADR 0016: `open --save-script` on a fresh session arms ordinary authoring. */
 export function armAuthoring(
-  requested: Readonly<{ path?: string | undefined; force: boolean }>,
+  requested: Readonly<{ path?: string | undefined; force: boolean; clientPath?: string }>,
 ): SessionScriptPublicationState {
   return { kind: 'authoring', status: 'armed', target: resolveScriptTarget(undefined, requested) };
 }
@@ -214,7 +226,12 @@ export function markAuthoringPublished(
   return {
     kind: 'authoring',
     status: 'published',
-    target: { kind: 'explicit', path: writtenPath, force: state.target.force },
+    target: {
+      kind: 'explicit',
+      path: writtenPath,
+      force: state.target.force,
+      clientPath: state.target.kind === 'explicit' ? state.target.clientPath : undefined,
+    },
   };
 }
 

@@ -185,7 +185,8 @@ export type DaemonArtifactKnownType =
   | 'screen-recording-contact-sheet'
   | 'screen-recording-telemetry'
   | 'trace-log'
-  | 'test-artifacts';
+  | 'test-artifacts'
+  | 'session-script';
 
 export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
 
@@ -199,6 +200,8 @@ export type DaemonArtifact = {
   artifactId?: string;
   fileName?: string;
   localPath?: string;
+  /** Per-target script overwrite authorization echoed by the publication owner. */
+  force?: boolean;
   path?: string;
 };
 

@@ -37,6 +37,7 @@ export type DaemonInfo = {
   /** The provider plugin inventory as published; `readPluginInventory` validates it where it is read. */
   plugins?: unknown;
   baseUrl?: string;
+  remoteActiveScriptArtifacts?: boolean;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
 };

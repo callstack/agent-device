@@ -411,6 +411,7 @@ export async function completeOpenCommand(params: {
   });
   sessionStore.recordAction(nextRef, {
     command: 'open',
+    clientScriptPath: req.meta?.clientArtifactPaths?.savedScript,
     positionals: openPositionals,
     flags: req.flags ?? {},
     runtime: req.runtime !== undefined ? runtimeHints : undefined,

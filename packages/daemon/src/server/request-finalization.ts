@@ -115,6 +115,7 @@ function registerDownloadableArtifacts(
         }),
         fileName: artifact.fileName,
         localPath: artifact.localPath,
+        ...(artifact.force !== undefined ? { force: artifact.force } : {}),
       };
     }),
   };

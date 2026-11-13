@@ -1,3 +1,4 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import fs from 'node:fs';
 // Type-only: a runtime `node:http` import would load it eagerly for every CLI command. The actual
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
@@ -24,6 +25,7 @@ export type RemoteArtifactDownload = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  scriptForce?: boolean;
 };
 
 type DownloadDestination = {
@@ -34,6 +36,20 @@ type DownloadDestination = {
 
 function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination {
   const { destinationPath } = params;
+  if (params.scriptForce !== undefined) {
+    return {
+      prepare: async () => {},
+      cleanupOnError: async () => {},
+      materialize: (res, signal) =>
+        materializeScriptArtifact(
+          res,
+          destinationPath,
+          params.scriptForce === true,
+          params.artifactId,
+          signal,
+        ),
+    };
+  }
   if (params.isDirectory) {
     return {
       prepare: async () => {
@@ -193,5 +209,57 @@ async function materializeDirectoryArtifact(
     return materializedPath;
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+/** A failed or racing transfer never exposes a prefix or removes the caller's existing script. */
+async function materializeScriptArtifact(
+  res: http.IncomingMessage,
+  destination: string,
+  force: boolean,
+  artifactId: string,
+  signal: AbortSignal,
+): Promise<string> {
+  let staging: string | undefined;
+  let publishing = false;
+  try {
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    staging = await fs.promises.mkdtemp(
+      path.join(path.dirname(destination), '.agent-device-script-'),
+    );
+    const temporary = path.join(staging, 'script.ad');
+    await pipeline(res, fs.createWriteStream(temporary, { flags: 'wx', mode: 0o600 }), { signal });
+    signal.throwIfAborted();
+    publishing = true;
+    if (force) await fs.promises.rename(temporary, destination);
+    else await fs.promises.link(temporary, destination);
+    return destination;
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `The remote script could not be saved to ${destination}.`,
+      {
+        reason:
+          publishing && (error as NodeJS.ErrnoException).code === 'EEXIST'
+            ? 'script_target_exists'
+            : 'script_download_failed',
+        path: destination,
+        artifactId,
+        hint: 'The daemon already published the script. Retry downloading the retained artifact by ID; do not repeat the device journey.',
+      },
+      error instanceof Error ? error : undefined,
+    );
+  } finally {
+    if (staging) {
+      try {
+        await fs.promises.rm(staging, { recursive: true, force: true });
+      } catch (error) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'script_download_cleanup_failed',
+          data: { artifactId, path: staging, error: String(error) },
+        });
+      }
+    }
   }
 }

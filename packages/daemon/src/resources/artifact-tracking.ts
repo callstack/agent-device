@@ -106,6 +106,7 @@ export type DownloadableArtifactRegistration = {
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
 
 type PreparedDownloadableArtifact = {
+  retainAfterDownload?: boolean;
   artifactPath: string;
   fileName?: string;
   mimeType: string;
@@ -324,6 +325,7 @@ async function prepareArtifactPayload(
       fileName: safeArtifactFilename(entry.fileName, artifactId),
       mimeType: DEFAULT_DOWNLOAD_MIME_TYPE,
       sizeBytes: stat.size,
+      ...(entry.artifactType === 'session-script' ? { retainAfterDownload: true } : {}),
     };
   }
   if (!stat.isDirectory()) return null;

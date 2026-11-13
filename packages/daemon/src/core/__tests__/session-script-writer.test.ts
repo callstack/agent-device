@@ -959,3 +959,19 @@ test.each([
     );
   },
 );
+
+test('teardown discards an unpublished caller-owned recording without writing on the daemon', () => {
+  const root = mkdtempForTestSync('remote-script-teardown-');
+  const target = path.join(root, 'daemon.ad');
+  const writer = new SessionScriptWriter(root, hostCwd);
+  const session = makeAuthoringSession('remote', {
+    scriptPublication: {
+      kind: 'authoring',
+      status: 'armed',
+      target: { kind: 'explicit', path: target, clientPath: '/caller/journey.ad', force: false },
+    },
+    actions: [action({ command: 'open', positionals: ['Demo'] })],
+  });
+  expect(writer.write(session)).toEqual({ written: false });
+  expect(fs.existsSync(target)).toBe(false);
+});

@@ -86,3 +86,26 @@ test('a repair transaction records for its whole lifetime, terminal statuses inc
     expect(isRecordingPublication({ kind: 'repair', status, target, boundary: 0 })).toBe(true);
   }
 });
+
+test('remote force follows the caller destination across daemon output allocations', () => {
+  const previous = {
+    kind: 'explicit',
+    path: '/tmp/old.ad',
+    clientPath: '/caller/a.ad',
+    force: true,
+  } as const;
+  expect(
+    resolveScriptTarget(previous, {
+      path: '/tmp/new.ad',
+      clientPath: '/caller/a.ad',
+      force: false,
+    }),
+  ).toMatchObject({ force: true, clientPath: '/caller/a.ad' });
+  expect(
+    resolveScriptTarget(previous, {
+      path: '/tmp/new.ad',
+      clientPath: '/caller/b.ad',
+      force: false,
+    }),
+  ).toMatchObject({ force: false, clientPath: '/caller/b.ad' });
+});

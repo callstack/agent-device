@@ -300,53 +300,59 @@ test('daemon artifact downloads can keep the source file while consuming the inv
   }
 });
 
-test('daemon artifact downloads can be forced retained by server option', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
+test.for([
+  { artifactType: 'session-log', retainArtifacts: true },
+  { artifactType: 'session-script', retainArtifacts: false },
+])(
+  'daemon artifact downloads retain $artifactType for retry',
+  async ({ artifactType, retainArtifacts }, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const tempDir = mkdtempForTestSync('agent-device-artifacts-retain-all-');
-  const artifactPath = path.join(tempDir, 'session-log.txt');
-  fs.writeFileSync(artifactPath, 'log-body');
-  const artifactId = trackDownloadableArtifact({
-    artifactPath,
-    artifactType: 'session-log',
-    fileName: 'session-log.txt',
-  });
-  const server = await createDaemonHttpServer({
-    token: 'daemon-secret',
-    retainArtifacts: true,
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    env: process.env,
-    cwd: process.cwd(),
-  });
-
-  try {
-    const port = await listenOnLoopback(server);
-    const baseUrl = `http://127.0.0.1:${port}`;
-    const auth = { authorization: 'Bearer daemon-secret' };
-
-    const bareDownload = await fetch(`${baseUrl}/artifacts/${encodeURIComponent(artifactId)}`, {
-      headers: auth,
+    const tempDir = mkdtempForTestSync('agent-device-artifacts-retain-all-');
+    const artifactPath = path.join(tempDir, 'session-log.txt');
+    fs.writeFileSync(artifactPath, 'log-body');
+    const artifactId = trackDownloadableArtifact({
+      artifactPath,
+      artifactType,
+      fileName: 'session-log.txt',
     });
-    assert.equal(bareDownload.status, 200);
-    assert.equal(await bareDownload.text(), 'log-body');
-    assert.equal(fs.existsSync(artifactPath), true);
-
-    const secondDownload = await fetch(`${baseUrl}/artifacts/${encodeURIComponent(artifactId)}`, {
-      headers: auth,
+    const server = await createDaemonHttpServer({
+      token: 'daemon-secret',
+      retainArtifacts,
+      handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+      env: process.env,
+      cwd: process.cwd(),
     });
-    assert.equal(secondDownload.status, 200);
-    assert.equal(await secondDownload.text(), 'log-body');
-    assert.equal(fs.existsSync(artifactPath), true);
 
-    const inventoryAfterDownloads = await fetch(`${baseUrl}/artifacts`, { headers: auth });
-    const body = (await inventoryAfterDownloads.json()) as ArtifactInventoryResponse;
-    assert.ok(body.artifacts.some((entry) => entry.id === artifactId));
-  } finally {
-    cleanupDownloadableArtifact(artifactId);
-    await closeLoopbackServer(server);
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-});
+    try {
+      const port = await listenOnLoopback(server);
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const auth = { authorization: 'Bearer daemon-secret' };
+
+      const bareDownload = await fetch(`${baseUrl}/artifacts/${encodeURIComponent(artifactId)}`, {
+        headers: auth,
+      });
+      assert.equal(bareDownload.status, 200);
+      assert.equal(await bareDownload.text(), 'log-body');
+      assert.equal(fs.existsSync(artifactPath), true);
+
+      const secondDownload = await fetch(`${baseUrl}/artifacts/${encodeURIComponent(artifactId)}`, {
+        headers: auth,
+      });
+      assert.equal(secondDownload.status, 200);
+      assert.equal(await secondDownload.text(), 'log-body');
+      assert.equal(fs.existsSync(artifactPath), true);
+
+      const inventoryAfterDownloads = await fetch(`${baseUrl}/artifacts`, { headers: auth });
+      const body = (await inventoryAfterDownloads.json()) as ArtifactInventoryResponse;
+      assert.ok(body.artifacts.some((entry) => entry.id === artifactId));
+    } finally {
+      cleanupDownloadableArtifact(artifactId);
+      await closeLoopbackServer(server);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test('daemon artifact downloads answer 404 for a consumed or unknown artifact id', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
