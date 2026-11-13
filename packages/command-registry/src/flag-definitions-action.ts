@@ -411,9 +411,9 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--foreground',
     usageDescription:
-      'open: keep normal app/device selection and return an initial snapshot; without an app, resolve the sole running app on the sole booted iOS simulator',
+      'open: keep normal app/device selection and return an initial snapshot; without an app, resolve the sole running app on the sole booted iOS simulator; on HarmonyOS with an app target, fail when the launched app does not hold the foreground within 5s',
     inputDescription:
-      'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
+      'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed. On HarmonyOS with an app target, the open fails with details.reason open-not-foreground when the launched app does not hold the foreground within 5s.',
     projectConfig: false,
     recorded: false,
   },
