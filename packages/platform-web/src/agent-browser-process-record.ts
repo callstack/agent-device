@@ -2,11 +2,12 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { realHostPathSync } from '@agent-device/host-kit/host-file';
+import { hostFileStatSync, realHostPathSync } from '@agent-device/host-kit/host-file';
 import { withoutCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   expandProcessTree,
   hostProcessId,
+  hostPlatform,
   isProcessAlive,
   listHostProcesses,
   readHostProcessIdentityObservationsAsync,
@@ -79,10 +80,33 @@ function matchManagedAgentBrowserProcess(
     const chrome = matchChromeProcess(processInfo, ownership);
     if (chrome) return chrome;
   }
-  if (processInfo.pid !== hostProcessId() && ownership.daemonEntries.includes(executable)) {
+  if (
+    processInfo.pid !== hostProcessId() &&
+    matchesManagedDaemonExecutable(executable, ownership.daemonEntries)
+  ) {
     return { process: processInfo, reason: 'agent-browser-daemon' };
   }
   return undefined;
+}
+
+function matchesManagedDaemonExecutable(executable: string, entries: readonly string[]): boolean {
+  if (entries.includes(executable)) return true;
+  if (hostPlatform() !== 'win32') return false;
+  const entry = entries.find((candidate) => candidate.toLowerCase() === executable.toLowerCase());
+  if (!entry) return false;
+  try {
+    const expected = hostFileStatSync(entry);
+    const observed = hostFileStatSync(executable);
+    return (
+      Number.isSafeInteger(expected.ino) &&
+      expected.ino > 0 &&
+      Number.isSafeInteger(expected.dev) &&
+      expected.ino === observed.ino &&
+      expected.dev === observed.dev
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isChromeExecutable(executable: string): boolean {

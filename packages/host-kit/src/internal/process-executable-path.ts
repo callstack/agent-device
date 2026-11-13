@@ -7,7 +7,6 @@ import { hostPlatform, uniquePositivePids } from './host-process.ts';
 const DEFAULT_TIMEOUT_MS = 1_000;
 const WINDOWS_TIMEOUT_FLOOR_MS = 2_000;
 const PATH_BUFFER_BYTES = 4_096;
-const WINDOWS_POWERSHELL = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
 
 export async function readProcessExecutablePaths(
   pids: Iterable<number>,
@@ -21,8 +20,10 @@ export async function readProcessExecutablePaths(
   return await withoutCommandExecutorOverride(async () => {
     try {
       const windows = platform === 'win32';
+      const executable = windows ? windowsPowerShellPath() : '/usr/bin/osascript';
+      if (!executable) return new Map();
       const result = await runCmd(
-        windows ? WINDOWS_POWERSHELL : '/usr/bin/osascript',
+        executable,
         windows ? windowsArgs(selected) : darwinArgs(selected),
         {
           allowFailure: true,
@@ -34,6 +35,15 @@ export async function readProcessExecutablePaths(
       return new Map();
     }
   });
+}
+
+function windowsPowerShellPath(): string | undefined {
+  const key = Object.keys(process.env).find((name) => name.toUpperCase() === 'SYSTEMROOT');
+  const root = key === undefined ? undefined : process.env[key];
+  if (!root || !path.win32.isAbsolute(root) || path.win32.parse(root).root.length < 3) {
+    return undefined;
+  }
+  return path.win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 }
 
 async function readLinuxPaths(

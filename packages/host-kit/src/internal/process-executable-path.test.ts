@@ -20,9 +20,16 @@ const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 afterEach(() => {
   Object.defineProperty(process, 'platform', originalPlatform);
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
 });
 function platform(value: NodeJS.Platform) {
   Object.defineProperty(process, 'platform', { ...originalPlatform, value });
+  if (value === 'win32') {
+    for (const key of Object.keys(process.env)) {
+      if (key.toUpperCase() === 'SYSTEMROOT') vi.stubEnv(key, undefined);
+    }
+    vi.stubEnv('SystemRoot', String.raw`D:\WinNT`);
+  }
 }
 
 test('Linux reads requested executable links and refuses missing, deleted and invalid paths', async () => {
@@ -69,18 +76,26 @@ test.each(['darwin', 'win32'] as const)(
         { pid: 5, path: valid },
       ]),
     });
-    const paths = await readProcessExecutablePaths([1, 2, 3, 4, 5, 0, 1], 20);
+    const paths = await readProcessExecutablePaths([1, 2, 3, 4, 5, 0, 1, -1, 1.5, 2147483648], 20);
     assert.deepEqual([...paths], [[1, valid]]);
     assert.equal(runCmdMock.mock.calls.length, 1);
     const [cmd, args, options] = runCmdMock.mock.calls[0]!;
     if (os === 'darwin') {
       assert.equal(cmd, '/usr/bin/osascript');
       assert.match(args[3], /proc_pidpath/);
+      const selected = /JSON\.stringify\((\[[^\]]*\])\.map/.exec(args[3]);
+      assert.ok(selected);
+      assert.deepEqual(JSON.parse(selected[1]!), [1, 2, 3, 4, 5]);
       assert.match(args[3], /n<=0 \|\| n>=4096/);
       assert.equal(options.timeoutMs, 20);
     } else {
-      assert.equal(cmd, String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`);
+      assert.equal(cmd, String.raw`D:\WinNT\System32\WindowsPowerShell\v1.0\powershell.exe`);
       assert.match(args[3], /ExecutablePath/);
+      const filter = /-Filter '([^']*)'/.exec(args[3]);
+      assert.equal(
+        filter?.[1],
+        'ProcessId=1 OR ProcessId=2 OR ProcessId=3 OR ProcessId=4 OR ProcessId=5',
+      );
       assert.doesNotMatch(args[3], /CommandLine/);
       assert.equal(options.timeoutMs, 2000);
     }
@@ -107,3 +122,25 @@ test.each(['darwin', 'win32'] as const)(
     assert.equal(runCmdMock.mock.calls.length, 3);
   },
 );
+
+test.each([undefined, '', 'Windows', String.raw`C:Windows`, String.raw`\Windows`])(
+  'Windows refuses missing or nonabsolute SystemRoot %s without a PATH lookup',
+  async (root) => {
+    platform('win32');
+    vi.stubEnv('SystemRoot', root);
+    assert.equal((await readProcessExecutablePaths([1])).size, 0);
+    assert.equal(runCmdMock.mock.calls.length, 0);
+  },
+);
+
+test('Windows host SystemRoot variable names are case-insensitive', async () => {
+  platform('win32');
+  vi.stubEnv('SystemRoot', undefined);
+  vi.stubEnv('sYsTeMrOoT', String.raw`E:\Windows`);
+  runCmdMock.mockResolvedValue({ stdout: '[]', stderr: '', exitCode: 0 });
+  await readProcessExecutablePaths([1]);
+  assert.equal(
+    runCmdMock.mock.calls[0]?.[0],
+    String.raw`E:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+  );
+});

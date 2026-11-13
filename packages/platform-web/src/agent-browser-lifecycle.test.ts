@@ -1,5 +1,6 @@
 import { bindTestCommandHost, installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
+import * as hostFile from '@agent-device/host-kit/host-file';
 import { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +11,7 @@ import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 const { runCmdMock, spawnMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
   spawnMock: vi.fn(),
-  probe: { unanswered: false },
+  probe: { unanswered: false, platform: undefined as NodeJS.Platform | undefined },
 }));
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -43,6 +44,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
     ...actual,
+    hostPlatform: () => probe.platform ?? actual.hostPlatform(),
     listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
       await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
     readHostProcessIdentityObservationsAsync: async (pids: Iterable<number>) =>
@@ -83,6 +85,7 @@ beforeEach(() => {
   identitiesMock.mockClear();
   executablePathsMock.mockReset();
   probe.unanswered = false;
+  probe.platform = undefined;
 });
 
 afterEach(() => {
@@ -520,6 +523,45 @@ function observeProcesses(processes: ProcessFixture[]) {
       ),
   );
 }
+
+test.each([
+  ['win32', 'same', [101]],
+  ['win32', 'different-file', []],
+  ['win32', 'different-device', []],
+  ['win32', 'missing', []],
+  ['win32', 'unsafe-inode', []],
+  ['darwin', 'same', []],
+] as const)(
+  'case-only executable spelling on %s requires %s file identity',
+  async (os, identity, expected) => {
+    const stateDir = mkdtempForTestSync('agent-device-web-case-');
+    try {
+      installFakeManagedAgentBrowser(stateDir);
+      const status = getManagedAgentBrowserStatus({
+        stateDir,
+        host: { env: process.env, cwd: process.cwd() },
+      });
+      const binary = nativeBinary(status.installDir);
+      const observed = binary.replaceAll('\\', '/').toUpperCase();
+      probe.platform = os;
+      vi.spyOn(hostFile, 'hostFileStatSync').mockImplementation((candidate) => {
+        if (candidate === observed && identity === 'missing') throw new Error('unavailable');
+        const stats = fs.statSync(candidate === observed ? binary : candidate);
+        if (candidate === observed) {
+          if (identity === 'different-file') stats.ino += 1;
+          if (identity === 'different-device') stats.dev += 1;
+          if (identity === 'unsafe-inode') stats.ino = Number.MAX_SAFE_INTEGER + 1;
+        }
+        return stats;
+      });
+      observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: observed }]);
+      const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+      expect((await recordManagedAgentBrowserProcesses(status, store)).pids).toEqual(expected);
+    } finally {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test('a managed binary symlink cannot confer ownership on an executable outside its install', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-install-boundary-');
