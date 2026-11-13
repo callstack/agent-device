@@ -17,8 +17,21 @@ extension RunnerTests {
 #else
   static let backGestureAllowanceMs = 400.0
 #endif
-  /// How long settling may sample before back swipes anyway and reports the outcome unverified.
-  static let backSwipeSettleBudgetMs = 2000.0
+  /// The least time settling may sample before back swipes anyway and reports the outcome
+  /// unverified; `backSwipeSettleBudgetMs` extends it on a host that captures slowly.
+  static let backSwipeSettleBaseBudgetMs = 2000.0
+
+  /// How long settling may sample: the base budget, or, when longer, the time a still screen needs
+  /// to settle at the slowest capture seen: the first capture, the required still span, and one more
+  /// pause and capture for the sample that completes the span. A slow host still settles a still
+  /// screen instead of always reporting it unverified.
+  static func backSwipeSettleBudgetMs(maxCaptureMs: Double) -> Double {
+    let sampleIntervalMs = backSwipeSettleSampleInterval * 1000 + maxCaptureMs
+    return max(
+      backSwipeSettleBaseBudgetMs,
+      maxCaptureMs + backSwipeRequiredStillMs(maxCaptureMs: maxCaptureMs) + sampleIntervalMs
+    )
+  }
 
   /// How long the screen must agree with itself before the swipe: as long as the gap it will be
   /// credited across, the contact allowance, one verification delay, and the slowest capture seen
@@ -74,8 +87,9 @@ extension RunnerTests {
   }
 
   /// iOS `back` presses the navigation bar's system back button when exactly one is on screen, read
-  /// from the live tree in this call. Otherwise it is the left-edge back swipe, verified by a change
-  /// of the app's screen. No other button counts, whatever its label.
+  /// from the live tree in this call, and confirms that the bar changed. Otherwise it is the
+  /// left-edge back swipe, verified by a change of the app's screen. No other button counts,
+  /// whatever its label.
   @MainActor
   func performInAppBack(app: XCUIApplication) throws -> InAppBackOutcome {
 #if os(macOS)
@@ -101,8 +115,8 @@ extension RunnerTests {
         NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", trace.logLine(outcome: outcome))
         return outcome
       }
-      if try pressNavigationBarBackButton(app: app, context: context) {
-        return .performed
+      if let pressed = try pressNavigationBarBackButton(app: app, context: context) {
+        return pressed
       }
       let outcome = try verifiedBackSwipe(app: app, context: context, trace: &trace)
       NSLog("AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION %@", trace.logLine(outcome: outcome))
@@ -160,53 +174,151 @@ extension RunnerTests {
     }
   }
 
-  /// Presses the navigation bar's system back button when exactly one hittable one is on screen.
-  /// It is read only where the tree answers queries: on a tree XCTest cannot serialize, the query
-  /// would grind through XCTest's retries, so back swipes there. Two candidates, such as a sheet over
-  /// a stack, are ambiguous and fall back to the swipe too. True once the tap was dispatched; false
-  /// when nothing was sent.
+  /// Presses the navigation bar's system back button when exactly one hittable one is on screen,
+  /// and confirms that the bar changed. It is read only where the tree answers queries: on a tree
+  /// XCTest cannot serialize, the query would grind through XCTest's retries, so back swipes there.
+  /// Two candidates, such as a sheet over a stack, are ambiguous and fall back to the swipe too. Nil
+  /// when nothing was sent, so the swipe is still safe; a delivered tap is never followed by a swipe.
   @MainActor
-  private func pressNavigationBarBackButton(app: XCUIApplication, context: SynthesizedCoordinateContext) throws -> Bool {
+  private func pressNavigationBarBackButton(
+    app: XCUIApplication,
+    context: SynthesizedCoordinateContext
+  ) throws -> InAppBackOutcome? {
+    var trace = NavigationBarBackTrace()
+    // One line on every exit, a thrown tap included.
+    defer { NSLog("AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON %@", trace.logLine) }
+    guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
-    let frame = navigationBarBackButtonFrame(app: app, context: context)
-    let lookupMs = Int((currentUptimeMs() - started).rounded())
-    guard let frame else {
-      NSLog("AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON found=no lookupMs=%ld", lookupMs)
-      return false
+    let frames = navigationBarBackButtonFrames(app: app)
+    let before = frames?.count == 1 ? readNavigationBarBackState(app: app) : nil
+    trace.lookupMs = currentUptimeMs() - started
+    guard let frames, frames.count == 1 else {
+      trace.found = frames == nil ? "unreadable" : frames!.isEmpty ? "no" : "ambiguous"
+      return nil
     }
+    guard let before else {
+      trace.found = "unreadable"
+      return nil
+    }
+    trace.found = "yes"
+    let frame = frames[0]
     // The synthesized tap returns once the touch is delivered; an XCTest tap would also wait out the
-    // pop animation, which the daemon's settle already observes.
-    let pressed: Bool
+    // pop animation, which the bar check below reads sooner.
     switch try performSynthesizedTapGesture(app: app, x: frame.midX, y: frame.midY, context: context) {
     case .performed:
-      pressed = true
+      break
     case .xctestFallback:
       let fallback = try performGesture(app) { try tapAt(app: app, x: frame.midX, y: frame.midY, context: context) }
-      if case .performed = fallback.outcome { pressed = true } else { pressed = false }
+      // A refused XCTest tap sent nothing either.
+      guard case .performed = fallback.outcome else { return nil }
     case .refused:
-      // Nothing was sent, so the swipe is still safe to try.
-      pressed = false
+      return nil
     }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON found=yes pressed=%@ lookupMs=%ld",
-      pressed ? "yes" : "no", lookupMs
-    )
-    return pressed
+    trace.pressed = true
+    let tapped = currentUptimeMs()
+    let confirmed = navigationBarBackStateChanged(app: app, from: before)
+    trace.confirmMs = currentUptimeMs() - tapped
+    trace.confirmed = confirmed
+    return confirmed ? .performed : .unconfirmed(Self.navigationBarBackUnverified)
+  }
+
+  /// What the back button path saw, logged as one line on every exit.
+  struct NavigationBarBackTrace {
+    /// `skipped` when the tree was not read, `unreadable` when a read failed, `no`, `ambiguous`, or `yes`.
+    var found = "skipped"
+    var pressed = false
+    var confirmed: Bool?
+    var lookupMs = 0.0
+    var confirmMs: Double?
+
+    var logLine: String {
+      func ms(_ value: Double?) -> String { value.map { String(Int($0.rounded())) } ?? "-" }
+      return [
+        "found=\(found)",
+        "pressed=\(pressed ? "yes" : "no")",
+        "confirmed=\(confirmed.map { $0 ? "yes" : "no" } ?? "-")",
+        "lookupMs=\(ms(lookupMs))",
+        "confirmMs=\(ms(confirmMs))",
+      ].joined(separator: " ")
+    }
+  }
+
+  /// Each navigation bar's identifier (the top screen's title in UIKit and SwiftUI stacks) with the
+  /// label and frame of its system back buttons. A pop removes, moves, or relabels the pressed button
+  /// or retitles its bar, so a change of this state is the evidence that the tap navigated.
+  struct NavigationBarBackState: Equatable {
+    let entries: [String]
+  }
+
+  /// The pause between two reads of the bar after the tap, and how long they may run before the
+  /// outcome is reported unconfirmed. Only a tap that did not navigate spends the whole budget.
+  static let navigationBarBackConfirmInterval: TimeInterval = 0.05
+  static let navigationBarBackConfirmBudgetMs = 1000.0
+
+  static let navigationBarBackUnverified = ErrorPayload(
+    code: RunnerWireErrorCode.backSwipeUnverified,
+    message: "back pressed the navigation bar back button, but the navigation bar did not change within 1 s. This is an unknown outcome.",
+    hint: "Take a snapshot to see where the app is."
+  )
+
+  /// Whether a later read of the bar differs from `before` within the confirmation budget. A read
+  /// that fails proves nothing, so it never confirms.
+  @MainActor
+  private func navigationBarBackStateChanged(app: XCUIApplication, from before: NavigationBarBackState) -> Bool {
+    let started = currentUptimeMs()
+    repeat {
+      if let after = readNavigationBarBackState(app: app), after != before { return true }
+      if currentUptimeMs() - started >= Self.navigationBarBackConfirmBudgetMs { return false }
+      sleepFor(Self.navigationBarBackConfirmInterval)
+    } while true
   }
 
   @MainActor
-  private func navigationBarBackButtonFrame(app: XCUIApplication, context: SynthesizedCoordinateContext) -> CGRect? {
-    guard !context.treeUnreadable, context.accessibilityHealth != .unavailable,
-      !isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
-    else { return nil }
+  private func navigationBarBackButtonIsReadable(context: SynthesizedCoordinateContext) -> Bool {
+    guard !context.treeUnreadable, context.accessibilityHealth != .unavailable else { return false }
+    return !isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
+  }
+
+  /// The frames of the hittable system back buttons; nil when the tree did not answer: a root walk
+  /// that failed, or a query XCTest rejected.
+  @MainActor
+  private func navigationBarBackButtonFrames(app: XCUIApplication) -> [CGRect]? {
     let rejectedBefore = rejectedAxSnapshotQueryCount()
-    // A root walk that fails finds no button; the swipe still runs.
-    let candidates = ((try? elementQueries(app: app, matching: .navigationBar)) ?? [])
+    guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
+    let frames = bars
       .flatMap { $0.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex }
       .filter { $0.isHittable }
-    guard rejectedAxSnapshotQueryCount() == rejectedBefore, candidates.count == 1 else { return nil }
-    let frame = candidates[0].frame
-    return SnapshotGeometry.isPositiveFinite(frame) ? frame : nil
+      .map(\.frame)
+    guard rejectedAxSnapshotQueryCount() == rejectedBefore, frames.allSatisfy(SnapshotGeometry.isPositiveFinite)
+    else { return nil }
+    return frames
+  }
+
+  /// One XCTest snapshot per bar, so a read after the tap costs a query per bar rather than one per
+  /// attribute. Nil when the tree did not answer.
+  @MainActor
+  private func readNavigationBarBackState(app: XCUIApplication) -> NavigationBarBackState? {
+    let rejectedBefore = rejectedAxSnapshotQueryCount()
+    guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
+    var entries: [String] = []
+    for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
+      guard let snapshot = try? bar.snapshot() else { return nil }
+      entries.append(Self.navigationBarBackEntry(snapshot))
+    }
+    guard rejectedAxSnapshotQueryCount() == rejectedBefore else { return nil }
+    return NavigationBarBackState(entries: entries)
+  }
+
+  static func navigationBarBackEntry(_ bar: XCUIElementSnapshot) -> String {
+    var buttons: [String] = []
+    var pending = bar.children
+    while let element = pending.popLast() {
+      if element.identifier == navigationBarBackButtonIdentifier {
+        buttons.append("\(element.label)\u{1F}\(NSCoder.string(for: element.frame))")
+      }
+      pending.append(contentsOf: element.children)
+    }
+    return ([bar.identifier] + buttons).joined(separator: "\u{1E}")
   }
 
   private func rejectedAxSnapshotQueryCount() -> Int {
@@ -321,7 +433,7 @@ extension RunnerTests {
 
   /// Samples `backSwipeSettleSampleInterval` apart until every sample of a run has agreed with its
   /// first one for `backSwipeRequiredStillMs` of the slowest capture so far. `settled` is false when
-  /// `backSwipeSettleBudgetMs` ran out first.
+  /// `backSwipeSettleBudgetMs` of the slowest capture so far ran out first.
   @MainActor
   private func settledBackVisualState(
     app: XCUIApplication,
@@ -345,7 +457,7 @@ extension RunnerTests {
         trace.settled = true
         return .success(SettledBackSample(sample: sample, stableSinceMs: start.ms, sampledMs: now, settled: true))
       }
-      if now - started >= Self.backSwipeSettleBudgetMs {
+      if now - started >= Self.backSwipeSettleBudgetMs(maxCaptureMs: trace.maxCaptureMs) {
         return .success(SettledBackSample(sample: sample, stableSinceMs: start.ms, sampledMs: now, settled: false))
       }
     }

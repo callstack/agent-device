@@ -264,7 +264,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     setValue: 'in-app',
     usageLabel: '--in-app',
     usageDescription:
-      'Back: use app-provided back UI when available; on iOS, the navigation bar back button, else the verified left-edge back swipe',
+      'Back: use app-provided back UI when available; on iOS, the one hittable navigation bar back button, confirmed by a bar change, else the verified left-edge back swipe',
     projectConfig: true,
     recorded: false,
   },

@@ -73,6 +73,21 @@ extension RunnerTests {
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
+  /// A delivered tap on the system back button is not a navigation: when the bar does not change,
+  /// back reports an unknown outcome and never swipes after the tap.
+  @MainActor
+  func testInAppBackReportsAPressedBackButtonThatDoesNotNavigateAsUnverified() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a back button tap that leaves the bar unchanged must not read as performed")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertTrue(app.navigationBars["Detail"].exists)
+  }
+
   /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,
   /// and the swipe that changes nothing reports so.
   @MainActor
@@ -477,6 +492,23 @@ extension RunnerTests {
     let slow = Self.backSwipeRequiredStillMs(maxCaptureMs: 600)
     XCTAssertEqual(slow - fast, 500)
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
+  }
+
+  /// A still screen settles before the budget runs out at any capture time: the settle loop's
+  /// timeline, replayed with fixed captures, reaches the required still span first. On a simulator
+  /// the base budget holds; a 1 s capture extends it.
+  func testBackSwipeSettleBudgetLetsAStillScreenSettleOnASlowHost() {
+    XCTAssertEqual(Self.backSwipeSettleBudgetMs(maxCaptureMs: 100), Self.backSwipeSettleBaseBudgetMs)
+    for captureMs in stride(from: 50.0, through: 2000.0, by: 50.0) {
+      let required = Self.backSwipeRequiredStillMs(maxCaptureMs: captureMs)
+      let budget = Self.backSwipeSettleBudgetMs(maxCaptureMs: captureMs)
+      var now = captureMs
+      let runStart = now
+      while now - runStart < required {
+        XCTAssertLessThan(now, budget, "capture \(captureMs) ms ran out of budget before settling")
+        now += Self.backSwipeSettleSampleInterval * 1000 + captureMs
+      }
+    }
   }
 
   func testBackSwipeOutcomeNamesNoChangeAndAnUnsampledScreenApart() {

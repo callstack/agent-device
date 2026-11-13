@@ -41,14 +41,15 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 
 // A real navigation stack for `back`. `--agent-device-back-navigation-bar` pushes a detail screen,
 // so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
-// pop it. `--custom-back-item` instead puts a bar button titled "Back" on the root, which is not the
+// pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
+// nowhere. `--custom-back-item` instead puts a bar button titled "Back" on the root, which is not the
 // system back button and must never be pressed. The root's label reports what happened.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @end
 
 @implementation AgentDeviceBackNavigationFixture
-- (instancetype)initWithCustomBackItem:(BOOL)customBackItem {
+- (instancetype)initWithCustomBackItem:(BOOL)customBackItem blockedBack:(BOOL)blockedBack {
   UIViewController *root = [UIViewController new];
   root.title = @"Root";
   root.view.backgroundColor = UIColor.systemBackgroundColor;
@@ -73,6 +74,11 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
     UIViewController *detail = [UIViewController new];
     detail.title = @"Detail";
     detail.view.backgroundColor = UIColor.systemTealColor;
+    if (blockedBack) {
+      if (@available(iOS 16.0, *)) {
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {}];
+      }
+    }
     [self pushViewController:detail animated:NO];
   }
   return self;
@@ -431,7 +437,9 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-navigation-bar"]) {
     self.alertFixtureStarted = YES;
     BOOL customBackItem = [NSProcessInfo.processInfo.arguments containsObject:@"--custom-back-item"];
-    [self presentViewController:[[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem]
+    BOOL blockedBack = [NSProcessInfo.processInfo.arguments containsObject:@"--blocked-back"];
+    [self presentViewController:[[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem
+                                                                                    blockedBack:blockedBack]
                        animated:NO
                      completion:nil];
   }
