@@ -97,6 +97,13 @@ test('defaults to the core tool set and pins the session for every call', async 
     false,
     'devices is extended-tier, excluded from the core default',
   );
+  for (const tierless of ['debug', 'metro', 'session']) {
+    assert.equal(
+      tierless in tools,
+      false,
+      `${tierless} declares no tier, so the core default leaves it out`,
+    );
+  }
 
   const schema = rawSchemaOf(tools, 'snapshot');
   assert.equal('session' in schema.properties, false, 'session is always hidden from the model');
