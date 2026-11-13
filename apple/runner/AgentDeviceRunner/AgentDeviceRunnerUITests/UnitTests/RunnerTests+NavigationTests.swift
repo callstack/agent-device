@@ -629,6 +629,7 @@ extension RunnerTests {
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
   }
 
+#if os(iOS)
   /// #3899: a placed iPad window's snapshot frames start at the window's own origin, while the live
   /// button frame is in screen points. The still bar holds the live button only through the window's
   /// screen origin.
@@ -652,6 +653,7 @@ extension RunnerTests {
     )
     XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
   }
+#endif
 
   /// A still screen settles before the budget runs out at any capture time: the settle loop's
   /// timeline, replayed with fixed captures, reaches the required still span first. On a simulator
