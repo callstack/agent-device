@@ -49,9 +49,11 @@ error: failed to get information and the parameters may be wrong.
 ## Consequences for the code
 
 `bm dump` misses and `bm` failures carry their verdict in stdout text at exit
-code 0 on this build (7.0.0.111). `install` success detection keys on stream
-content, and `uninstall` success is proven only by an inventory re-read — an
-exit-code check would read every failure as success.
+code 0 on this build (7.0.0.111). `install` success keys on the `hdc install`
+command result alone (a failing install exits non-zero and refuses; the
+output is not interpreted), and `uninstall` success is proven only by an
+inventory re-read — an exit-code check would read every `bm` failure as
+success.
 
 Addendum 2026-11-13: the uninstall route no longer interprets this per-bundle
 dump. Both probes read the `bm dump -a` inventory through the shared

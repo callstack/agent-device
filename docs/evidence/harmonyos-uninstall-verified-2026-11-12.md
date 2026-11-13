@@ -86,10 +86,11 @@ A second uninstall answers honestly that nothing was removed:
 ## What is proven here and what is not
 
 - The public `uninstall` route, the deployment-runtime admission for a physical
-  `device` denominator, and the post-uninstall dump verification all ran on
+  `device` denominator, and the post-uninstall inventory re-read all ran on
   hardware at a named commit.
-- The `wasInstalled: false` branch ran against a genuinely absent record with
-  the live-transport probe answering.
+- The `wasInstalled: false` branch ran against a genuinely absent bundle: the
+  inventory re-read answered non-empty without the target, which also proves
+  the transport was live.
 - The "inventory still lists the bundle" refusal (a `bm` that answers success
   but leaves the bundle) has no hardware reproduction on this build; the unit
   test `uninstall refuses to claim removal when the inventory still lists the

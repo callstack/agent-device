@@ -11,7 +11,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { parseHarmonyBundleDump, parseHarmonyBundleList } from '../app-lifecycle.ts';
+import { parseHarmonyBundleList, parseHarmonyLaunchTarget } from '../app-lifecycle.ts';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
@@ -191,7 +191,7 @@ async function openHarmonyApp(
   signal: AbortSignal,
 ): Promise<void> {
   const dump = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal);
-  const target = parseLaunchTarget(dump.stdout);
+  const target = parseHarmonyLaunchTarget(dump.stdout);
   if (!target) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -215,18 +215,6 @@ async function openHarmonyApp(
     ],
     signal,
   );
-}
-
-function parseLaunchTarget(rawOutput: string): { ability: string; module?: string } | undefined {
-  const modules = parseHarmonyBundleDump(rawOutput)?.hapModuleInfos;
-  if (!Array.isArray(modules)) return undefined;
-  const module = modules.find((item) => item.mainElementName);
-  return module?.mainElementName
-    ? {
-        ability: module.mainElementName,
-        ...(module.moduleName ? { module: module.moduleName } : {}),
-      }
-    : undefined;
 }
 
 async function runHdc(

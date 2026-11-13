@@ -77,7 +77,7 @@ export function parseHarmonyIsSystemApp(rawOutput: string): boolean | undefined 
   return typeof isSystemApp === 'boolean' ? isSystemApp : undefined;
 }
 
-export function parseHarmonyBundleDump(rawOutput: string): HarmonyBundleDump | undefined {
+function parseHarmonyBundleDump(rawOutput: string): HarmonyBundleDump | undefined {
   const jsonStart = rawOutput.indexOf('{');
   if (jsonStart === -1) return undefined;
   try {
