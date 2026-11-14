@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import type { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
@@ -88,7 +89,9 @@ test('selected creation retains one worker, forwards its diagnostic to the host 
   expect(release).not.toHaveBeenCalled();
 
   const reason = { kind: 'worker-exited', detail: 'exit code 1' } as const;
-  sinks[0](reason);
+  const onUnavailable = sinks[0];
+  assert.ok(onUnavailable);
+  onUnavailable(reason);
   expect(host.emitDiagnostic).toHaveBeenCalledExactlyOnceWith({
     level: 'warn',
     phase: 'png_worker_unavailable',
