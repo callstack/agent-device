@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -51,7 +51,9 @@ async function closeSession(params: {
   device: SessionState['device'];
   bootedByOpen?: true;
   flags?: Record<string, unknown>;
-  lifecycleOperationsLoader?: Parameters<typeof handleSessionCommands>[0]['lifecycleOperationsLoader'];
+  lifecycleOperationsLoader?: Parameters<
+    typeof handleSessionCommands
+  >[0]['lifecycleOperationsLoader'];
   platformResourceCleanup?: ReturnType<typeof platformResourceCleanupFixture>;
 }) {
   const { sessionName, device, bootedByOpen, flags } = params;
@@ -271,16 +273,20 @@ test('close --shutdown keeps asking for the stop on a session that did not boot 
 });
 
 test('a policy denial of the implicit stop keeps close successful and reports the kept device', async () => {
-  const policyDenied = new AppError('UNAUTHORIZED', "This daemon's policy denies device-shutdown.", {
-    capability: 'device-shutdown',
-    reason: 'DAEMON_POLICY_DENIED',
-    rule: 'capability',
-    retriable: false,
-  });
+  const policyDenied = new AppError(
+    'UNAUTHORIZED',
+    "This daemon's policy denies device-shutdown.",
+    {
+      capability: 'device-shutdown',
+      reason: 'DAEMON_POLICY_DENIED',
+      rule: 'capability',
+      retriable: false,
+    },
+  );
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy({
-    finalizeApplicationClose: vi.fn(async () => {
+    finalizeApplicationClose: async () => {
       throw policyDenied;
-    }),
+    },
   });
   const { response, sessionStore } = await closeSession({
     sessionName: 'policy-denied-session',
@@ -304,16 +310,20 @@ test('a policy denial of the implicit stop keeps close successful and reports th
 });
 
 test('the same policy denial still fails an explicit close --shutdown', async () => {
-  const policyDenied = new AppError('UNAUTHORIZED', "This daemon's policy denies device-shutdown.", {
-    capability: 'device-shutdown',
-    reason: 'DAEMON_POLICY_DENIED',
-    rule: 'capability',
-    retriable: false,
-  });
+  const policyDenied = new AppError(
+    'UNAUTHORIZED',
+    "This daemon's policy denies device-shutdown.",
+    {
+      capability: 'device-shutdown',
+      reason: 'DAEMON_POLICY_DENIED',
+      rule: 'capability',
+      retriable: false,
+    },
+  );
   const { loader } = lifecycleOperationsSpy({
-    finalizeApplicationClose: vi.fn(async () => {
+    finalizeApplicationClose: async () => {
       throw policyDenied;
-    }),
+    },
   });
   const sessionStore = makeSessionStore();
   const sessionName = 'policy-denied-explicit-session';

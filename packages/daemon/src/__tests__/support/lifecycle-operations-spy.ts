@@ -14,11 +14,11 @@ import {
 export function lifecycleOperationsSpy(
   overrides: Partial<ApplicationLifecycleRuntimeOperations> = {},
 ) {
-  // A caller replacing this operation brings its own spy; the returned handle is that spy either
-  // way, so the suite reads its calls whichever way it built it.
-  const finalizeApplicationClose =
-    overrides.finalizeApplicationClose ??
-    vi.fn<ApplicationLifecycleRuntimeOperations['finalizeApplicationClose']>(async () => ({}));
+  // The returned handle is always the spy the loader installs, so a suite reads its calls whichever
+  // way it built the case. A supplied implementation becomes that spy's behaviour.
+  const finalizeApplicationClose = vi.fn<
+    ApplicationLifecycleRuntimeOperations['finalizeApplicationClose']
+  >(overrides.finalizeApplicationClose ?? (async () => ({})));
   const loader: LifecycleOperationsLoader = async (device, signal, shutdownTarget) =>
     Object.freeze({
       ...(await applicationLifecycleRuntimeFixture(device, signal, shutdownTarget)),

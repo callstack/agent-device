@@ -140,13 +140,15 @@ export async function runSessionCloseTeardown(params: {
     'application_lifecycle',
     async (): Promise<CloseApplicationFinalizationResult> => {
       try {
-        return (await lifecycle.operations.finalizeApplicationClose({
-          appBundleId: session.appBundleId,
-          surface: session.surface ?? 'app',
-          retainRunner: retainExecutionHost,
-          stateDir: sessionStore.resolveDaemonStateDir(),
-          shutdownTarget: shutdownRequested && lifecycle.owner.kind === 'local-family',
-        })) ?? {};
+        return (
+          (await lifecycle.operations.finalizeApplicationClose({
+            appBundleId: session.appBundleId,
+            surface: session.surface ?? 'app',
+            retainRunner: retainExecutionHost,
+            stateDir: sessionStore.resolveDaemonStateDir(),
+            shutdownTarget: shutdownRequested && lifecycle.owner.kind === 'local-family',
+          })) ?? {}
+        );
       } catch (error) {
         // #4162: an implicit stop is this close's own convenience, not something the caller asked
         // for. The capability gate may still refuse it (ADR 0029), and that refusal must not fail

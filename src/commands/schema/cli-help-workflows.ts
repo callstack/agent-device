@@ -29,7 +29,7 @@ Loop:
   4. Treat a settled:true diff as the next observation. Do not add wait stable or another snapshot when the diff already shows the next target or expected result.
   5. If --settle prints not settled, follow its hint before the next ref-based action.
   6. Verify named expectations with wait text/selector/absent, get, is, find text "..." exists, or the settled diff. Bare find clicks. A bare screenshot/snapshot is not verification for a named expectation.
-  7. Close the session when the script ends. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
+  7. Close the session when the script ends. Plain close also stops a local simulator or emulator your session booted; a device that was already running keeps running.
 
 Command shapes:
   agent-device open com.example.app --relaunch
@@ -285,7 +285,7 @@ Loop:
   3. Use snapshot -i and press/fill/click/longpress --settle for UI-driving steps.
   4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is, find text "..." exists, screenshot, logs, network, perf, or trace based on the claim.
   5. Record timings, token/output size, screenshots/videos, logs, or perf artifacts only when they answer the validation question.
-  6. Close sessions and release leases before finishing. If your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running.
+  6. Close sessions and release leases before finishing. Plain close also stops a local simulator or emulator your session booted; a device that was already running keeps running.
 
 Evidence:
   CLI/runtime freshness: pnpm build, pnpm clean:daemon, then agent-device --version or the command under test.

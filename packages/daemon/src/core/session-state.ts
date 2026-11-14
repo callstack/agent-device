@@ -175,7 +175,8 @@ export type SessionState = {
    * #4162: this session's `open` booted the local simulator or emulator it now holds, so a plain
    * `close` stops it and leaves the device as the session found it. Recorded only when device
    * selection reports the boot (`selection.bootOccurred`), which never happens for a provider or
-   * physical target, nor for a device that was already running. Written only by `publishOpenSession`.
+   * physical target, nor for a device that was already running. The open-state publisher sets it
+   * through `SessionStore.markOpenBootedDevice`; close only reads it.
    */
   bootedByOpen?: true;
   createdAt: number;

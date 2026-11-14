@@ -80,14 +80,16 @@ test('#4162: an open whose selection reported the boot records it on the new ses
   assert.equal(firstOpen(true).bootedByOpen, true);
 });
 
-test.each([false, undefined])(
+test.each([false, undefined] as const)(
   '#4162: an open whose selection reported no boot records nothing',
   (bootedByOpen) => {
     assert.equal(firstOpen(bootedByOpen).bootedByOpen, undefined);
   },
 );
 
-test.each([true, undefined])(
+const bootOwnershipFacts: readonly (true | undefined)[] = [true, undefined];
+
+test.each(bootOwnershipFacts)(
   '#4162: a re-open leaves the boot ownership unchanged',
   (bootedByOpen) => {
     const store = makeSessionStore();
