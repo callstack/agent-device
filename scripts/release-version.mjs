@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 const N = String.raw`(0|[1-9]\d*)`;
 const RELEASE = new RegExp(`^${N}\\.${N}\\.${N}$`);
 const DEVELOPMENT = new RegExp(`^${N}\\.${N}\\.${N}-dev$`);
-const NIGHTLY = new RegExp(`^${N}\\.${N}\\.${N}-nightly\\.(\\d{8})\\.([1-9]\\d*)$`);
+const NIGHTLY = new RegExp(`^${N}\\.${N}\\.${N}-nightly(?:-0-22)?\\.(\\d{8})\\.([1-9]\\d*)$`);
 
 const ASSET_TAG =
   /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?![\s\S])/;
@@ -29,14 +29,16 @@ export function compareReleaseVersions(left, right) {
   return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 }
 
-export function nightlyVersion(developmentVersion, date, runNumber) {
+export function nightlyVersion(developmentVersion, date, runNumber, sourceBranch = 'main') {
   const match = DEVELOPMENT.exec(developmentVersion);
-  if (!match) throw new Error(`main must carry an X.Y.Z-dev version, got ${developmentVersion}.`);
+  if (!match)
+    throw new Error(`${sourceBranch} must carry an X.Y.Z-dev version, got ${developmentVersion}.`);
   if (!/^\d{8}$/.test(date)) throw new Error(`Nightly date must be YYYYMMDD, got ${date}.`);
   if (!/^[1-9]\d*$/.test(String(runNumber))) {
     throw new Error(`Nightly run number must be a positive integer, got ${runNumber}.`);
   }
-  return `${match.slice(1, 4).join('.')}-nightly.${date}.${runNumber}`;
+  const suffix = sourceBranch === '0.22' ? 'nightly-0-22' : 'nightly';
+  return `${match.slice(1, 4).join('.')}-${suffix}.${date}.${runNumber}`;
 }
 
 /** The `X.Y.Z` release a nightly previews. */
@@ -49,14 +51,13 @@ export function nightlyBase(version) {
 /**
  * Nightly tags live outside `v*`, which only repository admins may create: the release workflow
  * tags each nightly itself, and no nightly tag ref may deploy to the npm-publish environment.
+ * The newest tag in each source namespace is ordered by base, then date, then run.
  */
-const NIGHTLY_TAG_PREFIX = 'nightly/v';
-
-/** The newest `nightly/vX.Y.Z-nightly.<date>.<run>` tag, ordered by base, then date, then run. */
-export function latestNightlyTag(tags) {
+export function latestNightlyTag(tags, sourceBranch = 'main') {
+  const prefix = sourceBranch === '0.22' ? 'nightly-0.22/v' : 'nightly/v';
   const nightlies = tags
-    .filter((tag) => tag.startsWith(NIGHTLY_TAG_PREFIX))
-    .map((tag) => ({ tag, match: NIGHTLY.exec(tag.slice(NIGHTLY_TAG_PREFIX.length)) }))
+    .filter((tag) => tag.startsWith(prefix))
+    .map((tag) => ({ tag, match: NIGHTLY.exec(tag.slice(prefix.length)) }))
     .filter((entry) => entry.match);
   nightlies.sort((a, b) => {
     const [left, right] = [a.match, b.match].map((match) => match.slice(1).map(Number));

@@ -13,7 +13,7 @@ import {
 /**
  * Decides what one `.github/workflows/release.yml` run does, from the event that started it:
  *   pull_request              dry-run: build and verify every package, publish nothing
- *   schedule / dispatch       nightly: publish main's HEAD under the `nightly` dist-tag
+ *   schedule / dispatch       nightly: publish the fixed source branch under its own dist-tag
  *   vX.Y.Z tag                stable: publish that commit under the `latest` dist-tag
  * `tags` maps remote tag names to commits; `ciConclusion` and `onMain` describe `sha`.
  */
@@ -21,16 +21,26 @@ export function planRelease(run) {
   if (run.event === 'pull_request') {
     return { mode: 'dry-run', version: nightlyVersion(run.rootVersion, run.today, run.runNumber) };
   }
+  const sourceBranch = run.sourceBranch ?? 'main';
+  if (
+    !['main', '0.22'].includes(sourceBranch) ||
+    (run.ref.startsWith('refs/tags/') && sourceBranch !== 'main')
+  ) {
+    throw new Error(`Unsupported release source ${sourceBranch} for ${run.ref}.`);
+  }
   if (run.ref.startsWith('refs/tags/')) return planStable(run, run.ref.slice('refs/tags/'.length));
   if (run.ref !== 'refs/heads/main') {
     throw new Error(`Releases run from main or a vX.Y.Z tag, not ${run.ref}.`);
   }
-  return planNightly(run);
+  if (!['schedule', 'workflow_dispatch'].includes(run.event)) {
+    throw new Error(`Unsupported nightly event ${run.event}.`);
+  }
+  return planNightly(run, sourceBranch);
 }
 
-function planNightly(run) {
+function planNightly(run, sourceBranch) {
   const scheduled = run.event === 'schedule';
-  const latest = latestNightlyTag([...run.tags.keys()]);
+  const latest = latestNightlyTag([...run.tags.keys()], sourceBranch);
   if (scheduled && latest && run.tags.get(latest) === run.sha) {
     return skip(`${latest} already ships ${run.sha}.`);
   }
@@ -39,9 +49,17 @@ function planNightly(run) {
     if (scheduled) return skip(reason);
     throw new Error(reason);
   }
-  const version = nightlyVersion(run.rootVersion, run.today, run.runNumber);
+  if (sourceBranch === '0.22' && !/^0\.22\.(0|[1-9]\d*)-dev$/.test(run.rootVersion)) {
+    throw new Error(`0.22 must carry a 0.22.X-dev version, got ${run.rootVersion}.`);
+  }
+  const version = nightlyVersion(run.rootVersion, run.today, run.runNumber, sourceBranch);
   assertAheadOfStable(run, nightlyBase(version));
-  return { mode: 'nightly', version, distTag: 'nightly', commit: run.sha };
+  return {
+    mode: 'nightly',
+    version,
+    distTag: sourceBranch === '0.22' ? 'nightly-0.22' : 'nightly',
+    commit: run.sha,
+  };
 }
 
 function planStable(run, tag) {
@@ -138,7 +156,7 @@ const REPOSITORY_ADMIN_ROLE = 5;
 function assertAheadOfStable(run, version) {
   if (run.latestStable && compareReleaseVersions(version, run.latestStable) <= 0) {
     throw new Error(
-      `${version} is not ahead of the published ${run.latestStable}. Move main's -dev version past it.`,
+      `${version} is not ahead of the published ${run.latestStable}. Move ${run.sourceBranch ?? 'main'}'s -dev version past it.`,
     );
   }
 }
@@ -146,9 +164,13 @@ function assertAheadOfStable(run, version) {
 /** Remote release and nightly tags by name, resolved to the commit each one points at. */
 function remoteTags() {
   const tags = new Map();
-  const output = execFileSync('git', ['ls-remote', '--tags', 'origin', 'v*', 'nightly/*'], {
-    encoding: 'utf8',
-  });
+  const output = execFileSync(
+    'git',
+    ['ls-remote', '--tags', 'origin', 'v*', 'nightly/*', 'nightly-0.22/*'],
+    {
+      encoding: 'utf8',
+    },
+  );
   for (const line of output.split('\n').filter(Boolean)) {
     const [commit, name] = line.split('\t');
     const tag = name.replace(/^refs\/tags\//, '');
@@ -158,14 +180,23 @@ function remoteTags() {
   return tags;
 }
 
-async function ciConclusion(env, sha) {
+async function ciConclusion(env, sha, sourceBranch) {
   const { workflow_runs: runs } = await github(
     env,
-    `actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=1`,
+    `actions/workflows/ci.yml/runs?head_sha=${sha}&event=push${sourceBranch ? `&branch=${sourceBranch}` : ''}&per_page=1`,
   );
-  if (runs.length > 0) return runs[0].status === 'completed' ? runs[0].conclusion : runs[0].status;
+  const run = runs.find(
+    (run) =>
+      run.head_sha === sha &&
+      run.event === 'push' &&
+      (!sourceBranch || run.head_branch === sourceBranch),
+  );
+  if (run) return run.status === 'completed' ? run.conclusion : run.status;
+  if (sourceBranch === '0.22') return 'missing';
   const commit = await github(env, `commits/${sha}`);
-  return isVersionOnlyCommit(commit) ? ciConclusion(env, commit.parents[0].sha) : 'missing';
+  return isVersionOnlyCommit(commit)
+    ? ciConclusion(env, commit.parents[0].sha, sourceBranch)
+    : 'missing';
 }
 
 // `missing` included: a tag pushed right after a merge can arrive before the merge's CI run exists.
@@ -179,9 +210,9 @@ const UNSETTLED_CI = new Set([
 ]);
 
 /** A commit pushed moments ago waits, within the Plan job's budget, for its CI to finish. */
-async function settledCiConclusion(env, sha) {
+async function settledCiConclusion(env, sha, sourceBranch) {
   for (let attempt = 0; ; attempt += 1) {
-    const conclusion = await ciConclusion(env, sha);
+    const conclusion = await ciConclusion(env, sha, sourceBranch);
     if (!UNSETTLED_CI.has(conclusion) || attempt >= 40) {
       return conclusion;
     }
@@ -237,21 +268,53 @@ async function readRepositorySetup(env) {
   };
 }
 
+function sourceBranchForRun(event, ref, payload) {
+  if (event === 'pull_request') return 'main';
+  const sourceBranch =
+    event === 'schedule'
+      ? { '23 1 * * *': 'main', '53 1 * * *': '0.22' }[payload.schedule]
+      : (payload.inputs?.source_branch ?? 'main');
+  if (!['main', '0.22'].includes(sourceBranch)) {
+    throw new Error(`Unsupported release source ${sourceBranch}.`);
+  }
+  if (ref !== 'refs/heads/main' && (!ref.startsWith('refs/tags/') || sourceBranch !== 'main')) {
+    throw new Error(`Releases run from main or a vX.Y.Z tag, not ${ref}.`);
+  }
+  return sourceBranch;
+}
+
 async function readRun(env) {
   const event = env.GITHUB_EVENT_NAME;
   const ref = env.GITHUB_REF;
+  const payload = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
+  const sourceBranch = sourceBranchForRun(event, ref, payload);
   const onBranch = event !== 'pull_request' && ref === 'refs/heads/main';
   const onTag = ref.startsWith('refs/tags/');
+  const sha =
+    onBranch && sourceBranch === '0.22' ? (await github(env, 'commits/0.22')).sha : env.GITHUB_SHA;
+  const rootVersion =
+    sourceBranch === '0.22' && onBranch
+      ? JSON.parse(
+          Buffer.from(
+            (await github(env, `contents/package.json?ref=${sha}`)).content,
+            'base64',
+          ).toString('utf8'),
+        ).version
+      : JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
   return {
     event,
     ref,
-    sha: env.GITHUB_SHA,
-    rootVersion: JSON.parse(fs.readFileSync('package.json', 'utf8')).version,
+    sha,
+    sourceBranch,
+    rootVersion,
     today: new Date().toISOString().slice(0, 10).replaceAll('-', ''),
     runNumber: env.GITHUB_RUN_NUMBER,
     tags: event === 'pull_request' ? new Map() : remoteTags(),
     latestStable: onBranch || onTag ? await publishedVersion('latest') : null,
-    ciConclusion: onBranch || onTag ? await settledCiConclusion(env, env.GITHUB_SHA) : undefined,
+    ciConclusion:
+      onBranch || onTag
+        ? await settledCiConclusion(env, sha, onBranch ? sourceBranch : undefined)
+        : undefined,
     onMain: onTag ? await isOnMain(env) : undefined,
   };
 }
@@ -261,6 +324,7 @@ const OUTPUTS = {
   version: 'version',
   dist_tag: 'distTag',
   commit: 'commit',
+  nightly_tag: 'nightlyTag',
   previous_tag: 'previousTag',
 };
 
@@ -274,6 +338,8 @@ async function main(env) {
       );
     }
   }
+  if (result.mode === 'dry-run') result.commit = env.GITHUB_SHA;
+  if (result.mode === 'nightly') result.nightlyTag = `${result.distTag}/v${result.version}`;
   const lines = Object.entries(OUTPUTS).map(([output, key]) => `${output}=${result[key] ?? ''}\n`);
   fs.appendFileSync(env.GITHUB_OUTPUT, lines.join(''));
   const summary = result.reason ?? `${result.mode} ${result.version}`;

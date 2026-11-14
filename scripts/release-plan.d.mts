@@ -4,6 +4,7 @@ export type ReleaseRun = Readonly<{
   event: string;
   ref: string;
   sha: string;
+  sourceBranch?: 'main' | '0.22';
   rootVersion: string;
   today: string;
   runNumber: string | number;
@@ -16,7 +17,7 @@ export type ReleaseRun = Readonly<{
 
 export type ReleasePlan =
   | { mode: 'dry-run'; version: string }
-  | { mode: 'nightly'; version: string; distTag: 'nightly'; commit: string }
+  | { mode: 'nightly'; version: string; distTag: 'nightly' | 'nightly-0.22'; commit: string }
   | { mode: 'stable'; version: string; distTag: 'latest'; commit: string; previousTag: string }
   | { mode: 'skip'; reason: string };
 

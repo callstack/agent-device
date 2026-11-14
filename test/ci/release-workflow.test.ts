@@ -52,3 +52,23 @@ test('the published bytes are built without a restored dependency cache', () => 
   );
   expect(setup?.with?.['cache-store']).toBe('false');
 });
+
+test('the source checkout and artifact identity use the planned commit while the publisher stays trusted', () => {
+  const build = workflow.jobs.build?.steps ?? [];
+  const checkout = build.find((step) => step.uses?.startsWith('actions/checkout@'));
+  expect(checkout?.with?.ref).toBe('${{ needs.plan.outputs.commit }}');
+  const upload = build.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  expect(upload?.with?.name).toBe('npm-packages-${{ needs.plan.outputs.commit }}');
+  const publisher = workflow.jobs.publish?.steps ?? [];
+  expect(
+    publisher.find((step) => step.uses?.startsWith('useblacksmith/checkout@'))?.with?.ref,
+  ).toBe('${{ github.workflow_sha }}');
+  expect(
+    publisher.find((step) => step.uses?.startsWith('actions/download-artifact@'))?.with?.name,
+  ).toBe(upload?.with?.name);
+});
+
+test('version stamping uses tooling pinned to the workflow commit', () => {
+  const tooling = workflow.jobs.build?.steps?.find((step) => step.with?.path === '.release-tools');
+  expect(tooling?.with?.ref).toBe('${{ github.workflow_sha }}');
+});
