@@ -540,7 +540,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
           }
         : {}),
       catalog: { group: 'public' },
-      frameworkTier: 'loop',
+      frameworkTier: 'core',
       recordsSessionAction: true,
       recordingEffect: 'observes-app',
       daemon: { route: 'generic', refFrameEffect: 'preserve', appLease: 'allowed' },

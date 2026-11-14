@@ -37,7 +37,7 @@ test('search keywords add only words the tool name and description lack', () => 
 });
 
 // Always-loaded schemas land in every run's first prompt, so their total size is a per-run cost.
-const ALWAYS_LOADED_BUDGET_BYTES = 26 * 1024;
+const ALWAYS_LOADED_BUDGET_BYTES = 22 * 1024;
 
 test('the always-loaded tools stay within their byte budget', () => {
   const bytes = Buffer.byteLength(
