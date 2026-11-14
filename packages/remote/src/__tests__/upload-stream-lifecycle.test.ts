@@ -11,7 +11,6 @@
 // Every case uses the attempt seam, a controlled clock, and real loopback sockets: the overlap being
 // refused is only observable on a real socket, and phase budgets range from 30 to 120 seconds.
 
-import http from 'node:http';
 import { afterEach, assert, test, vi } from 'vitest';
 import { isRetryableUploadStreamError, isTransferPhaseTimeoutError } from '../upload-stream.ts';
 import {
@@ -23,6 +22,7 @@ import {
   assertDetailedError,
   createArtifactFile,
   pumpRealWork,
+  recordOutgoingWrites,
   settleAttemptAfterBudget,
   spendAttemptBudget,
   startAnswerUploadDaemon,
@@ -41,6 +41,7 @@ import {
 const MEBIBYTE = 1024 * 1024;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -129,18 +130,7 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
   const progressWindowMs = 30_000;
   assert.ok(progressWindowMs < TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
   const artifactBytes = 32 * MEBIBYTE;
-  let outgoingLegs = 0;
-  let resumedDrains = 0;
-  const request = http.request;
-  const requestSpy = vi.spyOn(http, 'request').mockImplementation((...args) => {
-    const req = Reflect.apply(request, http, args) as http.ClientRequest;
-    outgoingLegs += 1;
-    if (outgoingLegs === 2)
-      req.on('drain', () => {
-        resumedDrains += 1;
-      });
-    return req;
-  });
+  const writes = recordOutgoingWrites();
   const daemon = await startParkedUploadDaemon({
     answerFirstLeg: { status: 308, headers: { 'x-upload-offset': String(MEBIBYTE) } },
   });
@@ -159,15 +149,16 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
     assert.ok(hopTwoTookBytes(daemon), 'the resumed hop was dialed and took bytes');
 
     for (let window = 0; window < 6; window += 1) {
-      const drainsBefore = resumedDrains;
+      const writesBefore = writes.completed;
       const bytesBefore = daemon.receivedBytes;
       for (let round = 0; round < 400; round += 1) {
         daemon.releaseAllParked();
         await pumpRealWork(15);
-        if (resumedDrains > drainsBefore && daemon.receivedBytes > bytesBefore) break;
+        if (writes.completed > writesBefore && daemon.receivedBytes > bytesBefore) break;
       }
       assert.ok(daemon.receivedBytes > bytesBefore, 'the peer took more resumed bytes');
-      assert.ok(resumedDrains > drainsBefore, 'the resumed write queue drained');
+      // Hop one was joined before hop two was dialed, so every new completion is hop two's.
+      assert.ok(writes.completed > writesBefore, 'the resumed hop completed more writes');
       await vi.advanceTimersByTimeAsync(progressWindowMs);
       assert.equal(attempt.settled, false);
       assert.equal(daemon.bodyEnded, false);
@@ -186,7 +177,6 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
     assert.equal(isRetryableUploadStreamError(result.error), true);
     assert.equal(daemon.requests.filter((entry) => entry === LEGACY_UPLOAD_REQUEST).length, 2);
   } finally {
-    requestSpy.mockRestore();
     await daemon.close();
   }
 });

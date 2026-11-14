@@ -96,10 +96,9 @@ export function startUploadAttempt(options: {
     method: options.method ?? 'POST',
     headers: options.headers ?? { authorization: 'Bearer daemon-token' },
     payloadPath: options.artifactPath,
-    timeoutMessage: 'Artifact upload timed out',
     errorMessage: 'Failed to upload artifact to remote daemon',
     ...(options.retryable === undefined ? {} : { retryable: options.retryable }),
-    ...(options.signal ? { signal: options.signal } : {}),
+    signal: options.signal ?? new AbortController().signal,
   }).then(
     (value) => ({ value, error: undefined as unknown }),
     (error: unknown) => ({ value: undefined as UploadStreamResponse | undefined, error }),
@@ -157,18 +156,18 @@ export async function spendAttemptBudget(ms: number, attempt: SettledUploadAttem
 export async function spendProgressWindows(
   daemon: ParkedUploadDaemon,
   upload: SettledUpload,
-  options: { windows: number; windowMs: number },
+  options: { windows: number; windowMs: number; writes: OutgoingWrites },
 ): Promise<{ progressedInEveryWindow: boolean; budgetMs: number }> {
   await spendUntil({ ready: () => daemon.receivedBytes > 0, maxMs: 60_000 });
   let progressedInEveryWindow = true;
   let spent = 0;
   for (let window = 0; window < options.windows; window += 1) {
     const bodyInFlight = !daemon.bodyEnded;
-    const bytesBeforeWindow = daemon.receivedBytes;
+    const before = { bytes: daemon.receivedBytes, completed: options.writes.completed };
     daemon.releaseAllParked();
     // With the body fully taken there is nothing left to move and only a response is owed, so the
     // window is charged without a growth requirement.
-    const grew = bodyInFlight ? await awaitBytesGrowth(daemon, bytesBeforeWindow) : true;
+    const grew = bodyInFlight ? await awaitBodyProgress(daemon, options.writes, before) : true;
     await vi.advanceTimersByTimeAsync(options.windowMs);
     spent += options.windowMs;
     if (upload.settled) break;
@@ -177,14 +176,66 @@ export async function spendProgressWindows(
   return { progressedInEveryWindow, budgetMs: spent };
 }
 
-/** Lets the real loop run until the peer has taken at least one more byte of the parked body. */
-async function awaitBytesGrowth(daemon: ParkedUploadDaemon, bytesBefore: number): Promise<boolean> {
+/**
+ * Lets the real loop run until the client completed at least one more body write and the peer took
+ * at least one more byte. A completed write is the client's body progress; peer growth shows those
+ * bytes really crossed the socket.
+ */
+export async function awaitBodyProgress(
+  daemon: { readonly receivedBytes: number; releaseAllParked(): void },
+  writes: OutgoingWrites,
+  before: { bytes: number; completed: number },
+): Promise<boolean> {
+  const progressed = () =>
+    writes.completed > before.completed && daemon.receivedBytes > before.bytes;
   for (let round = 0; round < 400; round += 1) {
-    if (daemon.receivedBytes > bytesBefore) return true;
+    if (progressed()) return true;
     daemon.releaseAllParked();
     await pumpRealWork(15);
   }
-  return daemon.receivedBytes > bytesBefore;
+  return progressed();
+}
+
+/** The body writes of every outgoing `node:http` request, totalled over the legs of one upload. */
+export type OutgoingWrites = {
+  /** `write` calls that returned `false`. */
+  readonly falseReturns: number;
+  /** Writes whose callback reported success: bytes handed to the local kernel. */
+  readonly completed: number;
+  readonly drains: number;
+  /** True once the newest leg emitted `finish`: its whole body reached the transport. */
+  readonly finished: boolean;
+};
+
+/**
+ * Records the body writes of every outgoing `node:http` request; `vi.restoreAllMocks` ends it.
+ *
+ * The wrapper goes on each request as it is created, before the subject observes it, so the
+ * subject's own write observation calls through this one and both see the same completions.
+ */
+export function recordOutgoingWrites(): OutgoingWrites {
+  const log = { falseReturns: 0, completed: 0, drains: 0, finished: false };
+  const request = http.request;
+  vi.spyOn(http, 'request').mockImplementation((...args) => {
+    const req = Reflect.apply(request, http, args) as http.ClientRequest;
+    log.finished = false;
+    const write = req.write;
+    req.write = function (this: http.ClientRequest, ...writeArgs: unknown[]): boolean {
+      const callbackIndex = typeof writeArgs[1] === 'function' ? 1 : 2;
+      const callback = writeArgs[callbackIndex];
+      writeArgs[callbackIndex] = (error?: Error | null) => {
+        if (!error) log.completed += 1;
+        if (typeof callback === 'function') callback(error);
+      };
+      const accepted: boolean = Reflect.apply(write, this, writeArgs);
+      if (!accepted) log.falseReturns += 1;
+      return accepted;
+    };
+    req.on('drain', () => (log.drains += 1));
+    req.on('finish', () => (log.finished = true));
+    return req;
+  });
+  return log;
 }
 
 /**
@@ -265,6 +316,7 @@ export async function startParkedUploadDaemon(
   let bodyEnded = false;
   let uploadLegs = 0;
   let newestParkedLeg: http.IncomingMessage | undefined;
+  let readingToEnd = false;
 
   const server = http.createServer((req, res) => {
     const key = `${req.method} ${req.url}`;
@@ -298,6 +350,7 @@ export async function startParkedUploadDaemon(
         // then backpressured for the rest of the window, so an artifact sized in megabytes is still
         // mid-flight when the next window is charged.
         bytesTakenSinceRelease += chunk.length;
+        if (readingToEnd) return;
         req.pause();
         if (bytesTakenSinceRelease < RELEASE_QUOTA_BYTES) parked.push(req);
         else parkedAtQuota = req;
@@ -338,6 +391,12 @@ export async function startParkedUploadDaemon(
       }
       for (const entry of resumable) entry.resume();
     },
+    readToEnd() {
+      readingToEnd = true;
+      for (const entry of parked.splice(0)) entry.resume();
+      parkedAtQuota?.resume();
+      parkedAtQuota = undefined;
+    },
     resetParkedLeg() {
       assert.ok(newestParkedLeg, 'no parked leg to reset');
       newestParkedLeg.socket.resetAndDestroy();
@@ -355,6 +414,8 @@ export type ParkedUploadDaemon = {
   readonly bodyEnded: boolean;
   /** Lets the parked body take up to one more quota of bytes. */
   releaseAllParked(): void;
+  /** Stops parking: the daemon reads every remaining body byte as it arrives, still never answering. */
+  readToEnd(): void;
   /** Resets the connection of the newest parked leg: a real peer reset, not a clean close. */
   resetParkedLeg(): void;
   close(): Promise<void>;

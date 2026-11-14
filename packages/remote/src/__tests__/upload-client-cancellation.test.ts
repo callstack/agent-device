@@ -145,6 +145,59 @@ test('an aborted signal ends a legacy upload mid-stream instead of finishing the
   }
 });
 
+test('a cancel during the retried direct upload ends the upload without announcing a fallback', async () => {
+  const artifactPath = createTempFile('app.apk', 'retried-direct-payload');
+  const control = new AbortController();
+  const reason = new Error('request owner stopped');
+  const requests: string[] = [];
+  const events: string[] = [];
+  let ticketLegs = 0;
+  const server = await startServer(async (req, res) => {
+    requests.push(`${req.method} ${req.url}`);
+    if (req.url === '/upload/preflight') {
+      await readRequestBody(req);
+      sendJson(res, {
+        ok: true,
+        uploadId: 'retried-ticket',
+        upload: { url: `${server.baseUrl}/ticket`, headers: {} },
+      });
+      return;
+    }
+    if (req.url === '/ticket') {
+      ticketLegs += 1;
+      // Leg one breaks as a retryable transport failure; the caller cancels during leg two.
+      if (ticketLegs === 1) req.destroy();
+      else control.abort(reason);
+      return;
+    }
+    res.statusCode = 404;
+    res.end('not found');
+  });
+
+  try {
+    await assert.rejects(
+      uploadArtifact({
+        env: process.env,
+        localPath: artifactPath,
+        baseUrl: server.baseUrl,
+        token: TEST_TOKEN,
+        signal: control.signal,
+        onProgress: (event) => events.push(event.type),
+      }),
+      (error: unknown) => error === reason,
+    );
+    assert.equal(events.includes('fallback'), false, events.join(','));
+    assert.deepEqual(requests, [
+      'POST /upload/preflight',
+      'PUT /ticket',
+      'POST /upload/preflight',
+      'PUT /ticket',
+    ]);
+  } finally {
+    await server.close();
+  }
+});
+
 test('an aborted signal before preflight refuses to ask the daemon for a ticket', async () => {
   const artifactPath = createTempFile('app.apk', 'payload');
   const control = new AbortController();

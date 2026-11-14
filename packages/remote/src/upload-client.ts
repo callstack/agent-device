@@ -74,7 +74,9 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
   );
 }
 
-async function uploadArtifactWithinBudget(options: UploadArtifactOptions): Promise<string> {
+async function uploadArtifactWithinBudget(
+  options: UploadArtifactOptions & { signal: AbortSignal },
+): Promise<string> {
   const prepared = await prepareUploadArtifact(
     options.localPath,
     options.platform,
@@ -146,7 +148,7 @@ async function tryDirectUploadWithResume(options: {
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
   uploadAttemptId: string;
   onProgress?: UploadProgressSink;
-  signal?: AbortSignal;
+  signal: AbortSignal;
 }): Promise<string | undefined> {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -233,7 +235,7 @@ async function uploadLegacyArtifact(options: {
   leaseId?: string;
   artifact: PreparedUploadArtifact;
   onProgress?: UploadProgressSink;
-  signal?: AbortSignal;
+  signal: AbortSignal;
 }): Promise<string> {
   const { normalizedBase, token, leaseId, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
@@ -253,8 +255,6 @@ async function uploadLegacyArtifact(options: {
     method: 'POST',
     headers,
     payloadPath: artifact.payloadPath,
-    timeoutMessage: 'Artifact upload timed out',
-    timeoutHint: 'Inspect the upload diagnostics before retrying the artifact.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
     signal: options.signal,
@@ -382,7 +382,7 @@ async function uploadDirectArtifact(
     leaseId?: string;
     artifact: PreparedUploadArtifact;
     onProgress?: UploadProgressSink;
-    signal?: AbortSignal;
+    signal: AbortSignal;
   },
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
 ): Promise<void> {
@@ -398,8 +398,6 @@ async function uploadDirectArtifact(
         ? { ...ticket.headers, ...buildDaemonHttpLeaseHeaders(options.leaseId) }
         : ticket.headers,
     payloadPath: artifact.payloadPath,
-    timeoutMessage: 'Direct artifact upload timed out',
-    timeoutHint: 'The direct upload ticket did not accept the artifact within the timeout.',
     errorMessage: 'Failed to upload artifact with direct upload ticket',
     retryable: true,
     signal,

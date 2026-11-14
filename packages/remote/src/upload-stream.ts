@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import type { ClientRequest, IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
@@ -120,18 +120,16 @@ const UPLOAD_PREPARATION_TIMEOUT_MS = 600_000;
 export async function withUploadPreparationDeadline<T>(
   callerSignal: AbortSignal | undefined,
   prepare: (signal: AbortSignal) => Promise<T>,
-  timeout?: Readonly<{ message: string; hint?: string }>,
 ): Promise<T> {
   const deadline = new AbortController();
   const signal = callerSignal ? AbortSignal.any([callerSignal, deadline.signal]) : deadline.signal;
   signal.throwIfAborted();
   const timer = setTimeout(() => {
     deadline.abort(
-      new AppError('COMMAND_FAILED', timeout?.message ?? 'Artifact preparation deadline exceeded', {
+      new AppError('COMMAND_FAILED', 'Artifact preparation deadline exceeded', {
         reason: 'artifact_preparation_deadline_exceeded',
         transferPhase: 'preparation',
         timeoutMs: UPLOAD_PREPARATION_TIMEOUT_MS,
-        ...(timeout?.hint ? { hint: timeout.hint } : {}),
       }),
     );
   }, UPLOAD_PREPARATION_TIMEOUT_MS);
@@ -168,27 +166,17 @@ export async function streamFileToHttpRequest(options: {
   method: 'POST' | 'PUT';
   headers: Record<string, string>;
   payloadPath: string;
-  timeoutMessage: string;
-  timeoutHint?: string;
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  /** Ends this request when the work the upload serves is over; see `uploadArtifact`. */
-  signal?: AbortSignal;
+  /**
+   * The preparation aggregate `uploadArtifact` opened, combined with its caller's cancellation. Every
+   * attempt, redirect and resume runs under it; none of them opens a deadline of its own.
+   */
+  signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  return await withUploadPreparationDeadline(
-    options.signal,
-    async (signal) =>
-      await streamFileToHttpRequestAttempt({
-        ...options,
-        signal,
-        url: options.url,
-        redirectCount: 0,
-        startOffset: 0,
-      }),
-    { message: options.timeoutMessage, hint: options.timeoutHint },
-  );
+  return await streamFileToHttpRequestAttempt({ ...options, redirectCount: 0, startOffset: 0 });
 }
 
 export function isRetryableUploadStreamError(error: unknown): boolean {
@@ -200,17 +188,15 @@ async function streamFileToHttpRequestAttempt(options: {
   method: 'POST' | 'PUT';
   headers: Record<string, string>;
   payloadPath: string;
-  timeoutMessage: string;
-  timeoutHint?: string;
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  signal?: AbortSignal;
+  signal: AbortSignal;
   redirectCount: number;
   startOffset: number;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  options.signal?.throwIfAborted();
+  options.signal.throwIfAborted();
   // This module sits in the CLI's eager import closure via the remote-artifact
   // upload client, but only a remote daemon ever uploads, so the HTTP stack
   // loads here rather than at import time.
@@ -236,10 +222,12 @@ async function streamFileToHttpRequestAttempt(options: {
     let transportEstablished = false;
     let bodyFlushed = false;
     const settle = (result: UploadStreamResponse) => {
+      stopObservingWrites();
       watchdog.dispose();
       resolve(result);
     };
     const fail = (error: unknown) => {
+      stopObservingWrites();
       watchdog.dispose();
       // Whatever is still queued on this attempt's own outgoing pipeline has to settle before the
       // join in `finally`, so a failure that ends the attempt destroys the request too. Once the
@@ -265,16 +253,6 @@ async function streamFileToHttpRequestAttempt(options: {
         watchdog.arm('request-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
       }
     };
-    // Body progress is what the socket accepted, which `drain` reports when a previously full write
-    // queue empties. Chunks merely read ahead of the request, or throttled UI progress events, say
-    // nothing about bytes leaving this machine, so they are not progress against any budget.
-    const noteWriteProgress = () => {
-      // A request-side drain says nothing about the response; once an answer is streaming, only
-      // response bytes may re-arm the inactivity budget.
-      if (responseReceived) return;
-      watchdog.touchBody();
-    };
-
     const req = transport.request(
       {
         protocol: options.url.protocol,
@@ -318,7 +296,13 @@ async function streamFileToHttpRequestAttempt(options: {
         advanceOutgoingPhase();
       }
     });
-    req.on('drain', noteWriteProgress);
+    // Body progress is a completed body write: its bytes reached the local kernel, not the peer.
+    // Read-ahead chunks, queued writes and UI progress are not progress, and a completion after the
+    // response, an abort or a destroy belongs to an exchange with no request-body phase left.
+    const stopObservingWrites = observeCompletedWrites(req, () => {
+      if (responseReceived || req.destroyed || watchdog.signal.aborted) return;
+      watchdog.touchBody();
+    });
 
     req.on('error', (err) => {
       if (responseReceived) return;
@@ -404,6 +388,7 @@ async function streamFileToHttpRequestAttempt(options: {
       // redirect/resume starts — old bytes may never overlap the next hop.
       const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
+      stopObservingWrites();
       watchdog.dispose();
 
       const statusCode = res.statusCode ?? 500;
@@ -458,6 +443,44 @@ async function streamFileToHttpRequestAttempt(options: {
     watchdog.dispose();
     await upload;
   });
+}
+
+/**
+ * Reports each non-empty `req.write` chunk that Node completes without an error, until stopped.
+ *
+ * `pipeline` writes without a callback, and `drain` fires only after a write returned `false`. The
+ * wrapper passes the arguments, `this` and the backpressure result through, and runs the caller's
+ * callback exactly once with the same error. Stopping restores `write` only while this wrapper is
+ * still installed, and completions after the stop are not reported.
+ */
+function observeCompletedWrites(req: ClientRequest, onCompleted: () => void): () => void {
+  const ownWrite = Object.getOwnPropertyDescriptor(req, 'write');
+  const write = req.write;
+  let observing = true;
+  const observedWrite = function (this: ClientRequest, ...args: unknown[]): boolean {
+    const [chunk, encoding] = args;
+    const callbackIndex = typeof encoding === 'function' ? 1 : 2;
+    const callback = args[callbackIndex];
+    const hasBytes =
+      typeof chunk === 'string'
+        ? chunk.length > 0
+        : chunk instanceof Uint8Array && chunk.byteLength > 0;
+    if (observing && hasBytes) {
+      args[callbackIndex] = (error?: Error | null) => {
+        if (!error && observing) onCompleted();
+        if (typeof callback === 'function') callback(error);
+      };
+    }
+    const accepted: boolean = Reflect.apply(write, this, args);
+    return accepted;
+  };
+  req.write = observedWrite;
+  return () => {
+    observing = false;
+    if (req.write !== observedWrite) return;
+    if (ownWrite) Object.defineProperty(req, 'write', ownWrite);
+    else Reflect.deleteProperty(req, 'write');
+  };
 }
 
 function retryableUploadStreamDetail(options: { retryable?: boolean }): Record<string, true> {
