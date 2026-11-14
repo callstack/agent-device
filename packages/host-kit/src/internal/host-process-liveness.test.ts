@@ -16,6 +16,7 @@ import {
   isProcessZombie,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
+  readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
 } from './host-process.ts';
@@ -266,3 +267,97 @@ test('a host with both pinned ps binaries keeps running /bin/ps', () => {
   assert.equal(isProcessZombie(4242), false);
   assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/bin/ps');
 });
+
+for (const probe of ['single', 'sync', 'async'] as const) {
+  test.skipIf(process.platform !== 'linux')(
+    `Linux ${probe} identity survives a wall-clock step`,
+    async () => {
+      vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+        if (String(path) === '/proc/sys/kernel/random/boot_id') return 'test-boot\n';
+        if (String(path) === '/proc/4242/stat') {
+          return `4242 (a) b) S ${Array(18).fill('0').join(' ')} 5371442 0`;
+        }
+        throw new Error('ENOENT');
+      });
+      const read = async () => {
+        if (probe === 'single') return readProcessStartTime(4242);
+        const rows =
+          probe === 'sync'
+            ? readHostProcessIdentityObservations([4242])
+            : await readHostProcessIdentityObservationsAsync([4242]);
+        return rows.get(4242)?.startTime;
+      };
+      for (const time of ['Mon Nov  9 23:54:54 2026', 'Mon Nov  9 23:54:58 2026']) {
+        const stdout = probe === 'single' ? time : `4242 Ss ${time}`;
+        psReturns(stdout);
+        mockRunCmd.mockResolvedValue({ stdout, stderr: '', exitCode: 0 });
+        assert.equal(await read(), 'linux:test-boot:5371442');
+      }
+    },
+  );
+}
+
+for (const [psState, procState, zombie] of [
+  ['Z', 'S', false],
+  ['S', 'Z', true],
+] as const) {
+  test.skipIf(process.platform !== 'linux')(
+    `Linux state follows the /proc read that gave the start token (ps ${psState}, /proc ${procState})`,
+    async () => {
+      // A pid reused between the ps snapshot and the /proc read must not pair one lifetime's
+      // start token with the other lifetime's state.
+      vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+        if (String(path) === '/proc/sys/kernel/random/boot_id') return 'test-boot\n';
+        if (String(path) === '/proc/4242/stat') {
+          return `4242 (a) ${procState} ${Array(18).fill('0').join(' ')} 5371442 0`;
+        }
+        throw new Error('ENOENT');
+      });
+      const row = `4242 ${psState} Mon Nov  9 23:54:54 2026\n`;
+      psReturns(row);
+      psAnswersIdentity({ identity: row, command: '4242 y\n' });
+      const expected = { state: procState, startTime: 'linux:test-boot:5371442' };
+
+      assert.deepEqual(readHostProcessIdentityObservations([4242]).get(4242), expected);
+      assert.deepEqual(
+        (await readHostProcessIdentityObservationsAsync([4242])).get(4242),
+        expected,
+      );
+      assert.deepEqual(await readProcessIdentityFacts(4242), {
+        startTime: 'linux:test-boot:5371442',
+        command: 'y',
+        zombie,
+      });
+    },
+  );
+}
+
+test.skipIf(process.platform !== 'linux')(
+  'Linux identities fall back to lstart when proc is unreadable or malformed',
+  async () => {
+    for (const stat of [
+      null,
+      '4242 (broken) S 0',
+      `4242 (broken) S ${Array(18).fill('0').join(' ')} nope`,
+    ]) {
+      vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+        if (String(path) === '/proc/sys/kernel/random/boot_id') return 'test-boot\n';
+        if (stat === null) throw new Error('ENOENT');
+        return stat;
+      });
+      psReturns('original lstart');
+      assert.equal(readProcessStartTime(4242), 'original lstart');
+      psReturns('4242 Ss original lstart');
+      mockRunCmd.mockResolvedValue({ stdout: '4242 Ss original lstart', stderr: '', exitCode: 0 });
+      assert.equal(
+        readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
+        'original lstart',
+      );
+      assert.equal(
+        (await readHostProcessIdentityObservationsAsync([4242])).get(4242)?.startTime,
+        'original lstart',
+      );
+      vi.restoreAllMocks();
+    }
+  },
+);

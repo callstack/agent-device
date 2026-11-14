@@ -39,6 +39,117 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @interface AgentDeviceRunnerFixtureViewController : AgentDeviceRunnerViewController
 @end
 
+// A real navigation stack for `back`. `--agent-device-back-navigation-bar` pushes a detail screen,
+// so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
+// pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
+// nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
+// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
+// "Back" on the root, which is not the system back button and must never be pressed. The root's
+// label reports what happened.
+@interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
+@property(nonatomic, strong) UILabel *status;
+@property(nonatomic, strong) NSTimer *titleTimer;
+@end
+
+@implementation AgentDeviceBackNavigationFixture
+- (instancetype)initWithCustomBackItem:(BOOL)customBackItem blockedBack:(BOOL)blockedBack {
+  UIViewController *root = [UIViewController new];
+  root.title = @"Root";
+  root.view.backgroundColor = UIColor.systemBackgroundColor;
+  self = [super initWithRootViewController:root];
+  if (!self) return nil;
+  UILabel *status = [UILabel new];
+  status.text = @"Navigation root";
+  status.accessibilityIdentifier = @"agent-device-back-navigation-status";
+  status.translatesAutoresizingMaskIntoConstraints = NO;
+  [root.view addSubview:status];
+  [NSLayoutConstraint activateConstraints:@[
+    [status.centerXAnchor constraintEqualToAnchor:root.view.centerXAnchor],
+    [status.centerYAnchor constraintEqualToAnchor:root.view.centerYAnchor],
+  ]];
+  self.status = status;
+  self.modalPresentationStyle = UIModalPresentationFullScreen;
+  if (customBackItem) {
+    root.navigationItem.leftBarButtonItem =
+        [[UIBarButtonItem alloc] initWithTitle:@"Back" style:UIBarButtonItemStylePlain target:self
+                                        action:@selector(customBackPressed)];
+  } else {
+    UIViewController *detail = [UIViewController new];
+    detail.title = @"Detail";
+    detail.view.backgroundColor = UIColor.systemTealColor;
+    if (blockedBack) {
+      if (@available(iOS 16.0, *)) {
+        BOOL shifting = [NSProcessInfo.processInfo.arguments containsObject:@"--shifting-back"];
+        __weak UINavigationController *weakSelf = self;
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
+          if (shifting) weakSelf.additionalSafeAreaInsets = UIEdgeInsetsMake(30, 0, 0, 0);
+        }];
+      }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
+      __block NSInteger remaining = 59;
+      __weak UIViewController *weakDetail = detail;
+      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer) {
+        remaining = remaining > 0 ? remaining - 1 : 59;
+        weakDetail.title = [NSString stringWithFormat:@"0:%02ld", (long)remaining];
+      }];
+    }
+    [self pushViewController:detail animated:NO];
+  }
+  return self;
+}
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.interactivePopGestureRecognizer.enabled = NO;
+  self.delegate = self;
+}
+
+- (void)customBackPressed {
+  self.status.text = @"Custom back pressed";
+}
+
+- (void)navigationController:(UINavigationController *)navigationController
+       didShowViewController:(UIViewController *)viewController
+                    animated:(BOOL)animated {
+  // Only the pushed stack ever shows its root again, and only by popping the detail screen.
+  if (viewController == self.viewControllers.firstObject && viewController.navigationItem.leftBarButtonItem == nil) {
+    self.status.text = @"Back pressed";
+  }
+}
+@end
+
+// `--two-stacks` shows two pushed navigation stacks, one above the other, so two hittable system
+// back buttons are on screen at once and neither is the one `back` should press.
+@interface AgentDeviceTwoStacksBackFixture : UIViewController
+@end
+
+@implementation AgentDeviceTwoStacksBackFixture
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.view.backgroundColor = UIColor.systemBackgroundColor;
+  UIStackView *stack = [UIStackView new];
+  stack.axis = UILayoutConstraintAxisVertical;
+  stack.distribution = UIStackViewDistributionFillEqually;
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:stack];
+  [NSLayoutConstraint activateConstraints:@[
+    [stack.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+    [stack.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+    [stack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+  ]];
+  for (NSInteger index = 0; index < 2; index++) {
+    AgentDeviceBackNavigationFixture *child = [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:NO
+                                                                                                  blockedBack:NO];
+    [self addChildViewController:child];
+    [stack addArrangedSubview:child.view];
+    [child didMoveToParentViewController:self];
+  }
+}
+@end
+
 @interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
@@ -75,6 +186,9 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
+@property(nonatomic, weak) UITextField *keyboardBusyField;
+@property(nonatomic, strong) UILabel *keyboardBusyAnswer;
+@property(nonatomic, strong) NSTimer *keyboardBusyBackstop;
 @end
 
 // A one-time-code field that announces how many digits it holds instead of the digits, the way
@@ -251,6 +365,57 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   self.alertActivationBusyBackstop = nil;
 }
 
+// The keyboard counterpart of the busy alert: the field starts the same never-ending UIView animation
+// when it takes focus, so XCTest sees work in flight for as long as the keyboard is up. Its Done
+// accessory and its return key record whether they landed while the app was still busy. The backstop
+// passed after `--agent-device-keyboard-busy` ends the busy state, so a command that waits for the app
+// to idle before it taps still finishes, and records "after busy" instead of outlasting the test.
+static NSTimeInterval AgentDeviceKeyboardBusyWindow(void) {
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger flag = [arguments indexOfObject:@"--agent-device-keyboard-busy"];
+  return flag + 1 < arguments.count ? arguments[flag + 1].doubleValue : 0;
+}
+
+- (void)startKeyboardBusy {
+  if (self.keyboardBusyBackstop != nil) {
+    return;
+  }
+  self.keyboardBusyBackstop = [NSTimer scheduledTimerWithTimeInterval:AgentDeviceKeyboardBusyWindow()
+                                                               target:self
+                                                             selector:@selector(stopKeyboardBusy)
+                                                             userInfo:nil
+                                                              repeats:NO];
+  [UIView animateWithDuration:0.4
+                          delay:0
+                        options:(UIViewAnimationOptionRepeat | UIViewAnimationOptionAutoreverse)
+                     animations:^{
+                       self.keyboardBusyAnswer.transform = CGAffineTransformMakeTranslation(0, 8);
+                     }
+                     completion:nil];
+}
+
+- (void)stopKeyboardBusy {
+  [self.keyboardBusyAnswer.layer removeAllAnimations];
+  self.keyboardBusyAnswer.transform = CGAffineTransformIdentity;
+  [self.keyboardBusyBackstop invalidate];
+  self.keyboardBusyBackstop = nil;
+}
+
+- (void)recordKeyboardBusyAnswer:(NSString *)control {
+  self.keyboardBusyAnswer.text = [NSString
+      stringWithFormat:@"%@ %@", control, self.keyboardBusyBackstop != nil ? @"while busy" : @"after busy"];
+  [self stopKeyboardBusy];
+  [self.keyboardBusyField resignFirstResponder];
+}
+
+- (void)keyboardBusyDonePressed {
+  [self recordKeyboardBusyAnswer:@"Done"];
+}
+
+- (void)keyboardBusyReturnPressed {
+  [self recordKeyboardBusyAnswer:@"Return"];
+}
+
 // A banner from this app, shown over its own alert and re-posted before the previous one expires so
 // one is on screen for as long as the first alert is unanswered. XCTest treats such a banner as an
 // interruption of every event aimed at the app (#2546's late tap, from the banner side).
@@ -368,6 +533,17 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
+  if (!self.alertFixtureStarted &&
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-navigation-bar"]) {
+    self.alertFixtureStarted = YES;
+    BOOL customBackItem = [NSProcessInfo.processInfo.arguments containsObject:@"--custom-back-item"];
+    BOOL blockedBack = [NSProcessInfo.processInfo.arguments containsObject:@"--blocked-back"];
+    UIViewController *fixture = [NSProcessInfo.processInfo.arguments containsObject:@"--two-stacks"]
+        ? [AgentDeviceTwoStacksBackFixture new]
+        : [[AgentDeviceBackNavigationFixture alloc] initWithCustomBackItem:customBackItem blockedBack:blockedBack];
+    fixture.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentViewController:fixture animated:NO completion:nil];
+  }
   if (!self.alertFixtureStarted &&
       ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"])) {
@@ -608,15 +784,27 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         }
       }];
     }
-    // `--slow-toggle` repaints the whole screen every 0.5 s, slower than one verification delay, as
-    // a carousel does: one quiet pair of samples must not pass it for settled.
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
-      __weak UIView *view = self.view;
-      [self.animationTimer invalidate];
-      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(NSTimer *timer) {
-        view.backgroundColor = [view.backgroundColor isEqual:UIColor.blackColor] ? UIColor.whiteColor : UIColor.blackColor;
-      }];
-    }
+  }
+  // `--slow-toggle` repaints the whole screen every 0.45 s, as a carousel does: a run of quiet samples
+  // shorter than the back swipe's still span must not pass it for settled. Without
+  // `--agent-device-back-regression` nothing answers the swipe, so only the repaint changes the screen.
+  // The repaints fall on whole multiples of 0.45 s of the wall clock, which the test process shares,
+  // so a test can start at a chosen phase of the cycle. The shade steps through 8 grays by wall-clock
+  // period, so two samples on either side of a stall of a few periods still differ.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
+    __weak UIView *view = self.view;
+    NSTimeInterval period = 0.45;
+    NSDate *firstRepaint =
+        [NSDate dateWithTimeIntervalSince1970:(floor(NSDate.date.timeIntervalSince1970 / period) + 1) * period];
+    [self.animationTimer invalidate];
+    self.animationTimer = [[NSTimer alloc] initWithFireDate:firstRepaint interval:period repeats:YES block:^(NSTimer *timer) {
+      // NSTimer fires at or after its slot, never before: floor names the slot a late callback
+      // belongs to, so a late callback and the next on-time one never share a shade. The 1e-3
+      // keeps float error just below a slot boundary in that slot.
+      long long step = (long long)floor(NSDate.date.timeIntervalSince1970 / period + 1e-3) % 8;
+      view.backgroundColor = [UIColor colorWithWhite:step / 7.0 alpha:1];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.animationTimer forMode:NSRunLoopCommonModes];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
@@ -650,6 +838,43 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [busyAnswer.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
     ]];
     self.alertActivationBusyAnswer = busyAnswer;
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-keyboard-busy"]) {
+    UITextField *field = [[UITextField alloc] init];
+    field.accessibilityIdentifier = @"agent-device-keyboard-busy-input";
+    field.placeholder = @"Busy while editing";
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+    accessory.items = @[
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
+      [[UIBarButtonItem alloc] initWithTitle:@"Done"
+                                       style:UIBarButtonItemStyleDone
+                                      target:self
+                                      action:@selector(keyboardBusyDonePressed)],
+    ];
+    field.inputAccessoryView = accessory;
+    [field addTarget:self action:@selector(startKeyboardBusy) forControlEvents:UIControlEventEditingDidBegin];
+    [field addTarget:self
+                  action:@selector(keyboardBusyReturnPressed)
+        forControlEvents:UIControlEventEditingDidEndOnExit];
+    field.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:field];
+    UILabel *answer = [[UILabel alloc] init];
+    answer.text = @"Unanswered";
+    answer.accessibilityIdentifier = @"agent-device-keyboard-busy-answer";
+    answer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:answer];
+    [NSLayoutConstraint activateConstraints:@[
+      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      [field.widthAnchor constraintEqualToConstant:240],
+      [field.heightAnchor constraintEqualToConstant:44],
+      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
+    ]];
+    self.keyboardBusyField = field;
+    self.keyboardBusyAnswer = answer;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {

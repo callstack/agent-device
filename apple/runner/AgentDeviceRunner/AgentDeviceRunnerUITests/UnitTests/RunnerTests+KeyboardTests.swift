@@ -139,6 +139,21 @@ extension RunnerTests {
 
 #endif
 
+  /// The two ways a visible keyboard stays up answer different questions, so they must not share one
+  /// code (#1606). Finding no dismiss control sent nothing and is the runner's own refusal; a control
+  /// that was tapped and left the keys up did dispatch and keeps the generic code. The host reads the
+  /// first code's literal to publish `details.reason`, so it is pinned here as the wire value.
+  func testKeyboardDismissRefusalNamesItsOwnCodeOnlyWhenNothingWasDispatched() {
+    let notDispatched = keyboardDismissRefusal(dispatchedDismissal: false)
+    XCTAssertEqual(notDispatched.code, "KEYBOARD_DISMISS_UNAVAILABLE")
+    XCTAssertNotNil(notDispatched.hint)
+
+    let dispatched = keyboardDismissRefusal(dispatchedDismissal: true)
+    XCTAssertEqual(dispatched.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNotNil(dispatched.hint)
+    XCTAssertNotEqual(dispatched.code, notDispatched.code)
+  }
+
   func testKeyboardBandFactPublishesAbsenceWhenTheCompleteCaptureHasNoKeyboard() {
     let fact = runnerKeyboardBandFact(exists: false, frame: .zero)
     XCTAssertEqual(fact, .absent)
@@ -326,6 +341,68 @@ extension RunnerTests {
 
   private func textEntryInputCount() -> Int {
     app.textFields.count + app.secureTextFields.count + app.searchFields.count + app.textViews.count
+  }
+
+  // `keyboard dismiss` and `keyboard enter` tap a keyboard control. An app that never stops animating
+  // made that tap wait for XCTest's idle timeout, past the runner's main-thread watchdog, so the command
+  // failed with "main thread execution timed out" and the runner refused the next commands. The fixture
+  // keeps an animation in flight while its field has focus, until its backstop, and records whether
+  // each control landed while the app was still busy.
+  static let keyboardBusyBackstop: TimeInterval = 20
+
+  @MainActor
+  func testKeyboardDismissTapsItsDismissKeyWhileTheAppIsBusy() throws {
+    try withBusyKeyboardField {
+      let command = try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-busy"}"#)
+      let response = try execute(command: command)
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      let answer = app.staticTexts["agent-device-keyboard-busy-answer"].label
+      XCTAssertEqual(answer, "Done while busy")
+      NSLog("AGENT_DEVICE_KEYBOARD_BUSY command=dismiss response.ok=%@ answer=%@", response.ok ? "true" : "false", answer)
+    }
+  }
+
+  @MainActor
+  func testKeyboardEnterPressesReturnWhileTheAppIsBusy() throws {
+    try withBusyKeyboardField {
+      let command = try runnerCommandFixture(#"{"command":"keyboardReturn","commandId":"return-busy"}"#)
+      let response = try execute(command: command)
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertEqual(response.data?.wasVisible, true)
+      XCTAssertEqual(response.data?.visible, false)
+      let answer = app.staticTexts["agent-device-keyboard-busy-answer"].label
+      XCTAssertEqual(answer, "Return while busy")
+      NSLog("AGENT_DEVICE_KEYBOARD_BUSY command=enter response.ok=%@ visible=%@ answer=%@", response.ok ? "true" : "false", String(describing: response.data?.visible), answer)
+    }
+  }
+
+  @MainActor
+  private func withBusyKeyboardField(_ body: () throws -> Void) throws {
+    app.launchArguments = ["--agent-device-keyboard-busy", String(Self.keyboardBusyBackstop)]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-keyboard-busy-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    // Focus starts the busy animation, so this tap must not wait for the app to idle either.
+    withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) { field.tap() }
+    let keyboardDeadline = Date().addingTimeInterval(5)
+    while !isKeyboardVisible(app: app) && Date() < keyboardDeadline {
+      sleepFor(0.2)
+    }
+    XCTAssertTrue(
+      isKeyboardVisible(app: app),
+      "Enable the simulator software keyboard before running the busy keyboard tests; see apple/runner/README.md"
+    )
+    XCTAssertEqual(app.staticTexts["agent-device-keyboard-busy-answer"].label, "Unanswered")
+    try body()
   }
 #endif
 }

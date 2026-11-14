@@ -258,9 +258,11 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
     remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
     return { info: remoteInfo, startedByClient: false };
   }
-  throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+  // Loaded on the refusal: this error module is not part of what every CLI start pays for.
+  const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
+  throw remoteDaemonUnavailableError({
     daemonBaseUrl: settings.remoteBaseUrl,
-    hint: 'Verify AGENT_DEVICE_DAEMON_BASE_URL points to a reachable daemon with GET /health and POST /rpc. If this CLI was connected with connect proxy, run agent-device disconnect to return to the local daemon.',
+    hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
   });
 }
 

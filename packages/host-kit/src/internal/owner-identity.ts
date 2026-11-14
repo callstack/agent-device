@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import {
   isProcessAlive,
+  processStartTimesDiffer,
   isProcessZombie,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
@@ -74,7 +75,7 @@ export function ownerIdentityDiffers(
   right: Pick<OwnerIdentity, 'pid' | 'startTime'>,
 ): boolean {
   if (left.pid !== right.pid) return true;
-  return Boolean(left.startTime && right.startTime && left.startTime !== right.startTime);
+  return processStartTimesDiffer(left.startTime, right.startTime);
 }
 
 /**
@@ -183,7 +184,7 @@ function provesPidReused(
 ): boolean {
   const currentStartTime =
     observation === undefined ? readProcessStartTime(owner.pid) : (observation?.startTime ?? null);
-  return currentStartTime !== null && currentStartTime !== owner.startTime;
+  return processStartTimesDiffer(currentStartTime, owner.startTime);
 }
 
 function classifyOwnerStateDirectory(stateDir: string): OwnerLiveness {

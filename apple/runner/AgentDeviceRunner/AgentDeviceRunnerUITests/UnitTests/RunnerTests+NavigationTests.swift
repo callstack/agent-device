@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 import ObjectiveC.runtime
@@ -44,18 +45,242 @@ extension RunnerTests {
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
   }
 
-  /// A screen that changes on its own every 0.5 s is never still for the required span (the contact
-  /// allowance, one 0.25 s delay, and the slowest capture, over 0.5 s on a simulator), so it never
-  /// settles and back reports an unknown outcome instead of crediting the swipe.
+  /// A screen that repaints itself every 0.45 s, with a swipe that does nothing, is never still for
+  /// the required span (about 0.55 s on a simulator), so its own repaint after the swipe is never
+  /// read as a back. Attempt k starts k * 0.09 s after a repaint, five phases across the cycle.
   @MainActor
-  func testInAppBackOnAScreenChangingSlowerThanOneDelayIsNotPerformed() throws {
-    _ = try launchBackFixture(["--agent-device-back-regression", "--slow-toggle"])
+  func testInAppBackNeverCreditsASlowSelfRepaintToANoOpSwipe() throws {
+    _ = try launchBackFixture(["--slow-toggle"])
+    defer { endBackFixture() }
+
+    for offset in (0..<5).map({ Double($0) * Self.slowTogglePeriod / 5 }) {
+      waitForSlowToggleOffset(offset)
+      guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+        return XCTFail("a repaint \(offset) s before the attempt must not read as a back")
+      }
+      XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified, "offset \(offset) s")
+    }
+  }
+
+  /// The navigation bar's system back button is pressed from the live tree: the fixture's
+  /// interactive pop is off, so only that button can pop the detail screen.
+  @MainActor
+  func testInAppBackPressesTheNavigationBarBackButton() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a visible navigation bar back button must be pressed")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true, "the button, not the swipe, popped")
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
+  /// A delivered tap on the system back button is not a navigation: when the bar does not change,
+  /// back reports an unknown outcome and never swipes after the tap.
+  @MainActor
+  func testInAppBackReportsAPressedBackButtonThatDoesNotNavigateAsUnverified() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back"])
     defer { endBackFixture() }
 
     guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
-      return XCTFail("a screen that toggles on its own must not read as performed")
+      return XCTFail("a back button tap that leaves the bar unchanged must not read as performed")
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertTrue(app.navigationBars["Detail"].exists)
+  }
+
+  /// A bar title that counts down on its own is not a navigation: a tap that navigates nowhere on
+  /// such a bar reports an unknown outcome, though the title changes within the confirmation window.
+  @MainActor
+  func testInAppBackDoesNotCreditATickingBarTitleToAPressedBackButton() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back", "--ticking-title"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a ticking bar title must not confirm a back button tap that navigated nowhere")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 1)
+  }
+
+  /// A back button that only moves after the tap is not a navigation: a tap that navigates nowhere
+  /// but shifts the bar, as a large-title collapse does, reports an unknown outcome.
+  @MainActor
+  func testInAppBackDoesNotCreditAMovedBackButtonToAPressedBackButton() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--blocked-back", "--shifting-back"])
+    defer { endBackFixture() }
+    let backButton = app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).firstMatch
+    let frameBefore = backButton.frame
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a back button that only moved must not confirm a tap that navigated nowhere")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertTrue(app.navigationBars["Detail"].exists)
+    XCTAssertNotEqual(backButton.frame.minY, frameBefore.minY, "the fixture must move the back button")
+  }
+
+  /// An XCTest issue while the back button is looked up, such as a button gone mid-transition, means
+  /// no button: back answers from the swipe path. An issue that escaped the read would fail this
+  /// test as it fails the command with a recorded failure. The swipe's own outcome is not asserted:
+  /// iOS 27 pops this fixture on the edge swipe even with its interactive pop turned off.
+  @MainActor
+  func testInAppBackWithAnIssueInTheButtonLookupAnswersFromTheSwipe() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    navigationBarBackReadForTesting = { $0 == .lookup ? Self.vanishedBackButtonIssue : nil }
+    defer { navigationBarBackReadForTesting = nil }
+
+    let response = try execute(command: try runnerCommandFixture(
+      #"{"command":"backInApp","commandId":"back-lookup-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
+    ))
+
+    XCTAssertNotEqual(response.error?.code, "XCTEST_RECORDED_FAILURE")
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "unreadable")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+  }
+
+  /// A hung query before the tap stays visible to XCTest, as `record(_:)` requires, and back sends
+  /// nothing: neither the button tap nor the swipe follows a hung query.
+  @MainActor
+  func testInAppBackWithAHungQueryInTheButtonLookupSendsNothing() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    defer { navigationBarBackReadForTesting = nil }
+
+    let outcome = try expectingHungQueryRecorded {
+      navigationBarBackReadForTesting = { $0 == .lookup ? Self.hungQueryIssue : nil }
+      return try performInAppBack(app: app)
+    }
+
+    guard case .refused(let payload) = outcome else { return XCTFail("a hung lookup must send nothing") }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNotDispatched)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "hung")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+    navigationBarBackReadForTesting = nil
+    XCTAssertTrue(app.navigationBars["Detail"].exists, "nothing popped the detail screen")
+  }
+
+  /// A hung query after a delivered tap stays visible to XCTest, and back answers unverified at once
+  /// instead of querying the hung tree again.
+  @MainActor
+  func testInAppBackWithAHungQueryInTheConfirmationAnswersUnverified() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    defer { navigationBarBackReadForTesting = nil }
+
+    let outcome = try expectingHungQueryRecorded {
+      navigationBarBackReadForTesting = { $0 == .confirmation ? Self.hungQueryIssue : nil }
+      return try performInAppBack(app: app)
+    }
+
+    guard case .unconfirmed(let payload) = outcome else { return XCTFail("a hung confirmation must not read as performed") }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "hung")
+  }
+
+  /// Two hittable system back buttons, one per stack, are ambiguous: back presses neither and
+  /// answers from the swipe path.
+  @MainActor
+  func testInAppBackPressesNoneOfTwoNavigationBarBackButtons() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--two-stacks"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 2)
+
+    _ = try performInAppBack(app: app)
+
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "ambiguous")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+  }
+
+  /// A penalized XCTest snapshot channel is not read: back skips the button lookup and swipes.
+  @MainActor
+  func testInAppBackSkipsTheButtonLookupOnAPenalizedChannel() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    penalizeSnapshotXCTestChannel(bundleId: mainOwned.bundleId, reason: "navigation-test")
+    defer { clearSnapshotXCTestChannelPenalty(reason: "navigation-test") }
+
+    _ = try performInAppBack(app: app)
+
+    let trace = try XCTUnwrap(lastNavigationBarBackTraceForTesting)
+    XCTAssertEqual(trace.found, "skipped")
+    XCTAssertFalse(trace.pressed, "back answered from the swipe path")
+    XCTAssertEqual(trace.lookupMs, 0)
+  }
+
+  /// An XCTest issue in every read after a delivered tap proves nothing: back answers unverified and
+  /// never swipes after the tap. An escaped issue would fail this test.
+  @MainActor
+  func testInAppBackWithAnIssueInTheConfirmationAnswersUnverified() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    navigationBarBackReadForTesting = { $0 == .lookup ? nil : Self.vanishedBackButtonIssue }
+    defer { navigationBarBackReadForTesting = nil }
+
+    let response = try execute(command: try runnerCommandFixture(
+      #"{"command":"backInApp","commandId":"back-confirmation-issue","appBundleId":"com.callstack.agentdevice.runner"}"#
+    ))
+
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    navigationBarBackReadForTesting = nil
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed, "the tap itself was delivered")
+  }
+
+  /// A slow host can spend the whole confirmation budget on reads of the bar that is vanishing mid-pop,
+  /// each one an issue that proves nothing. Every read that starts in the budget fails here, so only
+  /// the read after the budget, which sees the settled screen, can confirm the pop.
+  @MainActor
+  func testInAppBackConfirmsAPopWhoseReadsInTheBudgetAllFail() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+    var budgetReads = 0
+    var finalReads = 0
+    navigationBarBackReadForTesting = { phase in
+      switch phase {
+      case .lookup: return nil
+      case .confirmation:
+        budgetReads += 1
+        return Self.vanishedBackButtonIssue
+      case .finalConfirmation:
+        finalReads += 1
+        return nil
+      }
+    }
+    defer { navigationBarBackReadForTesting = nil }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a pop read after the budget must read as performed")
+    }
+    XCTAssertGreaterThan(budgetReads, 0, "the reads in the budget ran and failed")
+    XCTAssertEqual(finalReads, 1, "the one read after the budget confirmed the pop")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
+  }
+
+  /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,
+  /// and the swipe that changes nothing reports so.
+  @MainActor
+  func testInAppBackNeverPressesABarButtonOnlyTitledBack() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--custom-back-item"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("a bar button titled Back must not count as the back button")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
+    XCTAssertEqual(status.label, "Navigation root")
   }
 
   @MainActor
@@ -250,6 +475,13 @@ extension RunnerTests {
     wait(for: [performed], timeout: 1)
   }
 
+  /// Waits until `offset` seconds have passed since the `--slow-toggle` fixture's last repaint.
+  private func waitForSlowToggleOffset(_ offset: TimeInterval) {
+    let sinceRepaint = Date().timeIntervalSince1970.truncatingRemainder(dividingBy: Self.slowTogglePeriod)
+    let wait = offset - sinceRepaint
+    sleepFor(wait < 0 ? wait + Self.slowTogglePeriod : wait)
+  }
+
   /// Launches the runner app and waits for its fixture surface. With
   /// `--agent-device-back-regression` a left-edge swipe sets the status to "Back performed", and
   /// without it the app ignores the swipe.
@@ -266,6 +498,38 @@ extension RunnerTests {
     XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
     return status
   }
+  static let vanishedBackButtonIssue = "Back button vanished during the navigation bar read"
+  static let hungQueryIssue = "Timed out while evaluating UI query."
+
+  /// Runs `body` and requires the hung query it records to reach XCTest exactly once.
+  @MainActor
+  private func expectingHungQueryRecorded<T>(_ body: () throws -> T) throws -> T {
+    let options = XCTExpectedFailure.Options()
+    var observed = 0
+    options.issueMatcher = { issue in
+      guard issue.compactDescription == Self.hungQueryIssue else { return false }
+      observed += 1
+      return true
+    }
+    var result: Result<T, Error>?
+    XCTExpectFailure("The hung query is the condition under test", options: options) {
+      result = Result { try body() }
+    }
+    XCTAssertEqual(observed, 1, "a hung query reaches XCTest once, and no query follows it")
+    return try XCTUnwrap(result).get()
+  }
+
+  @MainActor
+  private func launchBackNavigationFixture(_ arguments: [String]) throws -> XCUIElement {
+    app.launchArguments = arguments
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
+    XCTAssertTrue(app.navigationBars.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    return app.staticTexts["agent-device-back-navigation-status"]
+  }
+
   @MainActor
   private func endBackFixture() {
     invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -439,14 +703,80 @@ extension RunnerTests {
     XCTAssertGreaterThanOrEqual(slow, Self.backSwipeDurationMs + Self.backSwipeVerificationDelay * 1000 + 600)
   }
 
-  /// A screen that moved between settling and the swipe has no baseline to credit a change against.
-  func testBackSwipeBaselineHoldsOnlyWhenSettledAndUnmovedBeforeTheSwipe() {
-    let baseline = grid(100)
-    let moved = grid(255)
+  /// The `--slow-toggle` fixture's repaint period; it repaints on whole multiples of it of the wall
+  /// clock, which this process shares.
+  static let slowTogglePeriod: TimeInterval = 0.45
 
-    XCTAssertTrue(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: baseline))
-    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: true, baseline: baseline, justBefore: moved))
-    XCTAssertFalse(Self.backSwipeBaselineHolds(settled: false, baseline: baseline, justBefore: baseline))
+  /// The still span outlasts a 0.5 s self-repaint at a simulator's 0.1 s capture, and the
+  /// `--slow-toggle` fixture's period by at least 100 ms. It stays longer than the after-sample gap
+  /// (contact, verification delay, capture), whatever the delay.
+  func testBackSwipeRequiredStillSpanOutlastsAHalfSecondRepaint() {
+    let required = Self.backSwipeRequiredStillMs(maxCaptureMs: 100)
+    XCTAssertGreaterThan(required, 500)
+    XCTAssertGreaterThanOrEqual(required, Self.slowTogglePeriod * 1000 + 100)
+    XCTAssertEqual(required, Self.backGestureAllowanceMs + Self.backSwipeStillMarginMs + 100)
+    XCTAssertGreaterThan(required, Self.backGestureAllowanceMs + Self.backSwipeVerificationDelay * 1000 + 100)
+  }
+
+#if os(iOS)
+  /// #3899: a placed iPad window's snapshot frames start at the window's own origin, while the live
+  /// button frame is in screen points. The still bar holds the live button only through the window's
+  /// screen origin.
+  func testNavigationBarBackStateHoldsTheLiveButtonOfAPlacedWindow() {
+    let snapshotButton = CGRect(x: 8, y: 54, width: 44, height: 44)
+    let state = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [snapshotButton])
+    let placed = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 224, y: 128, width: 386, height: 954)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+    let liveButton = CGRect(x: 232, y: 182, width: 44, height: 44)
+
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: liveButton, geometry: placed))
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: placed))
+
+    let fullScreen = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 402, height: 874)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
+  }
+
+  /// After the tap, only a change of the bar count, the back button count, or a back button label
+  /// shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
+  /// it is never a still bar before the tap.
+  func testNavigationBarBackPoppedOnlyOnABarOrBackButtonChange() {
+    let button = CGRect(x: 8, y: 54, width: 44, height: 44)
+    let detail = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button])
+
+    let moved = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
+    XCTAssertFalse(Self.navigationBarBackPopped(from: detail, to: moved))
+    XCTAssertNotEqual(moved, detail)
+    let relabeled = NavigationBarBackState(backButtonLabels: [["Settings"]], backButtonFrames: [button])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: relabeled))
+    let atRoot = NavigationBarBackState(backButtonLabels: [[]], backButtonFrames: [])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: atRoot))
+    let barGone = NavigationBarBackState(backButtonLabels: [], backButtonFrames: [])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: atRoot, to: barGone))
+  }
+#endif
+
+  /// A still screen settles before the budget runs out at any capture time: the settle loop's
+  /// timeline, replayed with fixed captures, reaches the required still span first. On a simulator
+  /// the base budget holds; a 1 s capture extends it.
+  func testBackSwipeSettleBudgetLetsAStillScreenSettleOnASlowHost() {
+    XCTAssertEqual(Self.backSwipeSettleBudgetMs(maxCaptureMs: 100), Self.backSwipeSettleBaseBudgetMs)
+    for captureMs in stride(from: 50.0, through: 2000.0, by: 50.0) {
+      let required = Self.backSwipeRequiredStillMs(maxCaptureMs: captureMs)
+      let budget = Self.backSwipeSettleBudgetMs(maxCaptureMs: captureMs)
+      var now = captureMs
+      let runStart = now
+      while now - runStart < required {
+        XCTAssertLessThan(now, budget, "capture \(captureMs) ms ran out of budget before settling")
+        now += Self.backSwipeSettleSampleInterval * 1000 + captureMs
+      }
+    }
   }
 
   func testBackSwipeOutcomeNamesNoChangeAndAnUnsampledScreenApart() {

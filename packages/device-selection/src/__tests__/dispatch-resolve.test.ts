@@ -472,6 +472,7 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
   assert.equal(error.code, 'AMBIGUOUS_MATCH');
   assert.match(error.message, /Multiple booted iOS simulators have com\.example\.demo installed/);
   assert.equal(error.details?.hint, 'Pass --udid to select the intended simulator explicitly.');
+  assert.equal(error.details?.dispatched, 'no');
   assert.deepEqual(error.details?.devices, [
     { id: bootedSimulator.id, name: bootedSimulator.name },
     { id: secondBootedSimulator.id, name: secondBootedSimulator.name },

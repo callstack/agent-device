@@ -4,6 +4,7 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 type AndroidPassiveNodeFacts = Pick<
   RawSnapshotNode,
   | 'contentDescription'
+  | 'text'
   | 'enabled'
   | 'selected'
   | 'heading'

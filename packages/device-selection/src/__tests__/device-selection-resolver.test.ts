@@ -74,6 +74,37 @@ test('the booted simulator with the app installed carries its own selected-by re
   assert.equal(selection.source, 'local');
 });
 
+test('a cross-platform tie fails undispatched, naming only the tied devices and their ids', async () => {
+  const error = await resolveInventoryDeviceSelection({
+    devices: [
+      ANDROID_EMULATOR,
+      IOS_SIMULATOR,
+      { ...IOS_SIMULATOR, id: 'sim-stopped-1', name: 'iPhone 17', booted: false },
+      { ...IOS_SIMULATOR, id: 'sim-stopped-2', name: 'iPhone Air', booted: false },
+    ],
+    selector: {},
+    source: 'local',
+  }).catch((error: unknown) => error);
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'AMBIGUOUS_MATCH');
+  assert.equal(error.details?.dispatched, 'no');
+  assert.deepEqual(error.details?.devices, [
+    { id: ANDROID_EMULATOR.id, name: ANDROID_EMULATOR.name },
+    { id: IOS_SIMULATOR.id, name: IOS_SIMULATOR.name },
+  ]);
+  assert.deepEqual(error.details?.retrySelectors, [
+    { flag: '--serial', value: ANDROID_EMULATOR.id },
+    { flag: '--device', value: ANDROID_EMULATOR.name },
+    { flag: '--udid', value: IOS_SIMULATOR.id },
+    { flag: '--device', value: IOS_SIMULATOR.name },
+  ]);
+  assert.equal(
+    error.details?.hint,
+    `Retry with the id of the intended device: --serial ${ANDROID_EMULATOR.id} or --udid ${IOS_SIMULATOR.id}.`,
+  );
+});
+
 test('successful local virtual preparation records the boot event without changing provider evidence', () => {
   const localSelection = markSelectionBootOccurred({
     device: STOPPED_ANDROID_EMULATOR,

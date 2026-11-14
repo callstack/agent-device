@@ -218,6 +218,38 @@ function parseHostProcessCommandRows(stdout: string): Array<{ pid: number; comma
   }));
 }
 
+/** State and start token from one `/proc/<pid>/stat` read, so a reused pid cannot mix lifetimes. */
+function readLinuxProcessStat(pid: number): { state: string; startTime: string } | null {
+  if (process.platform !== 'linux') return null;
+  try {
+    const bootId = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    // comm can contain spaces and closing parentheses; field 3 follows the last one.
+    const end = stat.lastIndexOf(')');
+    if (end < 0) return null;
+    const fields = stat
+      .slice(end + 1)
+      .trim()
+      .split(/\s+/);
+    const state = fields[0];
+    const startTime = fields[19];
+    if (!bootId || !state || !startTime || !/^\d+$/.test(startTime)) return null;
+    return { state, startTime: `linux:${bootId}:${startTime}` };
+  } catch {
+    return null;
+  }
+}
+
+/** Positive proof of different lifetimes; unreadable or mixed-format records prove nothing. */
+export function processStartTimesDiffer(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
+  return left !== right;
+}
+
 export function readProcessStartTime(pid: number): string | null {
   return readProcessField(pid, 'lstart=');
 }
@@ -333,7 +365,9 @@ function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] 
     if (!match) continue;
     const pid = Number.parseInt(match[1]!, 10);
     if (!Number.isInteger(pid) || pid <= 0) continue;
-    rows.push({ pid, state: match[2]!, startTime: match[3]! });
+    // On Linux both facts come from one /proc read; the ps row is the fallback when /proc is unreadable.
+    const linux = readLinuxProcessStat(pid);
+    rows.push(linux ? { pid, ...linux } : { pid, state: match[2]!, startTime: match[3]! });
   }
   return rows;
 }
@@ -353,6 +387,10 @@ type HostProcessField = 'lstart=' | 'command=' | 'state=';
 function readProcessField(pid: number, field: HostProcessField): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   if (isWindowsHostPlatform()) return readWindowsProcessField(pid, field);
+  if (field === 'lstart=') {
+    const token = readLinuxProcessStat(pid)?.startTime;
+    if (token !== undefined) return token;
+  }
   try {
     const result = runCmdSync(hostPsCommand(), ['-p', String(pid), '-o', field], {
       allowFailure: true,
@@ -744,7 +782,7 @@ export function judgeProcessIdentity(
 ): ProcessIdentityVerdict {
   if (facts.zombie) return 'exited';
   const { startTime, matches } = expected;
-  if (startTime && facts.startTime && facts.startTime !== startTime) return 'reassigned';
+  if (processStartTimesDiffer(startTime, facts.startTime)) return 'reassigned';
   const commandMatches = facts.command === null || !matches ? undefined : matches(facts.command);
   if (!startTime && commandMatches === false) return 'reassigned';
   if (!startTime && !matches) return 'unverified';

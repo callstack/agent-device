@@ -780,21 +780,18 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
       // and MCP renderers print these candidates without a new shape to learn.
       devices: listed.map((device) => ({ id: device.id, name: device.name })),
       matches: candidates.length,
+      // Selection precedes every device operation, so a refused tie never reached a device.
+      dispatched: 'no',
       hint: buildAmbiguousDeviceHint(listed),
     },
   );
 }
 
 function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
-  const first = candidates[0];
-  const identitySelector = first
-    ? `--${deviceIdentityFlag(first.platform) ?? 'udid'} ${first.id}`
-    : `--udid <id>`;
-  return (
-    `Select the intended device explicitly, for example ${identitySelector} ` +
-    `or --device ${JSON.stringify(first?.name ?? '<name>')}. ` +
-    `Run agent-device devices to list them.`
+  const selectors = candidates.map(
+    (device) => `--${deviceIdentityFlag(device.platform) ?? 'udid'} ${device.id}`,
   );
+  return `Retry with the id of the intended device: ${selectors.join(' or ')}.`;
 }
 
 /**
@@ -803,7 +800,7 @@ function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
  * comparator's remaining tie-breaks are name order and discovery order, which encode nothing about
  * intent.
  */
-function preferredDeviceCandidates(candidates: DeviceInfo[]): DeviceInfo[] {
+export function preferredDeviceCandidates(candidates: DeviceInfo[]): DeviceInfo[] {
   const ranked = isAppleDeviceCandidateSet(candidates)
     ? candidatesWithBestAppleRank(candidates)
     : preferVirtualCandidates(candidates);

@@ -117,8 +117,8 @@ for (const platform of ['android', 'ios'] as const) {
           basisCacheDir: expect.any(String),
         });
         expect(deployment.events).toEqual([
-          ...(replaceExisting ? ['uninstall'] : []),
           'prepare',
+          ...(replaceExisting ? ['uninstall'] : []),
           'sync',
           'cleanup',
         ]);

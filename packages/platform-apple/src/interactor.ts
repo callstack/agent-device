@@ -148,7 +148,8 @@ export function createAppleInteractor(
           dispatched: 'no',
         });
       }
-      // iOS has one back: the verified left-edge swipe, whichever mode was asked.
+      // iOS has one back, whichever mode was asked: the navigation bar back button, else the verified
+      // left-edge swipe.
       await runAppleRunnerCommand(
         device,
         { command: 'backInApp', appBundleId: runnerContext.appBundleId },

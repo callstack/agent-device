@@ -35,10 +35,11 @@ test('Android WebDriver facts treat invalid state attributes as false', () => {
 // by, so a filled field used to read as a node labelled with its own value and no value at all:
 // `toHaveValue` saw "" on a field holding "Ada Lovelace".
 test("Android WebDriver facts name a node by its text, carry a content description beside it, and read a field's text as its value", () => {
-  const [field, label] = parseWebDriverSourceFacts(
+  const [field, label, described] = parseWebDriverSourceFacts(
     '<hierarchy>' +
       '<android.widget.EditText text="Ada Lovelace" content-desc="Name field" hint="Your name" bounds="[0,0][100,40]" />' +
       '<android.widget.TextView text="Ada Lovelace" bounds="[0,120][100,160]" />' +
+      '<android.widget.TextView text="" content-desc="Name field" bounds="[0,160][100,200]" />' +
       '</hierarchy>',
     'android',
   ).nodes;
@@ -55,9 +56,10 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
     ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', undefined, undefined],
   );
   assert.deepEqual(
-    [label!.label, label!.value, 'editable' in label!],
-    ['Ada Lovelace', undefined, false],
+    [label!.label, label!.value, 'editable' in label!, 'text' in label!, 'text' in field!],
+    ['Ada Lovelace', undefined, false, false, false],
   );
+  assert.deepEqual([described!.label, described!.text], ['Name field', '']);
 });
 
 test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and editability as unavailable when unreported', () => {

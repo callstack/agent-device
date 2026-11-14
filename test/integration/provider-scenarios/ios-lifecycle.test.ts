@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { runCmd } from '@agent-device/host-kit/command';
 import { assertFlatToolCall, assertRpcOk } from './assertions.ts';
 import {
   createIosBottomTabsSnapshotWorld,
@@ -402,6 +404,24 @@ test('Provider-backed integration iOS physical reinstall uses scripted devicectl
         PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
         appPath,
       ]);
+
+      const callsBeforeInvalidArchive = appleTool.calls.length;
+      const archiveDirectory = path.dirname(appPath);
+      fs.writeFileSync(path.join(archiveDirectory, 'README.txt'), 'no app bundle');
+      const invalidIpa = path.join(archiveDirectory, 'no-app.ipa');
+      await runCmd('zip', ['-q', invalidIpa, 'README.txt'], { cwd: archiveDirectory });
+      const invalid = await daemon.callCommand('reinstall', ['com.example.demo', invalidIpa], {
+        platform: 'ios',
+        udid: PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE.id,
+      });
+      assert.equal(invalid.statusCode, 400, JSON.stringify(invalid.json));
+      assert.equal(invalid.json?.error?.data?.code, 'INVALID_ARGS', JSON.stringify(invalid.json));
+      const laterCalls = appleTool.calls.slice(callsBeforeInvalidArchive);
+      assert.equal(
+        laterCalls.some((call) => call.includes('uninstall') || call.includes('install')),
+        false,
+        `Archive without an app must not reach uninstall or install: ${JSON.stringify(laterCalls)}`,
+      );
     },
   );
 });

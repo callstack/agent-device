@@ -102,18 +102,15 @@ async function deployAppleApp(
   signal: AbortSignal,
   install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
-  // Preserve reinstall's established partial-failure boundary: the old route resolved and
-  // removed the selected app before it materialized the replacement artifact. That ordering is
-  // observable when artifact preparation fails, so it belongs to the platform deployment facet.
   if (input.replaceExisting) {
     return await host.appleDeployment.withInvalidatedAppResolutionCache(device, async () => {
       const bundleId = await host.appleDeployment.resolveAppBundleId(device, input.app);
-      await uninstallAppleApp(host, device, bundleId, signal);
       const artifact = await host.appleDeployment.prepareArtifact(
         { source: { kind: 'path', path: input.appPath } },
         { appIdentifierHint: input.app, signal },
       );
       try {
+        await uninstallAppleApp(host, device, bundleId, signal);
         if (install) await install(artifact, signal);
         else await installAppleApp(host, device, artifact.installablePath, signal);
         return { bundleId, launchTarget: bundleId };

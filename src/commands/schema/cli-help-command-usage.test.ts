@@ -85,6 +85,7 @@ test('usageForCommand documents keyboard dismissal flow', async () => {
   assert.match(help ?? '', /keyboard \[status\|get\|dismiss\|enter\|return\]/);
   assert.match(help ?? '', /taps the keyboard dismiss\/hide key when one is exposed/);
   assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
+  assert.match(help ?? '', /error\.details\.reason keyboard_dismiss_unavailable/);
 });
 
 test('usageForCommand explains focused perf evidence', async () => {
