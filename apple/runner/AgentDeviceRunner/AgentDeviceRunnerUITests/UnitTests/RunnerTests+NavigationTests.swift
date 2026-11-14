@@ -874,9 +874,13 @@ extension RunnerTests {
     let inBar = CGRect(x: 8, y: 60, width: 44, height: 30)
     let below = CGRect(x: 100, y: 120, width: 120, height: 44)
     let content = CGRect(x: 100, y: 800, width: 120, height: 44)
-    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], barFrames: [bar], windowHeight: 874), [0])
-    XCTAssertEqual(Self.backButtonCandidates([below, content], barFrames: [bar], windowHeight: 874), [0])
-    XCTAssertEqual(Self.backButtonCandidates([content], barFrames: [bar], windowHeight: 874), [])
+    let always: (Int) -> Bool = { _ in true }
+    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], hittable: always, barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([below, content], hittable: always, barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([content], hittable: always, barFrames: [bar], windowHeight: 874), [])
+    // A bar button that cannot be hit does not hide the floating one.
+    XCTAssertEqual(
+      Self.backButtonCandidates([inBar, below], hittable: { $0 != 0 }, barFrames: [bar], windowHeight: 874), [1])
   }
 #endif
 

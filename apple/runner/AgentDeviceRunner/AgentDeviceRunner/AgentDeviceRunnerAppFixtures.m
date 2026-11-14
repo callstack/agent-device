@@ -123,11 +123,14 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
       [content setTitle:@"Content" forState:UIControlStateNormal];
       content.translatesAutoresizingMaskIntoConstraints = NO;
       [detail.view addSubview:content];
-      NSLayoutConstraint *bottom = topContent
-          ? [content.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:16]
-          : [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:-16];
+      // The constraint on the edge the button hangs from: the top one under `--top-content-back`, else the bottom.
+      CGFloat rest = topContent ? 16 : -16;
+      CGFloat moved = topContent ? 60 : -60;
+      NSLayoutConstraint *edge = topContent
+          ? [content.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:rest]
+          : [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:rest];
       [NSLayoutConstraint activateConstraints:@[
-        bottom,
+        edge,
         [content.centerXAnchor constraintEqualToAnchor:detail.view.centerXAnchor],
         [content.widthAnchor constraintEqualToConstant:120],
         [content.heightAnchor constraintEqualToConstant:44],
@@ -137,7 +140,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
         __weak UIViewController *weakDetail = detail;
         self.contentTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
           up = !up;
-          bottom.constant = up ? -60 : -16;
+          edge.constant = up ? moved : rest;
           [weakDetail.view layoutIfNeeded];
         }];
       }
