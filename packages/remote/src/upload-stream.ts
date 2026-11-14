@@ -18,36 +18,26 @@ import {
 /** Ceiling for establishing the connection for each upload hop or offset resume. */
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 
-/**
- * Ceiling for waiting on response headers once this side has written everything the server is
- * waiting for. For an upload that is the moment its outgoing request body is fully flushed, never
- * the moment the request was created; for a bodyless request it is connection establishment.
- */
+/** Header wait starts after connection and outgoing flush, never while the body progresses. */
 export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
 
-/**
- * Ceiling for silence between body bytes in either direction. Bytes actually written or read reset
- * it, so an artifact that keeps moving keeps its budget while a connection that stopped carrying
- * bytes does not. Progress never touches the aggregate budget the attempt runs under.
- */
+/** Body-byte inactivity does not extend the enclosing aggregate. */
 export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
 
-export type TransferPhase = 'connect' | 'request-body' | 'response-headers' | 'response-body';
+export type TransferPhase =
+  | 'connect'
+  | 'request-body'
+  | 'response-headers'
+  | 'response-body'
+  | 'preflight'
+  | 'finalize';
 
 const BODY_PHASES: ReadonlySet<TransferPhase> = new Set(['request-body', 'response-body']);
 
 /** The `details.reason` every phase expiry carries, so no consumer has to match error text. */
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 
-/**
- * Watches the sequential phases of ONE transfer attempt.
- *
- * One attempt gets one watchdog: arming a later phase stops counting the earlier one, so the ceiling
- * that applies is always the phase the transfer is actually in. Progress re-arms only the two body
- * phases. Nothing here extends an enclosing aggregate budget — the caller's signal is combined in,
- * never replaced, so the earliest deadline still wins and every attempt, redirect and resume keeps
- * sharing the original aggregate.
- */
+/** One sequential phase under the earliest caller/aggregate deadline; progress resets body phases only. */
 export type TransferPhaseWatchdog = {
   /** The signal the attempt runs on: the caller's cancellation plus every phase deadline. */
   signal: AbortSignal;
@@ -95,10 +85,6 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
   };
 }
 
-/**
- * Typed evidence that a transfer phase, rather than the caller or the whole preparation aggregate,
- * ended the attempt. The expired phase and its effective budget travel in `details`.
- */
 function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
   return new AppError('COMMAND_FAILED', `Artifact transfer ${phase} timed out`, {
     reason: TRANSFER_PHASE_TIMEOUT_REASON,
@@ -167,10 +153,7 @@ export async function streamFileToHttpRequest(options: {
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  /**
-   * The preparation aggregate `uploadArtifact` opened, combined with its caller's cancellation. Every
-   * attempt, redirect and resume runs under it; none of them opens a deadline of its own.
-   */
+  /** Every attempt and hop shares the enclosing aggregate/caller signal. */
   signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
@@ -203,12 +186,9 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
-  // A redirect or a resume is a new attempt with fresh phase timers under the same `options.signal`.
   const watchdog = createTransferPhaseWatchdog(options.signal);
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
 
-  // The owned pipeline (file → progress → request). Every exit joins it, so no owned byte overlaps
-  // the outcome or the next hop.
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
   let responseReceived = false;
@@ -228,8 +208,6 @@ async function streamFileToHttpRequestAttempt(options: {
       req.destroy();
       reject(error);
     };
-    // Buffered bytes are not transport progress: the connect ceiling counts until the transport is
-    // carried. After that, an unflushed body is timed as inactivity and a flushed one waits on headers.
     const advanceOutgoingPhase = () => {
       if (responseReceived || watchdog.signal.aborted) return;
       if (!transportEstablished) return;
@@ -266,7 +244,6 @@ async function streamFileToHttpRequestAttempt(options: {
 
     req.on('socket', (socket) => {
       if (socket.connecting) {
-        // Plain HTTP is carried on `connect`, TLS only once the handshake ends.
         const secured = (socket as { encrypted?: boolean }).encrypted === true;
         socket.once(secured ? 'secureConnect' : 'connect', () => {
           transportEstablished = true;
@@ -283,8 +260,6 @@ async function streamFileToHttpRequestAttempt(options: {
 
     req.on('error', (err) => {
       if (responseReceived) return;
-      // A cancellation or an expired phase is this client's own outcome, never a transport failure
-      // that a retry or a legacy fallback could fix.
       if (watchdog.signal.aborted) {
         fail(watchdog.signal.reason);
         return;
@@ -313,7 +288,6 @@ async function streamFileToHttpRequestAttempt(options: {
     upload = (async () => {
       await pipeline(fileStream, progressTransform, req, { signal: watchdog.signal });
       uploadSettled = true;
-      // `finish`: this side's flush, not the peer's consumption, so the server owes an answer.
       bodyFlushed = true;
       advanceOutgoingPhase();
     })().catch((err: unknown) => {
@@ -325,7 +299,6 @@ async function streamFileToHttpRequestAttempt(options: {
         fail(watchdog.signal.reason);
         return;
       }
-      // A transport break reports through `error`, so this is the artifact read failing.
       const error = err instanceof Error ? err : new Error(String(err));
       fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
@@ -344,8 +317,6 @@ async function streamFileToHttpRequestAttempt(options: {
     };
 
     async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
-      // Read the accepted answer to its end, then end and join the outgoing work before this attempt
-      // resolves or the next hop starts.
       const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
       stopObservingWrites();

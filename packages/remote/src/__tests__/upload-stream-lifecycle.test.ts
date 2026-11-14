@@ -1,7 +1,3 @@
-// One upload attempt against a misbehaving loopback peer (#4441 review), on a controlled clock. An
-// early answer is read to its end, and the owned work is destroyed and joined before the attempt
-// resolves or the next hop starts. The connect ceiling ends only when the transport is carried.
-
 import { afterEach, assert, test, vi } from 'vitest';
 import { isRetryableUploadStreamError, isTransferPhaseTimeoutError } from '../upload-stream.ts';
 import {
@@ -51,7 +47,6 @@ test('an early 413 from a peer that stops reading is consumed and its owned work
   });
   const atSettle = attempt.then(() => ({ destroyed: source.destroyed, finished: writes.finished }));
   await settleAfterBudget(attempt);
-  // The body never finished, so only the attempt's own destroy-and-join can have ended it.
   assert.deepEqual(await atSettle, { destroyed: true, finished: false });
   const result = await attempt;
 
@@ -76,7 +71,6 @@ test('a resume response ends the stalled hop before the next attempt is dialed',
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(4 * MEBIBYTE),
   });
-  // Leg two answers the same offset again: a typed terminal failure, not a third hop.
   await settleAfterBudget(attempt);
   const result = await attempt;
 
@@ -100,13 +94,11 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
     method: 'POST',
     retryable: true,
   });
-  // No fake time is charged until hop two has really taken bytes.
   await untilIo(() => hopTwoTookBytes(daemon) || attempt.settled);
   assert.ok(hopTwoTookBytes(daemon), 'the resumed hop was dialed and took bytes');
 
   for (let window = 0; window < 6; window += 1) {
     const before = { bytes: daemon.receivedBytes, completed: writes.completed };
-    // Hop one was joined before hop two was dialed, so every new completion is hop two's.
     const progressed = await awaitBodyProgress(daemon, writes, before, attempt);
     assert.equal(progressed, true, `window ${window}`);
     await vi.advanceTimersByTimeAsync(progressWindowMs);
@@ -118,8 +110,6 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
   daemon.resetParkedLeg();
   await settleAfterBudget(attempt);
   const result = await attempt;
-
-  // Hop one's retired budget must not relabel hop two's reset, and the retry marker survives.
   assert.equal(result.value, undefined);
   assert.equal(isTransferPhaseTimeoutError(result.error), false, JSON.stringify(result.error));
   assert.equal(isRetryableUploadStreamError(result.error), true);
@@ -254,12 +244,13 @@ test('a zero-length artifact on a peer that never answers waits on its header bu
     url: `http://127.0.0.1:${origin.port}/upload`,
     artifactPath: createArtifactFile(0),
   });
-  await untilIo(() => attempt.settled || writes.finished);
+  const snapshot = () => ({ writes, settled: attempt.settled });
+  await untilIo(() => attempt.settled || writes.finished, 'empty artifact flush', snapshot);
   assert.equal(writes.finished, true);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 5_000, attempt);
   assert.equal(attempt.settled, false);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, attempt);
-  await settleAfterBudget(attempt);
+  await settleAfterBudget(attempt, snapshot);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -282,8 +273,6 @@ test('an upload the peer keeps taking finishes while every phase ceiling is unex
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(MEBIBYTE),
   });
-  // One second is charged per release only while the client still writes: after its flush the
-  // peer reads the kernel's copy, and charging that would measure socket buffer depth.
   let spent = 0;
   while (
     !attempt.settled &&
@@ -318,7 +307,6 @@ test('a caller cancel during a stalled connect stays caller cancellation, distin
     artifactPath: createArtifactFile(64 * 1024),
     signal: control.signal,
   });
-  // Well inside the connect ceiling: only the caller can be the reason this stops.
   await spendBudget(5_000, canceled);
   control.abort();
   const result = await canceled;
@@ -347,7 +335,6 @@ test('an enclosing aggregate deadline ends a redirect hop with its own reason, n
   await untilIo(() => attempt.settled || daemon.requests.includes('POST /moved'));
   assert.deepEqual(daemon.requests, ['POST /upload', 'POST /moved']);
   assert.equal(attempt.settled, false);
-  // No phase budget is charged here, so nothing but the caller's deadline can end this.
   const reason = new Error('preparation aggregate expired');
   aggregate.abort(reason);
   await settleAfterBudget(attempt);
@@ -360,7 +347,6 @@ test('an enclosing aggregate deadline ends a redirect hop with its own reason, n
 
 test('an attempt on a reused connection is already past its connect phase', async () => {
   useTransferClock();
-  // A pooled socket never emits `connect`; leg two reuses leg one's socket and is never answered.
   const writes = recordOutgoingWrites();
   const daemon = await startUploadLegsDaemon([
     {
@@ -380,10 +366,14 @@ test('an attempt on a reused connection is already past its connect phase', asyn
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(64 * 1024),
   });
-  // The header wait starts at leg two's flush; no budget is charged before it.
-  await untilIo(() => (daemon.requests.length === 2 && writes.finished) || second.settled);
+  const snapshot = () => ({ writes, requests: daemon.requests, settled: second.settled });
+  await untilIo(
+    () => (daemon.requests.length === 2 && writes.finished) || second.settled,
+    'reused request flush',
+    snapshot,
+  );
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, second);
-  await settleAfterBudget(second);
+  await settleAfterBudget(second, snapshot);
   const result = await second;
 
   assert.equal(result.value, undefined);

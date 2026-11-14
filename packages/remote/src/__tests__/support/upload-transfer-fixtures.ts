@@ -1,7 +1,3 @@
-// Support for the tests that put real budget pressure on a real artifact upload (#4441). The peer
-// holds the body open chunk by chunk and the test drives the clock; sockets, framing and the client's
-// own stream stay real, because a mocked transport cannot show what an owned pipeline was doing.
-
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -10,12 +6,12 @@ import net from 'node:net';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import tls from 'node:tls';
+import { setTimeout as realSetTimeout, clearTimeout as realClearTimeout } from 'node:timers';
 import { onTestFinished, vi } from 'vitest';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { uploadArtifact } from '../../upload-client.ts';
 import { type UploadStreamResponse, streamFileToHttpRequest } from '../../upload-stream.ts';
-
-// Adopted phase budgets are independent expectations for the loopback tests.
+// Adopted budgets are literal expectations, independent of the subject.
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
 export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
@@ -23,60 +19,69 @@ export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
 export const PREFLIGHT_REQUEST = 'POST /upload/preflight';
 export const LEGACY_UPLOAD_REQUEST = 'POST /upload';
 
-/** Fine enough that no phase boundary is stepped over, cheap enough for minutes of budget. */
 const BUDGET_STEP_MS = 5_000;
 
-/** What the parked daemon takes per release: megabytes outlast the windows a test runs. */
 const RELEASE_QUOTA_BYTES = 256 * 1024;
 
-/** Anything whose settlement a test observes without awaiting it. */
 export type Settles = { readonly settled: boolean };
 
-/** The pending `untilIo` waits, each with the rejection the end of its test delivers. */
 const ioWaiters = new Map<() => void, () => void>();
 let ioWaitersEndWithTest = false;
+let ioDeadline: number | undefined;
 
-/** Called by every owned I/O callback below, after it records what it observed. */
 function noteIo(): void {
   for (const wake of ioWaiters.keys()) wake();
 }
 
-/**
- * Resolves once `ready` holds, rechecked after each owned I/O event below. It charges no budget and
- * counts no loop turns; a wait still pending when its test finishes is rejected with its stack.
- */
-export async function untilIo(ready: () => boolean): Promise<void> {
+/** Charges no fake time; all pending waits share a 3s real diagnostic deadline per test. */
+export async function untilIo(
+  ready: () => boolean,
+  label = 'I/O prerequisite',
+  snapshot: () => unknown = () => ({}),
+): Promise<void> {
   if (ready()) return;
   const unmet = new Error('untilIo: the I/O this wait needs never happened before its test ended');
   if (!ioWaitersEndWithTest) {
     ioWaitersEndWithTest = true;
+    ioDeadline = performance.now() + 3_000;
     onTestFinished(() => {
       ioWaitersEndWithTest = false;
+      ioDeadline = undefined;
       for (const release of ioWaiters.values()) release();
       ioWaiters.clear();
     });
   }
   await new Promise<void>((resolve, reject) => {
+    const finish = (error?: unknown) => {
+      realClearTimeout(timer);
+      ioWaiters.delete(wake);
+      if (error) reject(error);
+      else resolve();
+    };
     const wake = () => {
       try {
-        if (!ready()) return;
-        ioWaiters.delete(wake);
-        resolve();
+        if (ready()) finish();
       } catch (error) {
-        ioWaiters.delete(wake);
-        reject(error);
+        finish(error);
       }
     };
-    ioWaiters.set(wake, () => reject(unmet));
+    const timer = realSetTimeout(
+      () => {
+        const error = new Error(`${label}: real I/O deadline; ${JSON.stringify(snapshot())}`, {
+          cause: unmet,
+        });
+        finish(error);
+      },
+      Math.max(0, (ioDeadline ?? performance.now()) - performance.now()),
+    );
+    ioWaiters.set(wake, () => finish(unmet));
   });
 }
 
-/** Starts the clock every transfer budget in these tests is measured against. */
 export function useTransferClock(): void {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 }
 
-/** An outcome observable without awaiting it, which a controlled clock needs. */
 export type ObservedOutcome<T> = Promise<{ value: T | undefined; error: unknown }> & Settles;
 
 function observeOutcome<T>(work: Promise<T>): ObservedOutcome<T> {
@@ -108,7 +113,6 @@ export function startUpload(options: {
   );
 }
 
-/** One attempt straight at `url`: the attempt lifecycle belongs to `streamFileToHttpRequest`. */
 export function startUploadAttempt(options: {
   url: string;
   artifactPath: string;
@@ -130,10 +134,6 @@ export function startUploadAttempt(options: {
   );
 }
 
-/**
- * Spends `ms` of budget in `BUDGET_STEP_MS` steps, letting real socket work run between them, until
- * the transfer is over. A budget that fired is an answer, not a reason to keep ticking.
- */
 export async function spendBudget(ms: number, transfer: Settles): Promise<void> {
   for (let elapsed = 0; elapsed < ms && !transfer.settled; elapsed += BUDGET_STEP_MS) {
     await vi.advanceTimersByTimeAsync(BUDGET_STEP_MS);
@@ -141,16 +141,21 @@ export async function spendBudget(ms: number, transfer: Settles): Promise<void> 
   }
 }
 
-/**
- * Charges `windows` windows of `windowMs`, each only after one more completed write reached the
- * peer, and nothing before the first. Once the peer has the whole body, no growth is required.
- */
 export async function spendProgressWindows(
   daemon: ParkedUploadDaemon,
   upload: Settles,
   options: { windows: number; windowMs: number; writes: OutgoingWrites },
 ): Promise<{ progressedInEveryWindow: boolean; budgetMs: number }> {
-  await untilIo(() => upload.settled || (options.writes.completed > 0 && daemon.receivedBytes > 0));
+  await untilIo(
+    () => upload.settled || (options.writes.completed > 0 && daemon.receivedBytes > 0),
+    'first body progress',
+    () => ({
+      writes: options.writes,
+      receivedBytes: daemon.receivedBytes,
+      requests: daemon.requests,
+      settled: upload.settled,
+    }),
+  );
   let progressedInEveryWindow = true;
   let spent = 0;
   for (let window = 0; window < options.windows; window += 1) {
@@ -168,10 +173,6 @@ export async function spendProgressWindows(
   return { progressedInEveryWindow, budgetMs: spent };
 }
 
-/**
- * Waits until the client completed one more body write and the peer took one more byte, or the
- * transfer settled. The parked peer is released again after each I/O event.
- */
 export async function awaitBodyProgress(
   daemon: { readonly receivedBytes: number; releaseAllParked(): void },
   writes: OutgoingWrites,
@@ -180,29 +181,28 @@ export async function awaitBodyProgress(
 ): Promise<boolean> {
   const progressed = () =>
     writes.completed > before.completed && daemon.receivedBytes > before.bytes;
-  await untilIo(() => {
-    if (progressed() || transfer.settled) return true;
-    daemon.releaseAllParked();
-    return false;
-  });
+  await untilIo(
+    () => {
+      if (progressed() || transfer.settled) return true;
+      daemon.releaseAllParked();
+      return false;
+    },
+    'next body progress',
+    () => ({ writes, receivedBytes: daemon.receivedBytes, before, settled: transfer.settled }),
+  );
   return progressed();
 }
 
-/** The body writes of every outgoing request, totalled over the legs of one upload. */
 export type OutgoingWrites = {
-  /** `write` calls that returned `false`. */
   readonly falseReturns: number;
-  /** Writes whose callback reported success: bytes handed to the local kernel. */
+  /** Successful write callbacks mean local-kernel acceptance, not peer receipt. */
   readonly completed: number;
   readonly drains: number;
-  /** Controlled-clock time of the newest leg's latest completed write. */
   readonly lastCompletedAt: number | undefined;
-  /** True once the newest leg emitted `finish`: its whole body reached the transport. */
   readonly finished: boolean;
   readonly responseChunkRead: boolean;
 };
 
-/** Records each outgoing request's writes, wrapped before the subject observes them. */
 export function recordOutgoingWrites(): OutgoingWrites {
   const log: { -readonly [K in keyof OutgoingWrites]: OutgoingWrites[K] } = {
     falseReturns: 0,
@@ -260,11 +260,6 @@ export function recordOutgoingWrites(): OutgoingWrites {
   return log;
 }
 
-/**
- * Spends budget until `ms` of it has passed since the newest leg's last completed write, charging
- * nothing before the first one. The kernel may still take bytes late after a stall began; each
- * completion comes from the callback the subject observes, so it moves both deadlines alike.
- */
 export async function spendSinceLastWrite(
   ms: number,
   writes: OutgoingWrites,
@@ -285,19 +280,18 @@ function controlledNow(): number {
   return now.getTime();
 }
 
-/**
- * Lets an ended transfer tear down: at most 20 s of budget, less than any phase ceiling, then the
- * settlement itself, however long its real I/O takes on this host.
- */
-export async function settleAfterBudget(transfer: Settles): Promise<void> {
+export async function settleAfterBudget(
+  transfer: Settles,
+  snapshot: () => unknown = () => transfer,
+): Promise<void> {
   for (let round = 0; round < 200 && !transfer.settled; round += 1) {
     await vi.advanceTimersByTimeAsync(100);
     await pumpRealWork(5);
   }
-  await untilIo(() => transfer.settled);
+  await untilIo(() => transfer.settled, 'settlement after phase expiry', snapshot);
 }
 
-/** Holds the first upload-body read open; hashing stays real. Later body reads record teardown. */
+/** Holds upload reads selected by start offset; metadata hashing remains real. */
 export function holdArtifactSourceOpen(bytes = 0): {
   readonly source: PassThrough;
   readonly destroyedAtNextOpen: boolean | undefined;
@@ -324,14 +318,12 @@ export function holdArtifactSourceOpen(bytes = 0): {
   return held;
 }
 
-/** Lets real socket work, such as a destroyed connection's close, run without spending budget. */
 export async function pumpRealWork(rounds = 40): Promise<void> {
   for (let round = 0; round < rounds; round += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
 }
 
-/** Writes an artifact of exactly `bytes`, so a test can size a body against a release cadence. */
 export function createArtifactFile(bytes: number, fileName = 'app.apk'): string {
   const dir = mkdtempForTestSync('agent-device-upload-phases-');
   const artifactPath = path.join(dir, fileName);
@@ -339,10 +331,6 @@ export function createArtifactFile(bytes: number, fileName = 'app.apk'): string 
   return artifactPath;
 }
 
-/**
- * Listens on loopback until its test finishes, without server ceilings, which would fire on the
- * controlled clock.
- */
 async function listenUntimed(server: net.Server): Promise<number> {
   if (server instanceof http.Server) {
     server.requestTimeout = 0;
@@ -354,7 +342,6 @@ async function listenUntimed(server: net.Server): Promise<number> {
   return await listenOnLoopback(server);
 }
 
-/** Refuses preflight, so the upload runs on the legacy POST route that pipes the file. */
 function refusedPreflight(req: http.IncomingMessage, res: http.ServerResponse): boolean {
   if (`${req.method} ${req.url}` !== PREFLIGHT_REQUEST) return false;
   req.resume();
@@ -365,13 +352,8 @@ function refusedPreflight(req: http.IncomingMessage, res: http.ServerResponse): 
   return true;
 }
 
-/**
- * A loopback daemon that parks the upload body a quota at a time and never answers it, so a test
- * decides how much the peer takes between two budget windows under real backpressure.
- */
 export async function startParkedUploadDaemon(
   options: {
-    /** Answers the first upload leg and stops reading it; later legs are parked at the quota. */
     answerFirstLeg?: { status: number; headers?: Record<string, string> };
   } = {},
 ): Promise<ParkedUploadDaemon> {
@@ -392,7 +374,6 @@ export async function startParkedUploadDaemon(
     if (refusedPreflight(req, res)) return;
     if (key === LEGACY_UPLOAD_REQUEST) {
       uploadLegs += 1;
-      // The client destroys a leg it has moved past, and a reset leg errors on this side too.
       req.on('error', () => {});
       const answer = options.answerFirstLeg;
       if (answer && uploadLegs === 1) {
@@ -462,22 +443,13 @@ export async function startParkedUploadDaemon(
 export type ParkedUploadDaemon = {
   readonly baseUrl: string;
   readonly requests: readonly string[];
-  /** Bytes the daemon has accepted for the upload leg. */
   readonly receivedBytes: number;
-  /** True once the daemon has taken the whole upload body and only a response is owed. */
   readonly bodyEnded: boolean;
-  /** Lets the parked body take up to one more quota of bytes. */
   releaseAllParked(): void;
-  /** Stops parking: the daemon reads every remaining body byte as it arrives, still never answering. */
   readToEnd(): void;
-  /** Resets the connection of the newest parked leg: a real peer reset, not a clean close. */
   resetParkedLeg(): void;
 };
 
-/**
- * An origin that answers each upload leg at once — an early 4xx, a redirect or an offset resume —
- * and then stops reading its body while the client still has bytes queued.
- */
 export async function startAnswerUploadDaemon(options: {
   respond(req: http.IncomingMessage): {
     status: number;
@@ -504,7 +476,6 @@ export async function startAnswerUploadDaemon(options: {
   };
 }
 
-/** A silent TCP peer: HTTP receives no answer, and TLS receives no handshake. */
 export async function startSilentTcpOrigin() {
   const server = net.createServer((socket) => {
     socket.pause();
@@ -514,7 +485,6 @@ export async function startSilentTcpOrigin() {
   return { port };
 }
 
-/** An HTTP origin that answers with one response-body chunk and then goes silent mid-body. */
 export async function startHalfAnsweredOrigin(options: { firstChunk: string }) {
   const server = http.createServer((req, res) => {
     req.resume();
@@ -526,7 +496,6 @@ export async function startHalfAnsweredOrigin(options: { firstChunk: string }) {
   return { baseUrl: `http://127.0.0.1:${port}` };
 }
 
-/** A daemon that reads one parked chunk per release and answers once the body has ended. */
 export async function startSlowReadingUploadDaemon(options: { status: number; body: string }) {
   const parked: http.IncomingMessage[] = [];
   let receivedBytes = 0;
@@ -568,7 +537,6 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
   };
 }
 
-/** A TLS origin that completes the handshake and then reads nothing and answers nothing. */
 export async function startConnectedStalledTlsOrigin() {
   const server = tls.createServer(
     { key: readRepoFixture('localhost-key.pem'), cert: readRepoFixture('localhost-cert.pem') },
@@ -581,11 +549,7 @@ export async function startConnectedStalledTlsOrigin() {
   return { port };
 }
 
-/**
- * Trusts the repository's self-signed localhost certificate in the `node:https` global agent the
- * subject uses, until its test finishes; never `NODE_TLS_REJECT_UNAUTHORIZED`, which a test cannot
- * put back.
- */
+/** Restores the global agent even when later origin setup fails. */
 export function trustSelfSignedLocalhostCertificate(): void {
   const savedCa = https.globalAgent.options.ca;
   https.globalAgent.options.ca = readRepoFixture('localhost-cert.pem');
@@ -594,7 +558,6 @@ export function trustSelfSignedLocalhostCertificate(): void {
   });
 }
 
-/** A daemon whose legs follow a script: whether the peer reads the whole body, and answers. */
 export async function startUploadLegsDaemon(
   behaviors: readonly {
     readAllBody: boolean;

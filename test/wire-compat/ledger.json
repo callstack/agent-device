@@ -164,10 +164,10 @@
     "packages/remote/src/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "packages/remote/src/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "packages/remote/src/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:e8966f79d0518aa8d592113ff290efbde16120fd00ce8bb8648f243c38d0d173",
+    "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:3fd5ac061bbc16b0dd821db5e5c3e03daf53091cc93caa10845256e078779735",
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
-    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:e5f67a9a7799913f04cc9386291296a3d9fe13658776d2f4812a582c2e9befd5",
+    "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:471a307f501c849cccea1036af1685187d72ca55d425bc5a8afe6f30d575ddb8",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
     "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:93a36a9d3dea88064569517f3cdc34f27b33df6bf5f0c0ecc9efc29b47f24b77",
@@ -221,7 +221,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -296,7 +296,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -510,13 +510,13 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:e5f67a9a7799913f04cc9386291296a3d9fe13658776d2f4812a582c2e9befd5",
-      "rationale": "#4441 renames the constant naming this call's ceiling from UPLOAD_PREFLIGHT_TIMEOUT_MS to UPLOAD_CONTROL_PLANE_TIMEOUT_MS because it governs finalize as well. The value is the same 30 seconds the released client used, and the request body, headers, route and redirect refusal are byte-for-byte unchanged, so a released daemon or proxy parses the identical request."
+      "digest": "sha256:471a307f501c849cccea1036af1685187d72ca55d425bc5a8afe6f30d575ddb8",
+      "rationale": "#4441 preserves the 30-second control-request ceiling but reports its typed phase timeout instead of retrying or falling back after expiry. The shared Fetch/JSON owner retains route, method, authentication, request body, redirect refusal and successful response parsing, so protocol-2 peers parse the same messages; only the local timeout outcome stops subsequent upload legs."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:e8966f79d0518aa8d592113ff290efbde16120fd00ce8bb8648f243c38d0d173",
-      "rationale": "#4441 renames the constant naming this call's 30-second ceiling and annotates a caught error; neither reaches the wire. The request body, headers, route and redirect refusal are unchanged, and a released daemon or proxy never redirects this route, so it parses the identical request."
+      "digest": "sha256:3fd5ac061bbc16b0dd821db5e5c3e03daf53091cc93caa10845256e078779735",
+      "rationale": "#4441 preserves the 30-second control-request ceiling but reports its typed phase timeout instead of retrying or falling back after expiry. The shared Fetch/JSON owner retains route, method, authentication, request body, redirect refusal and successful response parsing, so protocol-2 peers parse the same messages; only the local timeout outcome stops subsequent upload legs."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-rpc-methods.ts#toInstallFromSourceDaemonRequest",

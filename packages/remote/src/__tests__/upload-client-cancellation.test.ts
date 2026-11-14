@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { AppError } from '@agent-device/kernel/errors';
 import { once } from 'node:events';
 import { uploadArtifact } from '../upload-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -47,50 +49,140 @@ test('cancellation refuses preparation before it reads a missing artifact', asyn
   assert.equal(fetch.mock.calls.length, 0);
 });
 
-test('a standalone upload expires its preparation aggregate without starting a fallback', async () => {
+test('a standalone upload expires its preparation aggregate during hashing without starting a request', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const artifactPath = createTempFile('app.apk', 'payload');
-  let preflightEntered = () => {};
-  const entered = new Promise<void>((resolve) => {
-    preflightEntered = resolve;
-  });
-  let preflightSignal: AbortSignal | undefined;
-  let refusePreflight: ((reason: Error) => void) | undefined;
-  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-    const signal = init?.signal;
-    assert.ok(signal);
-    preflightSignal = signal;
-    preflightEntered();
-    return await new Promise<Response>((_resolve, reject) => {
-      refusePreflight = reject;
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  });
+  const hashSource = new PassThrough();
+  vi.spyOn(fs, 'createReadStream').mockReturnValue(hashSource as unknown as fs.ReadStream);
+  const fetch = vi.spyOn(globalThis, 'fetch');
   const outcome = uploadArtifact({
     env: process.env,
     localPath: artifactPath,
     baseUrl: 'http://127.0.0.1:1',
     token: TEST_TOKEN,
-  }).then(
-    (value) => ({ value, error: undefined }),
-    (error: unknown) => ({ value: undefined, error }),
-  );
+  }).catch((error: unknown) => error);
   try {
-    await entered;
     await vi.advanceTimersByTimeAsync(600_001);
-    assert.equal(preflightSignal?.aborted, true);
-    const result = await outcome;
-    assert.equal(result.value, undefined);
-    assert.ok(result.error && typeof result.error === 'object' && 'details' in result.error);
-    assert.deepEqual(result.error.details, {
+    const error = await outcome;
+    assert.ok(error instanceof AppError);
+    assert.deepEqual(error.details, {
       reason: 'artifact_preparation_deadline_exceeded',
       transferPhase: 'preparation',
       timeoutMs: 600_000,
     });
-    assert.equal(fetch.mock.calls.length, 1);
+    assert.equal(hashSource.destroyed, true);
+    assert.equal(fetch.mock.calls.length, 0);
   } finally {
-    refusePreflight?.(new Error('fixture cleanup'));
+    hashSource.destroy();
     await outcome;
+  }
+});
+
+test.each([
+  'preflight',
+  'finalize',
+  'retry-preflight',
+  'retry-finalize',
+  'prose-preflight',
+  'prose-finalize',
+])('control request %s distinguishes a deadline from matching error prose', async (stage) => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const caller = new AbortController();
+  const artifactPath = createTempFile('app.apk', 'control-plane-payload');
+  const retry = stage.startsWith('retry-');
+  const prose = stage.startsWith('prose-');
+  const phase = stage.endsWith('preflight') ? 'preflight' : 'finalize';
+  const events: string[] = [];
+  const routes: string[] = [];
+  let uploads = 0;
+  const server = await startServer(async (req, res) => {
+    routes.push(`${req.method} ${req.url}`);
+    if (retry && ++uploads === 1) {
+      req.destroy();
+      return;
+    }
+    await readRequestBody(req);
+    sendJson(res, { ok: true, uploadId: 'control-upload' });
+  });
+  let entered = () => {};
+  const stalled = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let stalledSignal: AbortSignal | undefined;
+  let preflights = 0;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const route = new URL(String(input)).pathname;
+    if (route.endsWith('/preflight')) preflights += 1;
+    if (route.endsWith('/' + phase) && (!retry || preflights === 2)) {
+      const signal = init?.signal;
+      assert.ok(signal);
+      stalledSignal = signal;
+      entered();
+      if (prose) throw new Error(`Artifact transfer ${phase} timed out`);
+      return await new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    }
+    return Response.json({
+      ok: true,
+      uploadId: 'control-upload',
+      upload: { url: `${server.baseUrl}/ticket`, headers: {} },
+    });
+  });
+  let settled = false;
+  const outcome = uploadArtifact({
+    env: process.env,
+    localPath: artifactPath,
+    baseUrl: server.baseUrl,
+    token: TEST_TOKEN,
+    signal: caller.signal,
+    onProgress: (event) => events.push(event.type),
+  })
+    .then(
+      (value) => ({ value, error: undefined as unknown }),
+      (error: unknown) => ({ value: undefined, error }),
+    )
+    .finally(() => {
+      settled = true;
+    });
+  try {
+    await stalled;
+    if (prose) {
+      const result = await outcome;
+      assert.equal(result.error, undefined);
+      assert.equal(result.value, 'control-upload');
+      assert.ok(routes.includes('POST /upload'));
+      assert.equal(stalledSignal?.aborted, false);
+      return;
+    }
+    await vi.advanceTimersByTimeAsync(29_999);
+    assert.equal(stalledSignal?.aborted, false);
+    assert.equal(settled, false);
+    await vi.advanceTimersByTimeAsync(1);
+    assert.equal(stalledSignal?.aborted, true);
+    assert.equal(settled, true, 'expiry settles without starting another transfer');
+    const result = await outcome;
+    assert.equal(result.value, undefined);
+    assert.ok(result.error instanceof AppError);
+    assert.deepEqual(result.error.details, {
+      reason: 'transfer_phase_timeout',
+      transferPhase: phase,
+      timeoutMs: 30_000,
+    });
+    assert.equal(caller.signal.aborted, false);
+    assert.equal(events.includes('fallback'), false);
+    assert.deepEqual(
+      routes,
+      Array.from(
+        { length: phase === 'preflight' ? (retry ? 1 : 0) : retry ? 2 : 1 },
+        () => 'PUT /ticket',
+      ),
+    );
+    assert.equal(fetch.mock.calls.length, phase === 'preflight' ? (retry ? 2 : 1) : retry ? 3 : 2);
+  } finally {
+    caller.abort(new Error('fixture cleanup'));
+    await outcome;
+    await server.close();
   }
 });
 
