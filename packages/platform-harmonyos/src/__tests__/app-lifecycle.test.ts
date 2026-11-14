@@ -386,7 +386,9 @@ test('pollHarmonyOpenForeground reports an unreadable foreground when no mission
     pollIntervalMs: 10,
   });
 
-  assert.deepEqual(read, { confirmed: false });
+  // A budget with zero parseable foreground reads is an unreadable probe, not
+  // evidence that the app stayed backgrounded.
+  assert.deepEqual(read, { confirmed: false, probeState: 'unreadable' });
 });
 
 test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps polling', async () => {
@@ -492,7 +494,10 @@ test('verifyHarmonyOpenForeground reports an unreadable foreground when no missi
   await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
 
   const verified = await pending;
-  assert.deepEqual(verified.timing.foregroundVerification, { confirmed: false });
+  assert.deepEqual(verified.timing.foregroundVerification, {
+    confirmed: false,
+    probeState: 'unreadable',
+  });
 });
 
 test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {

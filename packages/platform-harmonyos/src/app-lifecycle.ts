@@ -6,7 +6,6 @@ import type {
   OpenApplicationInput,
   OpenApplicationOutcome,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { runHarmonyShell } from './hdc.ts';
 import { parseHarmonyForegroundApp } from './app-state.ts';
@@ -241,10 +240,15 @@ export const HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS = 5_000;
 /** One foreground read per interval until the budget runs out; the first read costs no wait. */
 const HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS = 500;
 
+/** One `aa dump -l` read; a read never outlives the poll's own budget remainder. */
+const HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS = 5_000;
+
 /** What one bounded foreground poll decided about a launched bundle. */
 export type HarmonyOpenForegroundRead = Readonly<{
   confirmed: boolean;
   foregroundPackage?: string;
+  /** `unreadable` when the budget closed without one parseable foreground read. */
+  probeState?: 'unreadable';
 }>;
 
 /**
@@ -265,32 +269,48 @@ export async function pollHarmonyOpenForeground(
   const pollIntervalMs = options.pollIntervalMs ?? HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS;
   const deadlineAtMs = Date.now() + pollBudgetMs;
   let foregroundPackage: string | undefined;
+  let sawReadable = false;
   while (true) {
     options.signal?.throwIfAborted();
-    const foregroundPackageRead = (await readHarmonyForegroundMission(device, options.signal))
-      ?.package;
-    if (foregroundPackageRead === bundleId) return { confirmed: true };
-    if (foregroundPackageRead !== undefined) foregroundPackage = foregroundPackageRead;
-    if (Date.now() >= deadlineAtMs) {
-      return foregroundPackage === undefined
-        ? { confirmed: false }
-        : { confirmed: false, foregroundPackage };
+    // Each read is bounded by the budget's remainder, so one slow read cannot
+    // push the poll past its deadline.
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) break;
+    const foregroundPackageRead = await readHarmonyForegroundMission(
+      device,
+      options.signal,
+      Math.min(remainingMs, HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS),
+    );
+    if (foregroundPackageRead !== undefined) {
+      sawReadable = true;
+      if (foregroundPackageRead === bundleId) return { confirmed: true };
+      foregroundPackage = foregroundPackageRead;
     }
-    await sleep(pollIntervalMs, undefined, { signal: options.signal });
+    const remainingAfterRead = deadlineAtMs - Date.now();
+    if (remainingAfterRead <= 0) break;
+    await sleep(Math.min(pollIntervalMs, remainingAfterRead), undefined, {
+      signal: options.signal,
+    });
   }
+  return {
+    confirmed: false,
+    ...(foregroundPackage !== undefined ? { foregroundPackage } : {}),
+    ...(sawReadable ? {} : { probeState: 'unreadable' as const }),
+  };
 }
 
 /** One foreground read; a failed or unreadable read answers undefined instead of throwing. */
 async function readHarmonyForegroundMission(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
-): Promise<AppStateRuntimeResult | undefined> {
+  timeoutMs: number,
+): Promise<string | undefined> {
   try {
     const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
       signal,
-      timeoutMs: 5_000,
+      timeoutMs,
     });
-    return parseHarmonyForegroundApp(result.stdout);
+    return parseHarmonyForegroundApp(result.stdout)?.package;
   } catch (error) {
     if (signal?.aborted) throw error;
     return undefined;
@@ -312,6 +332,21 @@ export async function verifyHarmonyOpenForeground(
   if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
   const read = await pollHarmonyOpenForeground(device, bundleId, { signal });
   if (read.confirmed) return outcome;
+  if (read.probeState === 'unreadable') {
+    // A budget with zero parseable reads is a failed probe, not evidence the
+    // app stayed backgrounded, so it carries its own reason.
+    if (input.execution.foreground === true) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
+        {
+          reason: 'open-foreground-probe-unreadable',
+          hint: 'Check the device connection, then run the open again.',
+        },
+      );
+    }
+    return { ...outcome, timing: { ...outcome.timing, foregroundVerification: read } };
+  }
   if (input.execution.foreground === true) {
     throw new AppError(
       'COMMAND_FAILED',

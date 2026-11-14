@@ -165,6 +165,11 @@ export type OpenApplicationTiming = Readonly<{
 export type OpenForegroundVerification = Readonly<{
   /** True when the launched app held the foreground within the owner's poll budget. */
   confirmed: boolean;
+  /**
+   * `unreadable` when the poll never parsed one foreground mission in its whole budget — the
+   * probe answered nothing, which is not evidence that the app stayed backgrounded.
+   */
+  probeState?: 'unreadable';
   /** The app that held the foreground instead, when the platform could name one. */
   foregroundPackage?: string;
 }>;
