@@ -21,11 +21,6 @@ import {
   REVYL_TELEPHONY_UNAVAILABLE,
 } from './interaction-operations.ts';
 
-/** Revyl installs the app it is given when the session starts; the worker's install action takes a URL. */
-const installUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'Revyl installs an app when the session starts. Pass --provider-app <URL> to connect, and run open afterwards.',
-);
 const uninstallUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not uninstall an app from a session.',
@@ -153,9 +148,10 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
       appLogReattach: appLogUnavailable,
       appLogCleanup: appLogUnavailable,
       listApps: appInventoryUnavailable,
-      deployApp: installUnavailable,
-      materializeAppSource: installUnavailable,
-      deployMaterializedApp: installUnavailable,
+      // The build goes to the session's storage and the worker installs it from there.
+      deployApp: available,
+      materializeAppSource: available,
+      deployMaterializedApp: available,
       sendPushNotification: REVYL_PUSH_UNAVAILABLE,
       uninstallApp: uninstallUnavailable,
       appState: appStateUnavailable,

@@ -4,6 +4,9 @@ import net from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   RevylDeviceSessionStopResponse,
+  RevylInstallAccepted,
+  RevylInstallStatus,
+  RevylSessionArtifactUpload,
   RevylStartDeviceRequest,
   RevylStartDeviceResponse,
   RevylWorkerActionResponse,
@@ -23,6 +26,8 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
 export const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
+/** How long one build upload may take to reach Revyl's storage; the install's whole budget. */
+const ARTIFACT_UPLOAD_TIMEOUT_MS = 420_000;
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
 const DEVICE_PROXY_GET_ACTIONS = new Set(['screenshot', 'health', 'device_info', 'hierarchy']);
@@ -88,6 +93,30 @@ export type RevylClient = Readonly<{
     signal?: AbortSignal,
   ): Promise<RevylWorkerActionResponse>;
   stopDeviceSession(sessionId: string): Promise<RevylDeviceSessionStopResponse>;
+  /** Presigned URLs for one build the session installs. */
+  createSessionArtifactUpload(
+    sessionId: string,
+    fileSize: number,
+    contentType: string,
+    signal?: AbortSignal,
+  ): Promise<RevylSessionArtifactUpload>;
+  /** Sends the build to the presigned URL; the URL carries its own authorization. */
+  uploadSessionArtifact(
+    uploadUrl: string,
+    body: Uint8Array<ArrayBuffer>,
+    contentType: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  startInstall(
+    workflowRunId: string,
+    body: unknown,
+    signal?: AbortSignal,
+  ): Promise<RevylInstallAccepted>;
+  getInstallStatus(
+    workflowRunId: string,
+    installId: string,
+    signal?: AbortSignal,
+  ): Promise<RevylInstallStatus>;
   /** Cheap enough to run on every `connect`: it authenticates without starting a device. */
   verifyCredentials(signal?: AbortSignal): Promise<void>;
 }>;
@@ -208,6 +237,54 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       });
       assertLifecycleAccepted('stop', response);
       return response;
+    },
+    createSessionArtifactUpload(sessionId, fileSize, contentType, signal) {
+      return json<RevylSessionArtifactUpload>({
+        method: 'POST',
+        path: `/api/v1/execution/device-sessions/${encodeURIComponent(sessionId)}/artifacts/upload-url`,
+        body: { file_size: fileSize, content_type: contentType },
+        route: 'session',
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async uploadSessionArtifact(uploadUrl, body, contentType, signal) {
+      const timeout = AbortSignal.timeout(ARTIFACT_UPLOAD_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetchImpl(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': contentType },
+          body,
+          redirect: 'error',
+          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        });
+      } catch (error) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Revyl storage did not accept the app upload.',
+          { reason: 'provider-unreachable' },
+          error,
+        );
+      }
+      if (!response.ok) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `Revyl storage refused the app upload with HTTP ${response.status}.`,
+          { reason: 'provider-refused', status: response.status },
+        );
+      }
+    },
+    startInstall(workflowRunId, body, signal) {
+      return json<RevylInstallAccepted>({
+        ...workerRequest(workflowRunId, 'install_async', signal),
+        body,
+      });
+    },
+    getInstallStatus(workflowRunId, installId, signal) {
+      return json<RevylInstallStatus>({
+        ...workerRequest(workflowRunId, `install_status/${encodeURIComponent(installId)}`, signal),
+        method: 'GET',
+      });
     },
     async verifyCredentials(signal) {
       await json<unknown>({

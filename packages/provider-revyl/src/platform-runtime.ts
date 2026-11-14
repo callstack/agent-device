@@ -19,6 +19,7 @@ import { bindAdmittedProviderInteractorOperations } from '@agent-device/contract
 import { bindRevylInteractionOperations } from './interaction-operations.ts';
 import { bindRevylApplicationLifecycle } from './lifecycle.ts';
 import { revylFacts, revylUnavailableCells, revylLifecycleFacts } from './facts-runtime.ts';
+import { deployRevylApp, materializedIdentity, type RevylDeploymentSession } from './deployment.ts';
 
 export type RevylPlatformRuntimeOwnerOptions = Readonly<{
   host: PlatformRuntimeHost;
@@ -26,12 +27,13 @@ export type RevylPlatformRuntimeOwnerOptions = Readonly<{
   ownsDevice(device: DeviceInfo): boolean;
   hasLiveSession(device: DeviceInfo): boolean;
   getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+  getDeploymentSession(device: DeviceInfo): RevylDeploymentSession | undefined;
 }>;
 
 /**
  * The owner a Revyl runtime hands the host. It owns one thing per device: the interactor bound to
- * that device's live session. Every operation is either an admitted interactor call or a classified
- * refusal, which is why there is no app-log, deployment, or recording machinery beside it.
+ * that device's live session. Every operation is either an admitted interactor call, an install
+ * through the session's storage, or a classified refusal.
  */
 export function createRevylPlatformRuntimeOwner(
   options: RevylPlatformRuntimeOwnerOptions,
@@ -103,6 +105,7 @@ function bindRevylRuntime(
       getInteractor: options.getInteractor,
       presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
     }),
+    ...bindRevylDeployment(options, device, signal),
     ...bindAdmittedProviderInteractorOperations({
       device,
       signal,
@@ -135,4 +138,31 @@ function admittedOperations(
       admitted[key] = operation;
   }
   return admitted;
+}
+
+function bindRevylDeployment(
+  options: RevylPlatformRuntimeOwnerOptions,
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Pick<PlatformRuntimeOperations, 'deployApp' | 'materializeAppSource' | 'deployMaterializedApp'> {
+  const env = () => options.host.hostEnvironment.env;
+  const session = () => {
+    const live = options.getDeploymentSession(device);
+    if (live) return live;
+    throw new AppError('UNSUPPORTED_OPERATION', 'Revyl provider session is no longer live.', {
+      reason: 'provider-session-unavailable',
+    });
+  };
+  return {
+    deployApp: async (input) => await deployRevylApp(session(), input.appPath, env(), signal),
+    materializeAppSource: async (input) =>
+      device.platform === 'apple'
+        ? await options.host.appleDeployment.prepareArtifact(input, { signal })
+        : await options.host.androidDeployment.prepareArtifact(input, { signal }),
+    // What Revyl reports wins; the materializer's reading fills in what it leaves out.
+    deployMaterializedApp: async ({ artifact }) => ({
+      ...materializedIdentity(artifact),
+      ...(await deployRevylApp(session(), artifact.installablePath, env(), signal)),
+    }),
+  };
 }
