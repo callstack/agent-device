@@ -89,7 +89,14 @@ export {
 
 import type * as LegacyXctestDeviceSet from './legacy-xctest-device-set.ts';
 import type * as RunnerSequence from './runner-sequence.ts';
-import { retryWithPolicy, emitDiagnostic, hasScopedAppleToolProvider } from './host.ts';
+import {
+  Deadline,
+  retryWithPolicy,
+  emitDiagnostic,
+  getRequestDeadlineMs,
+  hasScopedAppleToolProvider,
+} from './host.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
@@ -128,25 +135,43 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 /**
  * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
  * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
- * that budget has to outlast the drain. The window is a heuristic, not a measurement: 200ms doubling
- * to a 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a drain
- * that outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=` marker
- * in runner.log is the evidence for tuning it). Transport failures keep the pre-existing three
- * attempts. The budget is positional: the error on each attempt sets how many attempts the loop may
- * reach in total, so three busy refusals followed by a transport failure resend no further.
+ * that budget has to outlast the drain. Under a request deadline, busy refusals are resent until
+ * that deadline, less {@link RUNNER_BUSY_DEADLINE_RESERVE_MS}, so the last refusal (with its attempt
+ * count) is the answer instead of the deadline's. Without one, the window is a heuristic: 200ms
+ * doubling to a 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a
+ * drain that outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=`
+ * marker in runner.log is the evidence for tuning it). Transport failures keep the pre-existing
+ * three attempts. The budget is positional: the error on each attempt sets how many attempts the
+ * loop may reach in total, so three busy refusals followed by a transport failure resend no further.
  */
 const RUNNER_BUSY_RESEND_ATTEMPTS = 8;
 const TRANSPORT_RESEND_ATTEMPTS = 3;
 const READ_ONLY_RESEND_POLICY = {
-  maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
   baseDelayMs: 200,
   maxDelayMs: 1_000,
   jitter: 0,
 };
+/** One resend delay at its cap: a busy refusal is answered at once, so one round trip fits. */
+const RUNNER_BUSY_DEADLINE_RESERVE_MS = READ_ONLY_RESEND_POLICY.maxDelayMs;
 
-function readOnlyResendBudget(error: unknown): number {
-  if (isRunnerBusyError(error)) return RUNNER_BUSY_RESEND_ATTEMPTS;
+function readOnlyResendBudget(error: unknown, busyAttempts: number): number {
+  if (isRunnerBusyError(error)) return busyAttempts;
   return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
+}
+
+/** The busy resend bound: the request's own deadline when it has one, else the fixed count. */
+function resolveBusyResendWindow(requestId: string | undefined): {
+  busyAttempts: number;
+  deadline?: Deadline;
+} {
+  const requestDeadlineMs = getRequestDeadlineMs(requestId);
+  if (requestDeadlineMs === undefined) return { busyAttempts: RUNNER_BUSY_RESEND_ATTEMPTS };
+  return {
+    busyAttempts: Number.POSITIVE_INFINITY,
+    deadline: Deadline.fromTimeoutMs(
+      requestDeadlineMs - Date.now() - RUNNER_BUSY_DEADLINE_RESERVE_MS,
+    ),
+  };
 }
 
 export async function runAppleRunnerCommand(
@@ -161,32 +186,47 @@ export async function runAppleRunnerCommand(
   if (!isReadOnlyRunnerCommand(runnerCommand)) {
     return provider.runCommand(device, runnerCommand, options);
   }
-  let lastBusyRefusal: unknown;
+  const { busyAttempts, deadline } = resolveBusyResendWindow(options.requestId);
+  let lastBusyRefusal: AppError | undefined;
+  let attempts = 0;
   try {
     return await retryWithPolicy(
       () => {
         assertRunnerRequestActive(options.requestId);
+        attempts += 1;
         return provider.runCommand(device, runnerCommand, options);
       },
       {
         ...READ_ONLY_RESEND_POLICY,
+        maxAttempts: busyAttempts,
         shouldRetry: (error, attempt) => {
           assertRunnerRequestActive(options.requestId);
-          if (isRunnerBusyError(error)) lastBusyRefusal = error;
-          return attempt < readOnlyResendBudget(error);
+          if (isRunnerBusyError(error) && error instanceof AppError) lastBusyRefusal = error;
+          return attempt < readOnlyResendBudget(error, busyAttempts);
         },
       },
       // The busy window is seconds long, so an abort must wake the delay instead of sleeping it
       // out and sending one more attempt.
-      { signal: resolveRunnerRequestSignal(options) },
+      { signal: resolveRunnerRequestSignal(options), deadline },
     );
   } catch (error) {
+    if (isRunnerBusyError(error) && error instanceof AppError) {
+      throw withBusyResendAttempts(error, attempts);
+    }
     // A caller's deadline (a `wait` poll bounding this capture) that lands mid-window still has an
     // answer: the runner refused, and that typed refusal is what the caller can act on. Only a
     // cancelled request reports as a bare cancellation.
-    if (lastBusyRefusal && callerDeadlineExpired(options)) throw lastBusyRefusal;
+    if (lastBusyRefusal && callerDeadlineExpired(options)) {
+      throw withBusyResendAttempts(lastBusyRefusal, attempts);
+    }
     throw error;
   }
+}
+
+/** The busy refusal the resend ran out on, stating how many times the read was sent. */
+function withBusyResendAttempts(refusal: AppError, attempts: number): AppError {
+  refusal.details = { ...refusal.details, attempts };
+  return refusal;
 }
 
 export async function notifyIosRunnerAppRelaunched(
