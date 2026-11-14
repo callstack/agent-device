@@ -4,8 +4,13 @@ import { getReplayBackend, getReplayExecution } from './replay-backend-registry.
 
 /** Rejects unavailable execution before request binding can select or act on a device. */
 export async function requireReplayPlugins(request: DaemonWireRequest): Promise<void> {
-  const { isReplayBackendId, unsupportedReplayBackendMessage, resolveReplayFormat } =
-    await import('@agent-device/ad-script');
+  const {
+    isReplayBackendId,
+    unsupportedReplayBackendMessage,
+    resolveReplayFormat,
+    isMaestroYamlPath,
+    maestroBackendRequiredMessage,
+  } = await import('@agent-device/ad-script');
   const backend = request.flags?.replayBackend;
   if (backend !== undefined && !isReplayBackendId(backend))
     throw new AppError('INVALID_ARGS', unsupportedReplayBackendMessage(backend));
@@ -19,6 +24,8 @@ export async function requireReplayPlugins(request: DaemonWireRequest): Promise<
       await getReplayBackend('maestro');
   } else if (request.command === 'replay') {
     const entry = request.flags?.replayScriptSource?.entry ?? request.positionals?.[0] ?? '';
+    if (isMaestroYamlPath(entry) && backend !== 'maestro')
+      throw new AppError('INVALID_ARGS', maestroBackendRequiredMessage('replay', entry));
     if (resolveReplayFormat(entry, request.flags?.replayBackend) === 'maestro')
       await getReplayBackend('maestro');
     else await getReplayExecution();

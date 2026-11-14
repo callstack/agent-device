@@ -47,6 +47,36 @@ const source = {
   files: { '/caller/flow.ad': 'open com.example.app\nclose\n' },
 };
 
+test.each(['yaml', 'yml'])(
+  'bare %s replay reports explicit routing before plugin or device admission',
+  async (extension) => {
+    const f = await fixture();
+    const entry = `/caller/flow.${extension}`;
+    try {
+      const result = await f.handler({
+        token: 'token',
+        command: 'replay',
+        session: 'untouched',
+        positionals: [entry],
+        flags: { replayScriptSource: { entry, files: { [entry]: 'appId: com.example.app' } } },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'INVALID_ARGS',
+          message: `Maestro YAML requires explicit --maestro routing: replay ${entry} --maestro`,
+        },
+      });
+      if (result.ok) throw new Error('Bare YAML replay succeeded');
+      expect(result.error.details?.installCommand).toBeUndefined();
+      expect(f.discover).not.toHaveBeenCalled();
+      expect(f.store.get('untouched')).toBeUndefined();
+    } finally {
+      await f.registry.close();
+    }
+  },
+);
+
 test.each(['replay', 'test'] as const)(
   'missing %s execution is classified before device selection',
   async (command) => {
@@ -77,6 +107,31 @@ test.each(['replay', 'test'] as const)(
     }
   },
 );
+
+test('explicit Maestro routing still admits only the Maestro plugin', async () => {
+  const f = await fixture();
+  const entry = '/caller/flow.yaml';
+  try {
+    const result = await f.handler({
+      token: 'token',
+      command: 'replay',
+      session: 'untouched',
+      positionals: [entry],
+      flags: {
+        replayBackend: 'maestro',
+        replayScriptSource: { entry, files: { [entry]: 'appId: com.example.app' } },
+      },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'plugin-not-installed', package: '@agent-device/maestro' } },
+    });
+    expect(f.discover).not.toHaveBeenCalled();
+    expect(f.store.get('untouched')).toBeUndefined();
+  } finally {
+    await f.registry.close();
+  }
+});
 
 test('a changed store needs a daemon restart and embedded runtimes never consult it', async () => {
   const home = mkdtempForTestSync('replay-plugin-store-');
