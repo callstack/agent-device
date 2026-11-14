@@ -199,40 +199,6 @@ async function foreignClaimSettlement(params: {
 }
 
 /**
- * The owner half of the acquisition decision, asked of a claim somebody already inspected and
- * answered by the same {@link foreignClaimSettlement} an acquisition runs. `settles` says the
- * recorded owner cannot hold the device against a new session, so acquisition would take it once
- * that claim's durable resources reach a terminal state — the caller answers that half.
- * `conflicts` says a live or uncertain owner holds it. The caller-scoped halves an acquisition also
- * weighs (`held` by this very session, an abandoned claim of this daemon) decide nothing about a
- * NEW session, so they stay out of this question. A reporter that never touches the device omits
- * `observeDeviceBoot` and therefore never reads a reboot as proof, exactly as `boot`, `install` and
- * `shutdown` refuse a live foreign owner instead of asking. The device an acquisition targets only
- * reaches the decision through `observeDeviceBoot`, so a caller that passes none needs no device of
- * its own: the claim's own record describes the device the question is about.
- */
-export async function inspectDeviceClaimOwnerSettlement(params: {
-  inspected: InspectedDeviceClaim;
-  observeDeviceBoot?: DeviceBootObservationService;
-}): Promise<{ status: 'settles' } | { status: 'conflicts' }> {
-  const claim = params.inspected.claim;
-  if (!claim) return { status: 'conflicts' };
-  const settlement = await foreignClaimSettlement({
-    classification: params.inspected.classification,
-    claim,
-    device: deviceInfoFromClaim(claim),
-    observeDeviceBoot: params.observeDeviceBoot,
-  });
-  return settlement.settles ? { status: 'settles' } : { status: 'conflicts' };
-}
-
-/** The device a claim's record describes, in the shape a boot observation asks for. */
-function deviceInfoFromClaim(claim: DeviceClaim): DeviceInfo {
-  const { family, ...identity } = claim.device;
-  return { ...identity, platform: family };
-}
-
-/**
  * Clears the claim only once its durable resources are settled, so a claim never disappears while
  * something owned by its session is still running.
  */
