@@ -110,7 +110,10 @@ export type AppleRunnerHost = Pick<
   > &
   Pick<typeof HostVersion, 'findProjectRoot' | 'readVersion'> &
   Pick<typeof HostFile, 'acquireProcessLock' | 'withProcessLock' | 'publishFileSync'> &
-  Pick<typeof HostRequest, 'emitRequestProgress' | 'getRequestSignal' | 'isRequestCanceled'> &
+  Pick<
+    typeof HostRequest,
+    'emitRequestProgress' | 'getRequestDeadlineMs' | 'getRequestSignal' | 'isRequestCanceled'
+  > &
   Pick<typeof KernelKeyedLock, 'withKeyedLock'> &
   Pick<typeof KernelRecord, 'isRecord'> &
   Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
@@ -207,6 +210,7 @@ export const acquireProcessLock = delegate('acquireProcessLock');
 export const withProcessLock = delegate('withProcessLock');
 export const publishFileSync = delegate('publishFileSync');
 export const emitRequestProgress = delegate('emitRequestProgress');
+export const getRequestDeadlineMs = delegate('getRequestDeadlineMs');
 export const getRequestSignal = delegate('getRequestSignal');
 export const isRequestCanceled = delegate('isRequestCanceled');
 export const withKeyedLock = delegate('withKeyedLock');

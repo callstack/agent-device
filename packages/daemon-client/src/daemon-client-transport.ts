@@ -965,7 +965,11 @@ function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
   }
 }
 
-export async function cachedRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
+export async function cachedRemoteDaemonHealth(
+  info: DaemonInfo,
+  probeTimeoutMs?: number,
+  callerSignal?: AbortSignal,
+): Promise<RemoteDaemonHealth> {
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     return await remoteHealthCache.health;
   }
@@ -973,7 +977,7 @@ export async function cachedRemoteDaemonHealth(info: DaemonInfo): Promise<Remote
     baseUrl: info.baseUrl ?? '',
     token: info.token,
     pid: info.pid,
-    health: readRemoteDaemonHealth(info),
+    health: readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
   };
   remoteHealthCache = entry;
   try {

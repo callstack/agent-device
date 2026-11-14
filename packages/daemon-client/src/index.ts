@@ -102,7 +102,15 @@ async function sendToDaemonOnHost(
   const daemon = await cancellation.guard(async () => {
     return await withDiagnosticTimer(
       'daemon_startup',
-      async () => await connectToDaemon(settings),
+      // A remote `/health` gate sends nothing until it opens, so it may wait out an outage for as
+      // long as this command's own budget.
+      async () =>
+        await connectToDaemon(
+          settings,
+          requestTimeoutMs === undefined
+            ? undefined
+            : { budgetMs: requestTimeoutMs, signal: options.signal },
+        ),
       {
         requestId,
         session: req.session,
