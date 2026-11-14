@@ -78,6 +78,11 @@ test('the failure response hands the host the step, its warnings, and its sugges
 
   await buildTypedMaestroFailureResponse(
     {
+      runCommand: async () => {
+        throw new Error('Unexpected subprocess');
+      },
+      emitDiagnostic: () => {},
+      registerSensitiveValue: () => {},
       appendTraceEvent: () => {},
       buildBuiltinVars: () => ({}),
       readScriptSourceFile: () => '',

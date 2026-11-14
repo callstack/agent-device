@@ -83,41 +83,6 @@ function linkRuntimeDependencies(installedPackageRoot: string, consumerRoot: str
   }
 }
 
-/**
- * Runs the packaged runScript child, whose `http.post` starts the packaged HTTP child. Both entries
- * are found from the bundled chunk that holds the resolver, so this proves the shipped layout.
- */
-async function assertPackagedRunScriptChild(installedPackageRoot: string, root: string) {
-  const childPath = fs.realpathSync(
-    path.join(installedPackageRoot, 'dist', 'src', 'internal', 'run-script-child.js'),
-  );
-  assert.equal(fs.existsSync(childPath), true);
-  const aliasRoot = path.join(root, 'run-script-entry-alias');
-  fs.symlinkSync(installedPackageRoot, aliasRoot, 'junction');
-  const aliasChildPath = path.join(aliasRoot, 'dist', 'src', 'internal', 'run-script-child.js');
-  const server = http.createServer((_req, res) => res.end('x'.repeat(2 * 1024 * 1024)));
-  try {
-    const port = await listenOnLoopback(server);
-    const scriptPath = path.join(root, 'run-script-setup.js');
-    fs.writeFileSync(scriptPath, 'output.size = http.post(SERVER_URL).body.length');
-    for (const entryPath of [childPath, aliasChildPath]) {
-      const result = await runCmd(process.execPath, [entryPath], {
-        stdin: JSON.stringify({
-          scriptPath,
-          env: { SERVER_URL: `http://127.0.0.1:${port}/` },
-          publicNetworkOnly: false,
-        }),
-        timeoutMs: SUBPROCESS_TIMEOUT_MS,
-      });
-      assert.deepEqual(readJson(result.stdout), {
-        outputEnv: { 'output.size': String(2 * 1024 * 1024) },
-      });
-    }
-  } finally {
-    await closeLoopbackServer(server);
-  }
-}
-
 async function runNodeModuleJson(cwd: string, args: string[], script: string): Promise<any> {
   const stdout = await execFileText(process.execPath, [...args, script], {
     cwd,
@@ -318,7 +283,10 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       fs.existsSync(path.join(installedPackageRoot, 'dist', 'src', 'companion-tunnel.js')),
       false,
     );
-    await assertPackagedRunScriptChild(installedPackageRoot, root);
+    assert.equal(
+      fs.existsSync(path.join(installedPackageRoot, 'dist/src/internal/run-script-child.js')),
+      false,
+    );
 
     const pluginTypes = fs.readFileSync(path.join(installedPackageRoot, 'dist/src/plugins.d.ts'));
     assert.ok(pluginTypes.length < 16 * 1024);

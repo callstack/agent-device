@@ -1,3 +1,8 @@
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import {
+  emitDiagnostic,
+  registerDiagnosticSensitiveValue,
+} from '@agent-device/host-kit/diagnostics';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { getRequestSignal } from '@agent-device/host-kit/request';
@@ -16,6 +21,12 @@ import { appendReplayTraceEvent } from './session-replay-trace.ts';
  */
 export function createReplayBackendHost(): ReplayBackendHost {
   return {
+    emitDiagnostic,
+    runCommand: ({ executable, args, host, ...options }, signal) =>
+      withCommandHost({ host, requestEnv: undefined }, () =>
+        runCmd(executable, args, { ...options, ...host, signal }),
+      ),
+    registerSensitiveValue: registerDiagnosticSensitiveValue,
     appendTraceEvent: appendReplayTraceEvent,
     buildBuiltinVars: (params) => buildReplayBuiltinVars({ ...params, metadata: {} }),
     readScriptSourceFile: readReplayScriptSourceFile,

@@ -1,6 +1,11 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createBatchDaemonWriter } from './batch/projection.ts';
-import type { AnyDaemonWriter, CommandInput, DaemonCommandRequest } from './cli-grammar/types.ts';
+import type {
+  AnyDaemonWriter,
+  CommandInput,
+  DaemonCommandRequest,
+  DaemonWriterDependencies,
+} from './cli-grammar/types.ts';
 import { findCommandMetadata } from './command-metadata.ts';
 import { refuseRetiredCommonInput } from './common-input-fields.ts';
 import { readMetadataCommandFlags } from './command-flags.ts';
@@ -54,6 +59,7 @@ async function prepareBatchDaemonCommandRequest(
   input: CommandInput,
   stepNumber: number,
   host: HostEnvironment,
+  deps?: DaemonWriterDependencies,
 ): Promise<DaemonCommandRequest> {
   const writer = (daemonWriters as Readonly<Record<string, AnyDaemonWriter>>)[command];
   if (!writer) {
@@ -69,6 +75,7 @@ async function prepareBatchDaemonCommandRequest(
       metadata,
       metadata.readInput(input) as CommandInput,
       host,
+      deps,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -86,6 +93,7 @@ export async function prepareDaemonCommandRequest(
   command: DaemonCommandName,
   input: CommandInput,
   host: HostEnvironment,
+  deps?: DaemonWriterDependencies,
 ): Promise<DaemonCommandRequest> {
   const writer = daemonWriters[command];
   if (!writer) {
@@ -93,7 +101,7 @@ export async function prepareDaemonCommandRequest(
   }
   refuseRetiredCommonInput(input as Record<string, unknown>);
   const metadata = findCommandMetadata(command);
-  return await prepareRequestWithMetadataFlags(writer, metadata, input, host);
+  return await prepareRequestWithMetadataFlags(writer, metadata, input, host, deps);
 }
 
 async function prepareRequestWithMetadataFlags(
@@ -101,8 +109,9 @@ async function prepareRequestWithMetadataFlags(
   metadata: ReturnType<typeof findCommandMetadata>,
   input: CommandInput,
   host: HostEnvironment,
+  deps?: DaemonWriterDependencies,
 ): Promise<DaemonCommandRequest> {
-  const request = await writer(input, host);
+  const request = await writer(input, host, deps);
   return {
     ...request,
     ...(metadata ? { metadataFlags: readMetadataCommandFlags(metadata, request.options) } : {}),

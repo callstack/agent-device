@@ -1,3 +1,4 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -10,6 +11,7 @@ test('captures an explicit zero-timeout pair and accepts exactly 0.005% RGB diff
   let tempRoot: string | undefined;
 
   const stable = await waitForMaestroAnimationToEnd({
+    emitDiagnostic,
     timeoutMs: 0,
     now: () => 0,
     capture: async (screenshotPath) => {
@@ -29,6 +31,7 @@ test('retries changed pairs immediately until a matching pair is captured', asyn
   let tempRoot: string | undefined;
 
   const stable = await waitForMaestroAnimationToEnd({
+    emitDiagnostic,
     timeoutMs: 2,
     now: () => now,
     capture: async (screenshotPath) => {
@@ -58,6 +61,7 @@ test('treats dimension and capture failures as nonmatches before retrying', asyn
   let tempRoot: string | undefined;
 
   const stable = await waitForMaestroAnimationToEnd({
+    emitDiagnostic,
     timeoutMs: 10,
     now: () => now,
     capture: async (screenshotPath) => {
@@ -85,6 +89,7 @@ test('reports an expired deadline when no screenshot pair is stable', async () =
   let captureCount = 0;
 
   const stable = await waitForMaestroAnimationToEnd({
+    emitDiagnostic,
     timeoutMs: 0,
     now: () => 0,
     capture: async (screenshotPath) => {
@@ -106,6 +111,7 @@ test('propagates cancellation and cleans temporary screenshots', async () => {
 
   await expect(
     waitForMaestroAnimationToEnd({
+      emitDiagnostic,
       timeoutMs: 10,
       now: () => 0,
       signal: controller.signal,

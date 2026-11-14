@@ -1,3 +1,4 @@
+import { installWorkspaceMaestro } from '../../scripts/install-workspace-maestro.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -43,4 +44,10 @@ export function installIsolatedCliTestEnv(
     }
     fs.rmSync(tempRoot, { recursive: true, force: true });
   };
+}
+
+export function installedMaestroCliTestEnv(): Record<string, string> {
+  const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-maestro-') };
+  installWorkspaceMaestro(env, true);
+  return env;
 }

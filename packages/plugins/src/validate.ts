@@ -1,3 +1,5 @@
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
+import type { ReplayEnginePlugin, ReplayEngineSetup } from './replay-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { isProviderId } from './discovery.ts';
@@ -133,4 +135,48 @@ function hasProviderFacets(runtime: ProviderDeviceRuntime): boolean {
 
 export function invalidPlugin(message: string): AppError {
   return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+}
+
+export function validateReplayEnginePlugin(value: unknown): ReplayEnginePlugin {
+  if (!isRecord(value) || value.kind !== 'replay-backend')
+    throw invalidPlugin('Plugin must declare kind: replay-backend');
+  if (value.apiVersion !== 2)
+    throw new AppError('INVALID_ARGS', 'Replay plugin requires apiVersion 2', {
+      reason: 'incompatible_plugin',
+      apiVersion: 2,
+    });
+  if (
+    value.provider !== undefined ||
+    value.connection !== undefined ||
+    value.credentials !== undefined
+  )
+    throw invalidPlugin(
+      'Replay plugins cannot declare provider identity, connection or credentials',
+    );
+  if (!isProviderId(value.backend) || typeof value.setup !== 'function')
+    throw invalidPlugin('Replay plugin must declare a backend id and setup(host)');
+  return value as ReplayEnginePlugin;
+}
+
+export function validateReplayEngineSetup(value: unknown): ReplayEngineSetup {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.replayBackend) ||
+    typeof value.replayBackend.create !== 'function' ||
+    (value.dispose !== undefined && typeof value.dispose !== 'function')
+  )
+    throw invalidPlugin('Replay plugin setup must return replayBackend.create(host)');
+  return value as ReplayEngineSetup;
+}
+
+export function validateReplayBackend(id: string, value: unknown): ReplayBackend {
+  if (
+    !isRecord(value) ||
+    value.id !== id ||
+    (['collectSourceFiles', 'inspectSource', 'runReplay', 'exportReplayScript'] as const).some(
+      (name) => typeof value[name] !== 'function',
+    )
+  )
+    throw invalidPlugin(`Replay plugin runtime does not match its backend: ${id}`);
+  return value as ReplayBackend;
 }

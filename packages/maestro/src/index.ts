@@ -5,7 +5,6 @@ export {
   type MaestroActionEvent,
   type MaestroCompletedActionEvent,
   type MaestroExecutionObserver,
-  type MaestroExecutionOptions,
   type MaestroExecutionOutcome,
   type MaestroFailedAction,
   type MaestroFlow,
@@ -13,25 +12,11 @@ export {
 
 export type { MaestroSourceReader } from './internal/program-loader.ts';
 
-export {
-  collectMaestroFlowSources,
-  type MaestroOptionalSourceReader,
-} from './internal/source-closure.ts';
+export { collectMaestroFlowSources } from './internal/source-closure.ts';
 
-export {
-  exportReplayActionsToMaestro,
-  type MaestroExportOptions,
-  type MaestroExportResult,
-  type MaestroExportWarning,
-  type MaestroSelectorProjection,
-} from './internal/export-flow.ts';
+export { exportReplayActionsToMaestro } from './internal/export-flow.ts';
 
 export { MAESTRO_SELECTOR_PROJECTION } from './internal/selector-vocabulary.ts';
-
-export {
-  MAESTRO_COMPAT_LIMITATIONS,
-  MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
-} from './internal/facade-support.ts';
 
 export {
   createMaestroRuntimePort,
@@ -50,16 +35,12 @@ export {
   type MaestroRuntimeMetrics,
   type MaestroRuntimeCommand,
   type MaestroRuntimeOperationContext,
-  type MaestroRuntimeOperationResult,
   type MaestroRuntimeOperations,
   type MaestroRuntimePort,
-  type MaestroRuntimePortLifecycle,
   type MaestroRuntimeReadContext,
   type MaestroSelector,
   type MaestroSinglePointerGestureInput,
   type MaestroSnapshotTargetQuery,
-  type MaestroTargetFailureReason,
   type MaestroTargetMatch,
   type MaestroTargetQuery,
-  type MaestroTargetResolution,
 } from './internal/facade-runtime-port.ts';

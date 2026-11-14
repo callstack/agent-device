@@ -18,6 +18,7 @@ import {
 // wire cannot enforce a shape. This is the typed view of the same field, one rank above the wire
 // and below every consumer.
 
+/** Shared replay-compatibility hints; these remain core runtime behavior without the flow engine. */
 export type MaestroRuntimeFlags = {
   allowNonHittableCoordinateFallback?: boolean;
   expectedTapPoint?: Point;

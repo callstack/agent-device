@@ -101,6 +101,10 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: build }
 
+      - name: Verify the core and standalone Maestro packages
+        uses: ./.github/actions/run-gate
+        with: { gate: package }
+
       - name: Verify emitted chunk ownership
         uses: ./.github/actions/run-gate
         with: { gate: bundle-owner-files }
@@ -117,7 +121,7 @@ jobs:
       #
       # Runs the script directly rather than through `pnpm check:package`: the repo's pinned pnpm
       # requires Node >= 22.13 and refuses to start on the 22.12 floor this job exists to cover. The
-      # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
+      # root-package probe only needs `node` and `npm`. The full package gate runs above.
       - name: Verify the published package on Node.js 22.12
         run: node --experimental-strip-types scripts/check-package.ts
 

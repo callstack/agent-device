@@ -40,13 +40,18 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
     ]);
   const codeIdentity = await resolveLocalDaemonCodeIdentity();
   const output = { write: () => {} };
+  const clientDeps: NonNullable<Parameters<typeof createAgentDeviceClient>[1]> = { host };
   const runtime = await startDaemonRuntime({
     host: runtimeHost,
     stdout: output,
     stderr: output,
     ownership: 'embedded',
     codeIdentity,
-    composeDeps: async (input) => await composeDaemonRuntimeDeps(input, candidates),
+    composeDeps: async (input) => {
+      const deps = await composeDaemonRuntimeDeps(input, candidates);
+      clientDeps.resolveReplayBackend = deps.resolveReplayBackend;
+      return deps;
+    },
   });
   try {
     const identity = runtime.identity;
@@ -70,7 +75,7 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
       }),
     });
     return Object.freeze({
-      client: createAgentDeviceClient(clientConfig, { host }),
+      client: createAgentDeviceClient(clientConfig, clientDeps),
       clientConfig,
       close: () => runtime.close(),
     });

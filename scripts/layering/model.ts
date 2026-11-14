@@ -75,7 +75,7 @@ const TARGET_DAG_RANK = new Map([
   ['daemon-server', 4],
   ['platform-runtime', 4],
   ['remote', 4],
-  ['plugins', 4],
+  ['plugins', 1],
   ['daemon-client', 5],
   // The client factory builds the typed client over the daemon-client transport.
   ['client', 5],

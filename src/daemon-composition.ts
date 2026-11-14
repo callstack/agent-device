@@ -90,7 +90,11 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
 export async function composeDaemonRuntimeDeps(
   input: Parameters<ComposeDaemonRuntimeDeps>[0],
   providerCandidates?: readonly PluginCandidate[],
-): Promise<DaemonRuntimeDeps> {
+): Promise<
+  DaemonRuntimeDeps & {
+    resolveReplayBackend: import('@agent-device/contracts/replay-backend').ReplayBackendResolver;
+  }
+> {
   const {
     host,
     baseDir,
@@ -114,6 +118,9 @@ export async function composeDaemonRuntimeDeps(
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
+    const { bindReplayBackendResolver } =
+      await import('@agent-device/replay-port/replay-backend-registry');
+    await bindReplayBackendResolver(providerComposition.resolveReplayBackend);
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
@@ -162,6 +169,7 @@ export async function composeDaemonRuntimeDeps(
       ownerLifecycle: createPlatformDaemonLifecycleOwners(host),
       shutdownProviderRuntimes: providerComposition.shutdown,
       pluginInventory: providerComposition.inventory,
+      resolveReplayBackend: providerComposition.resolveReplayBackend,
       leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
       providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,

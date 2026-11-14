@@ -69,7 +69,8 @@ export type ShutdownReport = {
   plugins: {
     disposed: string[];
     failed: {
-      provider: string;
+      provider?: string;
+      backend?: string;
       source?: PluginCleanupOutcome['source'];
       step: 'shutdown' | 'dispose';
       error: NormalizedError;
@@ -106,7 +107,7 @@ export function describeUnfinishedShutdownWork(report: ShutdownReport): string[]
   }
   for (const failure of report.plugins.failed) {
     lines.push(
-      `Daemon shutdown: plugin ${failure.provider} failed to ${failure.step === 'shutdown' ? 'shut down' : 'dispose'}: ${failure.error.message}`,
+      `Daemon shutdown: plugin ${failure.provider ?? `replay backend ${failure.backend}`} failed to ${failure.step === 'shutdown' ? 'shut down' : 'dispose'}: ${failure.error.message}`,
     );
   }
   const { pending, unknown } = report.providerReleases;
@@ -151,7 +152,7 @@ export type PluginClose = Readonly<{
 /**
  * The daemon's one plugin cleanup: the registry closes each plugin (runtime shutdown, then dispose)
  * and answers with a per-plugin outcome. Bounded, because one plugin that never finishes must not
- * hold the whole close: past the budget every active plugin is reported pending while its cleanup
+ * hold the whole close: past the budget every registered plugin is reported pending while its cleanup
  * keeps running.
  */
 export function createPluginClose(params: {
@@ -160,10 +161,9 @@ export function createPluginClose(params: {
   timeoutMs?: number;
 }): PluginClose {
   let closing: Promise<ShutdownReport['plugins']> | undefined;
-  const activeProviders = (): string[] =>
-    params.inventory.flatMap((entry) =>
-      entry.state === 'active' && entry.provider !== undefined ? [entry.provider] : [],
-    );
+  const cleanupOwners = params.inventory.flatMap((entry) =>
+    entry.state === 'active' ? [{ provider: entry.provider, backend: entry.backend }] : [],
+  );
   return {
     close: () =>
       (closing ??= (async () => {
@@ -172,14 +172,20 @@ export function createPluginClose(params: {
           params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
         );
         if (outcome.kind === 'deadline') {
-          return { disposed: [], failed: [], pending: activeProviders() };
+          return {
+            disposed: [],
+            failed: [],
+            pending: cleanupOwners.map(
+              ({ provider, backend }) => provider ?? `replay-backend:${backend}`,
+            ),
+          };
         }
         if (outcome.kind === 'rejected') {
           const error = normalizeError(outcome.error);
           return {
             disposed: [],
-            failed: activeProviders().map((provider) => ({
-              provider,
+            failed: cleanupOwners.map((identity) => ({
+              ...identity,
               step: 'shutdown' as const,
               error,
             })),
@@ -221,7 +227,8 @@ function reportCleanupOutcomes(
   outcomes: readonly PluginCleanupOutcome[],
 ): ShutdownReport['plugins'] {
   const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
-  for (const { provider, source, shutdown, dispose } of outcomes) {
+  for (const { provider, backend, source, shutdown, dispose } of outcomes) {
+    const identity = provider === undefined ? { backend } : { provider };
     for (const [step, result] of [
       ['shutdown', shutdown],
       ['dispose', dispose],
@@ -229,13 +236,14 @@ function reportCleanupOutcomes(
       if (result.status !== 'failed') continue;
       const { code, message, hint } = result.error;
       report.failed.push({
-        provider,
+        ...identity,
         source,
         step,
         error: { code, message, ...(hint === undefined ? {} : { hint }) },
       });
     }
-    if (shutdown.status === 'ok' && dispose.status === 'ok') report.disposed.push(provider);
+    if (shutdown.status === 'ok' && dispose.status === 'ok')
+      report.disposed.push(provider ?? `replay-backend:${backend}`);
   }
   return report;
 }

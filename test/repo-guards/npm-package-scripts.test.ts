@@ -98,7 +98,11 @@ test('publishing cannot skip the package gate', () => {
   assert.equal(getCheckSpec('package').localRunnable, true);
   // The minimum-Node job runs the script directly — the repo's pinned pnpm needs a newer Node than
   // the floor that job covers — so it must still name the same entry point the script does.
-  assert.match(script('check:package'), /scripts\/check-package\.ts$/);
+  assert.deepEqual(script('check:package').split(' && '), [
+    'node --experimental-strip-types scripts/check-package.ts',
+    'node --experimental-strip-types scripts/node-test-tmpdir.ts --test packages/maestro/test/package-smoke.mjs',
+  ]);
+  assert.match(packagedCliWorkflow, /with: \{ gate: package \}/);
   assert.match(
     packagedCliWorkflow,
     /run: node --experimental-strip-types scripts\/check-package\.ts/,

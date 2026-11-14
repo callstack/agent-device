@@ -143,10 +143,15 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
   const imeFixture = 'packages/platform-android/src/fixtures/android-ime-capture.raw.json';
   assert.ok(fs.existsSync(imeFixture), imeFixture);
   assert.ok(!isUnitTest(imeFixture));
-  // Package tests outside src/ have no owner and keep failing open.
   assert.ok(!isUnitTest('packages/maestro/test/conformance/verify.test.ts'));
+  const conformance = selectChecks({
+    changedFiles: ['packages/maestro/test/conformance/verify.test.ts'],
+  });
+  assert.equal(conformance.failOpen, false);
+  assert.ok(conformance.checks.includes('maestro-conformance'));
+  assert.ok(conformance.checks.includes('maestro-differential'));
   assert.equal(
-    selectChecks({ changedFiles: ['packages/maestro/test/conformance/verify.test.ts'] }).failOpen,
+    selectChecks({ changedFiles: ['packages/unknown/test/unowned.test.ts'] }).failOpen,
     true,
   );
 });

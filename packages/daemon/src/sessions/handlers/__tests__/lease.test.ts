@@ -881,6 +881,7 @@ test('lease_allocate names the plugin that failed to register when it could have
         failed('testmu', '@agent-device/testmu'),
         failed(undefined, 'unloadable-plugin'),
         failed('other', 'other-plugin'),
+        { ...failed(undefined, '@agent-device/maestro'), backend: 'maestro' },
       ],
     }),
     (error: unknown) => {

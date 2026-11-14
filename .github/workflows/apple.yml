@@ -36,6 +36,7 @@ jobs:
     runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 90
     env:
+      AGENT_DEVICE_HOME: ${{ runner.temp }}/agent-device-apple-smoke-home
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       IOS_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
       MACOS_STATE_DIR: ${{ github.workspace }}/.tmp/macos-agent-device-state
@@ -83,6 +84,8 @@ jobs:
         uses: ./.github/actions/run-gate
         with:
           gate: build
+      - if: steps.build.outcome == 'success'
+        run: node --experimental-strip-types scripts/install-workspace-maestro.ts
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run

@@ -176,6 +176,7 @@ export async function listPlugins(env: NodeJS.ProcessEnv, builtinProviders: read
     name: entry.package,
     ...(entry.version !== undefined ? { version: entry.version } : {}),
     ...(entry.provider !== undefined ? { provider: entry.provider } : {}),
+    ...(entry.backend !== undefined ? { backend: entry.backend } : {}),
     compatible: entry.state === 'active',
     ...(entry.error ? { error: entry.error } : {}),
   }));

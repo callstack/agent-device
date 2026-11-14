@@ -16,6 +16,7 @@ export type PluginInventoryCredentials = Readonly<{
 
 type PluginInventoryIdentity = Readonly<{
   provider?: string;
+  backend?: string;
   source: PluginSource;
   package?: string;
   version?: string;
@@ -36,12 +37,13 @@ export type PluginCleanupStep =
  * What closing the registry did for one registered plugin. A plugin without `dispose` has nothing to
  * dispose, which reads as `ok`.
  */
-export type PluginCleanupOutcome = Readonly<{
-  provider: string;
-  source: PluginSource;
-  shutdown: PluginCleanupStep;
-  dispose: PluginCleanupStep;
-}>;
+export type PluginCleanupOutcome = Readonly<
+  ({ provider: string; backend?: never } | { backend: string; provider?: never }) & {
+    source: PluginSource;
+    shutdown: PluginCleanupStep;
+    dispose: PluginCleanupStep;
+  }
+>;
 
 export const NO_PLUGIN_CREDENTIALS: PluginInventoryCredentials = Object.freeze({
   variables: Object.freeze([]),
@@ -79,6 +81,7 @@ function readEntry(value: unknown): PluginInventoryEntry | undefined {
   if (!credentials) return undefined;
   const identity = {
     ...(typeof value.provider === 'string' ? { provider: value.provider } : {}),
+    ...(typeof value.backend === 'string' ? { backend: value.backend } : {}),
     source: value.source,
     ...(typeof value.package === 'string' ? { package: value.package } : {}),
     ...(typeof value.version === 'string' ? { version: value.version } : {}),

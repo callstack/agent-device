@@ -1,5 +1,5 @@
 ---
-title: Provider plugins
+title: Plugins
 ---
 
 Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
@@ -55,6 +55,12 @@ When the daemon stops, it closes every plugin once: each runtime shuts down, the
 When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then, once #3757 lets an embedding host pass plugins, those. The others are `failed` with `duplicate_provider`. The first claim holds even when that plugin then fails to set up, so a later plugin for the same provider doesn't take over. `cloud` and `proxy` are reserved and can't be claimed.
 
 A lease that names a provider this daemon has no runtime for refuses with `UNSUPPORTED_OPERATION` and reason `provider-not-registered`, before any lease is recorded. The error lists the registered providers and, as `failedPlugins`, any plugin that failed to register for that provider (or failed before its provider was known); restart the daemon with the provider's plugin installed. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
+
+## Install Maestro support
+
+`agent-device plugins add @agent-device/maestro` installs the optional Maestro engine for `replay --maestro`, `test --maestro`, and `replay export`. [Run Maestro flows](/docs/run-maestro-flows) explains client and daemon installation. `help maestro` remains available without the plugin.
+
+Replay backends appear in plugin inventories with `backend` instead of `provider`. A daemon keeps its plugin set until it stops. Installing a package on a client does not change a remote or embedded daemon's plugin set.
 
 ## Create a plugin
 
@@ -160,3 +166,9 @@ To move a package:
 ```
 
 A package that still ships the old manifest loads when it also exports `./agent-device`, and the manifest is then ignored. A plugin object with an `apiVersion` other than 2 is listed as `failed` with `incompatible_plugin`, and a default export that is not a plugin factory with `invalid_plugin`; the daemon starts without either.
+
+## Create a replay backend plugin
+
+A replay engine uses the same managed `./agent-device` factory entry and `apiVersion: 2`. Return a `ReplayEnginePlugin` from the type-only `agent-device/plugins` contract with `kind: 'replay-backend'`, a `backend` id, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }`. Keep setup engine-free; `create` may asynchronously import the engine when a replay capability is selected.
+
+The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`. The daemon owns sessions, policy, selector/ref authority, and device cleanup. `dispose` runs once after requests drain. Client-side source collection and export dispose their scoped plugin registry when the operation ends.

@@ -3,7 +3,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -44,13 +43,14 @@ async function handleReplayExportCommand({
   // `replay export` exports to Maestro, so the conversion goes through that backend's registry
   // entry rather than naming the engine package from the CLI (#3377). This handler is loaded
   // lazily by the router, and the engine sits one further thunk behind the backend.
-  const backend: ReplayBackend = await (
+  const result = await (
     await import('@agent-device/replay-port/replay-backend-registry')
-  ).getReplayBackend('maestro');
-  const result = backend.exportReplayScript(parsed.actions, {
-    actionLines: parsed.actionLines,
-    metadata: readReplayScriptMetadata(script),
-  });
+  ).withReplayBackend('maestro', host.env, (backend) =>
+    backend.exportReplayScript(parsed.actions, {
+      actionLines: parsed.actionLines,
+      metadata: readReplayScriptMetadata(script),
+    }),
+  );
   const outputPath =
     typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
   if (outputPath) {
@@ -64,7 +64,7 @@ async function handleReplayExportCommand({
   await writeCommandOutput(
     flags,
     {
-      format: backend.id,
+      format: 'maestro',
       sourcePath,
       ...(outputPath ? { path: outputPath } : { yaml: result.yaml }),
       warnings: result.warnings,

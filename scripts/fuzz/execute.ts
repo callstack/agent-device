@@ -200,8 +200,19 @@ export async function createCaseRunner(
       return failure;
     },
     close: async () => {
+      if (closed) return;
       closed = true;
-      await endSession(session);
+      try {
+        if (session.death() === null && session.child.connected) {
+          const answer = awaitWorker(session.child, caseTimeoutMs);
+          session.child.send({ kind: 'close' });
+          const outcome = await answer;
+          if (outcome.kind !== 'message' || outcome.message.kind !== 'closed')
+            throw new Error(`fuzz target cleanup did not finish within ${caseTimeoutMs}ms`);
+        }
+      } finally {
+        await endSession(session);
+      }
     },
   };
 }

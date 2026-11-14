@@ -288,6 +288,15 @@ test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', asyn
       shutdown: { status: 'ok' },
       dispose: { status: 'ok' },
     },
+    {
+      backend: 'maestro',
+      source: 'store',
+      shutdown: { status: 'ok' },
+      dispose: {
+        status: 'failed',
+        error: { code: 'COMMAND_FAILED', message: 'backend disposal broke' },
+      },
+    },
   ];
   const runtime = await startRuntime(stateDir);
   try {
@@ -295,11 +304,16 @@ test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', asyn
     const events = logEvents(stateDir).filter(
       ({ phase }) => phase === 'provider_plugin_cleanup_failed',
     );
-    expect(events).toHaveLength(1);
+    expect(events).toHaveLength(2);
     expect(events[0]?.data).toMatchObject({
       provider: 'example',
       source: 'store',
       shutdown: { code: 'COMMAND_FAILED' },
+    });
+    expect(events[1]?.data).toMatchObject({
+      backend: 'maestro',
+      source: 'store',
+      dispose: { code: 'COMMAND_FAILED' },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });

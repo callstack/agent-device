@@ -47,6 +47,9 @@ vi.mock('./provider-device-runtimes.ts', () => ({
     platformModules: [],
     shutdown: ports.shutdownProviders,
     inventory: [],
+    resolveReplayBackend: async () => {
+      throw new Error('no replay backend');
+    },
   }),
 }));
 

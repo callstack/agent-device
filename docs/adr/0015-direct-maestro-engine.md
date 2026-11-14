@@ -6,6 +6,7 @@ Accepted
 
 ## Rules at a glance
 
+- Load the optional `@agent-device/maestro` engine through the managed version 2 replay-backend plugin contract. Keep help declarations in core. Keep session authority, request cancellation, sensitive-value registration, and device dispatch with the host.
 - Parse supported Maestro YAML into a source-preserving typed program. Execute it directly through a narrow compatibility runtime port.
 - Do not lower the program through `SessionAction`, private command names, positional JSON, or a recursive replay dispatcher.
 - One explicit execution context owns variables and the current observation generation.

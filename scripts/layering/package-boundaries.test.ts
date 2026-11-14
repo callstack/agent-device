@@ -675,13 +675,10 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
-  // Locks the export surface: `.` (the engine), the replay backend plugin (#3377) with its
-  // engine-free declaration, and the runScript HTTP helper. The eager-closure budget gate
-  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the plugin off `.`.
+  // Source test facades stay private to the workspace; package smoke pins the published host entry.
   assert.deepEqual([...maestroPackage.exportTargets.keys()].sort(), [
     '@agent-device/maestro',
-    '@agent-device/maestro/replay-backend',
-    '@agent-device/maestro/replay-backend-declaration',
+    '@agent-device/maestro/agent-device',
     '@agent-device/maestro/run-script-http',
   ]);
   assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
@@ -692,6 +689,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
     '@agent-device/provision-kit',
     '@agent-device/selectors',
+    '@agent-device/test-kit',
+    'agent-device',
   ]);
   const adScriptPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-script');
   assert.ok(adScriptPackage, 'ad-script package must exist');
@@ -898,8 +897,8 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the contracts workspace dependency',
   );
   assert.ok(
-    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/maestro'),
-    'root must declare the maestro workspace dependency',
+    !rootWorkspaceDependencyNames(repoRoot).has('@agent-device/maestro'),
+    'core must not depend on the optional Maestro plugin',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/ad-script'),

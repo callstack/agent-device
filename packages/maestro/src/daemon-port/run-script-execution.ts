@@ -1,8 +1,9 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { assertMaestroScriptsTrusted } from '../internal/engine-flow.ts';
 import type { RunScriptChildOutput, RunScriptRequest } from './run-script-vm.ts';
 
@@ -20,17 +21,24 @@ const RUN_SCRIPT_CHILD_TIMEOUT_MS = 2 * RUN_SCRIPT_TIMEOUT_MS + 5_000;
  */
 export async function executeRunScriptFile(
   request: RunScriptRequest & { signal?: AbortSignal },
+  host: HostEnvironment,
+  runCommand: ReplayBackendHost['runCommand'],
 ): Promise<Record<string, string>> {
   const { signal, ...childRequest } = request;
   assertMaestroScriptsTrusted({ trustedScripts: !childRequest.publicNetworkOnly }, 'runScript');
-  const result = await runCmd(process.execPath, resolveRunScriptChildArgs('run-script-child'), {
-    stdin: JSON.stringify(childRequest),
+  const result = await runCommand(
+    {
+      executable: process.execPath,
+      args: resolveRunScriptChildArgs('run-script-child'),
+      host,
+      stdin: JSON.stringify(childRequest),
+      timeoutMs: RUN_SCRIPT_CHILD_TIMEOUT_MS,
+      // Its own process group, so a cancel or timeout also reaps an in-flight `http.post` child.
+      detached: true,
+      allowFailure: true,
+    },
     signal,
-    timeoutMs: RUN_SCRIPT_CHILD_TIMEOUT_MS,
-    // Its own process group, so a cancel or timeout also reaps an in-flight `http.post` child.
-    detached: true,
-    allowFailure: true,
-  });
+  );
   const output = readScriptChildOutput(result.stdout);
   if (output && 'outputEnv' in output) return output.outputEnv;
   if (output) throw new AppError(output.error.code, output.error.message, output.error.details);

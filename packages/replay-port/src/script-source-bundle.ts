@@ -1,9 +1,9 @@
 import fs from 'node:fs';
+import type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { resolveReplayFormat } from '@agent-device/ad-script';
-import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 
 export const REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -11,6 +11,8 @@ export type ReplayScriptSourceRequest = {
   inputPath: string;
   cwd: string;
   replayBackend?: string;
+  hostEnv: NodeJS.ProcessEnv;
+  resolveReplayBackend?: ReplayBackendResolver;
   env?: Readonly<Record<string, string>>;
 };
 
@@ -26,15 +28,20 @@ export async function loadReplayScriptSourceBundle(
   // Function-scoped on purpose: the eager-closure budget gate counts a static import here as a
   // module every warm CLI command evaluates, for a format most runs never use (#1802), and the
   // backend's engine sits one thunk behind it (#3377).
-  const backend: ReplayBackend = await (
+  const files = await (
     await import('@agent-device/replay-port/replay-backend-registry')
-  ).getReplayBackend(backendId);
-  const files = backend.collectSourceFiles({
-    entryPath: entry,
-    entrySource,
-    env: params.env,
-    readSource: tryReadScriptFile,
-  });
+  ).withReplayBackend(
+    backendId,
+    params.hostEnv,
+    (backend) =>
+      backend.collectSourceFiles({
+        entryPath: entry,
+        entrySource,
+        env: params.env,
+        readSource: tryReadScriptFile,
+      }),
+    params.resolveReplayBackend,
+  );
   return finishBundle(entry, files, params.inputPath);
 }
 

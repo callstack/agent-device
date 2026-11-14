@@ -46,3 +46,14 @@ export type HostDiagnostics = Readonly<{
     context: HostDiagnosticsContext,
   ): Promise<DoctorCheck | undefined>;
 }>;
+
+/** The severity an event is recorded with. */
+export type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
+
+/** A diagnostic handed to the host that owns the request log and redaction. */
+export type DiagnosticEventInput = {
+  level?: DiagnosticLevel;
+  phase: string;
+  durationMs?: number;
+  data?: Record<string, unknown>;
+};

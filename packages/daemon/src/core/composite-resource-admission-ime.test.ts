@@ -1,3 +1,4 @@
+import { getReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -75,7 +76,10 @@ test.each(['batch', 'replay'] as const)(
 
 test('Maestro stop keeps the IME and app log; capture still bars caller close', async () => {
   const helper = androidHelperWorld();
-  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+  const world = await resourceAdmissionWorld('capture', {
+    ime: helper.ime,
+    replayBackend: await getReplayBackend('maestro'),
+  });
   try {
     assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
     assertRpcOk(await world.call('logs', ['start']));

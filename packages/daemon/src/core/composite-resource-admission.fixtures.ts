@@ -1,3 +1,4 @@
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import path from 'node:path';
 import { LeaseRegistry } from '../resources/lease-registry.ts';
 import { applicationLifecycleRuntimeFixture } from '../__tests__/support/application-lifecycle-runtime-fixture.ts';
@@ -29,6 +30,7 @@ export async function resourceAdmissionWorld(
   audioMode: 'capture' | 'query' = 'capture',
   options: Readonly<{
     device?: DeviceInfo;
+    replayBackend?: ReplayBackend;
     providerOwned?: boolean;
     withLifecycleProvider?: boolean;
     ime?: {
@@ -188,6 +190,12 @@ export async function resourceAdmissionWorld(
     stdout: { write: () => {} },
     stderr: { write: () => {} },
     composeDeps: async (input) => {
+      const backend = options.replayBackend;
+      if (backend) {
+        const { bindReplayBackendResolver } =
+          await import('@agent-device/replay-port/replay-backend-registry');
+        await bindReplayBackendResolver(async () => backend);
+      }
       const base = await daemonRuntimeDepsFixture()(input);
       return {
         ...base,

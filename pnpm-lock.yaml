@@ -71,9 +71,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:packages/maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -376,7 +373,7 @@ importers:
         version: link:../test-kit
       vitest:
         specifier: 5.0.4
-        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
 
   packages/command-output:
     dependencies:
@@ -491,7 +488,7 @@ importers:
         version: link:../test-kit
       vitest:
         specifier: 5.0.4
-        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
 
   packages/contracts:
     dependencies:
@@ -532,9 +529,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:../maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:../platform-android
@@ -560,6 +554,9 @@ importers:
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:../apple-runner
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
@@ -682,7 +679,7 @@ importers:
   packages/kernel: {}
 
   packages/maestro:
-    dependencies:
+    devDependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -704,7 +701,12 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
-    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
       undici:
         specifier: 7.30.1
         version: 7.30.1
@@ -1091,9 +1093,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
+      '@agent-device/plugins':
         specifier: workspace:*
-        version: link:../maestro
+        version: link:../plugins
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:../replay-test
@@ -5648,16 +5650,22 @@ packages:
     resolution: {integrity: sha512-9K2k72s4n7rV9s4bX0MyjbX9iBribvKZbBJKuEmTCZfeWJXs6Yh7bGpY4eoc7UufAjvpheBqwyZCOIPBvxCv0A==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
+      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
+        optional: true
+      typescript:
         optional: true
 
   volar-service-typescript@0.0.71:
     resolution: {integrity: sha512-yTtM/BVT6hoyEYnDtaCyAtNhdNeS/mhTTABlBOdw3NNiRBUin3IznFJpgfjer4c6RYopiPjjQjc9VFhxVl1mLw==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
+      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
+        optional: true
+      typescript:
         optional: true
 
   volar-service-yaml@0.0.71:
@@ -5968,8 +5976,8 @@ snapshots:
       volar-service-emmet: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-html: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-prettier: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(prettier@3.9.10)
-      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
-      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
+      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
+      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
       volar-service-yaml: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       vscode-html-languageservice: 5.6.2
       vscode-uri: 3.2.0
@@ -7481,14 +7489,14 @@ snapshots:
     optionalDependencies:
       vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.0)
 
-  '@vitest/mocker@5.0.4(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))':
+  '@vitest/mocker@5.0.4(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.4
       estree-walker: 3.0.3
       magic-string: 1.4.3
     optionalDependencies:
-      vite: 8.3.5(@types/node@26.2.0)(yaml@2.9.1)
+      vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
 
   '@vitest/spy@5.0.4': {}
 
@@ -10099,18 +10107,6 @@ snapshots:
       fsevents: 2.3.3
       yaml: 2.9.1
 
-  vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1):
-    dependencies:
-      lightningcss: 1.33.0
-      picomatch: 4.0.7
-      postcss: 8.5.23
-      rolldown: 1.2.15
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@types/node': 26.2.0
-      fsevents: 2.3.3
-      yaml: 2.9.1
-
   vitefu@1.1.3(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1)):
     optionalDependencies:
       vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
@@ -10137,10 +10133,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1)):
+  vitest@5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.4(vite@8.3.5(@types/node@26.2.0)(yaml@2.9.1))
+      '@vitest/mocker': 5.0.4(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -10151,7 +10147,7 @@ snapshots:
       tinybench: 6.2.2
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.5(@types/node@26.2.0)(yaml@2.9.1)
+      vite: 8.3.5(@types/node@22.20.1)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@types/node': 22.20.1
@@ -10191,13 +10187,14 @@ snapshots:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
       prettier: 3.9.10
 
-  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
+  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
+      typescript: 5.9.3
 
-  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
+  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
       path-browserify: 1.0.1
       semver: 7.8.5
@@ -10207,6 +10204,7 @@ snapshots:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
+      typescript: 5.9.3
 
   volar-service-yaml@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
