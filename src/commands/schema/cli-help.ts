@@ -105,8 +105,8 @@ Selectors:
 Text entry:
   fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
   fill <target> "" clears the field (replace with nothing); the empty argument must be present -- fill <target> alone is a missing argument.
-  For dropped iOS text, retry with --delay-ms before clipboard paste. This also applies to Limrun iOS, which uses the same Apple runner.
-  Element presses behind the keyboard are refused with tap_keyboard_occludes_target. keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION. Android: try dismiss before back. iOS: when both fail, do not tap a static text/heading hoping it is safe; prefer type "\\n" to submit.
+  For dropped iOS text, retry with --delay-ms before clipboard paste (also Limrun iOS).
+  Element presses behind the keyboard are refused with tap_keyboard_occludes_target. keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION (iOS: error.details.reason keyboard_dismiss_unavailable, dispatched: no). Android: try dismiss before back. iOS: when both fail, never tap static text/headings; prefer type "\\n" to submit.
   iOS paste-prompt limits and Android IME/handwriting capture quirks: help debugging.
 
 Session ordering:

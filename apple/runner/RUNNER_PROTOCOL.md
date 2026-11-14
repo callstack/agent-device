@@ -252,11 +252,18 @@ Successful and failed responses use the same top-level envelope:
 {
   "ok": false,
   "error": {
-    "code": "UNSUPPORTED_OPERATION",
-    "message": "Unable to dismiss the iOS keyboard: the keyboard exposes no dismiss key (background taps are never attempted)"
+    "code": "KEYBOARD_DISMISS_UNAVAILABLE",
+    "message": "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)"
   }
 }
 ```
+
+The example is a `keyboard dismiss` the keyboard would not come down for; a refusal that can name a
+next step also carries `hint`, omitted here. A keyboard that stayed up answers one of two codes:
+`KEYBOARD_DISMISS_UNAVAILABLE` when it found no dismiss control and so sent nothing, or
+`UNSUPPORTED_OPERATION` when a dismiss control was tapped, or the tvOS remote's Menu press was sent,
+and the keyboard stayed visible. The host reports both under `UNSUPPORTED_OPERATION` and publishes the
+first one's `details.reason`.
 
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
@@ -310,7 +317,9 @@ declaration for the current rules.
   the main-thread watchdog in [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift). The daemon
   classifies a runner-reported code in `classifyRunnerReportedError`
   ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
-  arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, and other codes pass through as typed
-  codes. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
+  arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, unless their row names the wire code the
+  caller already reads that family under. Other codes pass through as typed codes. A code with a
+  `RUNNER_REPORTED_ERROR_REASONS` row also publishes `details.reason`, so a caller never reads the
+  refusal off `message`. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
   `RUNNER_ERROR_RULES` and the helpers beside it
   ([`runner-error-classification.ts`](../../packages/apple-runner/src/runner-error-classification.ts)).

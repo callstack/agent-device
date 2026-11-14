@@ -175,3 +175,20 @@ export function requireSwiftThrownErrorWireCode(): {
     finishedCode,
   };
 }
+
+/**
+ * The Swift declaration for the code a `keyboard dismiss` refuses with when the keyboard exposes no
+ * dismiss key (#1606). The refusal is thrown on a device lane, so the tie that keeps the host's
+ * `details.reason` row attached to it reads the declaration rather than a second copy of the literal.
+ */
+export function requireSwiftKeyboardDismissRefusalWireCode(): string {
+  const codes = readSwiftWireErrorCodes();
+  const refusalCode = codes['keyboardDismissUnavailable'];
+  assert.ok(
+    refusalCode !== undefined,
+    'RunnerWireErrorCode must declare keyboardDismissUnavailable: the daemon publishes ' +
+      "details.reason 'keyboard_dismiss_unavailable' for this code, and a runner that stopped " +
+      'encoding it would leave that reason unreachable.',
+  );
+  return refusalCode;
+}

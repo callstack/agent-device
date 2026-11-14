@@ -301,7 +301,7 @@ const foldCommandDescription = `Fold or unfold a foldable iPhone simulator (iPho
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
-  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
+  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when the keyboard stays up \u2014 background taps are never attempted. On iOS a keyboard with no dismiss key adds error.details.reason keyboard_dismiss_unavailable with dispatched: no; one whose key was tapped and stayed visible has no reason and dispatched: unknown.';
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =

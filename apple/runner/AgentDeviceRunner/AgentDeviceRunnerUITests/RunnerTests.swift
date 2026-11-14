@@ -58,6 +58,10 @@ final class RunnerTests: XCTestCase {
     static let backSwipeNoChange = "BACK_SWIPE_NO_CHANGE"
     static let backSwipeUnverified = "BACK_SWIPE_UNVERIFIED"
     static let backSwipeNotDispatched = "BACK_SWIPE_NOT_DISPATCHED"
+    /// A `keyboard dismiss` the visible keyboard would not come down for: it exposes no dismiss key the
+    /// runner vouches for (#1606). The host reports it under `UNSUPPORTED_OPERATION` and publishes
+    /// `details.reason`, so a caller never reads the refusal off the message prose.
+    static let keyboardDismissUnavailable = "KEYBOARD_DISMISS_UNAVAILABLE"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
     /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
