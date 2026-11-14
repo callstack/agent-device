@@ -181,7 +181,7 @@
     "packages/remote/src/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
     "packages/remote/src/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
     "packages/remote/src/upload-stream.ts#streamFileToHttpRequest": "sha256:3ac8f379c4b508b0c28c4f41f920b40f8cc0406afcd5b2290326c4cfb9168adb",
-    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:15a941b2bde322b0c1bce1050e9c8a1e8a556fb48770393845010180f0fd87f0",
+    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:5ba978e2740430e6ed03e06a1e4e056115fa393a3e32658739b97a444aa939fa",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
@@ -495,8 +495,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
-      "digest": "sha256:15a941b2bde322b0c1bce1050e9c8a1e8a556fb48770393845010180f0fd87f0",
-      "rationale": "#4441 keeps each attempt under its sequential phase watchdog and corrects its transport lifecycle: the connect ceiling now ends at actual socket or TLS-handshake establishment, body progress counts only transport writes, and an early response reads the accepted answer to its end, then destroys and joins the owned file/request pipeline before resolving or starting the redirect/resume attempt. Bytes on the wire are unchanged: same route, method, headers, body framing, resume-offset handling and redirect limit. Only this client's own sequencing and deadlines moved, so a protocol-2 peer parses exactly what it parsed before."
+      "digest": "sha256:5ba978e2740430e6ed03e06a1e4e056115fa393a3e32658739b97a444aa939fa",
+      "rationale": "#4441 keeps each attempt under its sequential phase watchdog and corrects its transport lifecycle: the connect ceiling now ends at actual socket or TLS-handshake establishment, body progress counts only transport writes, and an early response reads the accepted answer to its end, then destroys and joins the owned file/request pipeline and retires this attempt's phase watchdog before resolving or starting the redirect/resume attempt, so a completed hop's timers never reach the next hop. Bytes on the wire are unchanged: same route, method, headers, body framing, resume-offset handling and redirect limit. Only this client's own sequencing and deadlines moved, so a protocol-2 peer parses exactly what it parsed before."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
