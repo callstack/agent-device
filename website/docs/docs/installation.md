@@ -61,7 +61,11 @@ Nightly builds publish `main` after its CI passes, at most once per UTC day:
 npm install -g agent-device@nightly
 ```
 
-A nightly install's update notice recommends a newer nightly when an update check finds one. To
+The `0.22` preview channel requires a separate activation and first successful publish. Once
+available, install it with `npm install -g agent-device@nightly-0.22`. If npm reports that the tag
+is missing, that channel has not published yet; use `@nightly` for `main` or `@latest` for stable.
+
+A nightly install's update notice follows the channel you installed, including `nightly-0.22`. To
 return to stable releases, install `agent-device@latest`.
 
 ## Without installing
