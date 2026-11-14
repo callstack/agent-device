@@ -18,6 +18,12 @@ import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agen
 import { uploadArtifact } from '../../upload-client.ts';
 import { type UploadStreamResponse, streamFileToHttpRequest } from '../../upload-stream.ts';
 
+// The adopted transfer policy values, pinned as literals rather than read back from the module under
+// test: a budget compared with itself stays green when the policy drifts, and these are the
+// `timeoutMs` values a caller reads in typed phase-expiry details.
+export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
+export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
+
 export const PREFLIGHT_REQUEST = 'POST /upload/preflight';
 export const LEGACY_UPLOAD_REQUEST = 'POST /upload';
 
