@@ -7,7 +7,7 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - One contract. A provider plugin is a factory that returns `{ apiVersion: 2, provider, credentials,
   connection?, setup(host) }`. `setup` returns `{ runtime, platformModule, dispose? }` or
   `{ webDriver, dispose? }`. A `{ webDriver }` result stays a data descriptor the host interprets.
-- A replay plugin uses the same version 2 factory with `kind: 'replay-backend'`, `backend`, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }` for a format backend. The proposed native amendment below adds a factory for backend `ad`. Provider and backend ids have separate claim sets in this registry. A replay plugin registers no provider runtime.
+- A replay plugin uses the same version 2 factory with `kind: 'replay-backend'`, `backend`, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }` for a format backend. Provider and backend ids have separate claim sets in this registry. A replay plugin registers no provider runtime.
 - One registry. Composition selects built-in, store, or embedder sources. Built-in providers use the
   same shape as an installed plugin, and one function validates what every factory returns.
 - Plugins import only types from agent-device. The type-only contract is `agent-device/plugins`;
