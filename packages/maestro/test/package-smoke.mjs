@@ -1,7 +1,8 @@
+import { runCmdSync } from '@agent-device/host-kit/command';
 import http from 'node:http';
 import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,13 +11,12 @@ import { test } from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 function run(command, args, cwd, env = process.env) {
-  return execFileSync(command, args, {
+  return runCmdSync(command, args, {
     cwd,
     env,
-    encoding: 'utf8',
-    timeout: 120_000,
+    timeoutMs: 120_000,
     maxBuffer: 16 * 1024 * 1024,
-  });
+  }).stdout;
 }
 function files(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -160,7 +160,7 @@ test('packed core excludes the engine and the managed plugin works without works
 
 async function assertPackagedRunScriptChildren(plugin, scratch) {
   const alias = path.join(scratch, 'plugin-alias');
-  fs.symlinkSync(plugin, alias, 'dir');
+  fs.symlinkSync(plugin, alias, process.platform === 'win32' ? 'junction' : 'dir');
   const server = http.createServer((_request, response) =>
     response.end('x'.repeat(2 * 1024 * 1024)),
   );

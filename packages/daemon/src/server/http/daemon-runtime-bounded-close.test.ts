@@ -260,22 +260,42 @@ test('a clean close disposes the state composition declared in the entered handl
   expect(disposeState).toHaveBeenCalledOnce();
 });
 
-test('a failed lazy backend still retains cleanup ownership when disposal is pending', async () => {
+test('only registered cleanup owners stay pending after a lazy backend failure', async () => {
   vi.useFakeTimers();
   try {
-    const close = createPluginClose({
+    const inventory: import('@agent-device/contracts/plugin-inventory').PluginInventoryEntry[] = [
+      {
+        backend: 'maestro',
+        source: 'store',
+        state: 'active',
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        backend: 'maestro',
+        source: 'embedder',
+        state: 'failed',
+        error: { code: 'INVALID_ARGS', message: 'duplicate', reason: 'duplicate_replay_backend' },
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        backend: 'rejected',
+        source: 'store',
+        state: 'failed',
+        error: { code: 'COMMAND_FAILED', message: 'setup failed', reason: 'plugin_setup_failed' },
+        credentials: { variables: [], byBackend: {} },
+      },
+    ];
+    const owner = createPluginClose({
       close: () => new Promise(() => {}),
       timeoutMs: 50,
-      inventory: [
-        {
-          backend: 'maestro',
-          source: 'store',
-          state: 'failed',
-          error: { code: 'COMMAND_FAILED', message: 'load failed', reason: 'plugin_load_failed' },
-          credentials: { variables: [], byBackend: {} },
-        },
-      ],
-    }).close();
+      inventory,
+    });
+    inventory[0] = {
+      ...inventory[0]!,
+      state: 'failed',
+      error: { code: 'COMMAND_FAILED', message: 'load failed', reason: 'plugin_load_failed' },
+    };
+    const close = owner.close();
     await vi.advanceTimersByTimeAsync(50);
     expect(await close).toEqual({ disposed: [], failed: [], pending: ['replay-backend:maestro'] });
   } finally {

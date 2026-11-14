@@ -1,3 +1,7 @@
+import {
+  commandHostEnvironment,
+  withCommandExecutorOverride,
+} from '@agent-device/host-kit/command';
 import { expect, test, vi } from 'vitest';
 import { invokeMaestroPublicOperation } from '../daemon-runtime-port-support.ts';
 import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
@@ -122,4 +126,18 @@ test('preserves diagnostic metadata carried inside daemon error details', async 
     code: 'COMMAND_FAILED',
     details: { hint: 'Enable developer tools.', diagnosticId: 'diag-1' },
   });
+});
+
+test('the runtime command adapter enters the supplied host scope', async () => {
+  const envelope = makeRuntimeEnvelope();
+  const host = { ...envelope.host, env: { ...envelope.host.env, DEVELOPER_DIR: '/fixture/Xcode' } };
+  await withCommandExecutorOverride(
+    async () => {
+      expect(commandHostEnvironment().env.DEVELOPER_DIR).toBe('/fixture/Xcode');
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+    async () => {
+      await envelope.runCommand({ executable: 'fixture', args: [], host });
+    },
+  );
 });

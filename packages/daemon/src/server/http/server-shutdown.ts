@@ -152,7 +152,7 @@ export type PluginClose = Readonly<{
 /**
  * The daemon's one plugin cleanup: the registry closes each plugin (runtime shutdown, then dispose)
  * and answers with a per-plugin outcome. Bounded, because one plugin that never finishes must not
- * hold the whole close: past the budget every active plugin is reported pending while its cleanup
+ * hold the whole close: past the budget every registered plugin is reported pending while its cleanup
  * keeps running.
  */
 export function createPluginClose(params: {
@@ -161,12 +161,9 @@ export function createPluginClose(params: {
   timeoutMs?: number;
 }): PluginClose {
   let closing: Promise<ShutdownReport['plugins']> | undefined;
-  const activePlugins = () =>
-    params.inventory.flatMap((entry) =>
-      entry.state === 'active' || entry.backend !== undefined
-        ? [{ provider: entry.provider, backend: entry.backend }]
-        : [],
-    );
+  const cleanupOwners = params.inventory.flatMap((entry) =>
+    entry.state === 'active' ? [{ provider: entry.provider, backend: entry.backend }] : [],
+  );
   return {
     close: () =>
       (closing ??= (async () => {
@@ -178,7 +175,7 @@ export function createPluginClose(params: {
           return {
             disposed: [],
             failed: [],
-            pending: activePlugins().map(
+            pending: cleanupOwners.map(
               ({ provider, backend }) => provider ?? `replay-backend:${backend}`,
             ),
           };
@@ -187,7 +184,7 @@ export function createPluginClose(params: {
           const error = normalizeError(outcome.error);
           return {
             disposed: [],
-            failed: activePlugins().map((identity) => ({
+            failed: cleanupOwners.map((identity) => ({
               ...identity,
               step: 'shutdown' as const,
               error,

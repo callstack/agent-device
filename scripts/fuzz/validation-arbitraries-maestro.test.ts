@@ -7,7 +7,7 @@
 // than by the YAML tokenizer.
 
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SUPPORTED_MAESTRO_COMMAND_NAMES } from '../../packages/maestro/src/internal/program-ir-command-parser.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
@@ -18,6 +18,13 @@ const SAMPLE_SIZE = 3_000;
 const SEED = 1;
 
 const target = getFuzzTarget('maestro-validation');
+let dispose: (() => Promise<void>) | undefined;
+beforeAll(async () => {
+  dispose = await target.prepare?.();
+});
+afterAll(async () => {
+  await dispose?.();
+});
 const sample = fc.sample(maestroValidationArb, { numRuns: SAMPLE_SIZE, seed: SEED });
 
 describeGeneratorContract({

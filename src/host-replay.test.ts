@@ -136,12 +136,13 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
   const firstPlugin = await trackedPlugin();
   const secondPlugin = await trackedPlugin();
   const first = await startAgentDevice({ ...f, plugins: [firstPlugin.plugin] });
-  const second = await startAgentDevice({
-    ...f,
-    stateDir: path.join(f.root, 'second'),
-    plugins: [secondPlugin.plugin],
-  });
+  let second: Awaited<ReturnType<typeof startAgentDevice>> | undefined;
   try {
+    second = await startAgentDevice({
+      ...f,
+      stateDir: path.join(f.root, 'second'),
+      plugins: [secondPlugin.plugin],
+    });
     await Promise.all(
       [first, second].map(async ({ client }) => {
         await expect(
@@ -165,7 +166,7 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
     expect(secondPlugin.calls.dispose).toBe(0);
   } finally {
     await first.close();
-    await second.close();
+    await second?.close();
   }
   expect(secondPlugin.calls.dispose).toBe(1);
 });

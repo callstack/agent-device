@@ -50,6 +50,8 @@ export type FuzzFailure = {
 
 export type FuzzTarget = {
   name: FuzzTargetName;
+  /** Opens optional parser services for this target and returns their cleanup. */
+  prepare?: () => Promise<() => Promise<void>>;
   /** Human-readable description used in failure reports. */
   description: string;
   /** Runs the parser on one case; may throw. */

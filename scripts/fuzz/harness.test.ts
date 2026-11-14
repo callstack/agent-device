@@ -246,3 +246,14 @@ describe('artifact promotion', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+it.each([['--help'], ['--target', 'selector', '--iterations', '1']])(
+  'fuzz entrypoint %j does not require an installed Maestro plugin',
+  (...args) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-no-plugin-'));
+    const result = runHarness([...args, '--artifact-dir', dir], {
+      AGENT_DEVICE_HOME: path.join(dir, 'empty-home'),
+    });
+    expect(result.status).toBe(0);
+  },
+);

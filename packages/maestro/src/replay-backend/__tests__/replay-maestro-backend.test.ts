@@ -10,8 +10,12 @@ const unusedHost: ReplayBackendHost = {
   runCommand: async () => {
     throw new Error('Unexpected subprocess');
   },
-  emitDiagnostic: () => {},
-  registerSensitiveValue: () => {},
+  emitDiagnostic: () => {
+    throw new Error('host unused');
+  },
+  registerSensitiveValue: () => {
+    throw new Error('host unused');
+  },
   appendTraceEvent: () => {
     throw new Error('host unused');
   },

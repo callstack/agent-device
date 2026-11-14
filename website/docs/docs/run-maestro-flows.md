@@ -12,7 +12,7 @@ For recording and replaying native `.ad` scripts, see [Replay and E2E testing](/
 
 ## Install Maestro support
 
-In agent-device 0.22, Maestro flows and export require the optional `@agent-device/maestro` plugin:
+The 0.22 plugin is private and not yet available from npm. After publication, Maestro flows and export require the optional `@agent-device/maestro` plugin:
 
 ```bash
 agent-device plugins add @agent-device/maestro
@@ -20,7 +20,7 @@ agent-device plugins add @agent-device/maestro
 
 Install it on the client machine for source collection and export. When you use a remote daemon, install it on that daemon's host too. An embedded daemon uses the plugins supplied by its host application. Close your sessions and restart the daemon after changing its plugins, then retry your original command with all its arguments. Your flow syntax stays the same.
 
-If the plugin is missing, the error includes `plugin-not-installed` and the installation command. A selected package that fails loading or setup reports its own failure; agent-device does not install a replacement or switch engines. Use `agent-device plugins list --json` and `agent-device daemon status --json` to compare installed plugins with the running daemon's plugin set.
+If the plugin is missing, the error includes `plugin-not-installed` and the installation command. A selected package that fails loading or setup reports its own failure; agent-device does not install a replacement or switch engines. For a store-backed daemon, run `agent-device plugins list --json` on the relevant host. Run `agent-device daemon status --json --state-dir <path>` on the daemon host with its state directory. That command reads a local record; it cannot inspect a remote daemon from your client machine.
 
 ## Run a Maestro flow
 
