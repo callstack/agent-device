@@ -16,4 +16,4 @@ appId: com.callstack.agentdevicelab
       id: this-element-never-exists
     optional: true
     timeout: 1000
-- assertVisible: Agent Device Tester
+- assertVisible: Home
