@@ -3,10 +3,14 @@ import { test } from 'vitest';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
-function remoteRequest(input: Record<string, unknown>, flags: Record<string, unknown> = {}) {
+function remoteRequest(
+  input: Record<string, unknown>,
+  flags: Record<string, unknown> = {},
+  positionals: string[] = [],
+) {
   return {
     command: 'screenshot',
-    positionals: [],
+    positionals,
     flags,
     input,
     internal: { publicNetworkOnly: true },
@@ -15,7 +19,7 @@ function remoteRequest(input: Record<string, unknown>, flags: Record<string, unk
 
 test('a remote screenshot burst refuses with a typed reason before any device work', () => {
   try {
-    restrictRemoteHostInputs(remoteRequest({ count: 5, outPath: '/tmp/x.png' }));
+    restrictRemoteHostInputs(remoteRequest({}, { count: 5 }, ['/tmp/x.png']));
     assert.fail('a remote burst must refuse');
   } catch (error) {
     assert.equal((error as { code?: string }).code, 'INVALID_ARGS');
@@ -28,13 +32,13 @@ test('a remote screenshot burst refuses with a typed reason before any device wo
 
 test('a remote burst armed by a flags-level count refuses the same way', () => {
   assert.throws(
-    () => restrictRemoteHostInputs(remoteRequest({ outPath: '/tmp/x.png' }, { count: 2 })),
+    () => restrictRemoteHostInputs(remoteRequest({}, { count: 2 }, ['/tmp/x.png'])),
     /only the first frame would come back/,
   );
 });
 
 test('a remote single screenshot without count still passes the capture lane', () => {
-  const restricted = restrictRemoteHostInputs(remoteRequest({ outPath: '/tmp/x.png' }));
+  const restricted = restrictRemoteHostInputs(remoteRequest({}, {}, ['/tmp/x.png']));
   assert.equal((restricted.input as Record<string, unknown>).count, undefined);
   assert.equal(restricted.command, 'screenshot');
 });

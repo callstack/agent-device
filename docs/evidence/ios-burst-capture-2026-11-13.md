@@ -3,10 +3,10 @@
 Live evidence for #4291 at head `7f3741906` (the format-only commit after the
 burst fixes; the behavior this documents is unchanged since): the burst path
 (`--count`/`--interval-ms`) captured five frames of an animation on real
-simulator dispatch. The observed per-frame interval here runs about 520-710 ms
-— above the plan's 500 ms per-frame budget, because each frame also pays the
-capture round trip the budget's doc comment excludes; the budget bounds the
-admission wait per frame, not the full round trip. The screen was a page
+simulator dispatch. The gaps between the recorded `capturedAtMs` values run
+724-909 ms — above the plan's 500 ms per-frame budget, because each frame also
+pays the capture round trip the budget's doc comment excludes; the budget
+bounds the admission wait per frame, not the full round trip. The screen was a page
 served to Safari on the booted iPhone 17 Pro simulator
 (`C1C05FFF-29AD-40D8-94E5-D9CBB25EC6BB`, iOS 26.5) whose content updates every
 50 ms (a millisecond clock and a progress bar), so consecutive frames cannot
