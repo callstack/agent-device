@@ -73,6 +73,7 @@ export const perfCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Check frames, memory, or native profiles',
+    searchHint: 'performance fps profile',
     cliDetail:
       'Use perf frames for bounded frame-health evidence and perf memory sample for a compact process-memory reading. On iOS simulators and macOS, process sampling and captures target the resolved app executable and exclude other copies with the same name. Apple xctrace and Android Simpleperf/Perfetto captures keep raw artifacts on disk; report produces bounded agent-readable evidence. For React render performance, run agent-device react-devtools profile start before the interaction and react-devtools profile stop after it.',
     mcpDetail:

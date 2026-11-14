@@ -189,9 +189,11 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 | `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or on one more read after it or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
-0.05 s pause between captures plus each capture's own time, that agree for as long as the gap the swipe will be credited across: a contact
-allowance, one 0.1 s delay, and the slowest capture seen while settling. A slow host therefore
-settles for longer. The last sample of that run is the one the change is measured from, and the
+0.05 s pause between captures plus each capture's own time, that agree for the still span: a contact
+allowance, a 0.25 s margin, and the slowest capture seen while settling, about 0.55 s on a simulator.
+The margin keeps a screen that repaints itself about every 0.5 s from looking still, so its next
+repaint is not read as the swipe's effect; it does not depend on the 0.1 s wait before the sample
+after the swipe. A slow host therefore settles for longer. The last sample of that run is the one the change is measured from, and the
 swipe follows it at once:
 
 | Platform | Resolved before settling | Left in the gap | Contact allowance |
@@ -202,9 +204,9 @@ swipe follows it at once:
 On both, every tree and window read happens during that preparation, before the first sample.
 
 Settling samples for at most 2 s, plus the capture in flight. On a slow host the budget grows to the first capture, the still span, and one more pause and capture, so a still screen settles instead of always answering `BACK_SWIPE_UNVERIFIED`. A still screen usually settles after
-4 samples, about 0.45 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
+5 samples, about 0.6 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
 on one physical iPhone (iPhone 17 Pro, iOS 27.0.1;
-https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541) the still span is 0.9 s.
+https://github.com/callstack/agent-device/pull/4460#issuecomment-6828546541) the still span is 1.05 s.
 
 Only a change from the last sample to the sample taken 0.1 s after the swipe counts, and only when the time
 between those two does not exceed the time the screen had been still; otherwise the result is
@@ -252,11 +254,18 @@ Successful and failed responses use the same top-level envelope:
 {
   "ok": false,
   "error": {
-    "code": "UNSUPPORTED_OPERATION",
-    "message": "Unable to dismiss the iOS keyboard: the keyboard exposes no dismiss key (background taps are never attempted)"
+    "code": "KEYBOARD_DISMISS_UNAVAILABLE",
+    "message": "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)"
   }
 }
 ```
+
+The example is a `keyboard dismiss` the keyboard would not come down for; a refusal that can name a
+next step also carries `hint`, omitted here. A keyboard that stayed up answers one of two codes:
+`KEYBOARD_DISMISS_UNAVAILABLE` when it found no dismiss control and so sent nothing, or
+`UNSUPPORTED_OPERATION` when a dismiss control was tapped, or the tvOS remote's Menu press was sent,
+and the keyboard stayed visible. The host reports both under `UNSUPPORTED_OPERATION` and publishes the
+first one's `details.reason`.
 
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
@@ -310,7 +319,9 @@ declaration for the current rules.
   the main-thread watchdog in [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift). The daemon
   classifies a runner-reported code in `classifyRunnerReportedError`
   ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
-  arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, and other codes pass through as typed
-  codes. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
+  arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, unless their row names the wire code the
+  caller already reads that family under. Other codes pass through as typed codes. A code with a
+  `RUNNER_REPORTED_ERROR_REASONS` row also publishes `details.reason`, so a caller never reads the
+  refusal off `message`. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
   `RUNNER_ERROR_RULES` and the helpers beside it
   ([`runner-error-classification.ts`](../../packages/apple-runner/src/runner-error-classification.ts)).

@@ -132,7 +132,7 @@ test('waits for Android readiness before inspecting an install artifact', async 
   expect(order).toEqual(['ready', 'prepare']);
 });
 
-test('preserves reinstall partial-failure ordering and whole-operation cache invalidation', async () => {
+test('keeps the installed app when reinstall preparation fails and still invalidates the cache', async () => {
   const order: string[] = [];
   const cacheCalls: DeviceInfo[] = [];
   const withInvalidatedAppResolutionCache = async <Result>(
@@ -155,11 +155,8 @@ test('preserves reinstall partial-failure ordering and whole-operation cache inv
     },
     prepareArtifact: async () => {
       order.push('prepare');
-      throw new Error('replacement artifact is invalid');
+      throw new AppError('INVALID_ARGS', 'replacement artifact is invalid');
     },
-  });
-  native.uninstallAndroidPackage.mockImplementationOnce(async () => {
-    order.push('uninstall');
   });
 
   await expect(
@@ -172,11 +169,59 @@ test('preserves reinstall partial-failure ordering and whole-operation cache inv
       appPath: '/tmp/replacement.apk',
       replaceExisting: true,
     }),
-  ).rejects.toThrow('replacement artifact is invalid');
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    message: 'replacement artifact is invalid',
+  });
 
-  expect(order).toEqual(['cache-before', 'resolve', 'uninstall', 'prepare', 'cache-after']);
+  expect(order).toEqual(['cache-before', 'resolve', 'prepare', 'cache-after']);
   expect(cacheCalls).toEqual([device]);
+  expect(native.uninstallAndroidPackage).not.toHaveBeenCalled();
   expect(native.installAndroidArtifact).not.toHaveBeenCalled();
+});
+
+test('does not uninstall when reinstall is cancelled after preparation', async () => {
+  const controller = new AbortController();
+  const cleanup = vi.fn(async () => {});
+  const host = hostFixture({
+    prepareArtifact: async () => {
+      controller.abort(new Error('cancelled'));
+      return { installablePath: '/tmp/new.apk', cleanup };
+    },
+  });
+
+  await expect(
+    createAndroidAppDeploymentOperations({ host, device, signal: controller.signal }).deployApp?.({
+      app: 'com.example.app',
+      appPath: '/tmp/new.apk',
+      replaceExisting: true,
+    }),
+  ).rejects.toThrow('cancelled');
+
+  expect(native.uninstallAndroidPackage).not.toHaveBeenCalled();
+  expect(native.installAndroidArtifact).not.toHaveBeenCalled();
+  expect(cleanup).toHaveBeenCalledOnce();
+});
+
+test('cleans the prepared artifact when the reinstall uninstall fails', async () => {
+  const cleanup = vi.fn(async () => {});
+  const host = hostFixture({
+    prepareArtifact: async () => ({ installablePath: '/tmp/new.apk', cleanup }),
+  });
+  native.uninstallAndroidPackage.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'adb uninstall failed'),
+  );
+
+  await expect(
+    createAndroidAppDeploymentOperations({
+      host,
+      device,
+      signal: new AbortController().signal,
+    }).deployApp?.({ app: 'com.example.app', appPath: '/tmp/new.apk', replaceExisting: true }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'adb uninstall failed' });
+
+  expect(native.installAndroidArtifact).not.toHaveBeenCalled();
+  expect(cleanup).toHaveBeenCalledOnce();
 });
 
 test('keeps ordinary Android install successful when identity is unavailable', async () => {
@@ -262,7 +307,7 @@ test('uninstall resolves, removes and invalidates on the device readiness return
 });
 
 test.each([false, true])(
-  'reinstall removes data before the replacement is materialized with a hosted installer: %s',
+  'reinstall materializes the replacement before removing data with a hosted installer: %s',
   async (hosted) => {
     const events: string[] = [];
     const signal = new AbortController().signal;
@@ -312,8 +357,8 @@ test.each([false, true])(
     ).toEqual({ packageName: 'com.example.app', launchTarget: 'com.example.app' });
     expect(events).toEqual([
       'invalidate-before',
-      'uninstall',
       'materialize',
+      'uninstall',
       'install',
       'cleanup',
       'invalidate-after',

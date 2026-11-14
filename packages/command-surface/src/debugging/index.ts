@@ -47,6 +47,7 @@ export const debugCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Symbolicate Apple crash artifacts',
+    searchHint: 'report ips',
   },
   metadata: debugCommandMetadata,
   run: (client, input) => client.debug.symbols(input),

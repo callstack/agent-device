@@ -300,6 +300,12 @@ export type RawSnapshotNode = {
    * filled or hinted field) is carried here for consumers that want the accessible name.
    */
   contentDescription?: string;
+  /**
+   * Android view text when it is not already the `label`: the empty string on a view that has
+   * a content description and no text, where the description is the label. Absent otherwise,
+   * so `text ?? label` is the text the view shows.
+   */
+  text?: string;
   identifier?: string;
   rect?: Rect;
   enabled?: boolean;

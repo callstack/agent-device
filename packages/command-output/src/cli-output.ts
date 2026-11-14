@@ -76,6 +76,7 @@ export async function dispatchCliOutput(
     progress: params.progress,
     env: params.env,
     stderrIsTTY: params.stderrIsTTY,
+    reader: params.reader,
   });
   if (output === undefined) return undefined;
   return routeResponseWarnings(

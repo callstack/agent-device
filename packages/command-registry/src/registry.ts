@@ -443,7 +443,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       ? { ownerFiles: ['packages/command-surface/src/capture/snapshot.ts'] as const }
       : {}),
     catalog: { group: 'public' },
-    frameworkTier: 'core',
+    frameworkTier: 'loop',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
     daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
@@ -809,7 +809,7 @@ export function resolveCommandRecordsSessionAction(command: string | undefined):
  * `undefined` for a command that never declares one. A tier is declared iff
  * `catalog.group === 'public'`; that rule is a runtime pin, not a type rule —
  * `src/__tests__/command-descriptor-parity.test.ts` asserts it and the exact
- * `'core'` tool set, so a new public command cannot join a framework adapter's
+ * `'loop'` and `'core'` tool sets, so a new public command cannot join a framework adapter's
  * default set silently. Framework adapters (`agent-device/ai-sdk`,
  * `@agent-device/eve`) read this to build their default tool set instead of
  * hand-listing tool names.

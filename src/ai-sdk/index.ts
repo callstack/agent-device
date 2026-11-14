@@ -101,7 +101,8 @@ export async function createAgentDeviceTools(
 
   const tools: ToolSet = {};
   for (const definition of listCommandTools({ outputSchemas: true })) {
-    if (set === 'core' && resolveCommandFrameworkTier(definition.name) !== 'core') continue;
+    const tier = resolveCommandFrameworkTier(definition.name);
+    if (set === 'core' && tier !== 'core' && tier !== 'loop') continue;
 
     tools[definition.name] = tool({
       description: definition.description,

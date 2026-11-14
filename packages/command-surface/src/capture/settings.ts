@@ -101,6 +101,7 @@ export const settingsCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Change OS settings and app permissions',
+    searchHint: 'wifi airplane location dark mode permission grant revoke',
     cliDetail: [
       'A bare readable setting reads the value the target holds. A target that does not serve a setting refuses it with UNSUPPORTED_OPERATION before anything changes.',
       '',

@@ -6,6 +6,7 @@ import {
 } from '../commands/schema/cli-help.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
+import { resolvePostActionObservationSupport } from '@agent-device/command-registry/post-action-observation';
 import type { ToolResult } from './command-tools.ts';
 
 /**
@@ -13,17 +14,25 @@ import type { ToolResult } from './command-tools.ts';
  * at session start (Claude Code, Codex CLI). It is paid every session and Claude Code
  * truncates it at 2 KB, so it holds only what changes the first few calls: start with
  * `open`, act → settled diff → verify → `close`, ref fidelity, sparse-AX recovery, follow
- * error hints. Everything situational lives behind the `help` tool.
+ * error hints. Everything situational lives behind the `help` tool. Per-tool usage lives in each
+ * tool's description, which is the command's own help text.
  */
 export const MCP_SERVER_INSTRUCTIONS = `agent-device drives iOS, Android, tvOS, Android TV, macOS, Linux, and web apps. Tools mirror CLI commands of the same name; CLI flags are camelCase properties (--settle -> settle: true). If your client defers tool schemas, load a tool's schema before its first call.
 
 Start: known app -> call open {app, foreground: true} at once; do not probe with devices, apps, appstate, snapshot, or screenshot first. open returns the initial interactive snapshot with @refs. Unknown app id: devices, then apps, then open the discovered id; never invent ids. Existing session: continue from its state, do not reopen.
 
-Loop: press/click/fill/longpress/hover/scroll/back with settle: true; the response is the settled UI diff, continue from it. To reach an off-screen target, scroll {direction, until: "<selector>"} scrolls until it is on screen in one call, and direction "bottom" runs to the end of the content; repeated bare scrolls are the slow way to find something. snapshot {interactiveOnly: true} only when the diff lacks the next target or did not settle. Verify with wait {kind: "text", text}, wait {selector}, wait {absent: selector}, is, or get; a bare screenshot is not verification. find acts and clicks by default; to check only, pass action: "exists". End with close.
+Loop: ${settleToolNames().join('/')} with settle: true; the response is the settled UI diff, continue from it. A known multi-step walk is one batch call: steps [{command, input}]. To reach an off-screen target, scroll {direction, until: "<selector>"} scrolls until it is on screen in one call, and direction "bottom" runs to the end of the content; repeated bare scrolls are the slow way to find something. snapshot {interactiveOnly: true} only when the diff lacks the next target or did not settle. Verify with wait {kind: "text", text}, wait {selector}, wait {absent: selector}, is, or get; a bare screenshot is not verification. find acts and clicks by default; to check only, pass action: "exists". End with close.
 
 Targets are top-level arguments: press {ref: "@e12"}, click {selector: "id=submit"}, press {x, y}. Copy refs byte-for-byte (@e12, @e12~s4; keep @ and any ~sN). Refs go stale after mutations. Prefer refs, then id/label/role selectors; coordinates last. On a sparse/AX-unavailable warning its refs and selectors are invalid: screenshot, read the image, press {x, y}, then snapshot the changed screen.
 
 Errors carry hints; follow them instead of re-planning. Call help only for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or an unclear command shape, never at startup.`;
+
+/** The tools that take settle, from the command registry's post-action observation trait. */
+function settleToolNames(): string[] {
+  return listMcpExposedCommandNames().filter(
+    (name) => resolvePostActionObservationSupport(name) !== undefined,
+  );
+}
 
 export const HELP_TOOL_NAME = 'help';
 

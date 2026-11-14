@@ -65,10 +65,10 @@ const FIND_ACTION_VALUES = [
 
 const interactionCommandDescriptions = {
   click:
-    "Activate a UI target by snapshot ref, selector, or coordinates. This can change app state. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was.",
+    "Activate a UI target by snapshot ref, selector, or coordinates. This can change app state. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was. With settle, continue from the returned diff. Copy refs exactly, including any ~sN suffix.",
   press:
     "Short-press a UI target by snapshot ref, selector, or coordinates. Success reports dispatch only; settle returns the resulting UI diff and verify returns cheap post-action evidence. A ref or selector target is re-checked for motion before dispatch when the session's previous action just animated the screen, and is dispatched at its resting position; one that has not stopped refuses with target_still_moving rather than acting where it was.",
-  fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. An empty text clears the field. Unconfirmed evidence does not establish the resulting value or screen. The recordAs option keeps sensitive text out of a recorded replay while sending it to the live app.',
+  fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. An empty text clears the field. Unconfirmed evidence does not establish the resulting value or screen. The recordAs option keeps sensitive text out of a recorded replay while sending it to the live app. To append instead of replacing, use type.',
   longpress:
     'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. The durationMs input overrides the default hold duration.',
   hover:

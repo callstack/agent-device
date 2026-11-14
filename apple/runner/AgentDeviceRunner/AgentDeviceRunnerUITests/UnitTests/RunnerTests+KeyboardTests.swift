@@ -139,6 +139,21 @@ extension RunnerTests {
 
 #endif
 
+  /// The two ways a visible keyboard stays up answer different questions, so they must not share one
+  /// code (#1606). Finding no dismiss control sent nothing and is the runner's own refusal; a control
+  /// that was tapped and left the keys up did dispatch and keeps the generic code. The host reads the
+  /// first code's literal to publish `details.reason`, so it is pinned here as the wire value.
+  func testKeyboardDismissRefusalNamesItsOwnCodeOnlyWhenNothingWasDispatched() {
+    let notDispatched = keyboardDismissRefusal(dispatchedDismissal: false)
+    XCTAssertEqual(notDispatched.code, "KEYBOARD_DISMISS_UNAVAILABLE")
+    XCTAssertNotNil(notDispatched.hint)
+
+    let dispatched = keyboardDismissRefusal(dispatchedDismissal: true)
+    XCTAssertEqual(dispatched.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNotNil(dispatched.hint)
+    XCTAssertNotEqual(dispatched.code, notDispatched.code)
+  }
+
   func testKeyboardBandFactPublishesAbsenceWhenTheCompleteCaptureHasNoKeyboard() {
     let fact = runnerKeyboardBandFact(exists: false, frame: .zero)
     XCTAssertEqual(fact, .absent)

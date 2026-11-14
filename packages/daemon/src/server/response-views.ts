@@ -117,6 +117,7 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'label',
   'value',
   'contentDescription',
+  'text',
   'identifier',
   'enabled',
   'selected',

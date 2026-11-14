@@ -385,7 +385,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
       ? { ownerFiles: ['packages/command-surface/src/management/app.ts'] as const }
       : {}),
     catalog: { group: 'public' },
-    frameworkTier: 'core',
+    frameworkTier: 'loop',
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: {

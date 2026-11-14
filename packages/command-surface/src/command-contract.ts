@@ -33,6 +33,8 @@ export type CommandEffect = 'read' | 'write' | 'destructive';
 export type CommandMetadata<Name extends string, Input> = CommandInputMetadata<Name, Input> & {
   title: string;
   effect: CommandEffect;
+  /** Deferred-tool search keywords from the command text; see `CommandText.searchHint`. */
+  searchHint?: string;
 };
 
 export type CommandInputMetadata<Name extends string, Input> = {

@@ -158,6 +158,7 @@ export const logsCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Manage session app logs',
+    searchHint: 'console output device',
   },
   metadata: logsCommandMetadata,
   run: (client, input) => client.observability.logs(input),
@@ -171,6 +172,7 @@ export const eventsCommandFacet = defineCommandFacet({
   effect: 'read',
   text: {
     summary: 'Read session event timeline',
+    searchHint: 'history log',
   },
   metadata: eventsCommandMetadata,
   run: (client, input) => client.observability.events(input),
@@ -184,6 +186,7 @@ export const networkCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Inspect HTTP(S) traffic from session logs',
+    searchHint: 'requests api calls',
   },
   metadata: networkCommandMetadata,
   run: (client, input) => client.observability.network(input),
@@ -197,6 +200,7 @@ export const audioCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Probe audio levels',
+    searchHint: 'sound volume level',
   },
   metadata: audioCommandMetadata,
   run: (client, input) => client.observability.audio(input),

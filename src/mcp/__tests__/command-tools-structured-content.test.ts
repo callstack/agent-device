@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCommandToolExecutor } from '../command-tools.ts';
@@ -28,7 +28,8 @@ test('the default executor returns text only, from typed and untyped tools', asy
 
   const press = await executor.execute('press', { ref: '@e2' });
   const snapshot = await executor.execute('snapshot', {});
-  const json = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'full');
+  const json = await executor.execute('snapshot', {});
 
   assert.equal('structuredContent' in press, false);
   assert.equal(press.content[0]?.text, 'Tapped @e2 (10, 20)');
@@ -50,11 +51,12 @@ test('the default executor returns a failed call as error text only', async () =
   assert.match(result.content[0]?.text ?? '', /^Error \(COMMAND_FAILED\): snapshot failed/);
 });
 
-test('the default executor renders includeCost as JSON text, because the cost rides only on the data', async () => {
+test('the default executor renders the cost setting as JSON text, because the cost rides only on the data', async () => {
   const waitResult = { waitedMs: 42, cost: { wallClockMs: 42, runnerRoundTrips: 0 } };
   const executor = executorReturning(undefined, () => waitResult);
 
-  const result = await executor.execute('wait', { includeCost: true });
+  vi.stubEnv('AGENT_DEVICE_COST', '1');
+  const result = await executor.execute('wait', {});
 
   assert.equal('structuredContent' in result, false);
   assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), waitResult);
@@ -67,8 +69,10 @@ test('declared returns structuredContent for typed tools, and for untyped tools 
   assert.equal(compact.structuredContent, undefined);
   assert.match(compact.content[0]?.text ?? '', /@e2 \[button\] "Save"/);
 
-  const json = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'full');
+  const json = await executor.execute('snapshot', {});
   assert.deepEqual(json.structuredContent, snapshotResult);
+  vi.unstubAllEnvs();
 
   const press = await executor.execute('press', { ref: '@e2' });
   assert.deepEqual(press.structuredContent, { message: 'Tapped @e2 (10, 20)' });
@@ -83,15 +87,19 @@ test('a data host gets structuredContent from untyped tools by default', async (
 });
 
 test.each([
-  ['a non-default responseLevel', { responseLevel: 'digest' }],
-  ['includeCost', { includeCost: true }],
-])('declared returns structuredContent from an untyped tool with %s', async (_case, opt) => {
-  const executor = executorReturning('declared', () => ({ path: '/tmp/shot.png' }));
+  ['a non-default response level', ['AGENT_DEVICE_RESPONSE_LEVEL', 'digest']],
+  ['the cost setting', ['AGENT_DEVICE_COST', '1']],
+] as const)(
+  'declared returns structuredContent from an untyped tool with %s',
+  async (_case, [name, value]) => {
+    const executor = executorReturning('declared', () => ({ path: '/tmp/shot.png' }));
 
-  const result = await executor.execute('screenshot', opt);
+    vi.stubEnv(name, value);
+    const result = await executor.execute('screenshot', {});
 
-  assert.deepEqual(result.structuredContent, { path: '/tmp/shot.png' });
-});
+    assert.deepEqual(result.structuredContent, { path: '/tmp/shot.png' });
+  },
+);
 
 test('declared returns a failed untyped tool error in structuredContent', async () => {
   const executor = executorReturning('declared', () => {
@@ -125,7 +133,8 @@ test('MCP command tool executor renders JSON text when requested', async () => {
     },
   });
 
-  const result = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'full');
+  const result = await executor.execute('snapshot', {});
 
   // Compact: JSON text is what a text-only client shows the model.
   assert.equal(
@@ -134,7 +143,7 @@ test('MCP command tool executor renders JSON text when requested', async () => {
   );
 });
 
-test('default MCP errors retain possible dispatch, observe-first recovery and the local log path', async () => {
+test('default MCP errors retain possible dispatch and observe-first recovery, and keep the log path the default step reads', async () => {
   const executor = executorReturning(undefined, () => {
     const error = new AppError('COMMAND_FAILED', 'press reply was lost', {
       dispatched: 'unknown',
@@ -151,5 +160,69 @@ test('default MCP errors retain possible dispatch, observe-first recovery and th
   const text = result.content[0]?.text ?? '';
   assert.match(text, /May have reached the device\./);
   assert.match(text, /Run snapshot to check the screen before you retry\./);
+  assert.match(text, /^Error \(COMMAND_FAILED, runner_reply_lost\): press reply was lost\./);
+  // The default recovery step reads the log, so the path stays for that step.
   assert.match(text, /Log: \/tmp\/agent-device\/press\.log/);
+});
+
+test('MCP errors keep the log path when a producer hint sends the reader to the log', async () => {
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('COMMAND_FAILED', 'press still failed after a runner restart', {
+      reason: 'runner_recycle_budget_exhausted',
+      hint: 'Check the runner log for the underlying failure before retrying.',
+      logPath: '/tmp/agent-device/runner.log',
+    });
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  assert.equal(result.isError, true);
+  assert.equal(
+    result.content[0]?.text,
+    'Error (COMMAND_FAILED, runner_recycle_budget_exhausted): press still failed after a runner restart. Next: Check the runner log for the underlying failure before retrying.\nLog: /tmp/agent-device/runner.log',
+  );
+});
+
+test('MCP errors keep the log path whatever the recovery step', async () => {
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('INVALID_ARGS', 'missing ref', { logPath: '/tmp/agent-device/press.log' });
+  });
+
+  const result = await executor.execute('press', {});
+
+  assert.equal(result.isError, true);
+  const text = result.content[0]?.text ?? '';
+  assert.match(text, /^Error \(INVALID_ARGS\): missing ref\./);
+  assert.match(text, /\nLog: \/tmp\/agent-device\/press\.log$/);
+});
+
+test('MCP errors keep the full message when the summary cuts it', async () => {
+  const long = `runner reply was lost ${'x'.repeat(320)} end`;
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('COMMAND_FAILED', long, {
+      hint: 'Run snapshot, then press the target again.',
+    });
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  const text = result.content[0]?.text ?? '';
+  assert.match(text.split('\n')[0] ?? '', /… Next: Run snapshot/);
+  assert.ok(text.includes(`\nMessage: ${long}`), 'the cut summary is followed by the full message');
+});
+
+test('MCP errors keep a multi-line typed reason on the summary line', async () => {
+  const executor = executorReturning(undefined, () => {
+    throw new AppError('COMMAND_FAILED', 'press failed', {
+      reason: 'runner\n  reply lost',
+      hint: 'Run snapshot, then press the target again.',
+    });
+  });
+
+  const result = await executor.execute('press', { ref: '@e2' });
+
+  assert.match(
+    result.content[0]?.text ?? '',
+    /^Error \(COMMAND_FAILED, runner reply lost\): press failed\./,
+  );
 });

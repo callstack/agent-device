@@ -192,6 +192,8 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
     replyFailure('SYNTHESIZED_GESTURE_NOT_DISPATCHED'),
   'ios-runner.reply.SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN': () =>
     replyFailure('SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN'),
+  'ios-runner.reply.KEYBOARD_DISMISS_UNAVAILABLE': () =>
+    replyFailure('KEYBOARD_DISMISS_UNAVAILABLE'),
   'ios-runner.reply.unlisted-code': () => replyFailure('XCTEST_RECORDED_FAILURE'),
   'ios-runner.series.later-chunk-refused': pressSeriesRefusedOnSecondChunk,
   'ios-runner.series.invalid-step-before-send': pressSeriesWithInvalidStep,

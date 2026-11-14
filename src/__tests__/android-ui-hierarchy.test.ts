@@ -136,6 +136,26 @@ test('an Android content description beside text is carried, and one that is the
   assert.equal(result.nodes[3]?.contentDescription, undefined);
 });
 
+test('an Android view labelled by its content description carries an empty text, and one labelled by its text carries none', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.TextView" package="com.example.app" text="" content-desc="saved_task" bounds="[0,0][390,44]" visible-to-user="true"/>
+  <node class="android.widget.TextView" package="com.example.app" text="saved_task" bounds="[0,60][390,104]" visible-to-user="true"/>
+  <node class="android.widget.TextView" package="com.example.app" text="Release checklist" content-desc="saved_task" bounds="[0,120][390,164]" visible-to-user="true"/>
+  <node class="android.widget.TextView" package="com.example.app" text="" resource-id="empty" bounds="[0,180][390,224]" visible-to-user="true"/>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+
+  assert.equal(result.nodes[0]?.label, 'saved_task');
+  assert.equal(result.nodes[0]?.text, '');
+  assert.equal(result.nodes[1]?.label, 'saved_task');
+  assert.equal(result.nodes[1]?.text, undefined);
+  assert.equal(result.nodes[2]?.label, 'Release checklist');
+  assert.equal(result.nodes[2]?.text, undefined);
+  assert.equal(result.nodes[3]?.label, undefined);
+  assert.equal(result.nodes[3]?.text, undefined);
+});
+
 test('interactive Android snapshots keep a fixed sibling outside filtered scroll content (#1377)', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][400,800]" visible-to-user="true">

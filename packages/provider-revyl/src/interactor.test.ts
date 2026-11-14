@@ -454,6 +454,20 @@ test('the iOS snapshot reads the AX node tree Revyl answers with, in the root fr
   assert.equal(acquisition.nodes[0]?.type, 'Application');
 });
 
+test('an iOS root frame that is exactly the health screen establishes the screen origin', async () => {
+  const { interactor } = await liveInteractor('ios', {
+    screen: { width: 440, height: 956 },
+    hierarchy: REVYL_IOS_HIERARCHY,
+  });
+  const result = await interactor.snapshot({});
+  if (!('stage' in result) || result.stage !== 'acquired')
+    throw new Error('Expected an iOS acquisition');
+  assert.deepEqual(result.acquisition.viewport, {
+    kind: 'reported',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+});
+
 for (const [name, hierarchy] of [
   ['XML', '<AppiumAUT><XCUIElementTypeApplication/></AppiumAUT>'],
   ['a null node', '[null]'],

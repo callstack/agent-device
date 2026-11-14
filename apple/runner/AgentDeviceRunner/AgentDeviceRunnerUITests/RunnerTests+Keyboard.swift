@@ -31,6 +31,18 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
+/// One `keyboard dismiss` attempt, plus the fact that decides how a refusal is classified:
+/// `dispatchedDismissal` says whether the runner ever dispatched a dismissal.
+struct RunnerKeyboardDismissOutcome {
+  let wasVisible: Bool
+  let dismissed: Bool
+  let visible: Bool
+  let mechanism: RunnerKeyboardDismissMechanism?
+  /// Whether a dismissal was dispatched — the keyboard's own control was tapped, or the tvOS remote's
+  /// Menu press landed. Only its absence proves the command sent nothing.
+  let dispatchedDismissal: Bool
+}
+
 /// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
 /// Visible frames include the input assistant and share the nodes' normalized coordinate space.
 /// A complete scan with no keyboard establishes absence; projected or partial trees never do.
@@ -189,20 +201,32 @@ extension RunnerTests {
     return visibleKeyboardFrame(app: app) != nil
   }
 
-  func dismissKeyboard(
-    app: XCUIApplication
-  ) -> (wasVisible: Bool, dismissed: Bool, visible: Bool, mechanism: RunnerKeyboardDismissMechanism?) {
+  func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
     let keyboard = app.keyboards.firstMatch
     let wasVisible = isKeyboardVisible(app: app)
     guard wasVisible else {
-      return (wasVisible: false, dismissed: false, visible: false, mechanism: nil)
+      return RunnerKeyboardDismissOutcome(
+        wasVisible: false,
+        dismissed: false,
+        visible: false,
+        mechanism: nil,
+        dispatchedDismissal: false
+      )
     }
 
 #if os(tvOS)
     _ = pressTvRemote(.menu)
     sleepFor(0.2)
-    let visible = isKeyboardVisible(app: app)
-    return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .dismissKey)
+    let tvVisible = isKeyboardVisible(app: app)
+    return RunnerKeyboardDismissOutcome(
+      wasVisible: true,
+      dismissed: !tvVisible,
+      visible: tvVisible,
+      mechanism: tvVisible ? nil : .dismissKey,
+      // On tvOS the Menu press always goes out, so a refusal after it did dispatch and keeps the
+      // generic code.
+      dispatchedDismissal: true
+    )
 #else
     if tapKeyboardDismissControl(app: app) {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
@@ -213,7 +237,13 @@ extension RunnerTests {
         requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
       )
       let visible = isKeyboardVisible(app: app)
-      return (wasVisible: true, dismissed: !visible, visible: visible, mechanism: visible ? nil : .dismissKey)
+      return RunnerKeyboardDismissOutcome(
+        wasVisible: true,
+        dismissed: !visible,
+        visible: visible,
+        mechanism: visible ? nil : .dismissKey,
+        dispatchedDismissal: true
+      )
     }
 
     // #1606 review P1 (twice): generic background-tap dismissal is
@@ -222,8 +252,39 @@ extension RunnerTests {
     // indistinguishable from an inert backdrop, so a "safe-area" tap can
     // navigate or submit while reporting a successful dismiss. The dismiss
     // key is the only mechanism the runner can vouch for.
-    return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app), mechanism: nil)
+    return RunnerKeyboardDismissOutcome(
+      wasVisible: true,
+      dismissed: false,
+      visible: isKeyboardVisible(app: app),
+      mechanism: nil,
+      dispatchedDismissal: false
+    )
 #endif
+  }
+
+  /// The refusal a visible keyboard that stayed up answers with. The two ways it stays up answer
+  /// different questions and must not share one classification: finding no dismiss control sent
+  /// nothing and is the runner's own typed refusal (`KEYBOARD_DISMISS_UNAVAILABLE`, so the host
+  /// publishes its `details.reason` instead of leaving callers to read the prose), while a control
+  /// that was tapped and left the keys up did dispatch and keeps the generic code.
+  func keyboardDismissRefusal(dispatchedDismissal: Bool) -> ErrorPayload {
+    if dispatchedDismissal {
+      return ErrorPayload(
+        code: "UNSUPPORTED_OPERATION",
+        message: "Unable to dismiss the keyboard: a dismiss mechanism ran and the keyboard stayed visible",
+        hint: keyboardDismissRefusalHint
+      )
+    }
+    return ErrorPayload(
+      code: RunnerWireErrorCode.keyboardDismissUnavailable,
+      message: "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
+      hint: keyboardDismissRefusalHint
+    )
+  }
+
+  private var keyboardDismissRefusalHint: String {
+    return
+      "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
   }
 
 

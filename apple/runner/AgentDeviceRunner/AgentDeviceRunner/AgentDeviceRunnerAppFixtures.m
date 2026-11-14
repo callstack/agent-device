@@ -784,15 +784,27 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         }
       }];
     }
-    // `--slow-toggle` repaints the whole screen every 0.3 s, slower than one verification delay, as
-    // a carousel does: one quiet pair of samples must not pass it for settled.
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
-      __weak UIView *view = self.view;
-      [self.animationTimer invalidate];
-      self.animationTimer = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:YES block:^(NSTimer *timer) {
-        view.backgroundColor = [view.backgroundColor isEqual:UIColor.blackColor] ? UIColor.whiteColor : UIColor.blackColor;
-      }];
-    }
+  }
+  // `--slow-toggle` repaints the whole screen every 0.45 s, as a carousel does: a run of quiet samples
+  // shorter than the back swipe's still span must not pass it for settled. Without
+  // `--agent-device-back-regression` nothing answers the swipe, so only the repaint changes the screen.
+  // The repaints fall on whole multiples of 0.45 s of the wall clock, which the test process shares,
+  // so a test can start at a chosen phase of the cycle. The shade steps through 8 grays by wall-clock
+  // period, so two samples on either side of a stall of a few periods still differ.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--slow-toggle"]) {
+    __weak UIView *view = self.view;
+    NSTimeInterval period = 0.45;
+    NSDate *firstRepaint =
+        [NSDate dateWithTimeIntervalSince1970:(floor(NSDate.date.timeIntervalSince1970 / period) + 1) * period];
+    [self.animationTimer invalidate];
+    self.animationTimer = [[NSTimer alloc] initWithFireDate:firstRepaint interval:period repeats:YES block:^(NSTimer *timer) {
+      // NSTimer fires at or after its slot, never before: floor names the slot a late callback
+      // belongs to, so a late callback and the next on-time one never share a shade. The 1e-3
+      // keeps float error just below a slot boundary in that slot.
+      long long step = (long long)floor(NSDate.date.timeIntervalSince1970 / period + 1e-3) % 8;
+      view.backgroundColor = [UIColor colorWithWhite:step / 7.0 alpha:1];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.animationTimer forMode:NSRunLoopCommonModes];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {

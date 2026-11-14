@@ -8,6 +8,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { collapseWarningText } from '../output-common.ts';
 
@@ -25,6 +26,12 @@ export type HumanErrorView = {
 export type HumanErrorOptions = {
   /** Append the raw details dump (the `--debug` tier). */
   showDetails?: boolean;
+  /**
+   * Who reads the text. `terminal` (the default) is a person or script at the CLI. `model` is
+   * an agent reading a tool result: the typed `details.reason` joins the code and the summary
+   * stays one line.
+   */
+  reader?: OutputReader;
   /** The failing command's synopsis, such as `agent-device fill <target> <text>`. */
   synopsis?: string;
 };
@@ -48,7 +55,13 @@ export function formatHumanError(
   const candidateViews = readErrorCandidateViews(normalized.details);
   const inlineCandidates =
     normalized.code === 'AMBIGUOUS_MATCH' ? readInlineCandidates(candidateViews) : undefined;
-  const { summary, truncated } = formatSummary(normalized, inlineCandidates, options.synopsis);
+  const forModel = options.reader === 'model';
+  const { summary, truncated } = formatSummary(
+    normalized,
+    inlineCandidates,
+    options.synopsis,
+    forModel,
+  );
   return {
     summary,
     body: formatBody(normalized, {
@@ -63,6 +76,7 @@ function formatSummary(
   normalized: NormalizedError,
   inlineCandidates: string[] | undefined,
   synopsis: string | undefined,
+  withReason: boolean,
 ): { summary: string; truncated: boolean } {
   const dispatched = readDispatchDisclosure(normalized.details);
   const message = oneLine(normalized.message);
@@ -71,8 +85,10 @@ function formatSummary(
       ? `${message.slice(0, SUMMARY_MESSAGE_LIMIT)}…`
       : message;
   const next = nextStep(normalized, dispatched, inlineCandidates, synopsis);
+  const reason = withReason ? readReason(normalized) : undefined;
+  const label = reason ? `${normalized.code}, ${reason}` : normalized.code;
   const summary = [
-    `Error (${normalized.code}): ${withFullStop(shown)}`,
+    `Error (${label}): ${withFullStop(shown)}`,
     ...(dispatched ? [DISPATCH_SENTENCE[dispatched]] : []),
     ...(next ? [`Next: ${next}`] : []),
   ].join(' ');
@@ -106,9 +122,24 @@ function nextStep(
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
+const REASON_LIMIT = 80;
+
+/** The typed `details.reason`, when the throw site classified the failure, as one bounded line. */
+function readReason(normalized: NormalizedError): string | undefined {
+  const raw = normalized.details?.reason;
+  if (typeof raw !== 'string') return undefined;
+  const reason = oneLine(raw);
+  if (reason.length === 0) return undefined;
+  return reason.length > REASON_LIMIT ? `${reason.slice(0, REASON_LIMIT)}…` : reason;
+}
+
 function formatBody(
   normalized: NormalizedError,
-  options: { fullMessage: boolean; candidateViews: ErrorCandidateView[]; showDetails?: boolean },
+  options: {
+    fullMessage: boolean;
+    candidateViews: ErrorCandidateView[];
+    showDetails?: boolean;
+  },
 ): string[] {
   const body: string[] = [];
   if (options.fullMessage) body.push(`Message: ${normalized.message}`);

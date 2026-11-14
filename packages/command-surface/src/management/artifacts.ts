@@ -37,6 +37,7 @@ export const artifactsCommandFacet = defineCommandFacet({
   effect: 'read',
   text: {
     summary: 'List daemon or cloud provider session artifacts',
+    searchHint: 'files video logs download',
   },
   metadata: artifactsCommandMetadata,
   run: (client, input) => client.sessions.artifacts(input),

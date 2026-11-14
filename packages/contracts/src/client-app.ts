@@ -91,10 +91,9 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     // `commands/command-input-option-field.test.ts`.
     /**
      * Include an initial interactive snapshot in a fresh open response. On a local iOS simulator it
-     * waits up to 10s for the app's first screen (physical devices and other backends skip the
-     * wait); on timeout it carries postGestureOutcome.kind "loading" or "unsettled" and a warning.
-     * With no app argument, discover the sole running app on the sole booted iOS simulator;
-     * ambiguous environments fail closed.
+     * waits up to 10s for the app's first screen; on timeout it carries postGestureOutcome.kind
+     * "loading" or "unsettled" and a warning. With no app argument, discover the sole running app
+     * on the sole booted iOS simulator; ambiguous environments fail closed.
      */
     foreground?: boolean;
     saveScript?: boolean | string;

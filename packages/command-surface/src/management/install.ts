@@ -38,7 +38,7 @@ const installCommandMetadata = defineFieldCommandMetadata(
 
 const reinstallCommandMetadata = defineFieldCommandMetadata(
   'reinstall',
-  'Replace an installed app with a binary from a local path. This preserves the app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall.',
+  'Replace an installed app with a binary from a local path. This preserves the app identity while installing a new build on the selected device. Local Android and iOS install steps time out after 120s; the command allows 480s including device startup and uninstall. On iOS, a corrupt .ipa that cannot be unpacked leaves the installed app in place. On Android, an archive that cannot be unpacked or contains no .apk or .aab also leaves it in place. An invalid app bundle, corrupt APK or another install failure after uninstall can still leave the app removed.',
   {
     app: requiredField(stringField()),
     appPath: requiredField(stringField('Path to app binary.')),
@@ -136,6 +136,7 @@ const installCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Install an app binary from a path',
+    searchHint: 'apk ipa',
     cliDetail:
       'A HarmonyOS .hap installs from its path alone, for example agent-device install ./build/entry-default-signed.hap --platform harmonyos.',
   },
@@ -151,6 +152,7 @@ const reinstallCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Replace an installed app with a new build',
+    searchHint: 'update',
   },
   metadata: reinstallCommandMetadata,
   run: (client, input) => client.apps.reinstall(input),
@@ -164,6 +166,7 @@ const uninstallCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Remove an installed app',
+    searchHint: 'delete',
   },
   metadata: uninstallCommandMetadata,
   run: (client, input) => client.apps.uninstall(input),
@@ -177,6 +180,7 @@ const installFromSourceCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Install app builds from URLs or CI artifacts',
+    searchHint: 'fetch link hosted',
   },
   metadata: installFromSourceCommandMetadata,
   run: (client, input) => client.apps.installFromSource(input),

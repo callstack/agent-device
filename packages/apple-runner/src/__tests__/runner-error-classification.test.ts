@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+  KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
@@ -22,7 +23,10 @@ import {
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
 import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
-import { requireSwiftThrownErrorWireCode } from './runner-swift-settlement-fixtures.ts';
+import {
+  requireSwiftKeyboardDismissRefusalWireCode,
+  requireSwiftThrownErrorWireCode,
+} from './runner-swift-settlement-fixtures.ts';
 
 const TAP = { command: 'tap' } as const;
 const SNAPSHOT = { command: 'snapshot' } as const;
@@ -167,6 +171,42 @@ test('a back swipe that proved nothing stays COMMAND_FAILED, unknown, with its o
   assert.equal(notDispatched.code, 'COMMAND_FAILED');
   assert.equal(notDispatched.details.reason, 'back_swipe_not_dispatched');
   assert.equal(notDispatched.details.dispatched, 'no');
+});
+
+// The keyboard stays up two different ways, and only one of them sent nothing. The literal is what the
+// Swift runner encodes, so it is the contract and not the constant name: a rename on one side has to
+// fail here rather than silently split the pair.
+test('a keyboard dismiss refused for having no dismiss key keeps its code and publishes its reason', () => {
+  assert.equal(KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'KEYBOARD_DISMISS_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE);
+  // The code contract for `keyboard dismiss` is unchanged: the refusal travels under the code that
+  // command already refused with, so a caller keyed on the code sees what it saw before.
+  assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
+  assert.equal(refusal.details.runnerErrorCode, 'KEYBOARD_DISMISS_UNAVAILABLE');
+  assert.equal(refusal.details.reason, 'keyboard_dismiss_unavailable');
+  assert.equal(refusal.details.dispatched, 'no');
+  assert.equal(refusal.details.retriable, undefined);
+  // The whole published shape: the runner's own code survives, the wire code it hides under does not.
+  assert.deepEqual(refusal.details, {
+    runnerErrorCode: 'KEYBOARD_DISMISS_UNAVAILABLE',
+    reason: 'keyboard_dismiss_unavailable',
+    dispatched: 'no',
+  });
+  const refusalError = new AppError(refusal.code, refusal.details.reason ?? '', refusal.details);
+  assert.equal(isRetryableRunnerError(refusalError), false);
+  assert.equal(isRunnerBusyError(refusalError), false);
+  // The closest negative: the same refusal in prose alone, from an unclassified reply, earns no
+  // reason, so a consumer keyed on `reason` cannot mistake it for the pre-dispatch refusal.
+  const untyped = commandFailed(
+    'Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted',
+  );
+  assert.equal(untyped.details?.reason, undefined);
+  // A dismiss control that was tapped and left the keys up did dispatch, so it keeps the generic code
+  // and says nothing about dispatch.
+  const dispatched = classifyRunnerReportedError('UNSUPPORTED_OPERATION');
+  assert.equal(dispatched.code, 'UNSUPPORTED_OPERATION');
+  assert.equal(dispatched.details.reason, undefined);
+  assert.equal(dispatched.details.dispatched, 'unknown');
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {
@@ -557,6 +597,15 @@ test('the runner declares the wire codes the daemon reads for occupancy', () => 
     swift.finishedCode,
     COMMAND_ALREADY_FINISHED_RUNNER_CODE,
     'the runner must encode its finished-id refusal under the code the daemon reads as silent',
+  );
+});
+
+test('the runner declares the wire code the keyboard-dismiss refusal publishes its reason under', () => {
+  assert.equal(
+    requireSwiftKeyboardDismissRefusalWireCode(),
+    KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
+    'the runner must encode its no-dismiss-key refusal under the code the daemon maps to ' +
+      'details.reason, or that reason becomes unreachable',
   );
 });
 

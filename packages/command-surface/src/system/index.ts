@@ -301,7 +301,7 @@ const foldCommandDescription = `Fold or unfold a foldable iPhone simulator (iPho
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
-  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
+  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when the keyboard stays up \u2014 background taps are never attempted. On iOS a keyboard with no dismiss key adds error.details.reason keyboard_dismiss_unavailable with dispatched: no; one whose key was tapped and stayed visible has no reason and dispatched: unknown.';
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
@@ -630,6 +630,7 @@ const appStateCommandFacet = defineParameterlessCommandFacet({
   description: appStateCommandDescription,
   text: {
     summary: 'Show the foreground app and activity',
+    searchHint: 'current state',
   },
   run: (client, input) => client.command.appState(input),
 });
@@ -639,6 +640,7 @@ const backCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Navigate back in the app or system',
+    searchHint: 'previous return dismiss',
   },
   metadata: backCommandMetadata,
   run: (client, input) => client.command.back(input),
@@ -653,6 +655,7 @@ const homeCommandFacet = defineParameterlessCommandFacet({
   description: homeCommandDescription,
   text: {
     summary: 'Go to the device home screen',
+    searchHint: 'springboard launcher',
   },
   run: (client, input) => client.command.home(input),
 });
@@ -662,6 +665,7 @@ const orientationCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Set device orientation',
+    searchHint: 'rotate landscape',
   },
   metadata: orientationCommandMetadata,
   run: (client, input) => client.command.orientation(input),
@@ -675,6 +679,7 @@ const foldCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Fold or unfold a foldable iPhone simulator or Android emulator',
+    searchHint: 'flip book clamshell',
     cliDetail: `iPhone Duo simulators and foldable Android emulators. iOS sends a ${foldGuidance.hingeEvent} and confirms the hinge angle inside the simulator; Android sets the emulator console posture and confirms the device state. Refs and coordinates do not survive a pose change.`,
   },
   metadata: foldCommandMetadata,
@@ -690,6 +695,7 @@ const appSwitcherCommandFacet = defineParameterlessCommandFacet({
   description: appSwitcherCommandDescription,
   text: {
     summary: 'Open the device app switcher',
+    searchHint: 'recents multitasking',
   },
   run: (client, input) => client.command.appSwitcher(input),
 });
@@ -699,6 +705,7 @@ const keyboardCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Inspect, press, or dismiss the device keyboard',
+    searchHint: 'return',
   },
   metadata: keyboardCommandMetadata,
   run: (client, input) => client.command.keyboard(input),
@@ -712,6 +719,7 @@ const clipboardCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Read or write device clipboard text',
+    searchHint: 'copy paste pasteboard',
   },
   metadata: clipboardCommandMetadata,
   run: (client, input) => client.command.clipboard(input as ClipboardCommandOptions),
@@ -726,6 +734,7 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
   description: actionButtonCommandDescription,
   text: {
     summary: 'Press the iPhone or iPad Action Button',
+    searchHint: 'hardware',
     cliDetail:
       'iPhone and iPad only. The runner asks the device for the button and reports unsupported when that model has none.',
   },
@@ -737,6 +746,7 @@ const tvRemoteCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Press a TV remote navigation, media, or hardware button',
+    searchHint: 'dpad play',
     cliDetail:
       'longpress selects the 500ms preset; --duration-ms overrides it. Android TV uses the system long-press duration.',
   },
@@ -752,6 +762,7 @@ const hardwareButtonCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Press a phone hardware button once',
+    searchHint: 'lock',
     cliDetail:
       'Single press; no hold. Android presses all eleven named keys on phones and tablets: volume-up, volume-down, power, mute, sleep, wake, and the five media keys. A physical iPhone or iPad presses volume only; the other keys are never supported on Apple targets. iOS Simulators, Android TV, and tvOS refuse — use tv-remote on TV targets.',
   },
@@ -767,6 +778,7 @@ const telephonyCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
+    searchHint: 'voice gsm cellular',
     cliDetail:
       'Android emulators through the local adb executor; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
   },

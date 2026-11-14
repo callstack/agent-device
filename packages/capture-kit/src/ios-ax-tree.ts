@@ -144,8 +144,9 @@ function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
 /**
  * The viewport an AX tree acquisition uses: the tree's own application or window root when it reports a
  * usable box, because every node rect in the tree was measured in it (`derived`); otherwise the screen
- * size the provider reported for the device (`reported`), in the same points. Without either, the
- * tree's own reason the box is missing.
+ * size the provider reported for the device (`reported`), in the same points. A root that is exactly that
+ * screen at the origin is `reported`: two independent reads agree that window space is screen space.
+ * Without either box, the tree's own reason the box is missing.
  */
 export function resolveIosAxTreeViewport(
   tree: IosTreeNode | IosTreeNode[],
@@ -154,7 +155,11 @@ export function resolveIosAxTreeViewport(
   const evidence = resolveIosViewportEvidenceFromRoots(
     (Array.isArray(tree) ? tree : [tree]).map(viewportRoot),
   );
-  if (evidence?.kind === 'reported') return { kind: 'derived', rect: evidence.rect };
+  if (evidence?.kind === 'reported') {
+    return isScreenAtOrigin(evidence.rect, screen)
+      ? { kind: 'reported', rect: evidence.rect }
+      : { kind: 'derived', rect: evidence.rect };
+  }
   if (screen !== undefined && (screen.width !== undefined || screen.height !== undefined)) {
     return isFiniteNumber(screen.width) &&
       isFiniteNumber(screen.height) &&
@@ -164,6 +169,18 @@ export function resolveIosAxTreeViewport(
       : { kind: 'missing', reason: 'invalid' };
   }
   return evidence ?? { kind: 'missing', reason: 'not-provided' };
+}
+
+// CONSERVATIVE: a root whose size is the screen's with width and height swapped stays `derived`. The
+// provider reads its screen size once, and no live landscape run has confirmed which coordinate space
+// taps use after a rotation; revisit once one has.
+function isScreenAtOrigin(
+  rect: Readonly<{ x: number; y: number; width: number; height: number }>,
+  screen: Readonly<{ width?: number; height?: number }> | undefined,
+): boolean {
+  return (
+    rect.x === 0 && rect.y === 0 && rect.width === screen?.width && rect.height === screen.height
+  );
 }
 
 /**

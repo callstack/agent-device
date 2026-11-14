@@ -495,9 +495,8 @@ async function retryAfterRemoteInstanceMismatch(
     health.timedOut ? probeTimeoutMs : undefined,
   );
   if (!health.reachable) {
-    throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
-      daemonBaseUrl: info.baseUrl,
-    });
+    const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
+    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl });
   }
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;

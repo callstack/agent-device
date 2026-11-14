@@ -587,7 +587,7 @@ extension RunnerTests {
       }
       return Response(ok: true, data: DataPayload(message: command.command.rawValue))
     case .keyboardDismiss:
-      var dismissal: (wasVisible: Bool, dismissed: Bool, visible: Bool, mechanism: RunnerKeyboardDismissMechanism?)?
+      var dismissal: RunnerKeyboardDismissOutcome?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
         dismissal = dismissKeyboard(app: activeApp)
       }
@@ -595,15 +595,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "keyboardDismiss produced no result"))
       }
       if result.wasVisible && !result.dismissed {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "UNSUPPORTED_OPERATION",
-            message: "Unable to dismiss the iOS keyboard: the keyboard exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
-            hint:
-              "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
-          )
-        )
+        return Response(ok: false, error: keyboardDismissRefusal(dispatchedDismissal: result.dispatchedDismissal))
       }
       return Response(
         ok: true,
