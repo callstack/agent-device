@@ -63,7 +63,7 @@ MCP-only clients don't need a separately installed skill. When a client connects
 
 Tool results are compact text, such as `@e4 [button] "Products"` lines and settled UI diffs. Tools declare no output schema, and results carry no `structuredContent`, because some clients show the model `structuredContent` instead of the text. To get results as JSON text, set `AGENT_DEVICE_RESPONSE_LEVEL` to `digest` or `full`, or set `AGENT_DEVICE_COST=1`, in the server entry. Tool calls cannot pass these values, `debug`, or the `target` alias of `deviceTarget`.
 
-Clients that defer tool schemas, such as Claude Code, load the core loop tools up front: `open`, `snapshot`, `press`, `fill`, `back`, `wait`, `scroll`, and `screenshot`. Each tool also carries search keywords for the client's tool search. To run a known multi-step walk in one call, use `batch`; its description shows the step shape.
+Clients that defer tool schemas, such as Claude Code, load the core loop tools up front: `open`, `snapshot`, `press`, `fill`, `back`, `wait`, and `scroll`; other tools, `screenshot` included, load on first use. Each tool also carries search keywords for the client's tool search. To run a known multi-step walk in one call, use `batch`; its description shows the step shape.
 
 If your client reads results as data, start the server with `agent-device mcp --structured`. Tools that have a typed result, such as `press` or `wait`, then declare an output schema and return `structuredContent` that matches it. Other tools return `structuredContent` when the server is set to return JSON as above. A failed call returns the error in `structuredContent`.
 
