@@ -6,15 +6,18 @@ import {
   buildDaemonHttpLeaseHeaders,
 } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
-import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
+import {
+  isRetryableUploadStreamError,
+  isTransferPhaseTimeoutError,
+  streamFileToHttpRequest,
+  withUploadPreparationDeadline,
+} from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
-import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
-import { isTransferPhaseTimeoutError } from './transfer-phase-budget.ts';
 
 /**
  * Ceiling for the two small control-plane calls that bracket an upload (`preflight`, `finalize`).
  * Their payload is a few hundred bytes of JSON, so one window covers reaching the daemon and getting
- * the answer; the artifact bytes themselves are budgeted per phase in `transfer-phase-budget.ts`.
+ * the answer; the artifact bytes themselves are budgeted per phase in `upload-stream.ts`.
  */
 const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
 

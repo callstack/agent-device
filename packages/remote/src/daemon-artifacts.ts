@@ -15,7 +15,7 @@ import {
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import { uploadArtifact } from './upload-client.ts';
-import { withUploadPreparationDeadline } from './upload-preparation-deadline.ts';
+import { withUploadPreparationDeadline } from './upload-stream.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`

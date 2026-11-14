@@ -13,13 +13,13 @@
 
 import http from 'node:http';
 import { afterEach, assert, test, vi } from 'vitest';
-import { isRetryableUploadStreamError } from '../upload-stream.ts';
 import {
+  isRetryableUploadStreamError,
   isTransferPhaseTimeoutError,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from '../transfer-phase-budget.ts';
+} from '../upload-stream.ts';
 import {
   LEGACY_UPLOAD_REQUEST,
   type ParkedUploadDaemon,
