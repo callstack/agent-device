@@ -100,7 +100,7 @@ test('publishing cannot skip the package gate', () => {
   // the floor that job covers — so it must still name the same entry point the script does.
   assert.deepEqual(script('check:package').split(' && '), [
     'node --experimental-strip-types scripts/check-package.ts',
-    'node --experimental-strip-types scripts/node-test-tmpdir.ts --test packages/maestro/test/package-smoke.mjs',
+    'node --experimental-strip-types scripts/node-test-tmpdir.ts --test packages/maestro/test/package-smoke.mjs packages/replay/test/package-smoke.mjs',
   ]);
   assert.match(packagedCliWorkflow, /with: \{ gate: package \}/);
   assert.match(
