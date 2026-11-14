@@ -3,6 +3,8 @@ import XCTest
 
 extension RunnerTests {
   /// UIKit's identifier for a navigation bar's system back button, in UIKit and SwiftUI stacks alike.
+  /// The button is not always inside the bar's subtree: a floating one, such as the detail column's on
+  /// the iPhone Duo, is a sibling of the bar. It is therefore read from the app's windows.
   static let navigationBarBackButtonIdentifier = "BackButton"
   /// The wait from the end of the swipe's contact to the sample it is compared against. An
   /// interactive pop follows the contact across most of the width, so the screen has already moved.
@@ -218,7 +220,7 @@ extension RunnerTests {
       deadlineMs: started + Self.navigationBarBackReadBudgetMs
     )
     trace.lookupMs = currentUptimeMs() - started
-    let before: NavigationBarBackState
+    var before: NavigationBarBackState
     let frame: CGRect
     switch lookup {
     case .still(let state, let button):
@@ -230,6 +232,20 @@ extension RunnerTests {
     case .hung:
       trace.found = "hung"
       return .refused(Self.navigationBarBackHungLookup)
+    }
+    if before.backButtonLabels.contains(where: \.isEmpty) {
+      switch readNavigationBarBack(
+        app: app, phase: .lookup, deadlineMs: currentUptimeMs() + Self.navigationBarBackReadBudgetMs,
+        readsLiveButtons: false, readsBarTitles: true
+      ) {
+      case .hung:
+        trace.found = "hung"
+        return .refused(Self.navigationBarBackHungLookup)
+      case .read(let titled) where titled.state.backButtonFrames == before.backButtonFrames:
+        before = titled.state
+      case .read, .unreadable:
+        break
+      }
     }
     trace.found = "yes"
     // The synthesized tap returns once the touch is delivered; an XCTest tap would also wait out the
@@ -283,12 +299,16 @@ extension RunnerTests {
     }
   }
 
-  /// The labels of each navigation bar's system back buttons, one list per bar in bar order, and
-  /// the frames of those buttons. Both must agree for a still bar before the tap. Bar titles and
-  /// identifiers are left out: a bar can retitle itself, such as a countdown, without any navigation.
+  /// The number of navigation bars, the labels of the system back buttons in tree order, and the
+  /// frames of those buttons. All must agree for a still bar before the tap. Bar titles are left
+  /// out: a bar can retitle itself, such as a countdown, without any navigation. The exception is a
+  /// back button with no label, such as the iPhone Duo's floating one, which shows no pop on its own:
+  /// the state read just before the tap then also holds the bar titles, and so does each read after it.
   struct NavigationBarBackState: Equatable {
-    let backButtonLabels: [[String]]
+    let barCount: Int
+    let backButtonLabels: [String]
     let backButtonFrames: [CGRect]
+    var barTitles: [String] = []
   }
 
   /// Whether the bar after the tap shows a pop: the bar count, the back button count, or a back
@@ -296,7 +316,8 @@ extension RunnerTests {
   /// button, such as by a large-title collapse or a bar button that appears. A pop that keeps the
   /// same back button labels and bar count answers unverified.
   static func navigationBarBackPopped(from before: NavigationBarBackState, to after: NavigationBarBackState) -> Bool {
-    after.backButtonLabels != before.backButtonLabels
+    after.barCount != before.barCount || after.backButtonLabels != before.backButtonLabels
+      || after.barTitles != before.barTitles
   }
 
   /// The pause between two reads of the bar, and how long reads may start, both before the tap
@@ -342,19 +363,16 @@ extension RunnerTests {
   ) -> NavigationBarBackLookup {
     var previous: NavigationBarBackState?
     while true {
-      let button: CGRect
-      switch navigationBarBackButtonFrames(app: app, deadlineMs: deadlineMs) {
-      case .hung: return .hung
-      case .unreadable: return .notFound("unreadable")
-      case .read(let frames) where frames.isEmpty: return .notFound("no")
-      case .read(let frames) where frames.count > 1: return .notFound("ambiguous")
-      case .read(let frames): button = frames[0]
-      }
       let current: NavigationBarBackState
-      switch readNavigationBarBackState(app: app, phase: .lookup, deadlineMs: deadlineMs) {
+      let button: CGRect
+      switch readNavigationBarBack(app: app, phase: .lookup, deadlineMs: deadlineMs, readsLiveButtons: true) {
       case .hung: return .hung
       case .unreadable: return .notFound("unreadable")
-      case .read(let state): current = state
+      case .read(let read) where read.hittableButtons.isEmpty: return .notFound("no")
+      case .read(let read) where read.hittableButtons.count > 1: return .notFound("ambiguous")
+      case .read(let read):
+        current = read.state
+        button = read.hittableButtons[0]
       }
       if current == previous, Self.navigationBarBackState(current, holdsButton: button, geometry: geometry) {
         return .still(current, button: button)
@@ -407,8 +425,11 @@ extension RunnerTests {
       let isFinalRead = currentUptimeMs() >= deadlineMs
       let readDeadlineMs = isFinalRead ? Double.infinity : deadlineMs
       let phase: NavigationBarBackReadPhase = isFinalRead ? .finalConfirmation : .confirmation
-      switch readNavigationBarBackState(app: app, phase: phase, deadlineMs: readDeadlineMs) {
-      case .read(let after) where Self.navigationBarBackPopped(from: before, to: after): return .changed
+      switch readNavigationBarBack(
+        app: app, phase: phase, deadlineMs: readDeadlineMs, readsLiveButtons: false,
+        readsBarTitles: !before.barTitles.isEmpty
+      ) {
+      case .read(let after) where Self.navigationBarBackPopped(from: before, to: after.state): return .changed
       case .hung: return .hung
       case .read, .unreadable: break
       }
@@ -459,53 +480,59 @@ extension RunnerTests {
     return .read(value)
   }
 
-  /// The frames of the hittable system back buttons; unreadable when the tree did not answer or the
-  /// read budget had run out.
-  @MainActor
-  private func navigationBarBackButtonFrames(app: XCUIApplication, deadlineMs: Double) -> NavigationBarBackRead<[CGRect]> {
-    guard currentUptimeMs() < deadlineMs else { return .unreadable }
-    return heldNavigationBarRead(.lookup) {
-      guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
-      let frames = bars
-        .flatMap { $0.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex }
-        .filter { $0.isHittable }
-        .map(\.frame)
-      return frames.allSatisfy(SnapshotGeometry.isPositiveFinite) ? frames : nil
-    }
+  /// One read of the bars and back buttons: the state, and, when asked, the live frames of the hittable
+  /// back buttons.
+  struct NavigationBarBackSample {
+    let state: NavigationBarBackState
+    let hittableButtons: [CGRect]
   }
 
-  /// One XCTest snapshot per bar, so a read costs a query per bar rather than one per attribute.
-  /// Unreadable when the tree did not answer or the read budget ran out before a bar's snapshot.
+  /// One walk of the app's windows, then one query per bar kind and one snapshot per back button, so
+  /// a read stays well inside the read budget. Live reads of the buttons are skipped after the tap:
+  /// a button gone mid-pop would make the read prove nothing. Unreadable when the tree did not answer
+  /// or the read budget ran out before a snapshot.
   @MainActor
-  private func readNavigationBarBackState(
+  private func readNavigationBarBack(
     app: XCUIApplication,
     phase: NavigationBarBackReadPhase,
-    deadlineMs: Double
-  ) -> NavigationBarBackRead<NavigationBarBackState> {
-    heldNavigationBarRead(phase) {
-      guard let bars = try? elementQueries(app: app, matching: .navigationBar) else { return nil }
-      var backButtonLabels: [[String]] = []
-      var backButtonFrames: [CGRect] = []
-      for bar in bars.flatMap({ $0.allElementsBoundByIndex }) {
-        guard currentUptimeMs() < deadlineMs, let snapshot = try? bar.snapshot() else { return nil }
-        let buttons = Self.navigationBarBackButtons(snapshot)
-        backButtonLabels.append(buttons.map(\.label))
-        backButtonFrames.append(contentsOf: buttons.map(\.frame))
+    deadlineMs: Double,
+    readsLiveButtons: Bool,
+    readsBarTitles: Bool = false
+  ) -> NavigationBarBackRead<NavigationBarBackSample> {
+    guard currentUptimeMs() < deadlineMs else { return .unreadable }
+    return heldNavigationBarRead(phase) {
+      guard let roots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else { return nil }
+      let barCount = roots.reduce(0) { $0 + $1.descendants(matching: .navigationBar).count }
+      let buttons = roots.flatMap {
+        $0.descendants(matching: .button).matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex
       }
-      return NavigationBarBackState(backButtonLabels: backButtonLabels, backButtonFrames: backButtonFrames)
-    }
-  }
-
-  static func navigationBarBackButtons(_ bar: XCUIElementSnapshot) -> [(label: String, frame: CGRect)] {
-    var buttons: [(label: String, frame: CGRect)] = []
-    var pending = bar.children
-    while let element = pending.popLast() {
-      if element.identifier == navigationBarBackButtonIdentifier {
-        buttons.append((element.label, element.frame))
+      var labels: [String] = []
+      var frames: [CGRect] = []
+      var hittable: [CGRect] = []
+      for button in buttons {
+        guard currentUptimeMs() < deadlineMs, let snapshot = try? button.snapshot() else { return nil }
+        labels.append(snapshot.label)
+        frames.append(snapshot.frame)
+        if readsLiveButtons, button.isHittable {
+          let frame = button.frame
+          guard SnapshotGeometry.isPositiveFinite(frame) else { return nil }
+          hittable.append(frame)
+        }
       }
-      pending.append(contentsOf: element.children)
+      var barTitles: [String] = []
+      if readsBarTitles {
+        for bar in roots.flatMap({ $0.descendants(matching: .navigationBar).allElementsBoundByIndex }) {
+          guard currentUptimeMs() < deadlineMs else { return nil }
+          barTitles.append(bar.identifier)
+        }
+      }
+      return NavigationBarBackSample(
+        state: NavigationBarBackState(
+          barCount: barCount, backButtonLabels: labels, backButtonFrames: frames, barTitles: barTitles
+        ),
+        hittableButtons: hittable
+      )
     }
-    return buttons
   }
 
   @MainActor

@@ -724,7 +724,7 @@ extension RunnerTests {
   /// screen origin.
   func testNavigationBarBackStateHoldsTheLiveButtonOfAPlacedWindow() {
     let snapshotButton = CGRect(x: 8, y: 54, width: 44, height: 44)
-    let state = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [snapshotButton])
+    let state = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [snapshotButton])
     let placed = SurfaceGeometry(
       windowOnScreen: SurfaceRect(CGRect(x: 224, y: 128, width: 386, height: 954)),
       panelNativeSize: nil,
@@ -748,17 +748,22 @@ extension RunnerTests {
   /// it is never a still bar before the tap.
   func testNavigationBarBackPoppedOnlyOnABarOrBackButtonChange() {
     let button = CGRect(x: 8, y: 54, width: 44, height: 44)
-    let detail = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button])
+    let detail = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button])
 
-    let moved = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
+    let moved = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
     XCTAssertFalse(Self.navigationBarBackPopped(from: detail, to: moved))
     XCTAssertNotEqual(moved, detail)
-    let relabeled = NavigationBarBackState(backButtonLabels: [["Settings"]], backButtonFrames: [button])
+    let relabeled = NavigationBarBackState(barCount: 1, backButtonLabels: ["Settings"], backButtonFrames: [button])
     XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: relabeled))
-    let atRoot = NavigationBarBackState(backButtonLabels: [[]], backButtonFrames: [])
+    let atRoot = NavigationBarBackState(barCount: 1, backButtonLabels: [], backButtonFrames: [])
     XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: atRoot))
-    let barGone = NavigationBarBackState(backButtonLabels: [], backButtonFrames: [])
+    let barGone = NavigationBarBackState(barCount: 0, backButtonLabels: [], backButtonFrames: [])
     XCTAssertTrue(Self.navigationBarBackPopped(from: atRoot, to: barGone))
+
+    // A back button with no label shows a pop only through the bar title.
+    let unlabeled = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["About"])
+    let unlabeledPopped = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["General"])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: unlabeled, to: unlabeledPopped))
   }
 #endif
 
