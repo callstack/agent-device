@@ -7,12 +7,18 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 const source = fs.readFileSync(path.join(repoRoot, '.github/workflows/release.yml'), 'utf8');
 
 type Job = {
+  'cache-mode'?: string;
   environment?: string;
   permissions?: Record<string, string>;
   steps?: Array<{ uses?: string; with?: Record<string, string> }>;
   uses?: string;
 };
-const workflow = parse(source) as { permissions: unknown; jobs: Record<string, Job> };
+const workflow = parse(source) as {
+  permissions: unknown;
+  jobs: Record<string, Job>;
+  on: { schedule: Array<{ cron: string }> };
+  concurrency: { group: string };
+};
 
 // npm trusts release.yml in the npm-publish environment, so whichever job can mint an id-token
 // can publish. Only the publisher and the MCP Registry call (its own OIDC login) may.
@@ -46,9 +52,42 @@ test('the publisher authenticates through OIDC alone', () => {
   expect(setupNode?.with).not.toHaveProperty('registry-url');
 });
 
-test('the published bytes are built without a restored dependency cache', () => {
+test('the release build has no cache token access and restores no dependency cache', () => {
+  expect(workflow.jobs.build?.['cache-mode']).toBe('none');
   const setup = workflow.jobs.build?.steps?.find(
     (step) => step.uses === './.github/actions/setup-node-pnpm',
   );
   expect(setup?.with?.['cache-store']).toBe('false');
+});
+
+test('the source checkout and artifact identity use the planned commit while the publisher stays trusted', () => {
+  const build = workflow.jobs.build?.steps ?? [];
+  const checkout = build.find((step) => step.uses?.startsWith('actions/checkout@'));
+  expect(checkout?.with?.ref).toBe('${{ needs.plan.outputs.commit }}');
+  const upload = build.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  expect(upload?.with?.name).toBe('npm-packages-${{ needs.plan.outputs.commit }}');
+  const publisher = workflow.jobs.publish?.steps ?? [];
+  expect(
+    publisher.find((step) => step.uses?.startsWith('useblacksmith/checkout@'))?.with?.ref,
+  ).toBe('${{ github.workflow_sha }}');
+  expect(
+    publisher.find((step) => step.uses?.startsWith('actions/download-artifact@'))?.with?.name,
+  ).toBe(upload?.with?.name);
+});
+
+test('the version stamping entrypoint is pinned to the workflow commit', () => {
+  const entrypoint = workflow.jobs.build?.steps?.find(
+    (step) => step.with?.path === '.release-tools',
+  );
+  expect(entrypoint?.with?.ref).toBe('${{ github.workflow_sha }}');
+});
+
+test('both nightly schedules keep separate concurrency groups for cron and manual selection', () => {
+  expect(workflow.on.schedule.map((entry) => entry.cron)).toEqual(
+    expect.arrayContaining(['23 1 * * *', '53 1 * * *']),
+  );
+  expect(workflow.concurrency.group).toContain(
+    "(github.event.schedule == '53 1 * * *' || inputs.source_branch == '0.22') && 'release-nightly-0.22'",
+  );
+  expect(workflow.concurrency.group).toContain("|| 'release-nightly'");
 });

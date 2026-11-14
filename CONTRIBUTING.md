@@ -98,13 +98,18 @@ exception is the empty `0.0.0` placeholder a maintainer publishes by hand to onb
 described below. A local `npm publish` from the repository root refuses to run.
 
 The core and every public workspace package release together at one version. Private packages
-stay unpublished. There are three channels:
+stay unpublished. The workflow supports these release modes:
 
 - **Nightly** (`npm install -g agent-device@nightly`): once a day, at 01:23 UTC, the workflow
   checks `main`. It publishes `X.Y.Z-nightly.<YYYYMMDD>.<run>` under the `nightly` dist-tag when
   `main`'s HEAD has changed since the last nightly and its CI passed, waiting up to 20 minutes for
   CI that is still running. If that CI fails, is cancelled, or is still running after the wait, no
   nightly ships that day. A published nightly is tagged `nightly/v<nightly version>`. To publish one now, run **Release** on `main`.
+- **0.22 nightly** (`nightly-0.22`): at 01:53 UTC, the workflow on `main` resolves `0.22`'s
+  HEAD, reads its `0.22.X-dev` version, and requires successful push CI on that exact commit.
+  It builds that SHA as `0.22.X-nightly-0-22.<YYYYMMDD>.<run>` and tags it under
+  `nightly-0.22/v<version>`. Deduplication and concurrency are separate from `main`'s nightly.
+  To publish manually after activation, run **Release** on `main` with `source_branch: 0.22`.
 - **Stable** (`latest`): a repository admin publishes a GitHub release with a new `vX.Y.Z` tag
   targeting `main`. Use the version `main` builds towards (its `X.Y.Z-dev`), or a later one, and
   write the notes or generate them in the release form. The tag starts a **Release** run. It waits
@@ -155,7 +160,8 @@ granting npm trust:
    unattended.
 2. **Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset): active, targeting
    `refs/tags/v*` with no exclusions, restricting creations, updates, and deletions, with only the
-   Repository admin role allowed to bypass. Nightly tags live under `nightly/` and stay outside it.
+   Repository admin role allowed to bypass. Nightly tags live under `nightly/` or `nightly-0.22/`
+   and stay outside it.
 3. **Actions** (Settings → Actions → General): workflow permissions set to read repository contents,
    and "Allow GitHub Actions to create and approve pull requests" turned off.
 4. **Releases** (Settings → General): leave release immutability off, because the run attaches its
@@ -185,6 +191,22 @@ release. To plan a minor or major release, commit the new `-dev` version to `mai
 `0.22.0-dev`); nightlies then preview it. The invariant protects MCP Registry scanners, which diff
 the repository's tool surface per version string: a released number left on `main` while `main`
 keeps changing is indistinguishable from a republished ("rug-pull") version.
+
+### Activate the 0.22 nightly channel
+
+The `nightly-0.22` channel is unavailable until these changes are reviewed and merged and its
+first publish succeeds. Merge the `0.22` prerequisite first: enable CI pushes on `0.22`, stamp
+`0.22.0-dev` with the existing version script, and include the update notifier's `nightly-0.22`
+routing. Require successful push CI at the resulting `0.22` HEAD. Then merge this release
+configuration into `main`. Its next 01:53 UTC schedule can publish that source; merging the
+configuration activates the schedule. Do not dispatch it before the independent review.
+
+Keep the existing `release.yml` trusted publisher and `npm-publish` policies (`main` and `v*`).
+The planner and publisher use the workflow commit; the build uses the planned source commit.
+The version-stamping entrypoint uses the workflow commit and calls the source commit's workspace
+and MCP metadata helpers. The publisher verifies each package's name and version before publishing.
+Do not grant the `0.22` branch deployment access. Private optional plugins remain unpublished;
+this channel does not replace their placeholder, trusted-publisher, or native validation prerequisites.
 
 ### Released-surface baselines roll forward on publish
 

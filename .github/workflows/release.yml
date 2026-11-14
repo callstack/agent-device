@@ -3,7 +3,7 @@ name: Release
 # One workflow owns every npm publish, so each package trusts exactly this file
 # (npm trusted publishing pins the workflow filename and the npm-publish
 # environment). scripts/release-plan.mjs maps the triggering event to a mode:
-# dry-run (PR), nightly (schedule or dispatch on main), or stable (a vX.Y.Z tag on
+# dry-run (PR), nightly (main-owned schedule or dispatch), or stable (a vX.Y.Z tag on
 # main). The tag ruleset, which only admins can bypass, is the stable release's
 # approval: a tag publishes without another review.
 on:
@@ -21,8 +21,16 @@ on:
     # A nightly ships main's HEAD once its CI passes. CI that fails, is cancelled,
     # or outlasts the Plan job's wait skips that day.
     - cron: '23 1 * * *'
+    # The workflow stays on main; the planner resolves 0.22 to its exact source SHA.
+    - cron: '53 1 * * *'
   # On main: publish a nightly now. On a vX.Y.Z tag: retry that stable release.
   workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Nightly source (run on main; stable tag retries require main)'
+        type: choice
+        options: [main, '0.22']
+        default: main
 
 permissions: {}
 
@@ -30,6 +38,7 @@ concurrency:
   group: >-
     ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.ref)
     || startsWith(github.ref, 'refs/tags/') && format('release-{0}', github.ref)
+    || (github.event.schedule == '53 1 * * *' || inputs.source_branch == '0.22') && 'release-nightly-0.22'
     || 'release-nightly' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -48,11 +57,13 @@ jobs:
       dist_tag: ${{ steps.plan.outputs.dist_tag }}
       commit: ${{ steps.plan.outputs.commit }}
       previous_tag: ${{ steps.plan.outputs.previous_tag }}
+      nightly_tag: ${{ steps.plan.outputs.nightly_tag }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
         with:
           persist-credentials: false
+          ref: ${{ github.workflow_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -73,6 +84,7 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
+    cache-mode: none
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
@@ -80,6 +92,16 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          ref: ${{ needs.plan.outputs.commit }}
+
+      - name: Checkout version stamping entrypoint
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          sparse-checkout: scripts/release-version.mjs
+          sparse-checkout-cone-mode: false
 
       # No dependency cache: published bytes come from a clean install.
       - name: Setup toolchain
@@ -92,7 +114,7 @@ jobs:
         uses: ./.github/actions/setup-android-sdk
 
       - name: Stamp release version
-        run: node scripts/release-version.mjs stamp "$VERSION"
+        run: node .release-tools/scripts/release-version.mjs stamp "$VERSION"
 
       - name: Build and verify every public package
         run: pnpm release:prepare
@@ -100,7 +122,7 @@ jobs:
       - name: Upload packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: npm-packages
+          name: npm-packages-${{ needs.plan.outputs.commit }}
           path: .tmp/release/*.tgz
           include-hidden-files: true
           if-no-files-found: error
@@ -122,6 +144,7 @@ jobs:
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
         with:
           persist-credentials: false
+          ref: ${{ github.workflow_sha }}
           sparse-checkout: scripts/release-publish.mjs
           sparse-checkout-cone-mode: false
 
@@ -135,7 +158,7 @@ jobs:
       - name: Download packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: npm-packages
+          name: npm-packages-${{ needs.plan.outputs.commit }}
           path: ${{ runner.temp }}/npm-packages
 
       - name: Publish
@@ -156,11 +179,12 @@ jobs:
       - name: Tag the published commit
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: nightly/v${{ needs.plan.outputs.version }}
+          TAG: ${{ needs.plan.outputs.nightly_tag }}
+          DIST_TAG: ${{ needs.plan.outputs.dist_tag }}
           COMMIT: ${{ needs.plan.outputs.commit }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
-          echo "Published $TAG from $COMMIT: npm install agent-device@nightly" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published $TAG from $COMMIT: npm install agent-device@$DIST_TAG" >> "$GITHUB_STEP_SUMMARY"
 
   github-release:
     name: Draft GitHub release

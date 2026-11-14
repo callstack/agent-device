@@ -8,11 +8,17 @@ export function nightlyVersion(
   developmentVersion: string,
   date: string,
   runNumber: string | number,
+  sourceBranch?: 'main' | '0.22',
 ): string;
 
 export function nightlyBase(version: string): string;
 
-export function latestNightlyTag(tags: readonly string[]): string | null;
+export function nightlyDate(version: string, sourceBranch?: 'main' | '0.22'): string | null;
+
+export function latestNightlyTag(
+  tags: readonly string[],
+  sourceBranch?: 'main' | '0.22',
+): string | null;
 
 export function previousReleaseTag(tags: readonly string[], version: string): string | null;
 
