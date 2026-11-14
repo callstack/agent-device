@@ -44,6 +44,13 @@ test('loadNodeHttpRequester selects the protocol module and keeps request mutabl
 test('readNodeHttpResponseBody decodes the complete response stream', async () => {
   const response = Readable.from(['hello', Buffer.from(' world')]) as unknown as IncomingMessage;
   assert.equal(await readNodeHttpResponseBody(response), 'hello world');
+  const observed: string[] = [];
+  const progressing = Readable.from(['hello', Buffer.from(' world')]) as unknown as IncomingMessage;
+  assert.equal(
+    await readNodeHttpResponseBody(progressing, (chunk) => observed.push(chunk)),
+    'hello world',
+  );
+  assert.deepEqual(observed, ['hello', ' world']);
 });
 
 test('readNodeHttpRequestBody returns bytes and preserves the caller error message at the limit', async () => {

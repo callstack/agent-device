@@ -18,6 +18,11 @@ import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agen
 import { uploadArtifact } from '../../upload-client.ts';
 import { type UploadStreamResponse, streamFileToHttpRequest } from '../../upload-stream.ts';
 
+// Adopted phase budgets are independent expectations for the loopback tests.
+export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
+export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
+export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
+
 export const PREFLIGHT_REQUEST = 'POST /upload/preflight';
 export const LEGACY_UPLOAD_REQUEST = 'POST /upload';
 
@@ -672,7 +677,11 @@ export async function startUploadLegsDaemon(
   const server = http.createServer((req, res) => {
     requests.push(`${req.method} ${req.url}`);
     const behavior = behaviors[legs];
-    if (!behavior) throw new Error(`unexpected upload leg ${legs + 1}`);
+    if (!behavior) {
+      res.statusCode = 500;
+      res.end(`unexpected upload leg ${legs + 1}`);
+      return;
+    }
     legs += 1;
     const answer = () => {
       if (!behavior.respond) return;

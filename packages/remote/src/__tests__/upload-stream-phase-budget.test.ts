@@ -147,6 +147,7 @@ test('a phase is never armed after the attempt is already over', async () => {
     const late = createTransferPhaseWatchdog(caller.signal);
     try {
       late.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
+      assert.equal(vi.getTimerCount(), 0);
       await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS * 2);
       assert.equal(late.signal.reason.message, 'gone');
     } finally {

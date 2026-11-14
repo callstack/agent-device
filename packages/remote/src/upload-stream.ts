@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
+import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
@@ -15,7 +15,7 @@ import {
  * Ceiling for establishing the connection one artifact-transfer attempt runs on.
  *
  * Kept beside its domain rather than on the socket: the same number governs every hop of an upload,
- * every offset resume and a standalone artifact download, so "how long may one hop take to connect"
+ * and every offset resume, so "how long may one hop take to connect"
  * has exactly one answer.
  */
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
@@ -402,7 +402,7 @@ async function streamFileToHttpRequestAttempt(options: {
       // Read the accepted response to its end first, under the response-body budget; only then may
       // the outgoing work be destroyed, and it must be joined before this attempt resolves or a
       // redirect/resume starts — old bytes may never overlap the next hop.
-      const body = await readUploadResponseBody(res, () => watchdog.touchBody());
+      const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
       watchdog.dispose();
 
@@ -462,26 +462,6 @@ async function streamFileToHttpRequestAttempt(options: {
 
 function retryableUploadStreamDetail(options: { retryable?: boolean }): Record<string, true> {
   return options.retryable === true ? { [UPLOAD_STREAM_RETRYABLE_DETAIL]: true } : {};
-}
-
-/**
- * Reads a response body as text, reporting each chunk so an inactivity budget can tell a slow
- * transfer from a stalled one.
- *
- * The shared host-kit reader is deliberately not reused here: it has no notion of progress, and
- * widening it for one transfer family would move an unrelated transport owner's surface.
- */
-function readUploadResponseBody(res: IncomingMessage, onBytes: () => void): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    let body = '';
-    res.setEncoding('utf8');
-    res.on('data', (chunk: string) => {
-      onBytes();
-      body += chunk;
-    });
-    res.on('end', () => resolve(body));
-    res.on('error', reject);
-  });
 }
 
 function emitUploadAttemptStarted(

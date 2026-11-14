@@ -42,11 +42,15 @@ export async function loadNodeHttpRequester(protocol: string): Promise<NodeHttpR
     : (await import('node:http')).default;
 }
 
-export function readNodeHttpResponseBody(res: IncomingMessage): Promise<string> {
+export function readNodeHttpResponseBody(
+  res: IncomingMessage,
+  onChunk?: (chunk: string) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = '';
     res.setEncoding('utf8');
-    res.on('data', (chunk) => {
+    res.on('data', (chunk: string) => {
+      onChunk?.(chunk);
       body += chunk;
     });
     res.on('end', () => resolve(body));

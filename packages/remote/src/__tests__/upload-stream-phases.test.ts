@@ -1,19 +1,17 @@
 // Phase budgets applied to a real artifact upload over loopback (#4441).
 //
-// The budgets in `upload-stream.ts` are minutes long, so every case here drives a controlled
-// clock and parks the request body a quota at a time. That combination is the point: a transfer that
+// The 30–120-second phase budgets use a controlled clock here. Each case parks the request
+// body a quota at a time. That combination is the point: a transfer that
 // keeps moving must survive budget after budget, and one that stops moving must be ended by the ONE
 // budget that ran out. A mocked transport could show neither, because the backpressure that makes
 // "still progressing" mean something belongs to the real socket.
 
 import { afterEach, assert, test, vi } from 'vitest';
 import {
+  LEGACY_UPLOAD_REQUEST,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from '../upload-stream.ts';
-import {
-  LEGACY_UPLOAD_REQUEST,
   PREFLIGHT_REQUEST,
   assertDetailedError,
   createArtifactFile,

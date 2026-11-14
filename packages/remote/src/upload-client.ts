@@ -212,6 +212,7 @@ async function retryDirectUpload(
     try {
       return await uploadOnce(retryPreflight);
     } catch (error) {
+      options.signal?.throwIfAborted();
       // As above: an expired phase is this client's own deadline, so it must not buy the legacy
       // fallback a third attempt at the same bytes.
       if (isTransferPhaseTimeoutError(error)) throw error;

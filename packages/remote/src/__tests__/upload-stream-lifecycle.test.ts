@@ -9,19 +9,16 @@
 // already connected), and buffered bytes never count as transport progress.
 //
 // Every case uses the attempt seam, a controlled clock, and real loopback sockets: the overlap being
-// refused is only observable on a real socket, and the budgets are minutes long.
+// refused is only observable on a real socket, and phase budgets range from 30 to 120 seconds.
 
 import http from 'node:http';
 import { afterEach, assert, test, vi } from 'vitest';
+import { isRetryableUploadStreamError, isTransferPhaseTimeoutError } from '../upload-stream.ts';
 import {
-  isRetryableUploadStreamError,
-  isTransferPhaseTimeoutError,
+  LEGACY_UPLOAD_REQUEST,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from '../upload-stream.ts';
-import {
-  LEGACY_UPLOAD_REQUEST,
   type ParkedUploadDaemon,
   assertDetailedError,
   createArtifactFile,
@@ -328,30 +325,33 @@ test('a completed TLS handshake with a stalled body expires body inactivity, not
   // handler below answers the handshake and then stops reading, so a trusted peer connection has to
   // be established for this to say anything.
   const trusted = trustSelfSignedLocalhostCertificate();
-  const origin = await startConnectedStalledTlsOrigin();
   try {
-    // The control leg first: the same trust decision, a peer that reads nothing but completes the
-    // handshake, and the outcome is a body-phase expiry rather than a handshake failure.
-    const attempt = startUploadAttempt({
-      url: `https://127.0.0.1:${origin.port}/upload`,
-      artifactPath: createArtifactFile(4 * MEBIBYTE),
-    });
-    await spendAttemptBudget(TRANSFER_CONNECT_TIMEOUT_MS + 1_000, attempt);
-    assert.equal(attempt.settled, false, 'secureConnect ended the connect phase');
-    await spendAttemptBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, attempt);
-    const settled = await settleAttemptAfterBudget(attempt);
-    assert.equal(settled.settled, true);
-    const result = await attempt;
+    const origin = await startConnectedStalledTlsOrigin();
+    try {
+      // The control leg first: the same trust decision, a peer that reads nothing but completes the
+      // handshake, and the outcome is a body-phase expiry rather than a handshake failure.
+      const attempt = startUploadAttempt({
+        url: `https://127.0.0.1:${origin.port}/upload`,
+        artifactPath: createArtifactFile(4 * MEBIBYTE),
+      });
+      await spendAttemptBudget(TRANSFER_CONNECT_TIMEOUT_MS + 1_000, attempt);
+      assert.equal(attempt.settled, false, 'secureConnect ended the connect phase');
+      await spendAttemptBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, attempt);
+      const settled = await settleAttemptAfterBudget(attempt);
+      assert.equal(settled.settled, true);
+      const result = await attempt;
 
-    assert.equal(result.value, undefined);
-    assertDetailedError(result.error, {
-      reason: 'transfer_phase_timeout',
-      transferPhase: 'request-body',
-      timeoutMs: TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
-    });
+      assert.equal(result.value, undefined);
+      assertDetailedError(result.error, {
+        reason: 'transfer_phase_timeout',
+        transferPhase: 'request-body',
+        timeoutMs: TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+      });
+    } finally {
+      await origin.close();
+    }
   } finally {
     trusted.restore();
-    await origin.close();
   }
 });
 
@@ -498,20 +498,20 @@ test('an attempt on a reused connection is already past its connect phase', asyn
     },
     { readAllBody: true },
   ]);
-  const first = startUploadAttempt({
-    url: `${daemon.baseUrl}/upload`,
-    artifactPath: createArtifactFile(64 * 1024),
-  });
-  const firstSettled = await settleAttemptAfterBudget(first);
-  assert.equal(firstSettled.settled, true);
-  const firstResult = await first;
-  assert.equal(firstResult.error, undefined, `leg one failed: ${String(firstResult.error)}`);
-
-  const second = startUploadAttempt({
-    url: `${daemon.baseUrl}/upload`,
-    artifactPath: createArtifactFile(64 * 1024),
-  });
   try {
+    const first = startUploadAttempt({
+      url: `${daemon.baseUrl}/upload`,
+      artifactPath: createArtifactFile(64 * 1024),
+    });
+    const firstSettled = await settleAttemptAfterBudget(first);
+    assert.equal(firstSettled.settled, true);
+    const firstResult = await first;
+    assert.equal(firstResult.error, undefined, `leg one failed: ${String(firstResult.error)}`);
+
+    const second = startUploadAttempt({
+      url: `${daemon.baseUrl}/upload`,
+      artifactPath: createArtifactFile(64 * 1024),
+    });
     await spendAttemptBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, second);
     const settled = await settleAttemptAfterBudget(second);
     assert.equal(settled.settled, true);
