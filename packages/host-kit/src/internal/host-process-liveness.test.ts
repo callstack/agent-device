@@ -42,6 +42,13 @@ function psInstalledAt(installed: readonly string[]): void {
 }
 
 beforeEach(() => {
+  const readFileSync = fs.readFileSync;
+  vi.spyOn(fs, 'readFileSync').mockImplementation((path, options) => {
+    if (String(path).startsWith('/proc/')) {
+      throw Object.assign(new Error('proc is unavailable in the ps fixture'), { code: 'ENOENT' });
+    }
+    return readFileSync(path, options);
+  });
   mockRunCmdSync.mockReset();
   mockRunCmd.mockReset();
 });
