@@ -124,11 +124,13 @@ async function trackedPlugin() {
     setup: async (host) => {
       calls.setup += 1;
       const setup = await maestro.setup(host);
+      if (!setup.replayBackend) throw new Error('Expected a format backend');
+      const replayBackend = setup.replayBackend;
       return {
         replayBackend: {
           create: async (host) => {
             calls.create += 1;
-            const backend = await setup.replayBackend.create(host);
+            const backend = await replayBackend.create(host);
             return {
               ...backend,
               collectSourceFiles: (params) => {

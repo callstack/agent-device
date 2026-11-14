@@ -105,6 +105,7 @@
   "@agent-device/contracts/replay",
   "@agent-device/contracts/replay-backend",
   "@agent-device/contracts/replay-divergence-data",
+  "@agent-device/contracts/replay-execution",
   "@agent-device/contracts/replay-script-data",
   "@agent-device/contracts/replay-test-execution",
   "@agent-device/contracts/runner-lease-context",
