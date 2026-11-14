@@ -310,11 +310,14 @@ export const KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_DISMISS_UNAVAI
 export const KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_RETURN_UNAVAILABLE';
 
 /**
- * The runner's own code refusing a press of a hardware or Siri Remote control this target cannot
- * express: the Action Button on a model that has none, a volume key on a simulator, or a remote button
- * off tvOS. Each refusal comes from the press helper answering false, which it does before pressing
- * anything, so the reply proves nothing was sent. One code covers the family because the recovery is
- * one question — does this target have that control — and the message names the control.
+ * The runner's own code refusing a press of a hardware or Siri Remote control its target cannot
+ * perform. Today that is the Action Button on an iPhone or iPad model without one: the daemon admits
+ * `action-button` for every iPhone and iPad and lets the runner answer whether the hardware is there.
+ * A volume key on a simulator and a remote button off tvOS are refused by runtime admission before the
+ * runner is reached, so those refusals carry `unsupported-device-kind` and `unsupported-platform-leaf`.
+ * Each refusal comes from the press helper answering false, which it does before pressing anything, so
+ * the reply proves nothing was sent. One code covers the family because the recovery is one question —
+ * does this target have that control — and the message names the control.
  */
 export const HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE = 'HARDWARE_CONTROL_UNAVAILABLE';
 

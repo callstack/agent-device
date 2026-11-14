@@ -243,6 +243,12 @@ test('the keyboard-return refusal keeps UNSUPPORTED_OPERATION and reports an unk
     reason: 'keyboard_return_unavailable',
     dispatched: 'unknown',
   });
+  // The closest negative: the same sentence with no code earns no reason, so a consumer keyed on
+  // `reason` cannot mistake prose for the typed refusal.
+  const untyped = commandFailed(
+    'Unable to press the keyboard return key: the keyboard exposes no return-like key and no text field was available to submit',
+  );
+  assert.equal(untyped.details?.reason, undefined);
 });
 
 test('the macOS in-app back refusal publishes its reason under the code a code-less reply had', () => {
@@ -256,6 +262,10 @@ test('the macOS in-app back refusal publishes its reason under the code a code-l
     reason: 'in_app_back_control_unavailable',
     dispatched: 'no',
   });
+  // The closest negative: the base reply was a code-less COMMAND_FAILED, and prose alone still earns no
+  // reason, so a consumer keyed on `reason` cannot mistake it for the typed refusal.
+  const untyped = commandFailed('in-app back control is not available');
+  assert.equal(untyped.details?.reason, undefined);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {

@@ -316,7 +316,7 @@
   {
     "id": "ios-runner.reply.HARDWARE_CONTROL_UNAVAILABLE",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code HARDWARE_CONTROL_UNAVAILABLE: this target cannot express the asked-for hardware or Siri Remote control, so nothing was pressed",
+    "trigger": "structured runner reply with code HARDWARE_CONTROL_UNAVAILABLE: this target cannot perform the asked-for hardware or Siri Remote press, so nothing was pressed",
     "dispatched": "no"
   },
   {

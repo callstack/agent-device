@@ -46,8 +46,8 @@ final class RunnerTests: XCTestCase {
   /// was refused before any touch went down, so dispatched: no.
   /// `IN_APP_BACK_CONTROL_UNAVAILABLE` is macOS `back` finding no in-app back control, so it pressed
   /// nothing. `KEYBOARD_RETURN_UNAVAILABLE` is `keyboard enter` finding nothing to submit.
-  /// `HARDWARE_CONTROL_UNAVAILABLE` is a hardware or remote control this target cannot express.
-  /// Each is a pre-dispatch refusal, and the host publishes its `details.reason` for all three.
+  /// `HARDWARE_CONTROL_UNAVAILABLE` is a press the runner answers that its target cannot perform.
+  /// The host publishes `details.reason` for all three.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
@@ -71,9 +71,11 @@ final class RunnerTests: XCTestCase {
     /// `details.reason`; the disclosure stays `unknown` because the sole-field route taps the field
     /// before it types, and that tap can be the last thing that fails.
     static let keyboardReturnUnavailable = "KEYBOARD_RETURN_UNAVAILABLE"
-    /// A press of a hardware or Siri Remote control this target cannot express: the Action Button on a
-    /// model without one, a volume key on a simulator, or a remote button off tvOS. Nothing was
-    /// pressed, so the host reports `UNSUPPORTED_OPERATION` with `details.reason` and `dispatched: no`.
+    /// A press of a hardware or Siri Remote control this target cannot perform: the press helper refuses
+    /// before pressing anything, so the host reports `UNSUPPORTED_OPERATION` with `details.reason` and
+    /// `dispatched: no`. Through the daemon the reachable case today is the Action Button on an iPhone
+    /// or iPad model without one; the simulator volume and non-tvOS remote cases are refused by runtime
+    /// admission before the runner is asked.
     static let hardwareControlUnavailable = "HARDWARE_CONTROL_UNAVAILABLE"
     /// macOS `back` found no in-app back control to press, so it sent nothing. The host keeps the
     /// `COMMAND_FAILED` code such a code-less refusal always had and publishes `details.reason`.
