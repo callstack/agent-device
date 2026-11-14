@@ -13,7 +13,12 @@ type Job = {
   steps?: Array<{ uses?: string; with?: Record<string, string> }>;
   uses?: string;
 };
-const workflow = parse(source) as { permissions: unknown; jobs: Record<string, Job> };
+const workflow = parse(source) as {
+  permissions: unknown;
+  jobs: Record<string, Job>;
+  on: { schedule: Array<{ cron: string }> };
+  concurrency: { group: string };
+};
 
 // npm trusts release.yml in the npm-publish environment, so whichever job can mint an id-token
 // can publish. Only the publisher and the MCP Registry call (its own OIDC login) may.
@@ -73,4 +78,14 @@ test('the source checkout and artifact identity use the planned commit while the
 test('version stamping uses tooling pinned to the workflow commit', () => {
   const tooling = workflow.jobs.build?.steps?.find((step) => step.with?.path === '.release-tools');
   expect(tooling?.with?.ref).toBe('${{ github.workflow_sha }}');
+});
+
+test('both nightly schedules keep separate concurrency groups for cron and manual selection', () => {
+  expect(workflow.on.schedule.map((entry) => entry.cron)).toEqual(
+    expect.arrayContaining(['23 1 * * *', '53 1 * * *']),
+  );
+  expect(workflow.concurrency.group).toContain(
+    "(github.event.schedule == '53 1 * * *' || inputs.source_branch == '0.22') && 'release-nightly-0.22'",
+  );
+  expect(workflow.concurrency.group).toContain("|| 'release-nightly'");
 });
