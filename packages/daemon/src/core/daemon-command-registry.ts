@@ -112,6 +112,18 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
 }
 
+/**
+ * Whether the request only observes the device: no step of it dispatches an action or changes state.
+ * It reads the descriptor's declared effect: a recorded command's recording effect, otherwise an
+ * observe-only device claim. Observability commands get no special case: one that declares
+ * `observes-app` (such as `perf`) is read-only, and one that starts, stops or clears a capture is not.
+ */
+export function isReadOnlyRequest(req: DaemonWireRequest): boolean {
+  const recordingEffect = resolveCommandRecordingEffect(req);
+  if (recordingEffect !== undefined) return recordingEffect === 'observes-app';
+  return resolveCommandDeviceClaimPolicy(req.command) === 'observe';
+}
+
 export function isHumanControlMutation(req: DaemonRequest): boolean {
   if (req.command === 'human_control' || req.command === 'lease_heartbeat') return false;
   const recordingEffect = resolveCommandRecordingEffect(req);

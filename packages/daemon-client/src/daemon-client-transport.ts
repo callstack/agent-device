@@ -468,7 +468,7 @@ async function sendRequestWithFallback(
         options,
       );
     }
-    if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
+    if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
     const fallback = chooseAutoFallbackTransport(info, preference, transport);
     if (!fallback || !isSafeAutoTransportFallbackError(error, transport)) throw error;
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, fallback, options);
@@ -484,7 +484,7 @@ async function retryAfterRemoteInstanceMismatch(
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  invalidateRemoteDaemonHealth(info);
+  await invalidateRemoteDaemonHealth(info);
   const probeTimeoutMs = remainingRemoteRequestTimeoutMs(req, timeoutMs, deadline);
   const health = await readRemoteDaemonHealth(info, probeTimeoutMs, options.signal);
   refuseAbortedRequest(options.signal, req.meta?.requestId);
@@ -496,15 +496,15 @@ async function retryAfterRemoteInstanceMismatch(
   );
   if (!health.reachable) {
     const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
-    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl });
+    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts: 1 });
   }
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
-  cacheRemoteDaemonHealth(info, health);
+  (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health);
   try {
     return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
   } catch (error) {
-    if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
+    if (isRemoteTransportFailure(error)) await invalidateRemoteDaemonHealth(info);
     throw error;
   }
 }
@@ -936,59 +936,23 @@ async function sendHttpRequest(
   });
 }
 
-type RemoteHealthCacheEntry = {
-  baseUrl: string;
-  token: string;
-  pid: number;
-  health: Promise<RemoteDaemonHealth>;
-};
+// Loaded on the remote path only: a local daemon request never pays for the remote health cache.
+const loadRemoteHealthCache = () => import('./daemon-client-remote-health-cache.ts');
 
-let remoteHealthCache: RemoteHealthCacheEntry | undefined;
-
-function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
-  return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
+/** Drops a remote daemon's cached health; a local daemon has none, so its failure loads nothing. */
+async function invalidateRemoteDaemonHealth(info: DaemonInfo): Promise<void> {
+  if (!info.baseUrl) return;
+  (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info);
 }
 
-function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
-  if (!health.instanceId || (health.upstream && !health.upstream.instanceId)) return;
-  remoteHealthCache = {
-    baseUrl: info.baseUrl ?? '',
-    token: info.token,
-    pid: info.pid,
-    health: Promise.resolve(health),
-  };
-}
-
-function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
-  if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
-    remoteHealthCache = undefined;
-  }
-}
-
-export async function cachedRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
-  if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
-    return await remoteHealthCache.health;
-  }
-  const entry: RemoteHealthCacheEntry = {
-    baseUrl: info.baseUrl ?? '',
-    token: info.token,
-    pid: info.pid,
-    health: readRemoteDaemonHealth(info),
-  };
-  remoteHealthCache = entry;
-  try {
-    const health = await entry.health;
-    if (
-      (!health.reachable ||
-        !health.instanceId ||
-        (health.upstream && !health.upstream.instanceId)) &&
-      remoteHealthCache === entry
-    ) {
-      remoteHealthCache = undefined;
-    }
-    return health;
-  } catch (error) {
-    if (remoteHealthCache === entry) remoteHealthCache = undefined;
-    throw error;
-  }
+/** The remote `/health` answer within this caller's bound, through the process cache. */
+export async function cachedRemoteDaemonHealth(
+  info: DaemonInfo,
+  probeTimeoutMs?: number,
+  callerSignal?: AbortSignal,
+): Promise<RemoteDaemonHealth> {
+  const { cachedRemoteHealth } = await loadRemoteHealthCache();
+  return await cachedRemoteHealth(info, () =>
+    readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
+  );
 }

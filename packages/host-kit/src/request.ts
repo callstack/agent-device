@@ -5,6 +5,7 @@ export {
   getRequestDeadlineMs,
   getRequestSignal,
   getRequestExecutionDeadlineMs,
+  getRequestReadOnlyDeadlineMs,
   getRequestResultDeadlineMs,
   isRequestCanceled,
   markRequestCanceled,

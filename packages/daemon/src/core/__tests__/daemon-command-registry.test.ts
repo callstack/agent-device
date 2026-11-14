@@ -7,6 +7,7 @@ import {
   getDaemonCommandRoute,
   getSessionCommandKind,
   isHumanControlMutation,
+  isReadOnlyRequest,
   isLeaseAdmissionExempt,
   resolveSessionlessLeaseAdmissionExemption,
   shouldBlockForInvalidRecording,
@@ -326,3 +327,40 @@ function makeRequest(command: string, positionals: string[] = []): DaemonRequest
     flags: {},
   };
 }
+
+// The fact the transports stamp on each admitted request: only a request with no action in any of
+// its steps may let a resend loop spend its deadline.
+test('isReadOnlyRequest marks reads, and never a request that dispatches an action', () => {
+  const request = (command: string, positionals: string[] = []) => ({
+    token: 't',
+    session: 'default',
+    command,
+    positionals,
+    flags: {},
+  });
+  for (const [command, positionals] of [
+    [PUBLIC_COMMANDS.snapshot, []],
+    [PUBLIC_COMMANDS.screenshot, []],
+    [PUBLIC_COMMANDS.alert, ['get']],
+    [PUBLIC_COMMANDS.appState, []],
+  ] as const) {
+    assert.equal(isReadOnlyRequest(request(command, [...positionals])), true, command);
+  }
+  for (const [command, positionals] of [
+    [PUBLIC_COMMANDS.press, ['@e1']],
+    [PUBLIC_COMMANDS.swipe, ['up']],
+    [PUBLIC_COMMANDS.alert, ['accept']],
+    [PUBLIC_COMMANDS.batch, []],
+    // Observability commands that change state: never read-only, though not human-control mutations.
+    [PUBLIC_COMMANDS.logs, ['clear', '--restart']],
+    [PUBLIC_COMMANDS.logs, ['start']],
+    [PUBLIC_COMMANDS.logs, ['stop']],
+    [PUBLIC_COMMANDS.logs, ['mark']],
+    [PUBLIC_COMMANDS.audio, ['probe', 'start']],
+    [PUBLIC_COMMANDS.audio, ['probe', 'stop']],
+  ] as const) {
+    const req = request(command, [...positionals]);
+    assert.equal(isReadOnlyRequest(req), false, `${command} ${positionals.join(' ')}`);
+  }
+  assert.equal(isHumanControlMutation(request(PUBLIC_COMMANDS.logs, ['start']) as never), false);
+});

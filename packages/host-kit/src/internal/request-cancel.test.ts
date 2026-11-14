@@ -13,6 +13,7 @@ import {
   registerRequestAbort,
   resolveRequestTrackingId,
   getRequestDeadlineMs,
+  getRequestReadOnlyDeadlineMs,
   getRequestSignal,
   throwIfRequestCanceled,
   withRequestDeadline,
@@ -426,4 +427,26 @@ test('a request runs under the earlier of its execution and result deadlines', a
     }
   }
   assert.equal(getRequestDeadlineMs('unregistered-request'), undefined);
+});
+
+test('a resend loop gets the request deadline only for a read-only request, and an attempt inherits it', () => {
+  const deadlineMs = Date.now() + 30_000;
+  const read = registerRequestAbort('req-read', undefined, {
+    resultDeadlineMs: deadlineMs,
+    readOnly: true,
+  });
+  const action = registerRequestAbort('req-action', undefined, {
+    resultDeadlineMs: deadlineMs,
+    readOnly: false,
+  });
+  const step = registerRequestAbort('req-read-step', 'req-read');
+  try {
+    assert.equal(getRequestReadOnlyDeadlineMs('req-read'), deadlineMs);
+    assert.equal(getRequestReadOnlyDeadlineMs('req-read-step'), deadlineMs);
+    // A read inside an action leaves the action's budget to the dispatch after it.
+    assert.equal(getRequestDeadlineMs('req-action'), deadlineMs);
+    assert.equal(getRequestReadOnlyDeadlineMs('req-action'), undefined);
+  } finally {
+    for (const registration of [step, action, read]) clearRequestAbortRegistration(registration);
+  }
 });

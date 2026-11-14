@@ -30,6 +30,13 @@ import {
 import { REMOTE_DAEMON_UNAVAILABLE_REASON } from '../daemon-lifecycle-errors.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonProxyServer } from '@agent-device/proxy';
+import { invalidateRemoteDaemonHealth } from '../daemon-client-remote-health-cache.ts';
+
+// Calls through to the real cache, so only the invalidation test reads the spy.
+vi.mock('../daemon-client-remote-health-cache.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../daemon-client-remote-health-cache.ts')>();
+  return { ...actual, invalidateRemoteDaemonHealth: vi.fn(actual.invalidateRemoteDaemonHealth) };
+});
 
 function sendWithStaleInstance(port: number, timeoutMs: number) {
   return sendRequest(
@@ -621,3 +628,36 @@ test.for(['timeout', 'reset'] as const)(
     }
   },
 );
+
+// A transport failure drops the cached health of a remote daemon only: a local daemon has no cached
+// health, so its failed request neither invalidates nor loads the remote health cache.
+test('a transport failure invalidates cached health for a remote daemon only', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const server = http.createServer((req) => req.socket.destroy());
+  const port = await listenOnLoopback(server);
+  const invalidate = vi.mocked(invalidateRemoteDaemonHealth);
+  invalidate.mockClear();
+  const send = (info: Parameters<typeof sendRequest>[0]) =>
+    sendRequest(
+      info,
+      { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+      'http',
+      resolveDaemonPaths('/tmp/agent-device-health-invalidation-test'),
+      2_000,
+      { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  try {
+    const local = await send({ token: 'secret', pid: 1, transport: 'http', httpPort: port });
+    assert.ok(local instanceof AppError, `unexpected outcome: ${String(local)}`);
+    assert.equal(local.details?.reason, 'daemon_transport_failure');
+    assert.equal(invalidate.mock.calls.length, 0, 'a local failure leaves the remote cache alone');
+
+    await send({ token: 'secret', pid: 1, baseUrl: `http://127.0.0.1:${port}` });
+    assert.equal(invalidate.mock.calls.length, 1);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

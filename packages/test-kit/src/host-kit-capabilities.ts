@@ -45,6 +45,7 @@ export async function loadRealHostKitCapabilities() {
     withProcessLock: file.withProcessLock,
     publishFileSync: file.publishFileSync,
     emitRequestProgress: request.emitRequestProgress,
+    getRequestReadOnlyDeadlineMs: request.getRequestReadOnlyDeadlineMs,
     getRequestSignal: request.getRequestSignal,
     isRequestCanceled: request.isRequestCanceled,
     runnerRuntimeSlot: runtimeSlots.runtimeSlot,

@@ -226,9 +226,21 @@ function shouldUseOwnedReplayStateDir(
   return isOneShotReplayCommand(req.command) && !explicitStateDir && !rawRemoteBaseUrl;
 }
 
-export async function ensureManagedDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+/**
+ * How long the remote `/health` gate may re-probe a daemon that is there but not ready: the budget
+ * of the command waiting behind it. Without one, the first failed probe refuses.
+ */
+export type RemoteHealthRecovery = {
+  budgetMs: number;
+  signal: AbortSignal | undefined;
+};
+
+export async function ensureManagedDaemon(
+  settings: DaemonClientSettings,
+  healthRecovery?: RemoteHealthRecovery,
+): Promise<EnsuredDaemon> {
   if (settings.remoteBaseUrl) {
-    return await ensureRemoteDaemon(settings);
+    return await ensureRemoteDaemon(settings, healthRecovery);
   }
 
   const ensured = await ensureLocalDaemon(settings);
@@ -244,7 +256,10 @@ async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
   return await startLocalDaemon(settings);
 }
 
-async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+async function ensureRemoteDaemon(
+  settings: DaemonClientSettings,
+  healthRecovery: RemoteHealthRecovery | undefined,
+): Promise<EnsuredDaemon> {
   const remoteInfo: DaemonInfo = {
     transport: 'http',
     // Remote mode reuses the auth token as the daemon token so the existing JSON-RPC contract still works.
@@ -252,18 +267,27 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
-  const health = await cachedRemoteDaemonHealth(remoteInfo);
-  if (health.reachable) {
-    remoteInfo.remoteInstanceId = health.instanceId;
-    remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
-    return { info: remoteInfo, startedByClient: false };
+  // The command's budget starts with the first probe, which already runs under it and its signal.
+  const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
+  let health = await cachedRemoteDaemonHealth(
+    remoteInfo,
+    healthRecovery?.budgetMs,
+    healthRecovery?.signal,
+  );
+  if (!health.reachable) {
+    // Loaded on the refusal: this module is not part of what every CLI start pays for.
+    const { recoverRemoteDaemonHealth } = await import('./daemon-client-remote-health-recovery.ts');
+    health = await recoverRemoteDaemonHealth({
+      info: remoteInfo,
+      failedProbe: health,
+      recovery: healthRecovery,
+      deadline,
+      hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
+    });
   }
-  // Loaded on the refusal: this error module is not part of what every CLI start pays for.
-  const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
-  throw remoteDaemonUnavailableError({
-    daemonBaseUrl: settings.remoteBaseUrl,
-    hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
-  });
+  remoteInfo.remoteInstanceId = health.instanceId;
+  remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
+  return { info: remoteInfo, startedByClient: false };
 }
 
 /**
