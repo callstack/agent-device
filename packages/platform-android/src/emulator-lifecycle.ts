@@ -89,13 +89,18 @@ function isTransientAndroidBootFailure(error: unknown): boolean {
   const details = asAppError(error).details;
   return (
     details?.bootObservation === 'not_ready' ||
-    (details?.adbFailure === 'device_offline' && details.retriable === true)
+    (details?.retriable === true &&
+      (details.adbFailure === 'device_offline' || details.adbHostRefusal !== true))
   );
 }
 
 function androidBootFailureReason(error: unknown): ReturnType<typeof classifyBootFailure> {
   const appError = asAppError(error);
-  if (appError.code === 'TOOL_MISSING' || appError.details?.adbHostRefusal === true) {
+  if (
+    appError.code === 'TOOL_MISSING' ||
+    appError.details?.adbHostRefusal === true ||
+    appError.details?.adbFailure === 'device_unauthorized'
+  ) {
     return 'ADB_TRANSPORT_UNAVAILABLE';
   }
   if (appError.details?.adbFailure === 'timeout') return 'ANDROID_BOOT_TIMEOUT';

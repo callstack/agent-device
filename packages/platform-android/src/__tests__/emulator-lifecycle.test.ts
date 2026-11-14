@@ -122,7 +122,10 @@ test('cancellation stops polling', async () => {
     controller.abort();
     return { stdout: '0', stderr: '', exitCode: 0 };
   });
-  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, controller.signal));
+  await assert.rejects(
+    waitForAndroidBoot('emulator-5554', 500, controller.signal),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
