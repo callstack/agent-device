@@ -112,17 +112,24 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
 }
 
-/** Whether the request only observes the device: no step of it dispatches an action. */
+/**
+ * Whether the request only observes the device: no step of it dispatches an action or changes state.
+ * It reads the descriptor's declared effect: a recorded command's recording effect, otherwise an
+ * observe-only device claim. An observability command (logs, network, audio capture) can change
+ * state, so it is never read-only here.
+ */
 export function isReadOnlyRequest(req: DaemonWireRequest): boolean {
   const recordingEffect = resolveCommandRecordingEffect(req);
   if (recordingEffect !== undefined) return recordingEffect === 'observes-app';
-  if (getSessionCommandKind(req.command) === 'observability') return true;
   return resolveCommandDeviceClaimPolicy(req.command) === 'observe';
 }
 
 export function isHumanControlMutation(req: DaemonRequest): boolean {
   if (req.command === 'human_control' || req.command === 'lease_heartbeat') return false;
-  return !isReadOnlyRequest(req);
+  const recordingEffect = resolveCommandRecordingEffect(req);
+  if (recordingEffect !== undefined) return recordingEffect !== 'observes-app';
+  if (getSessionCommandKind(req.command) === 'observability') return false;
+  return resolveCommandDeviceClaimPolicy(req.command) !== 'observe';
 }
 
 export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest): boolean {

@@ -342,6 +342,7 @@ test('isReadOnlyRequest marks reads, and never a request that dispatches an acti
     [PUBLIC_COMMANDS.snapshot, []],
     [PUBLIC_COMMANDS.screenshot, []],
     [PUBLIC_COMMANDS.alert, ['get']],
+    [PUBLIC_COMMANDS.appState, []],
   ] as const) {
     assert.equal(isReadOnlyRequest(request(command, [...positionals])), true, command);
   }
@@ -350,7 +351,16 @@ test('isReadOnlyRequest marks reads, and never a request that dispatches an acti
     [PUBLIC_COMMANDS.swipe, ['up']],
     [PUBLIC_COMMANDS.alert, ['accept']],
     [PUBLIC_COMMANDS.batch, []],
+    // Observability commands that change state: never read-only, though not human-control mutations.
+    [PUBLIC_COMMANDS.logs, ['clear', '--restart']],
+    [PUBLIC_COMMANDS.logs, ['start']],
+    [PUBLIC_COMMANDS.logs, ['stop']],
+    [PUBLIC_COMMANDS.logs, ['mark']],
+    [PUBLIC_COMMANDS.audio, ['probe', 'start']],
+    [PUBLIC_COMMANDS.audio, ['probe', 'stop']],
   ] as const) {
-    assert.equal(isReadOnlyRequest(request(command, [...positionals])), false, command);
+    const req = request(command, [...positionals]);
+    assert.equal(isReadOnlyRequest(req), false, `${command} ${positionals.join(' ')}`);
   }
+  assert.equal(isHumanControlMutation(request(PUBLIC_COMMANDS.logs, ['start']) as never), false);
 });

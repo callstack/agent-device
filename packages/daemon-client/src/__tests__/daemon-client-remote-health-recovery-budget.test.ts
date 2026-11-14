@@ -115,7 +115,14 @@ test('aborting the request while the gate re-probes stops the probes', async () 
       () => undefined,
       (error: unknown) => error,
     );
-    while (server.probeTimes.length < 3) await new Promise((resolve) => setImmediate(resolve));
+    // Bounded, so a gate that never re-probes fails here instead of hanging the test.
+    for (let turn = 0; turn < 10_000 && server.probeTimes.length < 3; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.ok(
+      server.probeTimes.length >= 3,
+      `the gate re-probed ${server.probeTimes.length} times`,
+    );
     aborting.abort();
 
     assert.ok(isRequestCanceledError(await outcome), 'the abort answers as a cancellation');
