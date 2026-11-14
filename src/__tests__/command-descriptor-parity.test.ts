@@ -310,7 +310,6 @@ test("frameworkTier pins exactly the 'loop' command set", () => {
     'fill',
     'open',
     'press',
-    'screenshot',
     'scroll',
     'snapshot',
     'wait',
