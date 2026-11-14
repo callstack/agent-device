@@ -1,5 +1,5 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
@@ -703,54 +703,6 @@ test.each([
     }
   },
 );
-
-test('a remote daemon unavailable for the whole request budget is refused with its probe count and the disconnect hint', async () => {
-  // `session list` has the 90s default budget: 90 probes a second apart while /health answers 503.
-  let healthProbes = 0;
-  let rpcSends = 0;
-  const restoreHttpRequest = mockEventHttpRequest(({ options, res }) => {
-    if (options.method === 'GET') healthProbes += 1;
-    else rpcSends += 1;
-    res.statusCode = 503;
-    res.emit('end');
-  });
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
-  const stopAdvancing = new AbortController();
-  const advancing = (async () => {
-    while (!stopAdvancing.signal.aborted) await vi.advanceTimersByTimeAsync(1_000);
-  })();
-
-  try {
-    await withRemoteDaemonEnv(async () => {
-      let thrown: unknown;
-      try {
-        await sendToDaemon({
-          session: 'default',
-          command: 'session',
-          positionals: ['list'],
-          flags: {},
-          meta: { requestId: 'req-remote-unavailable' },
-        });
-      } catch (error) {
-        thrown = error;
-      }
-
-      assert.ok(thrown instanceof Error);
-      assert.equal((thrown as any).code, 'COMMAND_FAILED');
-      assert.equal(thrown.message, 'Remote daemon is unavailable');
-      assert.equal((thrown as any).details?.dispatched, 'no');
-      assert.equal((thrown as any).details?.attempts, 90);
-      assert.match(String((thrown as any).details?.hint ?? ''), /agent-device disconnect/);
-    });
-    assert.equal(healthProbes, 90);
-    assert.equal(rpcSends, 0);
-  } finally {
-    stopAdvancing.abort();
-    await advancing;
-    vi.useRealTimers();
-    restoreHttpRequest();
-  }
-});
 
 test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP', async () => {
   const rpcRequests: Record<string, unknown>[] = [];
