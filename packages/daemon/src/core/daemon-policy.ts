@@ -92,7 +92,7 @@ export function assertDaemonPolicyAdmitsDevice(policy: DaemonPolicy, device: Dev
   });
 }
 
-export function isDaemonPolicyCapabilityDenied(
+function isDaemonPolicyCapabilityDenied(
   policy: DaemonPolicy,
   capability: DaemonPolicyCapability,
 ): boolean {
