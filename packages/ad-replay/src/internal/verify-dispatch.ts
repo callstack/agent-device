@@ -13,7 +13,7 @@ import type {
   AdReplayStepRuntime,
   AdReplayTargetObservation,
   AdReplayVerifiedTargetGuard,
-} from './runtime-port-types.ts';
+} from '@agent-device/contracts/ad-replay-execution';
 
 /**
  * #1478 P5 stage C2b (split out of `step-loop.ts` by the #1555 structural-

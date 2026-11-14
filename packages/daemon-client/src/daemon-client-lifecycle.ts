@@ -8,7 +8,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
+import { readReplayDivergenceResume } from '@agent-device/contracts/replay-divergence-data';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createOwnedReplayStateDir,

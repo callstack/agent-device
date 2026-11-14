@@ -1,7 +1,10 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
-import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
+import {
+  scrubReplayVarValues,
+  type ReplayVarScrubEntry,
+} from '@agent-device/contracts/replay-divergence-data';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import { buildDisplayPositionals } from '@agent-device/session-journal/session-event-action';

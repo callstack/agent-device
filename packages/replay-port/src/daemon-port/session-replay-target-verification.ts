@@ -16,14 +16,14 @@ import type {
   AdReplayTargetBindingEvidence,
   AdReplayTargetClassification,
   AdReplayVerificationEntry,
-} from '@agent-device/ad-replay';
+} from '@agent-device/contracts/ad-replay-execution';
 import {
   type ReplayDivergence,
   type ReplayDivergenceTargetBindingKind,
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
 } from '@agent-device/contracts/divergence';
-import { createReplayDivergenceSanitizer } from '@agent-device/ad-replay/divergence';
+import { createReplayDivergenceSanitizer } from '@agent-device/contracts/replay-divergence-data';
 import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   WAIT_LANDMARK_MISMATCH_REASON,

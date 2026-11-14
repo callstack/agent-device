@@ -15,7 +15,7 @@ import type {
   ReplayTestResolveShardTargets,
   ReplayTestShardContext,
   ReplayTestShardTarget,
-} from '@agent-device/replay-test';
+} from '@agent-device/contracts/replay-test-execution';
 
 /**
  * The daemon adapter's shard-device binding (#1478 P3b).

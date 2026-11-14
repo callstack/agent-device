@@ -1,3 +1,7 @@
+import type {
+  AdReplayGuardMismatchEvidence,
+  AdReplayLandmarkMismatchEvidence,
+} from '@agent-device/contracts/ad-replay-execution';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -6,8 +10,6 @@ import {
   deriveWaitLandmarkMismatchEvidence,
   planPostResolutionTargetVerification,
   planPreDispatchTargetVerification,
-  type AdReplayGuardMismatchEvidence,
-  type AdReplayLandmarkMismatchEvidence,
 } from '../target-verification.ts';
 
 /**

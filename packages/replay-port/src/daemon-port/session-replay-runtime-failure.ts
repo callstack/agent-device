@@ -1,5 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import type { AdReplayScrubValue } from '@agent-device/ad-replay';
+import type { AdReplayScrubValue } from '@agent-device/contracts/ad-replay-execution';
 import {
   summarizeSnapshotTimingSamples,
   type SnapshotDiagnosticsSummary,

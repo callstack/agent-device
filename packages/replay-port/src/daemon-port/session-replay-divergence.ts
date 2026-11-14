@@ -47,7 +47,7 @@ import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
   type ReplayVarScrubEntry,
-} from '@agent-device/ad-replay/divergence';
+} from '@agent-device/contracts/replay-divergence-data';
 
 export type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 

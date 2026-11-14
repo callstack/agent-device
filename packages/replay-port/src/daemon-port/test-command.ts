@@ -1,3 +1,4 @@
+import { runReplayTestSuite } from '@agent-device/replay-test';
 /** Runs the replay-test scheduler and its nested replay attempts. */
 
 import { randomUUID } from 'node:crypto';
@@ -13,13 +14,12 @@ import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
-import {
-  runReplayTestSuite,
-  type ReplayTestAttemptOutcome,
-  type ReplayTestBindAttemptCancellation,
-  type ReplayTestShardContext,
-  type ReplayTestSuiteRequest,
-} from '@agent-device/replay-test';
+import type {
+  ReplayTestAttemptOutcome,
+  ReplayTestBindAttemptCancellation,
+  ReplayTestShardContext,
+  ReplayTestSuiteRequest,
+} from '@agent-device/contracts/replay-test-execution';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {

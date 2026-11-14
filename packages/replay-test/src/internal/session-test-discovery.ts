@@ -6,7 +6,7 @@ import type {
   ReplayTestDiscoverSources,
   ReplayTestManifest,
   ReplayTestPlatform,
-} from './session-test-types.ts';
+} from '@agent-device/contracts/replay-test-execution';
 
 const MAX_REPLAY_TEST_RETRIES = 3;
 

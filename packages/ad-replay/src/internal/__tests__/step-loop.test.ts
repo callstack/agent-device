@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { runAdReplay } from '../step-loop.ts';
-import type { AdReplayStepRuntime } from '../runtime-port-types.ts';
+import type { AdReplayStepRuntime } from '@agent-device/contracts/ad-replay-execution';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
