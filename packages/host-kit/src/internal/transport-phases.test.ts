@@ -1,10 +1,5 @@
-// The phase budget one artifact-transfer attempt runs under (#4441).
-//
-// Three ceilings govern one attempt — connecting, moving body bytes, waiting for headers — and each
-// has to end a stalled attempt on its own while none of them touches the aggregate budget the
-// attempt was admitted under. Those are behaviour claims about a clock, so the clock here is
-// controlled rather than waited out. The loopback proofs in `upload-stream-phases.test.ts` put the
-// same watchdog in front of real sockets.
+// The phase budget of one artifact-transfer attempt (#4441), on a controlled clock. Each ceiling ends a
+// stalled attempt on its own, and none of them touches the aggregate the attempt was admitted under.
 
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -15,6 +10,7 @@ import {
   createTransferPhaseWatchdog,
   isTransferPhaseTimeoutError,
   observeClientRequestPhases,
+  observeCompletedRequestWrites,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
@@ -163,16 +159,35 @@ test('a phase is never armed after the attempt is already over', async () => {
 
 type FakeSocket = EventEmitter & { connecting: boolean; encrypted?: boolean };
 
-function createObservedRequest(callerSignal?: AbortSignal) {
-  const req = new EventEmitter() as unknown as ClientRequest;
-  const watchdog = createTransferPhaseWatchdog(callerSignal);
+/** A request whose writes the test completes by hand, as Node does once a chunk reaches the kernel. */
+class FakeRequest extends EventEmitter {
+  destroyed = false;
+  readonly callbacks: unknown[] = [];
+  write(...args: unknown[]): boolean {
+    this.callbacks.push(args.find((arg) => typeof arg === 'function'));
+    return true;
+  }
+  complete(index: number): void {
+    const callback = this.callbacks[index];
+    assert.ok(typeof callback === 'function', `write ${index} has no callback`);
+    callback(null);
+  }
+}
+
+/** One request observed as the upload attempt observes it: the phase owner beside the write owner. */
+function createObservedRequest() {
+  const fake = new FakeRequest();
+  const watchdog = createTransferPhaseWatchdog();
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
+  const req = fake as unknown as ClientRequest;
   const phases = observeClientRequestPhases(req, watchdog);
-  const emit = (event: string, ...args: unknown[]) =>
-    (req as unknown as EventEmitter).emit(event, ...args);
+  const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
+    watchdog.touchBody(),
+  );
+  const emit = (event: string, ...args: unknown[]) => fake.emit(event, ...args);
   const socket = (state: { connecting: boolean; encrypted?: boolean }): FakeSocket =>
     Object.assign(new EventEmitter(), state);
-  return { req, watchdog, phases, emit, socket };
+  return { fake, req, watchdog, phases, stopObservingWrites, emit, socket };
 }
 
 test('a fresh socket keeps the connect ceiling until it connects, even after the body flushed', async () => {
@@ -227,11 +242,12 @@ test('a TLS socket is established by secureConnect, not connect', async () => {
 
 test('a pooled socket is already connected and times the body write as inactivity', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const { watchdog, emit, socket } = createObservedRequest();
+  const { fake, req, watchdog, emit, socket } = createObservedRequest();
   try {
     emit('socket', socket({ connecting: false }));
+    req.write(Buffer.from('body'));
     await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1_000);
-    emit('drain');
+    fake.complete(0);
     await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1);
     assert.equal(watchdog.signal.aborted, false);
     await vi.advanceTimersByTimeAsync(1);
@@ -243,16 +259,19 @@ test('a pooled socket is already connected and times the body write as inactivit
 
 test('once the response started, later request events do not overwrite its phase', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const { watchdog, phases, emit, socket } = createObservedRequest();
+  const { fake, req, watchdog, phases, emit, socket } = createObservedRequest();
   try {
     const fresh = socket({ connecting: true });
     emit('socket', fresh);
+    req.write(Buffer.from('body'));
     emit('response');
     assert.equal(phases.responseStarted, true);
     fresh.emit('connect');
     emit('finish');
-    emit('drain');
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 1);
+    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1_000);
+    // A request write that completes now says nothing about the response body.
+    fake.complete(0);
+    await vi.advanceTimersByTimeAsync(1_001);
     assertPhaseDetails(
       watchdog.signal.reason,
       'response-body',
@@ -263,17 +282,18 @@ test('once the response started, later request events do not overwrite its phase
   }
 });
 
-test('disposing the observer removes every listener it added', () => {
-  const { req, watchdog, phases, emit, socket } = createObservedRequest();
+test('disposing the phase observer removes only its own listeners', () => {
+  const { fake, watchdog, phases, stopObservingWrites, emit, socket } = createObservedRequest();
   try {
     const fresh = socket({ connecting: true });
     emit('socket', fresh);
     phases.dispose();
-    const emitter = req as unknown as EventEmitter;
-    for (const event of ['socket', 'drain', 'finish', 'response']) {
-      assert.equal(emitter.listenerCount(event), 0, event);
-    }
+    assert.equal(fake.listenerCount('socket'), 0);
+    assert.equal(fake.listenerCount('finish'), 0);
     assert.equal(fresh.listenerCount('connect'), 0);
+    assert.equal(fake.listenerCount('response'), 1, "the write owner's listener is its own");
+    stopObservingWrites();
+    assert.equal(fake.listenerCount('response'), 0);
   } finally {
     watchdog.dispose();
   }

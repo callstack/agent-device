@@ -253,14 +253,15 @@ export type ClientRequestPhases = {
  * - A fresh socket is not a connection until `connect`, or `secureConnect` for TLS. A pooled socket
  *   already is. Until then the connect ceiling keeps counting, even when the whole body already sits
  *   in the write buffer, because buffered bytes are not transport progress.
- * - A connected exchange that is still writing is in `request-body`. `drain` is the progress that
- *   restarts its inactivity budget, since it reports bytes the socket actually accepted.
+ * - A connected exchange that is still writing is in `request-body`. Only the body progress the
+ *   caller reports with `touchBody`, such as `observeCompletedRequestWrites` completions, restarts
+ *   its inactivity budget.
  * - The header wait starts only after BOTH the request `finish` and the connection.
  * - Once the response starts, the exchange is in `response-body` and no later request event can
  *   overwrite it. The caller reports response bytes with `touchBody`.
  *
- * Attach it in the tick that creates the request. It waits on nothing: every listener it adds is
- * removed by `dispose`.
+ * Attach it in the tick that creates the request. It waits on nothing: `dispose` removes every
+ * listener it adds.
  */
 export function observeClientRequestPhases(
   req: ClientRequest,
@@ -294,9 +295,6 @@ export function observeClientRequestPhases(
     connectEvent = secured ? 'secureConnect' : 'connect';
     next.once(connectEvent, onConnected);
   };
-  const onDrain = () => {
-    if (!responseStarted) watchdog.touchBody();
-  };
   const onFinish = () => {
     flushed = true;
     advance();
@@ -306,7 +304,6 @@ export function observeClientRequestPhases(
     watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
   };
   req.on('socket', onSocket);
-  req.on('drain', onDrain);
   req.on('finish', onFinish);
   // The request's own response callback is registered first, so the phase has to move before it runs.
   req.prependListener('response', onResponse);
@@ -316,7 +313,6 @@ export function observeClientRequestPhases(
     },
     dispose() {
       req.off('socket', onSocket);
-      req.off('drain', onDrain);
       req.off('finish', onFinish);
       req.off('response', onResponse);
       if (socket && connectEvent) socket.off(connectEvent, onConnected);
