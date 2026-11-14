@@ -412,9 +412,7 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
   );
 });
 
-test('the alert request envelope stays above the largest runner alert budget', () => {
-  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('alert'), {
-    positionals: ['get', '600000'],
-  });
+test('the fixed alert request envelope stays above the largest runner alert budget', () => {
+  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('alert'), {});
   assert.ok(envelopeMs !== undefined && envelopeMs > ALERT_RUNNER_MAX_BUDGET_MS);
 });

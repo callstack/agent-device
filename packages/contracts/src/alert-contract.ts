@@ -10,10 +10,12 @@ export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 
 /**
- * The ceiling of the budget one XCTest runner alert attempt receives. It stays below the runner's
- * 30 s main-thread watchdog, so a larger caller window ends as an `ALERT_NOT_FOUND` or
- * `ALERT_UNRESOLVED` answer (`alert wait` polls on) instead of a `MAIN_THREAD_TIMEOUT`, and well
- * below the 90 s daemon request envelope.
+ * The ceiling of the budget one XCTest runner alert attempt receives. For `alert`, the runner's
+ * main-thread watchdog and its inner alert deadline are both this budget, so it also bounds how
+ * long one attempt can occupy the runner before `MAIN_THREAD_TIMEOUT`. It stays below the 45 s
+ * runner transport deadline and the 90 s daemon request envelope, so a stalled attempt ends as the
+ * runner's typed answer, never as a transport or envelope timeout. `alert wait` polls in attempts
+ * of at most this budget.
  */
 export const ALERT_RUNNER_MAX_BUDGET_MS = 25_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;

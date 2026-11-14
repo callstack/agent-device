@@ -86,7 +86,8 @@ export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined
  * `ALERT_MIN_READ_BUDGET_MS` and `ALERT_RUNNER_MAX_BUDGET_MS`, and `DEFAULT_ALERT_TIMEOUT_MS` when
  * the caller gave none. A read the runner's main-thread watchdog cuts off is not absence: its
  * `MAIN_THREAD_TIMEOUT` is reported as itself (`reason: runner_main_thread_timeout`, `dispatched:
- * unknown`), and the next read meets `RUNNER_BUSY` or runs once the abandoned work drains.
+ * unknown`). The next read runs once the abandoned work drains, or reports `RUNNER_BUSY` when the
+ * bounded resends end first.
  */
 export async function readAppleAlert(
   device: DeviceInfo,
@@ -103,8 +104,9 @@ export async function readAppleAlert(
 }
 
 /**
- * Poll `get` until one answers or the caller's window runs out. The first attempt gets the whole
- * window and later ones only what is left, so a runner that blocks cannot outlive the budget.
+ * Poll `get` until one answers or the caller's window runs out. The first attempt gets the window,
+ * capped at `ALERT_RUNNER_MAX_BUDGET_MS`, and later ones only what is left (same cap), so a runner
+ * that blocks cannot outlive the budget.
  * After a completed observation, another read needs more than one polling interval of budget.
  * A dispatched read still owns its result, including a watchdog timeout.
  */
