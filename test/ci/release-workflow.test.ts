@@ -7,6 +7,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 const source = fs.readFileSync(path.join(repoRoot, '.github/workflows/release.yml'), 'utf8');
 
 type Job = {
+  'cache-mode'?: string;
   environment?: string;
   permissions?: Record<string, string>;
   steps?: Array<{ uses?: string; with?: Record<string, string> }>;
@@ -46,7 +47,8 @@ test('the publisher authenticates through OIDC alone', () => {
   expect(setupNode?.with).not.toHaveProperty('registry-url');
 });
 
-test('the published bytes are built without a restored dependency cache', () => {
+test('the release build has no cache token access and restores no dependency cache', () => {
+  expect(workflow.jobs.build?.['cache-mode']).toBe('none');
   const setup = workflow.jobs.build?.steps?.find(
     (step) => step.uses === './.github/actions/setup-node-pnpm',
   );

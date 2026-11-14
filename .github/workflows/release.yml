@@ -84,6 +84,7 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
+    cache-mode: none
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
