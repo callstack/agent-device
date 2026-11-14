@@ -295,6 +295,9 @@ export function holdArtifactSourceOpen(bytes = 0): {
   readonly destroyedAtNextOpen: boolean | undefined;
 } {
   const source = new PassThrough();
+  onTestFinished(() => {
+    source.destroy();
+  });
   if (bytes > 0) source.write(Buffer.alloc(bytes, 'x'));
   const open = fs.createReadStream;
   const held = { source, destroyedAtNextOpen: undefined as boolean | undefined };
@@ -322,7 +325,10 @@ export function createArtifactFile(bytes: number, fileName = 'app.apk'): string 
   return artifactPath;
 }
 
-/** Listens on loopback without server ceilings, which would fire on the controlled clock. */
+/**
+ * Listens on loopback until its test finishes, without server ceilings, which would fire on the
+ * controlled clock.
+ */
 async function listenUntimed(server: net.Server): Promise<number> {
   if (server instanceof http.Server) {
     server.requestTimeout = 0;
@@ -330,6 +336,7 @@ async function listenUntimed(server: net.Server): Promise<number> {
     server.keepAliveTimeout = 0;
   }
   server.unref();
+  onTestFinished(() => closeLoopbackServer(server));
   return await listenOnLoopback(server);
 }
 
@@ -435,7 +442,6 @@ export async function startParkedUploadDaemon(
       assert.ok(newestParkedLeg, 'no parked leg to reset');
       newestParkedLeg.socket.resetAndDestroy();
     },
-    close: () => closeLoopbackServer(server),
   };
 }
 
@@ -452,7 +458,6 @@ export type ParkedUploadDaemon = {
   readToEnd(): void;
   /** Resets the connection of the newest parked leg: a real peer reset, not a clean close. */
   resetParkedLeg(): void;
-  close(): Promise<void>;
 };
 
 /**
@@ -482,7 +487,6 @@ export async function startAnswerUploadDaemon(options: {
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     requests,
-    close: () => closeLoopbackServer(server),
   };
 }
 
@@ -505,7 +509,6 @@ export async function startConnectedStalledHttpOrigin() {
     get bytesTaken() {
       return bytesTaken;
     },
-    close: () => closeLoopbackServer(server),
   };
 }
 
@@ -518,7 +521,7 @@ export async function startHalfAnsweredOrigin(options: { firstChunk: string }) {
     res.write(options.firstChunk);
   });
   const port = await listenUntimed(server);
-  return { baseUrl: `http://127.0.0.1:${port}`, close: () => closeLoopbackServer(server) };
+  return { baseUrl: `http://127.0.0.1:${port}` };
 }
 
 /** A daemon that reads one parked chunk per release and answers once the body has ended. */
@@ -560,7 +563,6 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
     releaseAllParked() {
       for (const entry of parked.splice(0)) entry.resume();
     },
-    close: () => closeLoopbackServer(server),
   };
 }
 
@@ -574,7 +576,7 @@ export async function startUnfinishedHandshakeTlsOrigin() {
     socket.on('error', () => {});
   });
   const port = await listenUntimed(server);
-  return { port, close: () => closeLoopbackServer(server) };
+  return { port };
 }
 
 /** A TLS origin that completes the handshake and then reads nothing and answers nothing. */
@@ -587,21 +589,20 @@ export async function startConnectedStalledTlsOrigin() {
     },
   );
   const port = await listenUntimed(server);
-  return { port, close: () => closeLoopbackServer(server) };
+  return { port };
 }
 
 /**
  * Trusts the repository's self-signed localhost certificate in the `node:https` global agent the
- * subject uses, until restored; never `NODE_TLS_REJECT_UNAUTHORIZED`, which a test cannot put back.
+ * subject uses, until its test finishes; never `NODE_TLS_REJECT_UNAUTHORIZED`, which a test cannot
+ * put back.
  */
-export function trustSelfSignedLocalhostCertificate(): { restore(): void } {
+export function trustSelfSignedLocalhostCertificate(): void {
   const savedCa = https.globalAgent.options.ca;
   https.globalAgent.options.ca = readRepoFixture('localhost-cert.pem');
-  return {
-    restore() {
-      https.globalAgent.options.ca = savedCa;
-    },
-  };
+  onTestFinished(() => {
+    https.globalAgent.options.ca = savedCa;
+  });
 }
 
 /** A daemon whose legs follow a script: whether the peer reads the whole body, and answers. */
@@ -656,7 +657,6 @@ export async function startUploadLegsDaemon(
     get connections() {
       return connections;
     },
-    close: () => closeLoopbackServer(server),
   };
 }
 
