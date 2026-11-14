@@ -2,6 +2,8 @@ import { expect, test, vi } from 'vitest';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
 import type { PluginCandidate, PluginRegistryPolicy } from './registry.ts';
 import type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
+import { validateReplayEngineSetup } from './validate.ts';
+import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ProviderPluginHost } from './host.ts';
 import type { ReplayEnginePlugin } from './replay-backend.ts';
 
@@ -162,4 +164,128 @@ test('one backend disposer cannot delay another backend disposer', async () => {
   expect(second.dispose).toHaveBeenCalledTimes(1);
   release();
   expect(await closing).toHaveLength(2);
+});
+
+test('native execution shares backend claims, lazy creation and registry disposal', async () => {
+  const execution: ReplayExecution = {
+    inspectAdReplay: vi.fn(() => {
+      throw new Error('inspection is outside registry ownership');
+    }),
+    runAdReplay: vi.fn(async () => {
+      throw new Error('dispatch is outside registry ownership');
+    }),
+    runReplayTestSuite: vi.fn(async () => {
+      throw new Error('scheduling is outside registry ownership');
+    }),
+  };
+  const create = vi.fn(async () => execution);
+  const competing = { setup: vi.fn(() => ({ execution: { create } })) };
+  const competingPlugin = {
+    apiVersion: 2,
+    kind: 'replay-backend',
+    backend: 'ad',
+    setup: competing.setup,
+  };
+  const dispose = vi.fn();
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([
+      candidate({
+        apiVersion: 2,
+        kind: 'replay-backend',
+        backend: 'ad',
+        setup: () => ({ execution: { create }, dispose }),
+      }),
+      candidate(competingPlugin),
+    ]),
+    {},
+    policy,
+  );
+  expect(registry.inventory).toMatchObject([
+    { backend: 'ad', state: 'active' },
+    { backend: 'ad', state: 'failed', error: { reason: 'duplicate_replay_backend' } },
+  ]);
+  expect(competing.setup).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  const [one, two] = await Promise.all([
+    registry.resolveReplayExecution(),
+    registry.resolveReplayExecution(),
+  ]);
+  expect(one).toBe(two);
+  expect(one).toBe(execution);
+  expect(create).toHaveBeenCalledTimes(1);
+  await registry.close();
+  expect(dispose).toHaveBeenCalledTimes(1);
+  await expect(registry.resolveReplayExecution()).rejects.toMatchObject({
+    details: { reason: 'plugin-registry-closed' },
+  });
+});
+
+test.each([
+  [{ apiVersion: 99 }, 'incompatible_plugin'],
+  [{ setup: () => ({ execution: {} }) }, 'invalid_plugin'],
+  [
+    {
+      setup: () => {
+        throw new Error('failed setup');
+      },
+    },
+    'plugin_setup_failed',
+  ],
+  [{ setup: () => ({ execution: { create: () => ({}) } }) }, 'invalid_plugin'],
+])(
+  'selected native execution failures preserve their typed cause: %s',
+  async (override, reason) => {
+    const registry = await startProviderRegistry(
+      await resolveProviderPlugins([
+        candidate({
+          apiVersion: 2,
+          kind: 'replay-backend',
+          backend: 'ad',
+          setup: () => ({ execution: { create: () => ({}) } }),
+          ...override,
+        }),
+      ]),
+      {},
+      policy,
+    );
+    await expect(registry.resolveReplayExecution()).rejects.toMatchObject({ details: { reason } });
+    await registry.close();
+  },
+);
+
+test.each([
+  ['ad', { replayBackend: { create: vi.fn() } }],
+  ['maestro', { execution: { create: vi.fn() } }],
+  ['custom', { execution: { create: vi.fn() } }],
+])('setup validates the factory against backend %s', (backend, setup) => {
+  expect(() => validateReplayEngineSetup(setup, backend)).toThrow(
+    expect.objectContaining({ details: { reason: 'invalid_plugin' } }),
+  );
+});
+
+test('wrong native capability fails inventory, disposes setup and keeps its first claim', async () => {
+  const wrong = engine('ad');
+  const laterSetup = vi.fn(() => ({ execution: { create: vi.fn() } }));
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([
+      candidate(wrong.plugin),
+      candidate({ apiVersion: 2, kind: 'replay-backend', backend: 'ad', setup: laterSetup }),
+      candidate(engine('maestro').plugin),
+    ]),
+    {},
+    policy,
+  );
+  expect(registry.inventory).toMatchObject([
+    { backend: 'ad', state: 'failed', error: { reason: 'invalid_plugin' } },
+    { backend: 'ad', state: 'failed', error: { reason: 'duplicate_replay_backend' } },
+    { backend: 'maestro', state: 'active' },
+  ]);
+  expect(wrong.dispose).toHaveBeenCalledOnce();
+  expect(wrong.create).not.toHaveBeenCalled();
+  expect(laterSetup).not.toHaveBeenCalled();
+  await expect(registry.resolveReplayExecution()).rejects.toMatchObject({
+    details: { reason: 'invalid_plugin' },
+  });
+  await registry.close();
+  expect(wrong.dispose).toHaveBeenCalledOnce();
 });

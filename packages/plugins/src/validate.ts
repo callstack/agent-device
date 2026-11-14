@@ -1,3 +1,5 @@
+import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
+import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type { ReplayEnginePlugin, ReplayEngineSetup } from './replay-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -158,15 +160,35 @@ export function validateReplayEnginePlugin(value: unknown): ReplayEnginePlugin {
   return value as ReplayEnginePlugin;
 }
 
-export function validateReplayEngineSetup(value: unknown): ReplayEngineSetup {
+export function validateReplayEngineSetup<TBackend extends string>(
+  value: unknown,
+  backend: TBackend,
+): ReplayEngineSetup<TBackend> {
+  if (!isRecord(value) || (value.dispose !== undefined && typeof value.dispose !== 'function'))
+    throw invalidPlugin('Replay plugin setup must provide a factory and optional dispose()');
+  const native = backend === NATIVE_REPLAY_BACKEND;
+  const factory = native ? value.execution : value.replayBackend;
+  const other = native ? value.replayBackend : value.execution;
+  if (other !== undefined || !isRecord(factory) || typeof factory.create !== 'function')
+    throw invalidPlugin(
+      native
+        ? 'Native ad backend setup must provide execution.create()'
+        : 'Format backend setup must provide replayBackend.create(host)',
+    );
+  return value as ReplayEngineSetup<TBackend>;
+}
+
+export function validateReplayExecution(value: unknown): ReplayExecution {
   if (
     !isRecord(value) ||
-    !isRecord(value.replayBackend) ||
-    typeof value.replayBackend.create !== 'function' ||
-    (value.dispose !== undefined && typeof value.dispose !== 'function')
+    (['inspectAdReplay', 'runAdReplay', 'runReplayTestSuite'] as const).some(
+      (name) => typeof value[name] !== 'function',
+    )
   )
-    throw invalidPlugin('Replay plugin setup must return replayBackend.create(host)');
-  return value as ReplayEngineSetup;
+    throw invalidPlugin(
+      'Native replay execution must provide inspection, replay and suite execution',
+    );
+  return value as ReplayExecution;
 }
 
 export function validateReplayBackend(id: string, value: unknown): ReplayBackend {

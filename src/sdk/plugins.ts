@@ -31,3 +31,9 @@ export type AgentDevicePluginFactory<Options = Record<string, unknown>> = Contra
 
 export type { ReplayEnginePlugin, ReplayEngineSetup } from '@agent-device/plugins/replay-backend';
 export type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
+
+export type {
+  ReplayExecution,
+  ReplayExecutionPlugin,
+  ReplayExecutionResolver,
+} from '@agent-device/contracts/replay-execution';
