@@ -237,6 +237,7 @@ const gestureFields = {
   degrees: numberField('Rotation in degrees.'),
   durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
+  trajectoryTransport: enumField(['carrier'], 'Test-HAP carrier opt-in for locked-down builds.'),
   points: pointArrayField('Tap contact points, held together for holdMs.', {
     min: GESTURE_TAP_MIN_CONTACTS,
     max: GESTURE_MAX_CONTACTS,

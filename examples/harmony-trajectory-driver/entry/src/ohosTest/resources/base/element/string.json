@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "agent-device trajectory injection harness"
+    },
+    {
+      "name": "TestAbility_desc",
+      "value": "Hosts the hypium injection case"
+    },
+    {
+      "name": "TestAbility_label",
+      "value": "AD Trajectory Test"
+    }
+  ]
+}

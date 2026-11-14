@@ -181,6 +181,7 @@ test('.ad replay normalizes resolved gesture and swipe syntax into structured da
           delta: { x: 30, y: 40 },
           pointerCount: 2,
           durationMs: 500,
+          trajectoryTransport: undefined,
         },
       },
       {

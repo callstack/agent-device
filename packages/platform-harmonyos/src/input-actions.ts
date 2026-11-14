@@ -1,5 +1,8 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type {
+  GesturePlan,
+  SinglePointerGesturePlan,
+} from '@agent-device/contracts/gesture-plan-types';
 import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
@@ -9,7 +12,23 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runHarmonyShell } from './hdc.ts';
+import {
+  injectHarmonyTrajectoryViaDriver,
+  isHarmonyTrajectoryDriverInstalled,
+} from './trajectory-driver.ts';
 import { invalidateHarmonyGestureViewport, readHarmonyGestureViewport } from './snapshot.ts';
+import {
+  type HarmonyPanTransportRefusalReason,
+  type TouchPanelRange,
+  harmonyTrajectoryTimeoutMs,
+  lowerHarmonyTouchPlan,
+  parseHarmonyRenderResolution,
+  parseHarmonyTouchDeviceNode,
+  parseHarmonyTouchPanelRange,
+  renderHarmonyTouchScript,
+  resolveHarmonyPanelTransform,
+  TRAJECTORY_INJECTION_SENTINEL,
+} from './touch-plan-lowering.ts';
 
 export async function pressHarmony(device: DeviceInfo, x: number, y: number): Promise<void> {
   await runHarmonyShell(device, ['uitest', 'uiInput', 'click', x, y]);
@@ -76,6 +95,45 @@ export async function scrollHarmony(
 }
 
 /** Lowers HDC's public one-pointer primitives from a shared semantic plan. */
+type CarrierPanAttempt =
+  | { state: 'injected'; record: Record<string, unknown> }
+  | {
+      state: 'refused';
+      reason: Extract<
+        HarmonyPanTransportRefusalReason,
+        'carrier-install-missing' | 'carrier-injection-refused'
+      >;
+    };
+
+/**
+ * The test-HAP carrier for builds where the panel node is denied. The opt-in is plan data
+ * (`--trajectory-transport carrier`), so the platform package touches no ambient configuration.
+ * A missing carrier install or a refused injection reports the reason and lets the caller fall
+ * back to the endpoint swipe, matching the panel-transport semantics.
+ */
+async function injectHarmonyPanViaCarrier(
+  device: DeviceInfo,
+  plan: SinglePointerGesturePlan,
+): Promise<CarrierPanAttempt> {
+  if (!(await isHarmonyTrajectoryDriverInstalled(device))) {
+    return { state: 'refused', reason: 'carrier-install-missing' };
+  }
+  const outcome = await injectHarmonyTrajectoryViaDriver(device, plan);
+  if (!outcome.accepted) {
+    return { state: 'refused', reason: 'carrier-injection-refused' };
+  }
+  return {
+    state: 'injected',
+    record: {
+      backend: outcome.backend,
+      sampleCount: outcome.sampleCount,
+      speed: outcome.speed,
+      durationMs: plan.durationMs,
+      viewport: plan.viewport,
+    },
+  };
+}
+
 export async function performHarmonyGesture(
   device: DeviceInfo,
   plan: GesturePlan,
@@ -85,6 +143,15 @@ export async function performHarmonyGesture(
       'UNSUPPORTED_OPERATION',
       'HarmonyOS HDC does not support multi-touch gestures',
     );
+  }
+  let panTransportRefusal: HarmonyPanTransportRefusalReason | undefined;
+  if (plan.intent === 'pan') {
+    let attempt = await injectHarmonyPanTrajectory(device, plan);
+    if (attempt.state === 'refused' && plan.trajectoryTransport === 'carrier') {
+      attempt = await injectHarmonyPanViaCarrier(device, plan);
+    }
+    if (attempt.state === 'injected') return attempt.record;
+    panTransportRefusal = attempt.reason;
   }
   const samples = plan.pointers[0].samples;
   const start = samples[0];
@@ -108,7 +175,116 @@ export async function performHarmonyGesture(
     Math.round(end.point.y),
     velocity,
   ]);
-  return { backend: 'harmonyos-hdc-uiinput', command, velocity, viewport: plan.viewport };
+  return {
+    backend: 'harmonyos-hdc-uiinput',
+    command,
+    velocity,
+    viewport: plan.viewport,
+    ...(panTransportRefusal ? { trajectoryFallback: panTransportRefusal } : {}),
+  };
+}
+
+type ResolvedHarmonyTouchTransport =
+  | { kind: 'available'; node: string; range: TouchPanelRange }
+  | { kind: 'unavailable'; reason: HarmonyPanTransportRefusalReason };
+
+/**
+ * The panel node and its axis range are boot-stable facts, so they resolve once per device id.
+ * A locked-down build never resolves, and every pan re-checks the listing rather than caching
+ * the denial, so a policy change on the device takes effect without a daemon restart.
+ */
+const harmonyTouchTransportMemo = new Map<
+  string,
+  Extract<ResolvedHarmonyTouchTransport, { kind: 'available' }>
+>();
+
+async function resolveHarmonyTouchTransport(
+  device: DeviceInfo,
+): Promise<ResolvedHarmonyTouchTransport> {
+  const cached = harmonyTouchTransportMemo.get(device.id);
+  if (cached) return cached;
+  const listing = await runHarmonyShell(device, ['cat', '/proc/bus/input/devices'], {
+    allowFailure: true,
+  });
+  const node = parseHarmonyTouchDeviceNode(listing.stdout);
+  if (!node) {
+    const listingRead = listing.stdout.includes('N: Name=');
+    return {
+      kind: 'unavailable',
+      reason: listingRead ? 'touch-node-not-found' : 'touch-node-listing-unreadable',
+    };
+  }
+  const mmiDump = await runHarmonyShell(device, ['hidumper', '-s', 'MultimodalInput', '-a', '-d'], {
+    allowFailure: true,
+  });
+  const rangeResult = parseHarmonyTouchPanelRange(mmiDump.stdout);
+  if (rangeResult.kind !== 'range') {
+    return {
+      kind: 'unavailable',
+      reason:
+        rangeResult.kind === 'absent' ? 'touch-panel-range-absent' : 'touch-panel-range-ambiguous',
+    };
+  }
+  const resolved = { kind: 'available', node, range: rangeResult.range } as const;
+  harmonyTouchTransportMemo.set(device.id, resolved);
+  return resolved;
+}
+
+/**
+ * Injects one pan as a densified sample-carrying trajectory through the panel's evdev node. The
+ * chain is verified by the script's own success marker, so a denied or failed panel write can
+ * never report a completed gesture. Any unavailability falls back to the uiInput endpoint swipe
+ * with the reason carried back to the caller.
+ */
+async function injectHarmonyPanTrajectory(
+  device: DeviceInfo,
+  plan: SinglePointerGesturePlan,
+): Promise<
+  | { state: 'injected'; record: Record<string, unknown> }
+  | { state: 'refused'; reason: HarmonyPanTransportRefusalReason }
+> {
+  const transport = await resolveHarmonyTouchTransport(device);
+  if (transport.kind === 'unavailable') {
+    return { state: 'refused', reason: transport.reason };
+  }
+  const renderDump = await runHarmonyShell(
+    device,
+    ['hidumper', '-s', 'RenderService', '-a', 'screen'],
+    { allowFailure: true },
+  );
+  const transformResult = resolveHarmonyPanelTransform(
+    transport.range,
+    parseHarmonyRenderResolution(renderDump.stdout),
+    plan.viewport,
+  );
+  if (transformResult.kind !== 'transform') {
+    return { state: 'refused', reason: transformResult.kind };
+  }
+  const trajectory = lowerHarmonyTouchPlan(plan, transformResult.transform);
+  const script = renderHarmonyTouchScript(trajectory, { deviceNode: transport.node });
+  const result = await runHarmonyShell(device, ['sh', '-c', script], {
+    timeoutMs: harmonyTrajectoryTimeoutMs(trajectory),
+    allowFailure: true,
+  });
+  if (!result.stdout.includes(TRAJECTORY_INJECTION_SENTINEL)) {
+    // A reboot can renumber the panel node; drop the memo so the next pan re-probes it.
+    harmonyTouchTransportMemo.delete(device.id);
+    throw new AppError('COMMAND_FAILED', 'HarmonyOS touch trajectory injection did not complete', {
+      reason: 'touch-trajectory-injection-failed',
+      deviceNode: transport.node,
+      sampleCount: trajectory.sampleCount,
+    });
+  }
+  return {
+    state: 'injected',
+    record: {
+      backend: 'harmonyos-sendevent-trajectory',
+      deviceNode: transport.node,
+      sampleCount: trajectory.sampleCount,
+      durationMs: trajectory.durationMs,
+      viewport: plan.viewport,
+    },
+  };
 }
 
 export async function backHarmony(device: DeviceInfo): Promise<void> {
