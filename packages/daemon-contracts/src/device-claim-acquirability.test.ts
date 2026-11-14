@@ -175,6 +175,21 @@ test('an unreadable claim record blocks the device its key points at, not anothe
   assert.deepEqual(await acquirabilityFor(other), { acquirable: true });
 });
 
+test('an undecodable claim record keeps its own classification as the blocking reason', async () => {
+  useClaimsRoot();
+  const fileName = path.basename(
+    resolveDeviceClaimPath(canonicalLocalDeviceKey(DEVICE), process.env),
+  );
+
+  const result = await inspectDeviceAcquirability({
+    device: DEVICE,
+    claims: [{ fileName, classification: 'unknown', error: 'EACCES' }],
+    env: process.env,
+  });
+  assert.equal(result.acquirable, false);
+  assert.equal(result.blockedBy, 'owner-liveness-unknown');
+});
+
 test('a device no claim names is acquirable', async () => {
   useClaimsRoot();
   writeDeviceClaim(deadClaim(), process.env);

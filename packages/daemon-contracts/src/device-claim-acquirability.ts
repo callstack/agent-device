@@ -123,7 +123,7 @@ async function decideInspectedClaim(
       status: 'blocked',
       outcome: {
         acquirable: false,
-        blockedBy: 'claim-record-inconsistent',
+        blockedBy: deviceClaimRefusalReason(inspected.classification),
         claim: ownerOf(inspected),
       },
     };

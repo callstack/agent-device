@@ -234,9 +234,9 @@ export function deviceClaimRequiresStaleInspection(
  * claims it leaves alone, and `device status` reports them as the reason a device is not acquirable,
  * so one vocabulary answers both.
  *
- * The dead and superseded entries are the answer for a claim whose owner is provably gone yet which
- * still cannot be settled for a reason the owner is not: a claim file named for a different device,
- * or a settlement that never reached this claim.
+ * The dead and superseded entries describe owners that can no longer release their claim, for a claim
+ * that still cannot be settled for a reason the owner is not: a claim file named for a different
+ * device, or a settlement that never reached this claim.
  *
  * A lookup rather than a switch: a `Record` stays a flat table TypeScript still checks for
  * exhaustiveness, so a classification dropped from `DeviceClaimClassification` fails to compile here

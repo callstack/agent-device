@@ -23,15 +23,14 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
     throw new AppError('INVALID_ARGS', 'device accepts only: status, release');
   }
   if (positionals[0] === 'release') return await runDeviceRelease(flags, host);
-  const inspectedClaims = inspectDeviceClaims(
-    {
-      platform: flags.platform,
-      device: flags.device,
-      udid: flags.udid,
-      serial: flags.serial,
-    },
-    host.env,
-  );
+  const selectors = {
+    platform: flags.platform,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+  };
+  const inspectedClaims = inspectDeviceClaims(selectors, host.env);
+  const hasSelector = Object.values(selectors).some((value) => value !== undefined);
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
@@ -39,7 +38,11 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
     ? staleClaims
     : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification));
   const claims = visible.map(serializeClaim);
-  const devices = await reportDeviceAcquirability(inspectedClaims, host.env);
+  const devices = await reportDeviceAcquirability(
+    inspectedClaims,
+    hasSelector ? inspectDeviceClaims({}, host.env) : inspectedClaims,
+    host.env,
+  );
   const data = {
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
@@ -69,8 +72,9 @@ type DeviceAcquirabilityReport = {
 };
 
 /**
- * Whether a new session can take each device a claim names, weighed against every claim this run
- * inspected so a host's app device sees its host's owner. One entry per device, in inspection order.
+ * Whether a new session can take each device a selected claim names, weighed against every claim on
+ * the host, as `open` does, so a selector that hides a host's or an app's claim never hides its
+ * owner. One entry per device, in inspection order.
  *
  * Every device a claim names is reported, including one whose only claims are the stale ones this
  * view hides: their owner being reclaimable is exactly why they are hidden, and a caller choosing a
@@ -79,6 +83,7 @@ type DeviceAcquirabilityReport = {
  */
 async function reportDeviceAcquirability(
   inspectedClaims: readonly InspectedDeviceClaim[],
+  weighedClaims: readonly InspectedDeviceClaim[],
   env: EnvMap,
 ): Promise<DeviceAcquirabilityReport[]> {
   const reports: DeviceAcquirabilityReport[] = [];
@@ -90,10 +95,10 @@ async function reportDeviceAcquirability(
     seen.add(deviceKey);
     const acquirability = await inspectDeviceAcquirability({
       device,
-      claims: inspectedClaims,
+      claims: weighedClaims,
       env,
     });
-    const holder = acquirability.blockedBy ? acquirability.claim : undefined;
+    const holder = acquirability.claim;
     reports.push({
       deviceKey,
       device: serializeClaimDevice(device),

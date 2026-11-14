@@ -186,10 +186,12 @@ another process, its state directory was deleted, or a newer daemon replaced it.
 cases the owner process can still be running, so inspect each one before you act. Scope either view
 with `--platform` plus `--udid` (Apple) or `--serial` (Android).
 
-`--json` reports each device once as `acquirable`, which answers whether a new session can take that
-device now. `blockedBy` names why not, and `owner` identifies the claim that holds it. A stale claim
-whose owner is provably gone leaves the device acquirable, so a non-zero hidden stale-claim count is
-not a block on its own.
+`--json` reports each claimed device once as `acquirable`, an inspection of whether a new session can
+take it now. It cannot see a reboot and runs no recovery, so `open` may decide differently.
+`blockedBy` names why not, and `owner` identifies the holder when the blocking record decodes. A
+stale claim whose owner is provably gone and retains no resource does not block by itself, so a
+non-zero hidden stale-claim count is not a block on its own. Another live overlapping claim or
+pending resource cleanup still can.
 
 To free a device:
 

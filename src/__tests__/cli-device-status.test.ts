@@ -175,11 +175,55 @@ test('reports per device whether a new session can take it, with the blocking re
     // #4524: the Expo Explore case. A provably dead owner is no longer read as blocking.
     assert.equal(byId.reclaimable.acquirable, true);
     assert.equal(byId.reclaimable.blockedBy, undefined);
+    assert.equal(byId.reclaimable.owner.session, 'session-reclaimable');
     assert.equal(byId.retained.acquirable, false);
     assert.equal(byId.retained.blockedBy, 'screen-recording-cleanup-pending');
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(ownerStateDir, { recursive: true, force: true });
+  }
+});
+
+test('a device selector still weighs the host claim that overlaps the selected app device', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const owner = readCurrentOwnerIdentity();
+  const write = (id: string, name: string, ownerPid: number, ownerStartTime: string | null) => {
+    const deviceKey = `local:web:none:${id}`;
+    fs.writeFileSync(
+      path.join(claimsDir, `${cryptoHashForTest(deviceKey)}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey,
+        device: { platform: 'web', id, name, kind: 'device' },
+        session: `session-${name}`,
+        workspace: '/worktrees/owner',
+        stateDir: process.cwd(),
+        ownerPid,
+        ownerStartTime,
+        ownerToken: 'owner-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+  };
+  try {
+    write('chrome', 'Host Chrome', owner.pid, owner.startTime);
+    write('chrome:app:com.example.app', 'Example App', 999_999_999, 'old-start-time');
+
+    const result = await runCliCapture(['device', 'status', '--device', 'Example App', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    const data = JSON.parse(result.stdout).data;
+    // The selector scopes the listing to the app's own (stale, hidden) claim.
+    assert.deepEqual(data.claims, []);
+    assert.equal(data.hiddenStaleClaims, 1);
+    assert.equal(data.devices.length, 1);
+    assert.equal(data.devices[0].device.id, 'chrome:app:com.example.app');
+    assert.equal(data.devices[0].acquirable, false);
+    assert.equal(data.devices[0].blockedBy, 'live-owner');
+    assert.equal(data.devices[0].owner.session, 'session-Host Chrome');
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
 
