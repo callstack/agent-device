@@ -50,6 +50,13 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'upload control: Fetch drops the method, headers and body',
+    file: 'packages/remote/src/upload-client.ts',
+    name: 'requestUploadControl',
+    from: '...init, signal:',
+    to: 'signal:',
+  },
+  {
     breakClass: 'upload ticket: the response wrapper drops the configured origin',
     file: 'packages/proxy/src/daemon-proxy.ts',
     name: 'rewrittenUploadPreflightResponse',

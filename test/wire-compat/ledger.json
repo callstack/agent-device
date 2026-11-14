@@ -167,6 +167,7 @@
     "packages/remote/src/upload-client.ts#finalizeDirectUpload": "sha256:3fd5ac061bbc16b0dd821db5e5c3e03daf53091cc93caa10845256e078779735",
     "packages/remote/src/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
+    "packages/remote/src/upload-client.ts#requestUploadControl": "sha256:05c7bd5090eade7b163456c10489899842c452b5633730827539d4adcb94c85d",
     "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:471a307f501c849cccea1036af1685187d72ca55d425bc5a8afe6f30d575ddb8",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
     "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
@@ -221,7 +222,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -296,7 +297,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -507,6 +508,11 @@
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
       "digest": "sha256:eed6cb154db2b67ffe5f058ef0570fec247a5d2a43af2d42952dee0b08870a87",
       "rationale": "The /rpc body limit is now DAEMON_REQUEST_MAX_BYTES (64 MiB), the one request limit the socket transport, the proxy default, and client writers share, raised from 1 MiB. A larger limit refuses nothing a released client sends; a new client refuses a request over 64 MiB before sending it, and a released daemon still answers anything between 1 MiB and 64 MiB with its own -32700 refusal, as before."
+    },
+    {
+      "declaration": "packages/remote/src/upload-client.ts#requestUploadControl",
+      "digest": "sha256:05c7bd5090eade7b163456c10489899842c452b5633730827539d4adcb94c85d",
+      "rationale": "Lists the shared control Fetch/JSON owner so changes to method, headers, body or redirect forwarding remain wire-gated. Existing preflight/finalize routes and protocol-2 payloads are preserved; the original 30-second ceiling now retains typed local phase expiry and stops later legs. Non-success status handling is unchanged."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#requestUploadPreflight",
