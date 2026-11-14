@@ -136,13 +136,13 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
  * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
  * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
  * that budget has to outlast the drain. Under a request deadline, busy refusals are resent until
- * that deadline, less {@link RUNNER_BUSY_DEADLINE_RESERVE_MS}, so the last refusal (with its attempt
- * count) is the answer instead of the deadline's. Without one, the window is a heuristic: 200ms
- * doubling to a 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a
- * drain that outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=`
- * marker in runner.log is the evidence for tuning it). Transport failures keep the pre-existing
- * three attempts. The budget is positional: the error on each attempt sets how many attempts the
- * loop may reach in total, so three busy refusals followed by a transport failure resend no further.
+ * {@link RUNNER_BUSY_DEADLINE_RESERVE_MS} before it, so the last refusal (with its attempt count) is
+ * the answer instead of the deadline's. Without one, the window is a heuristic: 200ms doubling to a
+ * 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a drain that
+ * outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=` marker in
+ * runner.log is the evidence for tuning it). Transport failures keep the pre-existing three attempts
+ * either way. The budget is positional: the error on each attempt decides whether the loop may send
+ * again, so three busy refusals followed by a transport failure resend no further.
  */
 const RUNNER_BUSY_RESEND_ATTEMPTS = 8;
 const TRANSPORT_RESEND_ATTEMPTS = 3;
@@ -151,26 +151,40 @@ const READ_ONLY_RESEND_POLICY = {
   maxDelayMs: 1_000,
   jitter: 0,
 };
-/** One resend delay at its cap: a busy refusal is answered at once, so one round trip fits. */
-const RUNNER_BUSY_DEADLINE_RESERVE_MS = READ_ONLY_RESEND_POLICY.maxDelayMs;
+/**
+ * The last busy resend is decided before the window closes and sent one capped delay later, so the
+ * reserve holds that delay and the refusal's round trip, which the runner answers at once.
+ */
+const RUNNER_BUSY_DEADLINE_RESERVE_MS = 2 * READ_ONLY_RESEND_POLICY.maxDelayMs;
 
-function readOnlyResendBudget(error: unknown, busyAttempts: number): number {
-  if (isRunnerBusyError(error)) return busyAttempts;
-  return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
-}
+type ReadOnlyResendBudget = {
+  maxAttempts: number;
+  resends: (error: unknown, attempt: number) => boolean;
+};
 
-/** The busy resend bound: the request's own deadline when it has one, else the fixed count. */
-function resolveBusyResendWindow(requestId: string | undefined): {
-  busyAttempts: number;
-  deadline?: Deadline;
-} {
+function resolveReadOnlyResendBudget(requestId: string | undefined): ReadOnlyResendBudget {
   const requestDeadlineMs = getRequestDeadlineMs(requestId);
-  if (requestDeadlineMs === undefined) return { busyAttempts: RUNNER_BUSY_RESEND_ATTEMPTS };
+  const resendsOther = (error: unknown, attempt: number) =>
+    attempt < (isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1);
+  if (requestDeadlineMs === undefined) {
+    return {
+      maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
+      resends: (error, attempt) =>
+        isRunnerBusyError(error)
+          ? attempt < RUNNER_BUSY_RESEND_ATTEMPTS
+          : resendsOther(error, attempt),
+    };
+  }
+  const windowMs = Math.max(0, requestDeadlineMs - Date.now() - RUNNER_BUSY_DEADLINE_RESERVE_MS);
+  const busyWindow = Deadline.fromTimeoutMs(windowMs);
   return {
-    busyAttempts: Number.POSITIVE_INFINITY,
-    deadline: Deadline.fromTimeoutMs(
-      requestDeadlineMs - Date.now() - RUNNER_BUSY_DEADLINE_RESERVE_MS,
+    // Every delay is at least the base delay, so the window holds no more attempts than this.
+    maxAttempts: Math.max(
+      TRANSPORT_RESEND_ATTEMPTS,
+      Math.ceil(windowMs / READ_ONLY_RESEND_POLICY.baseDelayMs) + 1,
     ),
+    resends: (error, attempt) =>
+      isRunnerBusyError(error) ? !busyWindow.isExpired() : resendsOther(error, attempt),
   };
 }
 
@@ -186,7 +200,7 @@ export async function runAppleRunnerCommand(
   if (!isReadOnlyRunnerCommand(runnerCommand)) {
     return provider.runCommand(device, runnerCommand, options);
   }
-  const { busyAttempts, deadline } = resolveBusyResendWindow(options.requestId);
+  const budget = resolveReadOnlyResendBudget(options.requestId);
   let lastBusyRefusal: AppError | undefined;
   let attempts = 0;
   try {
@@ -198,16 +212,16 @@ export async function runAppleRunnerCommand(
       },
       {
         ...READ_ONLY_RESEND_POLICY,
-        maxAttempts: busyAttempts,
+        maxAttempts: budget.maxAttempts,
         shouldRetry: (error, attempt) => {
           assertRunnerRequestActive(options.requestId);
           if (isRunnerBusyError(error) && error instanceof AppError) lastBusyRefusal = error;
-          return attempt < readOnlyResendBudget(error, busyAttempts);
+          return budget.resends(error, attempt);
         },
       },
       // The busy window is seconds long, so an abort must wake the delay instead of sleeping it
       // out and sending one more attempt.
-      { signal: resolveRunnerRequestSignal(options), deadline },
+      { signal: resolveRunnerRequestSignal(options) },
     );
   } catch (error) {
     if (isRunnerBusyError(error) && error instanceof AppError) {
