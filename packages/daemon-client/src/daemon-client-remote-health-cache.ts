@@ -1,29 +1,13 @@
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-
-export type RemoteDaemonHealth = {
-  reachable: boolean;
-  statusCode?: number;
-  service?: string;
-  version?: string;
-  rpcProtocolVersion?: number;
-  instanceId?: string;
-  hostArch?: string;
-  /** The daemon behind a proxy, as the proxy's health reported it. */
-  upstream?: RemoteDaemonHealthLink;
-  /** The probe ran out of its time budget before an answer, rather than failing outright. */
-  timedOut?: true;
-};
-
-export type RemoteDaemonHealthLink = Pick<
-  RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
->;
+import type { RemoteDaemonHealth } from './daemon-client-transport.ts';
 
 type RemoteHealthCacheEntry = {
   baseUrl: string;
   token: string;
   pid: number;
   health: Promise<RemoteDaemonHealth>;
+  /** The settled answer, once the probe behind `health` has answered. */
+  answer?: RemoteDaemonHealth;
 };
 
 let remoteHealthCache: RemoteHealthCacheEntry | undefined;
@@ -45,6 +29,7 @@ export function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHe
     token: info.token,
     pid: info.pid,
     health: Promise.resolve(health),
+    answer: health,
   };
 }
 
@@ -54,63 +39,42 @@ export function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
   }
 }
 
-/** The in-flight or cached `/health` answer for this daemon, starting `probe` when there is none. */
-export function sharedRemoteHealth(
+/**
+ * The remote `/health` answer through the process cache. Unbounded callers share one in-flight
+ * probe. A caller with its own bound (`bounded`) reads only a settled answer and otherwise runs
+ * `probe` itself, so it never waits on a probe that another caller started under a different
+ * budget or signal.
+ */
+export async function cachedRemoteHealth(
   info: DaemonInfo,
+  bounded: boolean,
   probe: () => Promise<RemoteDaemonHealth>,
 ): Promise<RemoteDaemonHealth> {
-  if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
-    return remoteHealthCache.health;
+  const cached =
+    remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)
+      ? remoteHealthCache
+      : undefined;
+  if (cached?.answer) return cached.answer;
+  if (bounded) {
+    const health = await probe();
+    cacheRemoteDaemonHealth(info, health);
+    return health;
   }
-  const drop = () => {
-    if (remoteHealthCache === entry) remoteHealthCache = undefined;
-  };
+  if (cached) return await cached.health;
   const entry: RemoteHealthCacheEntry = {
     baseUrl: info.baseUrl ?? '',
     token: info.token,
     pid: info.pid,
-    health: probe().then(
-      (health) => {
-        if (!isCacheableRemoteHealth(health)) drop();
-        return health;
-      },
-      (error: unknown) => {
-        drop();
-        throw error;
-      },
-    ),
+    health: probe(),
   };
   remoteHealthCache = entry;
-  return entry.health;
-}
-
-/** A caller's view of a shared probe: unanswered once its own time is up, or once it aborts. */
-export async function awaitWithinCallerBound(
-  health: Promise<RemoteDaemonHealth>,
-  timeoutMs: number | undefined,
-  signal: AbortSignal | undefined,
-): Promise<RemoteDaemonHealth> {
-  if (timeoutMs === undefined && !signal) return await health;
-  if (signal?.aborted) return { reachable: false };
-  if (timeoutMs !== undefined && timeoutMs <= 0) return { reachable: false, timedOut: true };
-  return await new Promise<RemoteDaemonHealth>((resolve, reject) => {
-    const timer =
-      timeoutMs === undefined
-        ? undefined
-        : setTimeout(() => settle({ reachable: false, timedOut: true }), Math.ceil(timeoutMs));
-    const onAbort = () => settle({ reachable: false });
-    signal?.addEventListener('abort', onAbort, { once: true });
-    function release(): void {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-    }
-    function settle(result: RemoteDaemonHealth): void {
-      release();
-      resolve(result);
-    }
-    health.then(settle, (error: unknown) => {
-      release();
-      reject(error);
-    });
-  });
+  try {
+    const health = await entry.health;
+    if (isCacheableRemoteHealth(health)) entry.answer = health;
+    else if (remoteHealthCache === entry) remoteHealthCache = undefined;
+    return health;
+  } catch (error) {
+    if (remoteHealthCache === entry) remoteHealthCache = undefined;
+    throw error;
+  }
 }

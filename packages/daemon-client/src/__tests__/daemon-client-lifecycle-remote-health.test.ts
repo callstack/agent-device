@@ -148,10 +148,12 @@ test('a remote press whose health probe answers 4xx is sent and is not the unava
   }
 });
 
-// Concurrent callers share one in-flight probe, and each applies its own bound to it: one caller
-// aborting does not end the wait of another that shares the probe.
-test('a caller aborting a shared health probe leaves a concurrent caller its answer', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
+/** A remote daemon whose `/health` answers 200 with an instance id after `delayMs`, counting probes. */
+async function slowHealthyRemote(delayMs: number): Promise<{
+  handler: http.Server;
+  info: { baseUrl: string; token: string; pid: number };
+  probes: () => number;
+}> {
   let probes = 0;
   const handler = http.createServer((req, res) => {
     req.resume();
@@ -159,22 +161,46 @@ test('a caller aborting a shared health probe leaves a concurrent caller its ans
     setTimeout(() => {
       res.statusCode = 200;
       res.end(JSON.stringify({ instanceId: 'remote-instance' }));
-    }, 200);
+    }, delayMs);
   });
   const port = await listenOnLoopback(handler);
-  const info = { baseUrl: `http://127.0.0.1:${port}`, token: 'shared-probe', pid: 0 };
-  try {
-    const aborting = new AbortController();
-    const aborted = cachedRemoteDaemonHealth(info, undefined, aborting.signal);
-    const unbounded = cachedRemoteDaemonHealth(info);
-    aborting.abort();
+  const info = { baseUrl: `http://127.0.0.1:${port}`, token: `probe-${port}`, pid: 0 };
+  return { handler, info, probes: () => probes };
+}
 
-    assert.equal((await aborted).reachable, false);
-    const health = await unbounded;
-    assert.equal(health.reachable, true);
-    assert.equal(health.instanceId, 'remote-instance');
-    assert.equal(probes, 1, 'both callers shared one probe');
+// A bounded caller never joins a probe another caller started: that probe runs on another budget,
+// so waiting on it would spend this caller's budget on a stale request.
+test('a bounded health caller runs its own probe instead of joining one in flight', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const remote = await slowHealthyRemote(300);
+  try {
+    const unbounded = cachedRemoteDaemonHealth(remote.info);
+    const bounded = await cachedRemoteDaemonHealth(remote.info, 50);
+
+    assert.equal(bounded.reachable, false);
+    assert.equal(bounded.timedOut, true);
+    assert.equal((await unbounded).reachable, true);
+    assert.equal(remote.probes(), 2, 'the bounded caller sent its own probe');
+    // The settled answer is cached, so a later bounded caller reads it without probing.
+    assert.equal((await cachedRemoteDaemonHealth(remote.info, 50)).reachable, true);
+    assert.equal(remote.probes(), 2);
   } finally {
-    await closeLoopbackServer(handler);
+    await closeLoopbackServer(remote.handler);
+  }
+});
+
+// A caller already aborted, or with no budget left, sends no request at all.
+test('an aborted or budgetless health caller sends no probe', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const remote = await slowHealthyRemote(0);
+  try {
+    assert.equal((await cachedRemoteDaemonHealth(remote.info, 0)).reachable, false);
+    assert.equal(
+      (await cachedRemoteDaemonHealth(remote.info, undefined, AbortSignal.abort())).reachable,
+      false,
+    );
+    assert.equal(remote.probes(), 0);
+  } finally {
+    await closeLoopbackServer(remote.handler);
   }
 });

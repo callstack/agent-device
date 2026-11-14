@@ -1,8 +1,7 @@
 import { sleep } from '@agent-device/host-kit/retry';
 import type { RemoteHealthRecovery } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import type { RemoteDaemonHealth } from './daemon-client-remote-health-cache.ts';
-import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
+import { cachedRemoteDaemonHealth, type RemoteDaemonHealth } from './daemon-client-transport.ts';
 import { remoteDaemonUnavailableError } from './daemon-lifecycle-errors.ts';
 
 /** The pause between `/health` probes while a remote daemon is unavailable. */
