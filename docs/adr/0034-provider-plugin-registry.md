@@ -55,33 +55,6 @@ had to fake the store to load a plugin from its own dependencies (#3747).
   takes variable names from it. A v2 plugin declares its connect capabilities in code, so a client
   loads the store, without setting up a runtime, before it reads them.
 
-## Proposed 0.22 amendment: native execution on the replay backend
-
-This amendment is proposed for #3871 and awaits maintainer acceptance.
-The existing accepted provider contract and lifecycle rules retain their status.
-The draft API adds native execution to `kind: 'replay-backend'` with backend `ad`.
-It does not add a plugin kind or a provider identity.
-
-`NATIVE_REPLAY_BACKEND` declares this identity in the shared execution contract.
-`ReplayEnginePlugin<'ad'>` returns `{ execution: { create() }, dispose? }` from setup.
-Other backend ids return `{ replayBackend: { create(host) }, dispose? }`.
-The setup validator checks this correspondence before inventory can report an active plugin.
-A mismatch records `invalid_plugin` and disposes rejected setup.
-The first backend claim remains claimed after failure.
-
-Contracts own the inspection, step, suite and factory types.
-Native `create()` receives no format-backend host.
-Each execution call receives explicit host ports for dispatch, progress and cancellation.
-A format factory still receives `ReplayBackendHost` for source collection, execution and export.
-Both factories use the registry's claims, inventory, lazy creation, failure isolation and disposal.
-Core retains session, selector, recording, repair and cleanup authority.
-
-A separate native plugin kind would duplicate lifecycle and identity decisions.
-A provider implementation would give an execution engine device ownership it does not need.
-Both alternatives are rejected by this proposal.
-The consequence is one backend identity with two backend-specific factory shapes.
-The package factory and its routing consumer must land together so core does not retain a second engine delivery.
-
 ## Daemon ownership
 
 Clients retain managed and attach lifecycles. Managed clients may start a daemon; attach clients cannot start or replace one. An embedder calls `startAgentDevice({ stateDir, plugins?, host? })` from `agent-device` to own a runtime in its process. The main entry loads the runtime when called. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` in the host process is the only way to shut an embedded runtime down, and returns its `ShutdownReport`. `daemon stop` refuses live embedded ownership with `daemon-owner-embedded` and live unrecognized ownership with `daemon-owner-unrecognized`, without a request or signal. The embedded-ownership refusal names the host PID and directs the caller to close the runtime there. Stop may retire an embedded or unrecognized registration when its recorded host lifetime has provably exited. The CLI cannot replace a live embedded runtime. Registration and its lock remain held while requests or platform owners are unfinished.
