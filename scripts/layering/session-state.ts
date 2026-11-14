@@ -79,7 +79,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   lastPerfProfile: [
     'packages/daemon/src/sessions/session-observability/internal/session-perf-runtime.ts',
   ],
-  device: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   surface: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining
@@ -109,8 +108,9 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
  */
 export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'actions',
-  // #4162: the open-state publisher establishes this through `SessionStore.markOpenBootedDevice`,
-  // and nothing mutates it afterwards, so close only reads which device its own open booted.
+  // #4162: `SessionStore.updateOpenDevice` binds boot ownership to the current device identity.
+  // Close only reads the fact; a replacement cannot inherit it.
+  'device',
   'bootedByOpen',
   // #4237: `close` marks a session it keeps through `SessionStore.markCloseEffectsUnconfirmed`.
   'closeEffectsUnconfirmed',
