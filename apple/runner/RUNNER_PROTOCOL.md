@@ -267,6 +267,16 @@ next step also carries `hint`, omitted here. A keyboard that stayed up answers o
 and the keyboard stayed visible. The host reports both under `UNSUPPORTED_OPERATION` and publishes the
 first one's `details.reason`.
 
+Three more refusals name the control the target could not supply, so a caller never reads the refusal
+off `message`. `KEYBOARD_RETURN_UNAVAILABLE` is a `keyboard enter` whose keyboard exposed no return-like
+key and for which no text field could be found; it proves no submission, not that nothing ran, because
+the sole-text-field route taps the field before typing. `HARDWARE_CONTROL_UNAVAILABLE` is a press of a
+control this target cannot express — the Action Button on a model without one, a volume key on a
+simulator, or a Siri Remote button off tvOS — and `IN_APP_BACK_CONTROL_UNAVAILABLE` is macOS `back`
+finding no in-app back control in the app's tree. The last two press nothing. The host maps each to the
+code its command already refused with (the first three to `UNSUPPORTED_OPERATION`, the macOS back
+refusal to the `COMMAND_FAILED` a code-less reply produced) and publishes its `details.reason`.
+
 `data` is command-specific. Common fields include snapshot nodes, text lookup results, gesture timing, visibility metadata, and screenshot or recording output details.
 
 Capture-plan snapshots carry `snapshotViewport`, the acquisition's declared viewport evidence.

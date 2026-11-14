@@ -14,6 +14,7 @@ import {
   type AndroidAdbExecutor,
 } from '../adb-executor.ts';
 import { completeAndroidFillVerification } from '../fill-verification.ts';
+import { dismissAndroidKeyboard } from '../device-input-state.ts';
 import { doubleTapAndroid, pressAndroid } from '../input-actions.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { fillAndroid, typeAndroid } from '../text-input.ts';
@@ -176,6 +177,25 @@ async function oneShotGesture(instrument: AndroidAdbExecutor): Promise<void> {
   );
 }
 
+/**
+ * `keyboard dismiss` on a keyboard the escape keyevent never hides: the loop runs its two attempts and
+ * the producer refuses. Each `input keyevent` it sent counts as a dispatched step, so the disclosure
+ * cannot be `no`.
+ */
+async function dismissAgainstImeThatIgnoresEscape(): Promise<void> {
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell dumpsys input_method') {
+        return ['mInputShown=true mIsInputViewShown=true', 'inputType=0x1'].join('\n');
+      }
+      if (flat === 'shell input keyevent 111') return '';
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ device }) => await dismissAndroidKeyboard(device),
+  );
+}
+
 const HELPER_REPORTED_FAILURE = resultRecord({
   ok: 'false',
   errorType: 'java.lang.IllegalStateException',
@@ -243,6 +263,9 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
         targetInput: null,
         actualInput: null,
       }),
+  },
+  'android-adb.keyboard-dismiss.ime-ignored-escape': {
+    drive: dismissAgainstImeThatIgnoresEscape,
   },
   'android-helper.gesture.reported-failure': {
     drive: () =>

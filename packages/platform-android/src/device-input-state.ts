@@ -33,6 +33,13 @@ const ANDROID_TEXT_VARIATION_VISIBLE_PASSWORD = 0x00000090;
 const ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS = 2;
 const ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS = 120;
 const ANDROID_KEYCODE_ESCAPE = '111';
+/**
+ * `details.reason` of a `keyboard dismiss` whose keyboard stayed up. One reason covers both platforms
+ * because the concept and the recovery are one thing: the safe mechanism this platform has would not
+ * bring the keyboard down, so press the app's own control. What differs is how far each got, and
+ * `details.dispatched` says that, never the reason.
+ */
+const ANDROID_KEYBOARD_DISMISS_UNAVAILABLE_REASON = 'keyboard_dismiss_unavailable';
 const ANDROID_KEYBOARD_VISIBILITY_KEYS = [
   'mInputShown',
   'mIsInputViewShown',
@@ -126,6 +133,11 @@ export async function dismissAndroidKeyboardWithAdb(
       'UNSUPPORTED_OPERATION',
       'Android keyboard dismiss is unavailable for the current IME without back navigation.',
       {
+        // The same reason the Apple runner publishes for a keyboard that stays up: the safe mechanism
+        // this platform has would not bring it down. `dispatched` is the producer's own verdict and
+        // differs here — the escape keyevents above went out, so the disclosure cannot be `no`.
+        reason: ANDROID_KEYBOARD_DISMISS_UNAVAILABLE_REASON,
+        dispatched: 'unknown',
         attempts,
         inputType: state.inputType,
         type: state.type,

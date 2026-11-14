@@ -192,3 +192,40 @@ export function requireSwiftKeyboardDismissRefusalWireCode(): string {
   );
   return refusalCode;
 }
+
+/**
+ * The Swift declarations for the runner refusals that name a control or a key the target could not
+ * supply: `keyboard enter` with nothing to submit, a hardware or Siri Remote control this platform
+ * cannot express, and macOS `back` with no in-app back control. Each is thrown on a device lane, so the
+ * tie that keeps the host's `details.reason` row attached to it reads the declaration rather than a
+ * second copy of the literal.
+ */
+export function requireSwiftControlRefusalWireCodes(): {
+  keyboardReturnCode: string;
+  hardwareControlCode: string;
+  inAppBackControlCode: string;
+} {
+  const codes = readSwiftWireErrorCodes();
+  const members = [
+    'keyboardReturnUnavailable',
+    'hardwareControlUnavailable',
+    'inAppBackControlUnavailable',
+  ] as const;
+  const keys = ['keyboardReturnCode', 'hardwareControlCode', 'inAppBackControlCode'] as const;
+  const refusalCodes: Record<string, string> = {};
+  for (const [index, member] of members.entries()) {
+    const key = keys[index]!;
+    const refusalCode = codes[member];
+    assert.ok(
+      refusalCode !== undefined,
+      `RunnerWireErrorCode must declare ${member}: the daemon publishes details.reason for this ` +
+        'code, and a runner that stopped encoding it would leave that reason unreachable.',
+    );
+    refusalCodes[key] = refusalCode;
+  }
+  return refusalCodes as {
+    keyboardReturnCode: string;
+    hardwareControlCode: string;
+    inAppBackControlCode: string;
+  };
+}

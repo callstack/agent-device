@@ -425,7 +425,11 @@ extension RunnerTests {
       guard pressTvRemote(button, duration: duration) else {
         return Response(
           ok: false,
-          error: ErrorPayload(code: "UNSUPPORTED_OPERATION", message: "remotePress is only supported on tvOS")
+          error: ErrorPayload(
+            code: RunnerWireErrorCode.hardwareControlUnavailable,
+            message: "remotePress is only supported on tvOS",
+            hint: "Only a tvOS target has a Siri Remote. On a TV target use tv-remote; on a phone or Mac, press the app's own control by its ref."
+          )
         )
       }
       return Response(ok: true, data: DataPayload(message: "remote pressed"))
@@ -567,7 +571,7 @@ extension RunnerTests {
         return Response(
           ok: false,
           error: ErrorPayload(
-            code: "UNSUPPORTED_OPERATION",
+            code: RunnerWireErrorCode.hardwareControlUnavailable,
             message: "actionButton requires a device model with an Action Button",
             hint: "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
           )
@@ -579,7 +583,7 @@ extension RunnerTests {
         return Response(
           ok: false,
           error: ErrorPayload(
-            code: "UNSUPPORTED_OPERATION",
+            code: RunnerWireErrorCode.hardwareControlUnavailable,
             message: "\(command.command) requires a physical iPhone or iPad; XCUIDevice exposes no volume press on a simulator",
             hint: "hardware-button volume-up/volume-down is supported on physical iOS devices through the runner or Appium; iOS Simulators have no pressable volume key."
           )
@@ -616,13 +620,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "keyboardReturn produced no result"))
       }
       if !result.pressed {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "UNSUPPORTED_OPERATION",
-            message: "Unable to press the iOS keyboard return key"
-          )
-        )
+        return Response(ok: false, error: keyboardReturnRefusal)
       }
       return Response(
         ok: true,

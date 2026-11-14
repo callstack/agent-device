@@ -287,6 +287,19 @@ extension RunnerTests {
       "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
   }
 
+  /// The refusal a `keyboard enter` answers with when nothing was submitted: the keyboard exposes no
+  /// return-like key, and typing a return found no field to type into. It carries the runner's own code
+  /// so the host publishes `details.reason` instead of leaving callers to read the prose. The dispatch
+  /// disclosure stays `unknown`: the sole-text-field route taps that field before it types, and that
+  /// tap can be the step that failed.
+  var keyboardReturnRefusal: ErrorPayload {
+    return ErrorPayload(
+      code: RunnerWireErrorCode.keyboardReturnUnavailable,
+      message: "Unable to press the keyboard return key: the keyboard exposes no return-like key and no text field was available to submit",
+      hint: "Tap the app's own submit control by its ref, or focus a text field with fill or type before asking keyboard enter to submit it."
+    )
+  }
+
 
   // AX-free on purpose (screenshot bytes, not the accessibility tree) so it holds
   // under the same AX degradation the synthesized gesture lane is built to survive.

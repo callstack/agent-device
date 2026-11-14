@@ -154,6 +154,14 @@ extension RunnerTests {
     XCTAssertNotEqual(dispatched.code, notDispatched.code)
   }
 
+  /// `keyboard enter` refusing for having nothing to submit is its own typed refusal, and the host
+  /// reads this code's literal to publish `details.reason`. The wire code alone is the contract.
+  func testKeyboardReturnRefusalNamesItsOwnCode() {
+    let refusal = keyboardReturnRefusal
+    XCTAssertEqual(refusal.code, "KEYBOARD_RETURN_UNAVAILABLE")
+    XCTAssertNotNil(refusal.hint)
+  }
+
   func testKeyboardBandFactPublishesAbsenceWhenTheCompleteCaptureHasNoKeyboard() {
     let fact = runnerKeyboardBandFact(exists: false, frame: .zero)
     XCTAssertEqual(fact, .absent)
@@ -312,7 +320,10 @@ extension RunnerTests {
 
     XCTAssertEqual(textEntryInputCount(), 0)
     XCTAssertEqual(recordedFailures, 0)
-    XCTAssertEqual(response.error?.code, "UNSUPPORTED_OPERATION")
+    // The refusal names itself, so the host publishes its `details.reason`; the host still reports the
+    // command's own `UNSUPPORTED_OPERATION` for the caller.
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.keyboardReturnUnavailable)
+    XCTAssertNotNil(response.error?.hint)
   }
 
   @MainActor

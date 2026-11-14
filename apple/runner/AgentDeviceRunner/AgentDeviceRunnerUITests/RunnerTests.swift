@@ -44,6 +44,10 @@ final class RunnerTests: XCTestCase {
   /// `BACK_SWIPE_UNVERIFIED` is one whose screen kept changing on its own before the swipe, or could
   /// not be sampled afterwards. Both ran the swipe. `BACK_SWIPE_NOT_DISPATCHED` is a back swipe that
   /// was refused before any touch went down, so dispatched: no.
+  /// `IN_APP_BACK_CONTROL_UNAVAILABLE` is macOS `back` finding no in-app back control, so it pressed
+  /// nothing. `KEYBOARD_RETURN_UNAVAILABLE` is `keyboard enter` finding nothing to submit.
+  /// `HARDWARE_CONTROL_UNAVAILABLE` is a hardware or remote control this target cannot express.
+  /// Each is a pre-dispatch refusal, and the host publishes its `details.reason` for all three.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
@@ -62,6 +66,18 @@ final class RunnerTests: XCTestCase {
     /// runner vouches for (#1606). The host reports it under `UNSUPPORTED_OPERATION` and publishes
     /// `details.reason`, so a caller never reads the refusal off the message prose.
     static let keyboardDismissUnavailable = "KEYBOARD_DISMISS_UNAVAILABLE"
+    /// A `keyboard enter` that found no return key to press and no text entry to submit through, so
+    /// nothing was submitted. The host reports it under `UNSUPPORTED_OPERATION` and publishes
+    /// `details.reason`; the disclosure stays `unknown` because the sole-field route taps the field
+    /// before it types, and that tap can be the last thing that fails.
+    static let keyboardReturnUnavailable = "KEYBOARD_RETURN_UNAVAILABLE"
+    /// A press of a hardware or Siri Remote control this target cannot express: the Action Button on a
+    /// model without one, a volume key on a simulator, or a remote button off tvOS. Nothing was
+    /// pressed, so the host reports `UNSUPPORTED_OPERATION` with `details.reason` and `dispatched: no`.
+    static let hardwareControlUnavailable = "HARDWARE_CONTROL_UNAVAILABLE"
+    /// macOS `back` found no in-app back control to press, so it sent nothing. The host keeps the
+    /// `COMMAND_FAILED` code such a code-less refusal always had and publishes `details.reason`.
+    static let inAppBackControlUnavailable = "IN_APP_BACK_CONTROL_UNAVAILABLE"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
     /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
