@@ -133,7 +133,7 @@ test('remote tools execute the shared text-size, status bar and biometric settin
   ]);
 });
 
-test('shared deployment resolves remote app names and uninstalls before uploading a replacement', async () => {
+test('shared deployment prepares before uninstalling and uploading a replacement', async () => {
   const f = await fixture();
   const { createAppleToolHost } = await import('../../platform-runtime-apple-tool-host.ts');
   const { createAppleAppDeploymentExecutor } =
@@ -183,8 +183,8 @@ test('shared deployment resolves remote app names and uninstalls before uploadin
     }),
   ).toMatchObject({ bundleId: 'com.apple.Preferences' });
   expect(order).toEqual([
-    'uninstall:com.apple.Preferences',
     'materialize',
+    'uninstall:com.apple.Preferences',
     'upload-and-install',
     'cleanup',
   ]);
