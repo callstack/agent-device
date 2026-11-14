@@ -93,7 +93,7 @@ export type ReplayTestVideoOwner = Readonly<{
   throwIfCanceled: () => void;
 }>;
 
-type ReplayTestSessionCleanup = (sessionName: string) => Promise<void>;
+type ReplayTestSessionCleanup = (sessionName: string) => Promise<readonly string[] | void>;
 
 export type ReplayTestCommand = ReplayCommand &
   Readonly<{

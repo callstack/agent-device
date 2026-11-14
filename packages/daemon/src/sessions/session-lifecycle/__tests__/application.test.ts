@@ -60,12 +60,16 @@ function request(command: DaemonRequest['command']): DaemonRequest {
   };
 }
 
-async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
+async function run(
+  command: DaemonRequest['command'],
+  deviceShutdownDenied?: boolean,
+): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
+    deviceShutdownDenied,
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-lifecycle-route.log',
     sessionStore: makeSessionStore('agent-device-session-lifecycle-route-'),
@@ -140,31 +144,36 @@ test('open routes only its lifecycle input through its owner', async () => {
   });
 });
 
-test('close routes only its lifecycle input through its owner', async () => {
-  const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
-  mockHandleSessionCloseCommands.mockImplementationOnce(async () => expected);
+test.each([true, false])(
+  'close routes only its lifecycle input through its owner (shutdown denied: %s)',
+  async (deviceShutdownDenied) => {
+    const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
+    mockHandleSessionCloseCommands.mockImplementationOnce(async () => expected);
 
-  await expect(run('close')).resolves.toEqual(expected);
+    await expect(run('close', deviceShutdownDenied)).resolves.toEqual(expected);
 
-  const forwarded = mockHandleSessionCloseCommands.mock.calls.at(-1)?.[0];
-  expect(Object.keys(forwarded ?? {}).sort()).toEqual(
-    [
-      'bindDevice',
-      'host',
-      'inspectFacts',
-      'leaseLifecycleProvider',
-      'leaseRegistry',
-      'logPath',
-      'platformResourceCleanup',
-      'platformServices',
-      'req',
-      'sessionName',
-      'sessionStore',
-    ].sort(),
-  );
-  expect(forwarded).toMatchObject({
-    req: expect.objectContaining({ command: 'close' }),
-    sessionName: 'default',
-    logPath: '/tmp/agent-device-session-lifecycle-route.log',
-  });
-});
+    const forwarded = mockHandleSessionCloseCommands.mock.calls.at(-1)?.[0];
+    expect(Object.keys(forwarded ?? {}).sort()).toEqual(
+      [
+        'bindDevice',
+        'deviceShutdownDenied',
+        'host',
+        'inspectFacts',
+        'leaseLifecycleProvider',
+        'leaseRegistry',
+        'logPath',
+        'platformResourceCleanup',
+        'platformServices',
+        'req',
+        'sessionName',
+        'sessionStore',
+      ].sort(),
+    );
+    expect(forwarded).toMatchObject({
+      deviceShutdownDenied,
+      req: expect.objectContaining({ command: 'close' }),
+      sessionName: 'default',
+      logPath: '/tmp/agent-device-session-lifecycle-route.log',
+    });
+  },
+);

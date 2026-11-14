@@ -131,6 +131,16 @@ test('successful local virtual preparation records the boot event without changi
   assert.equal(localSelection?.bootOccurred, true);
   assert.equal(bootedSelection?.bootOccurred, false);
   assert.equal(providerSelection?.bootOccurred, false);
+  const sessionSelection = resolveExistingSessionDeviceSelection(STOPPED_ANDROID_EMULATOR);
+  assert.equal(markSelectionBootOccurred(sessionSelection, true).bootOccurred, true);
+  assert.equal(markSelectionBootOccurred(sessionSelection, false).bootOccurred, false);
+  assert.equal(
+    markSelectionBootOccurred(
+      resolveExistingSessionDeviceSelection(SECOND_BOOTED_ANDROID_EMULATOR),
+      true,
+    ).bootOccurred,
+    false,
+  );
 });
 
 test('multiple equally eligible local candidates fail with structured retry selectors', async () => {

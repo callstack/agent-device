@@ -13,7 +13,7 @@ agent-device open <app> --foreground
 
 That starts the session and returns the initial interactive snapshot with `@refs`.
 
-Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <direction> --settle`, or `back --settle`; continue from the printed diff, verify the named expectation with a read-only command (`wait text "..."`, `is`, or `get`; bare `find` clicks, so check with `find text "..." exists`), then run `agent-device close`, or `agent-device close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running.
+Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <direction> --settle`, or `back --settle`; continue from the printed diff, verify the named expectation with a read-only command (`wait text "..."`, `is`, or `get`; bare `find` clicks, so check with `find text "..." exists`), then run `agent-device close`. Plain close also stops a local simulator or emulator your open booted, and leaves one that was already running; if the daemon policy denies `device-shutdown`, inspect the warning for the local device that stays running. Pass `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership; a denied explicit stop fails with `UNAUTHORIZED` and `details.reason: DAEMON_POLICY_DENIED`.
 
 Reaching an off-screen target is one command, not a scroll-and-check loop: `scroll down --until <selector>` scrolls until that element is on screen, and `scroll bottom` runs to the end of the content. Repeated bare `scroll down` calls are the slow way to find something.
 

@@ -3,6 +3,7 @@
 ## Status
 
 Accepted (2026-09-29). Amended (2026-11-04): `devices.allow` admits web session devices like app devices (ADR 0037).
+Amended (2026-11-14): plain close skips a denied implicit stop of a local simulator or emulator that its session booted (#4162).
 
 ## Rules at a glance
 
@@ -21,6 +22,8 @@ Accepted (2026-09-29). Amended (2026-11-04): `devices.allow` admits web session 
    - **Capability gate:** the device-shutdown host capability refuses shutdown from every command.
      The only exception permits Apple readiness to roll back a Simulator boot started and then canceled by the same request.
      That Simulator was not previously running.
+     A plain close of a local simulator or emulator booted by that session skips the denied implicit stop, succeeds, and reports the kept local device.
+     A `close --shutdown` the caller asked for fails like any other denied request.
 4. Denials use `UNAUTHORIZED`, `details.reason: 'DAEMON_POLICY_DENIED'`, `retriable: false`, a hint, and the policy digest.
    They include `rule`: `command`, `device`, `capability`, or `lease`.
    They never expose the policy's host path.

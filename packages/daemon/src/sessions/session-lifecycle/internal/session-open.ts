@@ -42,7 +42,10 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { admitRuntimeOperations } from '../../../core/runtime-admission.ts';
-import { resolveExistingSessionDeviceSelection } from '@agent-device/device-selection/device-selection-resolver';
+import {
+  markSelectionBootOccurred,
+  resolveExistingSessionDeviceSelection,
+} from '@agent-device/device-selection/device-selection-resolver';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -406,7 +409,8 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   if (runtimePlanAdmission.type === 'response')
     return { type: 'response', response: runtimePlanAdmission.response };
   // A stopped AVD boots before the session claim and the open locks, so the session, its claim
-  // and its locks all key on the booted serial rather than the AVD name.
+  // and its locks all key on the booted serial rather than the AVD name. The boot fact is stamped
+  // on the pre-boot selection, because the booted serial is all the returned device shows.
   const booted = await bootStoppedLocalAndroidDevice({
     device: resolved.device,
     owner: runtimePlanAdmission.admission.runtime.owner,
@@ -415,7 +419,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     env: params.host.env,
     deadlineAtMs: startupDeadline,
   });
-  const selection = booted ? { ...resolved, device: booted } : resolved;
+  const selection = booted ? { ...markSelectionBootOccurred(resolved), device: booted } : resolved;
   const device = selection.device;
   if (booted) {
     await req.internal?.retainDeviceExecutionLock?.(device.id);

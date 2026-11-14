@@ -113,7 +113,10 @@ import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
-import { restrictDeviceInventoryToDaemonPolicy } from '../core/daemon-policy.ts';
+import {
+  restrictDeviceInventoryToDaemonPolicy,
+  isDaemonPolicyCapabilityDenied,
+} from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 // ---------------------------------------------------------------------------
@@ -194,6 +197,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const deviceShutdownDenied =
+    daemonPolicy !== undefined && isDaemonPolicyCapabilityDenied(daemonPolicy, 'device-shutdown');
   const deviceInventoryGateways = daemonPolicy
     ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
     : deps.deviceInventoryGateways;
@@ -414,6 +419,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       androidObservation,
       createCommandSurface,
       platformResourceCleanup,
+      deviceShutdownDenied,
       bindDevice: lockedScope.bindDevice,
       platformServices: lockedScope.platformServices,
       inspectFacts: lockedScope.inspectFacts,

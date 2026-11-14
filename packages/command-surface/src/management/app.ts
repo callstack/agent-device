@@ -93,10 +93,12 @@ const openCommandMetadata = defineFieldCommandMetadata(
 
 const closeCommandMetadata = defineFieldCommandMetadata(
   'close',
-  'Close the named app, or close the active session app when app is omitted. The shutdown option also stops the session simulator or emulator where supported; close alone never stops the device. Android ADB close fails with android-app-close-timeout if the app stays foreground past 2s, a killed process does not exit within 10s, or a new process runs past 2s; a relaunching open accepts that new process. It fails with android-process-probe-unavailable when adb pidof cannot list the app processes; if that happens before the force-stop, the app keeps running. If close cannot confirm its cleanup on a session that holds a device claim, the session and its claim stay. A repeated close retries cleanup with the same options, except that save-script must be omitted after publication.',
+  "Close the named app, or close the active session app when app is omitted. When this session's open booted a local simulator or emulator, close stops it too, leaving the device as the session found it; a device that was already running keeps running. Pass shutdown to explicitly stop a local simulator or emulator regardless of boot ownership. A daemon whose policy denies device-shutdown skips the implicit stop on plain close, which succeeds with a warning that the local device stays running. Explicit close with shutdown fails with UNAUTHORIZED and details.reason DAEMON_POLICY_DENIED. Android ADB close fails with android-app-close-timeout if the app stays foreground past 2s, a killed process does not exit within 10s, or a new process runs past 2s; a relaunching open accepts that new process. It fails with android-process-probe-unavailable when adb pidof cannot list the app processes; if that happens before the force-stop, the app keeps running. If close cannot confirm its cleanup on a session that holds a device claim, the session and its claim stay. A repeated close retries cleanup with the same options, except that save-script must be omitted after publication.",
   {
     app: stringField('Optional app to close.'),
-    shutdown: booleanField('Shutdown the session/device where supported.'),
+    shutdown: booleanField(
+      'Shutdown the session/device where supported, even one this session did not boot.',
+    ),
     saveScript: jsonSchemaField<boolean | string>({
       oneOf: [booleanSchema(), stringSchema()],
     }),

@@ -37,7 +37,11 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-bundle-id> --platform ios --foreground',
       },
-      { id: 'device shutdown on finish', requiredText: 'agent-device close --shutdown' },
+      {
+        id: 'device shutdown on finish',
+        requiredText:
+          'When you finish, run `agent-device close`. Plain close stops a local simulator your open booted and leaves one that was already running. If the daemon policy denies `device-shutdown`, inspect the warning for the local simulator that stays running. Pass `--shutdown` to explicitly stop a local simulator regardless of boot ownership; a denied explicit stop fails with `UNAUTHORIZED` and `details.reason: DAEMON_POLICY_DENIED`.',
+      },
     ] satisfies Contract[],
     prohibitions: [
       { id: 'version startup probe', forbiddenText: 'agent-device --version' },
@@ -65,7 +69,11 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-package-id> --platform android --foreground',
       },
-      { id: 'device shutdown on finish', requiredText: 'agent-device close --shutdown' },
+      {
+        id: 'device shutdown on finish',
+        requiredText:
+          'When you finish, run `agent-device close`. Plain close stops a local emulator your open booted and leaves one that was already running. If the daemon policy denies `device-shutdown`, inspect the warning for the local emulator that stays running. Pass `--shutdown` to explicitly stop a local emulator regardless of boot ownership; a denied explicit stop fails with `UNAUTHORIZED` and `details.reason: DAEMON_POLICY_DENIED`.',
+      },
     ] satisfies Contract[],
     prohibitions: [
       { id: 'version startup probe', forbiddenText: 'agent-device --version' },

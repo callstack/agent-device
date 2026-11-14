@@ -118,18 +118,34 @@ prints the `address` that `--session` accepts.
 
 ## Shut down the device on close
 
-Add `--shutdown` to shut down an Apple simulator or Android emulator when you close the session. Use it
-in CI and on shared hosts so devices don't keep running after the run:
+`close` stops the local simulator or emulator that this session's `open` booted, so the device ends
+as the session found it. A device that was already running when you opened it keeps running:
+
+```bash
+agent-device open --platform ios --device iPhone_17_Pro
+agent-device close            # the simulator this open booted ends shut down
+```
+
+Add `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership.
+Physical devices are not stopped. Provider sessions follow the provider's shutdown action.
+With [Limrun](./limrun.md), `--shutdown` ends the instance or attachment and can delete an instance
+that agent-device created:
 
 ```bash
 agent-device close --shutdown
 ```
 
-Without `--shutdown`, `close` can keep a ready, idle iOS simulator runner warm for the next `open`
-when its listener connection is still live and the session has no screen recording or device lease.
-Unfinished runner startup is stopped. If you shut that simulator down yourself while the runner is
-retained, losing its listener connection stops the retained runner. Idle retained runners also stop
-when their daemon shuts down gracefully.
+When a shutdown result exists, `close` reports it in `data.shutdown`. The field is absent when the
+device stays running. If the daemon policy denies `device-shutdown`, `close --shutdown` fails with
+`UNAUTHORIZED` and `error.details.reason: DAEMON_POLICY_DENIED`. Plain `close` skips its implicit stop,
+succeeds, and reports the local simulator or emulator it left running in `warnings`.
+
+When the session keeps its device running, `close` can keep a ready, idle iOS simulator runner warm
+for the next `open` when its listener connection is still live and the session has no screen
+recording or device lease. A close that stops the device stops its runner instead. Unfinished runner
+startup is always stopped. If you shut that simulator down yourself while the runner is retained,
+losing its listener connection stops the retained runner. Idle retained runners also stop when their
+daemon shuts down gracefully.
 
 ## Wait for a slow or busy device
 
@@ -219,8 +235,8 @@ xcrun simctl install "$udid" ./App.app
   never runs unfenced. Add `--wait <ms>` to `open` to queue for the device instead.
 - The script exits with the command's status, as long as the command is the last line. To run
   more after it, save `status=$?` and finish with `exit "$status"`.
-- The `trap` closes the session whether the command succeeds or fails. Add `--shutdown` to `close` to
-  shut the simulator or emulator down afterwards.
+- The `trap` closes the session whether the command succeeds or fails. That `close` also shuts down a
+  simulator or emulator the `open` booted; add `--shutdown` to shut down one that was already running.
 - `open` without an app boots the device if needed and claims it, so the first call on a cold
   simulator can take minutes.
 - This is a session claim, not a claim owned by your process. If the shell dies without running its

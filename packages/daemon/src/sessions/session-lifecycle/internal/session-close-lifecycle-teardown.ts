@@ -32,6 +32,11 @@ export type SessionCloseTeardownResult = Readonly<{
   saveScriptError?: Error;
   shutdownResult?: TargetShutdownResult;
   shutdownPrepared: boolean;
+  /**
+   * #4162: the close owned stopping the device its own `open` booted, and this daemon's policy
+   * denies `device-shutdown`, so the device stays running. The close itself succeeded.
+   */
+  implicitShutdownDeniedByPolicy: boolean;
 }>;
 
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
@@ -53,6 +58,7 @@ export async function runSessionCloseTeardown(params: {
     platformCloseError: unknown;
   }): Error | undefined;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
@@ -79,9 +85,21 @@ export async function runSessionCloseTeardown(params: {
       return undefined;
     }
   };
+  // #4162: plain close stops a local virtual device this session's own open booted. The boot fact
+  // only ever comes from local selection, and the local-family check keeps it off provider paths,
+  // which release through their lease instead. A policy that denies `device-shutdown` keeps this
+  // close's own stop from ever being asked: the refusal is decided before the call, so the runner
+  // retention a kept-running device earns is not spent on a stop that can never happen.
+  const explicitShutdown = req.flags?.shutdown === true;
+  const bootOwnedLocalStop =
+    session.bootedByOpen === true && lifecycle.owner.kind === 'local-family';
+  const implicitShutdown = !explicitShutdown && bootOwnedLocalStop;
+  const implicitShutdownDeniedByPolicy = implicitShutdown && params.deviceShutdownDenied === true;
+  const shutdownRequested =
+    explicitShutdown || (implicitShutdown && !implicitShutdownDeniedByPolicy);
   const retainExecutionHost = params.platformResourceCleanup.retainExecutionHostAfterClose({
     device: session.device,
-    shutdownRequested: req.flags?.shutdown === true,
+    shutdownRequested,
     hasScreenRecording: Boolean(session.screenRecording),
     leaseWillEnd:
       Boolean(session.lease) &&
@@ -121,7 +139,7 @@ export async function runSessionCloseTeardown(params: {
         surface: session.surface ?? 'app',
         retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        shutdownTarget: req.flags?.shutdown === true && lifecycle.owner.kind === 'local-family',
+        shutdownTarget: shutdownRequested && lifecycle.owner.kind === 'local-family',
       })) ?? {},
   );
   const saveScriptError = repairArmed
@@ -136,6 +154,7 @@ export async function runSessionCloseTeardown(params: {
     saveScriptError,
     shutdownResult: finalization?.shutdown,
     shutdownPrepared: finalization !== undefined,
+    implicitShutdownDeniedByPolicy,
   };
 }
 

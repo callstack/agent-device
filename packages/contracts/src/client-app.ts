@@ -156,6 +156,11 @@ export type AppCloseResult = {
   closedApp?: string;
   shutdown?: TargetShutdownResult;
   /**
+   * #4162: disclosure carried on the close response, e.g. the policy-refused stop of a device
+   * this session's own open booted. The close still succeeded; the warning says what stayed up.
+   */
+  warnings?: string[];
+  /**
    * #1258: absolute path of the committed session/healed script when this close
    * published one (`close --save-script`, or a repair-armed session's finalize)
    * — so a client that requested publication learns where the file landed.

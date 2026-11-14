@@ -174,6 +174,7 @@ export function serializeCloseResult(
   return {
     session: result.session,
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
+    ...(result.warnings?.length ? { warnings: result.warnings } : {}),
     ...('provider' in result && result.provider ? { provider: result.provider } : {}),
     ...successText(
       [

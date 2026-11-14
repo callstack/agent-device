@@ -45,6 +45,8 @@ import {
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
@@ -58,6 +60,46 @@ beforeEach(() => {
   mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
+});
+
+test('same-session replay close preserves a denied implicit shutdown without consuming retention', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-close-policy-');
+  const replayPath = path.join(root, 'close.ad');
+  fs.writeFileSync(replayPath, 'close\n');
+  const sessionStore = makeSessionStore('agent-device-replay-close-policy-');
+  sessionStore.publish(
+    'default',
+    makeIosSession('default', { bootedByOpen: true, appBundleId: 'com.example.app' }),
+  );
+  const cleanup = platformResourceCleanupFixture();
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(root, 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    platformResourceCleanup: cleanup,
+    daemonPolicy: parseDaemonPolicy(
+      { version: 1, capabilities: { deny: ['device-shutdown'] } },
+      path.join(root, 'policy.json'),
+    ),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'replay',
+    positionals: [replayPath],
+    meta: { cwd: root, requestId: 'replay-close-policy', sessionExplicit: true },
+  });
+  expect(response).toMatchObject({ ok: true });
+  expect(cleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+    expect.objectContaining({ shutdownRequested: false }),
+  );
+  expect(sessionStore.listRefs()).toHaveLength(0);
 });
 
 test('replay runs active-session actions inside the parent request provider scope', async () => {

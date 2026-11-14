@@ -1,3 +1,4 @@
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { resolveSessionTestArtifactsRoot } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -73,6 +74,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   retainDeviceExecutionLock,
   throwIfCanceled,
   platformResourceCleanup,
+  deviceShutdownDenied,
 }) => {
   if (!platformResourceCleanup) {
     throw new AppError(
@@ -122,6 +124,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         bindDevice,
         platformServices,
         platformResourceCleanup,
+        deviceShutdownDenied,
       }),
     ...(video ? { video } : {}),
   });
@@ -210,11 +213,14 @@ type ReplayTestSessionCleanupParams = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }>;
 
-async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
+async function closeReplayTestSession(
+  params: ReplayTestSessionCleanupParams,
+): Promise<readonly string[]> {
   const { req, sessionName, logPath, sessionStore } = params;
-  if (!sessionStore.get(sessionName)) return;
+  if (!sessionStore.get(sessionName)) return [];
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(
@@ -225,7 +231,9 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         positionals: [],
         flags: {},
         meta: req.meta,
-        internal: { cleanupIntent: 'suite-owned-test-session' },
+        internal: {
+          cleanupIntent: 'suite-owned-test-session',
+        },
       },
       req,
     ),
@@ -238,8 +246,9 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     platformResourceCleanup: params.platformResourceCleanup,
+    deviceShutdownDenied: params.deviceShutdownDenied,
   });
-  if (closeResponse.ok) return;
+  if (closeResponse.ok) return readResponseWarnings(closeResponse.data);
   throw new AppError(closeResponse.error.code, closeResponse.error.message, {
     ...(closeResponse.error.details ?? {}),
     ...(closeResponse.error.hint ? { hint: closeResponse.error.hint } : {}),
