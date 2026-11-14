@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import path from 'node:path';
 import type {
   MaestroObservation,
@@ -22,7 +23,10 @@ export type MaestroDaemonOperationInvoke = (
   request: MaestroDaemonOperationRequest,
 ) => Promise<DaemonResponse>;
 
-export type CreateDaemonMaestroRuntimeOperationsOptions = {
+export type CreateDaemonMaestroRuntimeOperationsOptions = Pick<
+  ReplayBackendHost,
+  'readSnapshotClickabilityEvidence'
+> & {
   readonly invoke: MaestroDaemonOperationInvoke;
   /** The runtime envelope every operation carries: platform, target, device, and recording flags. */
   readonly flags?: CommandFlags;

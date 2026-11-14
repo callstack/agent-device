@@ -82,6 +82,7 @@ test('the failure response hands the host the step, its warnings, and its sugges
       appendTraceEvent: () => {},
       buildBuiltinVars: () => ({}),
       readScriptSourceFile: () => '',
+      readSnapshotClickabilityEvidence: () => undefined,
       scriptSourceRequiredMessage: '',
       resolveTargetDevice: () => Promise.reject(new Error('unused')),
       requestSignal: () => undefined,

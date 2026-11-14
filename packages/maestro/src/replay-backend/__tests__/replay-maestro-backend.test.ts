@@ -19,6 +19,7 @@ const unusedHost: ReplayBackendHost = {
   readScriptSourceFile: () => {
     throw new Error('host unused');
   },
+  readSnapshotClickabilityEvidence: () => undefined,
   scriptSourceRequiredMessage: '',
   resolveTargetDevice: () => Promise.reject(new Error('host unused')),
   requestSignal: () => undefined,

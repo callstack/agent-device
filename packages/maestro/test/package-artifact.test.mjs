@@ -31,6 +31,16 @@ test('packed managed plugin contains its factory and runs real script children w
     ])
       assert.ok(fs.existsSync(path.join(plugin, 'dist', entry)), entry);
     await assertPackagedRunScriptChildren(plugin, scratch);
+    run(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        path.join(import.meta.dirname, 'packed-clickability.mjs'),
+        plugin,
+        scratch,
+      ],
+      root,
+    );
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }

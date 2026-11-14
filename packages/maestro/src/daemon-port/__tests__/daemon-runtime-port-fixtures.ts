@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -21,8 +22,12 @@ export function makeSnapshot(
 /** The daemon-owned half of the port options: the runtime envelope flags and the network origin. */
 export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
-): Pick<CreateDaemonMaestroRuntimeOperationsOptions, 'flags' | 'publicNetworkOnly'> {
+): Pick<
+  CreateDaemonMaestroRuntimeOperationsOptions,
+  'flags' | 'publicNetworkOnly' | 'readSnapshotClickabilityEvidence'
+> {
   return {
+    readSnapshotClickabilityEvidence,
     publicNetworkOnly: false,
     ...overrides,
   };

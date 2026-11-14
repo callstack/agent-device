@@ -116,6 +116,7 @@ async function executeTypedMaestroReplay(
   // for flows that did not arrive over the daemon's remote HTTP surface.
   const publicNetworkOnly = command.publicNetworkOnly === true;
   const port = createMaestroReplayPort({
+    host,
     command,
     device: context.device,
     platform: context.platform,
@@ -334,6 +335,7 @@ function buildTypedMaestroEnv(req: DaemonWireRequest, hostEnv: EnvMap): Record<s
 }
 
 function createMaestroReplayPort(params: {
+  host: ReplayBackendHost;
   command: ReplayBackendCommand;
   device: DeviceInfo | undefined;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
@@ -349,6 +351,7 @@ function createMaestroReplayPort(params: {
     ...(command.dispatch ? { dispatch: command.dispatch } : {}),
   };
   return createDaemonMaestroRuntimePort({
+    readSnapshotClickabilityEvidence: params.host.readSnapshotClickabilityEvidence,
     invoke: (operation) => invoke(maestroOperationDispatchRequest(replay, operation)),
     flags: maestroRuntimeDeviceFlags(device, platform, req.flags, publicNetworkOnly),
     publicNetworkOnly,

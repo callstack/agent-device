@@ -67,6 +67,7 @@ test('selected creation retains one worker, forwards its diagnostic to the host 
     readScriptSourceFile: () => {
       throw new Error('source reader unused');
     },
+    readSnapshotClickabilityEvidence: () => undefined,
     scriptSourceRequiredMessage: '',
     resolveTargetDevice: () => Promise.reject(new Error('device selection unused')),
     requestSignal: () => undefined,
