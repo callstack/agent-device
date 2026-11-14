@@ -14,18 +14,16 @@ import {
   awaitBodyProgress,
   createArtifactFile,
   holdArtifactSourceOpen,
-  pumpRealWork,
   recordOutgoingWrites,
   settleAfterBudget,
   spendBudget,
   spendSinceLastWrite,
   startAnswerUploadDaemon,
-  startConnectedStalledHttpOrigin,
+  startSilentTcpOrigin,
   startConnectedStalledTlsOrigin,
   startHalfAnsweredOrigin,
   startParkedUploadDaemon,
   startSlowReadingUploadDaemon,
-  startUnfinishedHandshakeTlsOrigin,
   startUploadAttempt,
   startUploadLegsDaemon,
   trustSelfSignedLocalhostCertificate,
@@ -160,12 +158,14 @@ test('a redirect response ends the stalled hop before the next hop is dialed', a
 
 test('a response body that stops mid-answer expires the response-body phase after what was read', async () => {
   useTransferClock();
+  const writes = recordOutgoingWrites();
   const origin = await startHalfAnsweredOrigin({ firstChunk: 'first chunk' });
   const attempt = startUploadAttempt({
     url: `${origin.baseUrl}/upload`,
     artifactPath: createArtifactFile(64),
   });
-  await pumpRealWork();
+  await untilIo(() => attempt.settled || writes.responseChunkRead);
+  assert.equal(writes.responseChunkRead, true);
   await spendBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, attempt);
   await settleAfterBudget(attempt);
   const result = await attempt;
@@ -178,18 +178,19 @@ test('a response body that stops mid-answer expires the response-body phase afte
   });
 });
 
-test('a connected peer that never takes a body byte expires body inactivity, not connect', async () => {
+test('a connected HTTP upload with an unfinished source expires body inactivity, not connect', async () => {
   useTransferClock();
   const writes = recordOutgoingWrites();
-  const origin = await startConnectedStalledHttpOrigin();
+  const origin = await startSilentTcpOrigin();
+  holdArtifactSourceOpen(1024);
   const attempt = startUploadAttempt({
     url: `http://127.0.0.1:${origin.port}/upload`,
-    artifactPath: createArtifactFile(4 * MEBIBYTE),
+    artifactPath: createArtifactFile(8 * 1024),
   });
   await spendSinceLastWrite(TRANSFER_CONNECT_TIMEOUT_MS + 1_000, writes, attempt);
   assert.equal(attempt.settled, false);
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, attempt);
-  assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
+  assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(attempt);
   const result = await attempt;
 
@@ -203,7 +204,7 @@ test('a connected peer that never takes a body byte expires body inactivity, not
 
 test('a TLS handshake that never completes expires connect even with the whole body buffered', async () => {
   useTransferClock();
-  const origin = await startUnfinishedHandshakeTlsOrigin();
+  const origin = await startSilentTcpOrigin();
   const attempt = startUploadAttempt({
     url: `https://127.0.0.1:${origin.port}/upload`,
     artifactPath: createArtifactFile(4 * MEBIBYTE),
@@ -220,19 +221,20 @@ test('a TLS handshake that never completes expires connect even with the whole b
   });
 });
 
-test('a completed TLS handshake with a stalled body expires body inactivity, not connect', async () => {
+test('a completed TLS handshake with an unfinished source expires body inactivity, not connect', async () => {
   useTransferClock();
   trustSelfSignedLocalhostCertificate();
   const origin = await startConnectedStalledTlsOrigin();
   const writes = recordOutgoingWrites();
+  holdArtifactSourceOpen(1024);
   const attempt = startUploadAttempt({
     url: `https://127.0.0.1:${origin.port}/upload`,
-    artifactPath: createArtifactFile(4 * MEBIBYTE),
+    artifactPath: createArtifactFile(8 * 1024),
   });
   await spendSinceLastWrite(TRANSFER_CONNECT_TIMEOUT_MS + 1_000, writes, attempt);
   assert.equal(attempt.settled, false, 'secureConnect ended the connect phase');
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, attempt);
-  assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
+  assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(attempt);
   const result = await attempt;
 
@@ -246,11 +248,14 @@ test('a completed TLS handshake with a stalled body expires body inactivity, not
 
 test('a zero-length artifact on a peer that never answers waits on its header budget', async () => {
   useTransferClock();
-  const origin = await startConnectedStalledHttpOrigin();
+  const writes = recordOutgoingWrites();
+  const origin = await startSilentTcpOrigin();
   const attempt = startUploadAttempt({
     url: `http://127.0.0.1:${origin.port}/upload`,
     artifactPath: createArtifactFile(0),
   });
+  await untilIo(() => attempt.settled || writes.finished);
+  assert.equal(writes.finished, true);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 5_000, attempt);
   assert.equal(attempt.settled, false);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, attempt);
@@ -263,7 +268,7 @@ test('a zero-length artifact on a peer that never answers waits on its header bu
     transferPhase: 'response-headers',
     timeoutMs: TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   });
-  assert.equal(origin.bytesTaken, 0);
+  assert.equal(writes.completed, 0);
 });
 
 test('an upload the peer keeps taking finishes while every phase ceiling is unexpired', async () => {
@@ -307,7 +312,7 @@ test('an upload the peer keeps taking finishes while every phase ceiling is unex
 test('a caller cancel during a stalled connect stays caller cancellation, distinct from the connect expiry', async () => {
   useTransferClock();
   const control = new AbortController();
-  const origin = await startUnfinishedHandshakeTlsOrigin();
+  const origin = await startSilentTcpOrigin();
   const canceled = startUploadAttempt({
     url: `https://127.0.0.1:${origin.port}/upload`,
     artifactPath: createArtifactFile(64 * 1024),
@@ -339,7 +344,9 @@ test('an enclosing aggregate deadline ends a redirect hop with its own reason, n
     artifactPath: createArtifactFile(64 * 1024),
     signal: aggregate.signal,
   });
-  await pumpRealWork();
+  await untilIo(() => attempt.settled || daemon.requests.includes('POST /moved'));
+  assert.deepEqual(daemon.requests, ['POST /upload', 'POST /moved']);
+  assert.equal(attempt.settled, false);
   // No phase budget is charged here, so nothing but the caller's deadline can end this.
   const reason = new Error('preparation aggregate expired');
   aggregate.abort(reason);

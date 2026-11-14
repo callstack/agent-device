@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { runInNewContext } from 'node:vm';
 import type { ClientRequest } from 'node:http';
 import { test } from 'vitest';
 import { observeCompletedRequestWrites } from '../transport.ts';
@@ -53,10 +54,11 @@ test('only a non-empty write that completes without an error is reported', () =>
   for (const [text, encoding] of [
     ['a', 'hex'],
     ['zz', 'hex'],
+    ['zz', 'HEX'],
     ['=', 'base64'],
     ['=', 'base64url'],
   ] as const) {
-    req.write(text, encoding, () => {});
+    req.write(text, encoding as BufferEncoding, () => {});
     fake.complete(fake.writes.length - 1);
   }
   assert.equal(
@@ -77,6 +79,16 @@ test.each([
 ] as const)('a successful %s string write is reported', (encoding, text) => {
   const { fake, req, completed, dispose } = observe();
   req.write(text, encoding);
+  fake.complete(0);
+  assert.equal(completed.count, 1);
+  dispose();
+});
+
+test('a Uint8Array from another realm is reported', () => {
+  const { fake, req, completed, dispose } = observe();
+  const chunk = runInNewContext('new Uint8Array([1])') as Uint8Array;
+  assert.equal(chunk instanceof Uint8Array, false);
+  req.write(chunk);
   fake.complete(0);
   assert.equal(completed.count, 1);
   dispose();

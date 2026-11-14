@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { types } from 'node:util';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -117,7 +118,7 @@ export function observeCompletedRequestWrites(
         ? encodingName === 'hex' || encodingName === 'base64' || encodingName === 'base64url'
           ? Buffer.from(chunk, encodingName).byteLength > 0
           : chunk.length > 0
-        : chunk instanceof Uint8Array && chunk.byteLength > 0;
+        : types.isUint8Array(chunk) && chunk.byteLength > 0;
     if (observing && hasBytes) {
       args[callbackIndex] = (error?: Error | null) => {
         if (!error && observing && !req.destroyed && !signal.aborted) onCompleted();

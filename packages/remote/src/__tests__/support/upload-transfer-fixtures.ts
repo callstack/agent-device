@@ -199,6 +199,7 @@ export type OutgoingWrites = {
   readonly lastCompletedAt: number | undefined;
   /** True once the newest leg emitted `finish`: its whole body reached the transport. */
   readonly finished: boolean;
+  readonly responseChunkRead: boolean;
 };
 
 /** Records each outgoing request's writes, wrapped before the subject observes them. */
@@ -209,10 +210,12 @@ export function recordOutgoingWrites(): OutgoingWrites {
     drains: 0,
     finished: false,
     lastCompletedAt: undefined,
+    responseChunkRead: false,
   };
   const observe = (req: http.ClientRequest): http.ClientRequest => {
     log.finished = false;
     log.lastCompletedAt = undefined;
+    log.responseChunkRead = false;
     const write = req.write;
     req.write = function (this: http.ClientRequest, ...writeArgs: unknown[]): boolean {
       const callbackIndex = typeof writeArgs[1] === 'function' ? 1 : 2;
@@ -230,6 +233,12 @@ export function recordOutgoingWrites(): OutgoingWrites {
       noteIo();
       return accepted;
     };
+    req.on('response', (res) => {
+      res.once('data', () => {
+        log.responseChunkRead = true;
+        noteIo();
+      });
+    });
     req.on('drain', () => {
       log.drains += 1;
       noteIo();
@@ -288,11 +297,7 @@ export async function settleAfterBudget(transfer: Settles): Promise<void> {
   await untilIo(() => transfer.settled);
 }
 
-/**
- * Feeds the next `fs.createReadStream` from a source that holds `bytes` and never ends, so the
- * attempt's pipeline can stop only when the attempt destroys it, whatever the kernel buffers. The
- * open after it reads the real file and records whether this source was destroyed by then.
- */
+/** Holds the first upload-body read open; hashing stays real. Later body reads record teardown. */
 export function holdArtifactSourceOpen(bytes = 0): {
   readonly source: PassThrough;
   readonly destroyedAtNextOpen: boolean | undefined;
@@ -304,12 +309,18 @@ export function holdArtifactSourceOpen(bytes = 0): {
   if (bytes > 0) source.write(Buffer.alloc(bytes, 'x'));
   const open = fs.createReadStream;
   const held = { source, destroyedAtNextOpen: undefined as boolean | undefined };
-  vi.spyOn(fs, 'createReadStream')
-    .mockImplementationOnce(() => source as unknown as fs.ReadStream)
-    .mockImplementationOnce((...args) => {
-      held.destroyedAtNextOpen = source.destroyed;
-      return Reflect.apply(open, fs, args);
-    });
+  let opened = false;
+  vi.spyOn(fs, 'createReadStream').mockImplementation((...args) => {
+    const options = args[1];
+    if (options && typeof options === 'object' && typeof options.start === 'number') {
+      if (!opened) {
+        opened = true;
+        return source as unknown as fs.ReadStream;
+      }
+      held.destroyedAtNextOpen ??= source.destroyed;
+    }
+    return Reflect.apply(open, fs, args);
+  });
   return held;
 }
 
@@ -493,26 +504,14 @@ export async function startAnswerUploadDaemon(options: {
   };
 }
 
-/**
- * An HTTP origin that accepts the TCP connection and then reads nothing and never speaks: the
- * connection is carried, so the budget that has to expire is body inactivity.
- */
-export async function startConnectedStalledHttpOrigin() {
-  let bytesTaken = 0;
+/** A silent TCP peer: HTTP receives no answer, and TLS receives no handshake. */
+export async function startSilentTcpOrigin() {
   const server = net.createServer((socket) => {
     socket.pause();
-    socket.on('data', (chunk: Buffer) => {
-      bytesTaken += chunk.length;
-    });
     socket.on('error', () => {});
   });
   const port = await listenUntimed(server);
-  return {
-    port,
-    get bytesTaken() {
-      return bytesTaken;
-    },
-  };
+  return { port };
 }
 
 /** An HTTP origin that answers with one response-body chunk and then goes silent mid-body. */
@@ -567,19 +566,6 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
       for (const entry of parked.splice(0)) entry.resume();
     },
   };
-}
-
-/**
- * An origin that accepts the TCP connection and never answers the TLS handshake: the client's socket
- * stays encrypted and connecting while the artifact piles up in its write queue.
- */
-export async function startUnfinishedHandshakeTlsOrigin() {
-  const server = net.createServer((socket) => {
-    socket.pause();
-    socket.on('error', () => {});
-  });
-  const port = await listenUntimed(server);
-  return { port };
 }
 
 /** A TLS origin that completes the handshake and then reads nothing and answers nothing. */

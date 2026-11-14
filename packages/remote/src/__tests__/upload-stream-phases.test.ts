@@ -54,17 +54,18 @@ test('a body that keeps moving outlives the body-inactivity ceiling', async () =
   assert.deepEqual(daemon.requests, [PREFLIGHT_REQUEST, LEGACY_UPLOAD_REQUEST]);
 });
 
-test('a body the peer stops taking expires the request-body phase on its own budget', async () => {
+test('an unfinished source with no new bytes expires the request-body phase on its own budget', async () => {
   useTransferClock();
   const writes = recordOutgoingWrites();
   const daemon = await startParkedUploadDaemon();
+  holdArtifactSourceOpen(1024);
   const upload = startUpload({
     baseUrl: daemon.baseUrl,
-    artifactPath: createArtifactFile(2 * MEBIBYTE),
+    artifactPath: createArtifactFile(8 * 1024),
   });
-  // The peer stops reading without answering or disconnecting.
+  // The source remains open without yielding more bytes; no kernel-buffer assumption is needed.
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, upload);
-  assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
+  assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(upload);
   const result = await upload;
 
@@ -155,6 +156,7 @@ test('writes below the high-water mark keep the body budget on each completed wr
 
 test('the caller ending the upload is reported as cancellation, not as an expired phase', async () => {
   useTransferClock();
+  const writes = recordOutgoingWrites();
   const daemon = await startParkedUploadDaemon();
   const control = new AbortController();
   const upload = startUpload({
@@ -163,7 +165,10 @@ test('the caller ending the upload is reported as cancellation, not as an expire
     signal: control.signal,
   });
   // Well inside every phase budget: only the caller can be the reason this stops.
-  await spendBudget(30_000, upload);
+  await untilIo(() => upload.settled || (writes.completed > 0 && daemon.receivedBytes > 0));
+  assert.equal(upload.settled, false);
+  assert.ok(writes.completed > 0 && daemon.receivedBytes > 0);
+  await spendBudget(5_000, upload);
   control.abort();
   const result = await upload;
 
