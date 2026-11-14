@@ -860,10 +860,18 @@ test('runtime press plan dispatches every member as an ordinary press and report
 
 test('runtime press plan sleeps intervalMs between keys and passes count to every member', async () => {
   const taps: string[] = [];
+  const sleeps: number[] = [];
   const device = createInteractionDevice(pinPadSnapshot(), {
     tap: async () => {
       taps.push('tap');
       return { ok: true };
+    },
+    // The test clock observes every inter-key wait the plan asks for.
+    clock: {
+      now: () => 0,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+      },
     },
   });
 
@@ -875,6 +883,7 @@ test('runtime press plan sleeps intervalMs between keys and passes count to ever
   });
 
   assert.equal(taps.length, 2);
+  assert.deepEqual(sleeps, [1]);
   assert.deepEqual(result.sequence?.pressed, 2);
 });
 

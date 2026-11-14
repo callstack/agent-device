@@ -309,14 +309,10 @@ async function tapRefPlanCommand(
       throw attachRefPlanContext(error, plannedRefs, index);
     }
   }
-  const last = members.at(-1)!;
-  const first = members[0]!;
-  // The plan's evidence compares the pre-command tree member 0 captured with the
-  // post-command tree, so the baseline rides to the final result.
-  const finalTarget: ResolvedInteractionTarget =
-    last.atRest.preAction || !first.atRest.preAction
-      ? last.atRest
-      : { ...last.atRest, preAction: first.atRest.preAction };
+  // The response keeps member 0's identity — the first key's ref, point, and
+  // its captured evidence baseline — while every key's landing stays in
+  // sequence.points.
+  const finalTarget: ResolvedInteractionTarget = members[0]!.atRest;
   const formattedBackendResult = toBackendResult(lastBackendResult);
   const result = await applyPostActionObservation(
     runtime,

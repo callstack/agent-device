@@ -240,6 +240,11 @@ test('parseTouchTarget keeps a comma token without a leading @ on the selector p
 });
 
 test('parseTouchTarget keeps a repeated member and rejects non-ref members', () => {
+  const empty = parseTouchTarget(['@e1,,@e2'], 'press');
+  expect(empty.ok).toBe(false);
+  if (!empty.ok && !empty.response.ok) {
+    expect(empty.response.error.message).toContain('empty member between commas');
+  }
   // Selector semantics re-resolve per press, so a repeated ref is the PIN
   // digit case, not a mistake: @e1,@e1 presses the same key twice.
   const repeated = parseTouchTarget(['@e1,@e1'], 'press');

@@ -444,6 +444,8 @@ test('a plan on an expired frame warns once, not once per member', async () => {
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(String(response.error.details?.hint)).toBe(STALE_SNAPSHOT_REFS_WARNING);
+    expect(response.error.details?.dispatched).toBe('no');
+    expect(response.error.details?.reason).toBe('ref_frame_expired');
   }
 });
 
@@ -499,5 +501,7 @@ test('a multi-ref press plan refuses a replay target guard instead of downgradin
   }
   expect(response.error.code).toBe('INVALID_ARGS');
   expect(response.error.message).toMatch(/cannot carry a replay target guard/);
+  expect(response.error.details?.reason).toBe('sequence-replay-guard-unsupported');
+  expect(response.error.details?.dispatched).toBe('no');
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
