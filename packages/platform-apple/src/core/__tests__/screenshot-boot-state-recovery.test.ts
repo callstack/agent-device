@@ -228,10 +228,14 @@ test('a state read that itself fails keeps the capture failure and its diagnosti
   assert.equal(probe.error, CAPTURE_FAILURE, 'a failed probe never replaces the capture failure');
   assert.equal(probe.boots, 0);
   assert.equal(probe.captureAttempts, 1);
-  const details = (CAPTURE_FAILURE.details ?? {}) as Record<string, unknown>;
-  assert.equal(details.exitCode, 60);
-  assert.equal(details.processExitError, true);
-  assert.equal(typeof details.hint, 'string', 'the hint the producer attached is preserved');
+  assert.ok(probe.error instanceof AppError);
+  assert.equal(probe.error.details?.exitCode, 60);
+  assert.equal(probe.error.details?.processExitError, true);
+  assert.equal(
+    typeof probe.error.details?.hint,
+    'string',
+    'the hint the producer attached is preserved',
+  );
 });
 
 test('the recovery probe is bounded by the screenshot ceiling, not the inventory budget', async () => {

@@ -88,10 +88,6 @@ function captureDeps(captureWithRetry: (device: DeviceInfo) => Promise<void>) {
     normalizeDensity: async () => {},
     captureWithRunner: async () => undefined,
     shouldFallbackToRunner: () => false,
-    // The capture under these cases either succeeds or fails as a transport failure; none of them is
-    // about the recovery, and a probe would query the fake status bar tool about a boot state it
-    // does not model.
-    observesSimulatorShutdown: async () => false,
   };
 }
 

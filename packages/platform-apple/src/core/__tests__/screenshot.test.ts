@@ -92,13 +92,26 @@ assert(MEASURED_CAPTURE, 'the golden table must record at least one measured cap
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockRunCmd.mockImplementation(execActual.runCmd);
+  mockRunCmd.mockImplementation(async (cmd, args, options) => {
+    if (args.includes('list') && args.includes('devices') && args.includes('-j')) {
+      return simulatorListing('Booted');
+    }
+    return await execActual.runCmd(cmd, args, options);
+  });
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);
   mockRunAppleRunnerCommand.mockImplementation(runnerActual.runAppleRunnerCommand);
   mockEnsureBootedSimulator.mockImplementation(simulatorActual.ensureBootedSimulator);
   mockOpenIosSimulatorApp.mockImplementation(simulatorActual.openIosSimulatorApp);
   mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => await capture());
 });
+
+function simulatorListing(state: 'Booted' | 'Shutdown') {
+  return {
+    exitCode: 0,
+    stderr: '',
+    stdout: JSON.stringify({ devices: { runtime: [{ udid: IOS_TEST_SIMULATOR.id, state }] } }),
+  };
+}
 
 async function waitForFileText(filePath: string, attempts = 20): Promise<string> {
   let lastError: unknown;
@@ -251,6 +264,7 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
 });
 
 test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after an observed shutdown', async () => {
+  mockRunCmd.mockResolvedValue(simulatorListing('Shutdown'));
   // The boot authorization is the observed state, not the capture's wording; see
   // screenshot-boot-state-recovery.test.ts for the state seam itself. This case pins the flow:
   // one boot, one re-capture, no runner leg.
@@ -275,7 +289,6 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
     deps: {
       ensureBooted,
       captureWithRetry,
-      observesSimulatorShutdown: async () => true,
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
@@ -289,6 +302,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
 });
 
 test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped-check boot recovery', async () => {
+  mockRunCmd.mockResolvedValue(simulatorListing('Shutdown'));
   const ensureBooted = vi.fn(async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
@@ -314,7 +328,6 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
     deps: {
       ensureBooted,
       captureWithRetry,
-      observesSimulatorShutdown: async () => true,
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
@@ -631,6 +644,9 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
   });
   mockRunCmd.mockImplementation(async (cmd, args) => {
     const argv = [cmd, ...(args ?? [])].join(' ');
+    if (args.includes('list') && args.includes('devices') && args.includes('-j')) {
+      return simulatorListing('Booted');
+    }
     if (argv.includes('status_bar')) {
       timeline.push(`status_bar:${/status_bar\s+\S+\s+(\S+)/.exec(argv)?.[1]}`);
       return {
@@ -657,9 +673,6 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
         resolveCaptureTarget: async () => ({}),
-        // The state question belongs to screenshot-boot-state-recovery.test.ts; here it must answer
-        // "not turned off" so the runner fallback this case observes is the ordinary one.
-        observesSimulatorShutdown: async () => false,
       },
     });
 
@@ -835,8 +848,6 @@ test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runn
       captureWithRetry: async () => {
         throw new Error('simctl screenshot failed');
       },
-      // This case is about the rotation facts; the state question is the recovery suite's.
-      observesSimulatorShutdown: async () => false,
     },
   });
   assert.deepEqual(facts, { displayRotation: 'landscape-right' });
@@ -857,8 +868,6 @@ test('an explicit screen mask refuses an unmasked runner fallback after simctl e
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         captureWithRunner: captureScreenshotViaRunner,
         normalizeDensity: async () => {},
-        // The mask, not a turned-off simulator, is what must refuse the runner here.
-        observesSimulatorShutdown: async () => false,
       },
     }),
     (error) => error === failure,

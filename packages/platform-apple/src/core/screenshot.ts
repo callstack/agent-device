@@ -71,12 +71,6 @@ type SimulatorScreenshotFlowDeps = {
     signal?: AbortSignal,
   ) => Promise<T>;
   resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
-  /**
-   * Whether this failed capture left its simulator turned off, observed from the tool's own state
-   * listing rather than from the capture's wording. Answers `false` when the listing failed or does
-   * not name the simulator: nobody may boot a simulator nobody observed.
-   */
-  observesSimulatorShutdown: (device: DeviceInfo, signal?: AbortSignal) => Promise<boolean>;
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
@@ -125,7 +119,6 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
   withStatusBarHeld: withSimulatorStatusBarHeld,
   resolveCaptureTarget: resolveAppleCaptureTarget,
-  observesSimulatorShutdown: observesSimulatorShutdown,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
   captureWithRunner: captureScreenshotViaRunner,
@@ -198,7 +191,7 @@ export async function captureSimulatorScreenshotWithFallback(
     // The probe answers from the tool's state listing, so a probe that itself got canceled stays
     // terminal rather than becoming an unknown state; anything else it cannot read keeps the
     // capture's own failure, unchanged, as the answer the caller sees.
-    return await deps.observesSimulatorShutdown(device, options.runnerOptions?.signal);
+    return await observesSimulatorShutdown(device, options.runnerOptions?.signal);
   };
 
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {

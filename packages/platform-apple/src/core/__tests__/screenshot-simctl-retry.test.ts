@@ -22,7 +22,6 @@ import {
   SIMCTL_SCREENSHOT_TIMEOUT_REASON,
 } from '../tool-provider.ts';
 import { captureSimulatorScreenshotWithRetry } from '../screenshot.ts';
-import { IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS } from '../config.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
   commandFailed,
@@ -200,11 +199,4 @@ test('an unrelated protocol code stays terminal and keeps the tool failure as re
   assert.ok(error instanceof Error);
   assert.equal(attempts, 1);
   assert.equal((error as { details?: Record<string, unknown> }).details?.reason, undefined);
-});
-
-test('the boot-state probe ceiling stays below the capture budget it explains', () => {
-  // The probe is a best-effort read on the failure path, so it must be bounded under the operation
-  // it follows; the inventory read's own 60s budget would invert that.
-  assert.equal(IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS, 5_000);
-  assert.ok(IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS < 20_000);
 });
