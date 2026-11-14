@@ -10,6 +10,7 @@ import type {
   KeyboardStatusResult,
 } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
@@ -17,6 +18,7 @@ import {
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capabilitySupported,
@@ -82,6 +84,11 @@ function textEntryClearTargetUnavailableError(): AppError {
     'fill requires a focused element reference to clear and replace the field',
     { reason: 'text_entry_clear_target_unavailable' },
   );
+}
+
+/** The planner's box starts at the frame origin; a snapshot container is absolute. */
+function relativeToFrame(container: Rect, frame: WebDriverWindowRect): Rect {
+  return { ...container, x: container.x - frame.x, y: container.y - frame.y };
 }
 
 function rectContains(rect: WebDriverWindowRect, x: number, y: number): boolean {
@@ -238,7 +245,7 @@ class WebDriverInteractor implements Interactor {
 
   async scroll(
     direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number; durationMs?: number },
+    options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown>> {
     this.requireSupport('scroll');
     const durationMs = options?.durationMs ?? 350;
@@ -250,6 +257,9 @@ class WebDriverInteractor implements Interactor {
       pixels: options?.pixels,
       referenceWidth: rect.width,
       referenceHeight: rect.height,
+      ...(options?.containerRect === undefined
+        ? {}
+        : { container: relativeToFrame(options.containerRect, rect) }),
     });
     const absolutePlan = {
       ...plan,

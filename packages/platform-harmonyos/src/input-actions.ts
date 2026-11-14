@@ -1,11 +1,15 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
+import {
+  type ScrollContainerTarget,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+} from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
 } from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runHarmonyShell } from './hdc.ts';
@@ -52,7 +56,7 @@ export async function fillHarmony(
 export async function scrollHarmony(
   device: DeviceInfo,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number; durationMs?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number } & ScrollContainerTarget,
 ): Promise<Record<string, unknown>> {
   const viewport = await readHarmonyGestureViewport(device);
   const plan = buildScrollGesturePlan({
@@ -61,6 +65,9 @@ export async function scrollHarmony(
     pixels: options?.pixels,
     referenceWidth: viewport.width,
     referenceHeight: viewport.height,
+    ...(options?.containerRect === undefined
+      ? {}
+      : { container: relativeToViewport(options.containerRect, viewport) }),
   });
   await runHarmonyShell(device, [
     'uitest',
@@ -73,6 +80,11 @@ export async function scrollHarmony(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
   ]);
   return plan;
+}
+
+/** The planner's box is the viewport size at the origin; a snapshot container is absolute. */
+function relativeToViewport(rect: Rect, viewport: Rect): Rect {
+  return { ...rect, x: rect.x - viewport.x, y: rect.y - viewport.y };
 }
 
 /** Lowers HDC's public one-pointer primitives from a shared semantic plan. */

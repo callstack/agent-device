@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { buildScrollGesturePlan } from '@agent-device/contracts/scroll-gesture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 const { runHarmonyShell, sleep, readHarmonyGestureViewport, invalidateHarmonyGestureViewport } =
   vi.hoisted(() => ({
@@ -94,6 +96,106 @@ test('HarmonyOS scroll derives a viewport-aware swipe plan', async () => {
     plan.y2,
     456,
   ]);
+});
+
+const PHONE = { x: 0, y: 0, width: 402, height: 874 };
+/** Inset under a navigation bar and above a footer, shorter than a 0.75 swipe. */
+const INSET_LIST: Rect = { x: 18, y: 178, width: 366, height: 500 };
+/** The same list shifted into an application window that is not at the screen origin. */
+const OFFSET_WINDOW = { x: 40, y: 80, width: 402, height: 874 };
+
+function strictlyInside(point: { x: number; y: number }, rect: Rect): boolean {
+  return (
+    point.x > rect.x &&
+    point.x < rect.x + rect.width &&
+    point.y > rect.y &&
+    point.y < rect.y + rect.height
+  );
+}
+
+function dispatchedSwipe(callIndex?: number): { x1: number; y1: number; x2: number; y2: number } {
+  const calls = runHarmonyShell.mock.calls;
+  const call = calls[callIndex ?? calls.length - 1];
+  const args = call?.[1] as readonly unknown[];
+  return {
+    x1: Number(args[3]),
+    y1: Number(args[4]),
+    x2: Number(args[5]),
+    y2: Number(args[6]),
+  };
+}
+
+test('HarmonyOS scroll keeps an inset list swipe inside the container and reports the shortened span', async () => {
+  readHarmonyGestureViewport.mockResolvedValue(PHONE);
+  const unclamped = await scrollHarmony(DEVICE, 'down', { amount: 0.75 });
+  const outside = dispatchedSwipe(0);
+  const result = await scrollHarmony(DEVICE, 'down', { amount: 0.75, containerRect: INSET_LIST });
+  const swipe = dispatchedSwipe(1);
+
+  assert.equal(
+    strictlyInside({ x: outside.x1, y: outside.y1 }, INSET_LIST) &&
+      strictlyInside({ x: outside.x2, y: outside.y2 }, INSET_LIST),
+    false,
+    'the fixture must leave the list',
+  );
+  assert.ok(strictlyInside({ x: swipe.x1, y: swipe.y1 }, INSET_LIST), JSON.stringify(swipe));
+  assert.ok(strictlyInside({ x: swipe.x2, y: swipe.y2 }, INSET_LIST), JSON.stringify(swipe));
+  assert.deepEqual(swipe, { x1: result.x1, y1: result.y1, x2: result.x2, y2: result.y2 });
+  assert.equal(result.pixels, Math.abs(Number(result.y2) - Number(result.y1)));
+  assert.ok(Number(result.pixels) < Number(unclamped.pixels));
+  assert.equal(result.requestedPixels, unclamped.pixels);
+});
+
+test('HarmonyOS scroll translates an offset window into the swipe frame before clamping', async () => {
+  readHarmonyGestureViewport.mockResolvedValue(OFFSET_WINDOW);
+  const list: Rect = {
+    x: OFFSET_WINDOW.x + INSET_LIST.x,
+    y: OFFSET_WINDOW.y + INSET_LIST.y,
+    width: INSET_LIST.width,
+    height: INSET_LIST.height,
+  };
+  const result = await scrollHarmony(DEVICE, 'up', { amount: 0.75, containerRect: list });
+  const swipe = dispatchedSwipe();
+  const inSnapshotSpace = {
+    x1: swipe.x1 + OFFSET_WINDOW.x,
+    y1: swipe.y1 + OFFSET_WINDOW.y,
+    x2: swipe.x2 + OFFSET_WINDOW.x,
+    y2: swipe.y2 + OFFSET_WINDOW.y,
+  };
+
+  assert.ok(strictlyInside({ x: inSnapshotSpace.x1, y: inSnapshotSpace.y1 }, list));
+  assert.ok(strictlyInside({ x: inSnapshotSpace.x2, y: inSnapshotSpace.y2 }, list));
+  assert.ok(Number(result.pixels) < Number(result.requestedPixels));
+});
+
+test('HarmonyOS scroll leaves a swipe that already fits its container unchanged', async () => {
+  const fitting: Rect = { x: 18, y: 62, width: 366, height: 729 };
+  readHarmonyGestureViewport.mockResolvedValue(PHONE);
+  const unclamped = await scrollHarmony(DEVICE, 'down', { amount: 0.75 });
+  const result = await scrollHarmony(DEVICE, 'down', { amount: 0.75, containerRect: fitting });
+
+  assert.deepEqual(result, unclamped);
+  assert.equal('requestedPixels' in result, false);
+});
+
+test('HarmonyOS scroll without a container keeps the unclamped swipe', async () => {
+  readHarmonyGestureViewport.mockResolvedValue(OFFSET_WINDOW);
+  const plan = await scrollHarmony(DEVICE, 'down', { amount: 0.75 });
+  const expected = buildScrollGesturePlan({
+    direction: 'down',
+    amount: 0.75,
+    referenceWidth: OFFSET_WINDOW.width,
+    referenceHeight: OFFSET_WINDOW.height,
+  });
+
+  assert.deepEqual(dispatchedSwipe(), {
+    x1: expected.x1,
+    y1: expected.y1,
+    x2: expected.x2,
+    y2: expected.y2,
+  });
+  assert.equal(plan.pixels, expected.pixels);
+  assert.equal('requestedPixels' in plan, false);
 });
 
 test('HarmonyOS gestures lower a single trajectory and reject multi-touch', async () => {
