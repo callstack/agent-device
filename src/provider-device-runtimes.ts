@@ -4,13 +4,14 @@ import type {
   PluginCleanupOutcome,
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
-import type { PluginCandidate } from '@agent-device/plugins/registry';
+import type { PluginCandidate, PluginRegistryPolicy } from '@agent-device/plugins/registry';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
 import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
+  resolveReplayExecution: import('@agent-device/contracts/replay-execution').ReplayExecutionResolver;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
   /** Every plugin the registry saw, built-in or not, active or failed. */
@@ -26,11 +27,13 @@ export type ProviderRuntimeComposition = Readonly<{
 export async function createDaemonProviderRuntimeComposition(
   host: HostEnvironment,
 ): Promise<ProviderRuntimeComposition> {
-  const { storePluginCandidates } = await import('@agent-device/plugins/store');
-  return await createEmbeddedProviderRuntimeComposition(
-    host,
-    await storePluginCandidates(host.env),
-  );
+  const { storePluginCandidates, createPluginSelectionGuard } =
+    await import('@agent-device/plugins/store');
+  const candidates = await storePluginCandidates(host.env);
+  return await composeProviderRuntime(host, candidates, {
+    ...PROVIDER_PLUGIN_POLICY,
+    assertReplaySelectionCurrent: createPluginSelectionGuard(candidates, host.env),
+  });
 }
 
 /** Composes built-ins followed by supplied candidates without reading the plugin store. */
@@ -38,13 +41,21 @@ export async function createEmbeddedProviderRuntimeComposition(
   host: HostEnvironment,
   candidates: readonly PluginCandidate[],
 ): Promise<ProviderRuntimeComposition> {
+  return await composeProviderRuntime(host, candidates, PROVIDER_PLUGIN_POLICY);
+}
+
+async function composeProviderRuntime(
+  host: HostEnvironment,
+  candidates: readonly PluginCandidate[],
+  policy: PluginRegistryPolicy,
+): Promise<ProviderRuntimeComposition> {
   const { resolveProviderPlugins, startProviderRegistry } =
     await import('@agent-device/plugins/registry');
   const resolved = await resolveProviderPlugins([
     ...builtinProviderCandidates(host),
     ...candidates,
   ]);
-  const registry = await startProviderRegistry(resolved, host.env, PROVIDER_PLUGIN_POLICY);
+  const registry = await startProviderRegistry(resolved, host.env, policy);
   return Object.freeze({
     runtimes: Object.freeze(registry.registrations.map(({ runtime }) => runtime)),
     platformModules: Object.freeze(
@@ -55,6 +66,7 @@ export async function createEmbeddedProviderRuntimeComposition(
     ),
     inventory: registry.inventory,
     resolveReplayBackend: registry.resolveReplayBackend,
+    resolveReplayExecution: registry.resolveReplayExecution,
     shutdown: registry.close,
   });
 }

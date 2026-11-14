@@ -7,7 +7,7 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - One contract. A provider plugin is a factory that returns `{ apiVersion: 2, provider, credentials,
   connection?, setup(host) }`. `setup` returns `{ runtime, platformModule, dispose? }` or
   `{ webDriver, dispose? }`. A `{ webDriver }` result stays a data descriptor the host interprets.
-- A replay plugin uses the same version 2 factory with `kind: 'replay-backend'`, `backend`, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }`. Provider and backend ids have separate claim sets in this registry. A replay plugin registers no provider runtime.
+- A replay plugin uses the same version 2 factory with `kind: 'replay-backend'`, `backend`, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }` for a format backend. Provider and backend ids have separate claim sets in this registry. A replay plugin registers no provider runtime.
 - One registry. Composition selects built-in, store, or embedder sources. Built-in providers use the
   same shape as an installed plugin, and one function validates what every factory returns.
 - Plugins import only types from agent-device. The type-only contract is `agent-device/plugins`;
@@ -24,6 +24,8 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`. A missing or
   stale record reads as a stopped daemon; an unreadable or invalid one never does.
 - Keep replay setup engine-free. Load the engine only when its backend is selected. The runtime's registry memoizes creation and owns disposal after requests drain. Client-side source collection and export close their scoped registry.
+- Engine-free vetted declarations supply help and missing-plugin installation commands. They do not establish whether an engine is installed or working. Unknown names produce no inferred package.
+- Missing replay execution returns `plugin-not-installed` before device binding. A selected package retains its load, validation, compatibility or setup reason. A package added after daemon startup returns `daemon-plugin-set-stale`; the caller finishes sessions and restarts that host. An embedded registry never consults the store for recovery.
 - The plugin set is fixed for a daemon's lifetime. A plugin change takes effect on the next daemon.
 - A store package is discovered through its package targets: the `./agent-device` export, else the
   root export, which is `main` for a package that declares no `exports`. Nothing is read from

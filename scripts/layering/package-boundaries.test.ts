@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
@@ -866,8 +867,9 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the ad-script workspace dependency',
   );
   assert.ok(
-    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/ad-replay'),
-    'root must declare the ad-replay workspace dependency',
+    !rootWorkspaceDependencyNames(repoRoot).has('@agent-device/ad-replay') &&
+      !rootWorkspaceDependencyNames(repoRoot).has('@agent-device/replay-test'),
+    'core must not depend on the optional native execution engines',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/selectors'),
@@ -889,6 +891,7 @@ test('the real tree parses, declares, and passes R11', () => {
 });
 
 test('Node resolution enforces the exports map at runtime', () => {
+  const replayPackageRequire = createRequire(path.join(repoRoot, 'packages/replay/package.json'));
   // Real resolver, not the gate's model: a deep import is a resolution error,
   // and the legal subpath realpaths OUTSIDE node_modules (pnpm symlink), which
   // is what lets --experimental-strip-types load package sources in dev.
@@ -915,11 +918,15 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/ad-replay/testing',
     '@agent-device/ad-replay/internal/target-verification.ts',
     '@agent-device/ad-replay/src/index.ts',
+    '@agent-device/replay-test/src/internal/session-test.ts',
     '@agent-device/selectors/internal/parse.ts',
     '@agent-device/selectors/src/index.ts',
   ]) {
     assert.throws(
-      () => import.meta.resolve(deep),
+      () =>
+        deep.startsWith('@agent-device/ad-replay/') || deep.startsWith('@agent-device/replay-test/')
+          ? replayPackageRequire.resolve(deep)
+          : import.meta.resolve(deep),
       /ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath|No "exports" main/,
       `${deep} must not resolve`,
     );
@@ -952,7 +959,9 @@ test('Node resolution enforces the exports map at runtime', () => {
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
   const adScriptResolved = import.meta.resolve('@agent-device/ad-script');
   assert.ok(adScriptResolved.endsWith('packages/ad-script/src/index.ts'), adScriptResolved);
-  const adReplayResolved = import.meta.resolve('@agent-device/ad-replay');
+  const adReplayResolved = replayPackageRequire.resolve('@agent-device/ad-replay');
+  const replayTestResolved = replayPackageRequire.resolve('@agent-device/replay-test');
+  assert.ok(replayTestResolved.endsWith('packages/replay-test/src/index.ts'), replayTestResolved);
   assert.ok(adReplayResolved.endsWith('packages/ad-replay/src/index.ts'), adReplayResolved);
   const selectorsResolved = import.meta.resolve('@agent-device/selectors');
   assert.ok(selectorsResolved.endsWith('packages/selectors/src/index.ts'), selectorsResolved);

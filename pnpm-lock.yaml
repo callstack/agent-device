@@ -23,9 +23,6 @@ importers:
 
   .:
     devDependencies:
-      '@agent-device/ad-replay':
-        specifier: workspace:*
-        version: link:packages/ad-replay
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
@@ -113,9 +110,6 @@ importers:
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:packages/replay-test
       '@agent-device/revyl':
         specifier: workspace:*
         version: link:packages/provider-revyl
@@ -535,9 +529,6 @@ importers:
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:../replay-port
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:../replay-test
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
@@ -554,9 +545,15 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:../maestro
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
+      '@agent-device/replay':
+        specifier: workspace:*
+        version: link:../replay
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
@@ -1061,11 +1058,26 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
 
-  packages/replay-port:
-    dependencies:
+  packages/replay:
+    devDependencies:
       '@agent-device/ad-replay':
         specifier: workspace:*
         version: link:../ad-replay
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/replay-port:
+    dependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -1090,9 +1102,6 @@ importers:
       '@agent-device/plugins':
         specifier: workspace:*
         version: link:../plugins
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:../replay-test
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors

@@ -2,6 +2,26 @@ import path from 'node:path';
 
 export type ReplayFormat = 'ad' | 'maestro';
 
+const REPLAY_PLUGIN_INSTALLATIONS = {
+  ad: {
+    package: '@agent-device/replay',
+    summary: 'Native .ad replay and test suites',
+    installationHint:
+      'Install on the daemon host for native .ad replay and all test suites. Core clients can read and send native .ad sources without this plugin.',
+  },
+  maestro: {
+    package: '@agent-device/maestro',
+    summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
+    installationHint:
+      'Install on the client for source collection/export and on the daemon host for Maestro execution.',
+  },
+} as const;
+
+/** Vetted installation facts for the replay format vocabulary, without loading an engine. */
+export function getReplayPluginInstallation(id: ReplayFormat) {
+  return { id, ...REPLAY_PLUGIN_INSTALLATIONS[id] };
+}
+
 export function isMaestroYamlPath(sourcePath: string): boolean {
   const extension = path.extname(sourcePath).toLowerCase();
   return extension === '.yaml' || extension === '.yml';

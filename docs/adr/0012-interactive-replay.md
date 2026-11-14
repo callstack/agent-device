@@ -18,6 +18,10 @@ At acceptance, replay had three gaps:
 
 ## Decision
 
+### Optional execution boundary (0.22)
+
+Native `.ad` execution and test-suite scheduling require the first-party `@agent-device/replay` version 2 plugin. Maestro suites additionally require `@agent-device/maestro`. The managed registry owns loading, backend claims, failure isolation and disposal. Core keeps session and repair-transaction authority, device dispatch, selectors, refs, recording, cancellation and cleanup. The existing explicit step and suite ports cross the package boundary without a second session store or request context. Shared `.ad` data and divergence wire functions remain in core. This extraction changes installation requirements, not the identity, divergence, resume or repair decisions below. A missing plugin is refused before device binding. A stale daemon requires an explicit host restart, never automatic installation or session termination.
+
 ### 1. Retire `--update` healing as an actor; repurpose its candidate machinery as ranked suggestions
 
 `--update`/`-u` does not rewrite `.ad` files.

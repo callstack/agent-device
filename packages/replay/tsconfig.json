@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": ".",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
+    "paths": {
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../ad-replay"
+    },
+    {
+      "path": "../replay-test"
+    },
+    {
+      "path": "../plugins"
+    },
+    {
+      "path": "../test-kit"
+    }
+  ]
+}

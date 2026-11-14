@@ -50,6 +50,7 @@ export type PluginCandidate = Readonly<{
   source: PluginSource;
   package?: string;
   version?: string;
+  selectionStamp?: string;
   /** Claims `provider` before its load settles, so a later candidate with that id is a duplicate. Dormant candidates claim it without loading. */
   provider?: string;
   /** Claims `provider` without registering or listing: a built-in that is not configured. */
@@ -75,6 +76,7 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
  * plugin's `{ webDriver }` descriptor becomes a runtime.
  */
 export type PluginRegistryPolicy = Readonly<{
+  assertReplaySelectionCurrent?(packageName: string): void;
   adaptWebDriver(
     descriptor: WebDriverDescriptor,
     context: Readonly<{ clientVersion: string }>,
@@ -204,15 +206,26 @@ export async function startProviderRegistry(
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
           reason: 'plugin-registry-closed',
         });
-      return await resolveRegisteredReplayBackend(resolved, inventory, id, host, packageName);
+      const slot = requireReplaySlot(
+        resolved,
+        id,
+        packageName,
+        policy.assertReplaySelectionCurrent,
+      );
+      return await resolveRegisteredReplayBackend(resolved, slot, inventory, id, host);
     },
     resolveReplayExecution: async (packageName) => {
       if (closed)
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
           reason: 'plugin-registry-closed',
         });
-      const slot = requireReplaySlot(resolved, NATIVE_REPLAY_BACKEND, packageName);
-      if (slot.failure !== undefined) throw slot.failure;
+      const slot = requireReplaySlot(
+        resolved,
+        NATIVE_REPLAY_BACKEND,
+        packageName,
+        policy.assertReplaySelectionCurrent,
+      );
+      if (slot.failure !== undefined) throw replaySlotError(slot);
       const execution = slot.replaySetup?.execution;
       if (!execution) throw invalidPlugin('Native replay plugin must provide execution.create()');
       return await (slot.executionLoading ??= Promise.resolve().then(async () => {
@@ -221,7 +234,7 @@ export async function startProviderRegistry(
         } catch (error) {
           slot.failure = asPluginFailure(error, 'plugin_load_failed');
           inventory.splice(0, inventory.length, ...resolved.inventory());
-          throw slot.failure;
+          throw replaySlotError(slot);
         }
       }));
     },
@@ -294,13 +307,12 @@ async function setUpReplaySlot(
 
 async function resolveRegisteredReplayBackend(
   resolved: ResolvedProviderPlugins,
+  slot: Slot,
   inventory: PluginInventoryEntry[],
   id: string,
   host: import('@agent-device/contracts/replay-backend').ReplayBackendHost,
-  packageName?: string,
 ): Promise<ReplayBackend> {
-  const slot = requireReplaySlot(resolved, id, packageName);
-  if (slot.failure !== undefined) throw slot.failure;
+  if (slot.failure !== undefined) throw replaySlotError(slot);
   const backend = slot.replaySetup?.replayBackend;
   if (!backend) throw invalidPlugin(`Replay backend was not set up: ${id}`);
   return await (slot.replayLoading ??= Promise.resolve().then(async () => {
@@ -309,7 +321,7 @@ async function resolveRegisteredReplayBackend(
     } catch (error) {
       slot.failure = asPluginFailure(error, 'plugin_load_failed');
       inventory.splice(0, inventory.length, ...resolved.inventory());
-      throw slot.failure;
+      throw replaySlotError(slot);
     }
   }));
 }
@@ -318,18 +330,45 @@ function requireReplaySlot(
   resolved: ResolvedProviderPlugins,
   id: string,
   packageName: string | undefined,
+  assertSelectionCurrent?: (packageName: string) => void,
 ): Slot {
   const slot =
     resolved.slots.find((slot) => slot.backend === id) ??
     resolved.slots.find(
       (slot) => packageName !== undefined && slot.candidate.package === packageName,
     );
-  if (!slot)
-    throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${id}`, {
-      reason: 'plugin-not-installed',
-      backend: id,
-    });
-  return slot;
+  if (slot) {
+    if (slot.candidate.source === 'store' && slot.candidate.package)
+      assertSelectionCurrent?.(slot.candidate.package);
+    return slot;
+  }
+  if (packageName) assertSelectionCurrent?.(packageName);
+  throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${id}`, {
+    reason: 'plugin-not-installed',
+    backend: id,
+  });
+}
+
+function replaySlotError(slot: Slot): AppError {
+  const error = asPluginFailure(slot.failure, 'plugin_load_failed');
+  const packageName = slot.candidate.package;
+  return new AppError(
+    error.code,
+    error.message,
+    {
+      ...error.details,
+      ...(packageName
+        ? {
+            package: packageName,
+            updateCommand: `agent-device plugins update ${packageName}`,
+            hint: `Repair or update ${packageName} on this host, then restart the daemon and retry the original invocation with all its arguments.`,
+          }
+        : {
+            hint: 'Repair the supplied replay plugin, then close and recreate the embedded runtime. Retry the original invocation with all its arguments.',
+          }),
+    },
+    error,
+  );
 }
 
 async function cleanUpReplaySlot(slot: Slot): Promise<PluginCleanupOutcome[]> {

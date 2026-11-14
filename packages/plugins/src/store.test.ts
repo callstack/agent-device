@@ -3,7 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { changePlugin, listPlugins } from './store.ts';
+import {
+  changePlugin,
+  listPlugins,
+  createPluginSelectionGuard,
+  storePluginCandidates,
+} from './store.ts';
 import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd: vi.fn() }));
@@ -245,4 +250,70 @@ test('broken siblings do not block pinned updates or unrelated additions', async
       ],
     );
   }
+});
+
+test('a fixed daemon detects replacement of a selected replay installation without importing it', async () => {
+  const { home, env } = pluginHome();
+  const name = '@agent-device/replay';
+  selectV2Plugin(home, name, 'throw new Error("selection checks must not import this package");');
+  const guard = createPluginSelectionGuard(await storePluginCandidates(env), env);
+  assert.doesNotThrow(() => guard(name));
+  selectV2Plugin(home, '@example/unrelated', 'throw new Error("unrelated");');
+  assert.doesNotThrow(() => guard(name));
+  selectV2Plugin(home, name, 'throw new Error("replacement, same npm version");');
+  assert.throws(
+    () => guard(name),
+    (error: unknown) => {
+      assert.equal(
+        (error as { details?: { reason?: string } }).details?.reason,
+        'daemon-plugin-set-stale',
+      );
+      return true;
+    },
+  );
+});
+
+test('a null replay selection is invalid configuration rather than an absent package', () => {
+  const { home, env } = pluginHome();
+  fs.writeFileSync(
+    path.join(home, 'config.json'),
+    JSON.stringify({ plugins: { '@agent-device/replay': null } }),
+  );
+  const guard = createPluginSelectionGuard([], env);
+  assert.throws(
+    () => guard('@agent-device/replay'),
+    (error: unknown) => {
+      assert.equal((error as { details?: { reason?: string } }).details?.reason, 'invalid_plugin');
+      return true;
+    },
+  );
+});
+
+test('equivalent nested option key order keeps the daemon selection current', async () => {
+  const { home, env } = pluginHome();
+  const name = '@agent-device/replay';
+  selectV2Plugin(home, name, 'throw new Error("must not import");');
+  const config = readPluginConfig(env);
+  const selection = config.plugins[name];
+  selection.options = { region: 'eu', nested: { retries: 2, labels: ['a', 'b'] } };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  const guard = createPluginSelectionGuard(await storePluginCandidates(env), env);
+  config.plugins[name] = {
+    options: { nested: { labels: ['a', 'b'], retries: 2 }, region: 'eu' },
+    installation: selection.installation,
+  };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config, null, 2));
+  assert.doesNotThrow(() => guard(name));
+  config.plugins[name].options.nested.labels.reverse();
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  assert.throws(
+    () => guard(name),
+    (error: unknown) => {
+      assert.equal(
+        (error as { details?: { reason?: string } }).details?.reason,
+        'daemon-plugin-set-stale',
+      );
+      return true;
+    },
+  );
 });

@@ -12,6 +12,9 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../plugins"
+    },
+    {
       "path": "../ad-replay"
     },
     {
@@ -60,9 +63,6 @@
       "path": "../replay-port"
     },
     {
-      "path": "../replay-test"
-    },
-    {
       "path": "../selectors"
     },
     {
@@ -70,6 +70,9 @@
     },
     {
       "path": "../test-kit"
+    },
+    {
+      "path": "../replay"
     }
   ]
 }
