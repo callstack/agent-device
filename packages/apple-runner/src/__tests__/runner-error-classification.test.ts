@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+  HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE,
+  IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE,
   KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
+  KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE,
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
@@ -24,6 +27,7 @@ import {
 } from '../runner-error-classification.ts';
 import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
 import {
+  requireSwiftControlRefusalWireCodes,
   requireSwiftKeyboardDismissRefusalWireCode,
   requireSwiftThrownErrorWireCode,
 } from './runner-swift-settlement-fixtures.ts';
@@ -207,6 +211,61 @@ test('a keyboard dismiss refused for having no dismiss key keeps its code and pu
   assert.equal(dispatched.code, 'UNSUPPORTED_OPERATION');
   assert.equal(dispatched.details.reason, undefined);
   assert.equal(dispatched.details.dispatched, 'unknown');
+});
+
+// Three more refusals a caller could only tell apart by reading `message`. Each keeps the code its
+// command already refused with, so only `details.reason` is added; the two that provably pressed
+// nothing disclose `no`, and `keyboard enter` cannot, because its sole-field route taps the field
+// before typing.
+test('the hardware-control refusal keeps UNSUPPORTED_OPERATION and says nothing was pressed', () => {
+  assert.equal(HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'HARDWARE_CONTROL_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE);
+  assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
+  assert.deepEqual(refusal.details, {
+    runnerErrorCode: 'HARDWARE_CONTROL_UNAVAILABLE',
+    reason: 'hardware_control_unavailable',
+    dispatched: 'no',
+  });
+  // The closest negative: the same sentence with no code earns no reason, so a consumer keyed on
+  // `reason` cannot mistake prose for the typed refusal.
+  const untyped = commandFailed('actionButton requires a device model with an Action Button');
+  assert.equal(untyped.details?.reason, undefined);
+});
+
+test('the keyboard-return refusal keeps UNSUPPORTED_OPERATION and reports an unknown dispatch', () => {
+  assert.equal(KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'KEYBOARD_RETURN_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE);
+  assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
+  // The refusal says nothing about dispatch: the sole-text-field route taps the field before typing the
+  // return, so a refusal can follow a tap that landed.
+  assert.deepEqual(refusal.details, {
+    runnerErrorCode: 'KEYBOARD_RETURN_UNAVAILABLE',
+    reason: 'keyboard_return_unavailable',
+    dispatched: 'unknown',
+  });
+  // The closest negative: the same sentence with no code earns no reason, so a consumer keyed on
+  // `reason` cannot mistake prose for the typed refusal.
+  const untyped = commandFailed(
+    'Unable to press the keyboard return key: the keyboard exposes no return-like key and no text field was available to submit',
+  );
+  assert.equal(untyped.details?.reason, undefined);
+});
+
+test('the macOS in-app back refusal publishes its reason under the code a code-less reply had', () => {
+  assert.equal(IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'IN_APP_BACK_CONTROL_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE);
+  // That reply carried no code, so the host read COMMAND_FAILED; naming it must not move the command
+  // to a code its callers never saw.
+  assert.equal(refusal.code, 'COMMAND_FAILED');
+  assert.deepEqual(refusal.details, {
+    runnerErrorCode: 'IN_APP_BACK_CONTROL_UNAVAILABLE',
+    reason: 'in_app_back_control_unavailable',
+    dispatched: 'no',
+  });
+  // The closest negative: the base reply was a code-less COMMAND_FAILED, and prose alone still earns no
+  // reason, so a consumer keyed on `reason` cannot mistake it for the typed refusal.
+  const untyped = commandFailed('in-app back control is not available');
+  assert.equal(untyped.details?.reason, undefined);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {
@@ -605,6 +664,28 @@ test('the runner declares the wire code the keyboard-dismiss refusal publishes i
     requireSwiftKeyboardDismissRefusalWireCode(),
     KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
     'the runner must encode its no-dismiss-key refusal under the code the daemon maps to ' +
+      'details.reason, or that reason becomes unreachable',
+  );
+});
+
+test('the runner declares the wire codes the control refusals publish their reasons under', () => {
+  const swift = requireSwiftControlRefusalWireCodes();
+  assert.equal(
+    swift.keyboardReturnCode,
+    KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE,
+    'the runner must encode its nothing-to-submit refusal under the code the daemon maps to ' +
+      'details.reason, or that reason becomes unreachable',
+  );
+  assert.equal(
+    swift.hardwareControlCode,
+    HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE,
+    'the runner must encode its cannot-press-here refusal under the code the daemon maps to ' +
+      'details.reason, or that reason becomes unreachable',
+  );
+  assert.equal(
+    swift.inAppBackControlCode,
+    IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE,
+    'the runner must encode its macOS no-back-control refusal under the code the daemon maps to ' +
       'details.reason, or that reason becomes unreachable',
   );
 });

@@ -102,7 +102,7 @@ extension RunnerTests {
   func performInAppBack(app: XCUIApplication) throws -> InAppBackOutcome {
 #if os(macOS)
     guard let back = macOSNavigationBackElement(app: app) else {
-      return .refused(ErrorPayload(message: "in-app back control is not available"))
+      return .refused(Self.macOSInAppBackControlRefusal)
     }
     let frame = back.frame
     if frame.isEmpty {
@@ -601,6 +601,15 @@ extension RunnerTests {
       hint: refusal.hint
     )
   }
+
+  /// macOS `back` presses the app's own back control, read from its tree; when the app exposes none,
+  /// there is no gesture left to try, so it sends nothing. The refusal carries the runner's own code so
+  /// the host publishes `details.reason` and a caller never reads the refusal off the message prose.
+  static let macOSInAppBackControlRefusal = ErrorPayload(
+    code: RunnerWireErrorCode.inAppBackControlUnavailable,
+    message: "in-app back control is not available",
+    hint: "Press the app's visible back control by its ref."
+  )
 
 #if os(iOS)
   /// The last settle sample: the baseline the swipe's change is measured from. `stableSinceMs` is
