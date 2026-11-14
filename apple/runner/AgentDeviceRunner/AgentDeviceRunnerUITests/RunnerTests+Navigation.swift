@@ -289,13 +289,16 @@ extension RunnerTests {
 
   /// The number of navigation bars, the labels of the system back buttons in tree order, and the
   /// frames of those buttons. The buttons' labels and frames must agree for a still bar before the tap.
-  /// Bar titles are left out of that: a bar can retitle itself, such as a countdown, without any
-  /// navigation. A back button with no label, such as the iPhone Duo's floating one, shows no pop on
-  /// its own, so a state with such a button also holds the bars' titles (their identifiers, which
-  /// UIKit sets to the title, or their labels when the identifier is empty). The state read decides that itself, so the state before the tap and
-  /// each one after it hold titles under the same rule. Limit: on the Duo no structural signal shows
-  /// every pop (closed, the button and one bar stay after a pop), so a bar that retitles itself more
-  /// slowly than the still check samples, under an unlabeled button, can be misread as a pop.
+  /// Bar titles are part of the state only for a back button with no label, such as the iPhone Duo's
+  /// floating one, which shows no pop on its own: the state then holds each bar's title (its
+  /// identifier, which UIKit sets to the title, or its label when the identifier is empty), the titles
+  /// must agree before the tap, and a title change after it shows a pop. For a labeled button titles
+  /// are left out, because a bar can retitle itself, such as a countdown, without any navigation. The
+  /// state read decides this itself, so the state before the tap and each one after it follow one rule.
+  /// Limit: on the Duo no structural signal shows every pop (closed, the button and one bar stay after
+  /// a pop). So under an unlabeled button a bar that retitles itself can be misread as a pop: one that
+  /// retitles more slowly than the still check samples passes it, and after the tap a single changed
+  /// read counts as a pop for the whole confirmation window.
   struct NavigationBarBackState: Equatable {
     var barCount: Int
     let backButtonLabels: [String]
@@ -316,7 +319,8 @@ extension RunnerTests {
   /// Whether the bar after the tap shows a pop: the bar count, the back button count, a back
   /// button label, or, for a back button with no label, a bar title changed. Frames are left out: a
   /// tap that navigates nowhere can still move the button, such as by a large-title collapse or a bar button that appears. A pop that keeps the
-  /// same back button labels and bar count answers unverified.
+  /// same back button labels and bar count answers unverified, except under an unlabeled button,
+  /// where a title change shows it.
   static func navigationBarBackPopped(from before: NavigationBarBackState, to after: NavigationBarBackState) -> Bool {
     after.barCount != before.barCount || after.backButtonLabels != before.backButtonLabels
       || after.barTitles != before.barTitles
