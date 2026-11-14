@@ -75,9 +75,11 @@ test('the source checkout and artifact identity use the planned commit while the
   ).toBe(upload?.with?.name);
 });
 
-test('version stamping uses tooling pinned to the workflow commit', () => {
-  const tooling = workflow.jobs.build?.steps?.find((step) => step.with?.path === '.release-tools');
-  expect(tooling?.with?.ref).toBe('${{ github.workflow_sha }}');
+test('the version stamping entrypoint is pinned to the workflow commit', () => {
+  const entrypoint = workflow.jobs.build?.steps?.find(
+    (step) => step.with?.path === '.release-tools',
+  );
+  expect(entrypoint?.with?.ref).toBe('${{ github.workflow_sha }}');
 });
 
 test('both nightly schedules keep separate concurrency groups for cron and manual selection', () => {

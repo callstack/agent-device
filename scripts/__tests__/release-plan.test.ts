@@ -13,6 +13,7 @@ import {
 
 const MAIN = 'a'.repeat(40);
 const NIGHTLY_COMMIT = 'b'.repeat(40);
+const PLANNER_TIME = '2026-10-11T12:00:00.000Z';
 
 function skipReason(plan: ReleasePlan): string {
   assert.equal(plan.mode, 'skip');
@@ -399,6 +400,12 @@ function runPlanner(
   fs.writeFileSync(
     mock,
     `import fs from 'node:fs';
+const NativeDate = Date;
+const now = NativeDate.parse(${JSON.stringify(PLANNER_TIME)});
+globalThis.Date = class extends NativeDate {
+  constructor(...args) { super(...(args.length ? args : [now])); }
+  static now() { return now; }
+};
 const responses = ${JSON.stringify(responses)};
 globalThis.fetch = async (url) => {
   const parsed = new URL(url);
@@ -523,7 +530,7 @@ for (const source of ['main', '0.22'] as const) {
   test(
     source + ' scheduled entrypoint deduplicates from its npm channel before any publish',
     () => {
-      const today = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+      const today = PLANNER_TIME.slice(0, 10).replaceAll('-', '');
       const version = source === '0.22' ? '0.22.0-nightly-0-22.' : '0.21.38-nightly.';
       const result = runPlanner({
         schedule: source === '0.22' ? '53 1 * * *' : '23 1 * * *',
