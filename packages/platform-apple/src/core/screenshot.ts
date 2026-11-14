@@ -191,7 +191,7 @@ export async function captureSimulatorScreenshotWithFallback(
     // The probe answers from the tool's state listing, so a probe that itself got canceled stays
     // terminal rather than becoming an unknown state; anything else it cannot read keeps the
     // capture's own failure, unchanged, as the answer the caller sees.
-    return await observesSimulatorShutdown(device, options.runnerOptions?.signal);
+    return await observesSimulatorShutdown(device, error, options.runnerOptions?.signal);
   };
 
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
@@ -268,7 +268,11 @@ export async function captureSimulatorScreenshotWithRetry(
       jitter: 0.2,
       shouldRetry: (error) => shouldRetryIosSimulatorScreenshot(error),
     },
-    { deadline, phase: 'ios_simulator_screenshot' },
+    {
+      deadline,
+      phase: 'ios_simulator_screenshot',
+      classifyReason: readSimulatorScreenshotFailureReason,
+    },
   );
 }
 
@@ -476,6 +480,11 @@ export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
   );
 }
 
+function readSimulatorScreenshotFailureReason(error: unknown): string | undefined {
+  const reason = error instanceof AppError ? error.details?.reason : undefined;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
 /**
  * Whether this simulator is turned off right now, read from the tool's own state listing under the
  * screenshot's own probe ceiling. Only the literal {@link SIMCTL_SHUTDOWN_STATE} authorizes a boot:
@@ -487,6 +496,7 @@ export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
  */
 async function observesSimulatorShutdown(
   device: DeviceInfo,
+  captureError: unknown,
   signal?: AbortSignal,
 ): Promise<boolean> {
   signal?.throwIfAborted();
@@ -501,7 +511,19 @@ async function observesSimulatorShutdown(
     return false;
   }
   signal?.throwIfAborted();
-  return state === SIMCTL_SHUTDOWN_STATE;
+  const recoveryAuthorized = state === SIMCTL_SHUTDOWN_STATE;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'ios_screenshot_skipped_boot_recovery',
+    data: {
+      udid: device.id,
+      observedState: state,
+      recoveryAuthorized,
+      ...extractAppleToolErrorMeta(captureError),
+      captureFailureReason: readSimulatorScreenshotFailureReason(captureError),
+    },
+  });
+  return recoveryAuthorized;
 }
 
 async function normalizeIosSimulatorScreenshotDensity(

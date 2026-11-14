@@ -1,6 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { bindTestCommandHost } from '@agent-device/test-kit';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecResult } from '@agent-device/host-kit/command';
@@ -14,7 +17,11 @@ import {
   SIMCTL_SCREENSHOT_TIMEOUT_REASON,
 } from '../tool-provider.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
-import { shouldRetryIosSimulatorScreenshot } from '../screenshot.ts';
+import {
+  captureSimulatorScreenshotWithRetry,
+  shouldRetryIosSimulatorScreenshot,
+} from '../screenshot.ts';
+import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
   commandFailed,
   commandStdout,
@@ -129,6 +136,46 @@ test.each(['\n', '\r\n'])(
     assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
   },
 );
+
+test.each([
+  { message: 'changed provider wording', typedReason: 'capture-provider-refused' },
+  { message: 'capture-provider-refused', typedReason: undefined },
+])('retry telemetry preserves typed evidence for $message', async ({ message, typedReason }) => {
+  const failure = new AppError(
+    'COMMAND_FAILED',
+    message,
+    typedReason ? { reason: typedReason } : {},
+  );
+  const logPath = path.join(await mkdtempForTest('ios-screenshot-retry-diag-'), 'events.ndjson');
+  await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, () =>
+    withAppleToolProvider(createLocalAppleToolProvider(), () =>
+      withScriptedCommands(
+        () => {
+          throw failure;
+        },
+        () =>
+          assert.rejects(
+            captureSimulatorScreenshotWithRetry(SIMULATOR, '/tmp/out.png', undefined),
+            (error: unknown) => error === failure,
+          ),
+      ),
+    ),
+  );
+  const events = readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { phase: string; data: Record<string, unknown> })
+    .filter((event) => event.phase === 'retry' && event.data.phase === 'ios_simulator_screenshot');
+  const failed = events.filter((event) => event.data.event === 'attempt_failed');
+
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0]?.data.attempt, 1);
+  assert.equal(failed[0]?.data.reason, typedReason);
+  assert.equal(
+    events.some((event) => event.data.event === 'retry_scheduled'),
+    false,
+  );
+});
 
 test('the adapter accepts a leading protocol header with CRLF line endings', async () => {
   const { error } = await captureScreenshot(() =>

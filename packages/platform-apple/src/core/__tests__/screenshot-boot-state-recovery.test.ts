@@ -1,6 +1,9 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { bindTestCommandHost } from '@agent-device/test-kit';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { ExecResult } from '@agent-device/host-kit/command';
@@ -28,6 +31,7 @@ import { ensureBootedSimulator } from '../simulator.ts';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
 import { SIMCTL_SCREENSHOT_TIMEOUT_REASON } from '../tool-provider.ts';
 import { IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS } from '../config.ts';
+import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
   commandFailed,
   commandStdout,
@@ -71,6 +75,7 @@ type RecoveryProbe = {
   captureAttempts: number;
   runnerCaptures: number;
   boots: number;
+  normalizations: number;
 };
 
 /**
@@ -94,6 +99,7 @@ async function probeRecovery(
   boot.mockResolvedValue(undefined);
   let captureAttempts = 0;
   let runnerCaptures = 0;
+  let normalizations = 0;
   const fallbackToRunner = options.shouldFallbackToRunner ?? (() => false);
 
   return await withScriptedCommands(
@@ -107,15 +113,20 @@ async function probeRecovery(
           captureWithRetry: async () => {
             captureAttempts += 1;
             const failure = options.captureError;
-            throw typeof failure === 'function'
-              ? (failure as (attempt: number) => unknown)(captureAttempts)
-              : (failure ?? CAPTURE_FAILURE);
+            if (typeof failure === 'function') {
+              const error = (failure as (attempt: number) => unknown)(captureAttempts);
+              if (error !== undefined) throw error;
+              return;
+            }
+            throw failure ?? CAPTURE_FAILURE;
           },
           captureWithRunner: async () => {
             runnerCaptures += 1;
             return undefined;
           },
-          normalizeDensity: async () => {},
+          normalizeDensity: async () => {
+            normalizations += 1;
+          },
           resolveCaptureTarget: async () => ({}),
           shouldFallbackToRunner: fallbackToRunner,
         },
@@ -129,6 +140,7 @@ async function probeRecovery(
         captureAttempts,
         runnerCaptures,
         boots: boot.mock.calls.length,
+        normalizations,
       };
     },
   );
@@ -155,6 +167,43 @@ test('a fresh Shutdown answer boots the skipped-check simulator once and re-capt
     0,
     'the recovery re-captures through the same simctl route, not the runner',
   );
+});
+
+test.each([
+  { label: 'typed timeout', typedReason: SIMCTL_SCREENSHOT_TIMEOUT_REASON, code: 60 },
+  { label: 'unattributed state failure', typedReason: undefined, code: 405 },
+])('successful recovery retains the original $label diagnostic', async ({ typedReason, code }) => {
+  const device = simulator(`sim-recovery-diagnostic-${code}`);
+  const stderr = `Detected file type from extension: PNG\nOriginal failure ${code}\n`;
+  const captureError = new AppError('COMMAND_FAILED', 'original capture message', {
+    stderr,
+    exitCode: code,
+    ...(typedReason ? { reason: typedReason } : {}),
+  });
+  const logPath = path.join(await mkdtempForTest('ios-screenshot-recovery-diag-'), 'events.ndjson');
+  const probe = await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, () =>
+    probeRecovery(device, {
+      state: () => listingFor(device.id, 'Shutdown'),
+      captureError: (attempt: number) => (attempt === 1 ? captureError : undefined),
+    }),
+  );
+  assert.ok(existsSync(logPath), 'recovery must retain the discarded failure in diagnostics');
+  const events = readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { phase: string; data: Record<string, unknown> })
+    .filter((event) => event.phase === 'ios_screenshot_skipped_boot_recovery');
+
+  assert.equal(probe.error, undefined);
+  assert.equal(probe.boots, 1);
+  assert.equal(probe.captureAttempts, 2);
+  assert.equal(probe.normalizations, 1, 'the re-capture reaches successful normalization');
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.data.observedState, 'Shutdown');
+  assert.equal(events[0]?.data.recoveryAuthorized, true);
+  assert.equal(events[0]?.data.stderr, stderr.trim(), 'diagnostics normalize outer whitespace');
+  assert.equal(events[0]?.data.reason, 'original capture message');
+  assert.equal(events[0]?.data.captureFailureReason, typedReason);
 });
 
 test('the re-capture that fails again reports its own failure and adds no second recovery', async () => {
