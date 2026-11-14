@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
+import type { ReplayTestAttemptStepSink } from '@agent-device/contracts/replay-test-execution';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import {

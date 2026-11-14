@@ -709,44 +709,12 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
     '@agent-device/selectors',
   ]);
-  // #1555 review P1 ("add the reviewer-required exact exported-symbol
-  // gate"; second pass, "enforce the accepted two-entrypoint facade"; the
-  // structural-quality review, "typed façade replaces the zero-type rule"):
-  // the exports-subpath assertion above only proves the package exposes one
-  // `.` entry point — it says nothing about what that entry point actually
-  // NAMES. This pins the exact symbol list `packages/ad-replay/src/index.ts`
-  // exports: the binding design's two VALUE entrypoints, `inspectAdReplay`
-  // and `runAdReplay` (never a third value), plus the neutral vocabulary
-  // their signatures are built from, named explicitly instead of every root
-  // consumer hand-deriving `Parameters<...>`/`ReturnType<...>` off them (the
-  // shim `src/daemon/ad-replay-facade-types.ts` used to centralize — since
-  // deleted). `formatReplaySuccessMessage` (presentation, not engine policy)
-  // stays out on purpose — it sits daemon-side beside its one caller. A
-  // stray export — intentional or not, including a form `readNamedExports`
-  // cannot enumerate a name for (`export *`, `export default` — see the
-  // rejection tests below) — must edit this list too, not just slip through
-  // the exports-subpath check.
+  // The engine exports two value entrypoints. Shared port vocabulary belongs to contracts.
   assert.deepEqual(
     readNamedExports(
       fs.readFileSync(path.join(repoRoot, 'packages/ad-replay/src/index.ts'), 'utf8'),
     ),
-    [
-      'AdReplayDispatchGuard',
-      'AdReplayDispatchOutcome',
-      'AdReplayGuardMismatchEvidence',
-      'AdReplayLandmarkMismatchEvidence',
-      'AdReplayManifest',
-      'AdReplayScrubValue',
-      'AdReplayStepFailure',
-      'AdReplayStepRuntime',
-      'AdReplayTargetBindingEvidence',
-      'AdReplayTargetClassification',
-      'AdReplayTargetObservation',
-      'AdReplayVarSources',
-      'AdReplayVerificationEntry',
-      'inspectAdReplay',
-      'runAdReplay',
-    ],
+    ['inspectAdReplay', 'runAdReplay'],
   );
   const selectorsPackage = packages.find((pkg) => pkg.name === '@agent-device/selectors');
   assert.ok(selectorsPackage, 'selectors package must exist');
