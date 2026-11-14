@@ -124,7 +124,7 @@ async function probeRecovery(
         },
       }).then(
         () => undefined,
-        (caught: unknown) => caught,
+        (error: unknown) => error,
       );
       return {
         error,
@@ -179,7 +179,7 @@ test('the re-capture that fails again reports its own failure and adds no second
 test.each(['Booted', 'Booting', 'Creating', 'Shutting Down', 'Living'] as const)(
   'a simulator listed as %s is not turned off, so nothing boots or re-captures',
   async (state) => {
-    const device = simulator(`sim-recover-${state.toLowerCase().replace(/[^a-z]+/g, '-')}`);
+    const device = simulator(`sim-recover-${state.toLowerCase().replaceAll(/[^a-z]+/g, '-')}`);
     const probe = await probeRecovery(device, { state: () => listingFor(device.id, state) });
 
     assert.equal(probe.stateReads.length, 1, 'exactly one state observation');
@@ -330,7 +330,7 @@ test('a mask-bearing capture that observed a shutdown still refuses the runner f
         },
       }).then(
         () => undefined,
-        (caught: unknown) => caught,
+        (error: unknown) => error,
       );
       return { error, stateReads: executor.calls().filter(isSimctlListDevices) };
     },

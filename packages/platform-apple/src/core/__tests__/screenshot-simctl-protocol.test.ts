@@ -154,8 +154,8 @@ test('the adapter reads the protocol header for a set-scoped screenshot call', a
             return await runXcrun(buildSimctlArgsForDevice(scopedDevice, SCREENSHOT_ARGS), {
               timeoutMs: 20_000,
             });
-          } catch (caught) {
-            return { error: caught };
+          } catch (error) {
+            return { error };
           }
         },
       ),
@@ -268,7 +268,7 @@ test('the adapter leaves a caller-supplied command executor unclassified', async
         async () =>
           await runScreenshot().then(
             () => null,
-            (caught: unknown) => caught,
+            (error: unknown) => error,
           ),
       ),
   );
@@ -300,7 +300,7 @@ test('the adapter leaves a caller-supplied simctl runner unclassified', async ()
         async () =>
           await runScreenshot().then(
             () => null,
-            (caught: unknown) => caught,
+            (error: unknown) => error,
           ),
       ),
   );
@@ -328,7 +328,7 @@ test('the adapter does not parse a simctl subcommand it did not scope as a scree
               timeoutMs: 20_000,
             }).then(
               (result) => ({ result }),
-              (caught: unknown) => ({ error: caught }),
+              (error: unknown) => ({ error }),
             ),
         ),
     );
@@ -352,8 +352,8 @@ test('the adapter leaves an allowFailure screenshot call untouched', async () =>
         async (executor) => {
           try {
             return { result: await runScreenshot({ allowFailure: true }), calls: executor.calls() };
-          } catch (caught) {
-            return { error: caught };
+          } catch (error) {
+            return { error };
           }
         },
       ),

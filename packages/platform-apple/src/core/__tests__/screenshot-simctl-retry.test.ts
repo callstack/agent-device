@@ -109,7 +109,7 @@ async function captureThroughLocalAdapter(
       await withScriptedCommands(script, async (executor) => {
         const error = await captureSimulatorScreenshotWithRetry(SIMULATOR, outPath, undefined).then(
           () => undefined,
-          (caught: unknown) => caught,
+          (error: unknown) => error,
         );
         const calls = executor.calls();
         return {
