@@ -351,3 +351,23 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
   }
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
+
+test('press --expect-screenshot-diff refuses at the route while no capture binds', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'readback-refused-plan';
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
+  mockTapPoint.mockRejectedValue(new Error('touch should not be called for an unbound readback'));
+
+  for (const positionals of [['@e1,@e2'], ['@e1']]) {
+    const response = await runInteraction(sessionStore, sessionName, 'press', positionals, {
+      expectScreenshotDiff: true,
+    });
+    expect(response?.ok, positionals.join(' ')).toBe(false);
+    if (response && !response.ok) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.details?.reason).toBe('screenshot-readback-unavailable');
+      expect(response.error.details?.dispatched).toBe('no');
+    }
+    expect(mockTapPoint).not.toHaveBeenCalled();
+  }
+});

@@ -1,4 +1,9 @@
-import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
+import {
+  selector,
+  createContractClock,
+  createContractDevice,
+  screenshotFramePlanBackend,
+} from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
@@ -365,6 +370,24 @@ test(scenario('settleObservation'), async () => {
   // Fresh refs ride the diff: the added line's ref resolves on the stored
   // settled tree.
   assert.equal(added?.ref, 'e1');
+});
+
+test(scenario('screenshotDiffEvidence'), async () => {
+  const device = createContractDevice(continueButtonSnapshot(), {
+    ...screenshotFramePlanBackend([{ color: [0, 0, 0] }, { color: [255, 255, 255] }]),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    expectScreenshotDiff: true,
+  });
+
+  // The pixel pair brackets the dispatch: the readback rides in the same
+  // response and never fails the action.
+  assert.equal(result.kind, 'selector');
+  assert.ok(result.screenshotDiff);
+  assert.equal(result.screenshotDiff?.changedFromBefore, true);
 });
 
 test(scenario('errorTaxonomy'), async () => {

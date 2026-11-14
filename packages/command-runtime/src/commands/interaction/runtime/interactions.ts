@@ -14,6 +14,7 @@ import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
+import type { ScreenshotPairOutcome } from './screenshot-diff-evidence.ts';
 import {
   applyPostActionObservation,
   planPostActionObservation,
@@ -41,6 +42,14 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Opt-in: bracket the dispatch with two lightweight screenshots and attach
+     * `screenshotDiff` to the result, so a tap on a surface the accessibility
+     * tree cannot describe (a PIN keypad) still answers "did the screen react
+     * at all". Best-effort — a capture failure drops the evidence; a matching
+     * pair adds a warning instead of failing the action.
+     */
+    expectScreenshotDiff?: boolean;
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -140,9 +149,12 @@ async function tapCommand(
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
   const observation = planPostActionObservation(options);
-  const nativeRefTap = observation.needsPreActionBaseline
-    ? null
-    : await maybeTapRefTarget(runtime, options, action);
+  // --expect-screenshot-diff brackets the dispatch below, which the native ref
+  // fast path never reaches — route through the runtime path like verify/settle.
+  const nativeRefTap =
+    observation.needsPreActionBaseline || options.expectScreenshotDiff === true
+      ? null
+      : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
   // One request object for the resolution and for the looks admission may spend, so a second look is
@@ -162,17 +174,28 @@ async function tapCommand(
   const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
+  const dispatchTap = runtime.backend.tap;
+  // Dynamic import: the readback evidence lane stays off the command-runtime entry closure.
+  const { attachScreenshotPairOutcome, dispatchWithScreenshotPair } =
+    await import('./screenshot-diff-evidence.ts');
   let backendResult;
+  let screenshotOutcome: ScreenshotPairOutcome | undefined;
   try {
-    backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
-      button: options.button,
-      count: options.count,
-      intervalMs: options.intervalMs,
-      holdMs: options.holdMs,
-      jitterPx: options.jitterPx,
-      doubleTap: options.doubleTap,
-      ...(pointObservation ? { pointObservation } : {}),
-    });
+    ({ result: backendResult, outcome: screenshotOutcome } = await dispatchWithScreenshotPair(
+      runtime,
+      options,
+      options.expectScreenshotDiff === true,
+      async () =>
+        await dispatchTap(toBackendContext(runtime, options), point, {
+          button: options.button,
+          count: options.count,
+          intervalMs: options.intervalMs,
+          holdMs: options.holdMs,
+          jitterPx: options.jitterPx,
+          doubleTap: options.doubleTap,
+          ...(pointObservation ? { pointObservation } : {}),
+        }),
+    ));
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of
     // band so a daemon-level failure corroboration can still record the same
@@ -185,10 +208,10 @@ async function tapCommand(
     runtime,
     options,
     atRest,
-    {
-      ...atRest,
-      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    },
+    attachScreenshotPairOutcome(
+      { ...atRest, ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}) },
+      screenshotOutcome,
+    ),
     observation,
   );
 }

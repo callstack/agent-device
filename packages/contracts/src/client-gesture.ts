@@ -63,6 +63,14 @@ export type ClickOptions = DeviceCommandBaseOptions &
      * snapshot to confirm the action had an effect.
      */
     verify?: boolean;
+    /**
+     * Opt-in: bracket the dispatch with two lightweight screenshots and return
+     * the pixel comparison as `screenshotDiff` in the response. For targets the
+     * accessibility tree cannot describe (a PIN keypad), where `verify` would
+     * compare empty trees. Advisory — never fails the action; a matching pair
+     * adds a response warning instead.
+     */
+    expectScreenshotDiff?: boolean;
   };
 
 export type PressOptions = DeviceCommandBaseOptions &
@@ -71,6 +79,8 @@ export type PressOptions = DeviceCommandBaseOptions &
   RepeatedPressOptions &
   SettleCommandOptions & {
     verify?: boolean;
+    /** See {@link ClickOptions.expectScreenshotDiff}. */
+    expectScreenshotDiff?: boolean;
   };
 
 export type LongPressOptions = DeviceCommandBaseOptions &

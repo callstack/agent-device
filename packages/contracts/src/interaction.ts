@@ -259,6 +259,25 @@ export type InteractionEvidence = {
   surfaceChange?: PostActionSurfaceChange;
 };
 
+/**
+ * Opt-in (`--expect-screenshot-diff`) out-of-tree post-action readback for
+ * press/click: the pixel comparison between the screenshots taken immediately
+ * before the dispatch and after it settles briefly. Answers "did the screen
+ * react at all" for surfaces the accessibility tree cannot describe — a PIN
+ * keypad whose keys never reach the tree leaves `--verify`'s digest flat no
+ * matter what the tap did — so the comparison runs on pixels instead of nodes.
+ *
+ * Advisory by contract: the comparison never fails the action. Absent means the
+ * pair was not taken (capture failed or the platform cannot screenshot), which
+ * is no claim about the screen. `changedFromBefore` compares pixels, not the
+ * `--verify` digest; `changedPixelRatio` is the share of pixels whose color
+ * moved, absent when the two frames could not be compared (shape change).
+ */
+export type ScreenshotDiffEvidence = {
+  changedFromBefore: boolean;
+  changedPixelRatio?: number;
+};
+
 export type SettleDiffLine = {
   kind: 'added' | 'removed';
   text: string;
@@ -389,6 +408,7 @@ type TouchResponseDataBase = {
   referenceWidth?: number;
   referenceHeight?: number;
   evidence?: InteractionEvidence;
+  screenshotDiff?: ScreenshotDiffEvidence;
   settle?: SettleObservation;
   resolution?: ResolutionDisclosure;
   cost?: ResponseCost;
@@ -485,6 +505,7 @@ export type PressCommandResult = ResolvedInteractionTarget & {
   message?: string;
   warning?: string;
   evidence?: InteractionEvidence;
+  screenshotDiff?: ScreenshotDiffEvidence;
   settle?: SettleObservation;
 };
 

@@ -14,6 +14,8 @@ export const NATIVE_REF_COVERAGE = definePathCoverage('native-ref', {
   verifyEvidence: 'native-ref verifyEvidence: --verify skips the fast path and returns evidence',
   settleObservation:
     'native-ref settleObservation: --settle skips the fast path and returns the settled diff',
+  screenshotDiffEvidence:
+    'native-ref screenshotDiffEvidence: --expect-screenshot-diff skips the fast path and returns the pixel comparison',
   // The preflight raises the runtime path's exact offscreen_ref shape (code,
   // reason, hint), which is the shared taxonomy on this path.
   errorTaxonomy:

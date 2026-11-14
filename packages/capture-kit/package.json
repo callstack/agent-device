@@ -150,6 +150,10 @@
       "types": "./src/png-rgb-difference.ts",
       "default": "./src/png-rgb-difference.ts"
     },
+    "./png-changed-pixel-ratio": {
+      "types": "./src/png-changed-pixel-ratio.ts",
+      "default": "./src/png-changed-pixel-ratio.ts"
+    },
     "./png-size": {
       "types": "./src/png-size.ts",
       "default": "./src/png-size.ts"

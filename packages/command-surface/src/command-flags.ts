@@ -100,6 +100,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     maxPasses: options.maxPasses,
     doubleTap: options.doubleTap,
     verify: options.verify,
+    expectScreenshotDiff: options.expectScreenshotDiff,
     settle: options.settle,
     settleQuietMs: options.settleQuietMs,
     clickButton: options.clickButton,
