@@ -19,6 +19,19 @@ afterEach(() => {
 
 let temporaryDirectory: string | undefined;
 
+test('MCP replay discovery identifies optional plugins and installation commands', () => {
+  const tools = listCommandTools({ outputSchemas: true });
+  for (const name of ['replay', 'test']) {
+    const tool = tools.find((candidate) => candidate.name === name);
+    assert.ok(tool);
+    assert.match(tool.description, /plugin, install separately/);
+    assert.ok(tool.description.includes('agent-device plugins add @agent-device/replay'));
+    assert.ok(tool.description.includes('agent-device plugins add @agent-device/maestro'));
+    assert.ok(tool.inputSchema.properties);
+    assert.ok(tool.outputSchema);
+  }
+});
+
 test('MCP collection results use object envelopes without changing object results or text', async () => {
   const results = {
     devices: [
