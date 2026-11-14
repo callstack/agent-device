@@ -93,8 +93,17 @@ test('a body admitted past four connect ceilings still waits only its own header
   assert.equal(daemon.bodyEnded, false);
   assert.equal(upload.settled, false);
   const close = fs.close;
+  let sourceClosed: Promise<void> | undefined;
   const closeSpy = vi.spyOn(fs, 'close').mockImplementation((fd, callback) => {
-    const release = vi.fn().mockImplementationOnce(() => close(fd, callback));
+    const release = vi.fn().mockImplementationOnce(() => {
+      sourceClosed = new Promise<void>((resolve) => {
+        close(fd, (error) => {
+          callback(error);
+          resolve();
+        });
+      });
+      return sourceClosed;
+    });
     onTestFinished(release);
     setTimeout(release, 20_000);
   });
@@ -113,7 +122,10 @@ test('a body admitted past four connect ceilings still waits only its own header
   );
   assert.equal(writes.finished && daemon.bodyEnded, true, 'the whole body reached the peer');
   assert.equal(closeSpy.mock.calls.length, 1, 'source close is held after the outgoing flush');
+  assert.equal(fs.fstatSync(closeSpy.mock.calls[0][0]).size, 16 * MEBIBYTE);
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 1);
+  assert.ok(sourceClosed, 'source close was released before the header deadline');
+  await sourceClosed;
   await pumpRealWork();
   assert.equal(upload.settled, false, 'the header wait counts from the flush');
   await vi.advanceTimersByTimeAsync(1);
