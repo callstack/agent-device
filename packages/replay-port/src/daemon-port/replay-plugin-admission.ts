@@ -1,14 +1,11 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  isReplayBackendId,
-  unsupportedReplayBackendMessage,
-  resolveReplayFormat,
-} from '@agent-device/ad-script/format';
 import { getReplayBackend, getReplayExecution } from './replay-backend-registry.ts';
 
 /** Rejects unavailable execution before request binding can select or act on a device. */
 export async function requireReplayPlugins(request: DaemonWireRequest): Promise<void> {
+  const { isReplayBackendId, unsupportedReplayBackendMessage, resolveReplayFormat } =
+    await import('@agent-device/ad-script');
   const backend = request.flags?.replayBackend;
   if (backend && !isReplayBackendId(backend))
     throw new AppError('INVALID_ARGS', unsupportedReplayBackendMessage(backend));

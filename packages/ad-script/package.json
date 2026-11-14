@@ -13,10 +13,6 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    },
-    "./format": {
-      "types": "./src/internal/format.ts",
-      "default": "./src/internal/format.ts"
     }
   }
 }
