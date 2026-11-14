@@ -115,6 +115,21 @@ test('the typed reason survives a changed human message and an unrelated exit co
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });
 
+test.each(['\n', '\r\n'])(
+  'a PNG diagnostic before the stderr header preserves typed retry with line ending %j',
+  async (lineEnding) => {
+    const stderr = [
+      'Detected file type from extension: PNG',
+      ...protocolTimeout().split('\n'),
+    ].join(lineEnding);
+    const { error } = await captureScreenshot(() => commandFailed(stderr, 60));
+
+    assert.equal(details(error).stderr, stderr);
+    assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+    assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
+  },
+);
+
 test('the adapter accepts a leading protocol header with CRLF line endings', async () => {
   const { error } = await captureScreenshot(() =>
     commandFailed(protocolTimeout().replaceAll('\n', '\r\n'), 60),
@@ -225,8 +240,8 @@ test('the adapter ignores a header that simctl did not print at the top level', 
     ['nested underlying-error header only', () => commandFailed(nestedOnly, 149)],
     ['header printed on stdout instead of stderr', () => commandFailed('', 60, stdoutOnly)],
     [
-      'matching header after a diagnostic preamble',
-      () => commandFailed(`Diagnostic preamble\n${protocolTimeout()}`, 60),
+      'indented matching header after a diagnostic preamble',
+      () => commandFailed(`Detected file type from extension: PNG\n    ${protocolTimeout()}`, 60),
     ],
     [
       'matching header after an unrelated top-level error',
