@@ -193,7 +193,32 @@ test('read-only transport failures keep the three-attempt resend budget', async 
   assert.equal(sentCommands().filter((command) => command === 'snapshot').length, 3);
 });
 
-test('a request deadline too close for a busy resend leaves the transport resends their three attempts', async () => {
+test('a RUNNER_BUSY refusal after the busy window closed is not resent', async () => {
+  // A 1s request deadline is inside the 2s reserve, so the window is already closed.
+  underRequestDeadline(1_000);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(busyRefusal())
+    .mockResolvedValue({ nodes: [], truncated: false });
+
+  await assert.rejects(
+    () =>
+      runAppleRunnerCommand(
+        IOS_SIMULATOR,
+        { command: 'snapshot' },
+        { requestId: 'req-deadline-window-closed' },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+      assert.equal(error.details?.dispatched, 'no');
+      assert.equal(error.details?.attempts, 1);
+      return true;
+    },
+  );
+  assert.deepEqual(sentCommands(), ['snapshot']);
+});
+
+test('under a request deadline too close for a busy resend, transport failures keep their three attempts', async () => {
   underRequestDeadline(1_000);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))

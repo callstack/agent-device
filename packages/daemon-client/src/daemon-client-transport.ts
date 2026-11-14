@@ -28,6 +28,14 @@ import {
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
+import {
+  awaitWithinCallerBound,
+  cacheRemoteDaemonHealth,
+  invalidateRemoteDaemonHealth,
+  sharedRemoteHealth,
+  type RemoteDaemonHealth,
+  type RemoteDaemonHealthLink,
+} from './daemon-client-remote-health-cache.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -160,25 +168,6 @@ function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): App
     { reason: DAEMON_ENDPOINT_UNAVAILABLE_REASON, transport },
   );
 }
-
-export type RemoteDaemonHealth = {
-  reachable: boolean;
-  statusCode?: number;
-  service?: string;
-  version?: string;
-  rpcProtocolVersion?: number;
-  instanceId?: string;
-  hostArch?: string;
-  /** The daemon behind a proxy, as the proxy's health reported it. */
-  upstream?: RemoteDaemonHealthLink;
-  /** The probe ran out of its time budget before an answer, rather than failing outright. */
-  timedOut?: true;
-};
-
-type RemoteDaemonHealthLink = Pick<
-  RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
->;
 
 export async function canConnect(
   info: DaemonInfo,
@@ -496,7 +485,7 @@ async function retryAfterRemoteInstanceMismatch(
   );
   if (!health.reachable) {
     const { remoteDaemonUnavailableError } = await import('./daemon-lifecycle-errors.ts');
-    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl });
+    throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts: 1 });
   }
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
@@ -936,63 +925,16 @@ async function sendHttpRequest(
   });
 }
 
-type RemoteHealthCacheEntry = {
-  baseUrl: string;
-  token: string;
-  pid: number;
-  health: Promise<RemoteDaemonHealth>;
-};
-
-let remoteHealthCache: RemoteHealthCacheEntry | undefined;
-
-function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
-  return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
-}
-
-function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
-  if (!health.instanceId || (health.upstream && !health.upstream.instanceId)) return;
-  remoteHealthCache = {
-    baseUrl: info.baseUrl ?? '',
-    token: info.token,
-    pid: info.pid,
-    health: Promise.resolve(health),
-  };
-}
-
-function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
-  if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
-    remoteHealthCache = undefined;
-  }
-}
-
+/**
+ * The remote `/health` answer, sharing one in-flight probe among concurrent callers. The shared
+ * probe runs on the default budget; each caller applies its own `probeTimeoutMs` and
+ * `callerSignal` to its wait, so no caller inherits another's bound or abort.
+ */
 export async function cachedRemoteDaemonHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
   callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
-  if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
-    return await remoteHealthCache.health;
-  }
-  const entry: RemoteHealthCacheEntry = {
-    baseUrl: info.baseUrl ?? '',
-    token: info.token,
-    pid: info.pid,
-    health: readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
-  };
-  remoteHealthCache = entry;
-  try {
-    const health = await entry.health;
-    if (
-      (!health.reachable ||
-        !health.instanceId ||
-        (health.upstream && !health.upstream.instanceId)) &&
-      remoteHealthCache === entry
-    ) {
-      remoteHealthCache = undefined;
-    }
-    return health;
-  } catch (error) {
-    if (remoteHealthCache === entry) remoteHealthCache = undefined;
-    throw error;
-  }
+  const shared = sharedRemoteHealth(info, () => readRemoteDaemonHealth(info));
+  return await awaitWithinCallerBound(shared, probeTimeoutMs, callerSignal);
 }

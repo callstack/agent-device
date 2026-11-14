@@ -15,6 +15,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { REMOTE_DAEMON_UNAVAILABLE_REASON } from '../daemon-lifecycle-errors.ts';
 import { sendToDaemon } from '../index.ts';
+import { cachedRemoteDaemonHealth } from '../daemon-client-transport.ts';
 
 // A press, so the refusal states the fact a caller needs before resending a mutating command.
 function remotePress(baseUrl: string) {
@@ -64,7 +65,9 @@ test('a remote press whose health probe answers 5xx re-probes, then is sent exac
       sendToDaemon(remotePress(`http://127.0.0.1:${port}`)),
       (error: unknown) => {
         assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+        assert.equal(error.code, 'COMMAND_FAILED');
         assert.notEqual(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+        assert.notEqual(error.details?.dispatched, 'no', 'the press left the client');
         return true;
       },
     );
@@ -95,6 +98,35 @@ test('a remote press whose health probe is refused is refused at once with the t
   });
 });
 
+// A daemon that answered 503 and then refuses connections is gone, not restarting: the re-probe
+// that is refused ends the wait at once instead of waiting out the command's budget.
+test('a remote press re-probing after 5xx stops at the first refused connection', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const handler = http.createServer((req, res) => {
+    req.resume();
+    res.statusCode = 503;
+    res.end();
+    handler.close();
+    handler.closeAllConnections();
+  });
+  const port = await listenOnLoopback(handler);
+  try {
+    await assert.rejects(
+      sendToDaemon(remotePress(`http://127.0.0.1:${port}`)),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
+        assert.equal(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+        assert.equal(error.details?.dispatched, 'no');
+        assert.equal(error.details?.attempts, 2);
+        assert.equal(error.details?.healthRecoveryBudgetMs, undefined, 'the budget was not spent');
+        return true;
+      },
+    );
+  } finally {
+    if (handler.listening) await closeLoopbackServer(handler);
+  }
+});
+
 // The closest negative: a probe that answers 4xx counts as reachable, so the press is sent and the
 // unavailable refusal is never stamped on a request that left the client.
 test('a remote press whose health probe answers 4xx is sent and is not the unavailable refusal', async (t) => {
@@ -111,6 +143,37 @@ test('a remote press whose health probe answers 4xx is sent and is not the unava
       },
     );
     assert.equal(rpcSends(), 1);
+  } finally {
+    await closeLoopbackServer(handler);
+  }
+});
+
+// Concurrent callers share one in-flight probe, and each applies its own bound to it: one caller
+// aborting does not end the wait of another that shares the probe.
+test('a caller aborting a shared health probe leaves a concurrent caller its answer', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let probes = 0;
+  const handler = http.createServer((req, res) => {
+    req.resume();
+    probes += 1;
+    setTimeout(() => {
+      res.statusCode = 200;
+      res.end(JSON.stringify({ instanceId: 'remote-instance' }));
+    }, 200);
+  });
+  const port = await listenOnLoopback(handler);
+  const info = { baseUrl: `http://127.0.0.1:${port}`, token: 'shared-probe', pid: 0 };
+  try {
+    const aborting = new AbortController();
+    const aborted = cachedRemoteDaemonHealth(info, undefined, aborting.signal);
+    const unbounded = cachedRemoteDaemonHealth(info);
+    aborting.abort();
+
+    assert.equal((await aborted).reachable, false);
+    const health = await unbounded;
+    assert.equal(health.reachable, true);
+    assert.equal(health.instanceId, 'remote-instance');
+    assert.equal(probes, 1, 'both callers shared one probe');
   } finally {
     await closeLoopbackServer(handler);
   }

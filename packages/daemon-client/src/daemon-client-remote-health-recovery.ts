@@ -1,7 +1,8 @@
 import { sleep } from '@agent-device/host-kit/retry';
 import type { RemoteHealthRecovery } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { cachedRemoteDaemonHealth, type RemoteDaemonHealth } from './daemon-client-transport.ts';
+import type { RemoteDaemonHealth } from './daemon-client-remote-health-cache.ts';
+import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
 import { remoteDaemonUnavailableError } from './daemon-lifecycle-errors.ts';
 
 /** The pause between `/health` probes while a remote daemon is unavailable. */
@@ -28,23 +29,29 @@ export async function recoverRemoteDaemonHealth(params: {
   info: DaemonInfo;
   failedProbe: RemoteDaemonHealth;
   recovery: RemoteHealthRecovery | undefined;
+  /** When the command's budget ends, on the `performance.now()` clock: it started with the first probe. */
+  deadline: number;
   hint: string;
 }): Promise<RemoteDaemonHealth> {
-  const { info, failedProbe, recovery, hint } = params;
+  const { info, recovery, deadline, hint } = params;
   let attempts = 1;
-  if (recovery && isTransientHealthFailure(failedProbe)) {
-    const { budgetMs, signal } = recovery;
-    const deadline = performance.now() + budgetMs;
-    while (!signal?.aborted) {
-      const remainingMs = deadline - performance.now();
-      if (remainingMs <= 0) break;
-      await sleep(Math.min(REMOTE_HEALTH_REPROBE_INTERVAL_MS, remainingMs), signal);
-      const probeMs = deadline - performance.now();
-      if (probeMs <= 0 || signal?.aborted) break;
-      attempts += 1;
-      const health = await cachedRemoteDaemonHealth(info, probeMs, signal);
-      if (health.reachable) return health;
+  let probe = params.failedProbe;
+  while (recovery && isTransientHealthFailure(probe) && !recovery.signal?.aborted) {
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) {
+      throw remoteDaemonUnavailableError({
+        daemonBaseUrl: info.baseUrl,
+        attempts,
+        healthRecoveryBudgetMs: recovery.budgetMs,
+        hint,
+      });
     }
+    await sleep(Math.min(REMOTE_HEALTH_REPROBE_INTERVAL_MS, remainingMs), recovery.signal);
+    const probeMs = deadline - performance.now();
+    if (probeMs <= 0 || recovery.signal?.aborted) continue;
+    attempts += 1;
+    probe = await cachedRemoteDaemonHealth(info, probeMs, recovery.signal);
+    if (probe.reachable) return probe;
   }
   throw remoteDaemonUnavailableError({ daemonBaseUrl: info.baseUrl, attempts, hint });
 }

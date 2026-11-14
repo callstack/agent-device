@@ -267,7 +267,13 @@ async function ensureRemoteDaemon(
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
-  let health = await cachedRemoteDaemonHealth(remoteInfo);
+  // The command's budget starts with the first probe, which already runs under it and its signal.
+  const deadline = performance.now() + (healthRecovery?.budgetMs ?? 0);
+  let health = await cachedRemoteDaemonHealth(
+    remoteInfo,
+    healthRecovery?.budgetMs,
+    healthRecovery?.signal,
+  );
   if (!health.reachable) {
     // Loaded on the refusal: this module is not part of what every CLI start pays for.
     const { recoverRemoteDaemonHealth } = await import('./daemon-client-remote-health-recovery.ts');
@@ -275,6 +281,7 @@ async function ensureRemoteDaemon(
       info: remoteInfo,
       failedProbe: health,
       recovery: healthRecovery,
+      deadline,
       hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
     });
   }

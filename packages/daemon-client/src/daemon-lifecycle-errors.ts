@@ -66,19 +66,22 @@ export const REMOTE_DAEMON_UNAVAILABLE_REASON = 'remote_daemon_unavailable';
  * before running it, and the retry is withheld. So `dispatched: 'no'` states that the command did
  * not run — what makes a resend safe, for a UI action as much as for a read — and a caller branches
  * on the reason instead of comparing the message. `attempts` counts the gate's probes, more than
- * one when it re-probed within the command's budget.
+ * one when it re-probed within the command's budget. `healthRecoveryBudgetMs` is present only when
+ * that budget ran out, which tells a spent budget from a single failed probe.
  */
 export function remoteDaemonUnavailableError(params: {
   daemonBaseUrl: string | undefined;
-  attempts?: number;
+  attempts: number;
+  healthRecoveryBudgetMs?: number;
   hint?: string;
 }): AppError {
-  const { daemonBaseUrl, attempts, hint } = params;
+  const { daemonBaseUrl, attempts, healthRecoveryBudgetMs, hint } = params;
   return new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
     reason: REMOTE_DAEMON_UNAVAILABLE_REASON,
     dispatched: 'no',
     daemonBaseUrl,
-    ...(attempts !== undefined ? { attempts } : {}),
+    attempts,
+    ...(healthRecoveryBudgetMs !== undefined ? { healthRecoveryBudgetMs } : {}),
     ...(hint !== undefined ? { hint } : {}),
   });
 }
