@@ -331,6 +331,7 @@ function normalizeAndroidUiHierarchyNode(
       value: androidFieldValue(attrs),
       passiveFacts: {
         contentDescription: attrs.desc && attrs.desc !== label ? attrs.desc : undefined,
+        text: label && !attrs.text ? '' : undefined,
         enabled: attrs.enabled,
         selected: attrs.selected,
         heading: attrs.heading,

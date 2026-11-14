@@ -336,6 +336,7 @@ test('get attrs digest compacts the node under a ref target', () => {
 test('attrs digest keeps explicit false/zero/empty field facts; unavailable ones stay absent (#2288)', () => {
   const fieldFacts = {
     value: '',
+    text: '',
     editable: false,
     password: false,
     hintShowing: false,

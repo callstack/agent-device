@@ -75,6 +75,7 @@ test.each<Partial<SnapshotNode>>([
   { value: 'Draft' },
   { identifier: 'create' },
   { contentDescription: 'Create a draft' },
+  { text: '' },
   { enabled: false },
   { selected: true },
   { checked: true },
