@@ -265,7 +265,7 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
 const replayBackendOwnership: OwnershipRule = ({ file }) =>
   file.startsWith('packages/maestro/') ||
   file.startsWith('packages/replay-port/') ||
-  /^packages\/plugins\/src\/(?:registry|replay-backend|store|discovery)\./.test(file)
+  /^packages\/plugins\/src\/(?:registry|replay-backend|store|discovery|validate)\./.test(file)
     ? [
         reason(
           'maestro-conformance',

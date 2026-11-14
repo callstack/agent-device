@@ -558,6 +558,8 @@ test('managed engine and loading changes retain every Maestro oracle lane', () =
     'packages/maestro/src/plugin.ts',
     'packages/plugins/src/registry.ts',
     'packages/plugins/src/replay-backend.ts',
+    'packages/plugins/src/store.ts',
+    'packages/plugins/src/validate.ts',
     'packages/replay-port/src/daemon-port/replay-backend-registry.ts',
   ]) {
     const result = plan([file]);
