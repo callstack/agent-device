@@ -171,7 +171,8 @@ Frames are left out after the tap, because a tap that navigates nowhere can stil
 (a large-title collapse, a bar button that appears). A pop that keeps the same `BackButton` labels
 and bar count, such as one between two screens whose back buttons have the same title, answers
 `BACK_SWIPE_UNVERIFIED`; so can a pop on a back button whose title updates itself, misread as a
-navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
+navigation. Under an unlabeled button the same misread applies to a bar that retitles itself:
+after the tap, any single changed title read within the confirmation window answers `ok`. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
 before each button's snapshot and each bar's snapshot. A query in flight finishes or ends at
 XCTest's own query timeout.
