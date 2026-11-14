@@ -53,6 +53,7 @@ An `abortSignal` passed to `generateText`, `streamText`, or the agent cancels a 
 `set: 'core'` is the default. It exposes the perceive-and-act loop: open, close, snapshot, click, press, fill, type, get, is, find, wait, back, scroll, swipe, alert, and screenshot.
 
 - Pass `set: 'all'` when the agent also needs device-management or observability commands.
+- Tool calls take the MCP tools' command arguments, except that `session` is always pinned and `platform` is hidden when you pass it. `debug` and the `target` alias are refused with `INVALID_ARGS`, and `cost`, `responseLevel`, and `stateDir` are dropped from the call; set `AGENT_DEVICE_COST` or `AGENT_DEVICE_RESPONSE_LEVEL` for the process, and use `deviceTarget` for a form factor.
 - Pass `approval: { close: 'user-approval' }` to require user approval before a command runs. `createAgentDeviceTools()` returns the map as `toolApproval`, ready to pass to [`ToolLoopAgent`](https://ai-sdk.dev/docs/agents/tool-approvals).
 
 Use the [Node.js API](/docs/client-api) when your application needs deterministic setup or other direct device control outside the agent loop. See the AI SDK reference for [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent).
