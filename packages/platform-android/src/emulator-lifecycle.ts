@@ -1,6 +1,6 @@
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { androidAdbInvocation, androidAdbSerialTarget } from './adb-transport.ts';
@@ -103,7 +103,9 @@ function androidBootFailureReason(error: unknown): ReturnType<typeof classifyBoo
   ) {
     return 'ADB_TRANSPORT_UNAVAILABLE';
   }
-  if (appError.details?.adbFailure === 'timeout') return 'ANDROID_BOOT_TIMEOUT';
+  if (isCommandTimeoutError(appError) || appError.details?.adbFailure === 'timeout') {
+    return 'ANDROID_BOOT_TIMEOUT';
+  }
   return 'BOOT_COMMAND_FAILED';
 }
 

@@ -116,11 +116,11 @@ test('offline wording without a typed failure reason does not trigger retry', as
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
-test('cancellation stops polling', async () => {
+test.each(['0', '1'])('cancellation wins when getprop returns %s', async (stdout) => {
   const controller = new AbortController();
   mockRunCmd.mockImplementation(async () => {
     controller.abort();
-    return { stdout: '0', stderr: '', exitCode: 0 };
+    return { stdout, stderr: '', exitCode: 0 };
   });
   await assert.rejects(
     waitForAndroidBoot('emulator-5554', 500, controller.signal),
@@ -128,6 +128,25 @@ test('cancellation stops polling', async () => {
   );
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
+
+test.each([
+  {
+    message: 'changed command-timeout wording',
+    details: { timeoutMs: 100 },
+    reason: 'ANDROID_BOOT_TIMEOUT',
+  },
+  { message: 'adb timed out after 100ms', details: {}, reason: 'BOOT_COMMAND_FAILED' },
+])(
+  'boot timeout classification follows typed evidence: $message',
+  async ({ message, details, reason }) => {
+    mockRunCmd.mockRejectedValue(new AppError('COMMAND_FAILED', message, details));
+
+    const failure = await expectBootFailure(500);
+
+    assert.equal(failure.details.reason, reason);
+    assert.equal(mockRunCmd.mock.calls.length, 1);
+  },
+);
 
 test('a still-booting device past its deadline reports an Android boot timeout', async () => {
   // On a fake clock: each poll burns 80 ms, and the 150 ms deadline is crossed inside the
