@@ -354,7 +354,8 @@ test('a mutating command meets RUNNER_BUSY once, with no status probe and no res
 });
 
 // The viewport read before a swipe runs under the swipe's request. That budget belongs to the swipe
-// dispatched after it, so a busy drain keeps the fixed window and refuses fast with nothing sent.
+// dispatched after it, so a busy drain keeps the fixed window: the read is sent 8 times (about 5.4 s
+// of delay), then RUNNER_BUSY is returned and the swipe is never dispatched.
 test('a busy read inside a mutating request keeps the fixed window under a 30s deadline', async () => {
   vi.useFakeTimers();
   mockExecuteRunnerCommandWithSession.mockImplementation(async () => {

@@ -10,6 +10,8 @@ type RemoteHealthCacheEntry = {
 };
 
 let remoteHealthCache: RemoteHealthCacheEntry | undefined;
+/** Bumped by every invalidation, so a probe that started before one cannot cache its answer. */
+let remoteHealthGeneration = 0;
 
 function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
   return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
@@ -32,12 +34,16 @@ export function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHe
 }
 
 export function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
+  remoteHealthGeneration += 1;
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     remoteHealthCache = undefined;
   }
 }
 
-/** The cached answer for this daemon, or `probe`'s, which is cached when it is usable. */
+/**
+ * The cached answer for this daemon, or `probe`'s, which is cached when it is usable and no
+ * invalidation landed while it was in flight.
+ */
 export async function cachedRemoteHealth(
   info: DaemonInfo,
   probe: () => Promise<RemoteDaemonHealth>,
@@ -45,7 +51,8 @@ export async function cachedRemoteHealth(
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     return remoteHealthCache.health;
   }
+  const generation = remoteHealthGeneration;
   const health = await probe();
-  cacheRemoteDaemonHealth(info, health);
+  if (generation === remoteHealthGeneration) cacheRemoteDaemonHealth(info, health);
   return health;
 }
