@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
@@ -35,6 +36,25 @@ import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
  * and payload projection this command family owns.
  */
 
+/**
+ * `--expect-screenshot-diff` needs a bound screenshot capture, and the touch
+ * routes bind none (#4509 owns the binding decision). Refusing here — the one
+ * place the daemon admits the flag — beats a silent no-op, where the caller's
+ * opt-in would read as verified evidence that never arrived.
+ */
+function screenshotReadbackRefusal(
+  params: TargetedTouchParams,
+  command: TargetedTouchCommand,
+): DaemonResponse | undefined {
+  if (command !== 'press' && command !== 'click') return undefined;
+  if (!params.req.flags?.expectScreenshotDiff) return undefined;
+  return errorResponse(
+    'INVALID_ARGS',
+    '--expect-screenshot-diff is not available on this route yet: the touch route binds no screenshot capture. Use --settle or --verify meanwhile; #4509 decides when the capture binds.',
+    { reason: 'screenshot-readback-unavailable', dispatched: 'no' },
+  );
+}
+
 export async function dispatchTargetedTouchViaRuntime(
   params: TargetedTouchParams,
   command: TargetedTouchCommand,
@@ -42,6 +62,8 @@ export async function dispatchTargetedTouchViaRuntime(
   params = bindInteractionSession(params);
   const admission = await admitTargetedTouch(params, command);
   if ('response' in admission) return admission.response;
+  const readbackRefusal = screenshotReadbackRefusal(params, command);
+  if (readbackRefusal) return readbackRefusal;
   const { admitted } = admission;
   const prepared = await prepareTouchDispatch(
     params,
