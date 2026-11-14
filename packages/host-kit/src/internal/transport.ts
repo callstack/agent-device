@@ -125,7 +125,7 @@ export function observeCompletedRequestWrites(
     return Reflect.apply(write, this, args);
   };
   req.write = observedWrite;
-  // Move the phase before the request's response callback runs.
+  // Stop counting writes before the request's response callback runs.
   req.prependListener('response', onResponse);
   return () => {
     observing = false;

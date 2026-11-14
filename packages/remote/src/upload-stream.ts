@@ -111,19 +111,12 @@ async function streamFileToHttpRequestAttempt(options: {
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
   return await new Promise<UploadStreamResponse>((resolve, reject) => {
-    let outgoingEnded = false;
-    const settle = (result: UploadStreamResponse) => {
-      phases.dispose();
-      stopObservingWrites();
-      watchdog.dispose();
-      resolve(result);
-    };
     const fail = (error: unknown) => {
       phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
       req.destroy();
-      reject(error);
+      reject(watchdog.signal.aborted ? watchdog.signal.reason : error);
     };
     const req = transport.request(
       {
@@ -139,11 +132,7 @@ async function streamFileToHttpRequestAttempt(options: {
       },
       (res) => {
         addAbortSignal(watchdog.signal, res);
-        void handleUploadResponse(res)
-          .then((result) => settle(result))
-          .catch((error: unknown) =>
-            fail(watchdog.signal.aborted ? watchdog.signal.reason : error),
-          );
+        void handleUploadResponse(res).then(resolve).catch(fail);
       },
     );
 
@@ -154,10 +143,6 @@ async function streamFileToHttpRequestAttempt(options: {
 
     req.on('error', (err) => {
       if (phases.responseStarted) return;
-      if (watchdog.signal.aborted) {
-        fail(watchdog.signal.reason);
-        return;
-      }
       fail(
         new AppError(
           'COMMAND_FAILED',
@@ -186,31 +171,19 @@ async function streamFileToHttpRequestAttempt(options: {
       // After a response, only this attempt's own teardown ends the pipeline, and the server's
       // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
       if (phases.responseStarted) return;
-      req.destroy();
-      if (watchdog.signal.aborted) {
-        fail(watchdog.signal.reason);
-        return;
-      }
       const error = err instanceof Error ? err : new Error(String(err));
       fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
 
-    const endOutgoingWork = (): Promise<void> => {
-      if (!outgoingEnded) {
-        outgoingEnded = true;
-        // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
-        // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
-        if (!uploadSettled) req.destroy();
-      }
-      return upload!.then(
+    async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
+      const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
+      // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
+      // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
+      if (!uploadSettled) req.destroy();
+      await upload!.then(
         () => undefined,
         () => undefined,
       );
-    };
-
-    async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
-      const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
-      await endOutgoingWork();
       phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
