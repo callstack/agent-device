@@ -6,6 +6,7 @@ extension RunnerTests {
   static let navigationBarBackButtonIdentifier = "BackButton"
   /// The wait from the end of the swipe's contact to the sample it is compared against. An
   /// interactive pop follows the contact across most of the width, so the screen has already moved.
+  /// It only bounds how soon that sample is taken; the still span does not depend on it.
   static let backSwipeVerificationDelay: TimeInterval = 0.1
   /// The pause between two settle samples; a capture itself takes about 0.1 s on a simulator.
   static let backSwipeSettleSampleInterval: TimeInterval = 0.05
@@ -20,6 +21,12 @@ extension RunnerTests {
   /// The least time settling may sample before back swipes anyway and reports the outcome
   /// unverified; `backSwipeSettleBudgetMs` extends it on a host that captures slowly.
   static let backSwipeSettleBaseBudgetMs = 2000.0
+  /// The still span's margin beyond the contact and the slowest capture. A screen that repaints
+  /// itself less often than the span looks still, and its next repaint after the swipe reads as a
+  /// back. 250 ms makes the span about 0.55 s on a simulator, so such a repaint every 0.5 s is
+  /// caught as changing. It is deliberately independent of `backSwipeVerificationDelay`, so a
+  /// faster after-sample does not weaken the guard.
+  static let backSwipeStillMarginMs = 250.0
 
   /// How long settling may sample: the base budget, or, when longer, the time a still screen needs
   /// to settle at the slowest capture seen: the first capture, the required still span, and one more
@@ -33,12 +40,13 @@ extension RunnerTests {
     )
   }
 
-  /// How long the screen must agree with itself before the swipe: as long as the gap it will be
-  /// credited across, the contact allowance, one verification delay, and the slowest capture seen
-  /// while settling. A slow host captures slowly, so it settles for longer instead of reading a real
-  /// pop as unverified. `backSwipeGapIsCovered` still refuses a swipe whose actual gap outran it.
+  /// How long the screen must agree with itself before the swipe: the contact allowance, the still
+  /// margin, and the slowest capture seen while settling. That is longer than the gap the swipe is
+  /// credited across (contact, verification delay, capture). A slow host captures slowly, so it
+  /// settles for longer instead of reading a real pop as unverified. `backSwipeGapIsCovered` still
+  /// refuses a swipe whose actual gap outran it.
   static func backSwipeRequiredStillMs(maxCaptureMs: Double) -> Double {
-    backGestureAllowanceMs + backSwipeVerificationDelay * 1000 + maxCaptureMs
+    backGestureAllowanceMs + backSwipeStillMarginMs + maxCaptureMs
   }
 
   /// What one `back` concluded. `.refused` dispatched nothing. `.unconfirmed` ran the back gesture,
