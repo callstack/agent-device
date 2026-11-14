@@ -21,16 +21,13 @@ async function fixture(storeEnv?: NodeJS.ProcessEnv) {
     await resolveProviderPlugins([]),
     {},
     {
+      assertReplaySelectionCurrent: storeEnv ? createPluginSelectionGuard([], storeEnv) : undefined,
       adaptWebDriver: async () => {
         throw new Error('no provider');
       },
     },
   );
-  await bindReplayBackendResolver(
-    registry.resolveReplayBackend,
-    registry.resolveReplayExecution,
-    storeEnv ? createPluginSelectionGuard([], storeEnv) : undefined,
-  );
+  await bindReplayBackendResolver(registry.resolveReplayBackend, registry.resolveReplayExecution);
   const store = makeSessionStore('replay-plugin-admission-store-');
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
@@ -102,14 +99,16 @@ test('a changed store needs a daemon restart and embedded runtimes never consult
       ok: false,
       error: { details: { reason: 'daemon-plugin-set-stale' } },
     });
-    await bindReplayBackendResolver(
-      f.registry.resolveReplayBackend,
-      f.registry.resolveReplayExecution,
-    );
-    expect(await f.handler(request)).toMatchObject({
-      ok: false,
-      error: { details: { reason: 'plugin-not-installed' } },
-    });
+    const embedded = await fixture();
+    try {
+      expect(await embedded.handler(request)).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'plugin-not-installed' } },
+      });
+      expect(embedded.discover).not.toHaveBeenCalled();
+    } finally {
+      await embedded.registry.close();
+    }
     expect(f.discover).not.toHaveBeenCalled();
   } finally {
     await f.registry.close();

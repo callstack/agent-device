@@ -12,7 +12,6 @@ async function binding() {
   return runtimeSlot(backendResolverKey, () => ({
     resolve: undefined as ReplayBackendResolver | undefined,
     execution: undefined as ReplayExecutionResolver | undefined,
-    assertSelectionCurrent: undefined as ((packageName: string) => void) | undefined,
   }));
 }
 
@@ -20,15 +19,13 @@ async function binding() {
 export async function bindReplayBackendResolver(
   resolve: ReplayBackendResolver,
   execution?: ReplayExecutionResolver,
-  assertSelectionCurrent?: (packageName: string) => void,
 ): Promise<void> {
-  Object.assign(await binding(), { resolve, execution, assertSelectionCurrent });
+  Object.assign(await binding(), { resolve, execution });
 }
 
 /** Resolves native replay and suite execution from this runtime's fixed plugin set. */
 export async function getReplayExecution(): Promise<ReplayExecution> {
   const state = await binding();
-  state.assertSelectionCurrent?.(await backendPackage('ad'));
   if (!state.execution) throw await missingReplayBackend('ad');
   try {
     return await state.execution(await backendPackage('ad'));
@@ -46,8 +43,7 @@ async function recoverReplayPluginError(id: ReplayFormat, error: unknown): Promi
 
 /** Resolves against the current daemon's plugins, without consulting another host's store. */
 export async function getReplayBackend(id: ReplayBackendId): Promise<ReplayBackend> {
-  const { resolve, assertSelectionCurrent } = await binding();
-  assertSelectionCurrent?.(await backendPackage(id));
+  const { resolve } = await binding();
   if (!resolve) throw await missingReplayBackend(id);
   return await resolveBackend(id, resolve);
 }
