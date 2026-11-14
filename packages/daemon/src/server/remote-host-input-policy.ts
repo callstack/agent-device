@@ -5,7 +5,6 @@ import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 
 const HOST_PATH_FIELDS = [
-  'saveScript',
   'sessionSaveScript',
   'launchConsole',
   'baseline',
@@ -56,7 +55,24 @@ function assertRemoteHostToolingInputs(
   const hostPath = HOST_PATH_FIELDS.find((field) =>
     fields.some((record) => record && Object.hasOwn(record, field)),
   );
-  if (hostPath || request.command === INTERNAL_COMMANDS.sessionSaveScript) {
+  const script = request.flags?.saveScript;
+  const invalidScript = fields.some(
+    (record) =>
+      record &&
+      Object.hasOwn(record, 'saveScript') &&
+      (record !== request.flags ||
+        request.command !== 'open' ||
+        !(
+          script === true ||
+          (request.internal?.remoteScriptDelivery === true && typeof script === 'string')
+        )),
+  );
+  const invalidPublication =
+    request.command === INTERNAL_COMMANDS.sessionSaveScript &&
+    (request.input?.path !== undefined ||
+      (request.positionals.length > 0 && request.internal?.remoteScriptDelivery !== true));
+  if (invalidScript) throw remoteHostInputDenied('saveScript');
+  if (hostPath || invalidPublication) {
     throw remoteHostInputDenied(hostPath ?? 'command');
   }
   const hostArgument = findRemoteFileUrlInput(request) ?? findRemoteHostArgument(request);
@@ -146,6 +162,12 @@ function restrictRemoteBatchSteps(request: DaemonRequest): DaemonRequest {
     flags.batchMaxSteps ?? DEFAULT_BATCH_MAX_STEPS,
   );
   flags.batchSteps = steps.map((step) => {
+    if (
+      step.flags?.saveScript !== undefined ||
+      step.command === INTERNAL_COMMANDS.sessionSaveScript
+    ) {
+      throw remoteHostInputDenied('saveScript');
+    }
     const restricted = restrictRemoteHostInputs({ ...request, ...step });
     return {
       ...step,
@@ -186,6 +208,6 @@ function remoteHostInputDenied(field: string): AppError {
     reason: 'REMOTE_HOST_INPUT_DENIED',
     field,
     retriable: false,
-    hint: 'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling or script publication.',
+    hint: 'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling.',
   });
 }

@@ -148,7 +148,7 @@ export function resolveDaemonTransportPreference(
 }
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
-export const DAEMON_CAPABILITIES = ['quiesce'] as const;
+export const DAEMON_CAPABILITIES = ['quiesce', 'active-script-artifacts'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**

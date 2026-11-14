@@ -104,12 +104,17 @@ while the artifact remains in inventory.
 Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it
 and cleans up after its pipeline stops.
 
-Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
-publication with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
+A fresh `open --save-script` can arm ordinary remote recording.
+`session save-script` publishes a `session-script` artifact and downloads it while keeping the session open.
+Repeat the command to download the retained immutable script again; pass `--force` to replace an existing caller file.
+Publish before closing. Remote `close --save-script`, `replay --save-script`, and script publication in batch steps remain refused.
+
+Remote requests ignore `meta.cwd`. They refuse host tooling paths and `--launch-console`
+with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
 and `reinstall` binaries, `push` payload files, and xctrace template files. `open` targets and launch
 URLs cannot use the `file:` scheme. Serve local web content over HTTP(S) instead. Upload binaries with the
 client, send `push` payloads as inline JSON, and name xctrace templates. Omit these inputs, or use a local daemon for
-host tooling and script publication. Test suite artifacts also use a daemon-chosen output root.
+host tooling. Test suite artifacts also use a daemon-chosen output root.
 
 ## Human takeover
 

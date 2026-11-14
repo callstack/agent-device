@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
@@ -8,6 +9,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
@@ -59,7 +61,7 @@ export async function prepareRemoteRequestArtifacts(
     });
   }
 
-  assertRemoteDaemonSupportsSaveScript(req);
+  flags = prepareRemoteScriptOutput(req, positionals, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
@@ -95,25 +97,40 @@ export async function prepareRemoteRequestArtifacts(
   return baseResult();
 }
 
-/**
- * #1802 (the other half of the caller/daemon file split): `--save-script` WRITES a `.ad` file,
- * and the writer is the daemon's `SessionScriptWriter` — on the daemon's own disk, next to a
- * source path that does not exist there. Reading was fixed by sending script sources with the
- * request; writing has no such symmetric path yet (the healed script commits at session teardown,
- * not in the replay response), so a remote request that would produce a file the caller can never
- * see is refused here instead of appearing to succeed. Tracked for the return-the-healed-script
- * response plumbing.
- */
-function assertRemoteDaemonSupportsSaveScript(req: Omit<DaemonWireRequest, 'token'>): void {
-  if (req.flags?.saveScript === undefined) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    '--save-script is not supported against a remote daemon: the healed script would be written on the daemon host, not on this machine.',
-    {
-      hint: 'Run the script against a local daemon to capture a healed .ad, or re-run without --save-script.',
-      command: req.command,
-    },
+function prepareRemoteScriptOutput(
+  req: Omit<DaemonWireRequest, 'token'>,
+  positionals: string[],
+  flags: DaemonWireRequest['flags'],
+  clientPaths: Record<string, string>,
+  host: HostEnvironment,
+): DaemonWireRequest['flags'] {
+  const active = req.command === INTERNAL_COMMANDS.sessionSaveScript;
+  if (flags?.saveScript && req.command !== 'open') {
+    throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
+      reason: 'remote_script_lifecycle_unsupported',
+      hint: 'Use open --save-script, then session save-script before closing. Remote repaired-script output is not supported.',
+    });
+  }
+  const requested = active ? positionals[0] : flags?.saveScript;
+  if (!active && !requested) return flags;
+  if (active && typeof requested !== 'string') return flags;
+  const localPath = resolveUserPath(
+    typeof requested === 'string' ? requested : `recording-${Date.now()}.ad`,
+    { cwd: req.meta?.cwd ?? host.cwd, env: host.env },
   );
+  if (!active && requested !== true && !req.flags?.force && fs.existsSync(localPath)) {
+    throw new AppError('COMMAND_FAILED', `A file already exists at ${localPath}.`, {
+      reason: 'script_target_exists',
+      path: localPath,
+      hint: 'Choose another output path or pass --force/--overwrite.',
+    });
+  }
+  clientPaths.savedScript = localPath;
+  if (active) {
+    if (positionals.length === 1) positionals.length = 0;
+    return flags;
+  }
+  return { ...flags, saveScript: true };
 }
 
 async function prepareRemoteInstallPackage(
@@ -447,11 +464,17 @@ export async function materializeRemoteArtifacts(
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
       // `downloadRemoteArtifact`).
       isDirectory: artifact.artifactType === 'test-artifacts',
+      ...(artifact.artifactType === 'session-script'
+        ? { scriptForce: req.flags?.force === true || artifact.force === true }
+        : {}),
     });
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
     nextData[artifact.field] = materializedPath;
+    if (artifact.field === 'savedScript' && req.command === INTERNAL_COMMANDS.sessionSaveScript) {
+      nextData.message = `Published script: ${materializedPath}`;
+    }
     nextArtifacts.push({
       ...artifact,
       localPath: materializedPath,
@@ -467,9 +490,11 @@ export async function materializeRemoteArtifacts(
  * destination, and the paths it derives from it, as `localPath`, because this process kept no
  * record of it. The finishing actions mirror the daemon's own (`request-finalization.ts`).
  */
-function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
+function finishesEarlierClientCapture(req: DaemonWireRequest, artifact: DaemonArtifact): boolean {
   const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
   switch (req.command) {
+    case INTERNAL_COMMANDS.sessionSaveScript:
+      return artifact.field === 'savedScript' && artifact.artifactType === 'session-script';
     case 'record':
     case 'trace':
       return first === 'stop';
@@ -492,7 +517,7 @@ function resolveMaterializedArtifactPath(
 ): string {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return requestedPath;
-  if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
+  if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req, artifact)) {
     return artifact.localPath;
   }
   const responseName = path.basename(artifact.fileName?.trim() ?? '');
@@ -512,6 +537,7 @@ type DownloadRemoteArtifactParams = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  scriptForce?: boolean;
 };
 
 export async function downloadRemoteArtifact(
@@ -528,6 +554,7 @@ export async function downloadRemoteArtifact(
     requestScope: params.requestScope,
     ...(params.timeoutMs === undefined ? {} : { timeoutMs: params.timeoutMs }),
     ...(params.isDirectory === undefined ? {} : { isDirectory: params.isDirectory }),
+    ...(params.scriptForce === undefined ? {} : { scriptForce: params.scriptForce }),
   });
 }
 

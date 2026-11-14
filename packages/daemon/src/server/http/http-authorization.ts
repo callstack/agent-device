@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 // May this HTTP caller reach this surface, and as which tenant? The auth hook
 // (loaded from the operator's environment), the token check, the tenant-trust
 // gate, and the remote-surface restrictions all answer here, for `/rpc` and
@@ -10,6 +11,7 @@ import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import {
+  buildRemoteTempArtifactPath,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
   normalizeTenantId,
@@ -67,11 +69,32 @@ function restrictRemoteHttpRequest(
     providerCredentialFingerprint: _providerCredentialFingerprint,
     ...meta
   } = request.meta ?? {};
-  return restrictRemoteHostInputs({
+  const restricted = restrictRemoteHostInputs({
     ...request,
     ...(request.meta ? { meta } : {}),
     internal: { ...request.internal, publicNetworkOnly: true },
   });
+  return allocateRemoteScriptOutput(restricted);
+}
+
+function allocateRemoteScriptOutput(request: DaemonRequest): DaemonRequest {
+  if (request.command === 'open' && request.flags?.saveScript) {
+    return {
+      ...request,
+      internal: { ...request.internal, remoteScriptDelivery: true },
+      flags: { ...request.flags, saveScript: buildRemoteTempArtifactPath('script', '.ad') },
+    };
+  }
+  if (request.command === INTERNAL_COMMANDS.sessionSaveScript) {
+    return {
+      ...request,
+      internal: { ...request.internal, remoteScriptDelivery: true },
+      ...(request.positionals.length === 0 && request.meta?.clientArtifactPaths?.savedScript
+        ? { positionals: [buildRemoteTempArtifactPath('script', '.ad')] }
+        : {}),
+    };
+  }
+  return request;
 }
 
 async function runHttpAuthHook(

@@ -88,7 +88,11 @@ An ordinary recording eligible for active-session publication has three states:
 A filesystem or target-collision failure leaves the recording ARMED, including its path and same-target `--force` authorization.
 Thus, the caller can correct the target or permissions and retry.
 ABORTED and PUBLISHED are terminal until the session is destroyed.
-In either state, `session save-script` fails with an explicit error and never writes.
+In either state, `session save-script` never records or publishes new script content.
+A PUBLISHED remote recording may return its retained immutable artifact for another caller-side download.
+This exception does not change the terminal recording state.
+A retry may choose another caller destination; overwrite permission applies only to the authorized destination.
+Local PUBLISHED recordings and all ABORTED recordings still refuse the command.
 
 Every existing arming entry point respects terminality.
 On any existing session, `open --save-script` is rejected before app dispatch.

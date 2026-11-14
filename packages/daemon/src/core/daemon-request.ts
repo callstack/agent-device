@@ -33,6 +33,7 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    */
   webSession?: WebSessionIdentity;
   publicNetworkOnly?: true;
+  remoteScriptDelivery?: true;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness
    * policy (runner demand) from it; the transport strips `internal`, so it never arrives from a

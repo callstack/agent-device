@@ -55,6 +55,7 @@ type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
   artifactType: DaemonArtifactType | undefined;
+  retainAfterDownload?: boolean;
   fileName?: string;
   displayRotation?: DeviceRotation;
   sessionName?: string;
@@ -96,6 +97,7 @@ export type DownloadableArtifactRegistration = {
   artifactPath: string;
   tenantId?: string;
   artifactType: DaemonArtifactType | undefined;
+  retainAfterDownload?: boolean;
   fileName?: string;
   displayRotation?: DeviceRotation;
   /** Public session name, for an artifact registered outside a request reply. */
@@ -106,6 +108,7 @@ export type DownloadableArtifactRegistration = {
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
 
 type PreparedDownloadableArtifact = {
+  retainAfterDownload?: boolean;
   artifactPath: string;
   fileName?: string;
   mimeType: string;
@@ -143,6 +146,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
     artifactType: params.artifactType,
+    retainAfterDownload: params.retainAfterDownload,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
@@ -324,6 +328,7 @@ async function prepareArtifactPayload(
       fileName: safeArtifactFilename(entry.fileName, artifactId),
       mimeType: DEFAULT_DOWNLOAD_MIME_TYPE,
       sizeBytes: stat.size,
+      ...(entry.retainAfterDownload ? { retainAfterDownload: true } : {}),
     };
   }
   if (!stat.isDirectory()) return null;

@@ -122,6 +122,16 @@ export class SessionScriptWriter {
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
     const repairArmed = isRepairArmedSession(session);
     const activePublication = options?.publication === 'active';
+    const state = session.scriptPublication;
+    // Remote ordinary recordings publish only through session save-script, never into an orphaned teardown file.
+    if (
+      !activePublication &&
+      state?.kind === 'authoring' &&
+      state.target.kind === 'explicit' &&
+      state.target.remote === true
+    ) {
+      return { written: false };
+    }
     let scriptPath: string | undefined;
     try {
       if (isPublicationWriteBlocked(session)) return { written: false };

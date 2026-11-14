@@ -348,3 +348,50 @@ test('refuses mutating find steps that cannot enforce target identity on replay'
   });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
+
+test('remote delivery without a caller hint returns a retained script artifact', () => {
+  const output = path.join(root, 'remote.ad');
+  const session = armedSession({
+    scriptPublication: {
+      kind: 'authoring',
+      status: 'armed',
+      target: { kind: 'explicit', path: output, force: false, remote: true },
+    },
+  });
+  store.publish('authoring', session);
+  const response = handleSessionScriptPublication({
+    req: request(),
+    sessionName: 'authoring',
+    sessionStore: store,
+  });
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      artifacts: [{ artifactType: 'session-script', path: output, retainAfterDownload: true }],
+    },
+  });
+  expect(fs.existsSync(output)).toBe(true);
+});
+
+test('an expired remote publication is not regenerated from later actions', () => {
+  const output = path.join(root, 'expired.ad');
+  store.publish(
+    'authoring',
+    armedSession({
+      scriptPublication: {
+        kind: 'authoring',
+        status: 'published',
+        publishedActionCount: 3,
+        target: { kind: 'explicit', path: output, remote: true, force: false },
+      },
+    }),
+  );
+  expect(
+    handleSessionScriptPublication({
+      req: request(),
+      sessionName: 'authoring',
+      sessionStore: store,
+    }),
+  ).toMatchObject({ ok: false, error: { details: { reason: 'script_artifact_unavailable' } } });
+  expect(fs.existsSync(output)).toBe(false);
+});

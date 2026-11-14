@@ -121,7 +121,11 @@ async function handleArtifactDownload(
       const checked = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
           bytesRead += chunk.length;
-          if (bytesRead >= artifact.sizeBytes && options.retainArtifacts !== true) {
+          if (
+            bytesRead >= artifact.sizeBytes &&
+            options.retainArtifacts !== true &&
+            artifact.retainAfterDownload !== true
+          ) {
             cleanupDownloadableArtifact(artifactId);
           }
           callback(null, chunk);
@@ -137,7 +141,8 @@ async function handleArtifactDownload(
             );
             return;
           }
-          if (options.retainArtifacts !== true) cleanupDownloadableArtifact(artifactId);
+          if (options.retainArtifacts !== true && artifact.retainAfterDownload !== true)
+            cleanupDownloadableArtifact(artifactId);
           callback();
         },
       });

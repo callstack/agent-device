@@ -133,6 +133,7 @@ export async function createDaemonHttpServer(options: {
         JSON.stringify(
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
+            capabilities: ['active-script-artifacts'],
             hostArch,
             leaseBackends,
           }),

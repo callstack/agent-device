@@ -1,3 +1,4 @@
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -206,4 +207,23 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
     daemonRequestSent: false,
     hint: 'Split the replay suite or flow into smaller runs.',
   });
+}
+
+/** Refuse unsupported script output before any mutating RPC, including after instance retry. */
+export function assertRemoteActiveScriptArtifacts(info: DaemonInfo, req: DaemonWireRequest): void {
+  if (
+    info.baseUrl &&
+    !info.capabilities?.includes('active-script-artifacts') &&
+    (req.flags?.saveScript || req.command === INTERNAL_COMMANDS.sessionSaveScript)
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'The remote daemon does not support downloadable session scripts.',
+      {
+        reason: 'remote_active_script_artifacts_unsupported',
+        daemonRequestSent: false,
+        hint: 'Use a daemon and proxy that advertise the active-script-artifacts capability in the upstream health response. Keep the owning integration in control of upgrades.',
+      },
+    );
+  }
 }

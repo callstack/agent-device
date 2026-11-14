@@ -1,0 +1,191 @@
+import { buildDaemonRpcRequest } from '@agent-device/contracts/lease-scope';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test } from 'vitest';
+import { createAgentDeviceClient } from '@agent-device/client';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createAndroidSettingsWorld } from './android-world.ts';
+import { withProviderScenarioResource } from './harness.ts';
+import { createProviderScenarioProxy } from './harness-proxy.ts';
+
+for (const publication of ['active', 'active-force', 'retry-existing'] as const) {
+  test(`remote ${publication} publication downloads a reusable script through the owning proxy`, async () => {
+    await withProviderScenarioResource(
+      () => createAndroidSettingsWorld({ nativeTextInjection: true }),
+      async (world) => {
+        const root = mkdtempForTestSync('remote-script-provider-');
+        const destination = path.join(root, 'caller', 'journey.ad');
+        if (publication === 'active-force') {
+          fs.mkdirSync(path.dirname(destination), { recursive: true });
+          fs.writeFileSync(destination, 'protected');
+        }
+        const proxy = await createProviderScenarioProxy(world.daemon, {
+          clientToken: 'script-client',
+        });
+        const client = createAgentDeviceClient({
+          daemonBaseUrl: proxy.baseUrl,
+          daemonAuthToken: 'script-client',
+          session: 'script-author',
+          stateDir: path.join(root, 'client-state'),
+        });
+        try {
+          await recordRemoteJourney(world, client, publication, destination);
+          if (publication === 'retry-existing') {
+            fs.mkdirSync(path.dirname(destination), { recursive: true });
+            fs.writeFileSync(destination, 'protected');
+            await assert.rejects(
+              client.sessions.saveScript({ path: destination }),
+              (error: unknown) =>
+                (error as { details?: { reason?: string } }).details?.reason ===
+                'script_target_exists',
+            );
+            assert.equal(fs.readFileSync(destination, 'utf8'), 'protected');
+          }
+          const published = await client.sessions.saveScript(
+            publication === 'retry-existing'
+              ? { path: destination, force: true }
+              : publication === 'active-force'
+                ? { path: destination }
+                : {},
+          );
+          assert.equal(published.savedScript, destination);
+          fs.unlinkSync(destination);
+          const retry = await client.sessions.saveScript();
+          assert.equal(retry.actionCount, published.actionCount);
+          assert.equal(retry.savedScript, destination);
+          const text = fs.readFileSync(destination, 'utf8');
+          const alternate = path.join(root, 'alternate.ad');
+          fs.writeFileSync(alternate, 'protected');
+          await assert.rejects(
+            client.sessions.saveScript({ path: alternate }),
+            (error: unknown) =>
+              (error as { details?: { reason?: string } }).details?.reason ===
+              'script_target_exists',
+          );
+          assert.equal(fs.readFileSync(alternate, 'utf8'), 'protected');
+          await client.sessions.saveScript({ path: alternate, force: true });
+          assert.equal(fs.readFileSync(alternate, 'utf8'), text);
+          assert.match(text, /open/);
+          assert.match(text, /agent-device:target-v1/);
+          assert.equal(text.includes(root), false);
+          if (publication === 'active') {
+            assert.equal(text.includes('fixture-input'), false);
+            assert.ok(text.includes('${SEARCH_TERM}'));
+          }
+          const reply = proxy.forwarded.filter((r) => r.route === '/rpc').at(-1);
+          assert.ok(reply);
+          const raw = JSON.parse(reply.responseBody).result.data;
+          assert.notEqual(raw.savedScript, destination);
+          const artifact = raw.artifacts.find(
+            (a: { artifactType: string }) => a.artifactType === 'session-script',
+          );
+          assert.ok(artifact?.artifactId);
+          assert.ok(
+            proxy.forwarded.some((r) => r.route.includes('/artifacts/') && r.statusCode === 200),
+          );
+          // Retry by ID remains possible after bytes arrived but local publication could have failed.
+          const again = await fetch(`${proxy.baseUrl}/artifacts/${artifact.artifactId}`, {
+            headers: { authorization: 'Bearer script-client' },
+          });
+          assert.equal(again.status, 200);
+          assert.equal(await again.text(), text);
+          const snapshot = await client.capture.snapshot({ interactiveOnly: true });
+          assert.ok(snapshot.nodes.some((node) => node.label === 'Apps'));
+          await client.sessions.close();
+          // Input transport reads only the caller's script; the daemon executes the returned source.
+          const replay = await client.replay.run({
+            path: destination,
+            env: ['SEARCH_TERM=second-input'],
+            ...world.selection,
+          });
+          assert.equal(replay.sessionActive, true);
+          await client.sessions.close();
+          world.assertNoHostAdbCalls();
+        } finally {
+          await proxy.close();
+        }
+      },
+    );
+  }, 20_000);
+}
+
+async function recordRemoteJourney(
+  world: Awaited<ReturnType<typeof createAndroidSettingsWorld>>,
+  client: ReturnType<typeof createAgentDeviceClient>,
+  publication: string,
+  destination: string,
+): Promise<void> {
+  await client.apps.open({
+    app: 'settings',
+    saveScript: destination,
+    force: publication === 'active-force',
+    ...world.selection,
+  });
+  if (publication === 'active') {
+    await client.interactions.fill({
+      selector: 'id="com.android.settings:id/search"',
+      text: 'fixture-input',
+      recordAs: 'SEARCH_TERM',
+      ...world.selection,
+    });
+  }
+  await client.command.wait({ selector: 'label="Apps"', ...world.selection });
+}
+
+test('raw remote RPC without caller path hints returns authenticated retained script IDs', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'raw-client' });
+    const root = mkdtempForTestSync('raw-script-');
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'raw-client',
+      session: 'raw-author',
+      stateDir: root,
+    });
+    const rpc = async (
+      command: string,
+      positionals: string[],
+      flags: DaemonWireRequest['flags'],
+    ) => {
+      const response = await fetch(`${proxy.baseUrl}/rpc`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer raw-client', 'content-type': 'application/json' },
+        body: JSON.stringify(
+          buildDaemonRpcRequest(
+            { token: 'raw-client', session: 'raw-author', command, positionals, flags },
+            { id: command, includeTokenParam: false },
+          ),
+        ),
+      });
+      assert.equal(response.status, 200);
+      const reply = await response.json();
+      assert.equal(reply.result.ok, true, JSON.stringify(reply));
+      return reply.result.data;
+    };
+    try {
+      await rpc('open', ['settings'], { ...world.selection, saveScript: true });
+      await client.command.wait({ selector: 'label="Apps"', ...world.selection });
+      const published = await rpc('session_save_script', [], {});
+      const artifact = published.artifacts.find(
+        (entry: { artifactType: string }) => entry.artifactType === 'session-script',
+      );
+      assert.ok(artifact?.artifactId);
+      assert.equal(artifact.path, undefined);
+      const denied = await fetch(`${proxy.baseUrl}/artifacts/${artifact.artifactId}`);
+      assert.notEqual(denied.status, 200);
+      const downloaded = await fetch(`${proxy.baseUrl}/artifacts/${artifact.artifactId}`, {
+        headers: { authorization: 'Bearer raw-client' },
+      });
+      assert.equal(downloaded.status, 200);
+      assert.match(await downloaded.text(), /agent-device:target-v1/);
+      const retry = await rpc('session_save_script', [], {});
+      assert.equal(retry.artifacts[0].artifactId, artifact.artifactId);
+      await client.sessions.close();
+      world.assertNoHostAdbCalls();
+    } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);

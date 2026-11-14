@@ -1,3 +1,6 @@
+import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
+import path from 'node:path';
+import fs from 'node:fs';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -35,6 +38,8 @@ export function handleSessionScriptPublication(params: {
     );
   }
   const session = sessionStore.requireCurrent(ref);
+  const retained = retainedPublication(req, session);
+  if (retained) return retained;
   const eligibilityError = validatePublicationEligibility(session);
   if (eligibilityError) return failure(eligibilityError);
 
@@ -44,7 +49,12 @@ export function handleSessionScriptPublication(params: {
   }
   retargetActivePublication(
     session,
-    { explicitPath, liveForce: req.flags?.force },
+    {
+      explicitPath,
+      liveForce: req.flags?.force,
+      clientPath: req.meta?.clientArtifactPaths?.savedScript,
+      remote: req.internal?.remoteScriptDelivery,
+    },
     sessionStore.host.cwd,
   );
 
@@ -62,15 +72,87 @@ export function handleSessionScriptPublication(params: {
     );
   }
 
-  markActivePublicationDone(session, result.path);
+  markActivePublicationDone(session, result.path, result.actionCount);
+  return publicationResponse(session, result.path, result.actionCount);
+}
+
+function retainedPublication(
+  req: DaemonRequest,
+  session: SessionState,
+): DaemonResponse | undefined {
+  const state = session.scriptPublication;
+  if (
+    state?.kind !== 'authoring' ||
+    state.status !== 'published' ||
+    state.target.kind !== 'explicit' ||
+    state.target.remote !== true
+  )
+    return undefined;
+  if (!fs.existsSync(state.target.path)) {
+    return failure(
+      new AppError(
+        'COMMAND_FAILED',
+        'The published script artifact has expired or is unavailable.',
+        {
+          reason: 'script_artifact_unavailable',
+          hint: 'The recording is terminal. Start a fresh authoring session to record another journey.',
+        },
+      ),
+    );
+  }
+  const requested = req.meta?.clientArtifactPaths?.savedScript;
+  if ((req.positionals?.length ?? 0) > 0 && !requested) {
+    return failure(
+      new AppError(
+        'INVALID_ARGS',
+        'A published remote script accepts only a caller-side download destination.',
+      ),
+    );
+  }
+  const force =
+    req.flags?.force === true ||
+    ((!requested || requested === state.target.clientPath) && state.target.force);
+  return publicationResponse(session, state.target.path, state.publishedActionCount ?? 0, {
+    path: requested ?? state.target.clientPath ?? path.basename(state.target.path),
+    force,
+  });
+}
+
+function publicationResponse(
+  session: SessionState,
+  writtenPath: string,
+  actionCount: number,
+  download?: { path: string; force: boolean },
+): DaemonResponse {
+  const state = session.scriptPublication;
+  const target = state?.kind === 'authoring' ? state.target : undefined;
+  const localPath = download?.path ?? (target?.kind === 'explicit' ? target.clientPath : undefined);
+  const artifacts =
+    target?.kind === 'explicit' && target.remote === true
+      ? [
+          {
+            field: 'savedScript',
+            artifactType: 'session-script',
+            path: writtenPath,
+            localPath,
+            fileName: path.basename(localPath ?? writtenPath),
+            retainAfterDownload: true,
+            force: download?.force ?? target.force,
+          },
+        ]
+      : undefined;
   return {
     ok: true,
-    data: {
-      session: session.name,
-      savedScript: result.path,
-      actionCount: result.actionCount,
-      ...successText(`Published script: ${result.path}`),
-    },
+    data: withCaptureOutputOwnership(
+      {
+        session: session.name,
+        savedScript: writtenPath,
+        actionCount,
+        ...(artifacts ? { artifacts } : {}),
+        ...successText(`Published script: ${writtenPath}`),
+      },
+      target?.kind === 'explicit' && target.remote === true ? 'daemon' : 'caller',
+    ),
   };
 }
 

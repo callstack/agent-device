@@ -20,6 +20,7 @@ import { captureOutputOwnership, captureOutputTenantId } from '../core/capture-o
 type PendingArtifact = DaemonArtifact & {
   displayRotation?: DeviceRotation;
   deleteAfterDownload?: boolean;
+  retainAfterDownload?: boolean;
 };
 
 export function finalizeDaemonResponse(
@@ -108,6 +109,7 @@ function registerDownloadableArtifacts(
           tenantId: captureOutputTenantId(data) ?? req.meta?.tenantId,
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
+          ...(artifact.retainAfterDownload ? { retainAfterDownload: true } : {}),
           ...(artifact.deleteAfterDownload === false ? { deleteAfterDownload: false } : {}),
           ...(isDeviceRotation(artifact.displayRotation)
             ? { displayRotation: artifact.displayRotation }
@@ -115,6 +117,7 @@ function registerDownloadableArtifacts(
         }),
         fileName: artifact.fileName,
         localPath: artifact.localPath,
+        ...(artifact.force !== undefined ? { force: artifact.force } : {}),
       };
     }),
   };

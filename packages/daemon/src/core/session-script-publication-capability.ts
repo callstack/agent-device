@@ -92,10 +92,14 @@ export function applyRecordedSaveScriptFlags(
   session: SessionState,
   flags: CommandFlags,
   hostCwd: string,
+  clientPath?: string,
+  remote?: boolean,
 ): void {
   if (!flags.saveScript) return;
   if (isAuthoringAborted(publicationState(session))) return;
   const requested = {
+    clientPath,
+    remote,
     path:
       typeof flags.saveScript === 'string'
         ? expandSessionPath(flags.saveScript, hostCwd)
@@ -127,7 +131,12 @@ export function applyRecordedSaveScriptFlags(
  */
 export function retargetActivePublication(
   session: SessionState,
-  params: { explicitPath?: string; liveForce: boolean | undefined },
+  params: {
+    explicitPath?: string;
+    liveForce: boolean | undefined;
+    clientPath?: string;
+    remote?: boolean;
+  },
   hostCwd: string,
 ): void {
   const state = publicationState(session);
@@ -135,6 +144,8 @@ export function retargetActivePublication(
   session.scriptPublication = {
     ...state,
     target: resolveScriptTarget(state.target, {
+      clientPath: params.clientPath,
+      remote: params.remote,
       path:
         params.explicitPath !== undefined
           ? expandSessionPath(params.explicitPath, hostCwd)
@@ -145,8 +156,16 @@ export function retargetActivePublication(
 }
 
 /** Active publication succeeded: PUBLISHED is terminal, which is what stops recording. */
-export function markActivePublicationDone(session: SessionState, writtenPath: string): void {
-  session.scriptPublication = markAuthoringPublished(publicationState(session), writtenPath);
+export function markActivePublicationDone(
+  session: SessionState,
+  writtenPath: string,
+  actionCount: number,
+): void {
+  session.scriptPublication = markAuthoringPublished(
+    publicationState(session),
+    writtenPath,
+    actionCount,
+  );
 }
 
 /** Ordinary close publication succeeded: the authoring lifecycle reached `published`. */
