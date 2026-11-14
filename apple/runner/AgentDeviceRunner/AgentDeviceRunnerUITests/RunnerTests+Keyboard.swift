@@ -215,7 +215,7 @@ extension RunnerTests {
     }
 
 #if os(tvOS)
-    let pressedMenu = pressTvRemote(.menu)
+    _ = pressTvRemote(.menu)
     sleepFor(0.2)
     let tvVisible = isKeyboardVisible(app: app)
     return RunnerKeyboardDismissOutcome(
@@ -223,9 +223,9 @@ extension RunnerTests {
       dismissed: !tvVisible,
       visible: tvVisible,
       mechanism: tvVisible ? nil : .dismissKey,
-      // `pressTvRemote` answers false only on a build that has no remote to press, so on tvOS the
-      // Menu press went out and the refusal that follows did dispatch: it keeps the generic code.
-      dispatchedDismissal: pressedMenu
+      // On tvOS the Menu press always goes out, so a refusal after it did dispatch and keeps the
+      // generic code.
+      dispatchedDismissal: true
     )
 #else
     if tapKeyboardDismissControl(app: app) {
