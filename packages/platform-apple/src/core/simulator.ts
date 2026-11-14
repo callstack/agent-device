@@ -181,13 +181,8 @@ export async function ensureBootedSimulator(
 }
 
 /**
- * The one boot-state read: `simctl list devices -j` answered through the listing's typed `state`
- * field. `null` means the listing failed or omits this simulator, which is never a state.
- *
- * The caller names the ceiling. The boot path can afford the inventory budget; a caller that only
- * wants to know whether it may boot after its own failed command bounds the same read to itself.
- * This read does not consult the boot memo: it is the fresh observation, and the memo is written by
- * the owners that make one.
+ * Reads fresh simctl state within the caller's budget.
+ * Unknown state returns null; process timeouts and cancellation throw.
  */
 export async function readSimulatorBootState(
   device: DeviceInfo,

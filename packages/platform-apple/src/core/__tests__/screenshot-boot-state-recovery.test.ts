@@ -155,6 +155,15 @@ beforeEach(() => {
   vi.mocked(ensureBootedSimulator).mockResolvedValue(undefined);
 });
 
+test.each([
+  { args: ['simctl', 'list', 'devices', '-j'], isStateRead: true },
+  { args: ['simctl', '--set', '/tmp/simulator-set', 'list', 'devices', '-j'], isStateRead: true },
+  { args: ['simctl', 'list', '-j'], isStateRead: false },
+  { args: ['simctl', 'list', 'runtimes', '-j'], isStateRead: false },
+])('classifies the state read separately from inventory: $args', ({ args, isStateRead }) => {
+  assert.equal(isSimctlListDevices({ cmd: 'xcrun', args, options: {} }), isStateRead);
+});
+
 test('a fresh Shutdown answer boots the skipped-check simulator once and re-captures once', async () => {
   const device = simulator('sim-recover-shutdown');
   const probe = await probeRecovery(device, { state: () => listingFor(device.id, 'Shutdown') });
@@ -199,6 +208,8 @@ test.each([
   assert.equal(probe.captureAttempts, 2);
   assert.equal(probe.normalizations, 1, 'the re-capture reaches successful normalization');
   assert.equal(events.length, 1);
+  assert.equal(events[0]?.data.deviceId, device.id);
+  assert.equal(events[0]?.data.udid, undefined);
   assert.equal(events[0]?.data.observedState, 'Shutdown');
   assert.equal(events[0]?.data.recoveryAuthorized, true);
   assert.equal(events[0]?.data.stderr, stderr.trim(), 'diagnostics normalize outer whitespace');
@@ -263,26 +274,68 @@ test('an unreadable, unlisted or stateless listing cannot authorize a boot', asy
   }
 });
 
-test('a state read that itself fails keeps the capture failure and its diagnostics', async () => {
-  const device = simulator('sim-recover-probe-throws');
-  const probe = await probeRecovery(device, {
-    state: () => {
-      throw new Error('simctl list devices -j could not be spawned');
-    },
-  });
+test.each([
+  {
+    label: 'spawn failure',
+    failure: new Error('simctl list devices -j could not be spawned'),
+    reason: undefined,
+  },
+  {
+    label: 'typed deadline',
+    failure: new AppError('COMMAND_FAILED', 'probe deadline reached', {
+      reason: 'probe-deadline',
+      timeoutMs: 5_000,
+      stderr: 'probe stderr',
+    }),
+    reason: 'probe-deadline',
+  },
+])(
+  'a state read $label keeps the capture failure and records the probe error',
+  async ({ failure, reason }) => {
+    const device = simulator('sim-recover-probe-throws');
+    const logPath = path.join(
+      await mkdtempForTest('ios-screenshot-probe-failure-'),
+      'events.ndjson',
+    );
+    const probe = await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, () =>
+      probeRecovery(device, {
+        state: () => {
+          throw failure;
+        },
+      }),
+    );
 
-  assert.equal(probe.error, CAPTURE_FAILURE, 'a failed probe never replaces the capture failure');
-  assert.equal(probe.boots, 0);
-  assert.equal(probe.captureAttempts, 1);
-  assert.ok(probe.error instanceof AppError);
-  assert.equal(probe.error.details?.exitCode, 60);
-  assert.equal(probe.error.details?.processExitError, true);
-  assert.equal(
-    typeof probe.error.details?.hint,
-    'string',
-    'the hint the producer attached is preserved',
-  );
-});
+    assert.equal(probe.error, CAPTURE_FAILURE, 'a failed probe never replaces the capture failure');
+    assert.equal(probe.boots, 0);
+    assert.equal(probe.captureAttempts, 1);
+    assert.ok(probe.error instanceof AppError);
+    assert.equal(probe.error.details?.exitCode, 60);
+    assert.equal(probe.error.details?.processExitError, true);
+    assert.equal(
+      typeof probe.error.details?.hint,
+      'string',
+      'the hint the producer attached is preserved',
+    );
+    assert.ok(existsSync(logPath), 'a failed probe records its diagnostic');
+    const events = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { phase: string; data: Record<string, unknown> });
+    const failures = events.filter(
+      (event) => event.phase === 'ios_screenshot_boot_state_probe_failed',
+    );
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0]?.data.deviceId, device.id);
+    assert.equal(failures[0]?.data.recoveryAuthorized, false);
+    assert.equal(failures[0]?.data.reason, failure.message);
+    assert.equal(failures[0]?.data.probeFailureReason, reason);
+    assert.equal(
+      events.some((event) => event.phase === 'ios_screenshot_skipped_boot_recovery'),
+      false,
+    );
+  },
+);
 
 test('the five-second recovery probe stays below the capture budget', async () => {
   const device = simulator('sim-recover-budget');
@@ -335,16 +388,30 @@ test('a cancellation that arrives with the capture failure is not treated as an 
 test('a cancellation raised by the probe travels on instead of answering no', async () => {
   const device = simulator('sim-recover-probe-canceled');
   const cancellation = createRequestCanceledError({ cmd: 'xcrun' });
-  const probe = await probeRecovery(device, {
-    captureError: CAPTURE_FAILURE,
-    state: () => {
-      throw cancellation;
-    },
-  });
+  const logPath = path.join(await mkdtempForTest('ios-screenshot-probe-cancel-'), 'events.ndjson');
+  const probe = await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, () =>
+    probeRecovery(device, {
+      captureError: CAPTURE_FAILURE,
+      state: () => {
+        throw cancellation;
+      },
+    }),
+  );
 
   assert.equal(probe.error, cancellation, 'the probe must not swallow a cancellation');
   assert.equal(probe.boots, 0);
   assert.equal(probe.captureAttempts, 1);
+  const events = existsSync(logPath)
+    ? readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { phase: string })
+    : [];
+  assert.equal(
+    events.some((event) => event.phase === 'ios_screenshot_boot_state_probe_failed'),
+    false,
+  );
 });
 
 test('a capture that did not skip the boot check never probes the state', async () => {

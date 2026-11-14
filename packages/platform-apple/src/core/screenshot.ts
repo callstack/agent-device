@@ -508,6 +508,16 @@ async function observesSimulatorShutdown(
     });
   } catch (error) {
     if (isRequestCanceledError(error)) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_screenshot_boot_state_probe_failed',
+      data: {
+        deviceId: device.id,
+        recoveryAuthorized: false,
+        ...extractAppleToolErrorMeta(error),
+        probeFailureReason: readSimulatorScreenshotFailureReason(error),
+      },
+    });
     return false;
   }
   signal?.throwIfAborted();
@@ -516,7 +526,7 @@ async function observesSimulatorShutdown(
     level: 'info',
     phase: 'ios_screenshot_skipped_boot_recovery',
     data: {
-      udid: device.id,
+      deviceId: device.id,
       observedState: state,
       recoveryAuthorized,
       ...extractAppleToolErrorMeta(captureError),

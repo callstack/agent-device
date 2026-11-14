@@ -61,7 +61,12 @@ export function commandFailed(stderr: string, exitCode: number, stdout = ''): Ex
 
 /** Whether one recorded command is the `simctl list devices -j` boot-state read. */
 export function isSimctlListDevices(call: ScriptedCommandCall): boolean {
-  return call.args[0] === 'simctl' && call.args.includes('list') && call.args.includes('-j');
+  return (
+    call.args[0] === 'simctl' &&
+    call.args.includes('list') &&
+    call.args.includes('devices') &&
+    call.args.includes('-j')
+  );
 }
 
 /** Whether one recorded command is this simulator's screenshot capture: `simctl [--set …] io <udid> screenshot …`. */
