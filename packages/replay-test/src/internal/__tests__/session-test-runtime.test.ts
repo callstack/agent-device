@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 
 import { runReplayTestAttempt } from '../session-test-runtime.ts';
 
-import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+import type { ReplayTestAttemptOutcome } from '@agent-device/contracts/replay-test-execution';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 // What the scheduler owes its host around cancellation (#1478 P3b): cancel exactly once when

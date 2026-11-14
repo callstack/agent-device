@@ -1,10 +1,10 @@
+import type {
+  AdReplayEntryIndexParams,
+  PendingRecordAndHeal,
+} from '@agent-device/contracts/ad-replay-execution';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  resolveReplayEntryIndex,
-  type AdReplayEntryIndexParams,
-  type PendingRecordAndHeal,
-} from '../resume.ts';
+import { resolveReplayEntryIndex } from '../resume.ts';
 
 /**
  * #1555 structural-quality review ("package-local tests... resume.ts and

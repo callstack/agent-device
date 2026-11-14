@@ -13,7 +13,6 @@
   // declared beside them; a package program that reaches registry.ts needs the declaration too.
   "include": ["src", "../command-registry/src/global.d.ts"],
   "references": [
-    { "path": "../ad-replay" },
     { "path": "../capture-kit" },
     { "path": "../command-registry" },
     { "path": "../command-surface" },

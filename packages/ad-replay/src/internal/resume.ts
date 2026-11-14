@@ -17,27 +17,11 @@
  * notes for why that reordering was judged out of scope here.
  */
 
-/**
- * The session-side state that gates an EMPTY-TAIL resume (`--from actionCount
- * + 1`). Stamped for `record-and-heal`, and per #1262 also for
- * `caution`/`manual`'s record-and-heal-shaped alternate repair (their own
- * unshifted `resume.from` is unaffected by this watermark).
- */
-export type PendingRecordAndHeal = Readonly<{
-  expectedFrom: number;
-  actionsCountAtDivergence: number;
-}>;
-
-export type AdReplayEntryIndexParams = Readonly<{
-  from: number | undefined;
-  digest: string | undefined;
-  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
-  sessionActionsLength: number;
-}>;
-
-export type AdReplayEntryIndexResult =
-  | Readonly<{ readonly ok: true; readonly value: number }>
-  | Readonly<{ readonly ok: false; readonly message: string }>;
+import type {
+  PendingRecordAndHeal,
+  AdReplayEntryIndexParams,
+  AdReplayEntryIndexResult,
+} from '@agent-device/contracts/ad-replay-execution';
 
 /**
  * Resolves `--from`/`--plan-digest` into a 0-based loop entry index before

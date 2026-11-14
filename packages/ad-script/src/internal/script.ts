@@ -1,3 +1,4 @@
+import type { ReplayScriptMetadata } from '@agent-device/contracts/replay-script-data';
 import { AppError } from '@agent-device/kernel/errors';
 import { recordingQualityInputToExportQuality } from '@agent-device/contracts/recording';
 import {
@@ -44,14 +45,6 @@ export const REPLAY_METADATA_PLATFORMS = new Set<ReplayScriptPlatform>(
   PLATFORM_SELECTORS.filter((p): p is ReplayScriptPlatform => p !== 'web'),
 );
 const REPLAY_METADATA_TARGETS = new Set<DeviceTarget>(['mobile', 'tv', 'desktop']);
-
-export type ReplayScriptMetadata = {
-  platform?: ReplayScriptPlatform;
-  target?: DeviceTarget;
-  timeoutMs?: number;
-  retries?: number;
-  env?: Record<string, string>;
-};
 
 export type ParsedReplayScript = {
   actions: SessionAction[];
