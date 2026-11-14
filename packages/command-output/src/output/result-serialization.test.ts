@@ -80,6 +80,106 @@ test('serializeOpenResult includes android serial for open payloads', () => {
   });
 });
 
+// #4525: a CI integration records the OS a capture ran on from this result alone.
+test('serializeOpenResult reports the device kind, model and OS version the host reported', () => {
+  const ios = serializeOpenResult({
+    session: 'ios',
+    device: {
+      platform: 'ios',
+      target: 'mobile',
+      id: 'SIM-001',
+      name: 'iPhone 17',
+      kind: 'simulator',
+      model: 'iPhone 17',
+      osVersion: '27.0',
+      identifiers: { session: 'ios', deviceId: 'SIM-001', deviceName: 'iPhone 17' },
+      ios: { udid: 'SIM-001' },
+    },
+    identifiers: { session: 'ios', deviceId: 'SIM-001', deviceName: 'iPhone 17' },
+  });
+  assert.deepEqual(
+    {
+      platform: ios.platform,
+      device: ios.device,
+      kind: ios.kind,
+      model: ios.model,
+      osVersion: ios.osVersion,
+    },
+    {
+      platform: 'ios',
+      device: 'iPhone 17',
+      kind: 'simulator',
+      model: 'iPhone 17',
+      osVersion: '27.0',
+    },
+  );
+
+  const android = serializeOpenResult({
+    session: 'android',
+    device: {
+      platform: 'android',
+      target: 'mobile',
+      id: 'emulator-5554',
+      name: 'pixel-9',
+      kind: 'emulator',
+      model: 'sdk_gphone64_arm64',
+      osVersion: '16',
+      identifiers: { session: 'android', deviceId: 'emulator-5554', serial: 'emulator-5554' },
+      android: { serial: 'emulator-5554' },
+    },
+    identifiers: { session: 'android', deviceId: 'emulator-5554', serial: 'emulator-5554' },
+  });
+  assert.equal(android.kind, 'emulator');
+  assert.equal(android.model, 'sdk_gphone64_arm64');
+  assert.equal(android.osVersion, '16');
+  assert.equal(android.serial, 'emulator-5554');
+
+  // A rented cloud device keeps what its provider reported, on the same keys.
+  const remote = serializeOpenResult({
+    session: 'remote',
+    device: {
+      platform: 'ios',
+      target: 'mobile',
+      id: 'browserstack:ios:lease-1',
+      name: 'iPhone 15',
+      kind: 'device',
+      osVersion: '17.2',
+      identifiers: {
+        session: 'remote',
+        deviceId: 'browserstack:ios:lease-1',
+        deviceName: 'iPhone 15',
+      },
+      ios: { udid: 'browserstack:ios:lease-1' },
+    },
+    identifiers: { session: 'remote', deviceId: 'browserstack:ios:lease-1' },
+  });
+  assert.equal(remote.kind, 'device');
+  assert.equal(remote.osVersion, '17.2');
+  // The provider reported no hardware model, so the field stays out rather than naming one.
+  assert.equal('model' in remote, false);
+});
+
+test('serializeSessionListEntry reports the session device kind and OS version', () => {
+  const data = serializeSessionListEntry({
+    name: 'qa',
+    createdAt: 123,
+    device: {
+      platform: 'ios',
+      target: 'mobile',
+      id: 'SIM-001',
+      name: 'iPhone 17',
+      kind: 'simulator',
+      osVersion: '27.0',
+      identifiers: { session: 'qa', deviceId: 'SIM-001', deviceName: 'iPhone 17' },
+      ios: { udid: 'SIM-001' },
+    },
+    identifiers: { session: 'qa', deviceId: 'SIM-001', deviceName: 'iPhone 17' },
+  });
+
+  assert.equal(data.kind, 'simulator');
+  assert.equal(data.osVersion, '27.0');
+});
+
 test('serializeOpenResult carries an answered launch confirmation', () => {
   const data = serializeOpenResult({
     session: 'qa',

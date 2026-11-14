@@ -29,6 +29,36 @@ test('buildOpenResult exposes the Vega serial without leaking an internal platfo
   assert.equal(result.target, 'tv');
 });
 
+const IOS_OPEN_RESULT_BASE = {
+  sessionName: 'ios-launch-url',
+  sessionStateDir: '/tmp/state',
+  runnerLogPath: '/tmp/runner.log',
+  requestLogPath: '/tmp/request.ndjson',
+  eventLogPath: '/tmp/events.ndjson',
+  surface: 'app' as const,
+  device: IOS_SIMULATOR,
+  runtimeHintCount: () => 0,
+  sessionReused: false,
+};
+
+// #4525: `open --json` is the one source a remote CI integration reads the capture OS from.
+test('buildOpenResult reports the OS version and model the host reported, and omits what it did not', () => {
+  const described = buildOpenResult({
+    ...IOS_OPEN_RESULT_BASE,
+    device: { ...IOS_SIMULATOR, model: 'iPhone 17 Pro', osVersion: '27.0' },
+  });
+  assert.equal(described.kind, 'simulator');
+  assert.equal(described.model, 'iPhone 17 Pro');
+  assert.equal(described.osVersion, '27.0');
+
+  // A host or provider that reports nothing gets no field: the reader cannot tell a
+  // guessed OS from a read one, so silence is the only honest answer.
+  const unreported = buildOpenResult({ ...IOS_OPEN_RESULT_BASE, device: IOS_SIMULATOR });
+  assert.equal(unreported.kind, 'simulator');
+  assert.equal('model' in unreported, false);
+  assert.equal('osVersion' in unreported, false);
+});
+
 test('buildOpenResult exposes typed device-selection evidence once at response level', () => {
   const result = buildOpenResult({
     sessionName: 'ios-selection',
@@ -58,17 +88,7 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
 });
 
 test('buildOpenResult reports an answered launch confirmation and omits one that never appeared', () => {
-  const base = {
-    sessionName: 'ios-launch-url',
-    sessionStateDir: '/tmp/state',
-    runnerLogPath: '/tmp/runner.log',
-    requestLogPath: '/tmp/request.ndjson',
-    eventLogPath: '/tmp/events.ndjson',
-    surface: 'app' as const,
-    device: IOS_SIMULATOR,
-    runtimeHintCount: () => 0,
-    sessionReused: false,
-  };
+  const base = IOS_OPEN_RESULT_BASE;
 
   assert.equal(
     buildOpenResult({ ...base, launchConfirmation: { launchConfirmation: 'accepted' } })

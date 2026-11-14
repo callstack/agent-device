@@ -72,6 +72,8 @@ export function buildOpenResult(params: {
     result.device = device.name;
     result.id = device.id;
     result.kind = device.kind;
+    if (device.model) result.model = device.model;
+    if (device.osVersion) result.osVersion = device.osVersion;
     if (isSerialAddressablePlatform(device.platform)) {
       result.serial = device.id;
     }
