@@ -188,12 +188,13 @@ with `--platform` plus `--udid` (Apple) or `--serial` (Android).
 
 `--json` reports each claimed device once as `acquirable`, an inspection of whether a new session can
 take it now. It cannot see a reboot and runs no recovery, so `open` may decide differently.
-`blockedBy` names why not, and `owner` identifies the claim's owner when its record decodes: the holder that blocks the device or,
-on an acquirable device, the reclaimable dead owner `open` would settle. A daemon's own abandoned
-claim is reported as blocked by that live owner, but `open` through that same daemon may still take it. A
-stale claim whose owner is provably gone and retains no resource does not block by itself, so a
-non-zero hidden stale-claim count is not a block on its own. Another live overlapping claim or
-pending resource cleanup still can.
+`blockedBy` names why not, and `owner` identifies the claim's owner when its record decodes: the
+holder that blocks the device or, on an acquirable device, the reclaimable dead owner `open` would
+settle. A daemon's own abandoned claim is reported as blocked by that live owner, but `open` through
+that same daemon may still take it. A stale claim whose owner is provably gone and retains no resource
+does not block by itself. `hiddenStaleClaims` counts the claim records this view hides and is not an
+availability signal, so read `acquirable`: a hidden owner whose PID was reused or whose state
+directory is gone, and pending resource cleanup, each still block the device.
 
 To free a device:
 
