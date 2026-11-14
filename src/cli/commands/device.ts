@@ -11,7 +11,7 @@ import {
 import {
   inspectDeviceAcquirability,
   type DeviceAcquirabilityBlockReason,
-} from '@agent-device/daemon-contracts/device-claim-acquirability';
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
