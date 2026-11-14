@@ -7,14 +7,12 @@
 // "still progressing" mean something belongs to the real socket.
 
 import { afterEach, assert, test, vi } from 'vitest';
-import {
-  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
-  TRANSFER_CONNECT_TIMEOUT_MS,
-  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from '@agent-device/host-kit/transport';
+import { TRANSFER_CONNECT_TIMEOUT_MS } from '@agent-device/host-kit/transport';
 import {
   LEGACY_UPLOAD_REQUEST,
   PREFLIGHT_REQUEST,
+  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   assertDetailedError,
   createArtifactFile,
   settleAfterBudget,

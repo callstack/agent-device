@@ -16,12 +16,12 @@ import { afterEach, assert, test, vi } from 'vitest';
 import { isRetryableUploadStreamError } from '../upload-stream.ts';
 import {
   isTransferPhaseTimeoutError,
-  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
-  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
 } from '@agent-device/host-kit/transport';
 import {
   LEGACY_UPLOAD_REQUEST,
+  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   type ParkedUploadDaemon,
   assertDetailedError,
   createArtifactFile,

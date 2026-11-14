@@ -18,7 +18,7 @@ import {
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from './transfer-phase.ts';
+} from './transport.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -318,11 +318,7 @@ test('a pooled socket is already connected and times the body write as inactivit
     await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1);
     assert.equal(watchdog.signal.aborted, false);
     await vi.advanceTimersByTimeAsync(1);
-    assertPhaseDetails(
-      watchdog.signal.reason,
-      'request-body',
-      TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
-    );
+    assertPhaseDetails(watchdog.signal.reason, 'request-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
   } finally {
     watchdog.dispose();
   }
