@@ -8,6 +8,7 @@ import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
+import { AppError } from '@agent-device/kernel/errors';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
@@ -798,4 +799,125 @@ test('coordinate tap with no session snapshot has no warning', async () => {
 
   assert.equal(result.kind, 'point');
   assert.equal('warning' in result, false);
+});
+
+// --- multi-ref plan lowering (press @e1,@e2,...) ---
+
+function pinPadSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: '1',
+      value: '1',
+      rect: { x: 10, y: 20, width: 60, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'Button',
+      label: '2',
+      value: '2',
+      rect: { x: 80, y: 20, width: 60, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: '3',
+      value: '3',
+      rect: { x: 150, y: 20, width: 60, height: 60 },
+      hittable: true,
+    },
+  ]);
+}
+
+test('runtime press plan dispatches every member as an ordinary press and reports the summary', async () => {
+  const taps: Array<{ point: Point; count?: number }> = [];
+  const device = createInteractionDevice(pinPadSnapshot(), {
+    tap: async (_context, point, options) => {
+      taps.push({ point, count: options?.count });
+      return { ok: true };
+    },
+  });
+
+  const result = await device.interactions.press(ref('@e1'), {
+    session: 'default',
+    refs: ['e1', 'e2', 'e1'],
+  });
+
+  assert.equal(taps.length, 3);
+  assert.deepEqual(result.sequence?.pressed, 3);
+  assert.deepEqual(result.sequence?.refs, ['@e1', '@e2', '@e1']);
+  assert.deepEqual(
+    result.sequence?.points,
+    taps.map((tap) => tap.point),
+  );
+});
+
+test('runtime press plan sleeps intervalMs between keys and passes count to every member', async () => {
+  const taps: string[] = [];
+  const sleeps: number[] = [];
+  const device = createInteractionDevice(pinPadSnapshot(), {
+    tap: async () => {
+      taps.push('tap');
+      return { ok: true };
+    },
+    // The test clock observes every inter-key wait the plan asks for.
+    clock: {
+      now: () => 0,
+      sleep: async (ms: number) => {
+        sleeps.push(ms);
+      },
+    },
+  });
+
+  const result = await device.interactions.press(ref('@e1'), {
+    session: 'default',
+    refs: ['e1', 'e1'],
+    intervalMs: 1,
+    count: 2,
+  });
+
+  assert.equal(taps.length, 2);
+  assert.deepEqual(sleeps, [1]);
+  assert.deepEqual(result.sequence?.pressed, 2);
+});
+
+test('runtime press plan refuses a non-ref target', async () => {
+  const device = createInteractionDevice(pinPadSnapshot(), {
+    tap: async () => ({ ok: true }),
+  });
+
+  await assert.rejects(
+    device.interactions.press({ kind: 'point', x: 1, y: 2 }, { refs: ['e1'] }),
+    /multi-ref press plan requires ref targets/,
+  );
+});
+
+test('runtime press plan names the refused key and the pending keys when a member fails', async () => {
+  const taps: Point[] = [];
+  const device = createInteractionDevice(pinPadSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+      if (taps.length === 2) {
+        throw new AppError('COMMAND_FAILED', 'the second key refused on the backend');
+      }
+      return { ok: true };
+    },
+  });
+
+  await assert.rejects(
+    device.interactions.press(ref('@e1'), { session: 'default', refs: ['e1', 'e2'] }),
+    (error: AppError) => {
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.refPlanKey, '@e2');
+      assert.deepEqual(error.details?.refPlanPending, []);
+      return true;
+    },
+  );
+  assert.equal(taps.length, 2);
 });

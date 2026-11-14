@@ -14,9 +14,24 @@ import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
+/** What a decoded touch target carries: the target plus optional ref-plan provenance. */
+type ParsedTouchTargetOk = {
+  target: InteractionTarget;
+  refGeneration?: number;
+  /** Multi-ref press sequence members in dispatch order, bare ref bodies (`e13`). */
+  refs?: string[];
+  refGenerations?: (number | undefined)[];
+};
+
 export type ParsedTouchTarget =
-  | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: never }
+  | (ParsedTouchTargetOk & {
+      ok: true;
+      /** Only `longpress` decodes a duration. */ durationMs?: never;
+    })
   | { ok: false; response: DaemonResponse };
+
+/** The tap family members a multi-ref sequence is admitted on: the commands that own `--count`. */
+const SEQUENCE_TOUCH_COMMANDS: ReadonlySet<string> = new Set(['press', 'click']);
 
 export function parseTouchTarget(positionals: string[], commandLabel: string): ParsedTouchTarget {
   const coordinates = parseCoordinateTarget(positionals);
@@ -25,6 +40,38 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
   }
   const first = positionals[0] ?? '';
   if (first.startsWith('@')) {
+    if (first.includes(',')) {
+      if (!SEQUENCE_TOUCH_COMMANDS.has(commandLabel)) {
+        return {
+          ok: false,
+          response: errorResponse(
+            'INVALID_ARGS',
+            `${commandLabel} takes one @ref — only press and click accept a comma-separated ref sequence`,
+          ),
+        };
+      }
+      return parseTouchRefSequence(positionals);
+    }
+    const spaceSeparatedRef = positionals[1];
+    if (
+      SEQUENCE_TOUCH_COMMANDS.has(commandLabel) &&
+      spaceSeparatedRef !== undefined &&
+      /^@e\d+(~s?\d*)?$/.test(spaceSeparatedRef.trim())
+    ) {
+      // `press @e13 @e14` is a comma-separated plan typed with spaces. On the
+      // single-ref path the extra positional would become a fallback label and
+      // every key after the first would be lost to a silent success — the
+      // exact failure class the sequence form exists to remove.
+      return {
+        ok: false,
+        response: errorResponse(
+          'INVALID_ARGS',
+          `"${spaceSeparatedRef.trim()}" looks like a second key. Separate the keys of a ref sequence with commas: @e13,@e14.`,
+          undefined,
+          { hint: REF_SEQUENCE_HINT },
+        ),
+      };
+    }
     const versioned = parseVersionedRefPositional(first);
     if (!versioned.ok) return { ok: false, response: versioned.response };
     return {
@@ -50,8 +97,92 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
   return { ok: true, target: { kind: 'selector', selector } };
 }
 
+const TOUCH_SEQUENCE_MAX_REFS = 16;
+
+/**
+ * The multi-ref press plan (`press @e13,@e14,@e15,@e16`): every comma-separated
+ * token must parse as a versioned snapshot ref and normalize to the `e<digits>`
+ * body the frame issues, and the plan names at least two distinct keys. The
+ * first member stays the command's `target` so the response's ref identity
+ * keeps the single-ref shape; the full plan rides beside it. The form is not
+ * recordable — the recorder binds one target per step — so daemon admission
+ * refuses it while a script recording is armed, and a replay dispatch that
+ * still carries a target guard for it refuses instead of downgrading to the
+ * first key.
+ */
+function parseTouchRefSequence(positionals: string[]): ParsedTouchTarget {
+  if (positionals.length > 1) {
+    // A plan is one positional. A trailing token would otherwise be dropped
+    // silently, while the same command on the single-ref path reads it as a
+    // fallback label — one trailing rule per form, stated instead of guessed.
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Unexpected argument "${positionals.slice(1).join(' ')}" after the ref sequence — a multi-ref plan takes no trailing label.`,
+        undefined,
+        { hint: REF_SEQUENCE_HINT },
+      ),
+    };
+  }
+  const members = positionals[0]!.split(',').map((token) => token.trim());
+  if (members.some((token) => token.length === 0)) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Invalid ref sequence "${positionals[0]}" — empty member between commas.`,
+        undefined,
+        { hint: REF_SEQUENCE_HINT },
+      ),
+    };
+  }
+  if (members.length > TOUCH_SEQUENCE_MAX_REFS) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Ref sequence "${positionals[0]}" lists ${members.length} refs; the maximum is ${TOUCH_SEQUENCE_MAX_REFS}.`,
+        undefined,
+        { hint: REF_SEQUENCE_HINT },
+      ),
+    };
+  }
+  const parsed: { ref: string; generation?: number }[] = [];
+  for (const member of members) {
+    const versioned = parseVersionedRefPositional(member);
+    if (!versioned.ok) return { ok: false, response: versioned.response };
+    const body = versioned.ref.startsWith('@') ? versioned.ref.slice(1) : versioned.ref;
+    if (!/^e\d+$/.test(body)) {
+      return {
+        ok: false,
+        response: errorResponse(
+          'INVALID_ARGS',
+          `Invalid ref "${member}" in sequence — expected a snapshot ref.`,
+          undefined,
+          { hint: REF_SEQUENCE_HINT },
+        ),
+      };
+    }
+    parsed.push({
+      ref: body,
+      ...(versioned.generation !== undefined ? { generation: versioned.generation } : {}),
+    });
+  }
+  const bodies = parsed.map((member) => member.ref);
+  return {
+    ok: true,
+    target: { kind: 'ref', ref: `@${bodies[0]}` },
+    refs: bodies,
+    refGenerations: parsed.map((member) => member.generation),
+  };
+}
+
+const REF_SEQUENCE_HINT =
+  'List each snapshot ref in press order, for example press @e13,@e14,@e15,@e16; a repeated ref presses the same key twice (a PIN digit). The whole plan resolves and admits against the current frame before the first press, so a member that cannot resolve refuses before anything dispatches; after the first press later keys tap where the snapshot showed them, and a later key that refuses carries its reason in details.refPlanKey, the keys already sent in details.dispatchedSteps, and the keys that did not run in details.refPlanPending.';
+
 export type ParsedLongPressTarget =
-  | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: number }
+  | (ParsedTouchTargetOk & { ok: true; durationMs?: number })
   | { ok: false; response: DaemonResponse };
 
 export function parseLongPressTarget(positionals: string[]): ParsedLongPressTarget {
@@ -161,9 +292,12 @@ export function interactionResultExtra(
   // `evidence` (#1047, opt-in via --verify) is additive on press/fill only —
   // LongPressCommandResult has no evidence field, so it reads as undefined
   // (and gets dropped by the response layer) for longpress. `settle` (#1101,
-  // opt-in via --settle) is additive on all four touch commands.
+  // opt-in via --settle) is additive on all four touch commands. `sequence`
+  // is additive on press only (the multi-ref plan summary).
   const evidence = 'evidence' in result ? result.evidence : undefined;
   const settle = result.settle;
+  const sequence = 'sequence' in result ? result.sequence : undefined;
+  const shared = sequence ? { sequence } : {};
   if (result.kind === 'ref') {
     return {
       ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
@@ -174,6 +308,7 @@ export function interactionResultExtra(
       evidence,
       settle,
       resolution: result.resolution,
+      ...shared,
     };
   }
   if (result.kind === 'selector') {
@@ -186,9 +321,10 @@ export function interactionResultExtra(
       evidence,
       settle,
       resolution: result.resolution,
+      ...shared,
     };
   }
-  return { evidence, settle };
+  return { evidence, settle, ...shared };
 }
 
 export function formatTouchTargetLabel(

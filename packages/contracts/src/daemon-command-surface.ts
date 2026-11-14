@@ -196,6 +196,14 @@ export type DaemonPressOptions = CommandContext &
   Readonly<{
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
+     * order, bare ref bodies; `target` repeats member 0 so the response's ref
+     * identity keeps the single-ref shape. Absent for a single-ref press.
+     * The plan is not recordable and cannot carry a replay target guard —
+     * daemon admission refuses both shapes.
+     */
+    refs?: readonly string[];
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
     /** #1654: a mutating `find`'s already-resolved node. */
     preresolvedTarget?: PreresolvedInteractionTarget;
