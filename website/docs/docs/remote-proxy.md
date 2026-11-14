@@ -284,7 +284,9 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
   stay denied. Some client-side tools reach the daemon through internal commands: allow `runtime` for
   Maestro flows, and `install-from-source` for remote installs.
 - `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
-  that would shut the device down.
+  that would shut the device down. The one exception is a plain `close` whose own `open` booted the
+  device: the stop is refused the same way, but the close succeeds and warns that the device is
+  still running.
 - `leases.require: "macos-app"` (the only accepted value) refuses every request that is not made
   under a `macos-app` lease or that its allow list does not cover, including requests that name no
   lease and inventory commands such as `doctor` and `session list`.

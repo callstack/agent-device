@@ -113,7 +113,10 @@ import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
-import { restrictDeviceInventoryToDaemonPolicy } from '../core/daemon-policy.ts';
+import {
+  restrictDeviceInventoryToDaemonPolicy,
+  withShutdownPolicyDeniedFlag,
+} from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 // ---------------------------------------------------------------------------
@@ -205,6 +208,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
       };
     }
+    // #4162: every request and every nested batch/replay step re-enters here, so one mark covers
+    // them all: a policy that denies `device-shutdown` travels with the request to the close
+    // lifecycle, which keeps its impossible own-stop from spending the warm-runner retention.
+    req = withShutdownPolicyDeniedFlag(req, daemonPolicy);
     return await reportEndedLeases(req, handleRequestOnLedger);
   }
 

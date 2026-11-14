@@ -412,7 +412,7 @@ export class SessionStore {
   /**
    * #4162: records that this session's `open` booted the local simulator or emulator it now holds,
    * so a plain `close` owes that device a stop. Only the open-state publisher calls this, while the
-   * record it just published is still its own; close only reads the fact.
+   * record is still its own; close only reads the fact.
    */
   markOpenBootedDevice(ref: SessionRef): void {
     this.update(ref, { bootedByOpen: true });

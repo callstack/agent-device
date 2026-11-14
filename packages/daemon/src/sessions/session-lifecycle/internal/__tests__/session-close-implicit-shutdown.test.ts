@@ -51,6 +51,7 @@ async function closeSession(params: {
   device: SessionState['device'];
   bootedByOpen?: true;
   flags?: Record<string, unknown>;
+  internal?: Record<string, unknown>;
   lifecycleOperationsLoader?: Parameters<
     typeof handleSessionCommands
   >[0]['lifecycleOperationsLoader'];
@@ -77,6 +78,7 @@ async function closeSession(params: {
       command: 'close',
       positionals: [],
       flags: flags ?? {},
+      ...(params.internal ? { internal: params.internal } : {}),
     },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -272,32 +274,29 @@ test('close --shutdown keeps asking for the stop on a session that did not boot 
   );
 });
 
-test('a policy denial of the implicit stop keeps close successful and reports the kept device', async () => {
-  const policyDenied = new AppError(
-    'UNAUTHORIZED',
-    "This daemon's policy denies device-shutdown.",
-    {
-      capability: 'device-shutdown',
-      reason: 'DAEMON_POLICY_DENIED',
-      rule: 'capability',
-      retriable: false,
-    },
-  );
-  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy({
-    finalizeApplicationClose: async () => {
-      throw policyDenied;
-    },
-  });
+test('a policy that denies the stop keeps close successful, keeps the runner warm, and reports the kept device', async () => {
+  // The request scope derives this fact from the daemon's loaded policy (ADR 0029). The close
+  // lifecycle reads it BEFORE finalizing, so the refused stop never consumes the runner retention.
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+  const platformResourceCleanup = platformResourceCleanupFixture();
   const { response, sessionStore } = await closeSession({
     sessionName: 'policy-denied-session',
     device: iosSimulator,
     bootedByOpen: true,
+    internal: { shutdownCapabilityDenied: true },
     lifecycleOperationsLoader: loader,
+    platformResourceCleanup,
   });
 
   expect(finalizeApplicationClose).toHaveBeenCalledWith(
-    expect.objectContaining({ shutdownTarget: true }),
+    expect.objectContaining({ shutdownTarget: false, retainRunner: false }),
   );
+  // The refused stop never reaches the retention question, so a device kept running still earns
+  // the warm-runner answer the cleanup gives an ordinary close.
+  expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+    expect.objectContaining({ device: iosSimulator, shutdownRequested: false }),
+  );
+  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
   expect(response?.ok).toBe(true);
   expect(sessionStore.get('policy-denied-session')).toBeUndefined();
   if (response?.ok) {
@@ -309,29 +308,41 @@ test('a policy denial of the implicit stop keeps close successful and reports th
   }
 });
 
-test('the same policy denial still fails an explicit close --shutdown', async () => {
-  const policyDenied = new AppError(
-    'UNAUTHORIZED',
-    "This daemon's policy denies device-shutdown.",
-    {
-      capability: 'device-shutdown',
-      reason: 'DAEMON_POLICY_DENIED',
-      rule: 'capability',
-      retriable: false,
-    },
+test('a denied policy fact without boot ownership changes nothing', async () => {
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+  const { response } = await closeSession({
+    sessionName: 'policy-denied-unowned-session',
+    device: { ...iosSimulator, booted: true },
+    internal: { shutdownCapabilityDenied: true },
+    lifecycleOperationsLoader: loader,
+  });
+
+  expect(finalizeApplicationClose).toHaveBeenCalledWith(
+    expect.objectContaining({ shutdownTarget: false }),
   );
+  expect(response?.ok).toBe(true);
+  if (response?.ok) expect(response.data?.warnings).toBeUndefined();
+});
+
+test('a failed finalization keeps failing an explicit close --shutdown', async () => {
+  // The request gate refuses a policy-denied `--shutdown` before the handler (daemon-policy.ts),
+  // covered there. This is the handler half: whatever the reason, a stop the platform cannot
+  // complete fails the close with the incomplete-cleanup report — an implicit convenience stop
+  // would not, which is what the boot-ownership tests above pin.
+  const shutdownFailed = new AppError('COMMAND_FAILED', 'Emulator refused to shut down.', {
+    reason: 'shutdown-failed',
+    retriable: true,
+  });
   const { loader } = lifecycleOperationsSpy({
     finalizeApplicationClose: async () => {
-      throw policyDenied;
+      throw shutdownFailed;
     },
   });
   const sessionStore = makeSessionStore();
-  const sessionName = 'policy-denied-explicit-session';
+  const sessionName = 'failed-explicit-shutdown-session';
   const session = makeSession(sessionName, { ...iosSimulator, booted: true });
   sessionStore.publish(sessionName, session);
 
-  // An explicit stop that the policy refuses is the caller's own failed request: close fails with
-  // the incomplete-cleanup report, exactly as any other failed finalization does.
   await expect(
     handleSessionCommands({
       host: createTestHostEnvironment(),

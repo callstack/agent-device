@@ -40,6 +40,7 @@ import {
   type CloseRuntimeWithRuntimeHintClear,
   type RuntimeHintClearOperation,
 } from './session-close-runtime-admission.ts';
+import { appendResponseWarning } from './session-open-warnings.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -523,41 +524,22 @@ function buildCloseSuccessResponse(params: {
   // an extra round-trip.
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
   const provider = providerData ? { provider: providerData } : {};
+  const text = `Closed: ${session.name}`;
+  const data: Record<string, unknown> = shutdownResult
+    ? withSuccessText(
+        { session: session.name, shutdown: shutdownResult, ...savedScript, ...provider },
+        text,
+      )
+    : { session: session.name, ...successText(text), ...savedScript, ...provider };
   // #4162: the close owed this device a stop because its own open booted it, but the daemon's
   // policy denies `device-shutdown`. The close still succeeded; say plainly what stayed up.
-  const keptRunning = implicitShutdownDeniedByPolicy
-    ? {
-        warnings: [
-          "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
-        ],
-      }
-    : {};
-  const text = `Closed: ${session.name}`;
-  if (shutdownResult) {
-    return {
-      ok: true,
-      data: withSuccessText(
-        {
-          session: session.name,
-          shutdown: shutdownResult,
-          ...savedScript,
-          ...provider,
-          ...keptRunning,
-        },
-        text,
-      ),
-    };
+  if (implicitShutdownDeniedByPolicy) {
+    appendResponseWarning(
+      data,
+      "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
+    );
   }
-  return {
-    ok: true,
-    data: {
-      session: session.name,
-      ...successText(text),
-      ...savedScript,
-      ...provider,
-      ...keptRunning,
-    },
-  };
+  return { ok: true, data };
 }
 
 async function closeAppWithoutEndingSession(params: {

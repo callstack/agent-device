@@ -109,8 +109,8 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
  */
 export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'actions',
-  // #4162: `publishOpenSession` sets this while it builds the record for its first publish, and
-  // nothing mutates it afterwards, so close only reads which device its own open booted.
+  // #4162: the open-state publisher establishes this through `SessionStore.markOpenBootedDevice`,
+  // and nothing mutates it afterwards, so close only reads which device its own open booted.
   'bootedByOpen',
   // #4237: `close` marks a session it keeps through `SessionStore.markCloseEffectsUnconfirmed`.
   'closeEffectsUnconfirmed',

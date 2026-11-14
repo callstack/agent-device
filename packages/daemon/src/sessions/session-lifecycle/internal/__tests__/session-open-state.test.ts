@@ -59,8 +59,10 @@ test('a re-open of a session that never armed records nothing', () => {
 
 // --- #4162: the boot-ownership fact belongs to the open that published it ---
 //
-// Only a first open whose selection reported the boot records it. A re-open never adds or drops it,
-// so the session that found the device stopped still owes it a stop after any number of re-opens.
+// Any publish whose selection reported the boot records it — the first open, a provisional
+// dispatch publish, or a re-open that had to boot a device that had died. A publish that
+// reported no boot never clears the fact, so the session that found the device stopped still
+// owes it a stop after any number of re-opens.
 
 function firstOpen(bootedByOpen: boolean | undefined) {
   const store = makeSessionStore();
@@ -90,7 +92,7 @@ test.each([false, undefined] as const)(
 const bootOwnershipFacts: readonly (true | undefined)[] = [true, undefined];
 
 test.each(bootOwnershipFacts)(
-  '#4162: a re-open leaves the boot ownership unchanged',
+  '#4162: a re-open that reports a boot owns the device from then on',
   (bootedByOpen) => {
     const store = makeSessionStore();
     const existing = makeIosSession('s', bootedByOpen === undefined ? {} : { bootedByOpen });
@@ -105,6 +107,29 @@ test.each(bootOwnershipFacts)(
         device: IOS_SIMULATOR,
         surface: 'app',
         bootedByOpen: true,
+      }),
+    );
+
+    assert.equal(next.bootedByOpen, true);
+  },
+);
+
+test.each(bootOwnershipFacts)(
+  '#4162: a re-open that reports no boot leaves the ownership unchanged',
+  (bootedByOpen) => {
+    const store = makeSessionStore();
+    const existing = makeIosSession('s', bootedByOpen === undefined ? {} : { bootedByOpen });
+    const ref = store.publish(existing.name, existing);
+
+    const next = store.requireCurrent(
+      publishOpenSession({
+        req: { token: 't', command: 'open', positionals: [], session: existing.name },
+        sessionStore: store,
+        sessionName: existing.name,
+        existingRef: ref,
+        device: IOS_SIMULATOR,
+        surface: 'app',
+        bootedByOpen: false,
       }),
     );
 
