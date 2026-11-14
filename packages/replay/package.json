@@ -1,0 +1,36 @@
+{
+  "name": "@agent-device/replay",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Optional native .ad replay and test-suite execution plugin for agent-device.",
+  "exports": {
+    "./agent-device": {
+      "types": "./src/plugin.ts",
+      "default": "./src/plugin.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
+    "agent-device": "workspace:*",
+    "@agent-device/plugins": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
+  }
+}

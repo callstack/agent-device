@@ -847,6 +847,9 @@ importers:
 
   packages/plugins:
     dependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -856,6 +859,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
     devDependencies:
       '@agent-device/test-kit':
         specifier: workspace:*
@@ -1060,6 +1066,21 @@ importers:
       tar-stream:
         specifier: ^3.2.0
         version: 3.2.0
+
+  packages/replay:
+    devDependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/replay-port:
     dependencies:

@@ -115,7 +115,7 @@ test('the compiled-set predicate is licensed by the tsconfig include/exclude sha
   }
 });
 
-test('root workspace dependencies cover every non-Maestro package and exclude the optional engine', () => {
+test('root workspace dependencies cover every core package and exclude optional engines', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -128,7 +128,7 @@ test('root workspace dependencies cover every non-Maestro package and exclude th
     .map(([name]) => name)
     .sort();
   const expected = readWorkspacePackages(repoRoot)
-    .filter((pkg) => pkg.name !== '@agent-device/maestro')
+    .filter((pkg) => !['@agent-device/maestro', '@agent-device/replay'].includes(pkg.name))
     .map((pkg) => pkg.name)
     .sort();
   assert.deepEqual(
@@ -139,7 +139,7 @@ test('root workspace dependencies cover every non-Maestro package and exclude th
       'specifiers through these declarations)',
   );
   assert.ok(
-    !declared.includes('@agent-device/maestro'),
+    !declared.includes('@agent-device/maestro') && !declared.includes('@agent-device/replay'),
     'The optional engine must be installed through the plugin store. R11 rejects undeclared imports from core.',
   );
 });
