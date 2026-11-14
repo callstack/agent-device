@@ -48,6 +48,16 @@ export function nightlyBase(version) {
   return match.slice(1, 4).join('.');
 }
 
+function matchNightlyVersion(version, sourceBranch) {
+  const match = NIGHTLY.exec(version);
+  const suffix = sourceBranch === '0.22' ? '-nightly-0-22.' : '-nightly.';
+  return match && version.includes(suffix) ? match : null;
+}
+
+export function nightlyDate(version, sourceBranch = 'main') {
+  return matchNightlyVersion(version, sourceBranch)?.[4] ?? null;
+}
+
 /**
  * Nightly tags live outside `v*`, which only repository admins may create: the release workflow
  * tags each nightly itself, and no nightly tag ref may deploy to the npm-publish environment.
@@ -57,7 +67,7 @@ export function latestNightlyTag(tags, sourceBranch = 'main') {
   const prefix = sourceBranch === '0.22' ? 'nightly-0.22/v' : 'nightly/v';
   const nightlies = tags
     .filter((tag) => tag.startsWith(prefix))
-    .map((tag) => ({ tag, match: NIGHTLY.exec(tag.slice(prefix.length)) }))
+    .map((tag) => ({ tag, match: matchNightlyVersion(tag.slice(prefix.length), sourceBranch) }))
     .filter((entry) => entry.match);
   nightlies.sort((a, b) => {
     const [left, right] = [a.match, b.match].map((match) => match.slice(1).map(Number));

@@ -13,6 +13,8 @@ export function nightlyVersion(
 
 export function nightlyBase(version: string): string;
 
+export function nightlyDate(version: string, sourceBranch?: 'main' | '0.22'): string | null;
+
 export function latestNightlyTag(
   tags: readonly string[],
   sourceBranch?: 'main' | '0.22',

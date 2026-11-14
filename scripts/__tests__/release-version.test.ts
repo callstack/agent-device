@@ -67,3 +67,18 @@ test('0.22 versions cannot collide with main versions at the same base, date and
   assert.equal(latestNightlyTag(tags, '0.22'), `nightly-0.22/v${version}`);
   assert.equal(latestNightlyTag(tags), tags[0]);
 });
+
+for (const sourceBranch of ['main', '0.22'] as const) {
+  test(
+    sourceBranch + ' tag selection rejects the other channel version shape in its namespace',
+    () => {
+      const prefix = sourceBranch === '0.22' ? 'nightly-0.22/v' : 'nightly/v';
+      const suffix = sourceBranch === '0.22' ? 'nightly-0-22' : 'nightly';
+      const other = sourceBranch === '0.22' ? 'nightly' : 'nightly-0-22';
+      const own = prefix + '0.22.0-' + suffix + '.20261113.1';
+      const wrong = prefix + '0.23.0-' + other + '.20261114.2';
+      assert.equal(latestNightlyTag([own, wrong], sourceBranch), own);
+      assert.equal(latestNightlyTag([wrong], sourceBranch), null);
+    },
+  );
+}

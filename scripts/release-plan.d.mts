@@ -11,6 +11,7 @@ export type ReleaseRun = Readonly<{
   /** Remote tag names, each resolved to the commit it points at. */
   tags: ReadonlyMap<string, string>;
   latestStable?: string | null;
+  latestNightly?: string | null;
   ciConclusion: string;
   onMain?: boolean;
 }>;

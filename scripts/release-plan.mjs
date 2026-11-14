@@ -6,6 +6,7 @@ import {
   isReleaseVersion,
   latestNightlyTag,
   nightlyBase,
+  nightlyDate,
   nightlyVersion,
   previousReleaseTag,
 } from './release-version.mjs';
@@ -38,8 +39,20 @@ export function planRelease(run) {
   return planNightly(run, sourceBranch);
 }
 
+function nightlyDistTag(sourceBranch) {
+  return sourceBranch === '0.22' ? 'nightly-0.22' : 'nightly';
+}
+
 function planNightly(run, sourceBranch) {
   const scheduled = run.event === 'schedule';
+  const distTag = nightlyDistTag(sourceBranch);
+  if (
+    scheduled &&
+    run.latestNightly &&
+    nightlyDate(run.latestNightly, sourceBranch) === run.today
+  ) {
+    return skip(distTag + ' already published on ' + run.today + '.');
+  }
   const latest = latestNightlyTag([...run.tags.keys()], sourceBranch);
   if (scheduled && latest && run.tags.get(latest) === run.sha) {
     return skip(`${latest} already ships ${run.sha}.`);
@@ -57,7 +70,7 @@ function planNightly(run, sourceBranch) {
   return {
     mode: 'nightly',
     version,
-    distTag: sourceBranch === '0.22' ? 'nightly-0.22' : 'nightly',
+    distTag,
     commit: run.sha,
   };
 }
@@ -283,6 +296,17 @@ function sourceBranchForRun(event, ref, payload) {
   return sourceBranch;
 }
 
+async function readPublishedVersions(event, sourceBranch, onBranch, onTag) {
+  return {
+    latestStable:
+      onTag || (onBranch && sourceBranch === 'main') ? await publishedVersion('latest') : null,
+    latestNightly:
+      event === 'schedule' && onBranch
+        ? await publishedVersion(nightlyDistTag(sourceBranch))
+        : null,
+  };
+}
+
 async function readRun(env) {
   const event = env.GITHUB_EVENT_NAME;
   const ref = env.GITHUB_REF;
@@ -310,7 +334,7 @@ async function readRun(env) {
     today: new Date().toISOString().slice(0, 10).replaceAll('-', ''),
     runNumber: env.GITHUB_RUN_NUMBER,
     tags: event === 'pull_request' ? new Map() : remoteTags(),
-    latestStable: onBranch || onTag ? await publishedVersion('latest') : null,
+    ...(await readPublishedVersions(event, sourceBranch, onBranch, onTag)),
     ciConclusion:
       onBranch || onTag
         ? await settledCiConclusion(env, sha, onBranch ? sourceBranch : undefined)

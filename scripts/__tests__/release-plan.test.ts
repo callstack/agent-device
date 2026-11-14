@@ -279,6 +279,31 @@ for (const ciConclusion of [
   });
 }
 
+for (const sourceBranch of ['main', '0.22'] as const) {
+  test(sourceBranch + ' schedule respects the published npm day without a Git tag', () => {
+    const rootVersion = sourceBranch === '0.22' ? '0.22.0-dev' : '0.21.25-dev';
+    const base = sourceBranch === '0.22' ? '0.22.0' : '0.21.25';
+    const suffix = sourceBranch === '0.22' ? 'nightly-0-22' : 'nightly';
+    const latestNightly = base + '-' + suffix + '.20261011.41';
+    const input = run({ sourceBranch, rootVersion, tags: new Map(), latestNightly });
+    assert.equal(planRelease(input).mode, 'skip');
+    assert.equal(planRelease({ ...input, event: 'workflow_dispatch' }).mode, 'nightly');
+    assert.throws(
+      () => planRelease({ ...input, event: 'workflow_dispatch', ciConclusion: 'failure' }),
+      /CI on/,
+    );
+    assert.equal(
+      planRelease({ ...input, latestNightly: base + '-' + suffix + '.20261010.41' }).mode,
+      'nightly',
+    );
+    const other = sourceBranch === '0.22' ? 'nightly' : 'nightly-0-22';
+    assert.equal(
+      planRelease({ ...input, latestNightly: base + '-' + other + '.20261011.41' }).mode,
+      'nightly',
+    );
+  });
+}
+
 function runPlanner(
   options: {
     schedule?: string;
@@ -289,6 +314,8 @@ function runPlanner(
     ciEvent?: string;
     rootVersion?: string;
     tags?: string;
+    publishedNightly?: string | null;
+    latestStable?: string;
   } = {},
 ) {
   const root = mkdtempForTestSync('release-plan-');
@@ -353,7 +380,13 @@ function runPlanner(
       ],
     },
     [`/repos/owner/repo/compare/main...${MAIN}`]: { status: 'identical' },
-    '/agent-device/latest': { version: '0.21.37' },
+    '/agent-device/latest': { version: options.latestStable ?? '0.21.37' },
+    '/agent-device/nightly': options.publishedNightly
+      ? { version: options.publishedNightly }
+      : null,
+    '/agent-device/nightly-0.22': options.publishedNightly
+      ? { version: options.publishedNightly }
+      : null,
     '/repos/owner/repo/rulesets?targets=tag': [{ id: 1 }],
     '/repos/owner/repo/rulesets/1': protectedRuleset(),
     '/repos/owner/repo/environments/npm-publish': protectedSetup().npmPublish,
@@ -372,7 +405,7 @@ globalThis.fetch = async (url) => {
   const key = parsed.pathname + parsed.search;
   fs.appendFileSync(${JSON.stringify(requests)}, JSON.stringify(key) + '\\n');
   if (!(key in responses)) throw new Error('Unexpected request ' + key);
-  return { ok: true, json: async () => responses[key] };
+  return { ok: responses[key] !== null, status: responses[key] === null ? 404 : 200, json: async () => responses[key] };
 };
 globalThis.setTimeout = (callback) => { callback(); return 0; };
 `,
@@ -485,3 +518,32 @@ test('the original main schedule, manual nightly and stable retry keep their cha
     assert.ok(!result.requests.includes('/repos/owner/repo/commits/0.22'));
   }
 });
+
+for (const source of ['main', '0.22'] as const) {
+  test(
+    source + ' scheduled entrypoint deduplicates from its npm channel before any publish',
+    () => {
+      const today = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+      const version = source === '0.22' ? '0.22.0-nightly-0-22.' : '0.21.38-nightly.';
+      const result = runPlanner({
+        schedule: source === '0.22' ? '53 1 * * *' : '23 1 * * *',
+        publishedNightly: version + today + '.41',
+        latestStable: source === '0.22' ? '0.23.0' : '0.21.37',
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.output, /mode=skip/);
+      assert.doesNotMatch(result.output, /dist_tag=nightly/);
+      assert.ok(
+        result.requests.includes(
+          '/agent-device/' + (source === '0.22' ? 'nightly-0.22' : 'nightly'),
+        ),
+      );
+      if (source === '0.22') assert.ok(!result.requests.includes('/agent-device/latest'));
+      const manual = runPlanner({ source, publishedNightly: version + today + '.41' });
+      assert.equal(manual.status, 0, manual.stderr);
+      assert.match(manual.output, /mode=nightly/);
+      assert.ok(!manual.requests.includes('/agent-device/nightly'));
+      assert.ok(!manual.requests.includes('/agent-device/nightly-0.22'));
+    },
+  );
+}
