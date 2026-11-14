@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import {
+  createLocalAppleToolProvider,
+  withAppleToolProvider,
+  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+} from '../tool-provider.ts';
 
 // `setIosSetting` boots through this owner; the capture route under test skips it, so the settings
 // case below needs it quiet without touching the status bar owner.
@@ -87,10 +91,13 @@ function captureDeps(captureWithRetry: (device: DeviceInfo) => Promise<void>) {
   };
 }
 
+/** A capture failure carrying the reason the local simctl adapter stamps for its protocol timeout:
+ * what the real capture would have thrown here. These cases only assert the status bar it leaves
+ * behind, so the failure stays a transport failure and never a shape a text rule could select. */
 function screenshotFailure(): AppError {
   return new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
-    stderr: 'Unable to capture screenshot',
     exitCode: 60,
+    reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
   });
 }
 

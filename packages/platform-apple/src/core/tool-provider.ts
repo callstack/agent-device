@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   coerceExecResult,
+  requireExecSuccess,
   runCmd,
   whichCmd,
   type ExecOptions,
@@ -55,6 +56,44 @@ async function runSimctlCommand(
   return await runCommand('xcrun', [...simctlCommand(args)], options);
 }
 
+/** The first unindented simctl error header; diagnostic lines can precede it on stderr. */
+const SIMCTL_ERROR_HEADER =
+  /^An error was encountered processing the command \(domain=([^,]+), code=(-?\d+)\):[\t ]*(?:\r?\n|$)/m;
+
+/** macOS ETIMEDOUT in simctl's protocol, classified only by this local adapter. */
+const SIMCTL_SCREENSHOT_TIMEOUT_DOMAIN = 'NSPOSIXErrorDomain';
+const SIMCTL_SCREENSHOT_TIMEOUT_CODE = 60;
+
+/** The local screenshot timeout reason consumed by retry and runner fallback. */
+export const SIMCTL_SCREENSHOT_TIMEOUT_REASON = 'simulator-screenshot-timeout';
+
+/** Screenshot options follow `io <udid> screenshot`; a simulator-set prefix precedes it. */
+function isSimctlScreenshotArgs(args: ScopedSimctlArgs): boolean {
+  const unscoped = args[0] === '--set' ? args.slice(2) : args;
+  return unscoped[0] === 'io' && unscoped[2] === 'screenshot';
+}
+
+/** Stamp {@link SIMCTL_SCREENSHOT_TIMEOUT_REASON}, preserving exec's own timeout evidence. */
+async function runLocalSimctlCommand(
+  args: ScopedSimctlArgs,
+  options?: AppleToolExecOptions,
+): Promise<ExecResult> {
+  const commandArgs = [...simctlCommand(args)];
+  if (options?.allowFailure || !isSimctlScreenshotArgs(args)) {
+    return await runCmd('xcrun', commandArgs, options);
+  }
+  const result = await runCmd('xcrun', commandArgs, { ...options, allowFailure: true });
+  const header = SIMCTL_ERROR_HEADER.exec(result.stderr);
+  const isScreenshotTimeout =
+    header?.[1] === SIMCTL_SCREENSHOT_TIMEOUT_DOMAIN &&
+    Number(header?.[2]) === SIMCTL_SCREENSHOT_TIMEOUT_CODE;
+  return requireExecSuccess(result, `xcrun exited with code ${result.exitCode}`, {
+    cmd: 'xcrun',
+    args: commandArgs,
+    ...(isScreenshotTimeout ? { reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON } : {}),
+  });
+}
+
 function simctlCommandArgs(command: ScopedSimctlCommand): ScopedSimctlArgs {
   return Object.freeze(command.slice(1)) as ScopedSimctlArgs;
 }
@@ -96,7 +135,9 @@ export function createLocalAppleToolProvider(
   const simctl: AppleSimctlToolProvider = {
     run: provider.simctl
       ? coerceRun(provider.simctl.run)
-      : async (args, options) => await runSimctlCommand(runCommand, args, options),
+      : provider.runCommand
+        ? async (args, options) => await runSimctlCommand(runCommand, args, options)
+        : runLocalSimctlCommand,
   };
   const plist = provider.plist ?? {
     readJson: async (plistPath: string, signal?: AbortSignal) =>
