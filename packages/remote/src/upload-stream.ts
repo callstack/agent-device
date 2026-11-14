@@ -274,6 +274,7 @@ async function streamFileToHttpRequestAttempt(options: {
       // redirect/resume starts — old bytes may never overlap the next hop.
       const body = await readUploadResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
+      watchdog.dispose();
 
       const statusCode = res.statusCode ?? 500;
       const location = res.headers.location;
@@ -294,10 +295,6 @@ async function streamFileToHttpRequestAttempt(options: {
             redirectOrigin: redirectedUrl.origin,
           });
         }
-        // The next hop carries its own phase budgets; the retired attempt's timers must not reach
-        // into it. The shared caller/aggregate signal is inherited by the new attempt, so the one
-        // 600-second preparation aggregate still bounds every hop.
-        watchdog.dispose();
         return await streamFileToHttpRequestAttempt({
           ...options,
           url: redirectedUrl,

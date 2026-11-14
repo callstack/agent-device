@@ -331,7 +331,7 @@
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequest",
       "digest": "sha256:3ac8f379c4b508b0c28c4f41f920b40f8cc0406afcd5b2290326c4cfb9168adb",
-      "rationale": "#4441 replaces the one 5-minute timer over a whole upload with the preparation aggregate that bounds it, and hands that aggregate's signal to the attempt. The request a peer parses is unchanged: same route, method, the headers buildUploadRequestHeaders produces, the piped payload and the 200/308 handling. What moved is when this client stops sending, and the ceiling is now shorter rather than longer, so a protocol-2 daemon or proxy answers the same requests and simply sees a stalled leg torn down sooner."
+      "rationale": "#4441 replaces the one 5-minute timer over a whole upload with the preparation aggregate that bounds it, and hands that aggregate's signal to the attempt. The request a peer parses is unchanged: same route, method, the headers buildUploadRequestHeaders produces, the piped payload and the 200/308 handling. A progressing upload may now consume the shared ten-minute aggregate instead of the former five-minute per-attempt ceiling. Connection, header and body-inactivity phase limits stop stalled work sooner; retries and resumes never restart the aggregate. A protocol-2 daemon or proxy parses the same requests, while client-side timeout and retry timing deliberately change."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",

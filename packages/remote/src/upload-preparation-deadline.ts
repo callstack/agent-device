@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 
-/** The one artifact-preparation aggregate: six minutes from admission to the last finalize. */
+/** The one artifact-preparation aggregate: ten minutes from admission to the last finalize. */
 export const UPLOAD_PREPARATION_TIMEOUT_MS = 600_000;
 
 export async function withUploadPreparationDeadline<T>(
