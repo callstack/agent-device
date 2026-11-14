@@ -152,7 +152,7 @@ const reinstallCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Replace an installed app with a new build',
-    searchHint: 'update apk ipa',
+    searchHint: 'update',
   },
   metadata: reinstallCommandMetadata,
   run: (client, input) => client.apps.reinstall(input),

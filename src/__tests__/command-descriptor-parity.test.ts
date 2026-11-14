@@ -305,15 +305,7 @@ test("frameworkTier pins exactly the 'loop' command set", () => {
     .map((descriptor) => descriptor.name)
     .sort();
 
-  assert.deepEqual(loop, [
-    'back',
-    'fill',
-    'open',
-    'press',
-    'scroll',
-    'snapshot',
-    'wait',
-  ]);
+  assert.deepEqual(loop, ['back', 'fill', 'open', 'press', 'scroll', 'snapshot', 'wait']);
 });
 
 test('targetIdentityVerification pins exactly the evidence-carrying command set (ADR 0012 / #1349)', () => {
