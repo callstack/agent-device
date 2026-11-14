@@ -177,6 +177,15 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
   );
 }
 
+/** What the caller's `open` output says when the probe never read one foreground app. */
+function openProbeUnreadableWarning(): string {
+  return (
+    'The launch dispatch succeeded, but the foreground probe could not read the device within 5s ' +
+    '(open-foreground-probe-unreadable). This claims nothing about whether the app reached the ' +
+    'foreground; check the device connection, then run the open again.'
+  );
+}
+
 /** What the caller's `open` output says when the launched app never held the foreground. */
 function openNotForegroundWarning(verification: OpenForegroundVerification): string {
   const read =
@@ -401,10 +410,13 @@ export async function completeOpenCommand(params: {
   if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
   }
-  if (outcome.timing.foregroundVerification?.confirmed === false) {
+  const foregroundVerification = outcome.timing.foregroundVerification;
+  if (foregroundVerification?.confirmed === false) {
     appendResponseWarning(
       openResult,
-      openNotForegroundWarning(outcome.timing.foregroundVerification),
+      foregroundVerification.probeState === 'unreadable'
+        ? openProbeUnreadableWarning()
+        : openNotForegroundWarning(foregroundVerification),
     );
   }
   const nextRef = publishOpenSession({

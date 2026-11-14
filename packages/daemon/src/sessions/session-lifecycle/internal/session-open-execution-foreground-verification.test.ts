@@ -59,6 +59,7 @@ async function openApp(params: {
   sessionStore: SessionStore;
   sessionName: string;
   openOutcome: OpenApplicationOutcome;
+  flags?: Record<string, unknown>;
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
 }): Promise<DaemonResponse | null> {
   const bindDevice: Parameters<typeof handleSessionCommands>[0]['bindDevice'] = async (
@@ -86,7 +87,7 @@ async function openApp(params: {
       session: params.sessionName,
       command: 'open',
       positionals: ['com.example.application'],
-      flags: {},
+      flags: (params.flags ?? {}) as DaemonRequest['flags'],
     } as DaemonRequest,
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -163,5 +164,60 @@ test('open adds no foreground warning when the lifecycle outcome carries no unco
   );
 
   const warnings = (data.warnings as string[] | undefined) ?? [];
+  expect(warnings.some((warning) => warning.includes('open-not-foreground'))).toBe(false);
+});
+
+test('open --foreground fails the command when the foreground verification is unconfirmed', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'harmony-session', HARMONY_DEVICE);
+
+  // The platform owns the hard failure; the mock replays it so the route's
+  // contract with --foreground is pinned end to end: the openApplication
+  // failure propagates out of the route instead of reporting a successful open.
+  await expect(
+    openApp({
+      sessionStore,
+      sessionName: 'harmony-session',
+      flags: { foreground: true },
+      openOutcome: {
+        appBundleId: 'com.example.application',
+        timing: {
+          foregroundVerification: { confirmed: false, foregroundPackage: 'com.ohos.launcher' },
+        },
+      },
+      onOpenApplication: async (input) => {
+        if (input.execution.foreground === true) {
+          throw Object.assign(
+            new Error(
+              'The launch dispatch for com.example.application succeeded, but HarmonyOS did not show it in the foreground within 5s',
+            ),
+            { code: 'COMMAND_FAILED', details: { reason: 'open-not-foreground' } },
+          );
+        }
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason: 'open-not-foreground' } });
+});
+
+test('open names the unreadable probe instead of claiming the app stayed backgrounded', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'harmony-session', HARMONY_DEVICE);
+
+  const data = requireOpenData(
+    await openApp({
+      sessionStore,
+      sessionName: 'harmony-session',
+      openOutcome: {
+        appBundleId: 'com.example.application',
+        timing: { foregroundVerification: { confirmed: false, probeState: 'unreadable' } },
+      },
+    }),
+  );
+
+  const warnings = (data.warnings as string[] | undefined) ?? [];
+  expect(warnings.some((warning) => warning.includes('open-foreground-probe-unreadable'))).toBe(
+    true,
+  );
+  expect(warnings.some((warning) => warning.includes('claims nothing'))).toBe(true);
   expect(warnings.some((warning) => warning.includes('open-not-foreground'))).toBe(false);
 });
