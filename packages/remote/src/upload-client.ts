@@ -6,10 +6,21 @@ import {
   buildDaemonHttpLeaseHeaders,
 } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
-import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
+import {
+  isRetryableUploadStreamError,
+  isTransferPhaseTimeoutError,
+  streamFileToHttpRequest,
+  withUploadPreparationDeadline,
+} from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
 
-const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
+/**
+ * Ceiling for the two small control-plane calls that bracket an upload (`preflight`, `finalize`).
+ * Their payload is a few hundred bytes of JSON, so one window covers reaching the daemon and getting
+ * the answer; the artifact bytes themselves are budgeted per phase in `upload-stream.ts`.
+ */
+const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
+
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 
 type UploadArtifactOptions = {
@@ -57,7 +68,19 @@ type UploadPreflightResult =
     };
 
 export async function uploadArtifact(options: UploadArtifactOptions): Promise<string> {
-  const prepared = await prepareUploadArtifact(options.localPath, options.platform, options.env);
+  return await withUploadPreparationDeadline(
+    options.signal,
+    async (signal) => await uploadArtifactWithinBudget({ ...options, signal }),
+  );
+}
+
+async function uploadArtifactWithinBudget(options: UploadArtifactOptions): Promise<string> {
+  const prepared = await prepareUploadArtifact(
+    options.localPath,
+    options.platform,
+    options.env,
+    options.signal,
+  );
   const normalizedBase = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
   const uploadAttemptId = randomUUID();
 
@@ -144,6 +167,10 @@ async function tryDirectUploadWithResume(options: {
     // A canceled upload resumes for no reason: the thing it was uploaded for is already gone, and
     // re-preflighting would ask the daemon for a fresh ticket to send bytes nobody is waiting on.
     if (options.signal?.aborted) throw error;
+    // An expired phase is this client's own deadline, not a transport break. Restarting the
+    // sequence would only buy a second attempt permission it never had, so the typed evidence for
+    // the phase that ran out is what the caller sees.
+    if (isTransferPhaseTimeoutError(error)) throw error;
     if (!shouldRetryDirectUpload(error)) return undefined;
     return await retryDirectUpload(options, uploadOnce);
   }
@@ -184,7 +211,10 @@ async function retryDirectUpload(
   if (retryPreflight?.kind === 'direct-upload') {
     try {
       return await uploadOnce(retryPreflight);
-    } catch {
+    } catch (error) {
+      // As above: an expired phase is this client's own deadline, so it must not buy the legacy
+      // fallback a third attempt at the same bytes.
+      if (isTransferPhaseTimeoutError(error)) throw error;
       return undefined;
     }
   }
@@ -223,7 +253,7 @@ async function uploadLegacyArtifact(options: {
     headers,
     payloadPath: artifact.payloadPath,
     timeoutMessage: 'Artifact upload timed out',
-    timeoutHint: 'The upload to the remote daemon exceeded the 5-minute timeout.',
+    timeoutHint: 'Inspect the upload diagnostics before retrying the artifact.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
     signal: options.signal,
@@ -270,7 +300,7 @@ async function requestUploadPreflight(options: {
     // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
     redirect: 'error',
     headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_CONTROL_PLANE_TIMEOUT_MS),
     body: JSON.stringify({
       uploadAttemptId: options.uploadAttemptId,
       sha256: options.artifact.sha256,
@@ -295,8 +325,12 @@ async function requestUploadPreflight(options: {
 }
 
 /**
- * The signal one upload request runs under: the caller's cancellation and the request's own
- * timeout, whichever fires first.
+ * The signal one small control-plane request runs under: the caller's cancellation and this
+ * request's own ceiling, whichever fires first.
+ *
+ * `preflight` and `finalize` carry a few hundred bytes of JSON that the transport writes with the
+ * request, so their ceiling is the same 30 seconds the artifact transfer spends getting connected and
+ * reading headers, and there is no separate body phase to time.
  */
 function combineUploadSignals(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -405,9 +439,9 @@ async function finalizeDirectUpload(options: {
     // As with preflight: the route never redirects, and a redirect must not carry the token.
     redirect: 'error',
     headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_CONTROL_PLANE_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),
-  }).catch((error) => {
+  }).catch((error: unknown) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
     if (options.signal?.aborted) throw error;
