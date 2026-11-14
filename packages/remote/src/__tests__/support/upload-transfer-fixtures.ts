@@ -82,6 +82,7 @@ export function startUploadAttempt(options: {
   artifactPath: string;
   method?: 'POST' | 'PUT';
   headers?: Record<string, string>;
+  retryable?: boolean;
   signal?: AbortSignal;
 }): SettledUploadAttempt {
   let settled = false;
@@ -92,6 +93,7 @@ export function startUploadAttempt(options: {
     payloadPath: options.artifactPath,
     timeoutMessage: 'Artifact upload timed out',
     errorMessage: 'Failed to upload artifact to remote daemon',
+    ...(options.retryable === undefined ? {} : { retryable: options.retryable }),
     ...(options.signal ? { signal: options.signal } : {}),
   }).then(
     (value) => ({ value, error: undefined as unknown }),
@@ -244,13 +246,20 @@ export function createArtifactFile(bytes: number, fileName = 'app.apk'): string 
  * refused, so the upload runs on the legacy POST route: the one path that pipes a file at the daemon
  * and keeps going while the daemon drains it.
  */
-export async function startParkedUploadDaemon(): Promise<ParkedUploadDaemon> {
+export async function startParkedUploadDaemon(
+  options: {
+    /** Answers the first upload leg and stops reading it; later legs are parked at the quota. */
+    answerFirstLeg?: { status: number; headers?: Record<string, string> };
+  } = {},
+): Promise<ParkedUploadDaemon> {
   const requests: string[] = [];
   const parked: http.IncomingMessage[] = [];
   let receivedBytes = 0;
   let bytesTakenSinceRelease = 0;
   let parkedAtQuota: http.IncomingMessage | undefined;
   let bodyEnded = false;
+  let uploadLegs = 0;
+  let newestParkedLeg: http.IncomingMessage | undefined;
 
   const server = http.createServer((req, res) => {
     const key = `${req.method} ${req.url}`;
@@ -264,6 +273,21 @@ export async function startParkedUploadDaemon(): Promise<ParkedUploadDaemon> {
       return;
     }
     if (key === LEGACY_UPLOAD_REQUEST) {
+      uploadLegs += 1;
+      // The client destroys a leg it has moved past, and a reset leg errors on this side too.
+      req.on('error', () => {});
+      const answer = options.answerFirstLeg;
+      if (answer && uploadLegs === 1) {
+        res.statusCode = answer.status;
+        for (const [name, value] of Object.entries(answer.headers ?? {})) {
+          res.setHeader(name, value);
+        }
+        res.end();
+        // The answered leg's body is never read, so the client stays in real backpressure on it.
+        req.pause();
+        return;
+      }
+      newestParkedLeg = req;
       req.on('data', (chunk: Buffer) => {
         receivedBytes += chunk.length;
         // Each release lets one quota of bytes through and parks the stream again. The client is
@@ -310,6 +334,10 @@ export async function startParkedUploadDaemon(): Promise<ParkedUploadDaemon> {
       }
       for (const entry of resumable) entry.resume();
     },
+    resetParkedLeg() {
+      assert.ok(newestParkedLeg, 'no parked leg to reset');
+      newestParkedLeg.socket.resetAndDestroy();
+    },
     close: () => closeLoopbackServer(server),
   };
 }
@@ -323,6 +351,8 @@ export type ParkedUploadDaemon = {
   readonly bodyEnded: boolean;
   /** Lets the parked body take up to one more quota of bytes. */
   releaseAllParked(): void;
+  /** Resets the connection of the newest parked leg: a real peer reset, not a clean close. */
+  resetParkedLeg(): void;
   close(): Promise<void>;
 };
 

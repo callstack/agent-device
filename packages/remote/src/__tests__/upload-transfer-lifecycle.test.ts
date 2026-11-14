@@ -11,7 +11,9 @@
 // Every case uses the attempt seam, a controlled clock, and real loopback sockets: the overlap being
 // refused is only observable on a real socket, and the budgets are minutes long.
 
+import http from 'node:http';
 import { afterEach, assert, test, vi } from 'vitest';
+import { isRetryableUploadStreamError } from '../upload-stream.ts';
 import {
   isTransferPhaseTimeoutError,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
@@ -19,6 +21,8 @@ import {
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
 } from '../transfer-phase-budget.ts';
 import {
+  LEGACY_UPLOAD_REQUEST,
+  type ParkedUploadDaemon,
   assertDetailedError,
   createArtifactFile,
   pumpRealWork,
@@ -28,6 +32,7 @@ import {
   startConnectedStalledHttpOrigin,
   startConnectedStalledTlsOrigin,
   startHalfAnsweredOrigin,
+  startParkedUploadDaemon,
   startSlowReadingUploadDaemon,
   startUnfinishedHandshakeTlsOrigin,
   startUploadAttempt,
@@ -121,6 +126,79 @@ test('a resume response ends the stalled hop before the next attempt is dialed',
     await daemon.close();
   }
 });
+
+test('a resumed hop that makes real progress past the first hop ceiling keeps its own retryable reset', async () => {
+  useTransferClock();
+  const artifactBytes = 32 * MEBIBYTE;
+  let outgoingLegs = 0;
+  let resumedDrains = 0;
+  const request = http.request;
+  const requestSpy = vi.spyOn(http, 'request').mockImplementation((...args) => {
+    const req = Reflect.apply(request, http, args) as http.ClientRequest;
+    outgoingLegs += 1;
+    if (outgoingLegs === 2)
+      req.on('drain', () => {
+        resumedDrains += 1;
+      });
+    return req;
+  });
+  const daemon = await startParkedUploadDaemon({
+    answerFirstLeg: { status: 308, headers: { 'x-upload-offset': String(MEBIBYTE) } },
+  });
+  // Hop one is answered while its body is still queued, so its response-body budget starts at fake
+  // time zero; hop two then moves bytes the peer really takes, for longer than that budget lasts.
+  const attempt = startUploadAttempt({
+    url: `${daemon.baseUrl}/upload`,
+    artifactPath: createArtifactFile(artifactBytes),
+    method: 'POST',
+    retryable: true,
+  });
+  try {
+    // Gate on real bytes only: no fake time is charged until hop two has really taken some.
+    for (let round = 0; round < 400 && !hopTwoTookBytes(daemon); round += 1) {
+      await pumpRealWork(15);
+    }
+    assert.ok(hopTwoTookBytes(daemon), 'the resumed hop was dialed and took bytes');
+
+    for (let window = 0; window < 6; window += 1) {
+      const drainsBefore = resumedDrains;
+      const bytesBefore = daemon.receivedBytes;
+      for (let round = 0; round < 400; round += 1) {
+        daemon.releaseAllParked();
+        await pumpRealWork(15);
+        if (resumedDrains > drainsBefore && daemon.receivedBytes > bytesBefore) break;
+      }
+      assert.ok(daemon.receivedBytes > bytesBefore, 'the peer took more resumed bytes');
+      assert.ok(resumedDrains > drainsBefore, 'the resumed write queue drained');
+      await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS);
+      assert.equal(attempt.settled, false);
+      assert.equal(daemon.bodyEnded, false);
+    }
+    assert.ok(6 * TRANSFER_CONNECT_TIMEOUT_MS > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+
+    daemon.resetParkedLeg();
+    const settled = await settleAttemptAfterBudget(attempt);
+    assert.equal(settled.settled, true);
+    const result = await attempt;
+
+    // The peer's reset is an ordinary transport failure of hop two. Hop one's retired budget must
+    // not relabel it as a phase expiry, and the retry marker must survive for the client's retry.
+    assert.equal(result.value, undefined);
+    assert.equal(isTransferPhaseTimeoutError(result.error), false);
+    assert.equal(isRetryableUploadStreamError(result.error), true);
+    assert.equal(daemon.requests.filter((entry) => entry === LEGACY_UPLOAD_REQUEST).length, 2);
+  } finally {
+    requestSpy.mockRestore();
+    await daemon.close();
+  }
+});
+
+function hopTwoTookBytes(daemon: ParkedUploadDaemon): boolean {
+  return (
+    daemon.requests.filter((entry) => entry === LEGACY_UPLOAD_REQUEST).length === 2 &&
+    daemon.receivedBytes > 0
+  );
+}
 
 test('a redirect response ends the stalled hop before the next hop is dialed', async () => {
   useTransferClock();
