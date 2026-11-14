@@ -14,12 +14,13 @@ on:
   push:
     branches:
       - main
+      - '0.22'
 
 permissions:
   contents: read
 
-# Release and nightly publishing require green CI on the exact main commit, so a
-# main push never cancels or replaces another commit's run.
+# Release and nightly publishing require green CI on the exact source commit, so a
+# push never cancels or replaces another commit's run.
 concurrency:
   group: >-
     ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}

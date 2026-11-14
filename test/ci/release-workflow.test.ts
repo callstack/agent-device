@@ -52,3 +52,8 @@ test('the published bytes are built without a restored dependency cache', () => 
   );
   expect(setup?.with?.['cache-store']).toBe('false');
 });
+
+test('both fixed nightly source branches receive push CI', () => {
+  const ci = parse(fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  expect(ci.on.push.branches).toEqual(['main', '0.22']);
+});
