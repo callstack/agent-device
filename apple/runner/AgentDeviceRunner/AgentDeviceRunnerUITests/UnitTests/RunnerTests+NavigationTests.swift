@@ -85,14 +85,7 @@ extension RunnerTests {
     defer { endBackFixture() }
     XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 0)
 
-    guard case .performed = try performInAppBack(app: app) else {
-      return XCTFail("a floating back button beside a navigation bar must be pressed and confirmed")
-    }
-    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
-    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
-    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
-    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
-    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+    try assertBackPressesTheButtonAndPops(status, "a floating back button beside a navigation bar must be pressed and confirmed")
   }
 
   /// A bar that retitles itself, such as a countdown, never holds still for an unlabeled back button,
@@ -115,13 +108,7 @@ extension RunnerTests {
     defer { endBackFixture() }
     XCTAssertEqual(app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 2)
 
-    guard case .performed = try performInAppBack(app: app) else {
-      return XCTFail("the bar's back button must be pressed beside an in-content button of the same identifier")
-    }
-    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
-    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
-    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
-    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+    try assertBackPressesTheButtonAndPops(status, "the bar's back button must be pressed beside an in-content button of the same identifier")
   }
 
   /// An in-content `BackButton` that keeps moving does not hold the lookup back: it is not compared.
@@ -588,6 +575,17 @@ extension RunnerTests {
     }
     XCTAssertEqual(observed, 1, "a hung query reaches XCTest once, and no query follows it")
     return try XCTUnwrap(result).get()
+  }
+
+  /// `back` presses a back button, confirms the pop, and the fixture's root reports it.
+  @MainActor
+  private func assertBackPressesTheButtonAndPops(_ status: XCUIElement, _ failure: String) throws {
+    guard case .performed = try performInAppBack(app: app) else { return XCTFail(failure) }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
   @MainActor
