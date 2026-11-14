@@ -1,7 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
-import { inheritPostGestureOutcome, type SnapshotState } from '@agent-device/contracts/snapshot';
+import {
+  inheritPostGestureOutcome,
+  isPostGestureRestUnproven,
+  type SnapshotState,
+} from '@agent-device/contracts/snapshot';
 import { snapshotPresentationOptionsFromFlags } from '@agent-device/capture-kit/snapshot-state';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -279,7 +283,7 @@ function canUseSessionSnapshotCache(
   if (request.cache?.useSessionSnapshot !== true) return false;
   if (getActiveAndroidSnapshotFreshness(session)) return false;
   if (shouldBypassForPostGestureStabilization(session, request)) return false;
-  return session.snapshot?.postGestureOutcome?.kind !== 'unsettled';
+  return !isPostGestureRestUnproven(session.snapshot?.postGestureOutcome);
 }
 
 function isFreshSelectorSnapshot(snapshot: SnapshotState, timestamp: number): boolean {

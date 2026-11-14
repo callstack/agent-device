@@ -26,6 +26,7 @@ import {
   runPostGestureStabilityLoop,
   type PostGestureStabilityOutcome,
 } from '@agent-device/capture-kit/post-gesture-stability';
+import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { DeferredSurface, SessionState } from './session-state.ts';
 
 /**
@@ -222,12 +223,19 @@ export function movingTargetBaseline(
 }
 
 /**
- * Called once an app open has published its session. A verdict other than `observable` means the
- * open never read the launched app: the probe failed or could not identify it, the device has no
- * observation path, or the app stayed unreadable. Nothing proved its layout at rest, so the next
- * capture runs the quiet-window loop (#3354, #3367). An open that reports no verdict does not mark.
- * No baseline: the pre-open tree is a different surface, so the open is never reported as having no
- * effect.
+ * Called once an Apple app open has published its session. Every verdict means the open launched an
+ * app, and none proves its first screen: an `observable` app can still show its launch or loading
+ * surface. The next capture therefore waits for the first screen (#3354, #3367). An open that
+ * reports no verdict launched no app, such as a URL or deep link, and does not mark. No baseline: the
+ * pre-open tree is a different surface, so the open is never reported as having no effect.
+ *
+ * The record replaces whatever the session's deferred surface held. A scroll's owed stabilization
+ * judged the scroll against its pre-action tree, and a moving-target baseline describes where the
+ * previous action's targets were. The open launched or foregrounded an app, so both describe a screen
+ * the open replaced: a verdict against them would charge the open's effect to the earlier action.
+ *
+ * Apple only: the first-screen rule tells the first screen from a launch surface by the
+ * Application and Window roots, and an Android tree has no root node to tell them apart.
  */
 export function markPostOpenStabilization(
   session: SessionState,
@@ -235,12 +243,13 @@ export function markPostOpenStabilization(
 ): void {
   if (!isApplePlatform(session.device.platform)) return;
   if (!supportsPostGestureStabilization(session.device)) return;
-  if (observation === undefined || observation === 'observable') return;
+  if (observation === undefined) return;
   session.deferredSurface = {
     kind: 'stabilize',
     action: 'open',
     positionals: [],
     markedAt: Date.now(),
+    readiness: 'first-screen',
   };
 }
 
@@ -366,6 +375,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         action: pending.action,
         positionals: pending.positionals ?? [],
         baseline: pending.baseline,
+        ...(pending.readiness ? { readiness: pending.readiness } : {}),
       },
       initial: params.initial,
       hooks: {
@@ -382,6 +392,8 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
+        countFirstScreenContent: (value) =>
+          readSnapshot(value).nodes.filter((node) => !isViewportRootNode(node)).length,
       },
     });
   } finally {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -46,12 +46,12 @@ const NODES = [
   },
 ];
 
-function snapshotEntry(): ProviderScenarioProviderEntry {
+function snapshotEntry(nodes: readonly unknown[] = NODES): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes: NODES, truncated: false },
+    result: { nodes, truncated: false },
   };
 }
 
@@ -66,9 +66,10 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration rejects stale pinned @refs and accepts current pins', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues the complete frame at the seeded generation g1; the first capture after
-    // open settles: one extra read
-    snapshotEntry(),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    // snapshot -i: issues the complete frame at generation g1
     snapshotEntry(),
     // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
     // and crosses the seam so the frame expires
@@ -103,6 +104,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
         udid: DEVICE_ID,
       });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
 
       const snapshot = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,

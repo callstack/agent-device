@@ -10,11 +10,34 @@ import {
   type DeferredOutcomeSnapshotAttempt,
 } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../session-state.ts';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   deliverySnapshot,
   makeSession,
   pickupSnapshot,
 } from './post-gesture-stabilization-fixtures.ts';
+
+/** A first screen with more than a sparse tree's content: a header and five rows. */
+function homeScreenSnapshot(y = 500) {
+  return makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Home',
+      rect: { x: 20, y: 60, width: 200, height: 30 },
+    },
+    ...Array.from({ length: 5 }, (_, row) => ({
+      index: row + 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: `Row ${row}`,
+      rect: { x: 20, y: y + row * 50, width: 300, height: 44 },
+    })),
+  ]);
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -110,26 +133,145 @@ test('an Apple open that could not observe its app marks stabilization without a
   assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 });
 
-test('every open verdict other than observable marks stabilization', () => {
-  const pending = (
-    [
-      'unobservable',
-      'probe-failed',
-      'app-unidentified',
-      'not-eligible',
-      'observable',
-      undefined,
-    ] as const
-  ).map((observation) => {
-    const session = makeSession('ios');
-    markPostOpenStabilization(session, observation);
-    return isPostGestureStabilizationPending(session);
-  });
-  const android = makeSession('android');
-  markPostOpenStabilization(android, 'probe-failed');
+test('every Apple open that launched an app marks a first-screen wait, and an Android open none', () => {
+  const readiness = (platform: 'ios' | 'android') =>
+    (
+      [
+        'unobservable',
+        'probe-failed',
+        'app-unidentified',
+        'not-eligible',
+        'observable',
+        undefined,
+      ] as const
+    ).map((observation) => {
+      const session = makeSession(platform);
+      markPostOpenStabilization(session, observation);
+      return pendingSurfaceStabilization(session)?.readiness;
+    });
+  const launched = Array.from({ length: 5 }, () => 'first-screen');
 
-  assert.deepEqual(pending, [true, true, true, true, false, false]);
-  assert.equal(isPostGestureStabilizationPending(android), false);
+  assert.deepEqual(readiness('ios'), [...launched, undefined]);
+  assert.deepEqual(
+    readiness('android'),
+    Array.from({ length: 6 }, () => undefined),
+  );
+});
+
+test('the first capture after an open waits through a loading tree for the first screen', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const loading = makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ]);
+  const home = homeScreenSnapshot();
+  const { capture } = scriptedCapture([loading, loading, loading, loading, loading, home, home]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(3_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot, home);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+  assert.equal(isPostGestureStabilizationPending(session), false);
+});
+
+test('the first capture after an open does not count the Window root as first-screen content', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const rootsOnly = makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    { index: 1, parentIndex: 0, type: 'Window', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ]);
+  const { capture } = scriptedCapture([rootsOnly]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(11_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
+});
+
+test('the first capture after an open waits through a root-only tree whatever its quality verdict', async () => {
+  const root = makeSnapshotState([
+    { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ]);
+  const rootOnlyReads: SnapshotState[] = [
+    // The runner's verdict on a tree holding only its roots.
+    { ...root, snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'sparse-tree' } },
+    // A runner that predates verdicts publishes the same tree with none.
+    { nodes: root.nodes, createdAt: root.createdAt, backend: 'xctest' },
+  ];
+  for (const rootOnly of rootOnlyReads) {
+    vi.useFakeTimers();
+    const session = makeSession('ios');
+    markPostOpenStabilization(session, 'observable');
+    const home = homeScreenSnapshot();
+    const { capture } = scriptedCapture([rootOnly, rootOnly, rootOnly, rootOnly, home, home]);
+
+    const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pendingResult;
+
+    assert.equal(result?.snapshot, home);
+    assert.equal(result?.snapshot.postGestureOutcome, undefined);
+  }
+});
+
+test('the first capture after an open settles a sparse read that holds content beyond its roots', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const sparse = {
+    ...homeScreenSnapshot(),
+    snapshotQuality: { state: 'sparse', backend: 'tree', reasonCode: 'budget' } as const,
+  };
+  const { capture, calls } = scriptedCapture([sparse, sparse]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(1_000);
+  const result = await pendingResult;
+
+  assert.equal(calls(), 2);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
+test('an open supersedes the stabilization a scroll still owed on the screen it replaced', () => {
+  const session = makeSession('ios');
+  session.snapshot = homeScreenSnapshot();
+  markDeferredInteractionOutcome({
+    session,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: undefined,
+  });
+  assert.ok(pendingSurfaceStabilization(session)?.baseline);
+
+  markPostOpenStabilization(session, 'observable');
+
+  const pending = pendingSurfaceStabilization(session);
+  assert.equal(pending?.action, 'open');
+  assert.equal(pending?.readiness, 'first-screen');
+  assert.equal(pending?.baseline, undefined);
+});
+
+test('the first capture after an open marks a tree that never showed a first screen as loading', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const { capture } = scriptedCapture([makeSnapshotState([])]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(11_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot.nodes.length, 0);
+  assert.deepEqual(result?.snapshot.postGestureOutcome, {
+    kind: 'loading',
+    gesture: { action: 'open', positionals: [] },
+  });
 });
 
 test('the first capture after an unobserved open reads the list where it came to rest', async () => {
@@ -137,9 +279,9 @@ test('the first capture after an unobserved open reads the list where it came to
   const session = makeSession('ios');
   markPostOpenStabilization(session, 'unobservable');
   const { capture, calls } = scriptedCapture([
-    pickupSnapshot(319),
-    pickupSnapshot(406),
-    pickupSnapshot(406),
+    homeScreenSnapshot(319),
+    homeScreenSnapshot(406),
+    homeScreenSnapshot(406),
   ]);
 
   const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
@@ -149,7 +291,7 @@ test('the first capture after an unobserved open reads the list where it came to
   const result = await pendingResult;
 
   assert.equal(calls(), 3);
-  assert.equal(result?.snapshot.nodes[1]?.rect?.y, 406);
+  assert.equal(result?.snapshot.nodes[2]?.rect?.y, 406);
   assert.equal(result?.snapshot.postGestureOutcome, undefined);
   assert.equal(isPostGestureStabilizationPending(session), false);
 });

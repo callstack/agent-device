@@ -14,6 +14,7 @@ import type {
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { ScreenshotResultData } from './snapshot-types.ts';
+import type { PostGestureOutcome } from './snapshot-model.ts';
 import type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,
@@ -83,6 +84,12 @@ export type CaptureSnapshotResult = {
    * of the field means a non-iOS producer or an older runner published nothing.
    */
   presentedSurface?: PresentedSurface;
+  /**
+   * Present when the tree may not show the surface at rest: `unsettled` (still changing after a
+   * gesture), `no-effect` (a gesture changed nothing), or `loading` (the app launched by `open`
+   * still showed no first screen when its wait ran out).
+   */
+  postGestureOutcome?: PostGestureOutcome;
   /**
    * Screenshot captured automatically when the semantic snapshot was sparse.
    * Remote clients receive a materialized local path through the daemon artifact channel.

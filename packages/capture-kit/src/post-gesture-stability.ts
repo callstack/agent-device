@@ -41,6 +41,45 @@ const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
  */
 const STABILIZATION_DISTRUST_DEADLINE_MS = POST_GESTURE_STABILITY_SCHEDULE.budgetMs + 2_000;
 
+/**
+ * Cadence and budget for a launched app's first screen. A launch shows a splash or a loading
+ * surface before its first screen, and a JavaScript bundle can take seconds to arrive, so the
+ * budget is wider than a gesture's. It bounds when a poll may start; a slow remote capture that
+ * starts in time is still judged.
+ */
+const FIRST_SCREEN_SCHEDULE: ObservationSchedule = {
+  intervalMs: POST_GESTURE_STABILITY_SCHEDULE.intervalMs,
+  budgetMs: 10_000,
+  minPolls: 2,
+};
+
+/**
+ * At most this many nodes besides the Application and Window roots is a sparse first screen. With
+ * its root that is the five-node tree the settle loop already calls nearly empty.
+ */
+const FIRST_SCREEN_SPARSE_CONTENT_NODES = 4;
+
+/**
+ * How long a sparse first screen must stay unchanged before it counts as the real first screen. A
+ * screen with one button is ready after this window; a loading surface that changes within it is
+ * not.
+ */
+const FIRST_SCREEN_SPARSE_QUIET_MS = 1_500;
+
+/**
+ * Whether a quiet pair can stand as a launched app's first screen, from the nodes it holds besides
+ * the Application and Window roots. A tree with no such node is a launch or loading surface and never
+ * qualifies, whatever quality verdict the producer gave it: the iOS runner marks exactly that
+ * root-only tree sparse, and a runner that predates verdicts publishes it with none. A sparse tree
+ * qualifies once it has stayed unchanged for {@link FIRST_SCREEN_SPARSE_QUIET_MS}. Any other tree
+ * qualifies at once.
+ */
+function isFirstScreenReady(contentNodes: number, quietForMs: number): boolean {
+  if (contentNodes === 0) return false;
+  if (contentNodes > FIRST_SCREEN_SPARSE_CONTENT_NODES) return true;
+  return quietForMs >= FIRST_SCREEN_SPARSE_QUIET_MS;
+}
+
 export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 
 /**
@@ -86,6 +125,11 @@ export type PostGestureStabilityPending<S> = {
   positionals: string[];
   /** Absent when the writer stored no baseline (non-Apple, or nothing usable pre-gesture). */
   baseline?: PostGesturePreActionBaseline<S>;
+  /**
+   * `first-screen`: an app launch marked this record. A quiet pair settles the loop only when
+   * {@link isFirstScreenReady} accepts it, under {@link FIRST_SCREEN_SCHEDULE}.
+   */
+  readiness?: 'first-screen';
 };
 
 export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
@@ -106,6 +150,11 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   surfacesIdentical: (baseline: S, current: S) => boolean;
   /** Why `surfacesIdentical` said no, for the veto diagnostic. */
   summarizeDivergence: (baseline: S, current: S) => Record<string, number>;
+  /**
+   * How many nodes one attempt holds besides the Application and Window roots. Read only for a
+   * launch record.
+   */
+  countFirstScreenContent: (value: T) => number;
 };
 
 export type PostGestureStabilityOutcome<T> = {
@@ -129,6 +178,9 @@ export type PostGestureStabilityOutcome<T> = {
  */
 export function formatPostGestureOutcomeWarning({ kind, gesture }: PostGestureOutcome): string {
   const named = [gesture.action, ...gesture.positionals].join(' ').trim();
+  if (kind === 'loading') {
+    return `The app was still loading after ${named} when this tree was read: it may show a launch or loading screen. Run snapshot -i again, or wait for expected content (wait text ...) before acting.`;
+  }
   return kind === 'unsettled'
     ? `The surface was still changing after ${named} when this tree was read, so it may not match where the surface comes to rest: an element missing from it is not proof of absence.`
     : `${named} produced no visible change: the tree still matches its pre-gesture state. ` +
@@ -193,6 +245,14 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   // A rebase or a distrust verdict keeps polling on a pair that DID agree, so
   // the budget can expire on a surface that is already at rest.
   let lastPairAgreed = false;
+  // When the latest surface was first read, for the first-screen quiet window.
+  let quietSinceMs = startedAt;
+  const firstScreen = pending.readiness === 'first-screen';
+  const firstScreenReady = (value: T): boolean =>
+    isFirstScreenReady(
+      hooks.countFirstScreenContent(value),
+      lastPairAgreed ? now() - quietSinceMs : 0,
+    );
   let surfaceCache: CapturedSurface<T, S> | undefined;
 
   const surfaceOf = (value: T): CapturedSurface<T, S> => {
@@ -204,18 +264,25 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   const observed = await observeUntil<T, PostGestureStabilityOutcome<T>>({
     ...(params.initial !== undefined ? { initial: params.initial } : {}),
     capture: () => hooks.capture(),
-    schedule: POST_GESTURE_STABILITY_SCHEDULE,
+    schedule: firstScreen ? FIRST_SCREEN_SCHEDULE : POST_GESTURE_STABILITY_SCHEDULE,
     ...(clock ? { clock } : {}),
     verdict: (latest, previousValue) => {
       attempts += 1;
       const current = surfaceOf(latest);
-      if (previousValue === undefined) return { kind: 'continue' };
+      if (previousValue === undefined) {
+        quietSinceMs = now();
+        return { kind: 'continue' };
+      }
 
       const previous = surfaceOf(previousValue);
       lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
-      if (!lastPairAgreed) return { kind: 'continue' };
+      if (!lastPairAgreed) {
+        quietSinceMs = now();
+        return { kind: 'continue' };
+      }
 
       const elapsedMs = now() - startedAt;
+      if (firstScreen && !firstScreenReady(latest)) return { kind: 'continue' };
       // A capture plan may fall back or be pre-empted by the XCTest-channel penalty at any time,
       // so the serving surface can change mid-poll. This quiet pair says nothing about the
       // gesture: adopt it as a post-action baseline and keep going (#1569). The pair that rebases
@@ -273,6 +340,16 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   });
   // minPolls guarantees at least one judged value before an `expired` end can fire.
   const value = observed.last as T;
+  // Loading means no first screen at all. A first screen counts as settled at the deadline only
+  // under the same rule the loop uses (a small tree must have been quiet for the full window);
+  // otherwise it is unsettled.
+  if (firstScreen) {
+    if (hooks.countFirstScreenContent(value) === 0) {
+      return { value, postGestureOutcome: postGestureOutcome('loading', pending) };
+    }
+    if (lastPairAgreed && firstScreenReady(value)) return { value };
+    return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
+  }
   if (lastPairAgreed) return { value };
   return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
 }

@@ -43,7 +43,7 @@ const appsCommandMetadata = defineFieldCommandMetadata(
 
 const openCommandMetadata = defineFieldCommandMetadata(
   'open',
-  'Boot the selected device when needed, then open an app, deep link, or URL in a session. With a known app, start with open and foreground: a fresh open returns the initial interactive snapshot with refs (or initialSnapshotError: then run snapshot). Do not probe with devices or apps first; list them only for an unknown app id, and never guess one. The app or URL inputs select the foreground automation target. Remote daemons refuse file: URLs in open targets and launch URLs with reason REMOTE_HOST_INPUT_DENIED. Local web content is supported over HTTP(S).',
+  'Boot the selected device when needed, then open an app, deep link, or URL in a session. With a known app, start with open and foreground: a fresh open returns the initial interactive snapshot with refs (or initialSnapshotError: then run snapshot). Do not probe with devices or apps first; list them only for an unknown app id, and never guess one. The app or URL inputs select the foreground automation target. On a local iOS simulator, the first capture after a launch waits up to 10s for a real first screen, not a root-only launch tree; other devices and backends skip the wait. On timeout it returns what it read, warning with postGestureOutcome.kind "loading" or "unsettled". Remote daemons refuse file: URLs in open targets and launch URLs with reason REMOTE_HOST_INPUT_DENIED. Local web content is supported over HTTP(S).',
   {
     app: stringField('App name, bundle id, package, or URL.'),
     url: stringField('Optional URL passed with an app shell.'),

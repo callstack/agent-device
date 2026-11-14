@@ -4,6 +4,7 @@ import { createAgentDeviceClient } from '@agent-device/client';
 import { runCommand } from '@agent-device/command-surface';
 import type { DevicePin } from '@agent-device/contracts/device';
 import {
+  FIRST_SCREEN_NODES,
   PROVIDER_SCENARIO_ANDROID,
   PROVIDER_SCENARIO_IOS_SIMULATOR,
   PROVIDER_SCENARIO_MACOS,
@@ -27,13 +28,10 @@ test('Provider-backed integration admits an existing session device through its 
       deviceId: device.id,
       repeat: true,
       result: {
+        // A populated first screen, so the first capture after open settles on one quiet pair.
         nodes: [
-          {
-            index: 0,
-            type: 'Application',
-            label: 'Existing Session App',
-            rect: { x: 0, y: 0, width: 400, height: 800 },
-          },
+          { ...FIRST_SCREEN_NODES[0], label: 'Existing Session App' },
+          ...FIRST_SCREEN_NODES.slice(1),
         ],
         truncated: false,
       },

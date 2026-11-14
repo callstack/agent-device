@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -178,8 +178,10 @@ test(
   { timeout: PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS },
   async () => {
     const runnerTranscript = createProviderTranscript([
-      // snapshot -i: issues refs; the first capture after open settles: one extra read
-      snapshotEntry(BEFORE_NODES),
+      // The first capture after open settles over a quiet pair of first-screen reads.
+      snapshotEntry(FIRST_SCREEN_NODES),
+      snapshotEntry(FIRST_SCREEN_NODES),
+      // snapshot -i: issues refs
       snapshotEntry(BEFORE_NODES),
       // press label=Continue --settle: resolution capture, tap, settle captures
       snapshotEntry(BEFORE_NODES),
@@ -211,6 +213,7 @@ test(
           udid: DEVICE_ID,
         });
         assertRpcOk(open);
+        assertRpcOk(await daemon.callCommand('snapshot'));
 
         const snapshot = await daemon.callCommand('snapshot', [], {
           snapshotInteractiveOnly: true,
@@ -310,9 +313,11 @@ test('Provider-backed integration never-settled press --settle does not issue di
     },
   ];
   const runnerTranscript = createProviderTranscript([
-    // press label=Continue --settle: resolution capture (the first capture after open settles: one extra read),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    // press label=Continue --settle: resolution capture,
     // tap, then a settle stream that never repeats itself, so the loop can only ever time out.
-    snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     tapEntry(200, 322),
     changingSnapshotEntry(loadingNodes),
@@ -340,6 +345,7 @@ test('Provider-backed integration never-settled press --settle does not issue di
         udid: DEVICE_ID,
       });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
 
       const press = await daemon.callCommand('press', ['label=Continue'], {
         settle: true,
@@ -371,8 +377,10 @@ test('Provider-backed integration never-settled press --settle does not issue di
 
 test('Provider-backed integration modal-dismiss press --settle attaches the unchanged interactive tail', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs; the first capture after open settles: one extra read
-    snapshotEntry(MODAL_BEFORE_NODES),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    // snapshot -i: issues refs
     snapshotEntry(MODAL_BEFORE_NODES),
     // press label=Cancel --settle: resolution capture, tap, settle captures.
     // The dialog closes leaving Continue in place — a removals-only diff with
@@ -406,6 +414,7 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
         udid: DEVICE_ID,
       });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
 
       const snapshot = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,
