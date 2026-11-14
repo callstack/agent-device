@@ -51,7 +51,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // a navigation bar's. `--content-back-button` adds an in-content button identified `BackButton` at the
 // bottom of the detail screen, which is not the system back button; `--moving-content-back` also moves
 // it every 0.05 s; `--top-content-back` puts it just below the bar instead. The root's label reports
-// what happened.
+// what happened. `--alert-back` makes the back press present an alert over the screen instead of popping.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @property(nonatomic, strong) NSTimer *titleTimer;
@@ -113,6 +113,17 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
       ]];
       if ([NSProcessInfo.processInfo.arguments containsObject:@"--hidden-bar"]) {
         [self setNavigationBarHidden:YES animated:NO];
+      }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--alert-back"]) {
+      if (@available(iOS 16.0, *)) {
+        __weak UIViewController *weakDetail = detail;
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
+          UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Discard?" message:nil
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
+          [alert addAction:[UIAlertAction actionWithTitle:@"Stay" style:UIAlertActionStyleCancel handler:nil]];
+          [weakDetail presentViewController:alert animated:NO completion:nil];
+        }];
       }
     }
     BOOL movingContent = [NSProcessInfo.processInfo.arguments containsObject:@"--moving-content-back"];

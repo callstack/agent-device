@@ -159,6 +159,21 @@ extension RunnerTests {
     XCTAssertTrue(app.navigationBars["Detail"].exists)
   }
 
+  /// A back tap that presents an alert covers the bar's back button instead of popping: the button
+  /// stays in the tree, so the outcome is unknown, not a pop.
+  @MainActor
+  func testInAppBackReportsABackTapThatPresentsAnAlertAsUnverified() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--alert-back"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("an alert over the bar must not read as a pop")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+  }
+
   /// A bar title that counts down on its own is not a navigation: a tap that navigates nowhere on
   /// such a bar reports an unknown outcome, though the title changes within the confirmation window.
   @MainActor
@@ -874,13 +889,9 @@ extension RunnerTests {
     let inBar = CGRect(x: 8, y: 60, width: 44, height: 30)
     let below = CGRect(x: 100, y: 120, width: 120, height: 44)
     let content = CGRect(x: 100, y: 800, width: 120, height: 44)
-    let always: (Int) -> Bool = { _ in true }
-    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], hittable: always, barFrames: [bar], windowHeight: 874), [0])
-    XCTAssertEqual(Self.backButtonCandidates([below, content], hittable: always, barFrames: [bar], windowHeight: 874), [0])
-    XCTAssertEqual(Self.backButtonCandidates([content], hittable: always, barFrames: [bar], windowHeight: 874), [])
-    // A bar button that cannot be hit does not hide the floating one.
-    XCTAssertEqual(
-      Self.backButtonCandidates([inBar, below], hittable: { $0 != 0 }, barFrames: [bar], windowHeight: 874), [1])
+    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([content], barFrames: [bar], windowHeight: 874), [])
   }
 #endif
 

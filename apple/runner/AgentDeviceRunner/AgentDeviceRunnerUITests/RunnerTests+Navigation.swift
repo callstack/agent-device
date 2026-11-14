@@ -384,7 +384,7 @@ extension RunnerTests {
       case .unreadable: return .notFound("unreadable")
       case .read(let read): sample = read
       }
-      let candidates = sample.byBar
+      let candidates = sample.candidates(by: sample.bars)
       if candidates.isEmpty { return .notFound("no") }
       let current = sample.state(of: candidates, bars: nil)
       let buttonsStill = previous.map { current.hasSameButtons(as: $0) } ?? false
@@ -491,7 +491,7 @@ extension RunnerTests {
       ) {
       case .read(let after)
       where Self.navigationBarBackPopped(
-        from: before, to: after.state(of: after.byBar, bars: after.bars)
+        from: before, to: after.state(of: after.candidates(by: after.bars), bars: after.bars)
       ):
         return .changed
       case .hung: return .hung
@@ -557,13 +557,8 @@ extension RunnerTests {
     let barsWereRead: Bool
     let windowHeight: CGFloat
 
-    /// The candidates the read found by its bars. Set by the read, which holds its XCTest issues.
-    var byBar: [Int] = []
-
-    /// Reads hittability, so call it only inside a held read.
     func candidates(by bars: [NavigationBarSnapshot]) -> [Int] {
-      RunnerTests.backButtonCandidates(
-        frames, hittable: { buttons[$0].isHittable }, barFrames: bars.map(\.frame), windowHeight: windowHeight)
+      RunnerTests.backButtonCandidates(frames, barFrames: bars.map(\.frame), windowHeight: windowHeight)
     }
 
     /// The candidates' state, with the bars read when given.
@@ -605,12 +600,10 @@ extension RunnerTests {
         bars = barSnapshots(elements, deadlineMs: deadlineMs)
       }
       guard let bars else { return nil }
-      var sample = NavigationBarBackSample(
+      return NavigationBarBackSample(
         buttons: buttons, labels: labels, frames: frames, roots: roots, bars: bars,
         barsWereRead: knownBars == nil, windowHeight: windowHeight
       )
-      sample.byBar = sample.candidates(by: bars)
-      return sample
     }
   }
 
@@ -626,20 +619,18 @@ extension RunnerTests {
     }
   }
 
-  /// The back buttons by a navigation bar, in two tiers. First the buttons inside a bar, which is the
-  /// rule a button in a bar's subtree always met, when one of them is hittable. Only otherwise, the
+  /// The back buttons by a navigation bar, in two tiers decided by geometry alone, so the state read
+  /// before the tap and after it never depends on what covers a button. First the buttons inside a bar,
+  /// which is the rule a button in a bar's subtree always met. Only when none is inside one, the
   /// buttons below a bar where the iPhone Duo floats its button. A content `BackButton` near the top
-  /// therefore never competes with the bar's own button, and a bar button that cannot be hit does not
-  /// hide the floating one.
-  static func backButtonCandidates(
-    _ frames: [CGRect], hittable: (Int) -> Bool, barFrames: [CGRect], windowHeight: CGFloat
-  ) -> [Int] {
+  /// therefore never competes with the bar's own button. Hittability only picks the tap target.
+  static func backButtonCandidates(_ frames: [CGRect], barFrames: [CGRect], windowHeight: CGFloat) -> [Int] {
     let inside = frames.indices.filter { index in
       barFrames.contains { $0.contains(CGPoint(x: frames[index].midX, y: frames[index].midY)) }
     }
-    if inside.contains(where: hittable) { return inside }
+    if !inside.isEmpty { return inside }
     return frames.indices.filter {
-      !inside.contains($0) && backButtonBelongsToABar(frames[$0], barFrames: barFrames, windowHeight: windowHeight)
+      backButtonBelongsToABar(frames[$0], barFrames: barFrames, windowHeight: windowHeight)
     }
   }
 

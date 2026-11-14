@@ -175,8 +175,8 @@ and bar count, such as one between two screens whose back buttons have the same 
 navigation. Under an unlabeled button the same misread applies to a bar that retitles itself:
 after the tap, any single changed title read within the confirmation window answers `ok`. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
-before each button's snapshot and each bar's snapshot. A query in flight finishes or ends at
-XCTest's own query timeout.
+before each button's snapshot and each bar's snapshot; the live read before the tap counts as a read of
+its own. A query in flight finishes or ends at XCTest's own query timeout.
 After the tap, when no read in the 1 s saw a change or hung, the runner starts one more read after
 the 1 s, with no deadline of its own: a snapshot of a button that vanished mid-pop can spend the 1 s
 in XCTest's retries, and this read can still see the screen after the pop. That read can also fail,
