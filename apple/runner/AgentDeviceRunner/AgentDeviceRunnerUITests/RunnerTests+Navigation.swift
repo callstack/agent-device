@@ -293,7 +293,9 @@ extension RunnerTests {
   /// navigation. A back button with no label, such as the iPhone Duo's floating one, shows no pop on
   /// its own, so a state with such a button also holds the bars' titles (their identifiers, which
   /// UIKit sets to the title, or their labels when the identifier is empty). The state read decides that itself, so the state before the tap and
-  /// each one after it hold titles under the same rule.
+  /// each one after it hold titles under the same rule. Limit: on the Duo no structural signal shows
+  /// every pop (closed, the button and one bar stay after a pop), so a bar that retitles itself more
+  /// slowly than the still check samples, under an unlabeled button, can be misread as a pop.
   struct NavigationBarBackState: Equatable {
     var barCount: Int
     let backButtonLabels: [String]
