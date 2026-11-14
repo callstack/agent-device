@@ -146,8 +146,8 @@ synthesized tap only when all of these hold:
 - One live read of those buttons then finds exactly one hittable. Its frame is in the state. The match
   places the snapshot frames at the window's screen origin, because a placed iPad window reports them
   from its own top-left.
-- That button is by a navigation bar: inside it, or horizontally within it and below it in the top
-  third of the windows. The Duo's sits 43 pt below the bar open and 93 pt closed.
+- That button is by a navigation bar: inside it, or horizontally within it and below it, within a
+  third of the window height from the bar's top.
 - The bar state read by the first round and by the live read agree (below).
 - A pop can show in the state: every `BackButton` has a label, or a bar has a title.
 
@@ -173,9 +173,8 @@ and bar count, such as one between two screens whose back buttons have the same 
 `BACK_SWIPE_UNVERIFIED`; so can a pop on a back button whose title updates itself, misread as a
 navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
-before each button's snapshot; the live read before the tap has a 1 s budget of its own,
-checked before each bar's snapshot. A query in flight finishes or ends at XCTest's own query
-timeout.
+before each button's snapshot and each bar's snapshot. A query in flight finishes or ends at
+XCTest's own query timeout.
 After the tap, when no read in the 1 s saw a change or hung, the runner starts one more read after
 the 1 s, with no deadline of its own: a snapshot of a button that vanished mid-pop can spend the 1 s
 in XCTest's retries, and this read can still see the screen after the pop. That read can also fail,

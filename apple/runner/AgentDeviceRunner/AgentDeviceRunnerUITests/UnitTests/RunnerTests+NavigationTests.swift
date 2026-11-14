@@ -812,11 +812,10 @@ extension RunnerTests {
     XCTAssertFalse(NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: [""]).canShowAPop)
     XCTAssertTrue(NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button]).canShowAPop)
   }
-#endif
 
-  /// The Duo's floating back button, measured on iOS 27.1 in all three poses, and an iPhone's button
-  /// inside its bar are by a bar; a button of the content below the top third, or beside the bar's
-  /// width, is not.
+  /// The Duo's floating back button (measured on iOS 27.1 in all three poses) and an iPhone's button
+  /// inside its bar belong to a bar. A content button far below the bar, or outside the bar's
+  /// horizontal span, does not.
   func testBackButtonBelongsToABarOnlyWhenItIsByTheBar() {
     XCTAssertTrue(Self.backButtonBelongsToABar(
       CGRect(x: 884, y: 125, width: 38, height: 38), barFrames: [CGRect(x: 0, y: 24, width: 951, height: 58)], windowHeight: 669))
@@ -831,6 +830,7 @@ extension RunnerTests {
       CGRect(x: 500, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 320, height: 44)], windowHeight: 874))
     XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [], windowHeight: 874))
   }
+#endif
 
   /// A still screen settles before the budget runs out at any capture time: the settle loop's
   /// timeline, replayed with fixed captures, reaches the required still span first. On a simulator
