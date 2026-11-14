@@ -32,7 +32,7 @@ import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import {
-  getRequestDeadlineMs,
+  getRequestReadOnlyDeadlineMs,
   getRequestSignal,
   isRequestCanceled,
   emitRequestProgress,
@@ -104,7 +104,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   parseBooleanLiteral,
   isRecord,
   emitRequestProgress,
-  getRequestDeadlineMs,
+  getRequestReadOnlyDeadlineMs,
   getRequestSignal,
   isRequestCanceled,
   classifyBootFailure,
