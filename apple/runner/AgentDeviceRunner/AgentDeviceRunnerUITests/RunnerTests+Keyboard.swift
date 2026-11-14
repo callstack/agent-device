@@ -287,16 +287,25 @@ extension RunnerTests {
       "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
   }
 
-  /// The refusal a `keyboard enter` answers with when nothing was submitted: the keyboard exposes no
+  /// The refusal a `keyboard enter` answers with when the control is missing: the keyboard exposes no
   /// return-like key, and typing a return found no field to type into. It carries the runner's own code
   /// so the host publishes `details.reason` instead of leaving callers to read the prose. The dispatch
-  /// disclosure stays `unknown`: the sole-text-field route taps that field before it types, and that
-  /// tap can be the step that failed.
+  /// disclosure stays `unknown` because typing the return can fail after XCTest sent it.
   var keyboardReturnRefusal: ErrorPayload {
     return ErrorPayload(
       code: RunnerWireErrorCode.keyboardReturnUnavailable,
       message: "Unable to press the keyboard return key: the keyboard exposes no return-like key and no text field was available to submit",
       hint: "Tap the app's own submit control by its ref, or focus a text field with fill or type before asking keyboard enter to submit it."
+    )
+  }
+
+  /// The refusal for a sole text field that was found and tapped but would not take the return. It is
+  /// not an absent control, so it has no typed reason; the tap may have landed.
+  var keyboardReturnFieldAttemptFailure: ErrorPayload {
+    return ErrorPayload(
+      code: "UNSUPPORTED_OPERATION",
+      message: "Unable to press the keyboard return key: the only text field was found, but tapping it and typing a return failed",
+      hint: "Focus the field with fill or type, or tap the app's own submit control by its ref."
     )
   }
 
@@ -345,26 +354,30 @@ extension RunnerTests {
     return runnerPngData(for: image)
   }
 
-  func pressKeyboardReturn(app: XCUIApplication) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
+  /// `fieldAttempted` is true when the sole-text-field route found a field and tapped it before typing,
+  /// so a failed press there is a failed attempt rather than a missing control.
+  func pressKeyboardReturn(
+    app: XCUIApplication
+  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool) {
 #if os(tvOS)
-    return (wasVisible: false, pressed: pressTvRemote(.select), visible: false)
+    return (wasVisible: false, pressed: pressTvRemote(.select), visible: false, fieldAttempted: false)
 #elseif os(iOS)
     let wasVisible = isKeyboardVisible(app: app)
     if tapKeyboardReturnControl(app: app) {
       sleepFor(0.2)
-      return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
+      return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: false)
     }
 
     guard typeKeyboardReturn({ app.typeText(XCUIKeyboardKey.return.rawValue) }) else {
       if let singleTarget = singleTextEntryElement(app: app) {
         return pressKeyboardReturn(on: singleTarget, app: app, wasVisible: wasVisible)
       }
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app))
+      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app), fieldAttempted: false)
     }
     sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
+    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: false)
 #else
-    return (wasVisible: false, pressed: false, visible: false)
+    return (wasVisible: false, pressed: false, visible: false, fieldAttempted: false)
 #endif
   }
 
@@ -386,7 +399,7 @@ extension RunnerTests {
     on element: XCUIElement,
     app: XCUIApplication,
     wasVisible: Bool
-  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
+  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool) {
 #if os(iOS)
     // `element` is bound by index, and the keyboard the tap raises shifts those indices, so the
     // return goes to whatever the tap focused rather than to a re-resolved `element`.
@@ -395,12 +408,12 @@ extension RunnerTests {
       app.typeText(XCUIKeyboardKey.return.rawValue)
     })
     guard typed else {
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app))
+      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app), fieldAttempted: true)
     }
     sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
+    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: true)
 #else
-    return (wasVisible: wasVisible, pressed: false, visible: false)
+    return (wasVisible: wasVisible, pressed: false, visible: false, fieldAttempted: false)
 #endif
   }
 

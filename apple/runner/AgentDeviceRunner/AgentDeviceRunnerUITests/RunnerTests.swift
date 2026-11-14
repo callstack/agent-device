@@ -68,8 +68,8 @@ final class RunnerTests: XCTestCase {
     static let keyboardDismissUnavailable = "KEYBOARD_DISMISS_UNAVAILABLE"
     /// A `keyboard enter` that found no return key to press and no text entry to submit through, so
     /// nothing was submitted. The host reports it under `UNSUPPORTED_OPERATION` and publishes
-    /// `details.reason`; the disclosure stays `unknown` because the sole-field route taps the field
-    /// before it types, and that tap can be the last thing that fails.
+    /// `details.reason`; the disclosure stays `unknown` because typing the return can fail after XCTest
+    /// sent it. A sole field that was found but would not take the return is not this refusal.
     static let keyboardReturnUnavailable = "KEYBOARD_RETURN_UNAVAILABLE"
     /// A press of a hardware or Siri Remote control this target cannot perform: the press helper refuses
     /// before pressing anything, so the host reports `UNSUPPORTED_OPERATION` with `details.reason` and

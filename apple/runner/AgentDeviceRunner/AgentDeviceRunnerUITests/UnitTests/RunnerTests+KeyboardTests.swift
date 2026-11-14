@@ -162,6 +162,14 @@ extension RunnerTests {
     XCTAssertNotNil(refusal.hint)
   }
 
+  /// A sole field that was found and tapped but would not take the return is a failed attempt, not an
+  /// absent control, so it must not publish the unavailable reason.
+  func testKeyboardReturnFieldAttemptFailureIsNotTheTypedRefusal() {
+    let failure = keyboardReturnFieldAttemptFailure
+    XCTAssertEqual(failure.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNotEqual(failure.code, keyboardReturnRefusal.code)
+  }
+
   func testKeyboardBandFactPublishesAbsenceWhenTheCompleteCaptureHasNoKeyboard() {
     let fact = runnerKeyboardBandFact(exists: false, frame: .zero)
     XCTAssertEqual(fact, .absent)

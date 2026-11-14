@@ -183,16 +183,27 @@ async function oneShotGesture(instrument: AndroidAdbExecutor): Promise<void> {
  * cannot be `no`.
  */
 async function dismissAgainstImeThatIgnoresEscape(): Promise<void> {
+  let escapeKeyevents = 0;
   await withFakeAdb(
     (args) => {
       const flat = args.join(' ');
       if (flat === 'shell dumpsys input_method') {
         return ['mInputShown=true mIsInputViewShown=true', 'inputType=0x1'].join('\n');
       }
-      if (flat === 'shell input keyevent 111') return '';
+      if (flat === 'shell input keyevent 111') {
+        escapeKeyevents += 1;
+        return '';
+      }
       return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
     },
-    async ({ device }) => await dismissAndroidKeyboard(device),
+    async ({ device }) => {
+      try {
+        await dismissAndroidKeyboard(device);
+      } catch (error) {
+        assert.equal(escapeKeyevents, 2, 'the refusal follows both scripted escape keyevents');
+        throw error;
+      }
+    },
   );
 }
 

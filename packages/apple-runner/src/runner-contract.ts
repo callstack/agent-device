@@ -303,9 +303,10 @@ export const KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_DISMISS_UNAVAI
 /**
  * The runner's own code refusing a `keyboard enter` whose keyboard exposes no return-like key and for
  * which no text field could be found to submit through. Unlike the dismiss refusal it cannot prove
- * nothing ran: the sole-text-field route taps that field before typing the return, and that tap can be
- * the step that fails, so the disclosure stays `unknown`. It is the runner's vocabulary, declared here
- * beside the set that keeps it off the wire, and consumers read `details.reason`.
+ * nothing ran: typing the return can fail after XCTest sent it, so the disclosure stays `unknown`. A
+ * sole field that was found and tapped but would not take the return is not this refusal. It is the
+ * runner's vocabulary, declared here beside the set that keeps it off the wire, and consumers read
+ * `details.reason`.
  */
 export const KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_RETURN_UNAVAILABLE';
 

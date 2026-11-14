@@ -612,7 +612,7 @@ extension RunnerTests {
         )
       )
     case .keyboardReturn:
-      var press: (wasVisible: Bool, pressed: Bool, visible: Bool)?
+      var press: (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool)?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .preEventSkipped) {
         press = pressKeyboardReturn(app: activeApp)
       }
@@ -620,7 +620,10 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "keyboardReturn produced no result"))
       }
       if !result.pressed {
-        return Response(ok: false, error: keyboardReturnRefusal)
+        return Response(
+          ok: false,
+          error: result.fieldAttempted ? keyboardReturnFieldAttemptFailure : keyboardReturnRefusal
+        )
       }
       return Response(
         ok: true,

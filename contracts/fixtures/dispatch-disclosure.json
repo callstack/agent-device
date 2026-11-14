@@ -310,7 +310,7 @@
   {
     "id": "ios-runner.reply.KEYBOARD_RETURN_UNAVAILABLE",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code KEYBOARD_RETURN_UNAVAILABLE: `keyboard enter` found no return key to press; the sole-text-field route taps the field before typing, so a tap may have landed",
+    "trigger": "structured runner reply with code KEYBOARD_RETURN_UNAVAILABLE: `keyboard enter` found no return key to press and no text field to submit through; typing the return can fail after XCTest sent it",
     "dispatched": "unknown"
   },
   {
