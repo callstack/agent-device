@@ -135,19 +135,27 @@ than silently applied:
 ```
 
 `backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
-call, for the navigation bar's system back button: a button with the identifier `BackButton` inside a
-navigation bar. It taps that button with a synthesized tap only when exactly one live, hittable
-candidate is found in a readable tree, and two reads in a row of the bar state, with a 0.05 s pause
-between them, agree and contain that button's frame; each round re-reads the buttons. The match
+call, for the system back button: a button with the identifier `BackButton` anywhere in the app's
+windows (the lit panel's windows when a panel is booked), because a floating one, such as the
+iPhone Duo's, is a sibling of the navigation bar rather than inside it. It taps that button with a
+synthesized tap only when the app shows at least one navigation bar, exactly one live, hittable
+candidate is found in a readable tree, and two reads in a row of the back buttons, with a 0.05 s pause
+between them, agree; one live read of the hittable buttons, their frames and the bars then checks
+that the one button's frame is in the state. The match
 places the snapshot frames at the window's screen origin, because a placed iPad window reports them
 from its own top-left. No other button
 counts, whatever its label.
-The bar state is the labels of each navigation bar's `BackButton` children, one list per bar in
-bar order, and the frames of those buttons; one XCTest snapshot per bar. The still check before the
-tap compares labels and frames. Bar titles and identifiers are left out, because a bar can retitle
-itself (a countdown) without navigating. After the tap it reads that state again with a 0.05 s
-pause between reads. Only these changes from the state read before the tap answer `ok`: the number
-of bars, the number of `BackButton` children (such as none at the root), or a `BackButton` label.
+The state is the number of navigation bars, the labels of the `BackButton` buttons in tree order,
+and the frames of those buttons; one XCTest snapshot per button. The still check before the tap
+compares labels and frames. Bar titles are left out, because a bar can retitle itself (a countdown)
+without navigating, with one exception: a state with a `BackButton` that has no label, such as the
+Duo's, also holds the bars' titles (their identifiers, which UIKit sets to the title), because the
+label cannot show a pop. That rule belongs to the state read, so the state before the tap and each
+state after it follow it. When such a state has no non-empty title, the pop could not be confirmed,
+so nothing is tapped and the runner swipes (`found=unprovable`). After the tap it reads that state
+again with a 0.05 s pause between reads. Only these changes from the state read before the tap
+answer `ok`: the number of bars, the number of `BackButton` buttons (such as none at the root), a
+`BackButton` label, or, for an unlabeled button, a bar title.
 Frames are left out after the tap, because a tap that navigates nowhere can still move the button
 (a large-title collapse, a bar button that appears). A pop that keeps the same `BackButton` labels
 and bar count, such as one between two screens whose back buttons have the same title, answers
@@ -172,7 +180,8 @@ The runner swipes instead when no tap was sent:
 - The tree read is skipped: the window resolution marked the tree unreadable, accessibility is
   unavailable, or the XCTest snapshot channel is penalized for the app.
 - The read fails or XCTest rejects one of its queries.
-- No candidate is found, or two or more are (such as a sheet over a stack).
+- No candidate is found, or two or more are (such as a sheet over a stack), or the app shows no
+  navigation bar, or the candidate has no label and no bar has a title.
 - The bar state does not hold still within 1 s.
 - The synthesized tap is refused before anything is sent.
 
@@ -217,7 +226,7 @@ window can still be misread as a back navigation; any finite window has that lim
 
 Each iOS back whose window context resolved logs one `AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON`
 line on every exit of the button path, a thrown tap included, with `found` (`skipped`,
-`unreadable`, `hung`, `moving`, `no`, `ambiguous`, or `yes`), `pressed`, `confirmed` (`yes`, `no`,
+`unreadable`, `hung`, `moving`, `no`, `ambiguous`, `unprovable`, or `yes`), `pressed`, `confirmed` (`yes`, `no`,
 `hung`, or `-` before a tap), `lookupMs` (`0` when the read was
 skipped), and `confirmMs`. Each swipe logs one runner line, `AGENT_DEVICE_RUNNER_BACK_SWIPE_VERIFICATION`, on every exit, with its
 `outcome` (`performed`, `refused`, `unconfirmed`, or `error` for a thrown failure), `code`, `changed`, `stableMs`, `justBeforeToAfterMs`, `gestureMs`, `maxCaptureMs`,

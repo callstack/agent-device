@@ -45,8 +45,10 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
 // without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
 // so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
-// "Back" on the root, which is not the system back button and must never be pressed. The root's
-// label reports what happened.
+// "Back" on the root, which is not the system back button and must never be pressed.
+// `--floating-back` hides the bar's back button and floats an unlabeled one in the screen's content
+// beside the bar, as the iPhone Duo does; `--hidden-bar` also hides the bar, so that button is not
+// a navigation bar's. The root's label reports what happened.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @property(nonatomic, strong) NSTimer *titleTimer;
@@ -85,6 +87,28 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
         detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
           if (shifting) weakSelf.additionalSafeAreaInsets = UIEdgeInsetsMake(30, 0, 0, 0);
         }];
+      }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--floating-back"]) {
+      detail.navigationItem.hidesBackButton = YES;
+      UIButton *floating = [UIButton buttonWithType:UIButtonTypeSystem];
+      floating.accessibilityIdentifier = @"BackButton";
+      floating.accessibilityLabel = @"";
+      [floating setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+      floating.translatesAutoresizingMaskIntoConstraints = NO;
+      __weak UINavigationController *weakSelf = self;
+      [floating addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        [weakSelf popViewControllerAnimated:NO];
+      }] forControlEvents:UIControlEventTouchUpInside];
+      [detail.view addSubview:floating];
+      [NSLayoutConstraint activateConstraints:@[
+        [floating.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [floating.trailingAnchor constraintEqualToAnchor:detail.view.trailingAnchor constant:-16],
+        [floating.widthAnchor constraintEqualToConstant:44],
+        [floating.heightAnchor constraintEqualToConstant:44],
+      ]];
+      if ([NSProcessInfo.processInfo.arguments containsObject:@"--hidden-bar"]) {
+        [self setNavigationBarHidden:YES animated:NO];
       }
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {

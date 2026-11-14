@@ -77,6 +77,36 @@ extension RunnerTests {
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
+  /// A floating back button with no label, outside the bar's subtree as on the iPhone Duo, is pressed
+  /// and its pop is confirmed through the bar's title.
+  @MainActor
+  func testInAppBackPressesAFloatingUnlabeledBackButtonAndConfirmsThroughTheBarTitle() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 0)
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a floating back button beside a navigation bar must be pressed and confirmed")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
+  /// A back button identified `BackButton` in an app with no navigation bar is not a system back
+  /// button: nothing is pressed.
+  @MainActor
+  func testInAppBackNeverPressesABackButtonWhenTheAppShowsNoNavigationBar() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back", "--hidden-bar"])
+    defer { endBackFixture() }
+
+    _ = try performInAppBack(app: app)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "no")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+  }
+
   /// A delivered tap on the system back button is not a navigation: when the bar does not change,
   /// back reports an unknown outcome and never swipes after the tap.
   @MainActor
@@ -526,7 +556,8 @@ extension RunnerTests {
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
-    XCTAssertTrue(app.navigationBars.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let ready = arguments.contains("--hidden-bar") ? app.buttons[Self.navigationBarBackButtonIdentifier] : app.navigationBars.firstMatch
+    XCTAssertTrue(ready.waitForFixtureExistence(timeout: appExistenceTimeout))
     return app.staticTexts["agent-device-back-navigation-status"]
   }
 
@@ -743,10 +774,10 @@ extension RunnerTests {
     XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
   }
 
-  /// After the tap, only a change of the bar count, the back button count, or a back button label
-  /// shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
+  /// After the tap, only a change of the bar count, the back button count, a back button label, or,
+  /// for a back button with no label, a bar title shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
   /// it is never a still bar before the tap.
-  func testNavigationBarBackPoppedOnlyOnABarOrBackButtonChange() {
+  func testNavigationBarBackPoppedOnlyOnABarBackButtonOrUnlabeledBarTitleChange() {
     let button = CGRect(x: 8, y: 54, width: 44, height: 44)
     let detail = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button])
 
@@ -764,6 +795,10 @@ extension RunnerTests {
     let unlabeled = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["About"])
     let unlabeledPopped = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["General"])
     XCTAssertTrue(Self.navigationBarBackPopped(from: unlabeled, to: unlabeledPopped))
+    XCTAssertTrue(unlabeled.canShowAPop)
+    // Without a bar title an unlabeled button could never confirm its pop, so it is not tapped.
+    XCTAssertFalse(NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: [""]).canShowAPop)
+    XCTAssertTrue(NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button]).canShowAPop)
   }
 #endif
 
