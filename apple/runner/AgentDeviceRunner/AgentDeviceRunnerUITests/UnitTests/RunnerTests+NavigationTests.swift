@@ -77,6 +77,73 @@ extension RunnerTests {
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
+  /// A floating back button with no label, outside the bar's subtree as on the iPhone Duo, is pressed
+  /// and its pop is confirmed through the bar's title.
+  @MainActor
+  func testInAppBackPressesAFloatingUnlabeledBackButtonAndConfirmsThroughTheBarTitle() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 0)
+
+    try assertBackPressesTheButtonAndPops(status, "a floating back button beside a navigation bar must be pressed and confirmed")
+  }
+
+  /// A bar that retitles itself, such as a countdown, never holds still for an unlabeled back button,
+  /// whose pop the title alone shows: nothing is tapped.
+  @MainActor
+  func testInAppBackNeverPressesAnUnlabeledBackButtonUnderATickingBarTitle() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back", "--fast-ticking-title"])
+    defer { endBackFixture() }
+
+    _ = try performInAppBack(app: app)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+    XCTAssertTrue(["moving", "unreadable"].contains(lastNavigationBarBackTraceForTesting?.found ?? ""), "the lookup never holds still")
+  }
+
+  /// An in-content button identified `BackButton` is no candidate: the bar's own back button is still
+  /// the one pressed, not counted as ambiguous.
+  @MainActor
+  func testInAppBackPressesTheBarBackButtonBesideAnInContentBackButton() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--content-back-button"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 2)
+
+    try assertBackPressesTheButtonAndPops(status, "the bar's back button must be pressed beside an in-content button of the same identifier")
+  }
+
+  /// An in-content `BackButton` just below the bar, in the region a floating button can take, does not
+  /// make the lookup ambiguous: the button inside the bar is pressed.
+  @MainActor
+  func testInAppBackPressesTheBarBackButtonBesideAnInContentBackButtonBelowTheBar() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--top-content-back"])
+    defer { endBackFixture() }
+    try assertBackPressesTheButtonAndPops(status, "an in-content button below the bar must not make the bar's button ambiguous")
+  }
+
+  /// An in-content `BackButton` that keeps moving does not hold the lookup back: it is not compared.
+  @MainActor
+  func testInAppBackIsNotBlockedByAMovingInContentBackButton() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--moving-content-back"])
+    defer { endBackFixture() }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a moving in-content button must not block the bar's back button")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+  }
+
+  /// A back button identified `BackButton` in an app with no navigation bar is not a system back
+  /// button: nothing is pressed.
+  @MainActor
+  func testInAppBackNeverPressesABackButtonWhenTheAppShowsNoNavigationBar() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back", "--hidden-bar"])
+    defer { endBackFixture() }
+
+    _ = try performInAppBack(app: app)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "no")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+  }
+
   /// A delivered tap on the system back button is not a navigation: when the bar does not change,
   /// back reports an unknown outcome and never swipes after the tap.
   @MainActor
@@ -90,6 +157,21 @@ extension RunnerTests {
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
     XCTAssertTrue(app.navigationBars["Detail"].exists)
+  }
+
+  /// A back tap that presents an alert covers the bar's back button instead of popping: the button
+  /// stays in the tree, so the outcome is unknown, not a pop.
+  @MainActor
+  func testInAppBackReportsABackTapThatPresentsAnAlertAsUnverified() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("UINavigationItem.backAction needs iOS 16") }
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--alert-back"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app) else {
+      return XCTFail("an alert over the bar must not read as a pop")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
   }
 
   /// A bar title that counts down on its own is not a navigation: a tap that navigates nowhere on
@@ -519,6 +601,17 @@ extension RunnerTests {
     return try XCTUnwrap(result).get()
   }
 
+  /// `back` presses a back button, confirms the pop, and the fixture's root reports it.
+  @MainActor
+  private func assertBackPressesTheButtonAndPops(_ status: XCUIElement, _ failure: String) throws {
+    guard case .performed = try performInAppBack(app: app) else { return XCTFail(failure) }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, true)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
   @MainActor
   private func launchBackNavigationFixture(_ arguments: [String]) throws -> XCUIElement {
     app.launchArguments = arguments
@@ -526,7 +619,8 @@ extension RunnerTests {
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
-    XCTAssertTrue(app.navigationBars.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let ready = arguments.contains("--hidden-bar") ? app.buttons[Self.navigationBarBackButtonIdentifier] : app.navigationBars.firstMatch
+    XCTAssertTrue(ready.waitForFixtureExistence(timeout: appExistenceTimeout))
     return app.staticTexts["agent-device-back-navigation-status"]
   }
 
@@ -724,7 +818,7 @@ extension RunnerTests {
   /// screen origin.
   func testNavigationBarBackStateHoldsTheLiveButtonOfAPlacedWindow() {
     let snapshotButton = CGRect(x: 8, y: 54, width: 44, height: 44)
-    let state = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [snapshotButton])
+    let state = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [snapshotButton])
     let placed = SurfaceGeometry(
       windowOnScreen: SurfaceRect(CGRect(x: 224, y: 128, width: 386, height: 954)),
       panelNativeSize: nil,
@@ -743,22 +837,61 @@ extension RunnerTests {
     XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
   }
 
-  /// After the tap, only a change of the bar count, the back button count, or a back button label
-  /// shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
+  /// After the tap, only a change of the bar count, the back button count, a back button label, or,
+  /// for a back button with no label, a bar title shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
   /// it is never a still bar before the tap.
-  func testNavigationBarBackPoppedOnlyOnABarOrBackButtonChange() {
+  func testNavigationBarBackPoppedOnlyOnABarBackButtonOrUnlabeledBarTitleChange() {
     let button = CGRect(x: 8, y: 54, width: 44, height: 44)
-    let detail = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button])
+    let detail = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button])
 
-    let moved = NavigationBarBackState(backButtonLabels: [["Root"]], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
+    let moved = NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button.offsetBy(dx: 0, dy: 30)])
     XCTAssertFalse(Self.navigationBarBackPopped(from: detail, to: moved))
     XCTAssertNotEqual(moved, detail)
-    let relabeled = NavigationBarBackState(backButtonLabels: [["Settings"]], backButtonFrames: [button])
+    let relabeled = NavigationBarBackState(barCount: 1, backButtonLabels: ["Settings"], backButtonFrames: [button])
     XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: relabeled))
-    let atRoot = NavigationBarBackState(backButtonLabels: [[]], backButtonFrames: [])
+    let atRoot = NavigationBarBackState(barCount: 1, backButtonLabels: [], backButtonFrames: [])
     XCTAssertTrue(Self.navigationBarBackPopped(from: detail, to: atRoot))
-    let barGone = NavigationBarBackState(backButtonLabels: [], backButtonFrames: [])
+    let barGone = NavigationBarBackState(barCount: 0, backButtonLabels: [], backButtonFrames: [])
     XCTAssertTrue(Self.navigationBarBackPopped(from: atRoot, to: barGone))
+
+    // A back button with no label shows a pop only through the bar title.
+    let unlabeled = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["About"])
+    let unlabeledPopped = NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: ["General"])
+    XCTAssertTrue(Self.navigationBarBackPopped(from: unlabeled, to: unlabeledPopped))
+    XCTAssertTrue(unlabeled.canShowAPop)
+    // Without a bar title an unlabeled button could never confirm its pop, so it is not tapped.
+    XCTAssertFalse(NavigationBarBackState(barCount: 1, backButtonLabels: [""], backButtonFrames: [button], barTitles: [""]).canShowAPop)
+    XCTAssertTrue(NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button]).canShowAPop)
+  }
+
+  /// The Duo's floating back button (measured on iOS 27.1 in all three poses) and an iPhone's button
+  /// inside its bar belong to a bar. A content button far below the bar, or outside the bar's
+  /// horizontal span, does not.
+  func testBackButtonBelongsToABarOnlyWhenItIsByTheBar() {
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 884, y: 125, width: 38, height: 38), barFrames: [CGRect(x: 0, y: 24, width: 951, height: 58)], windowHeight: 669))
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 399, y: 175, width: 38, height: 38), barFrames: [CGRect(x: 0, y: 24, width: 466, height: 58)], windowHeight: 678))
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 402, height: 44)], windowHeight: 874))
+    let bar = CGRect(x: 0, y: 54, width: 402, height: 44)
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 700, width: 44, height: 44), barFrames: [bar], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 20, width: 44, height: 20), barFrames: [bar], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(
+      CGRect(x: 500, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 320, height: 44)], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [], windowHeight: 874))
+  }
+
+  /// A button inside a bar is the candidate even when a content button sits below the bar; the
+  /// floating button is one when no button is inside a bar.
+  func testBackButtonCandidatesPreferTheButtonInsideTheBar() {
+    let bar = CGRect(x: 0, y: 54, width: 402, height: 44)
+    let inBar = CGRect(x: 8, y: 60, width: 44, height: 30)
+    let below = CGRect(x: 100, y: 120, width: 120, height: 44)
+    let content = CGRect(x: 100, y: 800, width: 120, height: 44)
+    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([content], barFrames: [bar], windowHeight: 874), [])
   }
 #endif
 
