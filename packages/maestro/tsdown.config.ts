@@ -16,6 +16,7 @@ export default defineConfig({
   dts: true,
   hash: false,
   deps: {
+    neverBundle: ['agent-device/plugins'],
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: ['yaml', 'undici', 'ipaddr.js', 'pngjs', 'jpeg-js'],
   },
