@@ -72,10 +72,7 @@ export async function streamFileToHttpRequest(options: {
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  /**
-   * The preparation aggregate `uploadArtifact` opened, combined with its caller's cancellation. Every
-   * attempt, redirect and resume runs under it; none of them opens a deadline of its own.
-   */
+  /** All hops share the enclosing aggregate/caller signal. */
   signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
@@ -108,12 +105,9 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
-  // A redirect or a resume is a new attempt with fresh phase timers under the same `options.signal`.
   const watchdog = createTransferPhaseWatchdog(options.signal);
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
 
-  // The owned pipeline (file → progress → request). Every exit joins it, so no owned byte overlaps
-  // the outcome or the next hop.
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
   return await new Promise<UploadStreamResponse>((resolve, reject) => {
@@ -128,7 +122,6 @@ async function streamFileToHttpRequestAttempt(options: {
       phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
-      // The queued pipeline has to settle before the join in `finally`.
       req.destroy();
       reject(error);
     };
@@ -161,8 +154,6 @@ async function streamFileToHttpRequestAttempt(options: {
 
     req.on('error', (err) => {
       if (phases.responseStarted) return;
-      // A cancellation or an expired phase is this client's own outcome, never a transport failure
-      // that a retry or a legacy fallback could fix.
       if (watchdog.signal.aborted) {
         fail(watchdog.signal.reason);
         return;
@@ -200,7 +191,6 @@ async function streamFileToHttpRequestAttempt(options: {
         fail(watchdog.signal.reason);
         return;
       }
-      // A transport break reports through `error`, so this is the artifact read failing.
       const error = err instanceof Error ? err : new Error(String(err));
       fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
@@ -219,8 +209,6 @@ async function streamFileToHttpRequestAttempt(options: {
     };
 
     async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
-      // Read the accepted answer to its end, then end and join the outgoing work before this attempt
-      // resolves or the next hop starts.
       const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
       phases.dispose();

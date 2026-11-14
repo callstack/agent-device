@@ -12,7 +12,10 @@ import {
   withUploadPreparationDeadline,
 } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
-import { createTransferPhaseWatchdog, isTransferPhaseTimeoutError } from '@agent-device/host-kit/transport';
+import {
+  createTransferPhaseWatchdog,
+  isTransferPhaseTimeoutError,
+} from '@agent-device/host-kit/transport';
 
 /** Ceiling for the small JSON `preflight` and `finalize` calls that bracket an upload. */
 const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;

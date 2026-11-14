@@ -90,13 +90,9 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
 }
 
 /**
- * Reports each non-empty `req.write` chunk that Node completes without an error: its bytes reached
- * the local kernel, not the peer. A queued write, `drain`, and a completion after the response
- * started, after `signal` aborted, after a destroy or after disposal are not reported.
- *
- * Attach it in the tick that creates the request, before anything writes to it. The wrapper keeps
- * the arguments, `this`, the backpressure result and one call of the caller's callback with its
- * error. Disposing removes its listener and restores `write` only while this wrapper is installed.
+ * Reports successful nonempty write completions as local-kernel acceptance, never peer receipt.
+ * Attach at construction. Late response/abort/destroy/dispose completions do not count.
+ * Disposal restores this wrapper only; caller arguments, callback and backpressure are preserved.
  */
 export function observeCompletedRequestWrites(
   req: ClientRequest,
@@ -139,41 +135,30 @@ export function observeCompletedRequestWrites(
   };
 }
 
-/** Ceiling for establishing the connection for each upload hop or offset resume. */
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 
-/**
- * Ceiling for response headers once this side's body is fully flushed, never from the moment the
- * request was created; for a bodyless request, from connection establishment.
- */
+/** Header wait begins after connection and outgoing flush. */
 export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
 
-/**
- * Ceiling for silence between body bytes in either direction. Moving bytes reset it; they never
- * touch the aggregate budget the attempt runs under.
- */
 export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
 
-export type TransferPhase = 'connect' | 'request-body' | 'response-headers' | 'response-body' | 'preflight' | 'finalize';
+export type TransferPhase =
+  | 'connect'
+  | 'request-body'
+  | 'response-headers'
+  | 'response-body'
+  | 'preflight'
+  | 'finalize';
 
 const BODY_PHASES: ReadonlySet<TransferPhase> = new Set(['request-body', 'response-body']);
 
-/** The `details.reason` every phase expiry carries, so no consumer has to match error text. */
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 
-/**
- * Watches the sequential phases of ONE transfer attempt: arming a later phase stops counting the
- * earlier one, and progress re-arms only a body phase. The caller's signal is combined in, never
- * replaced, so an enclosing aggregate deadline still wins and is never extended.
- */
+/** Sequential phases under the earliest caller/aggregate deadline; only body progress rearms. */
 export type TransferPhaseWatchdog = {
-  /** The signal the attempt runs on: the caller's cancellation plus every phase deadline. */
   signal: AbortSignal;
-  /** Starts watching `phase`. The phase watched before stops counting. */
   arm(phase: TransferPhase, timeoutMs: number): void;
-  /** Records body bytes moving, so only the silence since the last byte counts against a body phase. */
   touchBody(): void;
-  /** Stops the armed timer. Call it once the attempt is settled. */
   dispose(): void;
 };
 
@@ -201,7 +186,6 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
       rearm();
     },
     touchBody() {
-      // Progress in one phase buys no time in another.
       if (!armed || !BODY_PHASES.has(armed.phase)) return;
       rearm();
     },
@@ -213,7 +197,6 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
   };
 }
 
-/** Typed evidence that a phase, not the caller or the aggregate, ended the attempt. */
 function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
   return new AppError('COMMAND_FAILED', `Artifact transfer ${phase} timed out`, {
     reason: TRANSFER_PHASE_TIMEOUT_REASON,
@@ -222,36 +205,19 @@ function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number
   });
 }
 
-/** Whether `error` is a transfer phase's own expiry, which no fallback or retry may restart. */
 export function isTransferPhaseTimeoutError(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === TRANSFER_PHASE_TIMEOUT_REASON;
 }
 
-/** What `observeClientRequestPhases` reports and owns for one outgoing request. */
 export type ClientRequestPhases = {
-  /** Whether the response has started. Request-side events no longer move the phase after this. */
   readonly responseStarted: boolean;
-  /** Removes every listener the observer added. Call it once the exchange is settled. */
   dispose(): void;
 };
 
 /**
- * Drives `watchdog` through the phases of ONE outgoing `node:http` request.
- *
- * The caller arms `connect` before issuing the request. From the events that follow, this owner
- * decides the phase the exchange is in:
- * - A fresh socket is not a connection until `connect`, or `secureConnect` for TLS. A pooled socket
- *   already is. Until then the connect ceiling keeps counting, even when the whole body already sits
- *   in the write buffer, because buffered bytes are not transport progress.
- * - A connected exchange that is still writing is in `request-body`. Only the body progress the
- *   caller reports with `touchBody`, such as `observeCompletedRequestWrites` completions, restarts
- *   its inactivity budget.
- * - The header wait starts only after BOTH the request `finish` and the connection.
- * - Once the response starts, the exchange is in `response-body` and no later request event can
- *   overwrite it. The caller reports response bytes with `touchBody`.
- *
- * Attach it in the tick that creates the request. It waits on nothing: `dispose` removes every
- * listener it adds.
+ * Attach at construction after arming connect. Headers need connection and request finish.
+ * TLS needs secureConnect; pooled sockets are connected. Buffered bytes are not progress.
+ * The caller reports body bytes; response start retires request events. Dispose at settlement.
  */
 export function observeClientRequestPhases(
   req: ClientRequest,
@@ -295,7 +261,6 @@ export function observeClientRequestPhases(
   };
   req.on('socket', onSocket);
   req.on('finish', onFinish);
-  // The request's own response callback is registered first, so the phase has to move before it runs.
   req.prependListener('response', onResponse);
   return {
     get responseStarted() {

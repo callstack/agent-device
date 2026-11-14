@@ -1,6 +1,3 @@
-// The phase budget of one artifact-transfer attempt (#4441), on a controlled clock. Each ceiling ends a
-// stalled attempt on its own, and none of them touches the aggregate the attempt was admitted under.
-
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { ClientRequest } from 'node:http';
@@ -14,7 +11,6 @@ import {
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-  type TransferPhaseWatchdog,
 } from './transport.ts';
 
 beforeEach(() => {
@@ -25,8 +21,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** A watchdog disposed when its test finishes. */
-function watchPhases(callerSignal?: AbortSignal): TransferPhaseWatchdog {
+function watchPhases(callerSignal?: AbortSignal) {
   const watchdog = createTransferPhaseWatchdog(callerSignal);
   onTestFinished(() => watchdog.dispose());
   return watchdog;
@@ -41,8 +36,6 @@ test('the three transfer ceilings are the adopted policy values', () => {
 test('a body phase restarts its ceiling on every byte that moves', async () => {
   const watchdog = watchPhases();
   watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-  // Three full ceilings' worth of wall clock, each broken by real progress: 300 seconds of a slow
-  // artifact is admitted work, and nothing here may end it.
   for (const _ of [0, 1, 2]) {
     await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 20_000);
     watchdog.touchBody();
@@ -50,22 +43,16 @@ test('a body phase restarts its ceiling on every byte that moves', async () => {
   assert.equal(watchdog.signal.aborted, false);
   await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 1);
   assert.equal(watchdog.signal.aborted, true);
-  assertPhaseDetails(watchdog.signal.reason, 'response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  assertPhaseDetails(watchdog.signal.reason, 'response-body', 120_000);
 });
 
 test('a phase that carries no bytes is not extended by progress reported in another phase', async () => {
   const watchdog = watchPhases();
   watchdog.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 10_000);
-  // Bytes moving elsewhere — an unrelated header, a keepalive, a timer callback — are not the
-  // response-header wait making progress.
   watchdog.touchBody();
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
-  assertPhaseDetails(
-    watchdog.signal.reason,
-    'response-headers',
-    TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-  );
+  assertPhaseDetails(watchdog.signal.reason, 'response-headers', 30_000);
 });
 
 test('arming the next phase stops counting the previous one', async () => {
@@ -73,16 +60,10 @@ test('arming the next phase stops counting the previous one', async () => {
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
   await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS - 1_000);
   watchdog.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
-  // 58 seconds of total attempt time: past the connect ceiling, which the completed hop may spend,
-  // and inside the header ceiling the attempt is actually waiting on.
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 1_000);
   assert.equal(watchdog.signal.aborted, false);
   await vi.advanceTimersByTimeAsync(1_000);
-  assertPhaseDetails(
-    watchdog.signal.reason,
-    'response-headers',
-    TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-  );
+  assertPhaseDetails(watchdog.signal.reason, 'response-headers', 30_000);
 });
 
 test('an enclosing deadline wins and is never extended by a phase timer', async () => {
@@ -92,8 +73,6 @@ test('an enclosing deadline wins and is never extended by a phase timer', async 
   const watchdog = watchPhases(caller.signal);
   watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
   await vi.advanceTimersByTimeAsync(5_001);
-  // The caller's reason is the answer, not a phase's own evidence, so a consumer can still tell
-  // "the work this upload served is gone" from "this transfer stalled".
   assert.equal(watchdog.signal.aborted, true);
   assert.equal(watchdog.signal.reason, reason);
   assert.equal(isTransferPhaseTimeoutError(watchdog.signal.reason), false);
@@ -104,9 +83,7 @@ test('a phase expiry is its own typed evidence and never caller cancellation', a
   const watchdog = watchPhases(caller.signal);
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
   await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS + 1);
-  assertPhaseDetails(watchdog.signal.reason, 'connect', TRANSFER_CONNECT_TIMEOUT_MS);
-  // Distinctness the retry policy depends on: nobody canceled, so the caller's own signal stays
-  // live and an enclosing aggregate is free to reach a different outcome.
+  assertPhaseDetails(watchdog.signal.reason, 'connect', 30_000);
   assert.equal(caller.signal.aborted, false);
 });
 
@@ -130,9 +107,6 @@ test('a phase is never armed after the attempt is already over', async () => {
   assert.equal(late.signal.reason.message, 'gone');
 });
 
-type FakeSocket = EventEmitter & { connecting: boolean; encrypted?: boolean };
-
-/** A request whose writes the test completes by hand, as Node does once a chunk reaches the kernel. */
 class FakeRequest extends EventEmitter {
   destroyed = false;
   readonly callbacks: unknown[] = [];
@@ -147,7 +121,6 @@ class FakeRequest extends EventEmitter {
   }
 }
 
-/** One request observed as the upload attempt observes it: the phase owner beside the write owner. */
 function createObservedRequest() {
   const fake = new FakeRequest();
   const watchdog = watchPhases();
@@ -158,7 +131,7 @@ function createObservedRequest() {
     watchdog.touchBody(),
   );
   const emit = (event: string, ...args: unknown[]) => fake.emit(event, ...args);
-  const socket = (state: { connecting: boolean; encrypted?: boolean }): FakeSocket =>
+  const socket = (state: { connecting: boolean; encrypted?: boolean }) =>
     Object.assign(new EventEmitter(), state);
   return { fake, req, watchdog, phases, stopObservingWrites, emit, socket };
 }
@@ -169,7 +142,7 @@ test('a fresh socket keeps the connect ceiling until it connects, even after the
   emit('socket', fresh);
   emit('finish');
   await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS + 1);
-  assertPhaseDetails(watchdog.signal.reason, 'connect', TRANSFER_CONNECT_TIMEOUT_MS);
+  assertPhaseDetails(watchdog.signal.reason, 'connect', 30_000);
 });
 
 test('the header wait starts only after both the flush and the connection', async () => {
@@ -182,11 +155,7 @@ test('the header wait starts only after both the flush and the connection', asyn
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 1);
   assert.equal(watchdog.signal.aborted, false);
   await vi.advanceTimersByTimeAsync(1);
-  assertPhaseDetails(
-    watchdog.signal.reason,
-    'response-headers',
-    TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-  );
+  assertPhaseDetails(watchdog.signal.reason, 'response-headers', 30_000);
 });
 
 test('a TLS socket is established by secureConnect, not connect', async () => {
@@ -195,7 +164,7 @@ test('a TLS socket is established by secureConnect, not connect', async () => {
   emit('socket', tls);
   tls.emit('connect');
   await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS + 1);
-  assertPhaseDetails(watchdog.signal.reason, 'connect', TRANSFER_CONNECT_TIMEOUT_MS);
+  assertPhaseDetails(watchdog.signal.reason, 'connect', 30_000);
 });
 
 test('a pooled socket is already connected and times the body write as inactivity', async () => {
@@ -207,7 +176,7 @@ test('a pooled socket is already connected and times the body write as inactivit
   await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1);
   assert.equal(watchdog.signal.aborted, false);
   await vi.advanceTimersByTimeAsync(1);
-  assertPhaseDetails(watchdog.signal.reason, 'request-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  assertPhaseDetails(watchdog.signal.reason, 'request-body', 120_000);
 });
 
 test('once the response started, later request events do not overwrite its phase', async () => {
@@ -220,10 +189,9 @@ test('once the response started, later request events do not overwrite its phase
   fresh.emit('connect');
   emit('finish');
   await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1_000);
-  // A request write that completes now says nothing about the response body.
   fake.complete(0);
   await vi.advanceTimersByTimeAsync(1_001);
-  assertPhaseDetails(watchdog.signal.reason, 'response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  assertPhaseDetails(watchdog.signal.reason, 'response-body', 120_000);
 });
 
 test('disposing the phase observer removes only its own listeners', () => {
