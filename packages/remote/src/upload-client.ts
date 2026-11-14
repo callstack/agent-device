@@ -291,10 +291,6 @@ async function requestUploadPreflight(options: {
   const result = await requestUploadControl(
     preflightUrl,
     {
-      method: 'POST',
-      // The daemon never redirects this route. A redirect would carry x-agent-device-token, which
-      // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
-      redirect: 'error',
       headers,
       body: JSON.stringify({
         uploadAttemptId: options.uploadAttemptId,
@@ -324,7 +320,7 @@ async function requestUploadPreflight(options: {
 
 async function requestUploadControl(
   url: URL,
-  init: RequestInit,
+  init: { headers: Record<string, string>; body: string },
   phase: 'preflight' | 'finalize',
   callerSignal?: AbortSignal,
 ): Promise<{ response: Response; body: unknown }> {
@@ -332,7 +328,13 @@ async function requestUploadControl(
   watchdog.signal.throwIfAborted();
   watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { ...init, signal: watchdog.signal });
+    // Redirects could forward the daemon token, so these control requests never follow them.
+    const response = await fetch(url, {
+      ...init,
+      method: 'POST',
+      redirect: 'error',
+      signal: watchdog.signal,
+    });
     const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };
@@ -442,9 +444,6 @@ async function finalizeDirectUpload(options: {
   const result = await requestUploadControl(
     finalizeUrl,
     {
-      method: 'POST',
-      // As with preflight: the route never redirects, and a redirect must not carry the token.
-      redirect: 'error',
       headers,
       body: JSON.stringify({ uploadId: options.uploadId }),
     },
