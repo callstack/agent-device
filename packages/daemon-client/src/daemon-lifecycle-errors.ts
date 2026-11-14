@@ -51,6 +51,35 @@ export function daemonStopCommand(stateDir: string): string {
   return `agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}`;
 }
 
+/**
+ * The reason a remote connection answers when the `GET /health` probe that gates its send found no
+ * daemon to hand the request to. Recovery is what the reason's meaning is: make the daemon at
+ * `daemonBaseUrl` reachable, or return to the local daemon, then resend.
+ */
+export const REMOTE_DAEMON_UNAVAILABLE_REASON = 'remote_daemon_unavailable';
+
+/**
+ * The refusal both remote-send gates answer with: the probe before the first send
+ * (`ensureRemoteDaemon`) and the probe a restart retry runs after the daemon instance changed under
+ * the request. Before the first send, the request never leaves the client. On the restart retry, the
+ * first request did reach the daemon, but it refused it with the instance-mismatch precondition
+ * before running it, and the retry is withheld. So `dispatched: 'no'` states that the command did
+ * not run — what makes a resend safe, for a UI action as much as for a read — and a caller branches
+ * on the reason instead of comparing the message.
+ */
+export function remoteDaemonUnavailableError(params: {
+  daemonBaseUrl: string | undefined;
+  hint?: string;
+}): AppError {
+  const { daemonBaseUrl, hint } = params;
+  return new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+    reason: REMOTE_DAEMON_UNAVAILABLE_REASON,
+    dispatched: 'no',
+    daemonBaseUrl,
+    ...(hint !== undefined ? { hint } : {}),
+  });
+}
+
 /** A daemon won a startup race that this caller may not settle by retiring it. */
 export const DAEMON_CONTENDED_REASON = 'daemon-contended';
 
