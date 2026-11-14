@@ -107,6 +107,35 @@ extension RunnerTests {
     XCTAssertTrue(["moving", "unreadable"].contains(lastNavigationBarBackTraceForTesting?.found ?? ""), "the lookup never holds still")
   }
 
+  /// An in-content button identified `BackButton` is no candidate: the bar's own back button is still
+  /// the one pressed, not counted as ambiguous.
+  @MainActor
+  func testInAppBackPressesTheBarBackButtonBesideAnInContentBackButton() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--content-back-button"])
+    defer { endBackFixture() }
+    XCTAssertEqual(app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).count, 2)
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("the bar's back button must be pressed beside an in-content button of the same identifier")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.confirmed, "yes")
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
+  /// An in-content `BackButton` that keeps moving does not hold the lookup back: it is not compared.
+  @MainActor
+  func testInAppBackIsNotBlockedByAMovingInContentBackButton() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--moving-content-back"])
+    defer { endBackFixture() }
+
+    guard case .performed = try performInAppBack(app: app) else {
+      return XCTFail("a moving in-content button must not block the bar's back button")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "yes")
+  }
+
   /// A back button identified `BackButton` in an app with no navigation bar is not a system back
   /// button: nothing is pressed.
   @MainActor

@@ -252,6 +252,7 @@ extension RunnerTests {
     let confirmation = navigationBarBackConfirmation(
       app: app,
       from: before,
+      windowHeight: context.geometry.windowOnScreen.rect.height,
       deadlineMs: tapped + Self.navigationBarBackReadBudgetMs
     )
     trace.confirmMs = currentUptimeMs() - tapped
@@ -358,11 +359,12 @@ extension RunnerTests {
     case hung
   }
 
-  /// Reads the back buttons, one snapshot per button, until two reads in a row, one read interval
-  /// apart, agree, so a push still animating is not read as the state a pop changes. The bars (their
-  /// count, and their titles when a back button has no label) are read by the first round and then by
-  /// the live read, which checks that exactly one back button is hittable and that its frame is in
-  /// the state; the two bar reads must agree too, so a title that changes on its own is not still.
+  /// Reads the back buttons by a navigation bar, one snapshot per button, until two reads in a row, one
+  /// read interval apart, agree, so a push still animating is not read as the state a pop changes. A
+  /// button that is not by a bar is no candidate: it is neither counted nor compared. The bars (their
+  /// frames, count and, under an unlabeled candidate, titles) are read by the first round and then by
+  /// the live read, which checks that exactly one candidate is hittable and that its frame is in the
+  /// state; the two bar reads must agree too, so a title that changes on its own is not still.
   /// Rounds start only until `deadlineMs`; each live read has a read budget of its own.
   @MainActor
   private func stillNavigationBarBackButton(
@@ -370,52 +372,55 @@ extension RunnerTests {
     geometry: SurfaceGeometry,
     deadlineMs: Double
   ) -> NavigationBarBackLookup {
+    let windowHeight = geometry.windowOnScreen.rect.height
     var previous: NavigationBarBackState?
-    var barsRead: NavigationBarBackState?
+    var barsRead: (state: NavigationBarBackState, bars: [NavigationBarSnapshot])?
     while true {
       let sample: NavigationBarBackSample
-      let readsBars = barsRead == nil
-      switch readNavigationBarBack(app: app, phase: .lookup, deadlineMs: deadlineMs, readsBars: readsBars) {
+      switch readNavigationBarBack(
+        app: app, phase: .lookup, deadlineMs: deadlineMs, windowHeight: windowHeight, knownBars: barsRead?.bars
+      ) {
       case .hung: return .hung
       case .unreadable: return .notFound("unreadable")
-      case .read(let read) where read.buttons.isEmpty: return .notFound("no")
       case .read(let read): sample = read
       }
-      let buttonsStill = previous.map { sample.state.hasSameButtons(as: $0) } ?? false
-      if readsBars {
-        barsRead = sample.state
+      let candidates = sample.candidates(by: sample.bars)
+      if candidates.isEmpty { return .notFound("no") }
+      let current = sample.state(of: candidates, bars: nil)
+      let buttonsStill = previous.map { current.hasSameButtons(as: $0) } ?? false
+      if sample.barsWereRead {
+        barsRead = (sample.state(of: candidates, bars: sample.bars), sample.bars)
       } else if !buttonsStill {
         barsRead = nil
       }
-      if buttonsStill, let barsBefore = barsRead {
+      if buttonsStill, let barsBefore = barsRead?.state {
         // The live read is one bounded read of its own: it must not inherit what the rounds spent.
         let liveDeadlineMs = currentUptimeMs() + Self.navigationBarBackReadBudgetMs
         switch liveNavigationBarBackButton(of: sample, geometry: geometry, deadlineMs: liveDeadlineMs) {
         case .hung: return .hung
         case .unreadable: return .notFound("unreadable")
         case .read(.absent(let found)): return .notFound(found)
-        case .read(.found(let state, let button)):
+        case .read(.found(let state, let button, let bars)):
           if state == barsBefore { return .still(state, button: button) }
-          barsRead = state
+          barsRead = (state, bars)
         case .read(.moving): break
         }
       }
       if currentUptimeMs() >= deadlineMs { return .notFound("moving") }
-      previous = sample.state
+      previous = current
       sleepFor(Self.navigationBarBackReadInterval)
     }
   }
 
   /// What the live read of a still state found.
   enum NavigationBarBackLive {
-    case found(NavigationBarBackState, CGRect)
+    case found(NavigationBarBackState, CGRect, [NavigationBarSnapshot])
     case absent(String)
     case moving
   }
 
-  /// One live read of the sampled buttons: the hittable ones and their frames, and the bars. A button
-  /// that is not by a navigation bar is not a system back button. A pop that the state could not show
-  /// is not tapped.
+  /// One live read of the sampled buttons: the bars, the candidates by them, and which candidates are
+  /// hittable. A pop that the candidates could not show is not tapped.
   @MainActor
   private func liveNavigationBarBackButton(
     of sample: NavigationBarBackSample,
@@ -423,22 +428,18 @@ extension RunnerTests {
     deadlineMs: Double
   ) -> NavigationBarBackRead<NavigationBarBackLive> {
     heldNavigationBarRead(.lookup) {
-      let hittable = sample.buttons.indices.filter { sample.buttons[$0].isHittable }
+      let bars = sample.roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
+      guard let snapshots = barSnapshots(bars, deadlineMs: deadlineMs) else { return nil }
+      let candidates = sample.candidates(by: snapshots)
+      let hittable = candidates.filter { sample.buttons[$0].isHittable }
       if hittable.isEmpty { return .absent("no") }
       if hittable.count > 1 { return .absent("ambiguous") }
       let button = sample.buttons[hittable[0]].frame
       guard SnapshotGeometry.isPositiveFinite(button) else { return nil }
-      let bars = sample.roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
-      guard let snapshots = barSnapshots(bars, deadlineMs: deadlineMs) else { return nil }
-      // The button's and the bars' frames are both snapshot frames, so they share a space.
-      let belongs = Self.backButtonBelongsToABar(
-        sample.state.backButtonFrames[hittable[0]], barFrames: snapshots.map(\.frame),
-        windowHeight: geometry.windowOnScreen.rect.height)
-      if !belongs { return .absent("no") }
-      let state = Self.addingBars(snapshots, to: sample.state)
+      let state = sample.state(of: candidates, bars: snapshots)
       if !state.canShowAPop { return .absent("unprovable") }
       return Self.navigationBarBackState(state, holdsButton: button, geometry: geometry)
-        ? .found(state, button) : .moving
+        ? .found(state, button, snapshots) : .moving
     }
   }
 
@@ -478,6 +479,7 @@ extension RunnerTests {
   private func navigationBarBackConfirmation(
     app: XCUIApplication,
     from before: NavigationBarBackState,
+    windowHeight: CGFloat,
     deadlineMs: Double
   ) -> NavigationBarBackConfirmation {
     while true {
@@ -485,10 +487,13 @@ extension RunnerTests {
       let readDeadlineMs = isFinalRead ? Double.infinity : deadlineMs
       let phase: NavigationBarBackReadPhase = isFinalRead ? .finalConfirmation : .confirmation
       switch readNavigationBarBack(
-        app: app, phase: phase, deadlineMs: readDeadlineMs,
-        readsBars: true
+        app: app, phase: phase, deadlineMs: readDeadlineMs, windowHeight: windowHeight, knownBars: nil
       ) {
-      case .read(let after) where Self.navigationBarBackPopped(from: before, to: after.state): return .changed
+      case .read(let after)
+      where Self.navigationBarBackPopped(
+        from: before, to: after.state(of: after.candidates(by: after.bars), bars: after.bars)
+      ):
+        return .changed
       case .hung: return .hung
       case .read, .unreadable: break
       }
@@ -539,24 +544,45 @@ extension RunnerTests {
     return .read(value)
   }
 
-  /// One read of the bars and back buttons: the state, and the elements it was read from, so a live
-  /// read of the still state does not query again.
+  /// One read of every `BackButton` and the bars: the buttons and their snapshots, and the bars the
+  /// candidates are judged by. A candidate is a button by a bar, so an in-content `BackButton` is
+  /// neither counted nor compared. The elements stay so that a live read does not query them again.
   struct NavigationBarBackSample {
-    let state: NavigationBarBackState
     let buttons: [XCUIElement]
+    let labels: [String]
+    /// Snapshot frames, in the same space as the bars'.
+    let frames: [CGRect]
     let roots: [XCUIElement]
+    let bars: [NavigationBarSnapshot]
+    let barsWereRead: Bool
+    let windowHeight: CGFloat
+
+    func candidates(by bars: [NavigationBarSnapshot]) -> [Int] {
+      let barFrames = bars.map(\.frame)
+      return buttons.indices.filter {
+        RunnerTests.backButtonBelongsToABar(frames[$0], barFrames: barFrames, windowHeight: windowHeight)
+      }
+    }
+
+    /// The candidates' state, with the bars read when given.
+    func state(of candidates: [Int], bars: [NavigationBarSnapshot]?) -> NavigationBarBackState {
+      let state = NavigationBarBackState(
+        barCount: 0, backButtonLabels: candidates.map { labels[$0] }, backButtonFrames: candidates.map { frames[$0] })
+      return bars.map { RunnerTests.addingBars($0, to: state) } ?? state
+    }
   }
 
   /// One walk of the app's windows, then one query for the back buttons and one snapshot per button,
-  /// so a read stays well inside the read budget. The bars are read only when asked: the rounds that
-  /// wait for a still state skip them, and the live read of the still state adds them. Unreadable when
-  /// the tree did not answer or the read budget ran out before a snapshot.
+  /// so a read stays well inside the read budget. The bars are read too unless `knownBars` gives them:
+  /// the rounds that wait for a still state read them once, and the live read reads them again.
+  /// Unreadable when the tree did not answer or the read budget ran out before a snapshot.
   @MainActor
   private func readNavigationBarBack(
     app: XCUIApplication,
     phase: NavigationBarBackReadPhase,
     deadlineMs: Double,
-    readsBars: Bool = false
+    windowHeight: CGFloat,
+    knownBars: [NavigationBarSnapshot]?
   ) -> NavigationBarBackRead<NavigationBarBackSample> {
     guard currentUptimeMs() < deadlineMs else { return .unreadable }
     return heldNavigationBarRead(phase) {
@@ -571,18 +597,15 @@ extension RunnerTests {
         labels.append(snapshot.label)
         frames.append(snapshot.frame)
       }
-      var state = NavigationBarBackState(barCount: 0, backButtonLabels: labels, backButtonFrames: frames)
-      if readsBars {
-        let bars = roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
-        // Titles are snapshotted only for a state that holds them.
-        guard let snapshots = state.hasUnlabeledBackButton ? barSnapshots(bars, deadlineMs: deadlineMs) : bars.map({ _ in NavigationBarSnapshot(frame: .zero, title: "") })
-        else { return nil }
-        state = Self.addingBars(snapshots, to: state)
+      var bars = knownBars
+      if bars == nil {
+        let elements = roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
+        bars = barSnapshots(elements, deadlineMs: deadlineMs)
       }
+      guard let bars else { return nil }
       return NavigationBarBackSample(
-        state: state,
-        buttons: buttons,
-        roots: roots
+        buttons: buttons, labels: labels, frames: frames, roots: roots, bars: bars,
+        barsWereRead: knownBars == nil, windowHeight: windowHeight
       )
     }
   }

@@ -48,10 +48,13 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // "Back" on the root, which is not the system back button and must never be pressed.
 // `--floating-back` hides the bar's back button and floats an unlabeled one in the screen's content
 // beside the bar, as the iPhone Duo does; `--hidden-bar` also hides the bar, so that button is not
-// a navigation bar's. The root's label reports what happened.
+// a navigation bar's. `--content-back-button` adds an in-content button identified `BackButton` at the
+// bottom of the detail screen, which is not the system back button; `--moving-content-back` also moves
+// it every 0.05 s. The root's label reports what happened.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @property(nonatomic, strong) NSTimer *titleTimer;
+@property(nonatomic, strong) NSTimer *contentTimer;
 @end
 
 @implementation AgentDeviceBackNavigationFixture
@@ -109,6 +112,31 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
       ]];
       if ([NSProcessInfo.processInfo.arguments containsObject:@"--hidden-bar"]) {
         [self setNavigationBarHidden:YES animated:NO];
+      }
+    }
+    BOOL movingContent = [NSProcessInfo.processInfo.arguments containsObject:@"--moving-content-back"];
+    if (movingContent || [NSProcessInfo.processInfo.arguments containsObject:@"--content-back-button"]) {
+      UIButton *content = [UIButton buttonWithType:UIButtonTypeSystem];
+      content.accessibilityIdentifier = @"BackButton";
+      [content setTitle:@"Content" forState:UIControlStateNormal];
+      content.translatesAutoresizingMaskIntoConstraints = NO;
+      [detail.view addSubview:content];
+      NSLayoutConstraint *bottom =
+          [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:-16];
+      [NSLayoutConstraint activateConstraints:@[
+        bottom,
+        [content.centerXAnchor constraintEqualToAnchor:detail.view.centerXAnchor],
+        [content.widthAnchor constraintEqualToConstant:120],
+        [content.heightAnchor constraintEqualToConstant:44],
+      ]];
+      if (movingContent) {
+        __block BOOL up = NO;
+        __weak UIViewController *weakDetail = detail;
+        self.contentTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+          up = !up;
+          bottom.constant = up ? -60 : -16;
+          [weakDetail.view layoutIfNeeded];
+        }];
       }
     }
     BOOL fastTicking = [NSProcessInfo.processInfo.arguments containsObject:@"--fast-ticking-title"];

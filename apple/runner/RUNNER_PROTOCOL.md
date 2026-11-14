@@ -141,22 +141,23 @@ sibling of the navigation bar rather than inside it. The runner taps that button
 synthesized tap only when all of these hold:
 
 - The tree is readable.
-- Two reads in a row of every `BackButton` in the app's windows, with a 0.05 s pause between them,
-  agree on their labels and frames, hittable or not.
+- A candidate is a button inside a navigation bar, or horizontally within one and below it, within a
+  third of the window height from the bar's top.
+- Two reads in a row of the `BackButton` buttons by a navigation bar (the candidates), with a 0.05 s
+  pause between them, agree on their labels and frames, hittable or not. A `BackButton` that is not
+  by a bar is neither counted nor compared.
 - One live read of those buttons then finds exactly one hittable. Its frame is in the state. The match
   places the snapshot frames at the window's screen origin, because a placed iPad window reports them
   from its own top-left.
-- That button is by a navigation bar: inside it, or horizontally within it and below it, within a
-  third of the window height from the bar's top.
 - The bar state read by the first round and by the live read agree (below).
-- A pop can show in the state: every `BackButton` has a label, or a bar has a title.
+- A pop can show in the state: every candidate has a label, or a bar has a title.
 
 No other button counts, whatever its label.
 
-The state is the number of navigation bars, the labels of the `BackButton` buttons in tree order,
+The state is the number of navigation bars, the labels of the candidates in tree order,
 and the frames of those buttons. The runner reads one XCTest snapshot per button. Bar titles are not
 part of the state, because a bar can retitle itself (a countdown) without navigating. One exception
-applies: a state with a `BackButton` that has no label, such as the Duo's, also holds the title of
+applies: a state with a candidate that has no label, such as the Duo's, also holds the title of
 each bar. The title is the bar's identifier, which UIKit sets to the title, or its label when the
 identifier is empty. The label of such a button cannot show a pop. The state read applies this rule
 itself, so the state before the tap and each state after it follow it. The state before the tap must
