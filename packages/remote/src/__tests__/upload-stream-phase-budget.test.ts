@@ -1,10 +1,5 @@
-// The phase budget one artifact-transfer attempt runs under (#4441).
-//
-// Three ceilings govern one attempt — connecting, moving body bytes, waiting for headers — and each
-// has to end a stalled attempt on its own while none of them touches the aggregate budget the
-// attempt was admitted under. Those are behaviour claims about a clock, so the clock here is
-// controlled rather than waited out. The loopback proofs in `upload-stream-phases.test.ts` put the
-// same watchdog in front of real sockets.
+// The phase budget of one artifact-transfer attempt (#4441), on a controlled clock. Each ceiling ends a
+// stalled attempt on its own, and none of them touches the aggregate the attempt was admitted under.
 
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';

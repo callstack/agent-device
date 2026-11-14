@@ -1,13 +1,6 @@
-// Phase budgets applied to a real artifact upload over loopback (#4441).
-//
-// The 30–120-second phase budgets use a controlled clock here. Each case parks the request
-// body a quota at a time. That combination is the point: a transfer that
-// keeps moving must survive budget after budget, and one that stops moving must be ended by the ONE
-// budget that ran out. A mocked transport could show neither, because the backpressure that makes
-// "still progressing" mean something belongs to the real socket.
+// Phase budgets on a real loopback upload (#4441): a transfer that keeps moving survives budget after
+// budget, and one that stops is ended by the one budget that ran out.
 
-import fs from 'node:fs';
-import { PassThrough } from 'node:stream';
 import { afterEach, assert, test, vi } from 'vitest';
 import {
   LEGACY_UPLOAD_REQUEST,
@@ -18,15 +11,17 @@ import {
   assertDetailedError,
   awaitBodyProgress,
   createArtifactFile,
+  holdArtifactSourceOpen,
   pumpRealWork,
   recordOutgoingWrites,
   settleAfterBudget,
-  settleAttemptAfterBudget,
   spendBudget,
   spendProgressWindows,
+  spendSinceLastWrite,
   startParkedUploadDaemon,
   startUpload,
   startUploadAttempt,
+  untilIo,
   useTransferClock,
 } from './support/upload-transfer-fixtures.ts';
 
@@ -43,14 +38,9 @@ test('a body that keeps moving outlives the body-inactivity ceiling', async () =
   const daemon = await startParkedUploadDaemon();
   const upload = startUpload({
     baseUrl: daemon.baseUrl,
-    // Sixteen megabytes is far past what a handful of windows can drain, so every window below is
-    // paid for by bytes the peer really takes rather than by a socket that swallowed the file.
     artifactPath: createArtifactFile(16 * MEBIBYTE),
   });
   try {
-    // Eight ceilings' worth of budget, one release-and-wait per window. Each window is paid for only
-    // after the peer really took bytes, so this stays cheap in real time while still spending twice
-    // the inactivity ceiling the transfer has to outlive.
     const progress = await spendProgressWindows(daemon, upload, {
       windows: 8,
       windowMs: TRANSFER_CONNECT_TIMEOUT_MS,
@@ -70,16 +60,17 @@ test('a body that keeps moving outlives the body-inactivity ceiling', async () =
 
 test('a body the peer stops taking expires the request-body phase on its own budget', async () => {
   useTransferClock();
+  const writes = recordOutgoingWrites();
   const daemon = await startParkedUploadDaemon();
   const upload = startUpload({
     baseUrl: daemon.baseUrl,
     artifactPath: createArtifactFile(2 * MEBIBYTE),
   });
   try {
-    // Bytes are in flight and then the peer stops reading them, without answering or disconnecting.
-    // Nothing but the inactivity budget may end this.
-    await spendBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, upload);
-    await settleAfterBudget(upload);
+    // The peer stops reading without answering or disconnecting.
+    await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, upload);
+    assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
+    assert.equal(await settleAfterBudget(upload), true);
     const result = await upload;
 
     assert.equal(result.value, undefined);
@@ -101,7 +92,6 @@ test('a body admitted past four connect ceilings still waits only its own header
   const daemon = await startParkedUploadDaemon();
   const upload = startUpload({
     baseUrl: daemon.baseUrl,
-    // Sixteen megabytes outlasts five release windows: the body is still in flight past four ceilings.
     artifactPath: createArtifactFile(16 * MEBIBYTE),
   });
   try {
@@ -118,15 +108,13 @@ test('a body admitted past four connect ceilings still waits only its own header
 
     // The peer takes the rest with no fake time passing; `finish` starts the only wait that expires.
     daemon.readToEnd();
-    for (let round = 0; round < 400 && !(writes.finished && daemon.bodyEnded); round += 1) {
-      await pumpRealWork(15);
-    }
+    await untilIo(() => (writes.finished && daemon.bodyEnded) || upload.settled);
     assert.equal(writes.finished && daemon.bodyEnded, true, 'the whole body reached the peer');
     await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 1);
     await pumpRealWork();
     assert.equal(upload.settled, false, 'the header wait counts from the flush');
     await vi.advanceTimersByTimeAsync(1);
-    await settleAfterBudget(upload);
+    assert.equal(await settleAfterBudget(upload), true);
     const result = await upload;
 
     assert.equal(result.value, undefined);
@@ -142,11 +130,8 @@ test('a body admitted past four connect ceilings still waits only its own header
 
 test('writes below the high-water mark keep the body budget on each completed write', async () => {
   useTransferClock();
-  // A slow producer hands the request 1 KiB at a time. Each write fits under the socket's high-water
-  // mark, so it returns true and no `drain` ever fires: the write's completion is the only report
-  // that its bytes reached the local kernel.
-  const source = new PassThrough();
-  vi.spyOn(fs, 'createReadStream').mockReturnValueOnce(source as unknown as fs.ReadStream);
+  // 1 KiB writes return true and never `drain`: only their completion reports kernel progress.
+  const { source } = holdArtifactSourceOpen();
   const writes = recordOutgoingWrites();
   const daemon = await startParkedUploadDaemon();
   const attempt = startUploadAttempt({
@@ -157,7 +142,8 @@ test('writes below the high-water mark keep the body budget on each completed wr
     for (let window = 0; window < 6; window += 1) {
       const before = { bytes: daemon.receivedBytes, completed: writes.completed };
       source.write(Buffer.alloc(1024, 'x'));
-      assert.equal(await awaitBodyProgress(daemon, writes, before), true, `window ${window}`);
+      const progressed = await awaitBodyProgress(daemon, writes, before, attempt);
+      assert.equal(progressed, true, `window ${window}`);
       await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS);
       assert.equal(attempt.settled, false, `window ${window}`);
     }
@@ -165,15 +151,14 @@ test('writes below the high-water mark keep the body budget on each completed wr
     assert.equal(writes.drains, 0);
     assert.equal(writes.falseReturns, 0);
 
-    // The producer stops. The last completed write was one window ago, so the body budget expires
-    // exactly one inactivity ceiling after it.
+    // The producer stops; the budget expires one ceiling after the last completed write.
     await vi.advanceTimersByTimeAsync(
       TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - TRANSFER_CONNECT_TIMEOUT_MS - 1,
     );
     await pumpRealWork();
     assert.equal(attempt.settled, false);
     await vi.advanceTimersByTimeAsync(1);
-    assert.equal((await settleAttemptAfterBudget(attempt)).settled, true);
+    assert.equal(await settleAfterBudget(attempt), true);
     assertDetailedError((await attempt).error, {
       reason: 'transfer_phase_timeout',
       transferPhase: 'request-body',

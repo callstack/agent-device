@@ -1,23 +1,21 @@
 import fs from 'node:fs';
-import type { ClientRequest, IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
+import {
+  loadNodeHttpRequester,
+  observeCompletedRequestWrites,
+  readNodeHttpResponseBody,
+} from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
   type UploadProgressStage,
 } from './upload-progress.ts';
 
-/**
- * Ceiling for establishing the connection one artifact-transfer attempt runs on.
- *
- * Kept beside its domain rather than on the socket: the same number governs every hop of an upload,
- * and every offset resume, so "how long may one hop take to connect"
- * has exactly one answer.
- */
+/** Ceiling for establishing the connection for each upload hop or offset resume. */
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 
 /**
@@ -205,15 +203,12 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
-  // One watchdog for this attempt: connecting, then writing the body, then waiting for headers, then
-  // reading the response. A redirect or a resume is a NEW attempt and starts fresh phase timers, but
-  // it inherits `options.signal`, so the preparation aggregate the caller opened still expires it.
+  // A redirect or a resume is a new attempt with fresh phase timers under the same `options.signal`.
   const watchdog = createTransferPhaseWatchdog(options.signal);
   watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
 
-  // The attempt's owned outgoing pipeline: artifact file → progress transform → request. Every exit
-  // from this attempt joins it, so no owned byte is still moving when the attempt resolves, fails,
-  // or hands the body to a redirect/resume attempt.
+  // The owned pipeline (file → progress → request). Every exit joins it, so no owned byte overlaps
+  // the outcome or the next hop.
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
   let responseReceived = false;
@@ -229,21 +224,12 @@ async function streamFileToHttpRequestAttempt(options: {
     const fail = (error: unknown) => {
       stopObservingWrites();
       watchdog.dispose();
-      // Whatever is still queued on this attempt's own outgoing pipeline has to settle before the
-      // join in `finally`, so a failure that ends the attempt destroys the request too. Once the
-      // response has been consumed this cannot cut an accepted answer short; before it, the outcome
-      // is already decided by this failure.
+      // The queued pipeline has to settle before the join in `finally`.
       req.destroy();
       reject(error);
     };
-    // The phase this attempt is actually in, from the two events that can end the connect ceiling:
-    // the transport carrying the protocol, and every body byte reaching the socket. A pooled socket
-    // is already connected; a fresh one is not, and a TLS socket is not until its handshake ends.
-    // Until then the connect ceiling keeps counting even when the whole body already sits in the
-    // write buffer — buffered bytes are not transport progress. Once connected, a body the peer
-    // stopped taking is timed as body inactivity, never as a connect timeout; a body that flushed
-    // before the connection existed (a zero-length artifact) is already owed a response, so the
-    // header wait is what it waits on.
+    // Buffered bytes are not transport progress: the connect ceiling counts until the transport is
+    // carried. After that, an unflushed body is timed as inactivity and a flushed one waits on headers.
     const advanceOutgoingPhase = () => {
       if (responseReceived || watchdog.signal.aborted) return;
       if (!transportEstablished) return;
@@ -262,14 +248,12 @@ async function streamFileToHttpRequestAttempt(options: {
         path: options.url.pathname + options.url.search,
         headers,
         // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
-        // already piped at a device this client no longer holds the lease on.
-        // This is the attempt's phase budget combined with the caller's signal, so an expired phase
-        // destroys the socket exactly like a cancellation does.
+        // already piped at a device this client no longer holds the lease on. An expired phase
+        // destroys it exactly like a cancellation does.
         signal: watchdog.signal,
       },
       (res) => {
         responseReceived = true;
-        // The response has started; from here the budget that matters is silence between body bytes.
         watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
         addAbortSignal(watchdog.signal, res);
         void handleUploadResponse(res)
@@ -282,34 +266,25 @@ async function streamFileToHttpRequestAttempt(options: {
 
     req.on('socket', (socket) => {
       if (socket.connecting) {
-        // A fresh socket is not a connection yet: plain HTTP is carried when it connects, TLS only
-        // when the handshake ends. Until then the connect ceiling keeps counting, whatever the
-        // request's write buffer already holds.
+        // Plain HTTP is carried on `connect`, TLS only once the handshake ends.
         const secured = (socket as { encrypted?: boolean }).encrypted === true;
         socket.once(secured ? 'secureConnect' : 'connect', () => {
           transportEstablished = true;
           advanceOutgoingPhase();
         });
       } else {
-        // A pooled socket — keep-alive reuse — is already carrying the protocol.
         transportEstablished = true;
         advanceOutgoingPhase();
       }
     });
-    // Body progress is a completed body write: its bytes reached the local kernel, not the peer.
-    // Read-ahead chunks, queued writes and UI progress are not progress, and a completion after the
-    // response, an abort or a destroy belongs to an exchange with no request-body phase left.
-    const stopObservingWrites = observeCompletedWrites(req, () => {
-      if (responseReceived || req.destroyed || watchdog.signal.aborted) return;
-      watchdog.touchBody();
-    });
+    const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
+      watchdog.touchBody(),
+    );
 
     req.on('error', (err) => {
       if (responseReceived) return;
-      // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
-      // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
-      // An expired phase answers the same way — it is this client's own deadline, not a transport
-      // failure a retry or a legacy fallback could fix.
+      // A cancellation or an expired phase is this client's own outcome, never a transport failure
+      // that a retry or a legacy fallback could fix.
       if (watchdog.signal.aborted) {
         fail(watchdog.signal.reason);
         return;
@@ -327,9 +302,6 @@ async function streamFileToHttpRequestAttempt(options: {
       );
     });
 
-    // The owned outgoing work: the artifact file and the progress transform feeding the request.
-    // `endOutgoingWork` stops it once the response has been consumed, and `upload` is the join that
-    // proves the owned file handle and request are closed before this attempt reports its outcome.
     const fileStream = fs.createReadStream(options.payloadPath, { start: options.startOffset });
     const progressTransform = createUploadProgressTransform({
       stage: options.progress?.stage ?? 'legacy',
@@ -341,27 +313,19 @@ async function streamFileToHttpRequestAttempt(options: {
     upload = (async () => {
       await pipeline(fileStream, progressTransform, req, { signal: watchdog.signal });
       uploadSettled = true;
-      // `pipeline` settles on the request's `finish`: every body byte has been flushed into the
-      // transport. The server may still be reading them — normal HTTP buffering — so this is this
-      // side's flush, not the peer's consumption; it is still the point where the server owes an
-      // answer. If the TLS handshake has not completed under that flush, the connect ceiling is
-      // still the live budget and the header wait is armed when it does.
+      // `finish`: this side's flush, not the peer's consumption, so the server owes an answer.
       bodyFlushed = true;
       advanceOutgoingPhase();
     })().catch((err: unknown) => {
-      // After the response has been consumed to its end, this pipeline can only have been ended by
-      // the teardown that consumed it: the attempt destroys its own request at that point. The
-      // accepted answer is the outcome, and a rejection from our own destroy must not overwrite the
-      // server's verdict — a 413 that the client read completely is a 413, not a transport break.
+      // After a response, only this attempt's own teardown ends the pipeline, and the server's
+      // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
       if (responseReceived) return;
       req.destroy();
       if (watchdog.signal.aborted) {
         fail(watchdog.signal.reason);
         return;
       }
-      // Before any response, a rejection here is the artifact failing to reach the socket: the real
-      // read failure the caller has to see, never a swallowed transport error, because a transport
-      // break reports through the request's own `error` handler.
+      // A transport break reports through `error`, so this is the artifact read failing.
       const error = err instanceof Error ? err : new Error(String(err));
       fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
@@ -369,11 +333,8 @@ async function streamFileToHttpRequestAttempt(options: {
     const endOutgoingWork = (): Promise<void> => {
       if (!outgoingEnded) {
         outgoingEnded = true;
-        // The response has been consumed to its end, so destroying the request can no longer cut it
-        // short. Destroying it is what settles a pipeline still blocked on a peer that stopped
-        // reading: the owned file handle and the socket close now, not whenever the peer catches
-        // up. A pipeline that already flushed everything has nothing left to stop, and its socket
-        // stays in the pool exactly as it did before.
+        // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
+        // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
         if (!uploadSettled) req.destroy();
       }
       return upload!.then(
@@ -383,9 +344,8 @@ async function streamFileToHttpRequestAttempt(options: {
     };
 
     async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
-      // Read the accepted response to its end first, under the response-body budget; only then may
-      // the outgoing work be destroyed, and it must be joined before this attempt resolves or a
-      // redirect/resume starts — old bytes may never overlap the next hop.
+      // Read the accepted answer to its end, then end and join the outgoing work before this attempt
+      // resolves or the next hop starts.
       const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
       stopObservingWrites();
@@ -443,44 +403,6 @@ async function streamFileToHttpRequestAttempt(options: {
     watchdog.dispose();
     await upload;
   });
-}
-
-/**
- * Reports each non-empty `req.write` chunk that Node completes without an error, until stopped.
- *
- * `pipeline` writes without a callback, and `drain` fires only after a write returned `false`. The
- * wrapper passes the arguments, `this` and the backpressure result through, and runs the caller's
- * callback exactly once with the same error. Stopping restores `write` only while this wrapper is
- * still installed, and completions after the stop are not reported.
- */
-function observeCompletedWrites(req: ClientRequest, onCompleted: () => void): () => void {
-  const ownWrite = Object.getOwnPropertyDescriptor(req, 'write');
-  const write = req.write;
-  let observing = true;
-  const observedWrite = function (this: ClientRequest, ...args: unknown[]): boolean {
-    const [chunk, encoding] = args;
-    const callbackIndex = typeof encoding === 'function' ? 1 : 2;
-    const callback = args[callbackIndex];
-    const hasBytes =
-      typeof chunk === 'string'
-        ? chunk.length > 0
-        : chunk instanceof Uint8Array && chunk.byteLength > 0;
-    if (observing && hasBytes) {
-      args[callbackIndex] = (error?: Error | null) => {
-        if (!error && observing) onCompleted();
-        if (typeof callback === 'function') callback(error);
-      };
-    }
-    const accepted: boolean = Reflect.apply(write, this, args);
-    return accepted;
-  };
-  req.write = observedWrite;
-  return () => {
-    observing = false;
-    if (req.write !== observedWrite) return;
-    if (ownWrite) Object.defineProperty(req, 'write', ownWrite);
-    else Reflect.deleteProperty(req, 'write');
-  };
 }
 
 function retryableUploadStreamDetail(options: { retryable?: boolean }): Record<string, true> {

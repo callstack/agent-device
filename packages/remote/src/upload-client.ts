@@ -14,11 +14,7 @@ import {
 } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
 
-/**
- * Ceiling for the two small control-plane calls that bracket an upload (`preflight`, `finalize`).
- * Their payload is a few hundred bytes of JSON, so one window covers reaching the daemon and getting
- * the answer; the artifact bytes themselves are budgeted per phase in `upload-stream.ts`.
- */
+/** Ceiling for the small JSON `preflight` and `finalize` calls that bracket an upload. */
 const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
 
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
@@ -168,10 +164,8 @@ async function tryDirectUploadWithResume(options: {
   } catch (error) {
     // A canceled upload resumes for no reason: the thing it was uploaded for is already gone, and
     // re-preflighting would ask the daemon for a fresh ticket to send bytes nobody is waiting on.
-    if (options.signal?.aborted) throw error;
-    // An expired phase is this client's own deadline, not a transport break. Restarting the
-    // sequence would only buy a second attempt permission it never had, so the typed evidence for
-    // the phase that ran out is what the caller sees.
+    if (options.signal.aborted) throw error;
+    // An expired phase is this client's own deadline, never a transport break to retry.
     if (isTransferPhaseTimeoutError(error)) throw error;
     if (!shouldRetryDirectUpload(error)) return undefined;
     return await retryDirectUpload(options, uploadOnce);
@@ -193,7 +187,7 @@ async function retryDirectUpload(
     artifact: PreparedUploadArtifact;
     uploadAttemptId: string;
     onProgress?: UploadProgressSink;
-    signal?: AbortSignal;
+    signal: AbortSignal;
   },
   uploadOnce: (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -214,9 +208,7 @@ async function retryDirectUpload(
     try {
       return await uploadOnce(retryPreflight);
     } catch (error) {
-      options.signal?.throwIfAborted();
-      // As above: an expired phase is this client's own deadline, so it must not buy the legacy
-      // fallback a third attempt at the same bytes.
+      options.signal.throwIfAborted();
       if (isTransferPhaseTimeoutError(error)) throw error;
       return undefined;
     }
