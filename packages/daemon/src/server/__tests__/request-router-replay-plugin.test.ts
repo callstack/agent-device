@@ -115,22 +115,25 @@ test('a changed store needs a daemon restart and embedded runtimes never consult
   }
 });
 
-test('an unknown backend receives no inferred installation command', async () => {
-  const f = await fixture();
-  try {
-    const result = await f.handler({
-      token: 'token',
-      command: 'replay',
-      session: 'untouched',
-      positionals: [source.entry],
-      flags: { replayBackend: 'unknown-engine', replayScriptSource: source },
-    });
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGS' } });
-    if (result.ok) throw new Error('Unknown backend succeeded');
-    expect(result.error.details?.installCommand).toBeUndefined();
-    expect(result.error.message).toContain('Unsupported replay backend');
-    expect(f.discover).not.toHaveBeenCalled();
-  } finally {
-    await f.registry.close();
-  }
-});
+test.each(['unknown-engine', ''])(
+  'backend %j receives no inferred installation command',
+  async (backend) => {
+    const f = await fixture();
+    try {
+      const result = await f.handler({
+        token: 'token',
+        command: 'replay',
+        session: 'untouched',
+        positionals: [source.entry],
+        flags: { replayBackend: backend, replayScriptSource: source },
+      });
+      expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_ARGS' } });
+      if (result.ok) throw new Error('Unknown backend succeeded');
+      expect(result.error.details?.installCommand).toBeUndefined();
+      expect(result.error.message).toContain('Unsupported replay backend');
+      expect(f.discover).not.toHaveBeenCalled();
+    } finally {
+      await f.registry.close();
+    }
+  },
+);

@@ -53,14 +53,6 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Build and install the workspace Maestro plugin
-        run: |
-          pnpm --filter @agent-device/maestro build
-          pnpm --filter @agent-device/replay build
-          export AGENT_DEVICE_HOME="$RUNNER_TEMP/agent-device-fuzz-home"
-          node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
-          echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
-
       # A lane whose classifier or watchdog regressed would pass forever. This runs the
       # broken-on-purpose targets first and fails unless each violation is caught.
       - name: Self-check the harness

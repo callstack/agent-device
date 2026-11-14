@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isRecord } from '@agent-device/kernel/record';
+import { canonicalJson } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
@@ -51,7 +52,7 @@ function validatePluginSelection(name: string, selection: PluginSelection): void
 function selectionStamp(selection: PluginSelection | undefined): string {
   return crypto
     .createHash('sha256')
-    .update(JSON.stringify(selection ?? null))
+    .update(canonicalJson(selection ?? null))
     .digest('hex');
 }
 

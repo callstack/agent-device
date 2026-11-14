@@ -288,3 +288,32 @@ test('a null replay selection is invalid configuration rather than an absent pac
     },
   );
 });
+
+test('equivalent nested option key order keeps the daemon selection current', async () => {
+  const { home, env } = pluginHome();
+  const name = '@agent-device/replay';
+  selectV2Plugin(home, name, 'throw new Error("must not import");');
+  const config = readPluginConfig(env);
+  const selection = config.plugins[name];
+  selection.options = { region: 'eu', nested: { retries: 2, labels: ['a', 'b'] } };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  const guard = createPluginSelectionGuard(await storePluginCandidates(env), env);
+  config.plugins[name] = {
+    options: { nested: { labels: ['a', 'b'], retries: 2 }, region: 'eu' },
+    installation: selection.installation,
+  };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config, null, 2));
+  assert.doesNotThrow(() => guard(name));
+  config.plugins[name].options.nested.labels.reverse();
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  assert.throws(
+    () => guard(name),
+    (error: unknown) => {
+      assert.equal(
+        (error as { details?: { reason?: string } }).details?.reason,
+        'daemon-plugin-set-stale',
+      );
+      return true;
+    },
+  );
+});

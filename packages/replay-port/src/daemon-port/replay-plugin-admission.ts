@@ -7,7 +7,7 @@ export async function requireReplayPlugins(request: DaemonWireRequest): Promise<
   const { isReplayBackendId, unsupportedReplayBackendMessage, resolveReplayFormat } =
     await import('@agent-device/ad-script');
   const backend = request.flags?.replayBackend;
-  if (backend && !isReplayBackendId(backend))
+  if (backend !== undefined && !isReplayBackendId(backend))
     throw new AppError('INVALID_ARGS', unsupportedReplayBackendMessage(backend));
   if (request.command === 'test') {
     await getReplayExecution();

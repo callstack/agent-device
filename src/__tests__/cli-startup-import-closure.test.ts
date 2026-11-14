@@ -128,7 +128,7 @@ test('the CLI startup import closure never evaluates node:http or node:https', (
   ).toEqual([]);
 });
 
-test('the CLI startup import closure never evaluates the Maestro engine', () => {
+test('the CLI startup import closure never evaluates a lazy replay engine', () => {
   const offenders: string[] = [];
   for (const file of eagerClosureOf(path.join(srcRoot, 'cli.ts'))) {
     for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
@@ -140,13 +140,12 @@ test('the CLI startup import closure never evaluates the Maestro engine', () => 
 
   expect(
     offenders,
-    'Load @agent-device/maestro on demand instead: the command registry evaluates every command ' +
-      'family on startup, so importing the engine here costs every warm CLI command ~28ms of ' +
-      'YAML-parser evaluation and a 131 kB startup chunk, for a format most runs never use.',
+    'Load replay engine packages on demand instead: the command registry evaluates every command ' +
+      'family on startup, so eager engine imports add their parsing and execution code to every CLI invocation.',
   ).toEqual([]);
 });
 
-test('the replay command source closure keeps Maestro behind flow selection', () => {
+test('the replay command source closure keeps replay engines behind execution or source selection', () => {
   const replayEntry = path.join(srcRoot, '../packages/command-surface/src/replay/index.ts');
   const replayClosure = eagerClosureOf(replayEntry);
   const sourceBundle = path.join(srcRoot, '../packages/replay-port/src/script-source-bundle.ts');
@@ -161,7 +160,7 @@ test('the replay command source closure keeps Maestro behind flow selection', ()
 
   expect(
     offenders,
-    'The replay command may evaluate @agent-device/maestro only inside flow source collection.',
+    'The replay command must load replay engines only for execution or flow source collection.',
   ).toEqual([]);
 });
 

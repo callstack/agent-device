@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,13 +7,12 @@ import { test } from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 function run(command, args, cwd) {
-  return execFileSync(command, args, {
+  return runCmdSync(command, args, {
     cwd,
     env: process.env,
-    encoding: 'utf8',
-    timeout: 120_000,
+    timeoutMs: 120_000,
     maxBuffer: 16 * 1024 * 1024,
-  });
+  }).stdout;
 }
 function files(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

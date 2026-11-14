@@ -68,5 +68,5 @@ Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`;
 export function replayPluginInstallHelp(
   installation: ReturnType<typeof getReplayPluginInstallation>,
 ): string {
-  return `${installation.summary} (plugin, install separately). Run agent-device plugins add ${installation.package}.`;
+  return `${installation.summary} (plugin, install separately). Run agent-device plugins add ${installation.package}. ${installation.installationHint}`;
 }

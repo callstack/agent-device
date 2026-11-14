@@ -44,6 +44,8 @@ To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maes
 
 For 0.22, native `.ad` replay and all `test` suites require a separately installed first-party plugin on the daemon host:
 
+The 0.22 `@agent-device/replay` and `@agent-device/maestro` packages are private and not yet published. The npm commands below apply after publication. Native replay and suites cannot be installed from npm until then.
+
 ```bash
 agent-device plugins add @agent-device/replay
 ```

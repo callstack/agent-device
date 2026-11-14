@@ -99,7 +99,7 @@ async function runNodeModuleJson(cwd: string, args: string[], script: string): P
 async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<void> {
   for (const name of ['maestro', 'replay']) {
     const tarball = path.join(consumerRoot, `${name}.tgz`);
-    runCmdSync('pnpm', ['--config.ignore-scripts=true', 'pack', '--out', tarball], {
+    runCmdSync('pnpm', ['pack', '--out', tarball], {
       cwd: path.join(repoRoot, 'packages', name),
       timeoutMs: SUBPROCESS_TIMEOUT_MS,
     });

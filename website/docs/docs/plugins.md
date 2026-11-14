@@ -31,6 +31,8 @@ A failed install keeps the previous selection. A running daemon keeps the plugin
 
 ## Install replay and test support
 
+The 0.22 `@agent-device/replay` and `@agent-device/maestro` packages are private and not yet published. The npm commands below apply after publication. Native replay and suites cannot be installed from npm until then.
+
 In 0.22, install the native replay plugin on the daemon host:
 
 ```bash

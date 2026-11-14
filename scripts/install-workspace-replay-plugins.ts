@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveUserConfigPath } from '@agent-device/host-kit/file';
+import { publishFileSync, resolveUserConfigPath } from '@agent-device/host-kit/file';
 
 /** Installs the explicitly selected workspace build into an isolated validation plugin store. */
 export function installWorkspaceReplayPlugins(env: NodeJS.ProcessEnv, source: boolean): void {
@@ -9,17 +9,36 @@ export function installWorkspaceReplayPlugins(env: NodeJS.ProcessEnv, source: bo
     throw new Error('Workspace plugin installation requires AGENT_DEVICE_HOME');
   const configPath = resolveUserConfigPath(env);
   const home = path.dirname(configPath);
-  for (const packageId of ['maestro', 'replay'])
-    installWorkspacePlugin(source, home, configPath, packageId);
+  const staged = ['maestro', 'replay'].map((packageId) => ({
+    packageId,
+    installation: crypto.randomUUID(),
+  }));
+  try {
+    for (const { packageId, installation } of staged)
+      installWorkspacePlugin(source, home, packageId, installation);
+    const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+    const selections = Object.fromEntries(
+      staged.map(({ packageId, installation }) => [`@agent-device/${packageId}`, { installation }]),
+    );
+    publishFileSync({
+      destination: configPath,
+      contents: JSON.stringify({ ...config, plugins: { ...config.plugins, ...selections } }),
+      mode: 0o600,
+      preserveExistingMode: true,
+    });
+  } catch (error) {
+    for (const { installation } of staged)
+      fs.rmSync(path.join(home, 'plugins', installation), { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function installWorkspacePlugin(
   source: boolean,
   home: string,
-  configPath: string,
   packageId: string,
+  installation: string,
 ): void {
-  const installation = crypto.randomUUID();
   const directory = path.join(
     home,
     'plugins',
@@ -44,14 +63,6 @@ function installWorkspacePlugin(
       }),
     );
   }
-  const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({
-      ...config,
-      plugins: { ...config.plugins, [`@agent-device/${packageId}`]: { installation } },
-    }),
-  );
 }
 
 if (process.argv[1] === import.meta.filename) installWorkspaceReplayPlugins(process.env, false);
