@@ -92,7 +92,7 @@ function createDevice(params: {
         return { ok: true };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([
       { name: 'default', snapshot: params.frame, refFrameSnapshot: params.frame },
     ]),
