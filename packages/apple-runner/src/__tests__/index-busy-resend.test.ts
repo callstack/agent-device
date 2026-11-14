@@ -164,8 +164,8 @@ test('a request deadline reached mid-outage ends with the RUNNER_BUSY refusal an
 
   assert.ok(error instanceof AppError, `expected the refusal, got ${String(error)}`);
   assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
-  // Delays of 200, 400, 800, then 1000ms put the eleventh send at 8.4s. The window is 9s (10s less
-  // the 1s reserve), so the next delay is clamped to it and no send follows.
+  // The busy window is 8s (10s less the 2s reserve). Delays of 200, 400, 800, then 1000ms put the
+  // tenth send at 7.4s, inside it, and the eleventh at 8.4s, past it: that refusal is the answer.
   assert.equal(error.details?.attempts, 11);
   assert.equal(sentCommands().length, 11);
   assert.equal(sentAt.at(-1)! - startedAt, 8_400);
@@ -190,6 +190,25 @@ test('read-only transport failures keep the three-attempt resend budget', async 
     },
   );
 
+  assert.equal(sentCommands().filter((command) => command === 'snapshot').length, 3);
+});
+
+test('a request deadline too close for a busy resend leaves the transport resends their three attempts', async () => {
+  underRequestDeadline(1_000);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockResolvedValueOnce({ lifecycleState: 'started' })
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockResolvedValueOnce({ lifecycleState: 'started' })
+    .mockResolvedValueOnce({ nodes: [], truncated: false });
+
+  const result = await runAppleRunnerCommand(
+    IOS_SIMULATOR,
+    { command: 'snapshot' },
+    { requestId: 'req-deadline-transport' },
+  );
+
+  assert.deepEqual(result, { nodes: [], truncated: false });
   assert.equal(sentCommands().filter((command) => command === 'snapshot').length, 3);
 });
 
