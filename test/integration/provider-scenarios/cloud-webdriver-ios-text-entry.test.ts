@@ -444,8 +444,9 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   const open = await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
     meta: leaseMeta(lease.leaseId),
   });
-  const opened = assertRpcOk<{ appBundleId?: string }>(open);
+  const opened = assertRpcOk<{ appBundleId?: string; osVersion?: string }>(open);
   assert.equal(opened.appBundleId, 'com.example.demo');
+  assert.equal(opened.osVersion, '17.2');
   // The prepared cloud session chose iOS. This must become an explicit device leaf before the
   // runtime facts admission; a collapsed record may not borrow support from an owner label.
   const [session] = await daemon.client().sessions.list();
