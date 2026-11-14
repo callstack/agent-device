@@ -80,7 +80,7 @@ test('a retained owner decision stops recovery before gateway composition', asyn
     beforeGateway: async (current) => {
       assert.equal(current, claim);
       events.push('inspect');
-      return { status: 'retained', reason: 'resource-recovery-requires-standalone' };
+      return { status: 'retained', reason: 'screen-recording-cleanup-pending' };
     },
     composeGateway: () => {
       events.push('gateway');
@@ -89,7 +89,7 @@ test('a retained owner decision stops recovery before gateway composition', asyn
   });
   assert.deepEqual(await reconcile(claim), {
     status: 'retained',
-    reason: 'resource-recovery-requires-standalone',
+    reason: 'screen-recording-cleanup-pending',
   });
   assert.deepEqual(events, ['inspect']);
 });

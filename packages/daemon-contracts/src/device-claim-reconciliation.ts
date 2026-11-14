@@ -82,7 +82,19 @@ export type ClaimRecoveryInspection =
         resourcePath: string;
       }>[];
     }
-  | { status: 'retained'; reason: string };
+  | { status: 'retained'; reason: ClaimRecoveryRetentionReason };
+
+/**
+ * Why a claim's durable resources keep it un-settled. The reconciliation transaction and
+ * `device status`'s acquirability report both answer with it, so a caller reads one vocabulary:
+ * a reason named here is the reason `open` would refuse the device.
+ */
+export type ClaimRecoveryRetentionReason =
+  | `${DurableSessionResourceKind}-cleanup-pending`
+  | `${DurableSessionResourceKind}-owner-mismatch`
+  | `${DurableSessionResourceKind}-descriptor-invalid`
+  | `${DurableSessionResourceKind}-descriptor-version-unsupported`
+  | 'durable-resource-reconciliation-failed';
 
 /** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
 export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
@@ -185,7 +197,7 @@ function inspectResourceOwnership(
 ):
   | { status: 'missing' }
   | { status: 'owned'; resourcePath: string; requiresRecovery: boolean }
-  | { status: 'retained'; reason: string } {
+  | { status: 'retained'; reason: ClaimRecoveryRetentionReason } {
   const resourcePath = resource.store.resolvePath(sessionDir);
   const record = resource.store.read(resourcePath);
   if (record.status === 'missing') return { status: 'missing' };

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import * as hostProcess from '@agent-device/host-kit/process';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { runCliCapture } from './cli-capture.ts';
 import {
   mkdtempForTestSync,
@@ -18,7 +22,10 @@ test('device status is daemonless and does not send a daemon request', async () 
   assert.equal(result.code, null);
   assert.equal(result.calls.length, 0);
   const payload = JSON.parse(result.stdout);
-  assert.deepEqual(payload, { success: true, data: { claims: [], hiddenStaleClaims: 0 } });
+  assert.deepEqual(payload, {
+    success: true,
+    data: { claims: [], hiddenStaleClaims: 0, devices: [] },
+  });
 });
 
 test('keeps normal status compact while retaining proven-stale claims for explicit inspection', async () => {
@@ -96,6 +103,89 @@ test('keeps normal status compact while retaining proven-stale claims for explic
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+test('reports per device whether a new session can take it, with the blocking reason', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const ownerStateDir = mkdtempForTestSync('agent-device-cli-claims-owner-');
+  const owner = readCurrentOwnerIdentity();
+  const write = (
+    deviceKey: string,
+    id: string,
+    params: { ownerPid: number; ownerStartTime: string | null; stateDir: string },
+  ) =>
+    fs.writeFileSync(
+      path.join(claimsDir, `${cryptoHashForTest(deviceKey)}.json`),
+      JSON.stringify({
+        schemaVersion: 1,
+        deviceKey,
+        device: { platform: 'android', id, name: id, kind: 'emulator' },
+        session: `session-${id}`,
+        workspace: '/worktrees/owner',
+        stateDir: params.stateDir,
+        ownerPid: params.ownerPid,
+        ownerStartTime: params.ownerStartTime,
+        ownerToken: 'owner-token',
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      }),
+    );
+  try {
+    write('local:android:none:held', 'held', {
+      ownerPid: owner.pid,
+      ownerStartTime: owner.startTime,
+      stateDir: process.cwd(),
+    });
+    write('local:android:none:reclaimable', 'reclaimable', {
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerStateDir,
+    });
+    write('local:android:none:retained', 'retained', {
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerStateDir,
+    });
+    const recordingPath = screenRecordingDurableResource.store.resolvePath(
+      path.join(ownerStateDir, 'sessions', 'session-retained'),
+    );
+    screenRecordingDurableResource.store.write(
+      recordingPath,
+      createDurableResourceEnvelope({
+        resourceKind: 'screen-recording',
+        sessionId: 'session-retained',
+        device: { id: 'retained', family: 'android', kind: 'emulator' },
+        owner: localRuntimeOwner('android'),
+        fence: { token: 'fence', generation: 1 },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: {} },
+      }),
+    );
+
+    const result = await runCliCapture(['device', 'status', '--json'], {
+      env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    });
+    assert.equal(result.code, null);
+    const devices = JSON.parse(result.stdout).data.devices;
+    const byId = Object.fromEntries(
+      devices.map((entry: { device: { id: string } }) => [entry.device.id, entry]),
+    );
+    assert.equal(byId.held.acquirable, false);
+    assert.equal(byId.held.blockedBy, 'live-owner');
+    assert.equal(byId.held.owner.session, 'session-held');
+    // #4524: the Expo Explore case. A provably dead owner is no longer read as blocking.
+    assert.equal(byId.reclaimable.acquirable, true);
+    assert.equal(byId.reclaimable.blockedBy, undefined);
+    assert.equal(byId.retained.acquirable, false);
+    assert.equal(byId.retained.blockedBy, 'screen-recording-cleanup-pending');
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerStateDir, { recursive: true, force: true });
+  }
+});
+
+function cryptoHashForTest(deviceKey: string): string {
+  return crypto.createHash('sha256').update(deviceKey).digest('hex');
+}
 
 test('keeps corrupt claims visible and requires --stale for uncertain reclaimable views', async () => {
   const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');

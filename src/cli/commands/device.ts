@@ -1,4 +1,4 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import {
@@ -8,6 +8,10 @@ import {
   type InspectedDeviceClaim,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
+import {
+  inspectDeviceAcquirability,
+  type DeviceAcquirabilityBlockReason,
+} from '@agent-device/daemon-contracts/device-claim-acquirability';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -31,14 +35,15 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
-  const claims = (
-    flags.stale
-      ? staleClaims
-      : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification))
-  ).map(serializeClaim);
+  const visible = flags.stale
+    ? staleClaims
+    : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification));
+  const claims = visible.map(serializeClaim);
+  const devices = await reportDeviceAcquirability(inspectedClaims, host.env);
   const data = {
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
+    devices,
   };
   await writeCommandOutput(flags, data, () =>
     renderDeviceStatus(claims, {
@@ -53,6 +58,60 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
   );
   return true;
 };
+
+type DeviceAcquirabilityReport = {
+  deviceKey: string;
+  device: Record<string, unknown>;
+  acquirable: boolean;
+  /** Why a new session cannot take it now, and the holder to act on; absent when it can. */
+  blockedBy?: DeviceAcquirabilityBlockReason;
+  owner?: { session: string; workspace: string; stateDir: string };
+};
+
+/**
+ * Whether a new session can take each device a claim names, weighed against every claim this run
+ * inspected so a host's app device sees its host's owner. One entry per device, in inspection order.
+ *
+ * Every device a claim names is reported, including one whose only claims are the stale ones this
+ * view hides: their owner being reclaimable is exactly why they are hidden, and a caller choosing a
+ * device needs that answer without asking for the hidden records. A device no claim names is
+ * acquirable and absent; `agent-device devices` is what enumerates devices.
+ */
+async function reportDeviceAcquirability(
+  inspectedClaims: readonly InspectedDeviceClaim[],
+  env: EnvMap,
+): Promise<DeviceAcquirabilityReport[]> {
+  const reports: DeviceAcquirabilityReport[] = [];
+  const seen = new Set<string>();
+  for (const entry of inspectedClaims) {
+    const deviceKey = entry.deviceKey;
+    const device = entry.claim?.device;
+    if (!deviceKey || !device || seen.has(deviceKey)) continue;
+    seen.add(deviceKey);
+    const acquirability = await inspectDeviceAcquirability({
+      device,
+      claims: inspectedClaims,
+      env,
+    });
+    const holder = acquirability.blockedBy ? acquirability.claim : undefined;
+    reports.push({
+      deviceKey,
+      device: serializeClaimDevice(device),
+      acquirable: acquirability.acquirable,
+      ...(acquirability.blockedBy ? { blockedBy: acquirability.blockedBy } : {}),
+      ...(holder?.session
+        ? {
+            owner: {
+              session: holder.session,
+              workspace: holder.workspace ?? '',
+              stateDir: holder.stateDir ?? '',
+            },
+          }
+        : {}),
+    });
+  }
+  return reports;
+}
 
 /**
  * `device release --stale`: settle and clear matching claims whose owner

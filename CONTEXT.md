@@ -79,6 +79,11 @@ A command's observation, ownership, or exclusive-mutation rule.
 The per-owner-kind decision at the claim gate: ordinary or none.
 _Avoid_: Claim policy, device-claim policy
 
+**Device acquirability**:
+Whether a new session can take a device now, answered through the claim gate's own decisions. It is
+an inspection, not a reservation.
+_Avoid_: Device availability, free device
+
 **Human-control hold**:
 A device-scoped pause on agent mutations during human operation.
 

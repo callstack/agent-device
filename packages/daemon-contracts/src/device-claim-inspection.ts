@@ -229,6 +229,47 @@ export function deviceClaimRequiresStaleInspection(
 }
 
 /**
+ * The typed reason a caller gives when it refuses to take a device from the owner a classification
+ * describes, or refuses to settle that owner's claim. `device release --stale` reports these for the
+ * claims it leaves alone, and `device status` reports them as the reason a device is not acquirable,
+ * so one vocabulary answers both.
+ *
+ * The dead and superseded entries are the answer for a claim whose owner is provably gone yet which
+ * still cannot be settled for a reason the owner is not: a claim file named for a different device,
+ * or a settlement that never reached this claim.
+ *
+ * A lookup rather than a switch: a `Record` stays a flat table TypeScript still checks for
+ * exhaustiveness, so a classification dropped from `DeviceClaimClassification` fails to compile here
+ * exactly as it would a missing `case`.
+ */
+const DEVICE_CLAIM_REFUSAL_REASONS: Readonly<
+  Record<DeviceClaimClassification, DeviceClaimRefusalReason>
+> = Object.freeze({
+  live: 'live-owner',
+  'owner-process-reused': 'owner-pid-reused',
+  'owner-state-dir-gone': 'owner-process-still-running',
+  unknown: 'owner-liveness-unknown',
+  inconsistent: 'claim-record-inconsistent',
+  'owner-process-dead': 'claim-record-unreadable',
+  'owner-daemon-superseded': 'claim-record-unreadable',
+});
+
+export type DeviceClaimRefusalReason =
+  | 'live-owner'
+  | 'owner-pid-reused'
+  | 'owner-process-still-running'
+  | 'owner-liveness-unknown'
+  | 'claim-record-inconsistent'
+  | 'claim-record-unreadable';
+
+/** The refusal reason a classification names. A total lookup, so no caller re-derives it. */
+export function deviceClaimRefusalReason(
+  classification: DeviceClaimClassification,
+): DeviceClaimRefusalReason {
+  return DEVICE_CLAIM_REFUSAL_REASONS[classification];
+}
+
+/**
  * Claims whose recorded owner can no longer release them, and which
  * reconciliation may therefore settle once exact-owner resource recovery
  * reaches a terminal state. Both members are proofs about the owner, never

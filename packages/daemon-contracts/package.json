@@ -52,6 +52,10 @@
       "types": "./src/daemon-stop.ts",
       "default": "./src/daemon-stop.ts"
     },
+    "./device-claim-acquirability": {
+      "types": "./src/device-claim-acquirability.ts",
+      "default": "./src/device-claim-acquirability.ts"
+    },
     "./device-claim-recovery": {
       "types": "./src/device-claim-recovery.ts",
       "default": "./src/device-claim-recovery.ts"
