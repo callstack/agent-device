@@ -25,7 +25,7 @@ export type MaestroDaemonOperationInvoke = (
 
 export type CreateDaemonMaestroRuntimeOperationsOptions = Pick<
   ReplayBackendHost,
-  'readSnapshotClickabilityEvidence'
+  'readSnapshotClickabilityEvidence' | 'assertSnapshotScreenOrigin'
 > & {
   readonly invoke: MaestroDaemonOperationInvoke;
   /** The runtime envelope every operation carries: platform, target, device, and recording flags. */

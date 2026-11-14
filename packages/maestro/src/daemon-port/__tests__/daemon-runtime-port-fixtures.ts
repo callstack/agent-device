@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
+import {
+  assertSnapshotScreenOrigin,
+  readSnapshotClickabilityEvidence,
+} from '@agent-device/contracts/capture';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -24,10 +27,11 @@ export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
 ): Pick<
   CreateDaemonMaestroRuntimeOperationsOptions,
-  'flags' | 'publicNetworkOnly' | 'readSnapshotClickabilityEvidence'
+  'flags' | 'publicNetworkOnly' | 'readSnapshotClickabilityEvidence' | 'assertSnapshotScreenOrigin'
 > {
   return {
     readSnapshotClickabilityEvidence,
+    assertSnapshotScreenOrigin,
     publicNetworkOnly: false,
     ...overrides,
   };

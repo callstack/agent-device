@@ -83,6 +83,7 @@ test('the failure response hands the host the step, its warnings, and its sugges
       buildBuiltinVars: () => ({}),
       readScriptSourceFile: () => '',
       readSnapshotClickabilityEvidence: () => undefined,
+      assertSnapshotScreenOrigin: () => Promise.reject(new Error('unused')),
       scriptSourceRequiredMessage: '',
       resolveTargetDevice: () => Promise.reject(new Error('unused')),
       requestSignal: () => undefined,

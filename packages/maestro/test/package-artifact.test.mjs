@@ -41,6 +41,16 @@ test('packed managed plugin contains its factory and runs real script children w
       ],
       root,
     );
+    run(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        path.join(import.meta.dirname, 'packed-screen-origin.mjs'),
+        plugin,
+        scratch,
+      ],
+      root,
+    );
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }

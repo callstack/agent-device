@@ -235,6 +235,8 @@ export type ReplayBackendHost = Readonly<{
   emitDiagnostic(event: DiagnosticEventInput): void;
   /** Reads capture-local facts from the host's private evidence owner, without wire fields. */
   readSnapshotClickabilityEvidence(owner: object): SnapshotClickabilityEvidence | undefined;
+  /** Refuses capture-derived input when the host has no established screen origin. */
+  assertSnapshotScreenOrigin(owner: object, label: string): Promise<void>;
   /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
   appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
   /** The `AD_*` variables every replay run is seeded with. */
