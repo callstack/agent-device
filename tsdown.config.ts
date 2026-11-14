@@ -151,10 +151,16 @@ export default defineConfig({
   hash: false,
   outputOptions: {
     codeSplitting: {
-      groups: publicSdkChunkGroups.flatMap(([name, dtsTest, jsTest]) => [
-        { test: dtsTest, name: `${name}.d` },
-        { test: jsTest, name },
-      ]),
+      groups: [
+        ...publicSdkChunkGroups.flatMap(([name, dtsTest, jsTest]) => [
+          { test: dtsTest, name: `${name}.d` },
+          { test: jsTest, name },
+        ]),
+        {
+          test: /packages[\\/]contracts[\\/]src[\\/]replay-backend\.d\.[cm]?ts$/,
+          name: 'sdk-replay-backend.d',
+        },
+      ],
     },
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),

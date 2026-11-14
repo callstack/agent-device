@@ -682,7 +682,7 @@ importers:
   packages/kernel: {}
 
   packages/maestro:
-    dependencies:
+    devDependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -704,7 +704,9 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
-    devDependencies:
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
       undici:
         specifier: 7.30.1
         version: 7.30.1
