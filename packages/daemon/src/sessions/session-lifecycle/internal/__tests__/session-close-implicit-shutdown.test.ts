@@ -51,7 +51,7 @@ async function closeSession(params: {
   device: SessionState['device'];
   bootedByOpen?: true;
   flags?: Record<string, unknown>;
-  internal?: Record<string, unknown>;
+  deviceShutdownDenied?: boolean;
   lifecycleOperationsLoader?: Parameters<
     typeof handleSessionCommands
   >[0]['lifecycleOperationsLoader'];
@@ -72,13 +72,13 @@ async function closeSession(params: {
     ...(params.platformResourceCleanup
       ? { platformResourceCleanup: params.platformResourceCleanup }
       : {}),
+    deviceShutdownDenied: params.deviceShutdownDenied,
     req: {
       token: 't',
       session: sessionName,
       command: 'close',
       positionals: [],
       flags: flags ?? {},
-      ...(params.internal ? { internal: params.internal } : {}),
     },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -275,7 +275,7 @@ test('close --shutdown keeps asking for the stop on a session that did not boot 
 });
 
 test('a policy that denies the stop keeps close successful, keeps the runner warm, and reports the kept device', async () => {
-  // The request scope derives this fact from the daemon's loaded policy (ADR 0029). The close
+  // Runtime composition derives this fact from the loaded daemon policy (ADR 0029). The close
   // lifecycle reads it BEFORE finalizing, so the refused stop never consumes the runner retention.
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
   const platformResourceCleanup = platformResourceCleanupFixture();
@@ -283,7 +283,7 @@ test('a policy that denies the stop keeps close successful, keeps the runner war
     sessionName: 'policy-denied-session',
     device: iosSimulator,
     bootedByOpen: true,
-    internal: { shutdownCapabilityDenied: true },
+    deviceShutdownDenied: true,
     lifecycleOperationsLoader: loader,
     platformResourceCleanup,
   });
@@ -313,7 +313,7 @@ test('a denied policy fact without boot ownership changes nothing', async () => 
   const { response } = await closeSession({
     sessionName: 'policy-denied-unowned-session',
     device: { ...iosSimulator, booted: true },
-    internal: { shutdownCapabilityDenied: true },
+    deviceShutdownDenied: true,
     lifecycleOperationsLoader: loader,
   });
 

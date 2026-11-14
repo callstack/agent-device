@@ -100,9 +100,8 @@ export function resolveExistingSessionDeviceSelection(device: DeviceInfo): Devic
 }
 
 /**
- * Open preparation owns lifecycle effects. Once it succeeds, a local virtual
- * target that was stopped at resolution has provided the requested boot event;
- * provider and physical targets never claim a daemon-owned boot.
+ * Classifies the boot obligation for a stopped local virtual target before open dispatch.
+ * Provider and physical targets never claim a daemon-owned boot.
  */
 export function markSelectionBootOccurred(
   selection: DeviceSelectionResult,

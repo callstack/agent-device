@@ -90,8 +90,9 @@ test.each([false, true])(
       createCommandSurface: fakeCreateCommandSurface,
       req: {
         ...wireReq,
-        internal: { endedLeases, ...(shutdownDenied ? { shutdownCapabilityDenied: true } : {}) },
+        internal: { endedLeases },
       },
+      deviceShutdownDenied: shutdownDenied,
       sessionName: 'default',
       logPath: path.join(root, 'daemon.log'),
       sessionStore,

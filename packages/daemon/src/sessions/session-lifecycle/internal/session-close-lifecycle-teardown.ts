@@ -58,6 +58,7 @@ export async function runSessionCloseTeardown(params: {
     platformCloseError: unknown;
   }): Error | undefined;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
@@ -93,8 +94,7 @@ export async function runSessionCloseTeardown(params: {
   const bootOwnedLocalStop =
     session.bootedByOpen === true && lifecycle.owner.kind === 'local-family';
   const implicitShutdown = !explicitShutdown && bootOwnedLocalStop;
-  const implicitShutdownDeniedByPolicy =
-    implicitShutdown && req.internal?.shutdownCapabilityDenied === true;
+  const implicitShutdownDeniedByPolicy = implicitShutdown && params.deviceShutdownDenied === true;
   const shutdownRequested =
     explicitShutdown || (implicitShutdown && !implicitShutdownDeniedByPolicy);
   const retainExecutionHost = params.platformResourceCleanup.retainExecutionHostAfterClose({

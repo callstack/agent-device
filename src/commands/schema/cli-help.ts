@@ -129,7 +129,7 @@ Validation and evidence:
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, wait text "Home"; open --relaunch for native reset.
 
-Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground (native macOS: background); --relaunch restarts it. Plain close stops only local simulators/emulators this session booted; denied device-shutdown keeps them running with warnings. iOS can retain warm runners on running devices. open reclaims other worktrees' warm runners; "already owned by another agent-device daemon" = outside arbitration. Env vars: help physical-device.
+Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground (native macOS: background); --relaunch restarts it. Plain close can stop its device; rules: help close. iOS can retain warm runners on running devices; runners/daemons self-idle after 5 minutes; stale leases self-reclaim. open reclaims other worktrees' warm runners; "already owned by another agent-device daemon" = outside arbitration. Env vars: help physical-device.
 
 Escalate:
   help manual-qa scripted manual QA

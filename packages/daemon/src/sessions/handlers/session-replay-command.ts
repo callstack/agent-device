@@ -73,6 +73,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   retainDeviceExecutionLock,
   throwIfCanceled,
   platformResourceCleanup,
+  deviceShutdownDenied,
 }) => {
   if (!platformResourceCleanup) {
     throw new AppError(
@@ -122,6 +123,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         bindDevice,
         platformServices,
         platformResourceCleanup,
+        deviceShutdownDenied,
       }),
     ...(video ? { video } : {}),
   });
@@ -210,6 +212,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }>;
 
 async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): Promise<void> {
@@ -227,7 +230,6 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         meta: req.meta,
         internal: {
           cleanupIntent: 'suite-owned-test-session',
-          ...(req.internal?.shutdownCapabilityDenied ? { shutdownCapabilityDenied: true } : {}),
         },
       },
       req,
@@ -241,6 +243,7 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     platformResourceCleanup: params.platformResourceCleanup,
+    deviceShutdownDenied: params.deviceShutdownDenied,
   });
   if (closeResponse.ok) return;
   throw new AppError(closeResponse.error.code, closeResponse.error.message, {

@@ -115,7 +115,7 @@ import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import {
   restrictDeviceInventoryToDaemonPolicy,
-  withShutdownPolicyDeniedFlag,
+  isDaemonPolicyCapabilityDenied,
 } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
@@ -197,6 +197,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const deviceShutdownDenied =
+    daemonPolicy !== undefined && isDaemonPolicyCapabilityDenied(daemonPolicy, 'device-shutdown');
   const deviceInventoryGateways = daemonPolicy
     ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
     : deps.deviceInventoryGateways;
@@ -208,9 +210,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
       };
     }
-    // Replay dispatch carries this private policy fact from its parent request, including
-    // same-session actions that reuse an admitted scope instead of entering this handler again.
-    req = withShutdownPolicyDeniedFlag(req, daemonPolicy);
     return await reportEndedLeases(req, handleRequestOnLedger);
   }
 
@@ -420,6 +419,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       androidObservation,
       createCommandSurface,
       platformResourceCleanup,
+      deviceShutdownDenied,
       bindDevice: lockedScope.bindDevice,
       platformServices: lockedScope.platformServices,
       inspectFacts: lockedScope.inspectFacts,

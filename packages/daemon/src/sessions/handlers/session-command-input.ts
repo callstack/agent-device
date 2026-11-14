@@ -48,6 +48,7 @@ export type SessionCommandInput = {
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup?: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 };
 
 export type SessionCommandParams = Omit<SessionCommandInput, 'leaseRegistry'> & {

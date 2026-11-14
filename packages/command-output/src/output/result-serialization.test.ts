@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  serializeCloseResult,
   serializeInstallFromSourceResult,
   serializeOpenResult,
   serializeSessionListEntry,
@@ -136,4 +137,14 @@ test('serializeInstallFromSourceResult uses install-family package naming', () =
     package: 'com.example.demo',
     message: 'Installed: Demo',
   });
+});
+
+test('serializeCloseResult preserves warnings and omits an empty warning channel', () => {
+  const result = { session: 'qa', identifiers: { session: 'qa' } };
+  assert.deepEqual(serializeCloseResult({ ...result, warnings: ['Device remains running.'] }), {
+    session: 'qa',
+    message: 'Closed: qa',
+    warnings: ['Device remains running.'],
+  });
+  assert.deepEqual(serializeCloseResult({ ...result, warnings: [] }), serializeCloseResult(result));
 });

@@ -127,7 +127,9 @@ agent-device close            # the simulator this open booted ends shut down
 ```
 
 Add `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership.
-Physical devices and provider-owned devices are not stopped through this option:
+Physical devices are not stopped. Provider sessions follow the provider's shutdown action.
+With [Limrun](./limrun.md), `--shutdown` ends the instance or attachment and can delete an instance
+that agent-device created:
 
 ```bash
 agent-device close --shutdown

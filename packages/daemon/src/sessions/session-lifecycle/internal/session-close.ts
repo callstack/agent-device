@@ -59,6 +59,7 @@ export type SessionCloseCommandInput = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup?: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }>;
 
 function toRepairPlatformCloseFailure(error: unknown): AppError {
@@ -352,6 +353,7 @@ export async function handleSessionCloseCommands(
       clearRuntimeHints: admission.clearRuntimeHints,
       repairArmed: repair.repairArmed,
       platformResourceCleanup,
+      deviceShutdownDenied: params.deviceShutdownDenied,
     }),
   );
   if (closed.kind === 'response') return closed.response;
@@ -410,6 +412,7 @@ async function runCloseTeardownAndRelease(params: {
   clearRuntimeHints?: RuntimeHintClearOperation;
   repairArmed: boolean;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }): Promise<SessionCloseFinalization> {
   const {
     req,
@@ -443,6 +446,7 @@ async function runCloseTeardownAndRelease(params: {
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
+    deviceShutdownDenied: params.deviceShutdownDenied,
   });
   let session = sessionStore.requireCurrent(ref);
   // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint

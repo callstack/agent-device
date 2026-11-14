@@ -92,26 +92,11 @@ export function assertDaemonPolicyAdmitsDevice(policy: DaemonPolicy, device: Dev
   });
 }
 
-function isDaemonPolicyCapabilityDenied(
+export function isDaemonPolicyCapabilityDenied(
   policy: DaemonPolicy,
   capability: DaemonPolicyCapability,
 ): boolean {
   return policy.deniedCapabilities.has(capability);
-}
-
-/**
- * #4162: marks a request whose daemon policy denies `device-shutdown`, derived at the router entry
- * so every request and every nested batch/replay step carries it. The close lifecycle reads the
- * fact to keep its own stop — one the policy can never perform — from consuming the warm-runner
- * retention a kept-running device earns, and to disclose the device that stays up.
- */
-export function withShutdownPolicyDeniedFlag(
-  req: DaemonRequest,
-  daemonPolicy: DaemonPolicy | undefined,
-): DaemonRequest {
-  if (!daemonPolicy || !isDaemonPolicyCapabilityDenied(daemonPolicy, 'device-shutdown')) return req;
-  if (req.internal?.shutdownCapabilityDenied === true) return req;
-  return { ...req, internal: { ...req.internal, shutdownCapabilityDenied: true } };
 }
 
 export function assertDaemonPolicyAllowsCapability(

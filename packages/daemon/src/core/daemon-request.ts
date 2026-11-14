@@ -73,13 +73,6 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   endedLeases?: EndedLeaseLedger;
   /** Authority minted only by the test suite for its own attempt-session cleanup. */
   cleanupIntent?: 'suite-owned-test-session';
-  /**
-   * ADR 0029 / #4162: this daemon's policy denies `device-shutdown`, derived once by the request
-   * scope from the loaded policy. The close lifecycle reads it to keep a stop it can never perform
-   * from consuming the warm-runner retention a kept-running device earns. Nested batch and replay
-   * steps run through the same scope, so each derives its own.
-   */
-  shutdownCapabilityDenied?: true;
 };
 
 /**
