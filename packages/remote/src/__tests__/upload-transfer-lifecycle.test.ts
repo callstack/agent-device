@@ -129,6 +129,8 @@ test('a resume response ends the stalled hop before the next attempt is dialed',
 
 test('a resumed hop that makes real progress past the first hop ceiling keeps its own retryable reset', async () => {
   useTransferClock();
+  const progressWindowMs = 30_000;
+  assert.ok(progressWindowMs < TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
   const artifactBytes = 32 * MEBIBYTE;
   let outgoingLegs = 0;
   let resumedDrains = 0;
@@ -145,8 +147,7 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
   const daemon = await startParkedUploadDaemon({
     answerFirstLeg: { status: 308, headers: { 'x-upload-offset': String(MEBIBYTE) } },
   });
-  // Hop one is answered while its body is still queued, so its response-body budget starts at fake
-  // time zero; hop two then moves bytes the peer really takes, for longer than that budget lasts.
+  // Hop one answers at fake time zero. Hop two must stay active beyond the old response-body deadline.
   const attempt = startUploadAttempt({
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(artifactBytes),
@@ -170,11 +171,11 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
       }
       assert.ok(daemon.receivedBytes > bytesBefore, 'the peer took more resumed bytes');
       assert.ok(resumedDrains > drainsBefore, 'the resumed write queue drained');
-      await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(progressWindowMs);
       assert.equal(attempt.settled, false);
       assert.equal(daemon.bodyEnded, false);
     }
-    assert.ok(6 * TRANSFER_CONNECT_TIMEOUT_MS > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+    assert.ok(6 * progressWindowMs > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
 
     daemon.resetParkedLeg();
     const settled = await settleAttemptAfterBudget(attempt);
@@ -184,7 +185,7 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
     // The peer's reset is an ordinary transport failure of hop two. Hop one's retired budget must
     // not relabel it as a phase expiry, and the retry marker must survive for the client's retry.
     assert.equal(result.value, undefined);
-    assert.equal(isTransferPhaseTimeoutError(result.error), false);
+    assert.equal(isTransferPhaseTimeoutError(result.error), false, JSON.stringify(result.error));
     assert.equal(isRetryableUploadStreamError(result.error), true);
     assert.equal(daemon.requests.filter((entry) => entry === LEGACY_UPLOAD_REQUEST).length, 2);
   } finally {

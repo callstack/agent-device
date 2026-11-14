@@ -283,7 +283,6 @@ export async function startParkedUploadDaemon(
           res.setHeader(name, value);
         }
         res.end();
-        // The answered leg's body is never read, so the client stays in real backpressure on it.
         req.pause();
         return;
       }
