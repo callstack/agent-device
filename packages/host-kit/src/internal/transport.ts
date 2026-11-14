@@ -125,8 +125,7 @@ export function observeCompletedRequestWrites(
         if (typeof callback === 'function') callback(error);
       };
     }
-    const accepted: boolean = Reflect.apply(write, this, args);
-    return accepted;
+    return Reflect.apply(write, this, args);
   };
   req.write = observedWrite;
   req.prependListener('response', onResponse);

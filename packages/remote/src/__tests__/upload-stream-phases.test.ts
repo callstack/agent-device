@@ -1,4 +1,5 @@
-import { afterEach, assert, test, vi } from 'vitest';
+import fs from 'node:fs';
+import { afterEach, assert, onTestFinished, test, vi } from 'vitest';
 import {
   LEGACY_UPLOAD_REQUEST,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
@@ -91,6 +92,12 @@ test('a body admitted past four connect ceilings still waits only its own header
   assert.equal(writes.finished, false, 'the body was still being written');
   assert.equal(daemon.bodyEnded, false);
   assert.equal(upload.settled, false);
+  const close = fs.close;
+  const closeSpy = vi.spyOn(fs, 'close').mockImplementation((fd, callback) => {
+    const release = vi.fn().mockImplementationOnce(() => close(fd, callback));
+    onTestFinished(release);
+    setTimeout(release, 20_000);
+  });
   daemon.readToEnd();
   const snapshot = () => ({
     writes,
@@ -105,10 +112,13 @@ test('a body admitted past four connect ceilings still waits only its own header
     snapshot,
   );
   assert.equal(writes.finished && daemon.bodyEnded, true, 'the whole body reached the peer');
+  assert.equal(closeSpy.mock.calls.length, 1, 'source close is held after the outgoing flush');
   await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 1);
   await pumpRealWork();
   assert.equal(upload.settled, false, 'the header wait counts from the flush');
   await vi.advanceTimersByTimeAsync(1);
+  await pumpRealWork();
+  assert.equal(writes.destroyed, true, 'source close cannot reset the header deadline');
   await settleAfterBudget(upload, snapshot);
   const result = await upload;
   assert.equal(result.value, undefined);

@@ -196,19 +196,25 @@ export type OutgoingWrites = {
   readonly drains: number;
   readonly lastCompletedAt: number | undefined;
   readonly finished: boolean;
+  readonly destroyed: boolean;
   readonly responseChunkRead: boolean;
 };
 
 export function recordOutgoingWrites(): OutgoingWrites {
+  let currentRequest: http.ClientRequest | undefined;
   const log: { -readonly [K in keyof OutgoingWrites]: OutgoingWrites[K] } = {
     falseReturns: 0,
     completed: 0,
     drains: 0,
     finished: false,
+    get destroyed() {
+      return currentRequest?.destroyed ?? false;
+    },
     lastCompletedAt: undefined,
     responseChunkRead: false,
   };
   const observe = (req: http.ClientRequest): http.ClientRequest => {
+    currentRequest = req;
     log.finished = false;
     log.lastCompletedAt = undefined;
     log.responseChunkRead = false;
