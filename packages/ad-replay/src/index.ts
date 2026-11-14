@@ -81,7 +81,7 @@
  */
 
 export { inspectAdReplay } from './internal/inspect.ts';
-export type { AdReplayManifest } from './internal/inspect.ts';
+export type { AdReplayManifest } from '@agent-device/contracts/ad-replay-execution';
 
 export { runAdReplay } from './internal/step-loop.ts';
 
@@ -96,9 +96,9 @@ export type {
   AdReplayTargetObservation,
   AdReplayVarSources,
   AdReplayVerificationEntry,
-} from './internal/runtime-port-types.ts';
+} from '@agent-device/contracts/ad-replay-execution';
 
 export type {
   AdReplayGuardMismatchEvidence,
   AdReplayLandmarkMismatchEvidence,
-} from './internal/target-verification.ts';
+} from '@agent-device/contracts/ad-replay-execution';

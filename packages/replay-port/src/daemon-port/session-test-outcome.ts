@@ -2,7 +2,10 @@ import { readSnapshotDiagnosticsSummary } from '@agent-device/contracts/capture'
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts';
-import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-device/replay-test';
+import type {
+  ReplayTestAttemptFailed,
+  ReplayTestAttemptOutcome,
+} from '@agent-device/contracts/replay-test-execution';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**

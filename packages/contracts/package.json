@@ -559,6 +559,22 @@
     "./replay-divergence-data": {
       "types": "./src/replay-divergence-data.ts",
       "default": "./src/replay-divergence-data.ts"
+    },
+    "./replay-script-data": {
+      "types": "./src/replay-script-data.ts",
+      "default": "./src/replay-script-data.ts"
+    },
+    "./ad-replay-execution": {
+      "types": "./src/ad-replay-execution.ts",
+      "default": "./src/ad-replay-execution.ts"
+    },
+    "./replay-test-execution": {
+      "types": "./src/replay-test-execution.ts",
+      "default": "./src/replay-test-execution.ts"
+    },
+    "./replay-execution": {
+      "types": "./src/replay-execution.ts",
+      "default": "./src/replay-execution.ts"
     }
   },
   "devDependencies": {

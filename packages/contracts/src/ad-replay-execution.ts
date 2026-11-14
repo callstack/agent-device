@@ -4,12 +4,8 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
-import type { buildReplayVarScope, LocalIdentity } from '@agent-device/ad-script';
-import type {
-  AdReplayGuardMismatchEvidence,
-  AdReplayLandmarkMismatchEvidence,
-  AdReplayTargetStructuralDenotation,
-} from './target-verification.ts';
+import type { LocalIdentity, TargetAncestryEntry } from './target-annotation.ts';
+import type { ReplayVarSources, ReplayScriptMetadata } from './replay-script-data.ts';
 
 /**
  * #1478 P5 stage C2b (split out of `step-loop.ts` by the #1555 structural-
@@ -23,14 +19,8 @@ import type {
  * full boundary rationale.
  */
 
-/**
- * `${VAR}` scope inputs — plain data (builtins/file/shell/cli env) the
- * daemon reads from the request/process and passes in; `runAdReplay` builds
- * the scope from this. Derived structurally off `buildReplayVarScope`
- * (`@agent-device/ad-script` does not export its own `ReplayVarSources` type
- * by name) rather than duplicating the shape.
- */
-export type AdReplayVarSources = Parameters<typeof buildReplayVarScope>[0];
+/** Host-provided variable sources; the engine resolves each action once. */
+export type AdReplayVarSources = ReplayVarSources;
 
 /**
  * A `${VAR}` value eligible for divergence-report redaction — the engine's
@@ -373,3 +363,55 @@ export type AdReplayRunOutcome =
       readonly stepIndex: number;
       readonly failure: AdReplayStepFailure;
     }>;
+
+/**
+ * The verified/observed member's structural position within its capture
+ * (document order + sibling) — moved here (from `./step-loop.ts`, which
+ * still uses it for `AdReplayVerifiedTargetGuard`) so both this module's
+ * typed evidence shapes and the step loop can reference ONE definition
+ * without a cycle: this module has no dependency on `./step-loop.ts`, but
+ * `./step-loop.ts` already depends on this one.
+ */
+export type AdReplayTargetStructuralDenotation = Readonly<{
+  documentOrder: number;
+  sibling: number;
+}>;
+
+/**
+ * The guard-mismatch refusal's typed evidence, already narrowed by the
+ * daemon adapter from the wire response's `details` bag — the engine never
+ * sees the untyped bag itself.
+ */
+export type AdReplayGuardMismatchEvidence = Readonly<{
+  targetRole?: 'source' | 'destination';
+  observed: LocalIdentity | undefined;
+  expectedStructural: AdReplayTargetStructuralDenotation | undefined;
+  observedStructural: AdReplayTargetStructuralDenotation | undefined;
+}>;
+
+/** The wait-landmark-mismatch refusal's typed evidence — same translate-before-crossing rule. */
+export type AdReplayLandmarkMismatchEvidence = Readonly<{
+  matchCount: number | undefined;
+  observed: LocalIdentity | undefined;
+  observedAncestry: readonly TargetAncestryEntry[];
+}>;
+
+export type AdReplayManifest = Readonly<{
+  actions: SessionAction[];
+  actionLines: number[];
+  metadata: ReplayScriptMetadata;
+  /** SHA-256 digest of the canonical plan (`digestFlags` binds the same platform/target the replay invokes with). */
+  planDigest: string;
+  /** The `--from`/`--plan-digest` resume-point math, closed over this manifest's own `actions`/`planDigest`. */
+  resolveEntryIndex(params: {
+    from: number | undefined;
+    digest: string | undefined;
+    pendingRecordAndHeal:
+      | Readonly<{ expectedFrom: number; actionsCountAtDivergence: number }>
+      | undefined;
+    sessionActionsLength: number;
+  }): { ok: true; value: number } | { ok: false; message: string };
+}>;
+
+/** The request-level `--platform`/`--target` override the plan digest binds (raw flags, before any metadata merge). */
+export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string }>;

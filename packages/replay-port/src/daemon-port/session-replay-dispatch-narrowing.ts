@@ -5,7 +5,7 @@ import type {
   AdReplayGuardMismatchEvidence,
   AdReplayLandmarkMismatchEvidence,
   AdReplayStepFailure,
-} from '@agent-device/ad-replay';
+} from '@agent-device/contracts/ad-replay-execution';
 import type { LocalIdentity } from '@agent-device/ad-script';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
 import {

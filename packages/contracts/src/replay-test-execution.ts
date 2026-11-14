@@ -5,11 +5,6 @@ import type {
   ReplayTestSuiteProgressEvent,
 } from '@agent-device/contracts/progress';
 import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
-import type {
-  ReplayTestResolveShardTargets,
-  ReplayTestShardContext,
-  ReplayTestShardMode,
-} from './session-test-sharding.ts';
 
 /**
  * The device vocabulary a scheduler may name, sourced from the neutral kernel rather than
@@ -276,20 +271,35 @@ export type ReplayTestExecutionDependencies = Omit<
   'discoverSources' | 'resolveShardTargets'
 >;
 
-/** Neutral failure outcome helper; keeps timeout/unknown construction in one place. */
-export function replayTestAttemptFailure(params: {
-  error: ReplayTestAttemptError;
-  artifactPaths?: readonly string[];
-  warnings?: readonly string[];
-  infrastructure?: boolean;
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-}): ReplayTestAttemptFailed {
-  return {
-    status: 'failed',
-    error: params.error,
-    artifactPaths: params.artifactPaths ?? [],
-    warnings: params.warnings ?? [],
-    infrastructure: params.infrastructure ?? false,
-    ...(params.snapshotDiagnostics ? { snapshotDiagnostics: params.snapshotDiagnostics } : {}),
-  };
-}
+export type ReplayTestShardMode = 'all' | 'split';
+
+/**
+ * The device a shard runs against, in neutral vocabulary.
+ *
+ * The scheduler reads `id`/`name` for session labels and progress metadata. `platform` and
+ * `target` are here because the host needs them to bind a nested request, and both are already
+ * neutral kernel types — so `DeviceInfo` itself never crosses into scheduling.
+ */
+export type ReplayTestShardTarget = Readonly<{
+  id: string;
+  name: string;
+  platform: ReplayTestPlatform;
+  target?: ReplayTestTarget;
+}>;
+
+export type ReplayTestShardContext = {
+  shardIndex: number;
+  shardCount: number;
+  device: ReplayTestShardTarget;
+};
+
+/**
+ * Resolves the devices a sharded run will use (#1478 P3b).
+ *
+ * Enumerating inventory, applying allowlists and simulator set paths, and rejecting a run with
+ * too few devices are all host concerns. The scheduler decides how many shards there are and
+ * which entries go to each; it never enumerates hardware.
+ */
+export type ReplayTestResolveShardTargets = (
+  shardCount: number,
+) => Promise<readonly ReplayTestShardTarget[]>;

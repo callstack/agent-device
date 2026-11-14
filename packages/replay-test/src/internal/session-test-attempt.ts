@@ -13,10 +13,10 @@ import {
 } from './session-test-discovery.ts';
 import { runReplayTestAttempt } from './session-test-runtime.ts';
 import type {
+  ReplayTestShardContext,
   ReplayTestAttemptOutcome,
   ReplayTestExecutionDependencies,
-} from './session-test-types.ts';
-import type { ReplayTestShardContext } from './session-test-sharding.ts';
+} from '@agent-device/contracts/replay-test-execution';
 
 type ReplayTestCaseResult = Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>;
 type ReplayTestAttemptFailure = NonNullable<

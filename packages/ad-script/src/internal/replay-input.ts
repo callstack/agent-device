@@ -1,3 +1,4 @@
+import type { ReplayScriptMetadata } from '@agent-device/contracts/replay-script-data';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { isReplayBackendId, unsupportedReplayBackendMessage } from './format.ts';
@@ -5,7 +6,6 @@ import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
   type ParsedReplayScript,
-  type ReplayScriptMetadata,
 } from './script.ts';
 
 export type ParsedReplayInput = ParsedReplayScript & {

@@ -1,5 +1,5 @@
 export { parseReplayScriptDetailed, readReplayScriptMetadata } from './internal/script.ts';
-export type { ReplayScriptMetadata } from './internal/script.ts';
+export type { ReplayScriptMetadata } from '@agent-device/contracts/replay-script-data';
 
 export { resolveDeclaredScriptPlatform } from './internal/open-script.ts';
 

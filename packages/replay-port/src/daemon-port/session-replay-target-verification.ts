@@ -16,7 +16,7 @@ import type {
   AdReplayTargetBindingEvidence,
   AdReplayTargetClassification,
   AdReplayVerificationEntry,
-} from '@agent-device/ad-replay';
+} from '@agent-device/contracts/ad-replay-execution';
 import {
   type ReplayDivergence,
   type ReplayDivergenceTargetBindingKind,

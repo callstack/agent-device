@@ -11,7 +11,7 @@ import type {
   AdReplayRunOutcome,
   AdReplayRunRequest,
   AdReplayStepRuntime,
-} from './runtime-port-types.ts';
+} from '@agent-device/contracts/ad-replay-execution';
 
 /**
  * #1478 P5 stage C2b: the `.ad` step-loop ENGINE policy, split out of

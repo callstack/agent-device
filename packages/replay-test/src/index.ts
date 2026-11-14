@@ -25,11 +25,11 @@ export type {
   ReplayTestManifest,
   ReplayTestSource,
   ReplayTestSuiteRequest,
-} from './internal/session-test-types.ts';
+} from '@agent-device/contracts/replay-test-execution';
 
 export type {
   ReplayTestResolveShardTargets,
   ReplayTestShardContext,
   ReplayTestShardMode,
   ReplayTestShardTarget,
-} from './internal/session-test-sharding.ts';
+} from '@agent-device/contracts/replay-test-execution';
