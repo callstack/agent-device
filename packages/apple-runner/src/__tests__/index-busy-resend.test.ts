@@ -264,3 +264,36 @@ test('a read-only alert get answered ALERT_UNRESOLVED is sent once and reported 
 
   assert.deepEqual(sentCommands(), ['alert']);
 });
+
+test('an alert get cut off by the watchdog reports its typed unknown outcome, and the next get waits out RUNNER_BUSY', async () => {
+  vi.useFakeTimers();
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(
+      buildRunnerResponseError({
+        ok: false,
+        error: { code: 'MAIN_THREAD_TIMEOUT', message: 'main thread work was abandoned' },
+      }),
+    )
+    .mockRejectedValueOnce(busyRefusal())
+    .mockRejectedValueOnce(busyRefusal())
+    .mockResolvedValueOnce({ title: 'Camera Access' });
+
+  const first = runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action: 'get' });
+  const firstError = first.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  const watchdog = await firstError;
+  assert.ok(watchdog instanceof AppError);
+  assert.equal(watchdog.details?.runnerErrorCode, 'MAIN_THREAD_TIMEOUT');
+  assert.equal(watchdog.details?.reason, 'runner_main_thread_timeout');
+  assert.equal(watchdog.details?.dispatched, 'unknown');
+  assert.deepEqual(sentCommands(), ['alert']);
+
+  const second = runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action: 'get' });
+  await vi.advanceTimersByTimeAsync(6_000);
+
+  assert.deepEqual(await second, { title: 'Camera Access' });
+  assert.deepEqual(sentCommands(), ['alert', 'alert', 'alert', 'alert']);
+});
