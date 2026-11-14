@@ -11,8 +11,19 @@ import { parseArgs } from '../../src/cli/parser/args.ts';
 import { validateSelectorExpression } from '@agent-device/selectors';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { readCliBatchStepsJson } from '@agent-device/command-surface';
-import { inspectMaestroFlow } from '@agent-device/maestro';
+import { openReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+
 import type { FuzzTarget } from './target-types.ts';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
+
+let inspectMaestroFlow: ReplayBackend['inspectSource'];
+async function prepareMaestro(): Promise<() => Promise<void>> {
+  const scope = await openReplayBackend('maestro', process.env);
+  inspectMaestroFlow = scope.backend.inspectSource;
+  return async () => {
+    await scope.close();
+  };
+}
 import { acceptCase, makeValidationCheck, rejectCase } from './validation-case.ts';
 
 // argv is carried as one string so a case (and its corpus entry, artifact, and repro
@@ -123,6 +134,7 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
     // Same contract for Maestro flows: shape-valid YAML with one planted violation, so the
     // failure surfaces in the command-shape validation behind the YAML tokenizer.
     name: 'maestro-validation',
+    prepare: prepareMaestro,
     description: 'inspectMaestroFlow via shape-derived flows with expected outcomes',
     run: (input) => void inspectMaestroFlow(JSON.parse(input).payload as string, 'fuzz.yaml'),
     check: makeValidationCheck(
@@ -137,6 +149,7 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
   },
   {
     name: 'maestro',
+    prepare: prepareMaestro,
     description: 'parseMaestroProgram (Maestro compat)',
     run: (input) => void inspectMaestroFlow(input, 'fuzz.yaml'),
     seeds: [

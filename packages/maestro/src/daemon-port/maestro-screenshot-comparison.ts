@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { MAESTRO_RUNTIME_ADAPTER_POLICY } from '@agent-device/maestro';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { computePngRgbDifferenceAsync } from '@agent-device/capture-kit/png-worker-client';
 import type { PngRgbDifferenceResult } from '@agent-device/capture-kit/png-rgb-difference';
 
@@ -17,6 +17,7 @@ type MaestroScreenshotCaptureOptions = {
 };
 
 export async function withMaestroScreenshotBaseline<T>(options: {
+  readonly emitDiagnostic: ReplayBackendHost['emitDiagnostic'];
   readonly signal?: AbortSignal;
   readonly capture: (path: string) => Promise<void>;
   readonly run: (baseline: MaestroScreenshotBaseline) => Promise<T>;
@@ -30,7 +31,13 @@ export async function withMaestroScreenshotBaseline<T>(options: {
         if (!baselineAvailable || !(await captureMaestroScreenshot(options, afterPath))) {
           return undefined;
         }
-        return await compareMaestroScreenshotFiles(beforePath, afterPath, options.signal, 'tap');
+        return await compareMaestroScreenshotFiles(
+          beforePath,
+          afterPath,
+          options.signal,
+          'tap',
+          options.emitDiagnostic,
+        );
       },
     });
   });
@@ -55,6 +62,7 @@ export async function compareMaestroScreenshotFiles(
   secondPath: string,
   signal: AbortSignal | undefined,
   purpose: 'animation' | 'tap',
+  emitDiagnostic: ReplayBackendHost['emitDiagnostic'],
 ): Promise<boolean | undefined> {
   try {
     const [firstBuffer, secondBuffer] = await Promise.all([
@@ -68,7 +76,7 @@ export async function compareMaestroScreenshotFiles(
       'Maestro screenshot',
     );
     throwIfMaestroScreenshotAborted(signal);
-    return screenshotsMatch(comparison, purpose);
+    return screenshotsMatch(comparison, purpose, emitDiagnostic);
   } catch (error) {
     rethrowCancellation(error, signal);
     emitDiagnostic({
@@ -103,14 +111,15 @@ export async function captureMaestroScreenshot(
 function screenshotsMatch(
   comparison: PngRgbDifferenceResult,
   purpose: 'animation' | 'tap',
+  emitDiagnostic: ReplayBackendHost['emitDiagnostic'],
 ): boolean {
   if (comparison.status !== 'compared') {
-    emitComparison(purpose, comparison.status, comparison);
+    emitComparison(purpose, comparison.status, comparison, emitDiagnostic);
     return false;
   }
   const differencePercent = comparison.differencePercent;
   const matches = differencePercent <= MAESTRO_RUNTIME_ADAPTER_POLICY.animationDifferencePercent;
-  emitComparison(purpose, matches ? 'stable' : 'changed', comparison);
+  emitComparison(purpose, matches ? 'stable' : 'changed', comparison, emitDiagnostic);
   return matches;
 }
 
@@ -118,6 +127,7 @@ function emitComparison(
   purpose: 'animation' | 'tap',
   result: 'stable' | 'changed' | 'dimension_mismatch' | 'data_length_mismatch',
   comparison: PngRgbDifferenceResult,
+  emitDiagnostic: ReplayBackendHost['emitDiagnostic'],
 ): void {
   emitDiagnostic({
     level: 'debug',
