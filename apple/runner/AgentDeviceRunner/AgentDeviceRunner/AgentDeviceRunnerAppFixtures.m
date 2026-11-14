@@ -43,7 +43,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
 // pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
 // nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
-// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does (`--fast-ticking-title`: every 0.02 s),
 // so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
 // "Back" on the root, which is not the system back button and must never be pressed.
 // `--floating-back` hides the bar's back button and floats an unlabeled one in the screen's content
@@ -111,10 +111,11 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
         [self setNavigationBarHidden:YES animated:NO];
       }
     }
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
+    BOOL fastTicking = [NSProcessInfo.processInfo.arguments containsObject:@"--fast-ticking-title"];
+    if (fastTicking || [NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
       __block NSInteger remaining = 59;
       __weak UIViewController *weakDetail = detail;
-      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer) {
+      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:(fastTicking ? 0.02 : 0.2) repeats:YES block:^(NSTimer *timer) {
         remaining = remaining > 0 ? remaining - 1 : 59;
         weakDetail.title = [NSString stringWithFormat:@"0:%02ld", (long)remaining];
       }];

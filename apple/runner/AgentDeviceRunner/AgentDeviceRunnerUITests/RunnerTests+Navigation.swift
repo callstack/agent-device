@@ -292,7 +292,7 @@ extension RunnerTests {
   /// Bar titles are left out of that: a bar can retitle itself, such as a countdown, without any
   /// navigation. A back button with no label, such as the iPhone Duo's floating one, shows no pop on
   /// its own, so a state with such a button also holds the bars' titles (their identifiers, which
-  /// UIKit sets to the title). The state read decides that itself, so the state before the tap and
+  /// UIKit sets to the title, or their labels when the identifier is empty). The state read decides that itself, so the state before the tap and
   /// each one after it hold titles under the same rule.
   struct NavigationBarBackState: Equatable {
     var barCount: Int
@@ -301,6 +301,10 @@ extension RunnerTests {
     var barTitles: [String] = []
 
     var hasUnlabeledBackButton: Bool { backButtonLabels.contains(where: \.isEmpty) }
+
+    func hasSameButtons(as other: NavigationBarBackState) -> Bool {
+      backButtonLabels == other.backButtonLabels && backButtonFrames == other.backButtonFrames
+    }
 
     /// Whether a pop can show in a later read of this rule: every back button has a label, or a bar
     /// has a title. Without it a tap could not be confirmed, so it is not sent.
@@ -348,10 +352,12 @@ extension RunnerTests {
     case hung
   }
 
-  /// Reads the bar state, one snapshot per back button, until two reads in a row, one read interval
-  /// apart, agree, so a push still animating is not read as the state a pop changes. Only then does
-  /// one live read check that exactly one back button is hittable and that its frame is in the state,
-  /// and read the bar titles when a back button has no label. Reads start only until `deadlineMs`.
+  /// Reads the back buttons, one snapshot per button, until two reads in a row, one read interval
+  /// apart, agree, so a push still animating is not read as the state a pop changes. The bars (their
+  /// count, and their titles when a back button has no label) are read by the first round and then by
+  /// the live read, which checks that exactly one back button is hittable and that its frame is in
+  /// the state; the two bar reads must agree too, so a title that changes on its own is not still.
+  /// Rounds start only until `deadlineMs`; each live read has a read budget of its own.
   @MainActor
   private func stillNavigationBarBackButton(
     app: XCUIApplication,
@@ -359,20 +365,32 @@ extension RunnerTests {
     deadlineMs: Double
   ) -> NavigationBarBackLookup {
     var previous: NavigationBarBackState?
+    var barsRead: NavigationBarBackState?
     while true {
       let sample: NavigationBarBackSample
-      switch readNavigationBarBack(app: app, phase: .lookup, deadlineMs: deadlineMs) {
+      let readsBars = barsRead == nil
+      switch readNavigationBarBack(app: app, phase: .lookup, deadlineMs: deadlineMs, readsBars: readsBars) {
       case .hung: return .hung
       case .unreadable: return .notFound("unreadable")
       case .read(let read) where read.buttons.isEmpty: return .notFound("no")
       case .read(let read): sample = read
       }
-      if sample.state == previous {
-        switch liveNavigationBarBackButton(of: sample, geometry: geometry) {
+      let buttonsStill = previous.map { sample.state.hasSameButtons(as: $0) } ?? false
+      if readsBars {
+        barsRead = sample.state
+      } else if !buttonsStill {
+        barsRead = nil
+      }
+      if buttonsStill, let barsBefore = barsRead {
+        // The live read is one bounded read of its own: it must not inherit what the rounds spent.
+        let liveDeadlineMs = currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+        switch liveNavigationBarBackButton(of: sample, geometry: geometry, deadlineMs: liveDeadlineMs) {
         case .hung: return .hung
         case .unreadable: return .notFound("unreadable")
         case .read(.absent(let found)): return .notFound(found)
-        case .read(.still(let state, let button)): return .still(state, button: button)
+        case .read(.found(let state, let button)):
+          if state == barsBefore { return .still(state, button: button) }
+          barsRead = state
         case .read(.moving): break
         }
       }
@@ -384,29 +402,37 @@ extension RunnerTests {
 
   /// What the live read of a still state found.
   enum NavigationBarBackLive {
-    case still(NavigationBarBackState, CGRect)
+    case found(NavigationBarBackState, CGRect)
     case absent(String)
     case moving
   }
 
   /// One live read of the sampled buttons: the hittable ones and their frames, and the bars. A button
-  /// outside every navigation bar is not a system back button, so no bar means no button. A pop that
-  /// the state could not show is not tapped.
+  /// that is not by a navigation bar is not a system back button. A pop that the state could not show
+  /// is not tapped.
   @MainActor
   private func liveNavigationBarBackButton(
     of sample: NavigationBarBackSample,
-    geometry: SurfaceGeometry
+    geometry: SurfaceGeometry,
+    deadlineMs: Double
   ) -> NavigationBarBackRead<NavigationBarBackLive> {
     heldNavigationBarRead(.lookup) {
-      let frames = sample.buttons.filter { $0.isHittable }.map(\.frame)
-      guard frames.allSatisfy(SnapshotGeometry.isPositiveFinite) else { return nil }
-      if frames.isEmpty { return .absent("no") }
-      if frames.count > 1 { return .absent("ambiguous") }
-      let state = Self.addingBars(to: sample.state, roots: sample.roots)
-      if state.barCount == 0 { return .absent("no") }
+      let hittable = sample.buttons.indices.filter { sample.buttons[$0].isHittable }
+      if hittable.isEmpty { return .absent("no") }
+      if hittable.count > 1 { return .absent("ambiguous") }
+      let button = sample.buttons[hittable[0]].frame
+      guard SnapshotGeometry.isPositiveFinite(button) else { return nil }
+      let bars = sample.roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
+      guard let snapshots = barSnapshots(bars, deadlineMs: deadlineMs) else { return nil }
+      // The button's and the bars' frames are both snapshot frames, so they share a space.
+      let belongs = Self.backButtonBelongsToABar(
+        sample.state.backButtonFrames[hittable[0]], barFrames: snapshots.map(\.frame),
+        windowHeight: geometry.windowOnScreen.rect.height)
+      if !belongs { return .absent("no") }
+      let state = Self.addingBars(snapshots, to: sample.state)
       if !state.canShowAPop { return .absent("unprovable") }
-      return Self.navigationBarBackState(state, holdsButton: frames[0], geometry: geometry)
-        ? .still(state, frames[0]) : .moving
+      return Self.navigationBarBackState(state, holdsButton: button, geometry: geometry)
+        ? .found(state, button) : .moving
     }
   }
 
@@ -539,21 +565,56 @@ extension RunnerTests {
         labels.append(snapshot.label)
         frames.append(snapshot.frame)
       }
-      let state = NavigationBarBackState(barCount: 0, backButtonLabels: labels, backButtonFrames: frames)
+      var state = NavigationBarBackState(barCount: 0, backButtonLabels: labels, backButtonFrames: frames)
+      if readsBars {
+        let bars = roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
+        // Titles are snapshotted only for a state that holds them.
+        guard let snapshots = state.hasUnlabeledBackButton ? barSnapshots(bars, deadlineMs: deadlineMs) : bars.map({ _ in NavigationBarSnapshot(frame: .zero, title: "") })
+        else { return nil }
+        state = Self.addingBars(snapshots, to: state)
+      }
       return NavigationBarBackSample(
-        state: readsBars ? Self.addingBars(to: state, roots: roots) : state,
+        state: state,
         buttons: buttons,
         roots: roots
       )
     }
   }
 
+  /// Whether a back button is by a navigation bar, both frames in one coordinate space: inside it, as
+  /// on an iPhone, or below it within a third of the window's height from the bar's top, where the
+  /// iPhone Duo floats its button (43 pt below the bar when open, 93 pt when closed), horizontally
+  /// within the bar. An in-content button elsewhere, or in an app with no bar, is not the system back
+  /// button.
+  static func backButtonBelongsToABar(_ button: CGRect, barFrames: [CGRect], windowHeight: CGFloat) -> Bool {
+    barFrames.contains { bar in
+      button.midX >= bar.minX && button.midX <= bar.maxX
+        && button.minY >= bar.minY && button.minY <= bar.minY + windowHeight / 3
+    }
+  }
+
+  struct NavigationBarSnapshot {
+    let frame: CGRect
+    /// The bar's identifier, which UIKit sets to the title, or its label when the identifier is empty.
+    let title: String
+  }
+
+  /// One snapshot per bar. Nil when the read budget ran out before one or one failed.
+  func barSnapshots(_ bars: [XCUIElement], deadlineMs: Double) -> [NavigationBarSnapshot]? {
+    var snapshots: [NavigationBarSnapshot] = []
+    for bar in bars {
+      guard currentUptimeMs() < deadlineMs, let snapshot = try? bar.snapshot() else { return nil }
+      snapshots.append(
+        NavigationBarSnapshot(frame: snapshot.frame, title: snapshot.identifier.isEmpty ? snapshot.label : snapshot.identifier))
+    }
+    return snapshots
+  }
+
   /// `state` with the bars read: their count, and their titles when a back button has no label.
-  static func addingBars(to state: NavigationBarBackState, roots: [XCUIElement]) -> NavigationBarBackState {
-    let bars = roots.flatMap { $0.descendants(matching: .navigationBar).allElementsBoundByIndex }
+  static func addingBars(_ bars: [NavigationBarSnapshot], to state: NavigationBarBackState) -> NavigationBarBackState {
     var state = state
     state.barCount = bars.count
-    if state.hasUnlabeledBackButton { state.barTitles = bars.map(\.identifier) }
+    if state.hasUnlabeledBackButton { state.barTitles = bars.map(\.title) }
     return state
   }
 

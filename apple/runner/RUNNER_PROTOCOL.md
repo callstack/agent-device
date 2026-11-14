@@ -135,39 +135,52 @@ than silently applied:
 ```
 
 `backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
-call, for the system back button: a button with the identifier `BackButton` anywhere in the app's
-windows (the lit panel's windows when a panel is booked), because a floating one, such as the
-iPhone Duo's, is a sibling of the navigation bar rather than inside it. It taps that button with a
-synthesized tap only when the app shows at least one navigation bar, exactly one live, hittable
-candidate is found in a readable tree, and two reads in a row of the back buttons, with a 0.05 s pause
-between them, agree; one live read of the hittable buttons, their frames and the bars then checks
-that the one button's frame is in the state. The match
-places the snapshot frames at the window's screen origin, because a placed iPad window reports them
-from its own top-left. No other button
-counts, whatever its label.
+call, for the system back button: a button with the identifier `BackButton` in the app's windows
+(the lit panel's windows when a panel is booked). A floating one, such as the iPhone Duo's, is a
+sibling of the navigation bar rather than inside it. The runner taps that button with a
+synthesized tap only when all of these hold:
+
+- The tree is readable.
+- Two reads in a row of every `BackButton` in the app's windows, with a 0.05 s pause between them,
+  agree on their labels and frames, hittable or not.
+- One live read of those buttons then finds exactly one hittable. Its frame is in the state. The match
+  places the snapshot frames at the window's screen origin, because a placed iPad window reports them
+  from its own top-left.
+- That button is by a navigation bar: inside it, or horizontally within it and below it in the top
+  third of the windows. The Duo's sits 43 pt below the bar open and 93 pt closed.
+- The bar state read by the first round and by the live read agree (below).
+- A pop can show in the state: every `BackButton` has a label, or a bar has a title.
+
+No other button counts, whatever its label.
+
 The state is the number of navigation bars, the labels of the `BackButton` buttons in tree order,
-and the frames of those buttons; one XCTest snapshot per button. The still check before the tap
-compares labels and frames. Bar titles are left out, because a bar can retitle itself (a countdown)
-without navigating, with one exception: a state with a `BackButton` that has no label, such as the
-Duo's, also holds the bars' titles (their identifiers, which UIKit sets to the title), because the
-label cannot show a pop. That rule belongs to the state read, so the state before the tap and each
-state after it follow it. When such a state has no non-empty title, the pop could not be confirmed,
-so nothing is tapped and the runner swipes (`found=unprovable`). After the tap it reads that state
-again with a 0.05 s pause between reads. Only these changes from the state read before the tap
-answer `ok`: the number of bars, the number of `BackButton` buttons (such as none at the root), a
-`BackButton` label, or, for an unlabeled button, a bar title.
+and the frames of those buttons. The runner reads one XCTest snapshot per button. Bar titles are not
+part of the state, because a bar can retitle itself (a countdown) without navigating. One exception
+applies: a state with a `BackButton` that has no label, such as the Duo's, also holds the title of
+each bar. The title is the bar's identifier, which UIKit sets to the title, or its label when the
+identifier is empty. The label of such a button cannot show a pop. The state read applies this rule
+itself, so the state before the tap and each state after it follow it. The state before the tap must
+hold still: the bar count and, with an unlabeled button, the titles must agree between the first
+round and the live read, so a title that changes on its own is never still. When such a state has no
+non-empty title, the pop could not be confirmed, so nothing is tapped and the runner swipes
+(`found=unprovable`). After the tap the runner reads that state again with a 0.05 s pause between
+reads. Only these changes from the state read before the tap answer `ok`: the number of bars, the
+number of `BackButton` buttons (such as none at the root), a `BackButton` label, or, for an
+unlabeled button, a bar title.
 Frames are left out after the tap, because a tap that navigates nowhere can still move the button
 (a large-title collapse, a bar button that appears). A pop that keeps the same `BackButton` labels
 and bar count, such as one between two screens whose back buttons have the same title, answers
-`BACK_SWIPE_UNVERIFIED`; so can a pop on a
-back button whose title updates itself, misread as a navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
+`BACK_SWIPE_UNVERIFIED`; so can a pop on a back button whose title updates itself, misread as a
+navigation. No change, or reads that fail, answer `BACK_SWIPE_UNVERIFIED`; a delivered tap is
 never followed by the swipe. Before and after the tap, reads start for up to 1 s each, checked
-before each bar's snapshot; a query in flight finishes or ends at XCTest's own query timeout.
+before each button's snapshot; the live read before the tap has a 1 s budget of its own,
+checked before each bar's snapshot. A query in flight finishes or ends at XCTest's own query
+timeout.
 After the tap, when no read in the 1 s saw a change or hung, the runner starts one more read after
-the 1 s, with no deadline of its own: a snapshot of a bar that vanished mid-pop can spend the 1 s in
-XCTest's retries, and this read can still see the screen after the pop. That read can also fail,
+the 1 s, with no deadline of its own: a snapshot of a button that vanished mid-pop can spend the 1 s
+in XCTest's retries, and this read can still see the screen after the pop. That read can also fail,
 which answers `BACK_SWIPE_UNVERIFIED`, or hang, which ends at XCTest's own query timeout and also
-answers `BACK_SWIPE_UNVERIFIED`. A read in flight can run well past the 1 s: one bar snapshot took
+answers `BACK_SWIPE_UNVERIFIED`. A read in flight can run well past the 1 s: one snapshot took
 about 2 s on a CI simulator.
 
 Every bar read holds its XCTest issues. A held issue means the read proved nothing. A hung query
@@ -180,9 +193,10 @@ The runner swipes instead when no tap was sent:
 - The tree read is skipped: the window resolution marked the tree unreadable, accessibility is
   unavailable, or the XCTest snapshot channel is penalized for the app.
 - The read fails or XCTest rejects one of its queries.
-- No candidate is found, or two or more are (such as a sheet over a stack), or the app shows no
-  navigation bar, or the candidate has no label and no bar has a title.
-- The bar state does not hold still within 1 s.
+- No `BackButton` is found, no `BackButton` is hittable, or two or more are (such as a sheet over a
+  stack), or the hittable one is not by a navigation bar, or a `BackButton` has no label and no bar
+  has a title.
+- The back buttons or the bar state do not hold still within 1 s.
 - The synthesized tap is refused before anything is sent.
 
 A tap whose outcome is unknown after it may have been sent throws, and neither the bar check nor

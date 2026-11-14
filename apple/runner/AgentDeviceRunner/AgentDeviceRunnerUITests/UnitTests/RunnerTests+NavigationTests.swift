@@ -95,6 +95,18 @@ extension RunnerTests {
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
+  /// A bar that retitles itself, such as a countdown, never holds still for an unlabeled back button,
+  /// whose pop the title alone shows: nothing is tapped.
+  @MainActor
+  func testInAppBackNeverPressesAnUnlabeledBackButtonUnderATickingBarTitle() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--floating-back", "--fast-ticking-title"])
+    defer { endBackFixture() }
+
+    _ = try performInAppBack(app: app)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+    XCTAssertTrue(["moving", "unreadable"].contains(lastNavigationBarBackTraceForTesting?.found ?? ""), "the lookup never holds still")
+  }
+
   /// A back button identified `BackButton` in an app with no navigation bar is not a system back
   /// button: nothing is pressed.
   @MainActor
@@ -801,6 +813,24 @@ extension RunnerTests {
     XCTAssertTrue(NavigationBarBackState(barCount: 1, backButtonLabels: ["Root"], backButtonFrames: [button]).canShowAPop)
   }
 #endif
+
+  /// The Duo's floating back button, measured on iOS 27.1 in all three poses, and an iPhone's button
+  /// inside its bar are by a bar; a button of the content below the top third, or beside the bar's
+  /// width, is not.
+  func testBackButtonBelongsToABarOnlyWhenItIsByTheBar() {
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 884, y: 125, width: 38, height: 38), barFrames: [CGRect(x: 0, y: 24, width: 951, height: 58)], windowHeight: 669))
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 399, y: 175, width: 38, height: 38), barFrames: [CGRect(x: 0, y: 24, width: 466, height: 58)], windowHeight: 678))
+    XCTAssertTrue(Self.backButtonBelongsToABar(
+      CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 402, height: 44)], windowHeight: 874))
+    let bar = CGRect(x: 0, y: 54, width: 402, height: 44)
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 700, width: 44, height: 44), barFrames: [bar], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 20, width: 44, height: 20), barFrames: [bar], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(
+      CGRect(x: 500, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 320, height: 44)], windowHeight: 874))
+    XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [], windowHeight: 874))
+  }
 
   /// A still screen settles before the budget runs out at any capture time: the settle loop's
   /// timeline, replayed with fixed captures, reaches the required still span first. On a simulator
