@@ -39,7 +39,7 @@ export type TransferPhase = 'connect' | 'request-body' | 'response-headers' | 'r
 const BODY_PHASES: ReadonlySet<TransferPhase> = new Set(['request-body', 'response-body']);
 
 /** The `details.reason` every phase expiry carries, so no consumer has to match error text. */
-export const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
+const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 
 /**
  * Watches the sequential phases of ONE transfer attempt.
@@ -101,7 +101,7 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
  * Typed evidence that a transfer phase, rather than the caller or the whole preparation aggregate,
  * ended the attempt. The expired phase and its effective budget travel in `details`.
  */
-export function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
+function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
   return new AppError('COMMAND_FAILED', `Artifact transfer ${phase} timed out`, {
     reason: TRANSFER_PHASE_TIMEOUT_REASON,
     transferPhase: phase,
