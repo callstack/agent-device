@@ -27,10 +27,7 @@ vi.mock('../screenshot-status-bar.ts', async (importOriginal) => {
 import { ensureBootedSimulator } from '../simulator.ts';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
 import { SIMCTL_SCREENSHOT_TIMEOUT_REASON } from '../tool-provider.ts';
-import {
-  IOS_SIMCTL_LIST_TIMEOUT_MS,
-  IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
-} from '../config.ts';
+import { IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS } from '../config.ts';
 import {
   commandFailed,
   commandStdout,
@@ -238,20 +235,17 @@ test('a state read that itself fails keeps the capture failure and its diagnosti
   );
 });
 
-test('the recovery probe is bounded by the screenshot ceiling, not the inventory budget', async () => {
+test('the five-second recovery probe stays below the capture budget', async () => {
   const device = simulator('sim-recover-budget');
   const probe = await probeRecovery(device, { state: () => listingFor(device.id, 'Shutdown') });
 
   const [onlyProbe] = probe.stateReads;
   assert.ok(onlyProbe, 'the recovery reads the boot state once');
-  assert.equal(
-    onlyProbe.options.timeoutMs,
-    IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
-    'the probe runs under the screenshot-owned ceiling',
-  );
+  const timeoutMs = onlyProbe.options.timeoutMs;
+  assert.equal(timeoutMs, 5_000, 'the probe uses the adopted five-second ceiling');
   assert.ok(
-    IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS < IOS_SIMCTL_LIST_TIMEOUT_MS,
-    'the probe must not inherit the 60s inventory budget behind a 20s capture',
+    timeoutMs !== undefined && timeoutMs < IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
+    'the recovery probe stays below the capture budget',
   );
 });
 
