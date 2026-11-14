@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from '../__tests__/support/platform-ser
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
@@ -146,15 +146,9 @@ test('a burst that fails past frame 1 leaves no implicit temp root behind', asyn
 
   // The implicit root that held frame 1 is gone. Another concurrent run could
   // own its own root, so this checks the one this burst created — the dirname
-  // the failure reported, not a global sweep.
-  let frameOneDir: string | undefined;
-  try {
-    frameOneDir = path.dirname(fixture.captureScreenshot.mock.calls[0]![0]!.outPath);
-  } catch {
-    frameOneDir = undefined;
-  }
-  expect(frameOneDir).toBeDefined();
-  expect(fs.existsSync(frameOneDir!)).toBe(false);
+  // of the frame the burst captured, not a global sweep.
+  const frameOneDir = path.dirname(fixture.captureScreenshot.mock.calls[0]![0]!.outPath);
+  expect(fs.existsSync(frameOneDir)).toBe(false);
 });
 
 test('burst admission refuses crop, overlay, and misbounded flags before any device work', async () => {
@@ -221,6 +215,47 @@ test('a cancelled request stops the burst before the next frame', async () => {
   await expect(execution).rejects.toThrow();
   // The abort lands in the first capture's callback, so exactly one frame may
   // complete before the plan rejects; a later-frame cancellation would show 2.
+  expect(fixture.captureScreenshot.mock.calls.length).toBe(1);
+});
+
+test('an abort during the inter-frame wait stops the burst with the abort reason and one capture', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outDir = mkdtempForTestSync('agent-device-burst');
+  const req = screenshotRequest({
+    positionals: [path.join(outDir, 'page.png')],
+    flags: { count: 3, intervalMs: 1000 },
+  });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  if (!resolved.ok) throw new Error('screenshot admission must succeed');
+
+  const controller = new AbortController();
+  const execution = resolved.execute(
+    executionParams(session, req, {
+      count: req.flags?.count,
+      intervalMs: req.flags?.intervalMs,
+      signal: controller.signal,
+    }),
+  );
+  // Wait for frame 1 to complete; the abort then lands while the plan waits
+  // out intervalMs, so the wait must surface the abort instead of dispatching
+  // frame 2.
+  await vi.waitFor(() => expect(fixture.captureScreenshot).toHaveBeenCalledTimes(1));
+  const abortTimer = setTimeout(
+    () => controller.abort(new Error('canceled during the interval')),
+    20,
+  );
+  await expect(execution).rejects.toThrow('canceled during the interval');
+  clearTimeout(abortTimer);
   expect(fixture.captureScreenshot.mock.calls.length).toBe(1);
 });
 
