@@ -49,7 +49,6 @@ test('an early 413 from a peer that stops reading is consumed and its owned work
   await settleAfterBudget(attempt);
   assert.deepEqual(await atSettle, { destroyed: true, finished: false });
   const result = await attempt;
-
   assert.equal(result.error, undefined, `got ${String(result.error)}`);
   assert.equal(result.value?.statusCode, 413);
   assert.equal(result.value?.body, 'payload too large');
@@ -73,7 +72,6 @@ test('a resume response ends the stalled hop before the next attempt is dialed',
   });
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assertDetailedError(result.error, { offset: resumeOffset, previousOffset: resumeOffset });
   assert.equal(daemon.requests.filter((entry) => entry === LEGACY_UPLOAD_REQUEST).length, 2);
   assert.equal(held.destroyedAtNextOpen, true, 'hop one was ended before hop two opened');
@@ -96,7 +94,6 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
   });
   await untilIo(() => hopTwoTookBytes(daemon) || attempt.settled);
   assert.ok(hopTwoTookBytes(daemon), 'the resumed hop was dialed and took bytes');
-
   for (let window = 0; window < 6; window += 1) {
     const before = { bytes: daemon.receivedBytes, completed: writes.completed };
     const progressed = await awaitBodyProgress(daemon, writes, before, attempt);
@@ -106,7 +103,6 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
     assert.equal(daemon.bodyEnded, false);
   }
   assert.ok(6 * progressWindowMs > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-
   daemon.resetParkedLeg();
   await settleAfterBudget(attempt);
   const result = await attempt;
@@ -138,7 +134,6 @@ test('a redirect response ends the stalled hop before the next hop is dialed', a
   });
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.error, undefined, `got ${String(result.error)}`);
   assert.equal(result.value?.statusCode, 413);
   assert.equal(result.value?.body, 'moved and refused');
@@ -159,7 +154,6 @@ test('a response body that stops mid-answer expires the response-body phase afte
   await spendBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, attempt);
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -183,7 +177,6 @@ test('a connected HTTP upload with an unfinished source expires body inactivity,
   assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -202,7 +195,6 @@ test('a TLS handshake that never completes expires connect even with the whole b
   await spendBudget(TRANSFER_CONNECT_TIMEOUT_MS + 5_000, attempt);
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -227,7 +219,6 @@ test('a completed TLS handshake with an unfinished source expires body inactivit
   assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -252,7 +243,6 @@ test('a zero-length artifact on a peer that never answers waits on its header bu
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, attempt);
   await settleAfterBudget(attempt, snapshot);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -287,7 +277,6 @@ test('an upload the peer keeps taking finishes while every phase ceiling is unex
     await untilIo(() => attempt.settled || daemon.receivedBytes > bytesBefore);
   }
   const result = await attempt;
-
   assert.equal(result.error, undefined, `upload failed: ${String(result.error)}`);
   assert.equal(result.value?.statusCode, 200);
   assert.ok(
@@ -310,7 +299,6 @@ test('a caller cancel during a stalled connect stays caller cancellation, distin
   await spendBudget(5_000, canceled);
   control.abort();
   const result = await canceled;
-
   assert.equal(result.value, undefined);
   assert.ok(result.error instanceof DOMException, `got ${String(result.error)}`);
   assert.equal((result.error as DOMException).name, 'AbortError');
@@ -339,7 +327,6 @@ test('an enclosing aggregate deadline ends a redirect hop with its own reason, n
   aggregate.abort(reason);
   await settleAfterBudget(attempt);
   const result = await attempt;
-
   assert.equal(result.value, undefined);
   assert.equal(result.error, reason);
   assert.equal(isTransferPhaseTimeoutError(result.error), false);
@@ -361,7 +348,6 @@ test('an attempt on a reused connection is already past its connect phase', asyn
   });
   const firstResult = await first;
   assert.equal(firstResult.error, undefined, `leg one failed: ${String(firstResult.error)}`);
-
   const second = startUploadAttempt({
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(64 * 1024),
@@ -375,7 +361,6 @@ test('an attempt on a reused connection is already past its connect phase', asyn
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, second);
   await settleAfterBudget(second, snapshot);
   const result = await second;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',

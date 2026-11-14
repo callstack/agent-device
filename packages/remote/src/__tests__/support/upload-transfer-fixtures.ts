@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
@@ -11,7 +12,6 @@ import { onTestFinished, vi } from 'vitest';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { uploadArtifact } from '../../upload-client.ts';
 import { type UploadStreamResponse, streamFileToHttpRequest } from '../../upload-stream.ts';
-// Adopted budgets are literal expectations, independent of the subject.
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
 export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
@@ -366,7 +366,6 @@ export async function startParkedUploadDaemon(
   let uploadLegs = 0;
   let newestParkedLeg: http.IncomingMessage | undefined;
   let readingToEnd = false;
-
   const server = http.createServer((req, res) => {
     const key = `${req.method} ${req.url}`;
     requests.push(key);
@@ -377,10 +376,7 @@ export async function startParkedUploadDaemon(
       req.on('error', () => {});
       const answer = options.answerFirstLeg;
       if (answer && uploadLegs === 1) {
-        res.statusCode = answer.status;
-        for (const [name, value] of Object.entries(answer.headers ?? {})) {
-          res.setHeader(name, value);
-        }
+        res.writeHead(answer.status, answer.headers);
         res.end();
         req.pause();
         return;
@@ -462,10 +458,7 @@ export async function startAnswerUploadDaemon(options: {
     requests.push(`${req.method} ${req.url}`);
     req.on('error', () => {});
     const answer = options.respond(req);
-    res.statusCode = answer.status;
-    for (const [name, value] of Object.entries(answer.headers ?? {})) {
-      res.setHeader(name, value);
-    }
+    res.writeHead(answer.status, answer.headers);
     res.end(answer.body);
     req.pause();
   });
@@ -580,10 +573,7 @@ export async function startUploadLegsDaemon(
     const answer = () => {
       if (!behavior.respond) return;
       const reply = behavior.respond();
-      res.statusCode = reply.status;
-      for (const [name, value] of Object.entries(reply.headers ?? {})) {
-        res.setHeader(name, value);
-      }
+      res.writeHead(reply.status, reply.headers);
       res.end(reply.body);
     };
     if (behavior.readAllBody) {
@@ -613,26 +603,20 @@ export async function startUploadLegsDaemon(
 }
 
 function readRepoFixture(fileName: string): Buffer {
-  let dir = process.cwd();
-  for (let depth = 0; depth < 8; depth += 1) {
-    const candidate = path.join(dir, 'test/integration/provider-scenarios/fixtures', fileName);
-    if (fs.existsSync(candidate)) return fs.readFileSync(candidate);
-    dir = path.dirname(dir);
-  }
-  throw new Error(`missing ${fileName} under test/integration/provider-scenarios/fixtures`);
+  return fs.readFileSync(
+    new URL(
+      `../../../../../test/integration/provider-scenarios/fixtures/${fileName}`,
+      import.meta.url,
+    ),
+  );
 }
 
 export function assertDetailedError(
   error: unknown,
   details: Record<string, unknown>,
-): asserts error is { details?: Record<string, unknown> } {
-  assert.ok(error && typeof error === 'object', `expected an error, got ${String(error)}`);
-  const actual = JSON.stringify((error as { details?: unknown }).details ?? {});
+): asserts error is AppError {
+  assert.ok(error instanceof AppError, `expected AppError, got ${String(error)}`);
   for (const [key, value] of Object.entries(details)) {
-    assert.equal(
-      (error as { details?: Record<string, unknown> }).details?.[key],
-      value,
-      `${key} of ${actual}`,
-    );
+    assert.equal(error.details?.[key], value, `${key} of ${JSON.stringify(error.details)}`);
   }
 }

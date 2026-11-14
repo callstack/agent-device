@@ -42,7 +42,6 @@ test('a body that keeps moving outlives the body-inactivity ceiling', async () =
     windowMs: TRANSFER_CONNECT_TIMEOUT_MS,
     writes,
   });
-
   assert.equal(progress.progressedInEveryWindow, true);
   assert.ok(
     progress.budgetMs > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
@@ -64,7 +63,6 @@ test('an unfinished source with no new bytes expires the request-body phase on i
   assert.equal(writes.finished, false, 'the source still holds the body open');
   await settleAfterBudget(upload);
   const result = await upload;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -113,7 +111,6 @@ test('a body admitted past four connect ceilings still waits only its own header
   await vi.advanceTimersByTimeAsync(1);
   await settleAfterBudget(upload, snapshot);
   const result = await upload;
-
   assert.equal(result.value, undefined);
   assertDetailedError(result.error, {
     reason: 'transfer_phase_timeout',
@@ -172,7 +169,6 @@ test('the caller ending the upload is reported as cancellation, not as an expire
   await spendBudget(5_000, upload);
   control.abort();
   const result = await upload;
-
   assert.equal(result.value, undefined);
   assert.ok(result.error instanceof DOMException, `got ${String(result.error)}`);
   assert.equal((result.error as DOMException).name, 'AbortError');

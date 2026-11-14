@@ -5,10 +5,6 @@ import type { ClientRequest } from 'node:http';
 import { test } from 'vitest';
 import { observeCompletedRequestWrites } from '../transport.ts';
 
-/**
- * A request whose `write` the test completes by hand, as Node does once a chunk reaches the kernel.
- * Every write, empty or not, holds its callback until `complete` runs it.
- */
 class FakeRequest extends EventEmitter {
   destroyed = false;
   accepts = true;
@@ -24,15 +20,9 @@ class FakeRequest extends EventEmitter {
   }
 }
 
-type Observed = {
-  fake: FakeRequest;
-  req: ClientRequest;
-  caller: AbortController;
-  completed: { count: number };
-  dispose(): void;
-};
+type Observed = ReturnType<typeof observe>;
 
-function observe(prepare?: (fake: FakeRequest) => void): Observed {
+function observe(prepare?: (fake: FakeRequest) => void) {
   const fake = new FakeRequest();
   prepare?.(fake);
   const caller = new AbortController();
