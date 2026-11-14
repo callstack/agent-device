@@ -150,95 +150,12 @@ test('a phase is never armed after the attempt is already over', async () => {
     const late = createTransferPhaseWatchdog(caller.signal);
     try {
       late.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
+      assert.equal(vi.getTimerCount(), 0);
       await vi.advanceTimersByTimeAsync(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS * 2);
       assert.equal(late.signal.reason.message, 'gone');
     } finally {
       late.dispose();
     }
-  } finally {
-    watchdog.dispose();
-  }
-});
-
-test('a suspended phase is not charged while nothing is owed, and the attempt stays live', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const caller = new AbortController();
-  const watchdog = createTransferPhaseWatchdog(caller.signal);
-  try {
-    watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1_000);
-    watchdog.suspend();
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS * 5);
-    // Suspension is not settlement: nothing aborted, neither the attempt nor the caller's signal.
-    assert.equal(watchdog.signal.aborted, false);
-    assert.equal(caller.signal.aborted, false);
-  } finally {
-    watchdog.dispose();
-  }
-});
-
-test('late progress does not rearm a suspended timer', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const watchdog = createTransferPhaseWatchdog();
-  try {
-    watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-    watchdog.suspend();
-    watchdog.touchBody();
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS * 3);
-    assert.equal(watchdog.signal.aborted, false);
-  } finally {
-    watchdog.dispose();
-  }
-});
-
-test('arming resumes a suspended phase with a fresh full ceiling', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const watchdog = createTransferPhaseWatchdog();
-  try {
-    watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-    watchdog.suspend();
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS * 2);
-    watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1);
-    assert.equal(watchdog.signal.aborted, false);
-    // Progress restarts the resumed phase again, so suspension left no residue.
-    watchdog.touchBody();
-    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 1);
-    assert.equal(watchdog.signal.aborted, false);
-    await vi.advanceTimersByTimeAsync(1);
-    assertPhaseDetails(
-      watchdog.signal.reason,
-      'response-body',
-      TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
-    );
-  } finally {
-    watchdog.dispose();
-  }
-});
-
-test('a caller cancellation still ends a suspended attempt with the caller reason', () => {
-  const caller = new AbortController();
-  const watchdog = createTransferPhaseWatchdog(caller.signal);
-  try {
-    watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-    watchdog.suspend();
-    const reason = new Error('caller left');
-    caller.abort(reason);
-    assert.equal(watchdog.signal.aborted, true);
-    assert.equal(watchdog.signal.reason, reason);
-  } finally {
-    watchdog.dispose();
-  }
-});
-
-test('suspending twice or before any phase is armed is harmless', async () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const watchdog = createTransferPhaseWatchdog();
-  try {
-    watchdog.suspend();
-    watchdog.suspend();
-    await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS * 2);
-    assert.equal(watchdog.signal.aborted, false);
   } finally {
     watchdog.dispose();
   }

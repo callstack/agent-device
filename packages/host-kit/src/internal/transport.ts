@@ -139,13 +139,7 @@ export function observeCompletedRequestWrites(
   };
 }
 
-/**
- * Ceiling for establishing the connection one artifact-transfer attempt runs on.
- *
- * Kept beside its domain rather than on the socket: the same number governs every hop of an upload,
- * every offset resume and a standalone artifact download, so "how long may one hop take to connect"
- * has exactly one answer.
- */
+/** Ceiling for establishing the connection for each upload hop or offset resume. */
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 
 /**
@@ -181,17 +175,10 @@ const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 export type TransferPhaseWatchdog = {
   /** The signal the attempt runs on: the caller's cancellation plus every phase deadline. */
   signal: AbortSignal;
-  /** Starts watching `phase` and resumes phase timing if it was suspended. The phase watched before stops counting. */
+  /** Starts watching `phase`. The phase watched before stops counting. */
   arm(phase: TransferPhase, timeoutMs: number): void;
   /** Records body bytes moving, so only the silence since the last byte counts against a body phase. */
   touchBody(): void;
-  /**
-   * Stops the armed phase's timer while this side owes the peer nothing, such as a consumer that has
-   * not asked for more bytes. The attempt stays live: the signal, the caller's cancellation and any
-   * enclosing aggregate are untouched, and late progress does not restart the timer. Only `arm`
-   * resumes phase timing. Unlike `dispose`, it does not mean the attempt is settled.
-   */
-  suspend(): void;
   /** Stops the armed timer. Call it once the attempt is settled. */
   dispose(): void;
 };
@@ -201,12 +188,11 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
   const signal = callerSignal ? AbortSignal.any([callerSignal, phase.signal]) : phase.signal;
   let armed: { phase: TransferPhase; timeoutMs: number } | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let suspended = false;
   const rearm = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
     const current = armed;
-    if (!current || suspended) return;
+    if (!current) return;
     timer = setTimeout(() => {
       timer = undefined;
       phase.abort(createTransferPhaseTimeoutError(current.phase, current.timeoutMs));
@@ -218,17 +204,12 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
     arm(nextPhase, timeoutMs) {
       if (signal.aborted) return;
       armed = { phase: nextPhase, timeoutMs };
-      suspended = false;
       rearm();
     },
     touchBody() {
       // Unrelated headers, keepalive traffic and timer callbacks are not body progress, and
       // progress in one phase buys no time in another: only a body phase already armed re-arms.
       if (!armed || !BODY_PHASES.has(armed.phase)) return;
-      rearm();
-    },
-    suspend() {
-      suspended = true;
       rearm();
     },
     dispose() {
