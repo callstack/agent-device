@@ -5,6 +5,7 @@ import {
   ALERT_WAIT_TIMEOUT_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
+  ALERT_RUNNER_MAX_BUDGET_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '@agent-device/contracts/alert-contract';
@@ -60,7 +61,12 @@ function runAppleAlert(
   return async (action, timeoutMs) =>
     (await runAppleRunnerCommand(
       device,
-      { command: 'alert', action, appBundleId: options?.appBundleId, timeoutMs },
+      {
+        command: 'alert',
+        action,
+        appBundleId: options?.appBundleId,
+        timeoutMs: Math.min(timeoutMs, ALERT_RUNNER_MAX_BUDGET_MS),
+      },
       runnerOptions,
     )) as Record<string, unknown>;
 }
@@ -75,13 +81,25 @@ export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined
   }
 }
 
+/**
+ * One read spends the caller's window as the runner's budget, within
+ * `ALERT_MIN_READ_BUDGET_MS` and `ALERT_RUNNER_MAX_BUDGET_MS`, and `DEFAULT_ALERT_TIMEOUT_MS` when
+ * the caller gave none. A read the runner's main-thread watchdog cuts off is not absence: its
+ * `MAIN_THREAD_TIMEOUT` is reported as itself (`reason: runner_main_thread_timeout`, `dispatched:
+ * unknown`), and the next read meets `RUNNER_BUSY` or runs once the abandoned work drains.
+ */
 export async function readAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
   options: AlertInteractorOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  return await runAppleAlert(device, runnerOptions, options, env)('get', DEFAULT_ALERT_TIMEOUT_MS);
+  const requestedMs = options?.timeoutMs;
+  const budgetMs =
+    requestedMs === undefined || !Number.isFinite(requestedMs)
+      ? DEFAULT_ALERT_TIMEOUT_MS
+      : Math.max(requestedMs, ALERT_MIN_READ_BUDGET_MS);
+  return await runAppleAlert(device, runnerOptions, options, env)('get', budgetMs);
 }
 
 /**

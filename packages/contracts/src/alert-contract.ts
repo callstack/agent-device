@@ -3,10 +3,19 @@ export const ALERT_POLL_INTERVAL_MS = 300;
  * The minimum budget for a retry of `alert accept` or `alert dismiss` through the XCTest runner.
  * A read cut off by the runner's main-thread watchdog is reported as `MAIN_THREAD_TIMEOUT`, not
  * absence. Live late-prompt reads were accepted up to 1492 ms; three were cut off at 1502–1610 ms.
- * `alert wait` and the macOS helper do not use it.
+ * It is also the floor of the budget `alert get` sends the runner. `alert wait` and the macOS
+ * helper do not use it.
  */
 export const ALERT_MIN_READ_BUDGET_MS = 1_500;
 export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
+
+/**
+ * The ceiling of the budget one XCTest runner alert attempt receives. It stays below the runner's
+ * 30 s main-thread watchdog, so a larger caller window ends as an `ALERT_NOT_FOUND` or
+ * `ALERT_UNRESOLVED` answer (`alert wait` polls on) instead of a `MAIN_THREAD_TIMEOUT`, and well
+ * below the 90 s daemon request envelope.
+ */
+export const ALERT_RUNNER_MAX_BUDGET_MS = 25_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
 
 /**

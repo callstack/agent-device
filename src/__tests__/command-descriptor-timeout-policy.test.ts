@@ -6,6 +6,7 @@ import {
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
+import { ALERT_RUNNER_MAX_BUDGET_MS } from '@agent-device/contracts/alert-contract';
 import { OVERLAY_BUDGET_MS } from '@agent-device/capture-kit/recording-overlay';
 import {
   DEFAULT_TIMEOUT_POLICY,
@@ -409,4 +410,11 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
     }),
     90_000,
   );
+});
+
+test('the alert request envelope stays above the largest runner alert budget', () => {
+  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('alert'), {
+    positionals: ['get', '600000'],
+  });
+  assert.ok(envelopeMs !== undefined && envelopeMs > ALERT_RUNNER_MAX_BUDGET_MS);
 });
