@@ -180,10 +180,7 @@ async function streamFileToHttpRequestAttempt(options: {
       // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
       // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
       if (!uploadSettled) req.destroy();
-      await upload!.then(
-        () => undefined,
-        () => undefined,
-      );
+      await upload!.catch(() => undefined);
       phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
