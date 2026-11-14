@@ -28,22 +28,24 @@ import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '@agent-device/command-registry
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import {
   collectReplayShellEnv,
+  getReplayPluginInstallation,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   resolveReplayFormat,
   type ReplayFormat,
 } from '@agent-device/ad-script';
 import { loadReplayScriptSourceBundle } from '@agent-device/replay-port/script-source-bundle';
-import { replayPluginInstallHelp } from '@agent-device/replay-port/replay-backend-declarations';
 import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
 
-const replayPluginMcpDetail = [
-  replayPluginInstallHelp('ad'),
-  replayPluginInstallHelp('maestro'),
-].join(' ');
+const replayPluginMcpDetail = (['ad', 'maestro'] as const)
+  .map((id) => {
+    const declaration = getReplayPluginInstallation(id);
+    return `${declaration.summary} (plugin, install separately). ${declaration.installationHint}`;
+  })
+  .join(' ');
 
 const REPLAY_SHELL_ENV_PREFIX = 'AD_VAR_';
 

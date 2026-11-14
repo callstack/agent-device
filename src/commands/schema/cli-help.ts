@@ -1,3 +1,4 @@
+import { getReplayPluginInstallation } from '@agent-device/ad-script';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
@@ -73,7 +74,7 @@ const HELP_TOPICS = {
     body: 'agent-device help commands',
   },
   ...manualQaHelpTopics,
-  maestro: getReplayBackendDeclaration('maestro').help,
+  maestro: getReplayBackendDeclaration(getReplayPluginInstallation('maestro')).help,
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
@@ -879,9 +880,9 @@ export function buildCommandUsageText(commandName: string): string | null {
   );
   const sections: string[] = [];
   if (commandName === 'replay' || commandName === 'test') {
-    sections.push(replayPluginInstallHelp('ad'));
-    sections.push(getReplayBackendDeclaration('ad').help.body);
-    sections.push(replayPluginInstallHelp('maestro'));
+    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('ad')));
+    sections.push(getReplayBackendDeclaration(getReplayPluginInstallation('ad')).help.body);
+    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('maestro')));
   }
   if (commandName === 'connect') {
     sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);

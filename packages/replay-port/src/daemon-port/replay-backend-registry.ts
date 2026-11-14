@@ -122,11 +122,11 @@ async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
       backend: id,
       package: packageName,
       installCommand,
-      hint: `${(await import('./replay-backend-declarations.ts')).getReplayBackendDeclaration(id).installationHint} Restart the daemon after changing plugins; retry the original command with all its arguments.`,
+      hint: `${(await import('@agent-device/ad-script')).getReplayPluginInstallation(id).installationHint} Restart the daemon after changing plugins; retry the original command with all its arguments.`,
     },
   );
 }
 
 async function backendPackage(id: ReplayFormat): Promise<string> {
-  return (await import('./replay-backend-declarations.ts')).getReplayBackendDeclaration(id).package;
+  return (await import('@agent-device/ad-script')).getReplayPluginInstallation(id).package;
 }
