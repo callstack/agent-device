@@ -11,7 +11,7 @@ import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
-  resolveReplayExecution: import('@agent-device/plugins/replay-execution').ReplayExecutionResolver;
+  resolveReplayExecution: import('@agent-device/contracts/replay-execution').ReplayExecutionResolver;
   assertPluginSelectionCurrent?: (packageName: string) => void;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];

@@ -1,7 +1,7 @@
 import type { ReplayEnginePlugin } from 'agent-device/plugins';
 
 /** Native .ad execution and suite scheduling use host-owned dispatch, sessions and cancellation. */
-function replayPlugin(): ReplayEnginePlugin {
+function replayPlugin(): ReplayEnginePlugin<'ad'> {
   return {
     apiVersion: 2,
     kind: 'replay-backend',

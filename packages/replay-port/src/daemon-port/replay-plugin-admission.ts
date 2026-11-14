@@ -4,7 +4,7 @@ import {
   isReplayBackendId,
   unsupportedReplayBackendMessage,
   resolveReplayFormat,
-} from '@agent-device/ad-script';
+} from '@agent-device/ad-script/format';
 import { getReplayBackend, getReplayExecution } from './replay-backend-registry.ts';
 
 /** Rejects unavailable execution before request binding can select or act on a device. */

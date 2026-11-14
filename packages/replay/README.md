@@ -8,7 +8,7 @@ agent-device plugins add @agent-device/replay
 
 Finish your sessions, then restart the daemon on that host. Retry your original command with all its arguments. Existing `.ad` syntax, variables, target identity, divergence reports, resume and repair do not need a migration.
 
-The plugin uses API version 2 and supports core `>=0.22.0-0 <0.23.0`. The extraction's pinned development host, `0.21.38-dev`, is also accepted. Other core releases fail with `incompatible_plugin`. Use matching core and plugin releases. The package remains private until a maintainer publishes a non-`latest` npm placeholder and configures trusted publishing for `.github/workflows/release.yml`, job `npm-publish`.
+The plugin uses API version 2 and supports core `>=0.22.0-0 <0.23.0`. The extraction's pinned development host, `0.21.38-dev`, is also accepted. Other core releases, including the next development bump, fail with `incompatible_plugin` until compatibility is verified and the declared range is updated. The managed API version 2 check also applies. Use matching core and plugin releases. The package remains private until a maintainer publishes a non-`latest` npm placeholder and configures trusted publishing for `.github/workflows/release.yml`, job `npm-publish`.
 
 ## Choose the installation host
 

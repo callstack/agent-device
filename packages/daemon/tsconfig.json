@@ -11,7 +11,9 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../plugins" },
+    {
+      "path": "../plugins"
+    },
     {
       "path": "../ad-replay"
     },
@@ -71,6 +73,9 @@
     },
     {
       "path": "../test-kit"
+    },
+    {
+      "path": "../replay"
     }
   ]
 }

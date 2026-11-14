@@ -1,7 +1,7 @@
 import type {
   ReplayExecution,
   ReplayExecutionResolver,
-} from '@agent-device/plugins/replay-execution';
+} from '@agent-device/contracts/replay-execution';
 import type { ReplayBackendId, ReplayFormat } from '@agent-device/ad-script';
 import type { ReplayBackend, ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { AppError } from '@agent-device/kernel/errors';

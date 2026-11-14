@@ -32,7 +32,8 @@
     "yaml": "^2.9.0",
     "@agent-device/maestro": "workspace:*",
     "@agent-device/ad-replay": "workspace:*",
-    "@agent-device/plugins": "workspace:*"
+    "@agent-device/plugins": "workspace:*",
+    "@agent-device/replay": "workspace:*"
   },
   "exports": {
     ".": {

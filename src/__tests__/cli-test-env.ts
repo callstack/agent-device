@@ -34,7 +34,7 @@ export function installIsolatedCliTestEnv(
     }
   }
 
-  if (!explicitKeys.has('AGENT_DEVICE_HOME')) {
+  if (!explicitKeys.has('AGENT_DEVICE_HOME') && !explicitKeys.has('HOME')) {
     if (!previousEnv.has('AGENT_DEVICE_HOME'))
       previousEnv.set('AGENT_DEVICE_HOME', process.env.AGENT_DEVICE_HOME);
     process.env.AGENT_DEVICE_HOME = path.join(tempRoot, 'plugins');

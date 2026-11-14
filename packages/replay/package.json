@@ -15,7 +15,8 @@
     "@agent-device/ad-replay": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "agent-device": "workspace:*",
-    "@agent-device/plugins": "workspace:*"
+    "@agent-device/plugins": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
   },
   "scripts": {
     "build": "tsdown --config tsdown.config.ts",

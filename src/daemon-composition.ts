@@ -93,7 +93,7 @@ export async function composeDaemonRuntimeDeps(
 ): Promise<
   DaemonRuntimeDeps & {
     resolveReplayBackend: import('@agent-device/contracts/replay-backend').ReplayBackendResolver;
-    resolveReplayExecution: import('@agent-device/plugins/replay-execution').ReplayExecutionResolver;
+    resolveReplayExecution: import('@agent-device/contracts/replay-execution').ReplayExecutionResolver;
   }
 > {
   const {
