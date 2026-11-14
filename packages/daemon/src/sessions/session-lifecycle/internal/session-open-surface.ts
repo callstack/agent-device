@@ -66,26 +66,29 @@ export function buildOpenResult(params: {
   if (timing) result.timing = timing;
   Object.assign(result, launchConfirmation ?? {});
   if (runtime && runtimeHintCount(runtime) > 0) result.runtime = runtime;
-  if (device) {
-    result.platform = publicPlatformString(device);
-    result.target = device.target ?? 'mobile';
-    result.device = device.name;
-    result.id = device.id;
-    result.kind = device.kind;
-    if (device.model) result.model = device.model;
-    if (device.osVersion) result.osVersion = device.osVersion;
-    if (isSerialAddressablePlatform(device.platform)) {
-      result.serial = device.id;
-    }
-  }
-  if (device && isIosFamily(device)) {
-    result.device_udid = device.id;
-    result.ios_simulator_device_set = device.simulatorSetPath ?? null;
-  }
+  if (device) Object.assign(result, deviceResponseData(device));
   return {
     ...result,
     ...successText(`Opened: ${appName ?? appBundleId ?? sessionName}`),
   };
+}
+
+function deviceResponseData(device: DeviceInfo): Record<string, unknown> {
+  const data: Record<string, unknown> = {
+    platform: publicPlatformString(device),
+    target: device.target ?? 'mobile',
+    device: device.name,
+    id: device.id,
+    kind: device.kind,
+  };
+  if (device.model) data.model = device.model;
+  if (device.osVersion) data.osVersion = device.osVersion;
+  if (isSerialAddressablePlatform(device.platform)) data.serial = device.id;
+  if (isIosFamily(device)) {
+    data.device_udid = device.id;
+    data.ios_simulator_device_set = device.simulatorSetPath ?? null;
+  }
+  return data;
 }
 
 function selectionResponseData(
