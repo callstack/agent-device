@@ -1,10 +1,12 @@
 import type {
-  DeviceAcquirability,
-  inspectDeviceAcquirability as InspectDeviceAcquirability,
-} from './device-claim-acquirability.ts';
+  DeviceClaimAdmission,
+  inspectDeviceClaimAdmission as InspectDeviceClaimAdmission,
+  inspectNewSessionAdmission as InspectNewSessionAdmission,
+} from './device-claim-admission.ts';
+import type { ClaimRecoveryRetentionReason } from './device-claim-reconciliation.ts';
 
 export type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
-export type { DeviceAcquirabilityBlockReason } from './device-claim-acquirability.ts';
+export type { ClaimRecoveryRetentionReason, DeviceClaimAdmission };
 export {
   inspectDeviceClaimRecovery,
   type ClaimRecoveryInspection,
@@ -16,11 +18,17 @@ export {
 export { createRecoveryPlatformScope } from './recovery-platform-scope.ts';
 
 /**
- * {@link InspectDeviceAcquirability}, loaded on demand: only `device status` asks, and the daemon
- * that evaluates this entry never does.
+ * The acquisition admission verdict, loaded on demand: only the admission check and
+ * `device status` ask, and the daemon evaluating this entry never loads it eagerly.
  */
-export async function inspectDeviceAcquirability(
-  params: Parameters<typeof InspectDeviceAcquirability>[0],
-): Promise<DeviceAcquirability> {
-  return (await import('./device-claim-acquirability.ts')).inspectDeviceAcquirability(params);
+export async function inspectDeviceClaimAdmission(
+  params: Parameters<typeof InspectDeviceClaimAdmission>[0],
+): Promise<DeviceClaimAdmission> {
+  return (await import('./device-claim-admission.ts')).inspectDeviceClaimAdmission(params);
+}
+
+export async function inspectNewSessionAdmission(
+  params: Parameters<typeof InspectNewSessionAdmission>[0],
+): Promise<DeviceClaimAdmission> {
+  return (await import('./device-claim-admission.ts')).inspectNewSessionAdmission(params);
 }

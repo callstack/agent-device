@@ -19,12 +19,12 @@ import {
   isBoundedCompositeRequest,
   refuseBoundedCompositeResourceOperation,
 } from './lease-context.ts';
-import {
-  inspectDeviceClaimAcquisition,
-  type DeviceClaim,
-  type InspectedDeviceClaim,
+import type {
+  DeviceClaim,
+  InspectedDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import {
+  inspectDeviceClaimAdmission,
   inspectDeviceClaimRecovery,
   type ClaimRecoveryInspection,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
@@ -127,7 +127,7 @@ async function assertBoundedClaimRecovery(
   const device = await params.resolveDevice();
   if (req.command === 'open' && params.hasInMemorySessionOwner(device)) return;
   if (isActiveProviderDevice(device)) return;
-  const settlements = await inspectDeviceClaimAcquisition({
+  const admission = await inspectDeviceClaimAdmission({
     device,
     command: req.command,
     session: params.session,
@@ -135,17 +135,10 @@ async function assertBoundedClaimRecovery(
     stateDir: params.stateDir,
     env: params.env,
     coveredClaimIsOwnedByRequest: params.coveredClaimIsOwnedByRequest,
+    inspectRecovery: (claim) => inspectBoundedClaimBeforeGateway(req, claim),
     ...(policy === 'acquire-session' ? { observeDeviceBoot: params.observeDeviceBoot } : {}),
   });
-  for (const settlement of settlements) {
-    if (settlement.status === 'conflict')
-      throw params.claimConflictError(device, settlement.conflict);
-    if (settlement.status !== 'reconcile') continue;
-    const inspection = inspectBoundedClaimBeforeGateway(req, settlement.claim);
-    if (inspection?.status === 'retained') {
-      throw params.claimConflictError(device, settlement.conflict);
-    }
-  }
+  if (admission.status === 'refused') throw params.claimConflictError(device, admission.conflict);
 }
 
 function inspectBoundedClaimBeforeGateway(

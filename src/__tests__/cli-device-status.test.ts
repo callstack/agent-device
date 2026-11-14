@@ -8,6 +8,7 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { inspectDeviceClaimAdmission } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { runCliCapture } from './cli-capture.ts';
 import {
   mkdtempForTestSync,
@@ -224,6 +225,199 @@ test('a device selector still weighs the host claim that overlaps the selected a
     assert.equal(data.devices[0].owner.session, 'session-Host Chrome');
   } finally {
     fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+// Status and `open` read one admission verdict. These tests ask it the way `open` does, as a session of
+// another daemon, and require the status report to name the same refusal.
+async function openAdmissionFor(
+  claimsDir: string,
+  device: { id: string; platform: 'android' | 'web' },
+) {
+  const admission = await inspectDeviceClaimAdmission({
+    device: { ...device, name: device.id, kind: 'device' },
+    command: 'open',
+    session: 'other-session',
+    workspace: '/worktrees/other',
+    stateDir: '/other-daemon-state',
+    env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+    coveredClaimIsOwnedByRequest: () => false,
+  });
+  return admission.status === 'refused'
+    ? { acquirable: false, session: admission.conflict.claim?.session }
+    : { acquirable: true };
+}
+
+function claimJson(params: {
+  deviceKey: string;
+  id: string;
+  platform: 'android' | 'web';
+  session: string;
+  stateDir: string;
+  ownerPid: number;
+  ownerStartTime: string | null;
+  abandonedAtMs?: number;
+}): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    device: { platform: params.platform, id: params.id, name: params.id, kind: 'device' },
+    workspace: '/worktrees/owner',
+    ownerToken: 'owner-token',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    ...params,
+  });
+}
+
+async function statusDevices(claimsDir: string) {
+  const result = await runCliCapture(['device', 'status', '--json'], {
+    env: { AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+  });
+  return JSON.parse(result.stdout).data as {
+    claims: { classification: string }[];
+    devices: {
+      device: { id: string };
+      acquirable: boolean;
+      blockedBy?: string;
+      owner?: { session: string };
+    }[];
+  };
+}
+
+test('status and open agree on an abandoned claim of a running daemon', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    const deviceKey = 'local:android:none:emulator-5562';
+    fs.writeFileSync(
+      path.join(claimsDir, `${cryptoHashForTest(deviceKey)}.json`),
+      claimJson({
+        deviceKey,
+        id: 'emulator-5562',
+        platform: 'android',
+        session: 'abandoned-session',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+        abandonedAtMs: 5,
+      }),
+    );
+
+    const [entry] = (await statusDevices(claimsDir)).devices;
+    const open = await openAdmissionFor(claimsDir, { id: 'emulator-5562', platform: 'android' });
+    assert.equal(entry?.acquirable, false);
+    assert.equal(entry?.blockedBy, 'live-owner');
+    assert.equal(open.acquirable, false);
+    assert.equal(entry?.owner?.session, open.session);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test('status and open agree on a claim stored under a noncanonical file name', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    fs.writeFileSync(
+      path.join(claimsDir, 'renamed.json'),
+      claimJson({
+        deviceKey: 'local:android:none:emulator-5564',
+        id: 'emulator-5564',
+        platform: 'android',
+        session: 'renamed-session',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+      }),
+    );
+
+    const [entry] = (await statusDevices(claimsDir)).devices;
+    const open = await openAdmissionFor(claimsDir, { id: 'emulator-5564', platform: 'android' });
+    assert.equal(open.acquirable, true);
+    assert.equal(entry?.acquirable, true);
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test.skipIf(process.getuid?.() === 0)(
+  'status and open agree that an unreadable claim root holds every device',
+  async () => {
+    const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+    try {
+      fs.chmodSync(claimsDir, 0o000);
+      const status = await statusDevices(claimsDir);
+      const open = await openAdmissionFor(claimsDir, { id: 'emulator-5566', platform: 'android' });
+      assert.equal(open.acquirable, false);
+      // The root names no device, so status answers with the unreadable record, never acquirable.
+      assert.deepEqual(status.devices, []);
+      assert.deepEqual(
+        status.claims.map((claim) => claim.classification),
+        ['unknown'],
+      );
+    } finally {
+      fs.chmodSync(claimsDir, 0o700);
+      fs.rmSync(claimsDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test('status and open name the host claim before the app claim', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-claims-');
+  const ownerStateDir = mkdtempForTestSync('agent-device-cli-claims-owner-');
+  const owner = readCurrentOwnerIdentity();
+  try {
+    const hostKey = 'local:web:none:chrome';
+    const appId = 'chrome:app:com.example.app';
+    const appKey = `local:web:none:${appId}`;
+    fs.writeFileSync(
+      path.join(claimsDir, `${cryptoHashForTest(hostKey)}.json`),
+      claimJson({
+        deviceKey: hostKey,
+        id: 'chrome',
+        platform: 'web',
+        session: 'host-session',
+        stateDir: process.cwd(),
+        ownerPid: owner.pid,
+        ownerStartTime: owner.startTime,
+      }),
+    );
+    fs.writeFileSync(
+      path.join(claimsDir, `${cryptoHashForTest(appKey)}.json`),
+      claimJson({
+        deviceKey: appKey,
+        id: appId,
+        platform: 'web',
+        session: 'app-session',
+        stateDir: ownerStateDir,
+        ownerPid: 999_999_999,
+        ownerStartTime: 'old-start-time',
+      }),
+    );
+    // A dead app owner with an open recording would refuse on its own; the live host claim wins.
+    screenRecordingDurableResource.store.write(
+      screenRecordingDurableResource.store.resolvePath(
+        path.join(ownerStateDir, 'sessions', 'app-session'),
+      ),
+      createDurableResourceEnvelope({
+        resourceKind: 'screen-recording',
+        sessionId: 'app-session',
+        device: { id: appId, family: 'web', kind: 'device' },
+        owner: localRuntimeOwner('web'),
+        fence: { token: 'fence', generation: 1 },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: {} },
+      }),
+    );
+
+    const entry = (await statusDevices(claimsDir)).devices.find((d) => d.device.id === appId);
+    const open = await openAdmissionFor(claimsDir, { id: appId, platform: 'web' });
+    assert.equal(open.session, 'host-session');
+    assert.equal(entry?.blockedBy, 'live-owner');
+    assert.equal(entry?.owner?.session, 'host-session');
+  } finally {
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerStateDir, { recursive: true, force: true });
   }
 });
 

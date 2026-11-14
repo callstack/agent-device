@@ -53,12 +53,14 @@ import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 export {
   deviceClaimOwnerCannotRelease,
+  deviceClaimRefusalReason,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   inspectDeviceClaimsAsync,
 } from './device-claim-inspection.ts';
 export type {
   DeviceClaimClassification,
+  DeviceClaimRefusalReason,
   DeviceClaimSelectors,
   InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
@@ -87,7 +89,7 @@ export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
 
-type ClaimAcquisitionInspectionParams = {
+export type ClaimAcquisitionInspectionParams = {
   device: DeviceInfo;
   command: string;
   session: string;

@@ -1,16 +1,20 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
-import { publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   deviceClaimOwnerCannotRelease,
+  deviceClaimRefusalReason,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
+  type DeviceClaim,
+  type DeviceClaimRefusalReason,
   type InspectedDeviceClaim,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
 import {
-  inspectDeviceAcquirability,
-  type DeviceAcquirabilityBlockReason,
+  inspectNewSessionAdmission,
+  type ClaimRecoveryRetentionReason,
+  type DeviceClaimAdmission,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
@@ -23,14 +27,15 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
     throw new AppError('INVALID_ARGS', 'device accepts only: status, release');
   }
   if (positionals[0] === 'release') return await runDeviceRelease(flags, host);
-  const selectors = {
-    platform: flags.platform,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-  };
-  const inspectedClaims = inspectDeviceClaims(selectors, host.env);
-  const hasSelector = Object.values(selectors).some((value) => value !== undefined);
+  const inspectedClaims = inspectDeviceClaims(
+    {
+      platform: flags.platform,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+    host.env,
+  );
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
@@ -38,11 +43,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
     ? staleClaims
     : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification));
   const claims = visible.map(serializeClaim);
-  const devices = await reportDeviceAcquirability(
-    inspectedClaims,
-    hasSelector ? inspectDeviceClaims({}, host.env) : inspectedClaims,
-    host.env,
-  );
+  const devices = await reportDeviceAcquirability(inspectedClaims, host.env);
   const data = {
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
@@ -62,6 +63,8 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
   return true;
 };
 
+type DeviceAcquirabilityBlockReason = DeviceClaimRefusalReason | ClaimRecoveryRetentionReason;
+
 type DeviceAcquirabilityReport = {
   deviceKey: string;
   device: Record<string, unknown>;
@@ -72,18 +75,20 @@ type DeviceAcquirabilityReport = {
 };
 
 /**
- * Whether a new session can take each device a selected claim names, weighed against every claim on
- * the host, as `open` does, so a selector that hides a host's or an app's claim never hides its
- * owner. One entry per device, in inspection order.
+ * Whether a new session can take each device a selected claim names, answered by the admission
+ * verdict acquisition checks first, so claim order, canonical claim paths and unreadable claims
+ * follow `open`. One entry per device, in inspection order.
  *
  * Every device a claim names is reported, including one whose only claims are the stale ones this
  * view hides: their owner being reclaimable is exactly why they are hidden, and a caller choosing a
  * device needs that answer without asking for the hidden records. A device no claim names is
  * acquirable and absent; `agent-device devices` is what enumerates devices.
+ *
+ * A reclaimable owner with an open durable resource is reported as blocked by that resource's
+ * pending cleanup: `open` settles it through recovery, which status never runs.
  */
 async function reportDeviceAcquirability(
   inspectedClaims: readonly InspectedDeviceClaim[],
-  weighedClaims: readonly InspectedDeviceClaim[],
   env: EnvMap,
 ): Promise<DeviceAcquirabilityReport[]> {
   const reports: DeviceAcquirabilityReport[] = [];
@@ -93,29 +98,47 @@ async function reportDeviceAcquirability(
     const device = entry.claim?.device;
     if (!deviceKey || !device || seen.has(deviceKey)) continue;
     seen.add(deviceKey);
-    const acquirability = await inspectDeviceAcquirability({
-      device,
-      claims: weighedClaims,
+    const { family, ...identity } = device;
+    const admission = await inspectNewSessionAdmission({
+      device: { ...identity, platform: family } satisfies DeviceInfo,
       env,
     });
-    const holder = acquirability.claim;
+    const { blockedBy, holder } = describeAdmission(admission);
     reports.push({
       deviceKey,
       device: serializeClaimDevice(device),
-      acquirable: acquirability.acquirable,
-      ...(acquirability.blockedBy ? { blockedBy: acquirability.blockedBy } : {}),
-      ...(holder?.session
+      acquirable: blockedBy === undefined,
+      ...(blockedBy ? { blockedBy } : {}),
+      ...(holder
         ? {
             owner: {
               session: holder.session,
-              workspace: holder.workspace ?? '',
-              stateDir: holder.stateDir ?? '',
+              workspace: holder.workspace,
+              stateDir: holder.stateDir,
             },
           }
         : {}),
     });
   }
   return reports;
+}
+
+function describeAdmission(admission: DeviceClaimAdmission): {
+  blockedBy?: DeviceAcquirabilityBlockReason;
+  holder?: DeviceClaim;
+} {
+  if (admission.status === 'refused') {
+    return {
+      blockedBy:
+        admission.retainedBy ?? deviceClaimRefusalReason(admission.conflict.classification),
+      holder: admission.conflict.claim,
+    };
+  }
+  for (const { claim, recovery } of admission.reclaimed) {
+    const kind = recovery?.status === 'inspectable' ? recovery.recoveryKinds[0] : undefined;
+    if (kind) return { blockedBy: `${kind}-cleanup-pending`, holder: claim };
+  }
+  return { holder: admission.reclaimed[0]?.claim };
 }
 
 /**

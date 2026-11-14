@@ -9,11 +9,11 @@ import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-r
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
-import { inspectDeviceAcquirability } from './device-claim-acquirability.ts';
+import { inspectNewSessionAdmission } from './device-claim-admission.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
-import { inspectDeviceClaims, type DeviceClaim } from './device-claims.ts';
-import { hostAppDeviceId, type DeviceIdentity } from '@agent-device/kernel/device';
+import { deviceClaimRefusalReason, type DeviceClaim } from './device-claims.ts';
+import { hostAppDeviceId, type DeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 
 pinOwnProcessStartTime(hostProcess);
 
@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 function useClaimsRoot(): string {
-  const root = mkdtempForTestSync('device-claim-acquirability-');
+  const root = mkdtempForTestSync('device-claim-admission-');
   roots.push(root);
   process.env.AGENT_DEVICE_CLAIMS_DIR = root;
   return root;
@@ -63,48 +63,50 @@ function liveClaim(device: DeviceIdentity = DEVICE, stateDir = process.cwd()): D
   return claimFor(device, readCurrentOwnerIdentity(), stateDir);
 }
 
-/** What `device status` answers for `device`: every stored claim, weighed by the same inspection. */
-async function acquirabilityFor(device: DeviceIdentity) {
-  return await inspectDeviceAcquirability({
-    device,
-    claims: inspectDeviceClaims({}, process.env),
-    env: process.env,
-  });
+function infoOf(device: DeviceIdentity): DeviceInfo {
+  const { family, ...rest } = device;
+  return { ...rest, platform: family, name: device.id };
 }
 
-test('a live owner makes the device not acquirable and names that owner', async () => {
+/** What `device status` asks: the admission verdict of a new session of a daemon holding nothing. */
+async function admissionFor(device: DeviceIdentity) {
+  return await inspectNewSessionAdmission({ device: infoOf(device), env: process.env });
+}
+
+function refusedReason(admission: Awaited<ReturnType<typeof admissionFor>>): string | undefined {
+  if (admission.status !== 'refused') return undefined;
+  return admission.retainedBy ?? deviceClaimRefusalReason(admission.conflict.classification);
+}
+
+test('a live owner refuses the device and names that owner', async () => {
   useClaimsRoot();
   writeDeviceClaim(liveClaim(), process.env);
 
-  const result = await acquirabilityFor(DEVICE);
-  assert.equal(result.acquirable, false);
-  assert.equal(result.blockedBy, 'live-owner');
-  assert.equal(result.claim?.classification, 'live');
-  assert.equal(result.claim?.session, 'owner-session');
+  const result = await admissionFor(DEVICE);
+  assert.equal(result.status, 'refused');
+  assert.equal(refusedReason(result), 'live-owner');
+  assert.equal(result.status === 'refused' && result.conflict.claim?.session, 'owner-session');
 });
 
-test('a claim whose owner is provably dead and retains nothing is acquirable', async () => {
+test('a claim whose owner is provably dead and retains nothing is admitted', async () => {
   const stateDir = useClaimsRoot();
   writeDeviceClaim(deadClaim(DEVICE, stateDir), process.env);
 
-  const result = await acquirabilityFor(DEVICE);
-  assert.equal(result.acquirable, true);
-  assert.equal(result.blockedBy, undefined);
-  assert.equal(result.claim?.classification, 'owner-process-dead');
+  const result = await admissionFor(DEVICE);
+  assert.equal(result.status, 'admitted');
+  assert.equal(result.status === 'admitted' && result.reclaimed[0]?.claim.session, 'owner-session');
 });
 
-test('a live claim of a host device blocks one of its app devices', async () => {
+test('a live claim of a host device refuses one of its app devices', async () => {
   useClaimsRoot();
   const host: DeviceIdentity = { id: 'chrome', family: 'web', kind: 'device' };
   const app: DeviceIdentity = { ...host, id: hostAppDeviceId(host.id, 'com.example.app') };
   writeDeviceClaim(liveClaim(host), process.env);
 
-  const result = await acquirabilityFor(app);
-  assert.equal(result.acquirable, false);
-  assert.equal(result.blockedBy, 'live-owner');
+  assert.equal(refusedReason(await admissionFor(app)), 'live-owner');
 });
 
-test('a dead owner that still owns an open screen recording is not acquirable with that reason', async () => {
+test('a dead owner whose recording is still open is admitted with the recovery it needs', async () => {
   const stateDir = useClaimsRoot();
   const claim = deadClaim(DEVICE, stateDir);
   writeDeviceClaim(claim, process.env);
@@ -123,12 +125,15 @@ test('a dead owner that still owns an open screen recording is not acquirable wi
     }),
   );
 
-  const result = await acquirabilityFor(DEVICE);
-  assert.equal(result.acquirable, false);
-  assert.equal(result.blockedBy, 'screen-recording-cleanup-pending');
+  const result = await admissionFor(DEVICE);
+  assert.equal(result.status, 'admitted');
+  const recovery = result.status === 'admitted' ? result.reclaimed[0]?.recovery : undefined;
+  assert.deepEqual(recovery?.status === 'inspectable' && recovery.recoveryKinds, [
+    'screen-recording',
+  ]);
 });
 
-test('a dead owner whose recording reached its terminal state leaves the device acquirable', async () => {
+test('a dead owner whose resource reached its terminal state needs no recovery', async () => {
   const stateDir = useClaimsRoot();
   const claim = deadClaim(DEVICE, stateDir);
   writeDeviceClaim(claim, process.env);
@@ -145,10 +150,12 @@ test('a dead owner whose recording reached its terminal state leaves the device 
     }),
   );
 
-  assert.equal((await acquirabilityFor(DEVICE)).acquirable, true);
+  const result = await admissionFor(DEVICE);
+  const recovery = result.status === 'admitted' ? result.reclaimed[0]?.recovery : undefined;
+  assert.deepEqual(recovery?.status === 'inspectable' && recovery.recoveryKinds, []);
 });
 
-test('unreadable resource evidence blocks a dead owner with its own reason', async () => {
+test('unreadable resource evidence refuses a dead owner with its own reason', async () => {
   const stateDir = useClaimsRoot();
   const claim = deadClaim(DEVICE, stateDir);
   writeDeviceClaim(claim, process.env);
@@ -158,42 +165,22 @@ test('unreadable resource evidence blocks a dead owner with its own reason', asy
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, '{');
 
-  const result = await acquirabilityFor(DEVICE);
-  assert.equal(result.acquirable, false);
-  assert.equal(result.blockedBy, 'app-log-descriptor-invalid');
+  assert.equal(refusedReason(await admissionFor(DEVICE)), 'app-log-descriptor-invalid');
 });
 
-test('an unreadable claim record blocks the device its key points at, not another one', async () => {
+test('an unreadable claim record refuses the device its key points at, not another one', async () => {
   useClaimsRoot();
   fs.writeFileSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(DEVICE), process.env), '{bad');
 
-  const blocked = await acquirabilityFor(DEVICE);
-  assert.equal(blocked.acquirable, false);
-  assert.equal(blocked.blockedBy, 'claim-record-inconsistent');
-
+  assert.equal(refusedReason(await admissionFor(DEVICE)), 'claim-record-inconsistent');
   const other: DeviceIdentity = { id: 'emulator-5556', family: 'android', kind: 'emulator' };
-  assert.deepEqual(await acquirabilityFor(other), { acquirable: true });
+  assert.deepEqual(await admissionFor(other), { status: 'admitted', reclaimed: [] });
 });
 
-test('an undecodable claim record keeps its own classification as the blocking reason', async () => {
-  useClaimsRoot();
-  const fileName = path.basename(
-    resolveDeviceClaimPath(canonicalLocalDeviceKey(DEVICE), process.env),
-  );
-
-  const result = await inspectDeviceAcquirability({
-    device: DEVICE,
-    claims: [{ fileName, classification: 'unknown', error: 'EACCES' }],
-    env: process.env,
-  });
-  assert.equal(result.acquirable, false);
-  assert.equal(result.blockedBy, 'owner-liveness-unknown');
-});
-
-test('a device no claim names is acquirable', async () => {
+test('a device no claim names is admitted', async () => {
   useClaimsRoot();
   writeDeviceClaim(deadClaim(), process.env);
   const other: DeviceIdentity = { id: 'emulator-5556', family: 'android', kind: 'emulator' };
 
-  assert.deepEqual(await acquirabilityFor(other), { acquirable: true });
+  assert.deepEqual(await admissionFor(other), { status: 'admitted', reclaimed: [] });
 });
