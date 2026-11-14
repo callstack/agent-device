@@ -558,10 +558,7 @@ extension RunnerTests {
     let windowHeight: CGFloat
 
     func candidates(by bars: [NavigationBarSnapshot]) -> [Int] {
-      let barFrames = bars.map(\.frame)
-      return buttons.indices.filter {
-        RunnerTests.backButtonBelongsToABar(frames[$0], barFrames: barFrames, windowHeight: windowHeight)
-      }
+      RunnerTests.backButtonCandidates(frames, barFrames: bars.map(\.frame), windowHeight: windowHeight)
     }
 
     /// The candidates' state, with the bars read when given.
@@ -619,6 +616,20 @@ extension RunnerTests {
     barFrames.contains { bar in
       button.midX >= bar.minX && button.midX <= bar.maxX
         && button.minY >= bar.minY && button.minY <= bar.minY + windowHeight / 3
+    }
+  }
+
+  /// The back buttons by a navigation bar, in two tiers. First the buttons inside a bar, which is the
+  /// rule a button in a bar's subtree always met. Only when none is inside one, the buttons below a
+  /// bar where the iPhone Duo floats its button. A content `BackButton` near the top therefore never
+  /// competes with the bar's own button.
+  static func backButtonCandidates(_ frames: [CGRect], barFrames: [CGRect], windowHeight: CGFloat) -> [Int] {
+    let inside = frames.indices.filter { index in
+      barFrames.contains { $0.contains(CGPoint(x: frames[index].midX, y: frames[index].midY)) }
+    }
+    if !inside.isEmpty { return inside }
+    return frames.indices.filter {
+      backButtonBelongsToABar(frames[$0], barFrames: barFrames, windowHeight: windowHeight)
     }
   }
 

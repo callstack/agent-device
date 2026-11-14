@@ -141,8 +141,8 @@ sibling of the navigation bar rather than inside it. The runner taps that button
 synthesized tap only when all of these hold:
 
 - The tree is readable.
-- A candidate is a button inside a navigation bar, or horizontally within one and below it, within a
-  third of the window height from the bar's top.
+- A candidate is a button inside a navigation bar. Only when none is, a candidate is a button
+  horizontally within a bar and below it, within a third of the window height from the bar's top.
 - Two reads in a row of the `BackButton` buttons by a navigation bar (the candidates), with a 0.05 s
   pause between them, agree on their labels and frames, hittable or not. A `BackButton` that is not
   by a bar is neither counted nor compared.

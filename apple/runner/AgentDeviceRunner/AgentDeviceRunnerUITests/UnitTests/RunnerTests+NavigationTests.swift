@@ -111,6 +111,15 @@ extension RunnerTests {
     try assertBackPressesTheButtonAndPops(status, "the bar's back button must be pressed beside an in-content button of the same identifier")
   }
 
+  /// An in-content `BackButton` just below the bar, in the region a floating button can take, does not
+  /// make the lookup ambiguous: the button inside the bar is pressed.
+  @MainActor
+  func testInAppBackPressesTheBarBackButtonBesideAnInContentBackButtonBelowTheBar() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--top-content-back"])
+    defer { endBackFixture() }
+    try assertBackPressesTheButtonAndPops(status, "an in-content button below the bar must not make the bar's button ambiguous")
+  }
+
   /// An in-content `BackButton` that keeps moving does not hold the lookup back: it is not compared.
   @MainActor
   func testInAppBackIsNotBlockedByAMovingInContentBackButton() throws {
@@ -856,6 +865,18 @@ extension RunnerTests {
     XCTAssertFalse(Self.backButtonBelongsToABar(
       CGRect(x: 500, y: 60, width: 44, height: 44), barFrames: [CGRect(x: 0, y: 54, width: 320, height: 44)], windowHeight: 874))
     XCTAssertFalse(Self.backButtonBelongsToABar(CGRect(x: 8, y: 60, width: 44, height: 44), barFrames: [], windowHeight: 874))
+  }
+
+  /// A button inside a bar is the candidate even when a content button sits below the bar; the
+  /// floating button is one when no button is inside a bar.
+  func testBackButtonCandidatesPreferTheButtonInsideTheBar() {
+    let bar = CGRect(x: 0, y: 54, width: 402, height: 44)
+    let inBar = CGRect(x: 8, y: 60, width: 44, height: 30)
+    let below = CGRect(x: 100, y: 120, width: 120, height: 44)
+    let content = CGRect(x: 100, y: 800, width: 120, height: 44)
+    XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([below, content], barFrames: [bar], windowHeight: 874), [0])
+    XCTAssertEqual(Self.backButtonCandidates([content], barFrames: [bar], windowHeight: 874), [])
   }
 #endif
 

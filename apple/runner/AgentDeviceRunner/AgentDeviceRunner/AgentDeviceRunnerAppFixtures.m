@@ -50,7 +50,8 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // beside the bar, as the iPhone Duo does; `--hidden-bar` also hides the bar, so that button is not
 // a navigation bar's. `--content-back-button` adds an in-content button identified `BackButton` at the
 // bottom of the detail screen, which is not the system back button; `--moving-content-back` also moves
-// it every 0.05 s. The root's label reports what happened.
+// it every 0.05 s; `--top-content-back` puts it just below the bar instead. The root's label reports
+// what happened.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @property(nonatomic, strong) NSTimer *titleTimer;
@@ -115,14 +116,16 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
       }
     }
     BOOL movingContent = [NSProcessInfo.processInfo.arguments containsObject:@"--moving-content-back"];
-    if (movingContent || [NSProcessInfo.processInfo.arguments containsObject:@"--content-back-button"]) {
+    BOOL topContent = [NSProcessInfo.processInfo.arguments containsObject:@"--top-content-back"];
+    if (movingContent || topContent || [NSProcessInfo.processInfo.arguments containsObject:@"--content-back-button"]) {
       UIButton *content = [UIButton buttonWithType:UIButtonTypeSystem];
       content.accessibilityIdentifier = @"BackButton";
       [content setTitle:@"Content" forState:UIControlStateNormal];
       content.translatesAutoresizingMaskIntoConstraints = NO;
       [detail.view addSubview:content];
-      NSLayoutConstraint *bottom =
-          [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:-16];
+      NSLayoutConstraint *bottom = topContent
+          ? [content.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:16]
+          : [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:-16];
       [NSLayoutConstraint activateConstraints:@[
         bottom,
         [content.centerXAnchor constraintEqualToAnchor:detail.view.centerXAnchor],
