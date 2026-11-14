@@ -37,7 +37,10 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-bundle-id> --platform ios --foreground',
       },
-      { id: 'device shutdown on finish', requiredText: 'agent-device close --shutdown' },
+      {
+        id: 'device shutdown on finish',
+        requiredText: 'When you finish, run `agent-device close`.',
+      },
     ] satisfies Contract[],
     prohibitions: [
       { id: 'version startup probe', forbiddenText: 'agent-device --version' },
@@ -65,7 +68,10 @@ const SKILLS = [
         id: 'foreground platform open',
         requiredText: 'agent-device open <app-or-package-id> --platform android --foreground',
       },
-      { id: 'device shutdown on finish', requiredText: 'agent-device close --shutdown' },
+      {
+        id: 'device shutdown on finish',
+        requiredText: 'When you finish, run `agent-device close`.',
+      },
     ] satisfies Contract[],
     prohibitions: [
       { id: 'version startup probe', forbiddenText: 'agent-device --version' },
