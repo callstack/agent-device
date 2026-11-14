@@ -278,7 +278,9 @@ test('a policy that denies the stop keeps close successful, keeps the runner war
   // Runtime composition derives this fact from the loaded daemon policy (ADR 0029). The close
   // lifecycle reads it BEFORE finalizing, so the refused stop never consumes the runner retention.
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
-  const platformResourceCleanup = platformResourceCleanupFixture();
+  const platformResourceCleanup = platformResourceCleanupFixture({
+    retainExecutionHostAfterClose: () => true,
+  });
   const { response, sessionStore } = await closeSession({
     sessionName: 'policy-denied-session',
     device: iosSimulator,
@@ -289,7 +291,7 @@ test('a policy that denies the stop keeps close successful, keeps the runner war
   });
 
   expect(finalizeApplicationClose).toHaveBeenCalledWith(
-    expect.objectContaining({ shutdownTarget: false, retainRunner: false }),
+    expect.objectContaining({ shutdownTarget: false, retainRunner: true }),
   );
   // The refused stop never reaches the retention question, so a device kept running still earns
   // the warm-runner answer the cleanup gives an ordinary close.

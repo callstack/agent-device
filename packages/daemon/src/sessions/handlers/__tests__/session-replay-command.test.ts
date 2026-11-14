@@ -103,7 +103,7 @@ test.each([false, true])(
           sessionStore.publish(
             nestedReq.session,
             makeIosSession(nestedReq.session, {
-              ...(shutdownDenied ? { bootedByOpen: true } : {}),
+              bootedByOpen: true,
               lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
             }),
           );
@@ -131,10 +131,15 @@ test.each([false, true])(
     const response = await handleReplayTestCommand(params);
 
     expect(response).toMatchObject({ ok: true });
+    if (response?.ok) {
+      const tests = response.data?.tests;
+      if (!Array.isArray(tests)) throw new Error('Expected suite test results');
+      expect(tests[0]?.warnings).toEqual(shutdownDenied ? [expect.any(String)] : undefined);
+    }
     expect(endedLeases).toEqual([{ leaseId: lease.leaseId, outcome: 'released' }]);
     expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
     expect(finalizeApplicationClose).toHaveBeenCalledWith(
-      expect.objectContaining({ shutdownTarget: false }),
+      expect.objectContaining({ shutdownTarget: !shutdownDenied }),
     );
   },
 );

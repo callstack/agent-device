@@ -73,5 +73,5 @@ export function publishOpenSession(params: {
   };
   const ref = store.publish(sessionName, draft);
   if (bootedByOpen === true) store.updateOpenDevice(ref, device, true);
-  return ref;
+  return store.refresh(ref);
 }

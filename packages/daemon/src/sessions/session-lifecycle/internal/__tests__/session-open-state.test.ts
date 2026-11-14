@@ -63,16 +63,14 @@ test('a re-open of a session that never armed records nothing', () => {
 
 function firstOpen(bootedByOpen: boolean | undefined) {
   const store = makeSessionStore();
-  return store.requireCurrent(
-    publishOpenSession({
-      req: { token: 't', command: 'open', positionals: [], session: 's' },
-      sessionStore: store,
-      sessionName: 's',
-      device: IOS_SIMULATOR,
-      surface: 'app',
-      bootedByOpen,
-    }),
-  );
+  return publishOpenSession({
+    req: { token: 't', command: 'open', positionals: [], session: 's' },
+    sessionStore: store,
+    sessionName: 's',
+    device: IOS_SIMULATOR,
+    surface: 'app',
+    bootedByOpen,
+  }).session;
 }
 
 test('#4162: an open whose selection reported the boot records it on the new session', () => {

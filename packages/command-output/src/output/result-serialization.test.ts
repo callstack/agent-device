@@ -146,5 +146,9 @@ test('serializeCloseResult preserves warnings and omits an empty warning channel
     message: 'Closed: qa',
     warnings: ['Device remains running.'],
   });
-  assert.deepEqual(serializeCloseResult({ ...result, warnings: [] }), serializeCloseResult(result));
+  assert.deepEqual(serializeCloseResult({ ...result, warnings: [] }), {
+    session: 'qa',
+    message: 'Closed: qa',
+  });
+  assert.deepEqual(serializeCloseResult(result), { session: 'qa', message: 'Closed: qa' });
 });
