@@ -1214,7 +1214,7 @@ agent-device session list --json
 ```
 
 - `session list` shows active daemon sessions for your workspace, or for the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. Add `--json` for raw session metadata.
-- Each session's device carries `kind`, `model` and `osVersion`, reported the way [Device discovery](#device-discovery) describes.
+- Each session entry carries `kind`, `model` and `osVersion` beside its `platform` and `device`, reported the way [Device discovery](#device-discovery) describes. `session list --json` prints them flat: read `sessions[0].osVersion`, not `sessions[0].device.osVersion`, which is the device name. From the SDK, read them on `session.device`.
 
 ## Cloud provider artifacts
 
