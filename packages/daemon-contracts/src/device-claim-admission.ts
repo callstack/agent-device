@@ -63,6 +63,9 @@ export async function inspectNewSessionAdmission(params: {
   device: DeviceInfo;
   env: EnvMap;
 }): Promise<DeviceClaimAdmission> {
+  // The acquirer below is deliberately unadoptable: no claim records this session, workspace, or
+  // state dir, so every half of the decision that asks "is this claim already the caller's?" answers
+  // no, which is the question a reporter with no session of its own must ask.
   return await inspectDeviceClaimAdmission({
     device: params.device,
     command: 'open',

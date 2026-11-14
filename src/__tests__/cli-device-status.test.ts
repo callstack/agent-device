@@ -228,8 +228,9 @@ test('a device selector still weighs the host claim that overlaps the selected a
   }
 });
 
-// Status and `open` read one admission verdict. These tests ask it the way `open` does, as a session of
-// another daemon, and require the status report to name the same refusal.
+// Status and `open` read one admission verdict. These tests pin the status report to that shared
+// inspection, asked as `open` asks it — as a session of another daemon — rather than to a claim
+// actually taken through `acquireDeviceClaim`, which would also settle the claim under test.
 async function openAdmissionFor(
   claimsDir: string,
   device: { id: string; platform: 'android' | 'web' },

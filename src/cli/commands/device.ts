@@ -43,7 +43,9 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
     ? staleClaims
     : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification));
   const claims = visible.map(serializeClaim);
-  const devices = await reportDeviceAcquirability(inspectedClaims, host.env);
+  // Acquirability is a --json answer: each device weighs every claim, so the human view, which
+  // renders claims and notices, never pays for it.
+  const devices = flags.json ? await reportDeviceAcquirability(inspectedClaims, host.env) : [];
   const data = {
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
@@ -81,8 +83,10 @@ type DeviceAcquirabilityReport = {
  *
  * Every device a claim names is reported, including one whose only claims are the stale ones this
  * view hides: their owner being reclaimable is exactly why they are hidden, and a caller choosing a
- * device needs that answer without asking for the hidden records. A device no claim names is
- * acquirable and absent; `agent-device devices` is what enumerates devices.
+ * device needs that answer without asking for the hidden records. A device no claim names is absent;
+ * `agent-device devices` is what enumerates devices. Only a reported entry carries an answer, so a
+ * device that is unreported for another reason, such as a host whose live claims name only its own
+ * app devices, is not thereby acquirable.
  *
  * A reclaimable owner with an open durable resource is reported as blocked by that resource's
  * pending cleanup: `open` settles it through recovery, which status never runs.
