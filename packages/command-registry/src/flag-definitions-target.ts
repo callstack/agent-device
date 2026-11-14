@@ -446,7 +446,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     multiple: true,
     usageLabel: '--launch-args <arg>',
     usageDescription:
-      'open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args). Linux and macOS reject the flag.',
+      'open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args; HarmonyOS aa start args). Linux and macOS reject the flag.',
     projectConfig: true,
     recorded: false,
   },
