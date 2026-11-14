@@ -115,8 +115,8 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
 /**
  * Whether the request only observes the device: no step of it dispatches an action or changes state.
  * It reads the descriptor's declared effect: a recorded command's recording effect, otherwise an
- * observe-only device claim. An observability command (logs, network, audio capture) can change
- * state, so it is never read-only here.
+ * observe-only device claim. Observability commands get no special case: one that declares
+ * `observes-app` (such as `perf`) is read-only, and one that starts, stops or clears a capture is not.
  */
 export function isReadOnlyRequest(req: DaemonWireRequest): boolean {
   const recordingEffect = resolveCommandRecordingEffect(req);
