@@ -939,7 +939,9 @@ async function sendHttpRequest(
 // Loaded on the remote path only: a local daemon request never pays for the remote health cache.
 const loadRemoteHealthCache = () => import('./daemon-client-remote-health-cache.ts');
 
+/** Drops a remote daemon's cached health; a local daemon has none, so its failure loads nothing. */
 async function invalidateRemoteDaemonHealth(info: DaemonInfo): Promise<void> {
+  if (!info.baseUrl) return;
   (await loadRemoteHealthCache()).invalidateRemoteDaemonHealth(info);
 }
 
