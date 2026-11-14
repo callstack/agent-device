@@ -4,7 +4,11 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
-import type { LocalIdentity, TargetAncestryEntry } from './target-annotation.ts';
+import type {
+  LocalIdentity,
+  NodeStructuralDenotation,
+  TargetAncestryEntry,
+} from './target-annotation.ts';
 import type { ReplayVarSources, ReplayScriptMetadata } from './replay-script-data.ts';
 
 /**
@@ -364,18 +368,8 @@ export type AdReplayRunOutcome =
       readonly failure: AdReplayStepFailure;
     }>;
 
-/**
- * The verified/observed member's structural position within its capture
- * (document order + sibling) — moved here (from `./step-loop.ts`, which
- * still uses it for `AdReplayVerifiedTargetGuard`) so both this module's
- * typed evidence shapes and the step loop can reference ONE definition
- * without a cycle: this module has no dependency on `./step-loop.ts`, but
- * `./step-loop.ts` already depends on this one.
- */
-export type AdReplayTargetStructuralDenotation = Readonly<{
-  documentOrder: number;
-  sibling: number;
-}>;
+/** The verified member's shared structural position, read-only across the execution boundary. */
+export type AdReplayTargetStructuralDenotation = Readonly<NodeStructuralDenotation>;
 
 /**
  * The guard-mismatch refusal's typed evidence, already narrowed by the

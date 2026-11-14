@@ -19,7 +19,7 @@ import type {
  * `resolveReplayStepResponse` / `buildReplayActionFailure`. Everything that
  * touches a real device, a snapshot, `SessionStore`, or the P4b repair
  * coordinator is daemon authority and stays behind the narrow
- * `AdReplayStepRuntime` capabilities (`./runtime-port-types.ts`) — this
+ * `AdReplayStepRuntime` capabilities (`@agent-device/contracts/ad-replay-execution`) — this
  * module only decides which action to run next, when to skip one, and when
  * to stop.
  *
@@ -28,7 +28,7 @@ import type {
  * vocabulary and the verify-then-dispatch orchestrator — both extracted out,
  * following `packages/maestro`'s own three-way split
  * (`runtime-port-types.ts` for the vocabulary, its engine files for the
- * orchestration logic). `./runtime-port-types.ts` now owns every
+ * orchestration logic). `@agent-device/contracts/ad-replay-execution` now owns every
  * `AdReplayStepRuntime`-adjacent type; `./verify-dispatch.ts` owns
  * `verifyAndDispatchStep` and its two dispatch helpers. This file is left
  * with exactly the loop (`runAdReplay`) and the terminal-close/executable-
