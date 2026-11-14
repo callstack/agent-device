@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import { prepareDaemonCommandRequest } from '@agent-device/command-surface';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { ReplayEnginePlugin } from '@agent-device/plugins/replay-backend';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
@@ -9,6 +10,92 @@ import { storePluginCandidates } from '@agent-device/plugins/store';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { startAgentDevice } from './host.ts';
+
+async function trackSourceRegistries() {
+  const pluginRegistry = await import('@agent-device/plugins/registry');
+  const original = pluginRegistry.startProviderRegistry;
+  const closed = vi.fn();
+  const started = vi.spyOn(pluginRegistry, 'startProviderRegistry');
+  started.mockImplementation(async (...args) => {
+    const registry = await original(...args);
+    return {
+      ...registry,
+      close: async () => {
+        closed();
+        return await registry.close();
+      },
+    };
+  });
+  return { started, closed };
+}
+
+test('a multi-flow Maestro suite collects real includes in one disposable client scope', async () => {
+  const root = mkdtempForTestSync('maestro-suite-sources-');
+  const child = path.join(root, 'child.yaml');
+  const entries = ['first.yaml', 'second.yaml'].map((name) => path.join(root, name));
+  const flow = 'appId: demo.app\n---\n- runFlow: child.yaml\n';
+  const included = 'appId: demo.app\n---\n- back\n';
+  for (const entry of entries) fs.writeFileSync(entry, flow);
+  fs.writeFileSync(child, included);
+  const scope = await trackSourceRegistries();
+  try {
+    const result = await prepareDaemonCommandRequest(
+      'test',
+      { paths: entries, backend: 'maestro' },
+      { env: process.env, cwd: root },
+    );
+    expect(result.options.replayScriptSources).toEqual(
+      entries.map((entry) => ({ entry, files: { [entry]: flow, [child]: included } })),
+    );
+    expect(scope.started).toHaveBeenCalledTimes(1);
+    expect(scope.closed).toHaveBeenCalledTimes(1);
+  } finally {
+    scope.started.mockRestore();
+  }
+});
+
+test('a failed Maestro source bundle closes its client registry', async () => {
+  const root = mkdtempForTestSync('maestro-suite-large-source-');
+  const entry = path.join(root, 'large.yaml');
+  fs.writeFileSync(entry, `# ${'x'.repeat(2 * 1024 * 1024)}\n`);
+  const scope = await trackSourceRegistries();
+  try {
+    await expect(
+      prepareDaemonCommandRequest(
+        'test',
+        { paths: [entry], backend: 'maestro' },
+        { env: process.env, cwd: root },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS', details: { limitBytes: 2 * 1024 * 1024 } });
+    expect(scope.started).toHaveBeenCalledTimes(1);
+    expect(scope.closed).toHaveBeenCalledTimes(1);
+  } finally {
+    scope.started.mockRestore();
+  }
+});
+
+test.each([undefined, 'maestro'])(
+  'native-only source collection with backend %s never starts a plugin registry',
+  async (backend) => {
+    const root = mkdtempForTestSync('native-suite-sources-');
+    const entry = path.join(root, 'suite.ad');
+    const script = 'open demo.app\nclose\n';
+    fs.writeFileSync(entry, script);
+    const scope = await trackSourceRegistries();
+    try {
+      const result = await prepareDaemonCommandRequest(
+        'test',
+        { paths: [entry], backend },
+        { env: { AGENT_DEVICE_HOME: path.join(root, 'empty-home') }, cwd: root },
+      );
+      expect(result.options.replayScriptSources).toEqual([{ entry, files: { [entry]: script } }]);
+      expect(scope.started).not.toHaveBeenCalled();
+      expect(scope.closed).not.toHaveBeenCalled();
+    } finally {
+      scope.started.mockRestore();
+    }
+  },
+);
 
 function fixture() {
   const root = mkdtempForTestSync('embedded-replay-');
