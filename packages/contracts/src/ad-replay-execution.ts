@@ -403,15 +403,30 @@ export type AdReplayManifest = Readonly<{
   /** SHA-256 digest of the canonical plan (`digestFlags` binds the same platform/target the replay invokes with). */
   planDigest: string;
   /** The `--from`/`--plan-digest` resume-point math, closed over this manifest's own `actions`/`planDigest`. */
-  resolveEntryIndex(params: {
-    from: number | undefined;
-    digest: string | undefined;
-    pendingRecordAndHeal:
-      | Readonly<{ expectedFrom: number; actionsCountAtDivergence: number }>
-      | undefined;
-    sessionActionsLength: number;
-  }): { ok: true; value: number } | { ok: false; message: string };
+  resolveEntryIndex(params: AdReplayEntryIndexParams): AdReplayEntryIndexResult;
 }>;
 
 /** The request-level `--platform`/`--target` override the plan digest binds (raw flags, before any metadata merge). */
 export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string }>;
+
+/**
+ * The session-side state that gates an EMPTY-TAIL resume (`--from actionCount
+ * + 1`). Stamped for `record-and-heal`, and per #1262 also for
+ * `caution`/`manual`'s record-and-heal-shaped alternate repair (their own
+ * unshifted `resume.from` is unaffected by this watermark).
+ */
+export type PendingRecordAndHeal = Readonly<{
+  expectedFrom: number;
+  actionsCountAtDivergence: number;
+}>;
+
+export type AdReplayEntryIndexParams = Readonly<{
+  from: number | undefined;
+  digest: string | undefined;
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
+  sessionActionsLength: number;
+}>;
+
+export type AdReplayEntryIndexResult =
+  | Readonly<{ readonly ok: true; readonly value: number }>
+  | Readonly<{ readonly ok: false; readonly message: string }>;
