@@ -23,7 +23,7 @@ test('runtime wait stable preserves the requested scope, depth and raw view', as
         return { snapshot };
       },
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
     policy: localCommandPolicy(),
     clock: createFakeClock(),
