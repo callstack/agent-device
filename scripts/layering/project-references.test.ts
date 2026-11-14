@@ -128,7 +128,15 @@ test('root workspace dependencies cover every core package and exclude optional 
     .map(([name]) => name)
     .sort();
   const expected = readWorkspacePackages(repoRoot)
-    .filter((pkg) => !['@agent-device/maestro', '@agent-device/replay'].includes(pkg.name))
+    .filter(
+      (pkg) =>
+        ![
+          '@agent-device/maestro',
+          '@agent-device/replay',
+          '@agent-device/ad-replay',
+          '@agent-device/replay-test',
+        ].includes(pkg.name),
+    )
     .map((pkg) => pkg.name)
     .sort();
   assert.deepEqual(
@@ -139,7 +147,12 @@ test('root workspace dependencies cover every core package and exclude optional 
       'specifiers through these declarations)',
   );
   assert.ok(
-    !declared.includes('@agent-device/maestro') && !declared.includes('@agent-device/replay'),
+    ![
+      '@agent-device/maestro',
+      '@agent-device/replay',
+      '@agent-device/ad-replay',
+      '@agent-device/replay-test',
+    ].some((name) => declared.includes(name)),
     'The optional engine must be installed through the plugin store. R11 rejects undeclared imports from core.',
   );
 });
