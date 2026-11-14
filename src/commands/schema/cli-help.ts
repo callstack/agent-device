@@ -74,7 +74,10 @@ const HELP_TOPICS = {
     body: 'agent-device help commands',
   },
   ...manualQaHelpTopics,
-  maestro: getReplayBackendDeclaration(getReplayPluginInstallation('maestro')).help,
+  maestro: getReplayBackendDeclaration(
+    getReplayPluginInstallation('maestro'),
+    getReplayPluginInstallation('ad'),
+  ).help,
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
@@ -881,7 +884,12 @@ export function buildCommandUsageText(commandName: string): string | null {
   const sections: string[] = [];
   if (commandName === 'replay' || commandName === 'test') {
     sections.push(replayPluginInstallHelp(getReplayPluginInstallation('ad')));
-    sections.push(getReplayBackendDeclaration(getReplayPluginInstallation('ad')).help.body);
+    sections.push(
+      getReplayBackendDeclaration(
+        getReplayPluginInstallation('ad'),
+        getReplayPluginInstallation('ad'),
+      ).help.body,
+    );
     sections.push(replayPluginInstallHelp(getReplayPluginInstallation('maestro')));
   }
   if (commandName === 'connect') {

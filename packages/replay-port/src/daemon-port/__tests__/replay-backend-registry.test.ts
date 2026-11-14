@@ -6,7 +6,12 @@ import { getReplayBackend, openReplayBackend } from '../replay-backend-registry.
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('help declares the exact optional package without requiring a working plugin', () => {
-  expect(getReplayBackendDeclaration(getReplayPluginInstallation('maestro'))).toMatchObject({
+  expect(
+    getReplayBackendDeclaration(
+      getReplayPluginInstallation('maestro'),
+      getReplayPluginInstallation('ad'),
+    ),
+  ).toMatchObject({
     id: 'maestro',
     package: '@agent-device/maestro',
   });

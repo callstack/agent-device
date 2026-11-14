@@ -37,13 +37,18 @@ function formatMaestroCompatibilityReference(): string {
 /** Full compatibility help is composed only by help consumers, from the vetted installation. */
 export function getReplayBackendDeclaration(
   installation: ReturnType<typeof getReplayPluginInstallation>,
+  suiteInstallation: ReturnType<typeof getReplayPluginInstallation>,
 ): ReplayBackendDeclaration<ReplayFormat> {
   const body =
     installation.id === 'ad'
       ? `Run agent-device plugins add ${installation.package} on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.`
       : `agent-device help maestro
 
-Install with agent-device plugins add ${installation.package} on the client and daemon host. Restart the daemon after installation.
+Install with agent-device plugins add ${installation.package}. ${installation.installationHint}
+
+For test suites, also run agent-device plugins add ${suiteInstallation.package}. ${suiteInstallation.installationHint}
+
+Restart the daemon after installing the required plugins.
 
 Run Maestro compatibility flows with replay <flow.yaml> --maestro or test <path> --maestro. Bind an iOS or Android target with --platform or an existing session.
 
