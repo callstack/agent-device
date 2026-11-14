@@ -22,6 +22,8 @@ import {
 } from './host-process.ts';
 import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
+const readFile = fs.readFileSync;
+
 function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
 }
@@ -46,6 +48,11 @@ beforeEach(() => {
   mockLinuxProcessStatAbsent();
   mockRunCmdSync.mockReset();
   mockRunCmd.mockReset();
+  vi.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+    // The ps fixture must not borrow the real host's identity for a fabricated pid.
+    if (String(args[0]) === '/proc/sys/kernel/random/boot_id') throw new Error('ENOENT');
+    return readFile(...args);
+  });
 });
 
 afterEach(() => {
