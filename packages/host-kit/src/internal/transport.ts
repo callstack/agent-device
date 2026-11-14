@@ -143,16 +143,14 @@ export function observeCompletedRequestWrites(
 export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
 
 /**
- * Ceiling for waiting on response headers once this side has written everything the server is
- * waiting for. For an upload that is the moment its outgoing request body is fully flushed, never
- * the moment the request was created; for a bodyless request it is connection establishment.
+ * Ceiling for response headers once this side's body is fully flushed, never from the moment the
+ * request was created; for a bodyless request, from connection establishment.
  */
 export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
 
 /**
- * Ceiling for silence between body bytes in either direction. Bytes actually written or read reset
- * it, so an artifact that keeps moving keeps its budget while a connection that stopped carrying
- * bytes does not. Progress never touches the aggregate budget the attempt runs under.
+ * Ceiling for silence between body bytes in either direction. Moving bytes reset it; they never
+ * touch the aggregate budget the attempt runs under.
  */
 export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
 
@@ -164,13 +162,9 @@ const BODY_PHASES: ReadonlySet<TransferPhase> = new Set(['request-body', 'respon
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 
 /**
- * Watches the sequential phases of ONE transfer attempt.
- *
- * One attempt gets one watchdog: arming a later phase stops counting the earlier one, so the ceiling
- * that applies is always the phase the transfer is actually in. Progress re-arms only the two body
- * phases. Nothing here extends an enclosing aggregate budget — the caller's signal is combined in,
- * never replaced, so the earliest deadline still wins and every attempt, redirect and resume keeps
- * sharing the original aggregate.
+ * Watches the sequential phases of ONE transfer attempt: arming a later phase stops counting the
+ * earlier one, and progress re-arms only a body phase. The caller's signal is combined in, never
+ * replaced, so an enclosing aggregate deadline still wins and is never extended.
  */
 export type TransferPhaseWatchdog = {
   /** The signal the attempt runs on: the caller's cancellation plus every phase deadline. */
@@ -207,8 +201,7 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
       rearm();
     },
     touchBody() {
-      // Unrelated headers, keepalive traffic and timer callbacks are not body progress, and
-      // progress in one phase buys no time in another: only a body phase already armed re-arms.
+      // Progress in one phase buys no time in another.
       if (!armed || !BODY_PHASES.has(armed.phase)) return;
       rearm();
     },
@@ -220,10 +213,7 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
   };
 }
 
-/**
- * Typed evidence that a transfer phase, rather than the caller or the whole preparation aggregate,
- * ended the attempt. The expired phase and its effective budget travel in `details`.
- */
+/** Typed evidence that a phase, not the caller or the aggregate, ended the attempt. */
 function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
   return new AppError('COMMAND_FAILED', `Artifact transfer ${phase} timed out`, {
     reason: TRANSFER_PHASE_TIMEOUT_REASON,
