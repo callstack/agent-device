@@ -59,10 +59,7 @@ test('a re-open of a session that never armed records nothing', () => {
 
 // --- #4162: the boot-ownership fact belongs to the open that published it ---
 //
-// Any publish whose selection reported the boot records it — the first open, a provisional
-// dispatch publish, or a re-open that had to boot a device that had died. A publish that
-// reported no boot never clears the fact, so the session that found the device stopped still
-// owes it a stop after any number of re-opens.
+// Ownership survives reopens of the same target. A replacement owns only its own boot.
 
 function firstOpen(bootedByOpen: boolean | undefined) {
   const store = makeSessionStore();
@@ -90,6 +87,24 @@ test.each([false, undefined] as const)(
 );
 
 const bootOwnershipFacts: readonly (true | undefined)[] = [true, undefined];
+
+test.each([false, true])('replacement target owns only its own boot: %s', (replacementBooted) => {
+  const store = makeSessionStore();
+  const existing = makeIosSession('s', { bootedByOpen: true });
+  const ref = store.publish(existing.name, existing);
+  const next = store.requireCurrent(
+    publishOpenSession({
+      req: { token: 't', command: 'open', positionals: [], session: existing.name },
+      sessionStore: store,
+      sessionName: existing.name,
+      existingRef: ref,
+      device: { ...IOS_SIMULATOR, id: 'replacement-simulator' },
+      surface: 'app',
+      bootedByOpen: replacementBooted,
+    }),
+  );
+  assert.equal(next.bootedByOpen, replacementBooted ? true : undefined);
+});
 
 test.each(bootOwnershipFacts)(
   '#4162: a re-open that reports a boot owns the device from then on',

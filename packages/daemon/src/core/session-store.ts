@@ -8,7 +8,12 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { devicesOverlap } from '@agent-device/kernel/device';
+import {
+  devicesOverlap,
+  deviceIdentity,
+  sameDeviceIdentity,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
@@ -409,13 +414,14 @@ export class SessionStore {
     session.lastActivityAtMs = atMs;
   }
 
-  /**
-   * #4162: records that this session's `open` booted the local simulator or emulator it now holds,
-   * so a plain `close` owes that device a stop. Only the open-state publisher calls this, while the
-   * record is still its own; close only reads the fact.
-   */
-  markOpenBootedDevice(ref: SessionRef): void {
-    this.update(ref, { bootedByOpen: true });
+  /** Carries boot ownership across reopens of the same device, never onto a replacement. */
+  updateOpenDevice(ref: SessionRef, device: DeviceInfo, bootOccurred: boolean): void {
+    const current = this.requireCurrent(ref);
+    const retainsBoot = sameDeviceIdentity(deviceIdentity(current.device), deviceIdentity(device));
+    this.update(ref, {
+      device,
+      bootedByOpen: bootOccurred || (retainsBoot && current.bootedByOpen) ? true : undefined,
+    });
   }
 
   /**

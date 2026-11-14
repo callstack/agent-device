@@ -225,7 +225,10 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
         positionals: [],
         flags: {},
         meta: req.meta,
-        internal: { cleanupIntent: 'suite-owned-test-session' },
+        internal: {
+          cleanupIntent: 'suite-owned-test-session',
+          ...(req.internal?.shutdownCapabilityDenied ? { shutdownCapabilityDenied: true } : {}),
+        },
       },
       req,
     ),

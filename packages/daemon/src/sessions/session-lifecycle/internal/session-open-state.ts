@@ -48,18 +48,14 @@ export function publishOpenSession(params: {
   } = params;
   requireOpenSessionAdmission(store, sessionName, existingRef);
   if (existingRef) {
+    store.updateOpenDevice(existingRef, device, bootedByOpen === true);
     const session = store.update(existingRef, {
-      device,
       surface,
       appBundleId,
       appName,
     });
     session.lease = resolveSessionLeaseForRequest({ req, existingLease: session.lease });
     if (deviceClaim) session.deviceClaim = deviceClaim;
-    // #4162: the fact is additive. A provisional publish (record-video test opens) or a re-open
-    // whose device had died and was re-booted by THIS open both reach this branch; a re-open's own
-    // selection never claims a boot, so an unchanged re-open cannot add or clear the fact.
-    if (bootedByOpen === true) store.markOpenBootedDevice(existingRef);
     clearSessionSnapshot(session);
     return store.refresh(existingRef);
   }
@@ -76,6 +72,6 @@ export function publishOpenSession(params: {
     deviceClaim,
   };
   const ref = store.publish(sessionName, draft);
-  if (bootedByOpen === true) store.markOpenBootedDevice(ref);
+  if (bootedByOpen === true) store.updateOpenDevice(ref, device, true);
   return ref;
 }

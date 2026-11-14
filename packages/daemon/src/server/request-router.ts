@@ -208,9 +208,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
       };
     }
-    // #4162: every request and every nested batch/replay step re-enters here, so one mark covers
-    // them all: a policy that denies `device-shutdown` travels with the request to the close
-    // lifecycle, which keeps its impossible own-stop from spending the warm-runner retention.
+    // Replay dispatch carries this private policy fact from its parent request, including
+    // same-session actions that reuse an admitted scope instead of entering this handler again.
     req = withShutdownPolicyDeniedFlag(req, daemonPolicy);
     return await reportEndedLeases(req, handleRequestOnLedger);
   }

@@ -104,14 +104,19 @@ export function resolveExistingSessionDeviceSelection(device: DeviceInfo): Devic
  * target that was stopped at resolution has provided the requested boot event;
  * provider and physical targets never claim a daemon-owned boot.
  */
-export function markSelectionBootOccurred(selection: DeviceSelectionResult): DeviceSelectionResult;
+export function markSelectionBootOccurred(
+  selection: DeviceSelectionResult,
+  localPreparation?: boolean,
+): DeviceSelectionResult;
 export function markSelectionBootOccurred(
   selection: DeviceSelectionResult | undefined,
+  localPreparation?: boolean,
 ): DeviceSelectionResult | undefined;
 export function markSelectionBootOccurred(
   selection: DeviceSelectionResult | undefined,
+  localPreparation = selection?.source === 'local',
 ): DeviceSelectionResult | undefined {
-  if (!selection || selection.source !== 'local') return selection;
+  if (!selection || !localPreparation || selection.source === 'provider') return selection;
   const { device } = selection;
   const bootedByThisOpen =
     device.booted !== true && (device.kind === 'simulator' || device.kind === 'emulator');

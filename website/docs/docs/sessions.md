@@ -126,16 +126,17 @@ agent-device open --platform ios --device iPhone_17_Pro
 agent-device close            # the simulator this open booted ends shut down
 ```
 
-Add `--shutdown` to stop the device even when it was already running — the line to use in CI and on
-shared hosts where no device may outlive the run:
+Add `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership.
+Physical devices and provider-owned devices are not stopped through this option:
 
 ```bash
 agent-device close --shutdown
 ```
 
-Either way, `close` reports the stop in `data.shutdown`. A daemon whose policy denies
-`device-shutdown` never stops a device: a `close --shutdown` there fails with `DAEMON_POLICY_DENIED`,
-and a plain `close` succeeds and says in `warnings` that it left the device running.
+When a shutdown result exists, `close` reports it in `data.shutdown`. The field is absent when the
+device stays running. If the daemon policy denies `device-shutdown`, `close --shutdown` fails with
+`UNAUTHORIZED` and `error.details.reason: DAEMON_POLICY_DENIED`. Plain `close` skips its implicit stop,
+succeeds, and reports the local simulator or emulator it left running in `warnings`.
 
 When the session keeps its device running, `close` can keep a ready, idle iOS simulator runner warm
 for the next `open` when its listener connection is still live and the session has no screen
