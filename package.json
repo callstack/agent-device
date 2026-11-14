@@ -1,6 +1,6 @@
 {
   "name": "agent-device",
-  "version": "0.21.38-dev",
+  "version": "0.22.0-dev",
   "description": "Open source device layer for AI coding agents: a CLI, MCP server, and typed Node.js API to control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud.",
   "mcpName": "io.github.callstack/agent-device",
   "license": "MIT",

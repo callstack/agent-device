@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/tizen",
-  "version": "0.21.38-dev",
+  "version": "0.22.0-dev",
   "type": "module",
   "description": "Samsung Tizen TV web app plugin for agent-device.",
   "files": [
