@@ -112,12 +112,17 @@ export function shouldGuardAndroidBlockingDialog(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.androidBlockingDialogGuard === true;
 }
 
+/** Whether the request only observes the device: no step of it dispatches an action. */
+export function isReadOnlyRequest(req: DaemonWireRequest): boolean {
+  const recordingEffect = resolveCommandRecordingEffect(req);
+  if (recordingEffect !== undefined) return recordingEffect === 'observes-app';
+  if (getSessionCommandKind(req.command) === 'observability') return true;
+  return resolveCommandDeviceClaimPolicy(req.command) === 'observe';
+}
+
 export function isHumanControlMutation(req: DaemonRequest): boolean {
   if (req.command === 'human_control' || req.command === 'lease_heartbeat') return false;
-  const recordingEffect = resolveCommandRecordingEffect(req);
-  if (recordingEffect !== undefined) return recordingEffect !== 'observes-app';
-  if (getSessionCommandKind(req.command) === 'observability') return false;
-  return resolveCommandDeviceClaimPolicy(req.command) !== 'observe';
+  return !isReadOnlyRequest(req);
 }
 
 export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest): boolean {

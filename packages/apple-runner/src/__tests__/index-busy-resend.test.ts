@@ -114,17 +114,23 @@ test('a RUNNER_BUSY resend still ends when the refusals outlast the window', asy
   assert.deepEqual(sentCommands(), Array<string>(8).fill('snapshot'));
 });
 
-/** Runs the request under a daemon deadline `timeoutMs` from now, as `withRequestDeadline` sets it. */
-function underRequestDeadline(timeoutMs: number): void {
+/**
+ * Admits `requestId` with a deadline `timeoutMs` from now. The host answers that deadline to a
+ * resend loop only when the request itself is read-only, as host-kit's
+ * `getRequestReadOnlyDeadlineMs` does for the fact the daemon stamps at admission.
+ */
+function admitRequest(requestId: string, timeoutMs: number, readOnly: boolean): string {
   const deadlineMs = Date.now() + timeoutMs;
-  appleRunnerTestHost.update({ getRequestDeadlineMs: () => deadlineMs });
+  appleRunnerTestHost.update({
+    getRequestReadOnlyDeadlineMs: (id) => (id === requestId && readOnly ? deadlineMs : undefined),
+  });
+  return requestId;
 }
 
 test('under a request deadline, read-only commands outlast the fixed RUNNER_BUSY count', async () => {
   // Twelve busy answers, four past the fixed eight-attempt window, then the runner answers inside
   // the request's 30s deadline.
   vi.useFakeTimers();
-  underRequestDeadline(30_000);
   for (let refusal = 0; refusal < 12; refusal += 1) {
     mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(busyRefusal());
   }
@@ -133,7 +139,7 @@ test('under a request deadline, read-only commands outlast the fixed RUNNER_BUSY
   const pending = runAppleRunnerCommand(
     IOS_SIMULATOR,
     { command: 'snapshot' },
-    { requestId: 'req-deadline-recovers' },
+    { requestId: admitRequest('req-deadline-recovers', 30_000, true) },
   );
   await vi.advanceTimersByTimeAsync(20_000);
 
@@ -143,7 +149,6 @@ test('under a request deadline, read-only commands outlast the fixed RUNNER_BUSY
 
 test('a request deadline reached mid-outage ends with the RUNNER_BUSY refusal and its attempt count', async () => {
   vi.useFakeTimers();
-  underRequestDeadline(10_000);
   const sentAt: number[] = [];
   mockExecuteRunnerCommandWithSession.mockImplementation(async () => {
     sentAt.push(Date.now());
@@ -154,7 +159,7 @@ test('a request deadline reached mid-outage ends with the RUNNER_BUSY refusal an
   const settled = runAppleRunnerCommand(
     IOS_SIMULATOR,
     { command: 'snapshot' },
-    { requestId: 'req-deadline-outage' },
+    { requestId: admitRequest('req-deadline-outage', 10_000, true) },
   ).then(
     () => undefined,
     (error: unknown) => error,
@@ -195,7 +200,6 @@ test('read-only transport failures keep the three-attempt resend budget', async 
 
 test('a RUNNER_BUSY refusal after the busy window closed is not resent', async () => {
   // A 1s request deadline is inside the 2s reserve, so the window is already closed.
-  underRequestDeadline(1_000);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(busyRefusal())
     .mockResolvedValue({ nodes: [], truncated: false });
@@ -205,7 +209,7 @@ test('a RUNNER_BUSY refusal after the busy window closed is not resent', async (
       runAppleRunnerCommand(
         IOS_SIMULATOR,
         { command: 'snapshot' },
-        { requestId: 'req-deadline-window-closed' },
+        { requestId: admitRequest('req-deadline-window-closed', 1_000, true) },
       ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -219,7 +223,6 @@ test('a RUNNER_BUSY refusal after the busy window closed is not resent', async (
 });
 
 test('under a request deadline too close for a busy resend, transport failures keep their three attempts', async () => {
-  underRequestDeadline(1_000);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'started' })
@@ -230,7 +233,7 @@ test('under a request deadline too close for a busy resend, transport failures k
   const result = await runAppleRunnerCommand(
     IOS_SIMULATOR,
     { command: 'snapshot' },
-    { requestId: 'req-deadline-transport' },
+    { requestId: admitRequest('req-deadline-transport', 1_000, true) },
   );
 
   assert.deepEqual(result, { nodes: [], truncated: false });
@@ -329,11 +332,15 @@ test('a mutating command meets RUNNER_BUSY once, with no status probe and no res
   // The status-recovery bypass for structured replies reaches mutating commands too: the refusal
   // says the tap did not run, so there is nothing to recover and nothing is replayed, even with a
   // request deadline that would let a read resend.
-  underRequestDeadline(30_000);
   mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(busyRefusal());
 
   await assert.rejects(
-    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () =>
+      runAppleRunnerCommand(
+        IOS_SIMULATOR,
+        { command: 'tap', x: 120, y: 240 },
+        { requestId: admitRequest('req-tap-read-only-window', 30_000, true) },
+      ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
@@ -344,6 +351,32 @@ test('a mutating command meets RUNNER_BUSY once, with no status probe and no res
 
   assert.deepEqual(sentCommands(), ['tap']);
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
+});
+
+// The viewport read before a swipe runs under the swipe's request. That budget belongs to the swipe
+// dispatched after it, so a busy drain keeps the fixed window and refuses fast with nothing sent.
+test('a busy read inside a mutating request keeps the fixed window under a 30s deadline', async () => {
+  vi.useFakeTimers();
+  mockExecuteRunnerCommandWithSession.mockImplementation(async () => {
+    throw busyRefusal();
+  });
+
+  const settled = runAppleRunnerCommand(
+    IOS_SIMULATOR,
+    { command: 'gestureViewport', appBundleId: 'com.example.app' },
+    { requestId: admitRequest('req-swipe', 30_000, false) },
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(30_000);
+  const error = await settled;
+
+  assert.ok(error instanceof AppError, `expected the refusal, got ${String(error)}`);
+  assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+  assert.equal(error.details?.dispatched, 'no');
+  assert.equal(error.details?.attempts, 8);
+  assert.deepEqual(sentCommands(), Array<string>(8).fill('gestureViewport'));
 });
 
 test('a read-only alert get answered ALERT_UNRESOLVED is sent once and reported as itself', async () => {

@@ -93,7 +93,7 @@ import {
   Deadline,
   retryWithPolicy,
   emitDiagnostic,
-  getRequestDeadlineMs,
+  getRequestReadOnlyDeadlineMs,
   hasScopedAppleToolProvider,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -135,9 +135,11 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 /**
  * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
  * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
- * that budget has to outlast the drain. Under a request deadline, busy refusals are resent until
- * {@link RUNNER_BUSY_DEADLINE_RESERVE_MS} before it, so the last refusal (with its attempt count) is
- * the answer instead of the deadline's. Without one, the window is a heuristic: 200ms doubling to a
+ * that budget has to outlast the drain. When the request itself is read-only, busy refusals are
+ * resent until {@link RUNNER_BUSY_DEADLINE_RESERVE_MS} before its deadline, so the last refusal (with
+ * its attempt count) is the answer instead of the deadline's. A read inside an action (the viewport
+ * read before a swipe, the selector query before a press) keeps the fixed window instead, because
+ * the action dispatched after it needs the rest of the budget. The fixed window is a heuristic: 200ms doubling to a
  * 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a drain that
  * outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=` marker in
  * runner.log is the evidence for tuning it). Transport failures keep the pre-existing three attempts
@@ -163,7 +165,7 @@ type ReadOnlyResendBudget = {
 };
 
 function resolveReadOnlyResendBudget(requestId: string | undefined): ReadOnlyResendBudget {
-  const requestDeadlineMs = getRequestDeadlineMs(requestId);
+  const requestDeadlineMs = getRequestReadOnlyDeadlineMs(requestId);
   const resendsOther = (error: unknown, attempt: number) =>
     attempt < (isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1);
   if (requestDeadlineMs === undefined) {

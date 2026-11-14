@@ -952,9 +952,7 @@ export async function cachedRemoteDaemonHealth(
   callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
   const { cachedRemoteHealth } = await loadRemoteHealthCache();
-  return await cachedRemoteHealth(
-    info,
-    probeTimeoutMs !== undefined || callerSignal !== undefined,
-    () => readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
+  return await cachedRemoteHealth(info, () =>
+    readRemoteDaemonHealth(info, probeTimeoutMs, callerSignal),
   );
 }

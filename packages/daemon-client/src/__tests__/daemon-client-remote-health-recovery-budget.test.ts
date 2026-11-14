@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { afterEach, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendToDaemon } from '../index.ts';
 
 /** Replaces `http.request` with one that answers every request 503, recording each probe's time. */
@@ -39,6 +39,38 @@ function answerEveryRequest503(): { probeTimes: number[]; rpcs: () => number } {
   return { probeTimes, rpcs: () => rpcs };
 }
 
+/**
+ * Moves fake time only once real work (module loads, the mocked reply) has gone quiet, and then
+ * straight to the next timer, so no real latency lands on the faked clock. Returns the stop.
+ */
+function driveFakeTime(): () => Promise<void> {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  let driving = true;
+  const drive = (async () => {
+    while (driving) {
+      for (let turn = 0; turn < 20; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      if (vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
+    }
+  })();
+  return async () => {
+    driving = false;
+    await drive;
+  };
+}
+
+/** `session list`, which has the 90s default budget, against a remote daemon. */
+function remoteSessionList() {
+  return {
+    session: 'default',
+    command: 'session',
+    positionals: ['list'],
+    flags: { daemonBaseUrl: 'http://remote-mac.example.test:7777/agent-device' },
+    meta: { requestId: 'req-remote-budget' },
+  };
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -46,30 +78,11 @@ afterEach(() => {
 
 test('a remote daemon answering 5xx for the whole request budget is refused with its probe count and budget', async () => {
   const server = answerEveryRequest503();
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
-  let advancing = true;
-  // Fake time moves only once real work (module loads, the mocked reply) has gone quiet, and then
-  // straight to the next timer, so no real latency lands on the faked clock.
-  const advance = (async () => {
-    while (advancing) {
-      for (let turn = 0; turn < 20; turn += 1)
-        await new Promise((resolve) => setImmediate(resolve));
-      if (vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
-    }
-  })();
+  const stopDriving = driveFakeTime();
 
   try {
-    const outcome = await sendToDaemon(
-      {
-        session: 'default',
-        command: 'session',
-        positionals: ['list'],
-        flags: { daemonBaseUrl: 'http://remote-mac.example.test:7777/agent-device' },
-        meta: { requestId: 'req-remote-budget' },
-      },
-      // A non-loopback daemon is trusted only with an auth token.
-      { authToken: 'remote-secret' },
-    ).then(
+    // A non-loopback daemon is trusted only with an auth token.
+    const outcome = await sendToDaemon(remoteSessionList(), { authToken: 'remote-secret' }).then(
       () => undefined,
       (error: unknown) => error,
     );
@@ -86,7 +99,30 @@ test('a remote daemon answering 5xx for the whole request budget is refused with
     assert.deepEqual(gaps, Array<number>(89).fill(1_000), 'probes are one second apart');
     assert.equal(server.rpcs(), 0);
   } finally {
-    advancing = false;
-    await advance;
+    await stopDriving();
+  }
+});
+
+test('aborting the request while the gate re-probes stops the probes', async () => {
+  const aborting = new AbortController();
+  const server = answerEveryRequest503();
+  const stopDriving = driveFakeTime();
+  try {
+    const outcome = sendToDaemon(remoteSessionList(), {
+      authToken: 'remote-secret',
+      signal: aborting.signal,
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    while (server.probeTimes.length < 3) await new Promise((resolve) => setImmediate(resolve));
+    aborting.abort();
+
+    assert.ok(isRequestCanceledError(await outcome), 'the abort answers as a cancellation');
+    const probesAtAbort = server.probeTimes.length;
+    for (let turn = 0; turn < 5; turn += 1) await vi.advanceTimersByTimeAsync(1_000);
+    assert.equal(server.probeTimes.length, probesAtAbort, 'no probe follows the abort');
+  } finally {
+    await stopDriving();
   }
 });

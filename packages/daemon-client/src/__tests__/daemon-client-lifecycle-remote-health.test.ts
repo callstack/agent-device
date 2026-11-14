@@ -168,9 +168,9 @@ async function slowHealthyRemote(delayMs: number): Promise<{
   return { handler, info, probes: () => probes };
 }
 
-// A bounded caller never joins a probe another caller started: that probe runs on another budget,
-// so waiting on it would spend this caller's budget on a stale request.
-test('a bounded health caller runs its own probe instead of joining one in flight', async (t) => {
+// Each caller probes under its own bound; only a settled, usable answer is shared through the cache,
+// so no caller waits on a probe started under another caller's budget.
+test('a health caller probes on its own bound, and a settled answer is cached', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const remote = await slowHealthyRemote(300);
   try {
@@ -180,7 +180,7 @@ test('a bounded health caller runs its own probe instead of joining one in fligh
     assert.equal(bounded.reachable, false);
     assert.equal(bounded.timedOut, true);
     assert.equal((await unbounded).reachable, true);
-    assert.equal(remote.probes(), 2, 'the bounded caller sent its own probe');
+    assert.equal(remote.probes(), 2, 'each caller sent its own probe');
     // The settled answer is cached, so a later bounded caller reads it without probing.
     assert.equal((await cachedRemoteDaemonHealth(remote.info, 50)).reachable, true);
     assert.equal(remote.probes(), 2);

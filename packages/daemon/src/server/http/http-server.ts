@@ -16,7 +16,10 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
-import { resolveDaemonRequestResultDeadlineMs } from '../../core/daemon-command-registry.ts';
+import {
+  isReadOnlyRequest,
+  resolveDaemonRequestResultDeadlineMs,
+} from '../../core/daemon-command-registry.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearRequestAbortRegistration,
@@ -494,6 +497,7 @@ function beginRpcRequestLifetime(params: {
       requestId = resolveRequestTrackingId(daemonRequest.meta?.requestId, rpcId);
       abortRegistration = registerRequestAbort(requestId, undefined, {
         resultDeadlineMs: resolveDaemonRequestResultDeadlineMs(daemonRequest),
+        readOnly: isReadOnlyRequest(daemonRequest),
       });
       return {
         ...daemonRequest,
