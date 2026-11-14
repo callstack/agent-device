@@ -176,14 +176,12 @@ test.each([
     }
     assert.equal(caller.signal.aborted, canceled);
     assert.equal(events.includes('fallback'), false);
+    const expectedTicketLegs = Number(retry) + Number(phase === 'finalize');
     assert.deepEqual(
       routes,
-      Array.from(
-        { length: phase === 'preflight' ? (retry ? 1 : 0) : retry ? 2 : 1 },
-        () => 'PUT /ticket',
-      ),
+      Array.from({ length: expectedTicketLegs }, () => 'PUT /ticket'),
     );
-    assert.equal(fetch.mock.calls.length, phase === 'preflight' ? (retry ? 2 : 1) : retry ? 3 : 2);
+    assert.equal(fetch.mock.calls.length, 1 + expectedTicketLegs);
   } finally {
     caller.abort(new Error('fixture cleanup'));
     refuseStall?.(new Error('fixture cleanup'));
