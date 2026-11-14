@@ -99,6 +99,27 @@ test('without a usable root the device screen is the viewport, and a bad screen 
   ).toEqual({ kind: 'derived', rect: { x: 0, y: 0, width: 320, height: 240 } });
 });
 
+test('a root frame is reported only when it is the provider screen at the origin', () => {
+  const screen = { width: 440, height: 956 };
+  const root = (frame: Record<string, number>) => [{ type: 'Application', frame }];
+  expect(resolveIosAxTreeViewport(root({ x: 0, y: 0, width: 440, height: 956 }), screen)).toEqual({
+    kind: 'reported',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+  expect(resolveIosAxTreeViewport(root({ x: 0, y: 20, width: 440, height: 956 }), screen)).toEqual({
+    kind: 'derived',
+    rect: { x: 0, y: 20, width: 440, height: 956 },
+  });
+  expect(resolveIosAxTreeViewport(root({ x: 0, y: 0, width: 956, height: 440 }), screen)).toEqual({
+    kind: 'derived',
+    rect: { x: 0, y: 0, width: 956, height: 440 },
+  });
+  expect(resolveIosAxTreeViewport(root({ x: 0, y: 0, width: 440, height: 956 }))).toEqual({
+    kind: 'derived',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+});
+
 test('a screen box with one dimension is invalid, and a null role description is omitted', () => {
   expect(resolveIosAxTreeViewport([{ type: 'Application' }], { width: 440 })).toEqual({
     kind: 'missing',
