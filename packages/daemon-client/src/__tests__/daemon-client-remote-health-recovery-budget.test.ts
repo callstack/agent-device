@@ -9,9 +9,9 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { sendToDaemon } from '../index.ts';
 
-/** Replaces `http.request` with one that answers every request 503, counting them by method. */
-function answerEveryRequest503(): { probes: () => number; rpcs: () => number } {
-  let probes = 0;
+/** Replaces `http.request` with one that answers every request 503, recording each probe's time. */
+function answerEveryRequest503(): { probeTimes: number[]; rpcs: () => number } {
+  const probeTimes: number[] = [];
   let rpcs = 0;
   vi.spyOn(http, 'request').mockImplementation(((
     options: { method?: string },
@@ -21,7 +21,7 @@ function answerEveryRequest503(): { probes: () => number; rpcs: () => number } {
       write: () => {},
       destroy: () => {},
       end: () => {
-        if (options.method === 'GET') probes += 1;
+        if (options.method === 'GET') probeTimes.push(performance.now());
         else rpcs += 1;
         const res = Object.assign(new EventEmitter(), {
           statusCode: 503,
@@ -36,7 +36,7 @@ function answerEveryRequest503(): { probes: () => number; rpcs: () => number } {
     });
     return req;
   }) as unknown as typeof http.request);
-  return { probes: () => probes, rpcs: () => rpcs };
+  return { probeTimes, rpcs: () => rpcs };
 }
 
 afterEach(() => {
@@ -48,10 +48,13 @@ test('a remote daemon answering 5xx for the whole request budget is refused with
   const server = answerEveryRequest503();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   let advancing = true;
+  // Fake time moves only once real work (module loads, the mocked reply) has gone quiet, and then
+  // straight to the next timer, so no real latency lands on the faked clock.
   const advance = (async () => {
     while (advancing) {
-      await new Promise((resolve) => setImmediate(resolve));
-      await vi.advanceTimersByTimeAsync(100);
+      for (let turn = 0; turn < 20; turn += 1)
+        await new Promise((resolve) => setImmediate(resolve));
+      if (vi.getTimerCount() > 0) await vi.advanceTimersToNextTimerAsync();
     }
   })();
 
@@ -75,13 +78,12 @@ test('a remote daemon answering 5xx for the whole request budget is refused with
     assert.equal(outcome.code, 'COMMAND_FAILED');
     assert.equal(outcome.details?.reason, 'remote_daemon_unavailable');
     assert.equal(outcome.details?.dispatched, 'no');
-    // At most one probe a second fits the 90s budget, and far more than a fixed resend count. Real
-    // module loading can let fake time run ahead, so the exact count is not asserted.
-    const attempts = Number(outcome.details?.attempts);
-    assert.ok(attempts > 8 && attempts <= 90, `unexpected attempts: ${attempts}`);
+    // One probe a second fills the 90s budget.
+    assert.equal(outcome.details?.attempts, 90);
     assert.equal(outcome.details?.healthRecoveryBudgetMs, 90_000);
     assert.match(String(outcome.details?.hint ?? ''), /agent-device disconnect/);
-    assert.equal(server.probes(), attempts);
+    const gaps = server.probeTimes.slice(1).map((at, index) => at - server.probeTimes[index]!);
+    assert.deepEqual(gaps, Array<number>(89).fill(1_000), 'probes are one second apart');
     assert.equal(server.rpcs(), 0);
   } finally {
     advancing = false;
