@@ -30,6 +30,8 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 80
+    env:
+      AGENT_DEVICE_HOME: ${{ runner.temp }}/agent-device-android-smoke-home
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
@@ -91,7 +93,6 @@ jobs:
             ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
             test -n "$ANDROID_SERIAL"
             pnpm gate build
-            export AGENT_DEVICE_HOME="$RUNNER_TEMP/agent-device-android-smoke-home"
             node --experimental-strip-types scripts/install-workspace-maestro.ts
             pnpm clean:daemon
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=smoke AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator.test.ts
