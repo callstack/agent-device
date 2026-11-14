@@ -169,7 +169,7 @@
     "packages/remote/src/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
     "packages/remote/src/upload-client.ts#requestUploadPreflight": "sha256:e5f67a9a7799913f04cc9386291296a3d9fe13658776d2f4812a582c2e9befd5",
     "packages/remote/src/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
-    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:8b1b35bcac4977f79fdc126de1fe476fd1439e2b1a65b56f53b82366421e6986",
+    "packages/remote/src/upload-client.ts#tryDirectUploadWithResume": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
     "packages/remote/src/upload-client.ts#uploadDirectArtifact": "sha256:93a36a9d3dea88064569517f3cdc34f27b33df6bf5f0c0ecc9efc29b47f24b77",
     "packages/remote/src/upload-client.ts#uploadLegacyArtifact": "sha256:1546c696134b47bfaaaffcf95deb176cccdce243818b658ae0494dafb57fafb6",
     "packages/remote/src/upload-stream.ts#MAX_UPLOAD_REDIRECTS": "sha256:12ff46dfe33a1dce95bdb79c90c17a3ba4f3919e7dc4b3a1b04590fff430f79f",
@@ -181,7 +181,7 @@
     "packages/remote/src/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
     "packages/remote/src/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
     "packages/remote/src/upload-stream.ts#streamFileToHttpRequest": "sha256:c2b5e1369c8b1c9420036e23163d21e43fa2ac8b889c6a8f028cc6095055a16f",
-    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:38cf753a537423c93e48d89b1fc45eb0237180ce4f3886173660718d1fcfb79e",
+    "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:3447b4c74b58d84c2cc785572ea14374ae80df24902e666fd642a537c41af33e",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
@@ -440,8 +440,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#tryDirectUploadWithResume",
-      "digest": "sha256:8b1b35bcac4977f79fdc126de1fe476fd1439e2b1a65b56f53b82366421e6986",
-      "rationale": "#4441 ends the direct-upload sequence when a transfer phase's own budget expires, instead of re-preflighting for a fresh ticket or falling back, because a second attempt would be permission that budget already refused. Preflight, ticket PUT and finalize requests are unchanged in route, method, headers and body, so a protocol-2 daemon parses everything it parsed before; it just receives no further legs once the caller's aggregate has expired. Its signal is now required, because the preparation aggregate is always the one passed down; no request changes."
+      "digest": "sha256:cc5d33f38e047cf3be4bd412b64958c7495eb9a45e58eefadaa00eefa0cb6b53",
+      "rationale": "#4441 ends the direct-upload sequence when a transfer phase's own budget expires, instead of re-preflighting for a fresh ticket or falling back, because a second attempt would be permission that budget already refused. Preflight, ticket PUT and finalize requests are unchanged in route, method, headers and body, so a protocol-2 daemon parses everything it parsed before; it just receives no further legs once the caller's aggregate has expired. Its signal is now required, because the preparation aggregate is always the one passed down, and it is read directly; no request changes."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadLegacyArtifact",
@@ -495,8 +495,8 @@
     },
     {
       "declaration": "packages/remote/src/upload-stream.ts#streamFileToHttpRequestAttempt",
-      "digest": "sha256:38cf753a537423c93e48d89b1fc45eb0237180ce4f3886173660718d1fcfb79e",
-      "rationale": "#4441 keeps each attempt under its sequential phase watchdog and corrects its transport lifecycle: the connect ceiling now ends at actual socket or TLS-handshake establishment, body progress counts only transport writes, and an early response reads the accepted answer to its end, then destroys and joins the owned file/request pipeline and retires this attempt's phase watchdog before resolving or starting the redirect/resume attempt, so a completed hop's timers never reach the next hop. Bytes on the wire are unchanged: same route, method, headers, body framing, resume-offset handling and redirect limit. Only this client's own sequencing and deadlines moved, so a protocol-2 peer parses exactly what it parsed before. Request-body progress is now each non-empty request write that completes without an error, which Node reports once the bytes reach the local kernel, instead of drain, which fires only after a write returned false. The write wrapper passes every argument and the backpressure result through, so the bytes and framing on the wire do not change."
+      "digest": "sha256:3447b4c74b58d84c2cc785572ea14374ae80df24902e666fd642a537c41af33e",
+      "rationale": "#4441 keeps each attempt under its sequential phase watchdog and corrects its transport lifecycle: the connect ceiling now ends at actual socket or TLS-handshake establishment, body progress counts only transport writes, and an early response reads the accepted answer to its end, then destroys and joins the owned file/request pipeline and retires this attempt's phase watchdog before resolving or starting the redirect/resume attempt, so a completed hop's timers never reach the next hop. Bytes on the wire are unchanged: same route, method, headers, body framing, resume-offset handling and redirect limit. Only this client's own sequencing and deadlines moved, so a protocol-2 peer parses exactly what it parsed before. Request-body progress is now each non-empty request write that completes without an error, which Node reports once the bytes reach the local kernel, instead of drain, which fires only after a write returned false. The write wrapper passes every argument and the backpressure result through, so the bytes and framing on the wire do not change. That completed-write observer is host-kit's transport owner, which also stops reporting after the response starts, the signal aborts or the request is destroyed; no request changes."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
