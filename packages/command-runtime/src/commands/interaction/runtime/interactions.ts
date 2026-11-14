@@ -4,6 +4,7 @@ import type {
   PreresolvedInteractionTarget,
   PressCommandResult,
   RepeatedInput,
+  ResolvedInteractionTarget,
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
@@ -12,7 +13,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
-import { toBackendContext } from '../../runtime-common.ts';
+import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
 import {
   applyPostActionObservation,
@@ -41,6 +42,14 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
+     * order, bare ref bodies; `target` repeats member 0 for the response's
+     * ref identity. Absent for a single-ref press. One ADR 0014 logical
+     * command: every member resolves and admits against the active frame
+     * before the first press; see tapRefPlanCommand.
+     */
+    refs?: readonly string[];
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -139,14 +148,17 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
+  if (options.refs?.length) {
+    return await tapRefPlanCommand(runtime, options, action);
+  }
   const observation = planPostActionObservation(options);
   const nativeRefTap = observation.needsPreActionBaseline
     ? null
     : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
-  // One request object for the resolution and for the looks admission may spend, so a second look is
-  // the same question asked again rather than a differently-configured one.
+  // One request object for the resolution and for the re-resolutions #3471's gate may spend, so the
+  // second look is the same question asked again rather than a differently-configured one.
   const resolutionRequest: ResolveInteractionTargetParams = {
     action,
     requireInteractive: true,
@@ -198,6 +210,142 @@ function requireResolvedPoint(result: { point?: Point }): Point {
     throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
   }
   return result.point;
+}
+
+/**
+ * Resolves and admits every plan member against the active frame, before key 1. Member 0's
+ * resolution captures the plan's pre-command evidence baseline. Every refusal here is
+ * pre-dispatch: nothing has crossed to the device, so the verdict stays `no`.
+ */
+async function resolveRefPlanMembers(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  action: 'click' | 'press',
+  plannedRefs: readonly string[],
+  captureEvidenceBaseline: boolean,
+): Promise<Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }>> {
+  // One request object for the resolution and for the looks admission may spend, so a
+  // second look is the same question asked again rather than a differently-configured one.
+  const resolutionRequest: ResolveInteractionTargetParams = {
+    action,
+    requireInteractive: true,
+    pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
+  };
+  const members: Array<{ ref: string; atRest: ResolvedInteractionTarget; point: Point }> = [];
+  for (const [index, ref] of plannedRefs.entries()) {
+    const member: PressCommandOptions = { ...options, target: { kind: 'ref', ref } };
+    try {
+      const resolved = await resolveInteractionTarget(runtime, member, {
+        ...resolutionRequest,
+        // One pre-command baseline serves the plan's evidence: member 0's resolution
+        // captures it, and the final result carries it forward.
+        captureEvidenceBaseline: captureEvidenceBaseline && index === 0,
+      });
+      const atRest = await admitResolvedTarget(runtime, member, resolutionRequest, resolved);
+      members.push({ ref, atRest, point: requireResolvedPoint(atRest) });
+    } catch (error) {
+      throw attachRefPlanContext(error, plannedRefs, index);
+    }
+  }
+  return members;
+}
+
+/**
+ * A multi-ref plan is one ADR 0014 logical command that resolves and admits every member
+ * once against the active frame, then dispatches the admitted points in order — `press
+ * --count` with N points. Key 1's dispatch expires the ref frame, so later keys tap where
+ * the snapshot showed them: no member re-resolves, and the motion screen judges the whole
+ * plan once, before key 1. Every resolution and admission refusal is pre-dispatch
+ * (`dispatched: 'no'`); after key 1, the request dispatch ledger owns the dispatched-steps
+ * disclosure and these details name the key that refused and the keys that did not run.
+ */
+async function tapRefPlanCommand(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  action: 'click' | 'press',
+): Promise<PressCommandResult> {
+  if (options.target.kind !== 'ref') {
+    throw new AppError('INVALID_ARGS', 'A multi-ref press plan requires ref targets.');
+  }
+  if (!runtime.backend.tap) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
+  }
+  // The parser emits the full plan in `refs` with `target` kept as member 0's
+  // response identity, so the plan iterates `refs` alone.
+  const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
+  const observation = planPostActionObservation(options);
+  const members = await resolveRefPlanMembers(
+    runtime,
+    options,
+    action,
+    plannedRefs,
+    observation.needsPreActionBaseline,
+  );
+  let lastBackendResult;
+  for (const [index, member] of members.entries()) {
+    if (index > 0 && options.intervalMs !== undefined && options.intervalMs > 0) {
+      await sleep(runtime, options.intervalMs, options.signal);
+    }
+    const pointObservation = pointObservationOf(member.atRest);
+    try {
+      lastBackendResult = await runtime.backend.tap(
+        toBackendContext(runtime, options),
+        member.point,
+        {
+          button: options.button,
+          count: options.count,
+          intervalMs: options.intervalMs,
+          holdMs: options.holdMs,
+          jitterPx: options.jitterPx,
+          doubleTap: options.doubleTap,
+          ...(pointObservation ? { pointObservation } : {}),
+        },
+      );
+    } catch (error) {
+      // Resolution is complete before the backend call. Preserve it out of
+      // band so a daemon-level failure corroboration can still record the same
+      // target identity if the backend reports an ambiguous tap outcome.
+      attachResolvedInteractionTarget(error, member.atRest);
+      throw attachRefPlanContext(error, plannedRefs, index);
+    }
+  }
+  // The response keeps member 0's identity — the first key's ref, point, and
+  // its captured evidence baseline — while every key's landing stays in
+  // sequence.points.
+  const finalTarget: ResolvedInteractionTarget = members[0]!.atRest;
+  const formattedBackendResult = toBackendResult(lastBackendResult);
+  const result = await applyPostActionObservation(
+    runtime,
+    options,
+    finalTarget,
+    {
+      ...finalTarget,
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    },
+    observation,
+  );
+  return {
+    ...result,
+    sequence: {
+      pressed: members.length,
+      refs: plannedRefs,
+      points: members.map((member) => member.point),
+    },
+  };
+}
+
+function attachRefPlanContext(
+  error: unknown,
+  refs: readonly string[],
+  failedIndex: number,
+): unknown {
+  if (!(error instanceof AppError)) return error;
+  error.details = {
+    ...error.details,
+    refPlanKey: refs[failedIndex],
+    refPlanPending: refs.slice(failedIndex + 1),
+  };
+  return error;
 }
 
 async function maybeTapRefTarget(
