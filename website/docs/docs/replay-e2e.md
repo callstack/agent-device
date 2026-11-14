@@ -40,6 +40,20 @@ and the same original-input guidance.
 
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 
+## Install replay support
+
+For 0.22, native `.ad` replay and all `test` suites require a separately installed first-party plugin on the daemon host:
+
+The 0.22 `@agent-device/replay` and `@agent-device/maestro` packages are private and not yet published. The npm commands below apply after publication. Native replay and suites cannot be installed from npm until then.
+
+```bash
+agent-device plugins add @agent-device/replay
+```
+
+Finish your sessions and restart that daemon, then retry your original command with all its arguments. Existing scripts, variables, resume and repair syntax stay the same. A local installation does not install the plugin on a remote daemon. Ordinary `open`/`close --save-script` recording stays available in core.
+
+For Maestro YAML, install `@agent-device/maestro` on the client and daemon host as well. `replay export` uses the client-side Maestro plugin. See [plugin installation and recovery](./plugins.md).
+
 ## How it works
 
 You work in two passes:
