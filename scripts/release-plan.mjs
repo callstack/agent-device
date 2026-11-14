@@ -53,7 +53,7 @@ function planNightly(run, sourceBranch) {
     throw new Error(`0.22 must carry a 0.22.X-dev version, got ${run.rootVersion}.`);
   }
   const version = nightlyVersion(run.rootVersion, run.today, run.runNumber, sourceBranch);
-  assertAheadOfStable(run, nightlyBase(version));
+  if (sourceBranch === 'main') assertAheadOfStable(run, nightlyBase(version));
   return {
     mode: 'nightly',
     version,

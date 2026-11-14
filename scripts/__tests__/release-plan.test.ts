@@ -218,6 +218,28 @@ test('the 0.22 source publishes an isolated nightly channel from its own version
   );
 });
 
+for (const latestStable of ['0.22.0', '0.22.1', '0.23.0']) {
+  test(`0.22 nightlies remain available after stable ${latestStable} ships`, () => {
+    const source = run({
+      sourceBranch: '0.22',
+      rootVersion: '0.22.0-dev',
+      latestStable,
+    });
+    for (const event of ['schedule', 'workflow_dispatch']) {
+      assert.deepEqual(planRelease({ ...source, event }), {
+        mode: 'nightly',
+        version: '0.22.0-nightly-0-22.20261011.42',
+        distTag: 'nightly-0.22',
+        commit: MAIN,
+      });
+    }
+    assert.throws(
+      () => planRelease({ ...source, sourceBranch: 'main' }),
+      /not ahead of the published/,
+    );
+  });
+}
+
 test('0.22 deduplication ignores main nightlies and skips only its own published source', () => {
   const source = run({ sourceBranch: '0.22', sha: NIGHTLY_COMMIT, rootVersion: '0.22.0-dev' });
   assert.equal(planRelease(source).mode, 'nightly');
