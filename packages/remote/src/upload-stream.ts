@@ -256,6 +256,7 @@ async function streamFileToHttpRequestAttempt(options: {
       // redirect/resume starts — old bytes may never overlap the next hop.
       const body = await readUploadResponseBody(res, () => watchdog.touchBody());
       await endOutgoingWork();
+      phases.dispose();
       watchdog.dispose();
 
       const statusCode = res.statusCode ?? 500;
