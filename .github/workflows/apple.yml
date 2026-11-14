@@ -85,7 +85,7 @@ jobs:
         with:
           gate: build
       - if: steps.build.outcome == 'success'
-        run: node --experimental-strip-types scripts/install-workspace-maestro.ts
+        run: node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run
