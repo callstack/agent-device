@@ -630,8 +630,10 @@ function deviceDescriptionFromWebDriverCapabilities(
 }
 
 function readCapability(capabilities: Record<string, unknown>, key: string): string | undefined {
-  const value = capabilities[key] ?? capabilities[`appium:${key}`];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  for (const value of [capabilities[key], capabilities[`appium:${key}`]]) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
 }
 
 /**

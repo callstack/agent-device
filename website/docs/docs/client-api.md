@@ -64,7 +64,7 @@ This example opens an app, takes a snapshot, interacts, handles typed errors, an
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
 
-`client.apps.open()` answers with the attached device under `device`, which carries `kind` (`simulator`, `emulator`, or `device`) and the `model` and `osVersion` the host or provider reported, the same fields `client.sessions.list()` reports per session. A target that reports no OS leaves `osVersion` unset; nothing infers one.
+When the daemon can name the attached host device, `client.apps.open()` answers with it under `device`. Its `kind` (`simulator`, `emulator`, or `device`), `model` and `osVersion` are each optional and present only when the host or provider reported them, the same fields `client.sessions.list()` reports per session. A target that reports no OS leaves `osVersion` unset; nothing infers one.
 
 For direct app launches on local or Limrun iOS simulators, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
 stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens, other provider-owned simulators, or non-simulator targets.
