@@ -103,7 +103,7 @@ function androidBootFailureReason(error: unknown): ReturnType<typeof classifyBoo
   ) {
     return 'ADB_TRANSPORT_UNAVAILABLE';
   }
-  if (isCommandTimeoutError(appError) || appError.details?.adbFailure === 'timeout') {
+  if (appError.details?.adbFailure === 'timeout' || isCommandTimeoutError(appError)) {
     return 'ANDROID_BOOT_TIMEOUT';
   }
   return 'BOOT_COMMAND_FAILED';
