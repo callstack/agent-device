@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 
 // Every claim the stopper makes is about what the host answers, so one double answers both syscalls it
@@ -16,6 +17,7 @@ import {
   type ProcessStopTarget,
 } from './host-process.ts';
 
+const readFile = fs.readFileSync;
 const PID = 4242;
 const BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 500 };
 type Signal = 'SIGTERM' | 'SIGINT' | 'SIGKILL';
@@ -256,6 +258,11 @@ const STOP_CASES: HostCase[] = [
 ];
 
 function driveHost(model: HostCase): { signals: Signal[] } {
+  vi.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+    // This host model supplies process identity through its ps answers.
+    if (String(args[0]) === '/proc/sys/kernel/random/boot_id') throw new Error('ENOENT');
+    return readFile(...args);
+  });
   const signals: Signal[] = [];
   let psRefused = false;
   let ended = false;
