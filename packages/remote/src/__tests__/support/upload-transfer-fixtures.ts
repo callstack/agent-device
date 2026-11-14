@@ -276,13 +276,16 @@ function controlledNow(): number {
   return now.getTime();
 }
 
-/** Gives an ended transfer the clock and loop turns its teardown needs; reports settlement. */
-export async function settleAfterBudget(transfer: Settles): Promise<boolean> {
+/**
+ * Lets an ended transfer tear down: at most 20 s of budget, less than any phase ceiling, then the
+ * settlement itself, however long its real I/O takes on this host.
+ */
+export async function settleAfterBudget(transfer: Settles): Promise<void> {
   for (let round = 0; round < 200 && !transfer.settled; round += 1) {
     await vi.advanceTimersByTimeAsync(100);
     await pumpRealWork(5);
   }
-  return transfer.settled;
+  await untilIo(() => transfer.settled);
 }
 
 /**

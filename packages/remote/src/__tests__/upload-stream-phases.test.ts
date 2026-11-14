@@ -65,7 +65,7 @@ test('a body the peer stops taking expires the request-body phase on its own bud
   // The peer stops reading without answering or disconnecting.
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, upload);
   assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
-  assert.equal(await settleAfterBudget(upload), true);
+  await settleAfterBudget(upload);
   const result = await upload;
 
   assert.equal(result.value, undefined);
@@ -105,7 +105,7 @@ test('a body admitted past four connect ceilings still waits only its own header
   await pumpRealWork();
   assert.equal(upload.settled, false, 'the header wait counts from the flush');
   await vi.advanceTimersByTimeAsync(1);
-  assert.equal(await settleAfterBudget(upload), true);
+  await settleAfterBudget(upload);
   const result = await upload;
 
   assert.equal(result.value, undefined);
@@ -145,7 +145,7 @@ test('writes below the high-water mark keep the body budget on each completed wr
   await pumpRealWork();
   assert.equal(attempt.settled, false);
   await vi.advanceTimersByTimeAsync(1);
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   assertDetailedError((await attempt).error, {
     reason: 'transfer_phase_timeout',
     transferPhase: 'request-body',

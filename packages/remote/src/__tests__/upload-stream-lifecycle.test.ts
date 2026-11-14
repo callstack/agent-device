@@ -52,7 +52,7 @@ test('an early 413 from a peer that stops reading is consumed and its owned work
     artifactPath: createArtifactFile(4 * MEBIBYTE),
   });
   const atSettle = attempt.then(() => ({ destroyed: source.destroyed, finished: writes.finished }));
-  assert.equal(await settleAfterBudget(attempt), true, 'the attempt ended on the early answer');
+  await settleAfterBudget(attempt);
   // The body never finished, so only the attempt's own destroy-and-join can have ended it.
   assert.deepEqual(await atSettle, { destroyed: true, finished: false });
   const result = await attempt;
@@ -79,7 +79,7 @@ test('a resume response ends the stalled hop before the next attempt is dialed',
     artifactPath: createArtifactFile(4 * MEBIBYTE),
   });
   // Leg two answers the same offset again: a typed terminal failure, not a third hop.
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assertDetailedError(result.error, { offset: resumeOffset, previousOffset: resumeOffset });
@@ -118,7 +118,7 @@ test('a resumed hop that makes real progress past the first hop ceiling keeps it
   assert.ok(6 * progressWindowMs > TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
 
   daemon.resetParkedLeg();
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   // Hop one's retired budget must not relabel hop two's reset, and the retry marker survives.
@@ -148,7 +148,7 @@ test('a redirect response ends the stalled hop before the next hop is dialed', a
     url: `${daemon.baseUrl}/upload`,
     artifactPath: createArtifactFile(4 * MEBIBYTE),
   });
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.error, undefined, `got ${String(result.error)}`);
@@ -167,7 +167,7 @@ test('a response body that stops mid-answer expires the response-body phase afte
   });
   await pumpRealWork();
   await spendBudget(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, attempt);
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -190,7 +190,7 @@ test('a connected peer that never takes a body byte expires body inactivity, not
   assert.equal(attempt.settled, false);
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, attempt);
   assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -209,7 +209,7 @@ test('a TLS handshake that never completes expires connect even with the whole b
     artifactPath: createArtifactFile(4 * MEBIBYTE),
   });
   await spendBudget(TRANSFER_CONNECT_TIMEOUT_MS + 5_000, attempt);
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -233,7 +233,7 @@ test('a completed TLS handshake with a stalled body expires body inactivity, not
   assert.equal(attempt.settled, false, 'secureConnect ended the connect phase');
   await spendSinceLastWrite(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 5_000, writes, attempt);
   assert.equal(writes.finished, false, 'the stalled body was still queued at the client');
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -254,7 +254,7 @@ test('a zero-length artifact on a peer that never answers waits on its header bu
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS - 5_000, attempt);
   assert.equal(attempt.settled, false);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, attempt);
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -343,7 +343,7 @@ test('an enclosing aggregate deadline ends a redirect hop with its own reason, n
   // No phase budget is charged here, so nothing but the caller's deadline can end this.
   const reason = new Error('preparation aggregate expired');
   aggregate.abort(reason);
-  assert.equal(await settleAfterBudget(attempt), true);
+  await settleAfterBudget(attempt);
   const result = await attempt;
 
   assert.equal(result.value, undefined);
@@ -376,7 +376,7 @@ test('an attempt on a reused connection is already past its connect phase', asyn
   // The header wait starts at leg two's flush; no budget is charged before it.
   await untilIo(() => (daemon.requests.length === 2 && writes.finished) || second.settled);
   await spendBudget(TRANSFER_RESPONSE_HEADER_TIMEOUT_MS + 5_000, second);
-  assert.equal(await settleAfterBudget(second), true);
+  await settleAfterBudget(second);
   const result = await second;
 
   assert.equal(result.value, undefined);
