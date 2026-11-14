@@ -72,6 +72,13 @@ export function readRequiredDeviceKind(record: Record<string, unknown>, key: str
   return readRequired(record, key, parseDeviceKind, `Daemon response has invalid "${key}".`);
 }
 
+export function readOptionalDeviceKind(
+  record: Record<string, unknown>,
+  key: string,
+): DeviceKind | undefined {
+  return readOptional(record, key, parseDeviceKind);
+}
+
 export function readDeviceTarget(record: Record<string, unknown>, key: string): DeviceTarget {
   return readOptional(record, key, parseDeviceTarget) ?? 'mobile';
 }

@@ -332,6 +332,8 @@ const HOST_OPEN_RESULT_KEYS = [
   'device',
   'id',
   'kind',
+  'model',
+  'osVersion',
   'serial',
   'device_udid',
   'ios_simulator_device_set',
