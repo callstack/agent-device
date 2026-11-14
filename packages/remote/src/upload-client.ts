@@ -8,16 +8,16 @@ import {
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import {
   isRetryableUploadStreamError,
-  isTransferPhaseTimeoutError,
   streamFileToHttpRequest,
   withUploadPreparationDeadline,
 } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
+import { isTransferPhaseTimeoutError } from '@agent-device/host-kit/transport';
 
 /**
  * Ceiling for the two small control-plane calls that bracket an upload (`preflight`, `finalize`).
  * Their payload is a few hundred bytes of JSON, so one window covers reaching the daemon and getting
- * the answer; the artifact bytes themselves are budgeted per phase in `upload-stream.ts`.
+ * the answer; the artifact bytes themselves are budgeted per phase in `@agent-device/host-kit/transport`.
  */
 const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
 

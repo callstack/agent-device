@@ -1,6 +1,6 @@
 // Phase budgets applied to a real artifact upload over loopback (#4441).
 //
-// The budgets in `upload-stream.ts` are minutes long, so every case here drives a controlled
+// The budgets in `@agent-device/host-kit/transport` are minutes long, so every case here drives a controlled
 // clock and parks the request body a quota at a time. That combination is the point: a transfer that
 // keeps moving must survive budget after budget, and one that stops moving must be ended by the ONE
 // budget that ran out. A mocked transport could show neither, because the backpressure that makes
@@ -11,7 +11,7 @@ import {
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
   TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
-} from '../upload-stream.ts';
+} from '@agent-device/host-kit/transport';
 import {
   LEGACY_UPLOAD_REQUEST,
   PREFLIGHT_REQUEST,
