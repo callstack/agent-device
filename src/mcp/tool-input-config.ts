@@ -2,6 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
+  getCommandSchema,
   isFlagSupportedForCommand,
   mergeDefinedFlags,
   resolveBindingSettings,
@@ -27,8 +28,12 @@ export function resolveMcpConfigDefaults(
   });
   const defaults = configDefaults.flags;
   const devicePin = configDefaults.devicePin;
+  // The command's explicit-only flags mean what the CLI parser strips mean there: a config or env
+  // default never stands in for the caller naming the key, so the tool input must carry it.
+  const explicitOnly = getCommandSchema(name)?.explicitOnlyFlags;
   const applicableDefaults: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(defaults)) {
+    if (explicitOnly?.includes(key as FlagKey)) continue;
     if (
       Object.hasOwn(supportedProperties, key) &&
       isFlagSupportedForCommand(key as FlagKey, name)

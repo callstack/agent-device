@@ -1,8 +1,10 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
   RETIRED_SCREENSHOT_MAX_SIZE,
+  SCREENSHOT_BURST_LIMITS,
   SCREENSHOT_CAPTURE_BACKENDS,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_SCALE_LIMITS,
@@ -10,6 +12,7 @@ import {
   screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
   validateNoRetiredScreenshotMaxSize,
+  validateScreenshotBurst,
   validateScreenshotScale,
 } from '@agent-device/contracts/capture';
 import {
@@ -55,6 +58,14 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
       SCREENSHOT_CAPTURE_BACKENDS,
       'Capture through the XCTest runner instead of the platform default, which leaves out the simulator-drawn Dynamic Island. Local Apple targets only; refused on provider sessions and on a macOS surface the helper captures, and with pixelDensity, screenMask or normalizeStatusBar.',
     ),
+    count: integerField(
+      'Capture a burst of this many frames in one request; the command writes a <path>-0001 style sequence and reports every frame. Cannot be combined with cropOn or overlayRefs.',
+      { min: SCREENSHOT_BURST_LIMITS.minCount, max: SCREENSHOT_BURST_LIMITS.maxCount },
+    ),
+    intervalMs: integerField(
+      `Wait this many milliseconds between burst frames; requires count. Defaults to ${SCREENSHOT_BURST_LIMITS.defaultIntervalMs}.`,
+      { min: SCREENSHOT_BURST_LIMITS.minIntervalMs, max: SCREENSHOT_BURST_LIMITS.maxIntervalMs },
+    ),
     surface: enumField(SESSION_SURFACES),
   },
 );
@@ -62,7 +73,17 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
 const screenshotCliSchema = {
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
-} as const;
+  // A burst arms a multi-file write, so only the invocation that names the flags may start one.
+  // The count and wait serve press and swipe series too, and a repository `count` set for those
+  // must not turn a single capture into a burst, nor refuse --crop-on beside it.
+  explicitOnlyFlags: ['count', 'intervalMs'],
+  flagDescriptionOverrides: {
+    count:
+      'Burst: capture this many frames of one animation in one request into a numbered file sequence (2-100). The CLI reads it only from this invocation; a config count for press and swipe series never arms a burst',
+    intervalMs:
+      'Burst: wait this many milliseconds between frames (100-10000, default 100). Requires --count, and like --count it is read only from this invocation',
+  },
+} as const satisfies CommandSchemaOverride;
 
 export const screenshotCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -73,6 +94,7 @@ export const screenshotCliReader: CliReader = (positionals, flags) => ({
 export const screenshotDaemonWriter: DaemonWriter = (input) => {
   validateNoRetiredScreenshotMaxSize('screenshot', input);
   validateScreenshotScale(input as CaptureScreenshotOptions);
+  validateScreenshotBurst(input as CaptureScreenshotOptions);
   return request(PUBLIC_COMMANDS.screenshot, optionalString(input.path), {
     ...input,
     ...screenshotFlagsFromPublicOptions(input as CaptureScreenshotOptions),
@@ -85,7 +107,7 @@ export const screenshotCommandFacet = defineCommandFacet({
   text: {
     summary: 'Capture a screenshot',
     cliDetail:
-      "Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. Use --screen-mask black to fill the iOS simulator screen outline, including rounded corners, with black for this capture. It requires simctl: physical devices, tvOS and visionOS simulators, other platforms, provider captures and XCTest runner captures are refused. A masked capture fails if simctl fails instead of falling back to an unmasked runner capture. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators, Android emulators, and CoreDevice physical iPhones), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator or Android chrome. Physical iPhone crop verification covers portrait CoreDevice/devicectl captures only. XCTest, runner fallback, and physical iPad crops are refused; landscape iPhone crop is unverified. Android captures immediately by default; --normalize-status-bar also waits for transient UI to fade, and --no-stabilize keeps capture immediate. With the native macOS backend, the front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, as is the small indicator window macOS adds in front of a window that a screen-sharing stream captures, and a sheet is captured as its own window. On macOS, any --surface other than app (desktop, menubar, frontmost-app) always captures the main display and refuses an explicit --fullscreen. On single-display iOS simulators and Android devices, the result reports displayRotation, the rotation the display rendered the capture in, when the device returns a reading in time; otherwise the field is absent. On iOS simulators a screenshot waits for that simulator's status bar to be free, and a request its caller cancelled while it waits reports the cancellation instead of capturing.",
+      "Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. Use --screen-mask black to fill the iOS simulator screen outline, including rounded corners, with black for this capture. It requires simctl: physical devices, tvOS and visionOS simulators, other platforms, provider captures and XCTest runner captures are refused. A masked capture fails if simctl fails instead of falling back to an unmasked runner capture. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators, Android emulators, and CoreDevice physical iPhones), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator or Android chrome. Physical iPhone crop verification covers portrait CoreDevice/devicectl captures only. XCTest, runner fallback, and physical iPad crops are refused; landscape iPhone crop is unverified. Android captures immediately by default; --normalize-status-bar also waits for transient UI to fade, and --no-stabilize keeps capture immediate. Use --count with --interval-ms to capture an animation burst in one request. The daemon captures frames sequentially and writes each frame as a numbered file beside the --out path, for example page-0001.png, and the result reports every frame path and capture time. A burst refuses --crop-on and --overlay-refs, because a crop binds one snapshot and overlay refs annotate one frame. Keep --count times --interval-ms plus 500 ms per frame within 60 seconds, because the frames must finish inside the request timeout. When --count is present without --interval-ms, the daemon waits 100ms between frames. A burst starts only when this invocation names --count; a count set for press and swipe in a config file never arms one, and a remote daemon refuses --count with REMOTE_SCREENSHOT_BURST_DENIED, so run a burst against a local daemon. With the native macOS backend, the front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, as is the small indicator window macOS adds in front of a window that a screen-sharing stream captures, and a sheet is captured as its own window. On macOS, any --surface other than app (desktop, menubar, frontmost-app) always captures the main display and refuses an explicit --fullscreen. On single-display iOS simulators and Android devices, the result reports displayRotation, the rotation the display rendered the capture in, when the device returns a reading in time; otherwise the field is absent. On iOS simulators a screenshot waits for that simulator's status bar to be free, and a request its caller cancelled while it waits reports the cancellation instead of capturing.",
   },
   metadata: screenshotCommandMetadata,
   run: (client, input) => client.capture.screenshot(input),

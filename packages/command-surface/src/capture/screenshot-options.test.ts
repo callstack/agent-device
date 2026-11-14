@@ -6,10 +6,12 @@ import {
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   readScreenshotScriptFlag,
+  screenshotBurstFramePath,
   screenshotFlagsFromOptions,
   screenshotFlagsFromPublicOptions,
   screenshotOptionsFromFlags,
   validateNoRetiredScreenshotMaxSize,
+  validateScreenshotBurst,
   validateScreenshotScale,
   type ScreenshotRequestFlags,
 } from '@agent-device/contracts/capture';
@@ -173,6 +175,8 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotNoStabilize',
     'screenshotNormalizeStatusBar',
     'screenshotCaptureBackend',
+    'count',
+    'intervalMs',
   ]);
 });
 
@@ -199,4 +203,99 @@ test('explicit screenshot stabilization survives SDK projection and script recor
     nextIndex: 0,
   });
   assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
+});
+
+test('screenshot burst flags ride both projections', () => {
+  assert.deepEqual(screenshotOptionsFromFlags({ count: 5, intervalMs: 250 }), {
+    count: 5,
+    intervalMs: 250,
+  });
+  assert.deepEqual(screenshotFlagsFromOptions({ count: 5, intervalMs: 250 }), {
+    count: 5,
+    intervalMs: 250,
+  });
+  assert.deepEqual(screenshotFlagsFromPublicOptions({ count: 3 }), { count: 3 });
+});
+
+test('screenshot burst admission bounds the count, the interval, and their pair', () => {
+  assert.doesNotThrow(() => validateScreenshotBurst({ count: 2 }));
+  assert.doesNotThrow(() => validateScreenshotBurst({ count: 5, intervalMs: 250 }));
+  assert.doesNotThrow(() => validateScreenshotBurst({}));
+  assert.throws(() => validateScreenshotBurst({ intervalMs: 250 }), {
+    message: /--interval-ms requires --count/,
+  });
+  assert.throws(() => validateScreenshotBurst({ count: 1 }), {
+    message: /--count requires an integer from 2 to /,
+  });
+  assert.throws(() => validateScreenshotBurst({ count: 101 }), { code: 'INVALID_ARGS' });
+  assert.throws(() => validateScreenshotBurst({ count: 2.5 }), { code: 'INVALID_ARGS' });
+  assert.throws(() => validateScreenshotBurst({ count: 2, intervalMs: 50 }), {
+    message: /--interval-ms requires an integer from 100 to /,
+  });
+  assert.throws(() => validateScreenshotBurst({ count: 2, intervalMs: 20_000 }), {
+    code: 'INVALID_ARGS',
+  });
+});
+
+test('screenshot burst admission refuses crop and overlay combinations and request-budget overruns', () => {
+  assert.throws(() => validateScreenshotBurst({ count: 3, cropOn: 'role=button label=Save' }), {
+    message: /--count cannot be combined with --crop-on or --overlay-refs/,
+  });
+  assert.throws(() => validateScreenshotBurst({ count: 3, overlayRefs: true }), {
+    message: /--count cannot be combined with --crop-on or --overlay-refs/,
+  });
+  assert.doesNotThrow(() => validateScreenshotBurst({ count: 3, cropOn: undefined }));
+  // The run budget covers the waits plus one capture allowance per frame, so the admitted burst
+  // stays inside the request envelope even when every frame costs its full allowance.
+  assert.throws(
+    () => validateScreenshotBurst({ count: 100, intervalMs: 200 }),
+    /keep the burst within 60000 ms/,
+  );
+  assert.throws(
+    () => validateScreenshotBurst({ count: 100, intervalMs: 600 }),
+    /keep the burst within 60000 ms/,
+  );
+  assert.doesNotThrow(() => validateScreenshotBurst({ count: 100 }));
+  assert.throws(() => validateScreenshotBurst({ count: 150 }), {
+    message: /--count requires an integer from 2 to 100/,
+  });
+});
+
+test('screenshot burst frame paths number the user sequence in place', () => {
+  assert.equal(screenshotBurstFramePath('/tmp/page.png', 1), '/tmp/page-0001.png');
+  assert.equal(screenshotBurstFramePath('/tmp/page.png', 12), '/tmp/page-0012.png');
+  assert.equal(screenshotBurstFramePath('page.jpeg', 3), 'page-0003.jpeg');
+  assert.equal(screenshotBurstFramePath('/tmp/page', 2), '/tmp/page-0002');
+  assert.equal(screenshotBurstFramePath('/tmp/my.photos/page', 4), '/tmp/my.photos/page-0004');
+  assert.equal(screenshotBurstFramePath('/tmp/.hidden', 5), '/tmp/.hidden-0005');
+});
+
+test('screenshot burst flags round-trip through recorded scripts', () => {
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, { count: 5, intervalMs: 250 });
+  assert.deepEqual(parts, ['--count', '5', '--interval-ms', '250']);
+  const recorded: Partial<ScreenshotRequestFlags> = {};
+  assert.deepEqual(readScreenshotScriptFlag({ args: parts, index: 0, flags: recorded }), {
+    handled: true,
+    nextIndex: 1,
+  });
+  assert.deepEqual(readScreenshotScriptFlag({ args: parts, index: 2, flags: recorded }), {
+    handled: true,
+    nextIndex: 3,
+  });
+  assert.deepEqual(screenshotOptionsFromFlags(recorded), { count: 5, intervalMs: 250 });
+  assert.throws(() => readScreenshotScriptFlag({ args: ['--count', '1'], index: 0, flags: {} }), {
+    code: 'INVALID_ARGS',
+  });
+  assert.throws(
+    () => readScreenshotScriptFlag({ args: ['--interval-ms', '50'], index: 0, flags: {} }),
+    { code: 'INVALID_ARGS' },
+  );
+});
+
+test('the scripted pixel-density flag keeps its released error text', () => {
+  assert.throws(
+    () => readScreenshotScriptFlag({ args: ['--pixel-density', '0'], index: 0, flags: {} }),
+    { code: 'INVALID_ARGS', message: 'screenshot --pixel-density requires a positive integer' },
+  );
 });
