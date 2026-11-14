@@ -6,48 +6,40 @@ import {
 } from '@agent-device/command-surface';
 
 /**
- * The MCP surface's own tool arguments: transport and response-shaping controls
- * it adds on top of a command's input, consumes itself, and never forwards to
- * the command route. One row per key, so the advertised schema, the keys
- * stripped before dispatch, and the audience boundary read one declaration.
+ * The MCP surface's own controls: the state directory and response shaping it
+ * adds on top of a command's input, consumes itself, and never forwards to the
+ * command route. One row per key, so the keys stripped before dispatch and the
+ * audience boundary read one declaration.
  *
- * Not `tool-input-config.ts`, which is the other half of the same call: that one
- * merges the operator's env and config-file defaults into a call's input.
+ * Every row is operator-owned: the operator sets it for the whole server with
+ * the CLI flag's `AGENT_DEVICE_*` environment variable or config key, which
+ * `tool-input-config.ts` merges into each call. No tool schema advertises
+ * these keys, so they cost no schema bytes on any tool, and a call that passes
+ * one is refused with the operator path.
  */
 type McpToolConfigFieldSpec = {
+  /** The schema env/config defaults resolve against; never advertised. */
   schema: JsonSchema;
-  /** Who may write the key. Absent means the model — see `commands/input-audience.ts`. */
-  audience?: InputAudience;
+  audience: InputAudience;
 };
 
 const MCP_TOOL_CONFIG_FIELDS = {
   stateDir: {
-    schema: { type: 'string', description: 'Agent-device state directory.' },
+    schema: { type: 'string' },
     // Selects which daemon state directory (and therefore which daemon and
     // session namespace) a call resolves against: operator infrastructure, not
     // per-call work.
     audience: operatorAudience({ operatorConfig: true }),
   },
-  mcpOutputFormat: {
-    schema: {
-      type: 'string',
-      enum: ['optimized', 'json'],
-      description: 'Result text: compact optimized (default) or the full result as JSON (larger).',
-    },
-  },
-  includeCost: {
-    schema: {
-      type: 'boolean',
-      description: 'Add agent cost (cost.wallClockMs, …) to the result, returned as JSON text.',
-    },
+  // Keyed by the CLI flag (`--cost`, `--level`), so the flag's env/config default reaches the
+  // call through the same resolver as every other flag.
+  cost: {
+    schema: { type: 'boolean' },
+    audience: operatorAudience({ operatorConfig: true }),
   },
   responseLevel: {
-    schema: {
-      type: 'string',
-      enum: ['digest', 'default', 'full'],
-      description:
-        'Result detail: digest (smallest) or full (largest), as JSON; default is compact text.',
-    },
+    schema: { type: 'string', enum: ['digest', 'default', 'full'] },
+    audience: operatorAudience({ operatorConfig: true }),
   },
 } as const satisfies Record<string, McpToolConfigFieldSpec>;
 
@@ -78,7 +70,7 @@ export const CONFIG_LOADER_AUDIENCE: InputAudienceMap = {
 };
 
 export const MCP_TOOL_CONFIG_AUDIENCE: InputAudienceMap = Object.fromEntries(
-  MCP_TOOL_CONFIG_ROWS.flatMap(([key, field]) => (field.audience ? [[key, field.audience]] : [])),
+  MCP_TOOL_CONFIG_ROWS.map(([key, field]) => [key, field.audience]),
 );
 
 export function mcpToolConfigProperties(): Record<string, JsonSchema> {

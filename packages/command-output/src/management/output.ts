@@ -22,6 +22,7 @@ import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
 import {
   type CliOutputFormatter,
+  type CliOutputFormatterParams,
   messageCliOutput,
   messageOutput,
   resultOutput,
@@ -87,11 +88,14 @@ async function sessionCliOutput(
   return { data, text: JSON.stringify(data, null, 2) };
 }
 
-export async function openCliOutput(result: AppOpenResult): Promise<CliOutput> {
+export async function openCliOutput(
+  result: AppOpenResult,
+  reader: CliOutputFormatterParams['reader'] = 'terminal',
+): Promise<CliOutput> {
   const { serializeOpenResult } = await import('../output/result-serialization.ts');
   const data = serializeOpenResult(result);
   const lines = [readCommandMessage(data)].filter((line): line is string => Boolean(line));
-  if (typeof data.sessionStateDir === 'string') {
+  if (reader === 'terminal' && typeof data.sessionStateDir === 'string') {
     lines.push(`Session state: ${data.sessionStateDir}`);
   }
   for (const warning of result.warnings ?? []) {
@@ -243,7 +247,7 @@ export const managementCliOutputFormatters = {
     }),
   session: resultOutput(sessionCliOutput),
   artifacts: resultOutput(artifactsCliOutput),
-  open: resultOutput(openCliOutput),
+  open: ({ result, reader }) => openCliOutput(result as AppOpenResult, reader),
   close: resultOutput(closeCliOutput),
   install: resultOutput(deployCliOutput),
   reinstall: resultOutput(deployCliOutput),

@@ -36,10 +36,16 @@ export type OperatorInputSource =
  * `retired` keys are released keys that were removed. They are absent from
  * every schema but still recognized, so supplying one answers with migration
  * guidance instead of silently dropping the value or rejecting it as unknown.
+ *
+ * `alias` keys are a second spelling of another key. The CLI and Node input
+ * keep them; a model-facing tool schema advertises only the canonical key, so
+ * the alias costs no schema bytes, and a call that passes it is refused with
+ * the key to use.
  */
 export type InputAudience =
   | { kind: 'operator'; source: OperatorInputSource }
-  | { kind: 'retired'; message: string };
+  | { kind: 'retired'; message: string }
+  | { kind: 'alias'; of: string };
 
 /** Non-model audiences by input key. Keys absent from the map are model-writable. */
 export type InputAudienceMap = Readonly<Record<string, InputAudience>>;
@@ -56,6 +62,11 @@ export function refuseRetiredInput(
 
 export function operatorAudience(source: OperatorInputSource): InputAudience {
   return { kind: 'operator', source };
+}
+
+/** The refusal a model-facing surface answers with for an alias key. */
+export function aliasInputRefusal(key: string, canonicalKey: string): string {
+  return `${key} is not accepted as a tool argument. Pass ${canonicalKey}.`;
 }
 
 /** The refusal a model-facing surface answers with, rendered from the declared source. */

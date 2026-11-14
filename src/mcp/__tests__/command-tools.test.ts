@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { resolveCommandRecordsSessionAction } from '@agent-device/command-registry/registry';
@@ -23,10 +23,8 @@ test('MCP command tool executor hides client creation behind an execution adapte
     },
   });
 
-  const result = await executor.execute('wait', {
-    includeCost: true,
-    mcpOutputFormat: 'optimized',
-  });
+  vi.stubEnv('AGENT_DEVICE_COST', '1');
+  const result = await executor.execute('wait', {});
 
   assert.deepEqual(createdConfigs, [{ cost: true }]);
   assert.deepEqual(calls, [
@@ -37,7 +35,7 @@ test('MCP command tool executor hides client creation behind an execution adapte
     },
   ]);
   assert.deepEqual(result.structuredContent, { message: 'Ran wait', ok: true });
-  // The cost rides only on the data, so includeCost renders the result as JSON text.
+  // The cost rides only on the data, so the cost setting renders the result as JSON text.
   assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), { message: 'Ran wait', ok: true });
 });
 
@@ -69,7 +67,7 @@ test('MCP renders a non-default response level as JSON text, not misleading opti
   // With responseLevel:digest the daemon returns the digest shape (no `nodes`).
   // The optimized snapshot formatter expects `nodes` and would print
   // "Snapshot: 0 nodes" — contradicting structuredContent. The text must instead
-  // be the digest payload verbatim (JSON), even though mcpOutputFormat is optimized.
+  // be the digest payload verbatim (JSON).
   const digest = { nodeCount: 3, refs: [{ ref: 'e1', label: 'Continue' }], truncated: false };
   const executor = createCommandToolExecutor({
     structuredContent: 'declared',
@@ -77,10 +75,8 @@ test('MCP renders a non-default response level as JSON text, not misleading opti
     runCommand: async () => digest,
   });
 
-  const result = await executor.execute('snapshot', {
-    mcpOutputFormat: 'optimized',
-    responseLevel: 'digest',
-  });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'digest');
+  const result = await executor.execute('snapshot', {});
 
   assert.deepEqual(result.structuredContent, digest);
   assert.match(result.content[0]?.text ?? '', /^\{/);
@@ -88,25 +84,14 @@ test('MCP renders a non-default response level as JSON text, not misleading opti
   assert.doesNotMatch(result.content[0]?.text ?? '', /Snapshot: 0 nodes/);
 });
 
-test('MCP tool schemas add MCP client config fields at the MCP boundary', () => {
-  const devicesTool = listCommandTools({ outputSchemas: true }).find(
-    (tool) => tool.name === 'devices',
-  );
-
-  assert.ok(devicesTool);
-  assert.equal('stateDir' in (devicesTool.inputSchema.properties ?? {}), false);
-  assert.deepEqual(
-    (devicesTool.inputSchema.properties?.mcpOutputFormat as { enum?: unknown[] } | undefined)?.enum,
-    ['optimized', 'json'],
-  );
-  assert.equal(
-    (devicesTool.inputSchema.properties?.includeCost as { type?: string } | undefined)?.type,
-    'boolean',
-  );
-  assert.deepEqual(
-    (devicesTool.inputSchema.properties?.responseLevel as { enum?: unknown[] } | undefined)?.enum,
-    ['digest', 'default', 'full'],
-  );
+// The MCP controls are operator settings, so no tool schema spends bytes on them.
+test('MCP tool schemas advertise none of the MCP control fields', () => {
+  for (const tool of listCommandTools({ outputSchemas: true })) {
+    const properties = tool.inputSchema.properties ?? {};
+    for (const key of ['stateDir', 'cost', 'responseLevel', 'mcpOutputFormat', 'includeCost']) {
+      assert.equal(key in properties, false, `${tool.name} advertises ${key}`);
+    }
+  }
 });
 
 // #1625: `list` must be accepted by the MCP input surface, not only the CLI
@@ -268,7 +253,7 @@ test('MCP swipe tool exposes bounded repetition inputs', () => {
   });
 });
 
-test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the arg, surfaces cost', async () => {
+test('AGENT_DEVICE_COST opts into agent-cost: sets client.cost and surfaces cost', async () => {
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
@@ -283,11 +268,12 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
     },
   });
 
-  const result = await executor.execute('wait', { includeCost: true });
+  vi.stubEnv('AGENT_DEVICE_COST', '1');
+  const result = await executor.execute('wait', {});
 
-  // includeCost maps to the client `cost` config (→ meta.includeCost on the daemon).
+  // The cost setting maps to the client `cost` config (→ meta.includeCost on the daemon).
   assert.deepEqual(createdConfigs, [{ cost: true }]);
-  // includeCost is an MCP-boundary field and must not leak into the command input.
+  // It is an MCP-boundary field and must not leak into the command input.
   assert.deepEqual(calls, [{ name: 'wait', input: {} }]);
   // The daemon-provided cost rides through structuredContent unchanged.
   assert.deepEqual(result.structuredContent, {
@@ -296,7 +282,7 @@ test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the ar
   });
 });
 
-test('MCP includeCost absent/false leaves the request shape untouched (no cost config)', async () => {
+test('an absent or false cost setting leaves the request shape untouched (no cost config)', async () => {
   const createdConfigs: unknown[] = [];
   const executor = createCommandToolExecutor({
     structuredContent: 'declared',
@@ -308,7 +294,8 @@ test('MCP includeCost absent/false leaves the request shape untouched (no cost c
   });
 
   const absent = await executor.execute('wait', {});
-  const explicitFalse = await executor.execute('wait', { includeCost: false });
+  vi.stubEnv('AGENT_DEVICE_COST', '0');
+  const explicitFalse = await executor.execute('wait', {});
 
   // Neither path sets `cost` on the client config; both are byte-identical configs.
   assert.deepEqual(createdConfigs, [{}, {}]);
@@ -316,19 +303,7 @@ test('MCP includeCost absent/false leaves the request shape untouched (no cost c
   assert.equal(JSON.stringify(absent), JSON.stringify(explicitFalse));
 });
 
-test('MCP includeCost rejects non-boolean values at the boundary', async () => {
-  const executor = createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
-    runCommand: async () => ({}),
-  });
-
-  await assert.rejects(
-    executor.execute('wait', { includeCost: 'yes' }),
-    /Expected includeCost to be a boolean\./,
-  );
-});
-
-test('MCP responseLevel:digest opts into a verbosity level: sets client.responseLevel, strips the arg', async () => {
+test('AGENT_DEVICE_RESPONSE_LEVEL opts into a verbosity level: sets client.responseLevel', async () => {
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
@@ -343,7 +318,8 @@ test('MCP responseLevel:digest opts into a verbosity level: sets client.response
     },
   });
 
-  const result = await executor.execute('wait', { responseLevel: 'digest' });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'digest');
+  const result = await executor.execute('wait', {});
 
   // responseLevel maps to the client `responseLevel` config (→ meta.responseLevel on the daemon).
   assert.deepEqual(createdConfigs, [{ responseLevel: 'digest' }]);
@@ -368,18 +344,6 @@ test('MCP responseLevel absent leaves the request shape untouched (no responseLe
   // The absent path never sets `responseLevel`; the config is byte-identical to today.
   assert.deepEqual(createdConfigs, [{}]);
   assert.deepEqual(absent.structuredContent, { message: 'ok' });
-});
-
-test('MCP responseLevel rejects unknown values at the boundary', async () => {
-  const executor = createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
-    runCommand: async () => ({}),
-  });
-
-  await assert.rejects(
-    executor.execute('wait', { responseLevel: 'verbose' }),
-    /Expected responseLevel to be one of 'digest', 'default', or 'full'\./,
-  );
 });
 
 test('MCP keyboard outputSchema advertises flat contract discriminants', () => {

@@ -67,7 +67,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         ? { ownerFiles: ['packages/command-surface/src/capture/wait.ts'] as const }
         : {}),
       catalog: { group: 'public' },
-      frameworkTier: 'core',
+      frameworkTier: 'loop',
       recordsSessionAction: true,
       recordingEffect: 'observes-app',
       // #1349: a wait's landmark may legitimately be absent when the step
@@ -253,7 +253,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         : {}),
       ...TARGETED_TOUCH_INTERACTION_TRAITS,
       daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
-      frameworkTier: 'core',
+      frameworkTier: 'loop',
       timeoutPolicy: postActionObservationTimeoutPolicy('fill', PRESERVE_DAEMON_TIMEOUT_POLICY),
       postActionObservation: postActionObservation('fill'),
       responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
@@ -309,7 +309,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         : {}),
       ...TARGETED_TOUCH_INTERACTION_TRAITS,
       daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
-      frameworkTier: 'core',
+      frameworkTier: 'loop',
       timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
       postActionObservation: postActionObservation('press'),
       responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
@@ -380,7 +380,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
         : {}),
       catalog: { group: 'public' },
-      frameworkTier: 'core',
+      frameworkTier: 'loop',
       // R42 retires this command's capability bucket and its `dispatch` leaf together: admission is
       // the owner's `back` fact, and the only execution is the bound operation — the postActionObservation
       // timeout trait it kept is admission-independent, like `type` kept its dialog guard.
@@ -483,7 +483,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         ? { ownerFiles: ['packages/daemon/src/execution/scroll-runtime.ts'] as const }
         : {}),
       catalog: { group: 'public' },
-      frameworkTier: 'core',
+      frameworkTier: 'loop',
       // R53 retires this command's capability bucket and its `dispatch` leaf together: admission is
       // the owner's `scrollDirection` fact, and the only execution is the bound operation. `scroll`
       // was the last holder of the legacy `dispatch`/`capability` pair, which retires with it.

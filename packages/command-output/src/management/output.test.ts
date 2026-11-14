@@ -22,6 +22,22 @@ describe('openCliOutput', () => {
     });
   });
 
+  test('leaves the session state directory out of the text a model reads', async () => {
+    const output = await openCliOutput(
+      {
+        session: 'default',
+        sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
+        identifiers: { session: 'default' },
+      },
+      'model',
+    );
+
+    expect(output.text).toBe('Opened: default');
+    expect(output.data).toMatchObject({
+      sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
+    });
+  });
+
   test('keeps internal open timing out of public output data', async () => {
     const result: AppOpenResult & { timing: { totalDurationMs: number } } = {
       session: 'default',

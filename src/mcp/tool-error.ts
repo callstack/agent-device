@@ -6,7 +6,7 @@ export function normalizeToolError(error: unknown): NormalizedError {
 }
 
 export function formatToolErrorText(normalized: NormalizedError): string {
-  const { summary, body } = formatHumanError(normalized);
+  const { summary, body } = formatHumanError(normalized, { reader: 'model' });
   const lines = [summary, ...body];
   if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
   return lines.join('\n');

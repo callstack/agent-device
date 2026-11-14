@@ -28,7 +28,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 const SCREENSHOT_COMMAND_NAME = 'screenshot';
 
 const screenshotCommandDescription =
-  'Capture a screenshot of the active app or web session. Input fields control capture scope, density, size, and annotations.';
+  'Capture a screenshot of the active app or web session. Input fields control capture scope, density, size, and annotations. Use it for visual evidence, or when a snapshot warns that the accessibility tree is sparse: read the image, then press by coordinates. A screenshot alone does not verify a result.';
 
 const screenshotCommandMetadata = defineFieldCommandMetadata(
   SCREENSHOT_COMMAND_NAME,
@@ -84,6 +84,7 @@ export const screenshotCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Capture a screenshot',
+    searchHint: 'picture screen png',
     cliDetail:
       "Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. Use --screen-mask black to fill the iOS simulator screen outline, including rounded corners, with black for this capture. It requires simctl: physical devices, tvOS and visionOS simulators, other platforms, provider captures and XCTest runner captures are refused. A masked capture fails if simctl fails instead of falling back to an unmasked runner capture. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators, Android emulators, and CoreDevice physical iPhones), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator or Android chrome. Physical iPhone crop verification covers portrait CoreDevice/devicectl captures only. XCTest, runner fallback, and physical iPad crops are refused; landscape iPhone crop is unverified. Android captures immediately by default; --normalize-status-bar also waits for transient UI to fade, and --no-stabilize keeps capture immediate. With the native macOS backend, the front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, as is the small indicator window macOS adds in front of a window that a screen-sharing stream captures, and a sheet is captured as its own window. On macOS, any --surface other than app (desktop, menubar, frontmost-app) always captures the main display and refuses an explicit --fullscreen. On single-display iOS simulators and Android devices, the result reports displayRotation, the rotation the display rendered the capture in, when the device returns a reading in time; otherwise the field is absent. On iOS simulators a screenshot waits for that simulator's status bar to be free, and a request its caller cancelled while it waits reports the cancellation instead of capturing.",
   },

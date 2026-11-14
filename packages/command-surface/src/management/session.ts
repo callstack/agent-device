@@ -39,6 +39,7 @@ export const sessionCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'List sessions, show the state dir, or publish a script',
+    searchHint: 'current running inspect',
   },
   metadata: sessionCommandMetadata,
   run: async (client, { action, path, force, ...input }) => {

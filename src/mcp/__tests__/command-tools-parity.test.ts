@@ -82,7 +82,8 @@ test('MCP open keeps device-selection evidence in structured content and JSON te
     runCommand: async () => openResult,
   });
 
-  const result = await executor.execute('open', { app: 'Settings', mcpOutputFormat: 'json' });
+  vi.stubEnv('AGENT_DEVICE_RESPONSE_LEVEL', 'full');
+  const result = await executor.execute('open', { app: 'Settings' });
 
   assert.deepEqual(result.structuredContent, openResult);
   assert.deepEqual(JSON.parse(result.content[0]?.text ?? '{}').selection, openResult.selection);

@@ -15,7 +15,7 @@ export type { CommandName } from './command-metadata.ts';
 export type { CommandExecutionResult } from './command-surface.ts';
 export { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 export { COMMON_INPUT_AUDIENCE } from './common-input-fields.ts';
-export { operatorAudience, operatorInputRefusal } from './input-audience.ts';
+export { aliasInputRefusal, operatorAudience, operatorInputRefusal } from './input-audience.ts';
 export { buildRequestFlags } from './command-flags.ts';
 export { runCommand } from './command-surface.ts';
 export { readInputFromCli } from './cli-grammar/registry.ts';
