@@ -160,7 +160,8 @@ granting npm trust:
    unattended.
 2. **Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset): active, targeting
    `refs/tags/v*` with no exclusions, restricting creations, updates, and deletions, with only the
-   Repository admin role allowed to bypass. Nightly tags live under `nightly/` and stay outside it.
+   Repository admin role allowed to bypass. Nightly tags live under `nightly/` or `nightly-0.22/`
+   and stay outside it.
 3. **Actions** (Settings → Actions → General): workflow permissions set to read repository contents,
    and "Allow GitHub Actions to create and approve pull requests" turned off.
 4. **Releases** (Settings → General): leave release immutability off, because the run attaches its
@@ -202,6 +203,8 @@ configuration activates the schedule. Do not dispatch it before the independent 
 
 Keep the existing `release.yml` trusted publisher and `npm-publish` policies (`main` and `v*`).
 The planner and publisher use the workflow commit; the build uses the planned source commit.
+The version-stamping entrypoint uses the workflow commit and calls the source commit's workspace
+and MCP metadata helpers. The publisher verifies each package's name and version before publishing.
 Do not grant the `0.22` branch deployment access. Private optional plugins remain unpublished;
 this channel does not replace their placeholder, trusted-publisher, or native validation prerequisites.
 
