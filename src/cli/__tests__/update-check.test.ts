@@ -252,3 +252,37 @@ test('a failed check after a channel switch records the new channel and drops th
   assert.equal(cache.latestVersion, undefined);
   assert.equal(cache.checkedAt, '2026-03-31T10:00:00.000Z');
 });
+
+test('a 0.22 nightly follows its own dist-tag and ignores cached main-nightly updates', async () => {
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  const currentVersion = '0.22.0-nightly-0-22.20261113.7';
+  writeCache(stateDir, { latestVersion: '0.23.0-nightly.20261114.8', distTag: 'nightly' });
+  assert.equal(
+    withCapturedStderr(
+      () => maybeRunUpgradeNotifier({ command: 'devices', currentVersion, stateDir, flags: {} }),
+      { interactive: true },
+    ),
+    '',
+  );
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ version: '0.22.0-nightly-0-22.20261114.8' }),
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  await runUpdateCheckWorker({
+    cachePath: path.join(stateDir, 'update-check.json'),
+    currentVersion,
+  });
+  assert.equal(
+    fetchMock.mock.calls[0]?.[0],
+    'https://registry.npmjs.org/agent-device/nightly-0.22',
+  );
+  assert.match(
+    withCapturedStderr(
+      () => maybeRunUpgradeNotifier({ command: 'devices', currentVersion, stateDir, flags: {} }),
+      { interactive: true },
+    ),
+    /npm install -g agent-device@nightly-0\.22/,
+  );
+});
