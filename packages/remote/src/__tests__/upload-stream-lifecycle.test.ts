@@ -274,7 +274,11 @@ test('an upload the peer keeps taking finishes while every phase ceiling is unex
       await vi.advanceTimersByTimeAsync(1_000);
       spent += 1_000;
     }
-    await untilIo(() => attempt.settled || daemon.receivedBytes > bytesBefore);
+    await untilIo(
+      () => attempt.settled || daemon.receivedBytes > bytesBefore,
+      'slow upload next chunk',
+      () => ({ writes, receivedBytes: daemon.receivedBytes, settled: attempt.settled }),
+    );
   }
   const result = await attempt;
   assert.equal(result.error, undefined, `upload failed: ${String(result.error)}`);

@@ -16,6 +16,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { once } from 'node:events';
 import { uploadArtifact } from '../upload-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { observeOutcome } from './support/upload-transfer-fixtures.ts';
 
 const TEST_TOKEN = 'agent-device-upload-cancel-token';
 const tempDirs: string[] = [];
@@ -83,6 +84,8 @@ test.each([
   'finalize',
   'retry-preflight',
   'retry-finalize',
+  'cancel-preflight',
+  'cancel-finalize',
   'prose-preflight',
   'prose-finalize',
 ])('control request %s distinguishes a deadline from matching error prose', async (stage) => {
@@ -91,6 +94,8 @@ test.each([
   const artifactPath = createTempFile('app.apk', 'control-plane-payload');
   const retry = stage.startsWith('retry-');
   const prose = stage.startsWith('prose-');
+  const canceled = stage.startsWith('cancel-');
+  const callerReason = new Error('lease ended during control request');
   const phase = stage.endsWith('preflight') ? 'preflight' : 'finalize';
   const events: string[] = [];
   const routes: string[] = [];
@@ -110,6 +115,7 @@ test.each([
   });
   let stalledSignal: AbortSignal | undefined;
   let preflights = 0;
+  let refuseStall: ((error: Error) => void) | undefined;
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const route = new URL(String(input)).pathname;
     if (route.endsWith('/preflight')) preflights += 1;
@@ -120,6 +126,7 @@ test.each([
       entered();
       if (prose) throw new Error(`Artifact transfer ${phase} timed out`);
       return await new Promise<Response>((_resolve, reject) => {
+        refuseStall = reject;
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
       });
     }
@@ -129,22 +136,16 @@ test.each([
       upload: { url: `${server.baseUrl}/ticket`, headers: {} },
     });
   });
-  let settled = false;
-  const outcome = uploadArtifact({
-    env: process.env,
-    localPath: artifactPath,
-    baseUrl: server.baseUrl,
-    token: TEST_TOKEN,
-    signal: caller.signal,
-    onProgress: (event) => events.push(event.type),
-  })
-    .then(
-      (value) => ({ value, error: undefined as unknown }),
-      (error: unknown) => ({ value: undefined, error }),
-    )
-    .finally(() => {
-      settled = true;
-    });
+  const outcome = observeOutcome(
+    uploadArtifact({
+      env: process.env,
+      localPath: artifactPath,
+      baseUrl: server.baseUrl,
+      token: TEST_TOKEN,
+      signal: caller.signal,
+      onProgress: (event) => events.push(event.type),
+    }),
+  );
   try {
     await stalled;
     if (prose) {
@@ -155,21 +156,25 @@ test.each([
       assert.equal(stalledSignal?.aborted, false);
       return;
     }
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(canceled ? 10_000 : 29_999);
     assert.equal(stalledSignal?.aborted, false);
-    assert.equal(settled, false);
-    await vi.advanceTimersByTimeAsync(1);
+    assert.equal(outcome.settled, false);
+    if (canceled) caller.abort(callerReason);
+    await vi.advanceTimersByTimeAsync(canceled ? 0 : 1);
     assert.equal(stalledSignal?.aborted, true);
-    assert.equal(settled, true, 'expiry settles without starting another transfer');
+    assert.equal(outcome.settled, true, 'expiry settles without starting another transfer');
     const result = await outcome;
     assert.equal(result.value, undefined);
-    assert.ok(result.error instanceof AppError);
-    assert.deepEqual(result.error.details, {
-      reason: 'transfer_phase_timeout',
-      transferPhase: phase,
-      timeoutMs: 30_000,
-    });
-    assert.equal(caller.signal.aborted, false);
+    if (canceled) assert.equal(result.error, callerReason);
+    else {
+      assert.ok(result.error instanceof AppError);
+      assert.deepEqual(result.error.details, {
+        reason: 'transfer_phase_timeout',
+        transferPhase: phase,
+        timeoutMs: 30_000,
+      });
+    }
+    assert.equal(caller.signal.aborted, canceled);
     assert.equal(events.includes('fallback'), false);
     assert.deepEqual(
       routes,
@@ -181,6 +186,7 @@ test.each([
     assert.equal(fetch.mock.calls.length, phase === 'preflight' ? (retry ? 2 : 1) : retry ? 3 : 2);
   } finally {
     caller.abort(new Error('fixture cleanup'));
+    refuseStall?.(new Error('fixture cleanup'));
     await outcome;
     await server.close();
   }

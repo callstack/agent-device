@@ -333,7 +333,7 @@ async function requestUploadControl(
   watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
   try {
     const response = await fetch(url, { ...init, signal: watchdog.signal });
-    const body: unknown = await response.json().catch(() => undefined);
+    const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
     watchdog.signal.throwIfAborted();
     return { response, body };
   } catch (error) {

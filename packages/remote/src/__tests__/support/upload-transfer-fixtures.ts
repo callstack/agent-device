@@ -8,7 +8,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import tls from 'node:tls';
 import { setTimeout as realSetTimeout, clearTimeout as realClearTimeout } from 'node:timers';
-import { onTestFinished, vi } from 'vitest';
+import { beforeEach, onTestFinished, vi } from 'vitest';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { uploadArtifact } from '../../upload-client.ts';
 import { type UploadStreamResponse, streamFileToHttpRequest } from '../../upload-stream.ts';
@@ -20,20 +20,26 @@ export const PREFLIGHT_REQUEST = 'POST /upload/preflight';
 export const LEGACY_UPLOAD_REQUEST = 'POST /upload';
 
 const BUDGET_STEP_MS = 5_000;
-
 const RELEASE_QUOTA_BYTES = 256 * 1024;
 
 export type Settles = { readonly settled: boolean };
 
 const ioWaiters = new Map<() => void, () => void>();
-let ioWaitersEndWithTest = false;
-let ioDeadline: number | undefined;
+let ioDeadline: number;
+beforeEach(({ task }) => {
+  assert.ok(task.timeout > 100, 'transfer diagnostics require a finite test timeout');
+  ioDeadline = performance.now() + task.timeout - 100;
+  onTestFinished(() => {
+    for (const release of ioWaiters.values()) release();
+    ioWaiters.clear();
+  });
+});
 
 function noteIo(): void {
   for (const wake of ioWaiters.keys()) wake();
 }
 
-/** Charges no fake time; all pending waits share a 3s real diagnostic deadline per test. */
+/** Charges no fake time; diagnostics fire 100ms before the declared test timeout. */
 export async function untilIo(
   ready: () => boolean,
   label = 'I/O prerequisite',
@@ -41,16 +47,6 @@ export async function untilIo(
 ): Promise<void> {
   if (ready()) return;
   const unmet = new Error('untilIo: the I/O this wait needs never happened before its test ended');
-  if (!ioWaitersEndWithTest) {
-    ioWaitersEndWithTest = true;
-    ioDeadline = performance.now() + 3_000;
-    onTestFinished(() => {
-      ioWaitersEndWithTest = false;
-      ioDeadline = undefined;
-      for (const release of ioWaiters.values()) release();
-      ioWaiters.clear();
-    });
-  }
   await new Promise<void>((resolve, reject) => {
     const finish = (error?: unknown) => {
       realClearTimeout(timer);
@@ -72,7 +68,7 @@ export async function untilIo(
         });
         finish(error);
       },
-      Math.max(0, (ioDeadline ?? performance.now()) - performance.now()),
+      Math.max(0, ioDeadline - performance.now()),
     );
     ioWaiters.set(wake, () => finish(unmet));
   });
@@ -84,7 +80,7 @@ export function useTransferClock(): void {
 
 export type ObservedOutcome<T> = Promise<{ value: T | undefined; error: unknown }> & Settles;
 
-function observeOutcome<T>(work: Promise<T>): ObservedOutcome<T> {
+export function observeOutcome<T>(work: Promise<T>): ObservedOutcome<T> {
   let settled = false;
   const outcome = work.then(
     (value) => ({ value, error: undefined as unknown }),
@@ -282,7 +278,7 @@ function controlledNow(): number {
 
 export async function settleAfterBudget(
   transfer: Settles,
-  snapshot: () => unknown = () => transfer,
+  snapshot: () => unknown = () => ({ settled: transfer.settled }),
 ): Promise<void> {
   for (let round = 0; round < 200 && !transfer.settled; round += 1) {
     await vi.advanceTimersByTimeAsync(100);
@@ -346,8 +342,7 @@ function refusedPreflight(req: http.IncomingMessage, res: http.ServerResponse): 
   if (`${req.method} ${req.url}` !== PREFLIGHT_REQUEST) return false;
   req.resume();
   req.on('end', () => {
-    res.statusCode = 404;
-    res.end('not found');
+    res.writeHead(404).end('not found');
   });
   return true;
 }
@@ -481,8 +476,7 @@ export async function startSilentTcpOrigin() {
 export async function startHalfAnsweredOrigin(options: { firstChunk: string }) {
   const server = http.createServer((req, res) => {
     req.resume();
-    res.statusCode = 200;
-    res.setHeader('content-type', 'text/plain');
+    res.writeHead(200, { 'content-type': 'text/plain' });
     res.write(options.firstChunk);
   });
   const port = await listenUntimed(server);
@@ -493,7 +487,6 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
   const parked: http.IncomingMessage[] = [];
   let receivedBytes = 0;
   let bodyEnded = false;
-  let connections = 0;
   const server = http.createServer((req, res) => {
     if (refusedPreflight(req, res)) return;
     req.on('data', (chunk: Buffer) => {
@@ -504,13 +497,9 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
     });
     req.on('end', () => {
       bodyEnded = true;
-      res.statusCode = options.status;
-      res.end(options.body);
+      res.writeHead(options.status).end(options.body);
       noteIo();
     });
-  });
-  server.on('connection', () => {
-    connections += 1;
   });
   const port = await listenUntimed(server);
   return {
@@ -520,9 +509,6 @@ export async function startSlowReadingUploadDaemon(options: { status: number; bo
     },
     get bodyEnded() {
       return bodyEnded;
-    },
-    get connections() {
-      return connections;
     },
     releaseAllParked() {
       for (const entry of parked.splice(0)) entry.resume();
@@ -581,12 +567,7 @@ export async function startUploadLegsDaemon(
       req.on('end', answer);
       return;
     }
-    let tookOneChunk = false;
-    req.on('data', () => {
-      if (tookOneChunk) return;
-      tookOneChunk = true;
-      req.pause();
-    });
+    req.once('data', () => req.pause());
     answer();
   });
   server.on('connection', () => {
