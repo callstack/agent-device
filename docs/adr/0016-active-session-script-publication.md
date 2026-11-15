@@ -181,7 +181,8 @@ It adds no state name, command, or flag:
 
 - Before it sends the open, the client mints a random publication ID and records the destination and the `--force` grant under it in its state directory (`remote-connections/session-scripts/`), keyed by the endpoint, the tenant, the session, and that ID.
   The open carries the ID in `meta.scriptPublicationId` and never the caller path.
-  A refused or failed open, or one whose response does not name the ID, removes the record; an open that the daemon armed keeps it when only this machine failed to save the first version.
+  A refused open, or one whose response does not name the ID, removes the record.
+  An open that may have armed the recording keeps it: one whose first version this machine failed to save, or one that was sent but whose answer was lost.
 - The daemon arms the recording under that ID, which `open` and `close` name in `scriptPublicationId`.
   After each successful request that records into the ARMED recording, the daemon writes the recording so far, without a terminal `close`, and returns it as a `session-script` artifact with the ID and a growing `scriptRevision`.
   The close-time write is the final version and has the highest revision; close takes it from the close-time write itself, so a capture that close stops first never hides recorded actions.

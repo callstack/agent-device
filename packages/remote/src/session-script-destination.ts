@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, readDispatchDisclosure } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -35,8 +35,8 @@ type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[
 /**
  * Sends a remote `open --save-script`. Before the open leaves, the client mints a publication ID
  * and records the caller destination and the `--force` grant under it. The serialized request
- * carries the ID and omits the destination. A refused or failed open, or one that armed no
- * recording, removes the record. A record that outlives its open stays inert: only artifacts of its
+ * carries the ID and omits the destination. A refused open, or one that armed no recording,
+ * removes the record; an open that may have armed one keeps it. A record that outlives its open stays inert: only artifacts of its
  * own ID match it.
  */
 export async function sendRemoteScriptOpen(
@@ -64,8 +64,12 @@ export async function sendRemoteScriptOpen(
     armed = response.ok && response.data?.scriptPublicationId === publicationId;
     return response;
   } catch (error) {
-    // The daemon armed the recording when only this machine failed to save its first version.
-    armed = error instanceof AppError && SAVE_FAILURES.has(String(error.details?.reason));
+    // The daemon armed the recording when only this machine failed to save its first version, and
+    // may have armed it when the open was sent but its answer was lost.
+    armed =
+      error instanceof AppError &&
+      (SAVE_FAILURES.has(String(error.details?.reason)) ||
+        readDispatchDisclosure(error.details) === 'unknown');
     throw error;
   } finally {
     if (!armed) {
@@ -312,7 +316,9 @@ function createRecord(file: string, record: ScriptRecord): void {
     const entry = path.join(directory, name);
     const stat = fs.lstatSync(entry, { throwIfNoEntry: false });
     if (name.endsWith('.json') && stat && stat.mtimeMs < staleBefore) {
+      const staging = readRecord(entry)?.publishing?.staging;
       fs.rmSync(entry, { force: true });
+      if (staging) fs.rmSync(staging, { recursive: true, force: true });
     }
   }
   writeRecord(file, record);

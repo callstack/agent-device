@@ -11,6 +11,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
+import { AppError } from '@agent-device/kernel/errors';
 import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
 import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 
@@ -164,7 +165,13 @@ test.each([
   {
     name: 'a failed open',
     respond: (): DaemonResponse => {
-      throw new Error('DEVICE_NOT_FOUND');
+      throw new AppError('DEVICE_NOT_FOUND', 'no device');
+    },
+  },
+  {
+    name: 'an open that never left',
+    respond: (): DaemonResponse => {
+      throw new AppError('COMMAND_FAILED', 'refused', { dispatched: 'no' });
     },
   },
   { name: 'an open that armed nothing', respond: (): DaemonResponse => ({ ok: true, data: {} }) },
@@ -174,6 +181,23 @@ test.each([
   await open('http://127.0.0.1:9', stateDir, destination, { respond }).catch(() => undefined);
 
   expect(records(stateDir)).toEqual([]);
+});
+
+test('an open whose answer was lost keeps its record', async () => {
+  const { stateDir, destination } = journey();
+  const lost = new AppError('COMMAND_FAILED', 'Daemon request timed out', {
+    dispatched: 'unknown',
+  });
+
+  await expect(
+    open('http://127.0.0.1:9', stateDir, destination, {
+      respond: () => {
+        throw lost;
+      },
+    }),
+  ).rejects.toBe(lost);
+
+  expect(records(stateDir)).toHaveLength(1);
 });
 
 test('only a newer version of a recorded publication writes', async () => {
@@ -370,7 +394,10 @@ test('creating a record removes records nobody touched for a week', async () => 
   fs.mkdirSync(directory, { recursive: true });
   const stale = path.join(directory, 'stale.json');
   const fresh = path.join(directory, 'fresh.json');
-  fs.writeFileSync(stale, '{}');
+  const staging = path.join(path.dirname(destination), '.agent-device-script-stale');
+  fs.mkdirSync(staging, { recursive: true });
+  const publishing = { revision: 1, file: '0:0', staging };
+  fs.writeFileSync(stale, JSON.stringify({ destination, force: false, revision: 0, publishing }));
   fs.writeFileSync(fresh, '{}');
   const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
   fs.utimesSync(stale, eightDaysAgo, eightDaysAgo);
@@ -380,6 +407,7 @@ test('creating a record removes records nobody touched for a week', async () => 
   });
 
   expect(fs.existsSync(stale)).toBe(false);
+  expect(fs.existsSync(staging)).toBe(false);
   expect(fs.existsSync(fresh)).toBe(true);
 });
 

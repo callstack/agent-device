@@ -453,6 +453,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'packages/remote/src/session-script-destination.ts',
         'SessionScriptDelivery',
         'publishScriptVersion',
+        'sendRemoteScriptOpen',
+        'RemoteEndpoint',
       ),
       ...from(ARTIFACT_DOWNLOAD, 'RemoteArtifactDownload', 'downloadRemoteArtifactFromUrl'),
     ],
