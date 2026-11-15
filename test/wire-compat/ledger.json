@@ -212,7 +212,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:42d78f01311e3e0c5f9099ef72e3c6258241e66204747aa176a55cd5191a2145",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:9ae76c9fa2d81106fe53d50b5d556c226c342f55b35d8352e29265192b04edc2",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:b128203c4545f4f620211c917707173f97a67a3355cbfc2dbf4d08e719a994d2",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
   },

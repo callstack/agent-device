@@ -23,13 +23,16 @@ const RECORD_LOCK_TIMEOUT_MS = 30_000;
  * daemon response never establishes a destination. `revision` is the newest version published.
  * `publishing` names a version, the staged file's identity, and its staging directory before the
  * rename, so a crash between the rename and the revision update is settled from the destination's
- * identity, and the staging directory is removed once nothing can name it.
+ * identity, and the staging directory is removed once nothing can name it. `staging` lists every
+ * staging directory allocated and not yet removed, so retiring or sweeping the record reclaims the
+ * ones a crashed download left behind.
  */
 type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
   publishing?: Readonly<{ revision: number; file: string; staging: string }>;
+  staging?: readonly string[];
 }>;
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
@@ -93,11 +96,7 @@ export function sessionScriptDelivery(
   const retire = async (): Promise<void> => {
     if (closedId === undefined) return;
     const file = recordPath(stateDir, endpoint.baseUrl, req, closedId);
-    await withRecordLock(file, async () => {
-      const staging = readRecord(file)?.publishing?.staging;
-      fs.rmSync(file, { force: true });
-      if (staging) fs.rmSync(staging, { recursive: true, force: true });
-    });
+    await withRecordLock(file, async () => removeRecord(file));
   };
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
@@ -196,7 +195,8 @@ async function publishScriptVersion(
   let staging: string | undefined;
   try {
     await fs.promises.mkdir(directory, { recursive: true });
-    staging = await fs.promises.mkdtemp(path.join(directory, '.agent-device-script-'));
+    staging = await withRecordLock(file, async () => allocateStaging(file, directory));
+    if (!staging) return undefined;
     const staged = path.join(staging, 'script.ad');
     await context.download({
       ...endpoint,
@@ -210,10 +210,44 @@ async function publishScriptVersion(
   } catch (error) {
     throw scriptSaveError(record.destination, artifactId, error, req.command === 'close');
   } finally {
-    if (staging && !pending.named) {
-      await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+    const removed = staging;
+    if (removed && !pending.named) {
+      // A directory that cannot be released here stays listed, so retirement or the sweep removes it.
+      await withRecordLock(file, async () => releaseStaging(file, removed)).catch(() => undefined);
     }
   }
+}
+
+/** Creates a staging directory and lists it in the record before any script bytes reach it. */
+function allocateStaging(file: string, directory: string): string | undefined {
+  const record = readRecord(file);
+  if (!record) return undefined;
+  const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
+  try {
+    writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    throw error;
+  }
+  return staging;
+}
+
+/** Unlists a staging directory the record can no longer name, then removes it. */
+function releaseStaging(file: string, staging: string): void {
+  const record = readRecord(file);
+  if (record) writeRecord(file, withoutStaging(record, staging));
+  fs.rmSync(staging, { recursive: true, force: true });
+}
+
+function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
+  return { ...record, staging: (record.staging ?? []).filter((listed) => listed !== staging) };
+}
+
+/** Removes a record and every staging directory it lists. */
+function removeRecord(file: string): void {
+  const record = readRecord(file);
+  fs.rmSync(file, { force: true });
+  for (const staging of record?.staging ?? []) fs.rmSync(staging, { recursive: true, force: true });
 }
 
 /**
@@ -232,11 +266,12 @@ function publishStaged(
   const { revision, staging, staged, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
-  const current = settlePublishing(record);
-  if (current !== record) {
+  let current = settlePublishing(record);
+  if (record.publishing) {
+    // Once the settled record is written, its staging directory can no longer be named.
+    current = withoutStaging(current, record.publishing.staging);
     writeRecord(file, current);
-    // The settled entry's staging directory can no longer be named.
-    if (record.publishing) fs.rmSync(record.publishing.staging, { recursive: true, force: true });
+    fs.rmSync(record.publishing.staging, { recursive: true, force: true });
   }
   if (revision <= current.revision) return current.destination;
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
@@ -332,10 +367,7 @@ async function createRecord(file: string, record: ScriptRecord): Promise<void> {
     if (!name.endsWith('.json') || !isStale(entry)) continue;
     // Rechecked under the lock, so a record that a publish just refreshed stays.
     await withRecordLock(entry, async () => {
-      if (!isStale(entry)) return;
-      const staging = readRecord(entry)?.publishing?.staging;
-      fs.rmSync(entry, { force: true });
-      if (staging) fs.rmSync(staging, { recursive: true, force: true });
+      if (isStale(entry)) removeRecord(entry);
     });
   }
   writeRecord(file, record);
@@ -357,7 +389,10 @@ function readRecord(file: string): ScriptRecord | undefined {
     (publishing === undefined ||
       (Number.isSafeInteger(publishing?.revision) &&
         typeof publishing?.file === 'string' &&
-        typeof publishing?.staging === 'string'));
+        typeof publishing?.staging === 'string')) &&
+    (record.staging === undefined ||
+      (Array.isArray(record.staging) &&
+        record.staging.every((staging) => typeof staging === 'string')));
   return valid ? (record as ScriptRecord) : undefined;
 }
 

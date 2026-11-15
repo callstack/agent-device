@@ -202,6 +202,17 @@ test('a failed script write keeps the action successful and discloses the delive
         failed.artifacts?.some((artifact) => artifact.artifactType === 'session-script') ?? false,
         false,
       );
+      // A digest response narrows the command's result but keeps the delivery failure.
+      const digest = assertRpcOk<{
+        nodeCount?: number;
+        scriptDeliveryFailure?: { reason: string };
+      }>(
+        await proxy.callCommand('raw-client', 'snapshot', [], world.selection, {
+          meta: { responseLevel: 'digest' },
+        }),
+      );
+      assert.equal(typeof digest.nodeCount, 'number');
+      assert.equal(digest.scriptDeliveryFailure?.reason, 'script_delivery_failed');
 
       linkSpy.mockRestore();
       const delivered = assertRpcOk<{

@@ -194,6 +194,7 @@ It adds no state name, command, or flag:
   The download streams, capped at 8 MiB, into a new 0600 file, created exclusively and never through a symbolic link, in a 0700 staging directory beside the destination.
   Under the record lock, the record names the version and the staged file's device and inode before the rename or link, and the next version settles that entry from the destination's identity.
   A second name keeps the staged inode, and its staging directory, on disk while the record may name it, so no later file can reuse that inode; settling or retiring the entry removes the staging directory.
+  The record lists each staging directory before a download writes to it, so retiring or sweeping the record also removes the staging that a crashed download left behind.
   The first version is linked exclusively, as a local close-time write is, unless the open granted `--force`; a symbolic or hard link at the destination is replaced as a directory entry and never written through.
 - If this machine cannot download or save a version, the action also keeps its success and carries the same `scriptDeliveryFailure` and warning; a script delivery failure never changes the outcome of the action that recorded it.
 - A close retires the record it names, even when the final version or another artifact fails, and reports the first error.

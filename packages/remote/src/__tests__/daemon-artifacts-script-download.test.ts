@@ -341,8 +341,9 @@ test.each([
 );
 
 test.each([
-  { name: 'before the record names the version', failingWrite: 1, kept: false },
-  { name: 'after the link, while the record names it', failingWrite: 2, kept: true },
+  { name: 'while it lists the staging directory', failingWrite: 1, kept: false },
+  { name: 'before the record names the version', failingWrite: 2, kept: false },
+  { name: 'after the link, while the record names it', failingWrite: 3, kept: true },
 ])(
   'a record write that fails $name keeps the staged file only while it is named',
   async ({ failingWrite, kept }) => {
@@ -353,7 +354,8 @@ test.each([
     );
     let writes = 0;
     vi.mocked(file.publishFileSync).mockImplementation((options) => {
-      // The record created before the open is write 0; the publish writes follow it.
+      // The record created before the open is write 0; the publish writes follow it: listing the
+      // staging directory, naming the version, then recording its revision.
       if (options.destination.endsWith('.json') && writes++ === failingWrite) {
         throw new Error('record write failed');
       }
@@ -385,7 +387,8 @@ test('creating a record removes records nobody touched for a week', async () => 
   const staging = path.join(path.dirname(destination), '.agent-device-script-stale');
   fs.mkdirSync(staging, { recursive: true });
   const publishing = { revision: 1, file: '0:0', staging };
-  fs.writeFileSync(stale, JSON.stringify({ destination, force: false, revision: 0, publishing }));
+  const record = { destination, force: false, revision: 0, publishing, staging: [staging] };
+  fs.writeFileSync(stale, JSON.stringify(record));
   fs.writeFileSync(fresh, '{}');
   const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
   fs.utimesSync(stale, eightDaysAgo, eightDaysAgo);
@@ -461,3 +464,21 @@ test.skipIf(process.platform === 'win32' || process.getuid?.() === 0).each([
     expect(records(stateDir)).toHaveLength(1);
   },
 );
+
+test('retiring a record removes the staging a crashed download left behind', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const [name] = records(stateDir);
+  const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
+  const crashed = path.join(path.dirname(destination), '.agent-device-script-crashed');
+  fs.mkdirSync(crashed);
+  fs.writeFileSync(path.join(crashed, 'script.ad'), 'partial');
+  const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, staging: [crashed] }));
+
+  await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
+
+  expect(fs.existsSync(crashed)).toBe(false);
+  expect(records(stateDir)).toEqual([]);
+});
