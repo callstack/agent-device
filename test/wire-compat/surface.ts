@@ -448,7 +448,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'downloadResponseArtifacts',
         'resolveMaterializedArtifactPath',
       ),
-      // The session-script artifact fields a remote open --save-script reads (ADR 0016).
+      // The client functions and types that write the remote open --save-script request field and
+      // read the session-script artifact fields (ADR 0016).
       ...from(
         'packages/remote/src/session-script-destination.ts',
         'SessionScriptDelivery',
