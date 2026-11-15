@@ -142,6 +142,12 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // URL builder below is its counterpart.
       ...from(REQUEST_DIAGNOSTICS_HTTP, 'resolveRequestDiagnosticsHttpRoute'),
       ...from(REMOTE_REQUEST_DIAGNOSTICS, 'buildRemoteRequestDiagnosticsUrl'),
+      ...from(
+        'packages/daemon-contracts/src/daemon-resolution.ts',
+        'DAEMON_CAPABILITIES',
+        'DaemonCapability',
+        'readDaemonCapabilities',
+      ),
       // Consumer side of /health: the client reads this payload and refuses a
       // mismatched peer from it, so a narrowed reader defeats the very check
       // ADR 0006 built. `readRemoteDaemonHealth` is where the comparison lives.
