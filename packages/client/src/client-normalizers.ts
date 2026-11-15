@@ -37,6 +37,7 @@ import {
   isRecord,
   readDeviceTarget,
   readNullableString,
+  readOptionalDeviceKind,
   readOptionalString,
   readRequiredDeviceKind,
   readRequiredNumber,
@@ -124,7 +125,11 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
   };
 }
 
-/** Reads the optional presentation-only hardware model and OS version of a listed device. */
+/**
+ * Reads the optional presentation-only hardware model and OS version a daemon response carries,
+ * for both a listed device and the device of an open session. Absent means the host or provider
+ * reported nothing; it is never inferred here.
+ */
 function readDeviceDescription(
   record: Record<string, unknown>,
 ): Pick<AgentDeviceDevice, 'model' | 'osVersion'> {
@@ -150,6 +155,7 @@ export function normalizeSession(value: unknown): AgentDeviceSession {
   const { record, platform, id, name, target } = readClientDeviceIdentity(value, 'name');
   const deviceName = readRequiredString(record, 'device');
   const appleOs = readAppleOs(record);
+  const kind = readOptionalDeviceKind(record, 'kind');
   const identifiers = {
     session: name,
     ...buildDeviceIdentifiers(platform, id, deviceName),
@@ -167,6 +173,10 @@ export function normalizeSession(value: unknown): AgentDeviceSession {
       name: deviceName,
       // Additive Apple-OS discriminant; present only when the daemon emits it (Apple devices).
       ...(appleOs ? { appleOs } : {}),
+      // Model and OS version are the daemon's discovery read; a session whose host reported
+      // neither carries neither.
+      ...readDeviceDescription(record),
+      ...(kind ? { kind } : {}),
       identifiers,
       ...buildClientDevicePlatformFields(platform, id, {
         simulatorSetPath: readNullableString(record, 'ios_simulator_device_set'),
@@ -240,6 +250,7 @@ export function normalizeOpenDevice(
     return undefined;
   }
   const target = readDeviceTarget(value, 'target');
+  const kind = readOptionalDeviceKind(value, 'kind');
   const serial = isSerialAddressablePlatform(platform)
     ? (readOptionalString(value, 'serial') ?? id)
     : undefined;
@@ -252,6 +263,9 @@ export function normalizeOpenDevice(
     target,
     id,
     name,
+    // The daemon echoes what discovery or the provider reported; an absent field stays absent.
+    ...readDeviceDescription(value),
+    ...(kind ? { kind } : {}),
     identifiers,
     ...buildClientDevicePlatformFields(
       platform,

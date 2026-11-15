@@ -444,11 +444,17 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   const open = await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
     meta: leaseMeta(lease.leaseId),
   });
-  const opened = assertRpcOk<{ appBundleId?: string }>(open);
+  const opened = assertRpcOk<{ appBundleId?: string; osVersion?: string }>(open);
   assert.equal(opened.appBundleId, 'com.example.demo');
+  assert.equal(opened.osVersion, '17.2');
   // The prepared cloud session chose iOS. This must become an explicit device leaf before the
   // runtime facts admission; a collapsed record may not borrow support from an owner label.
-  assert.equal((await daemon.client().sessions.list())[0]?.device.appleOs, 'ios');
+  const [session] = await daemon.client().sessions.list();
+  assert.equal(session?.device.appleOs, 'ios');
+  // #4525: the OS the session reports is the one the hub granted (17.2), not the one the request
+  // asked for (18), because a caller records what a capture actually ran on.
+  assert.equal(session?.device.osVersion, '17.2');
+  assert.equal(session?.device.kind, 'device');
   return lease;
 }
 
@@ -512,7 +518,10 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
     return {
       'POST /wd/hub/session': () =>
         cloudWebDriverTestJson({
-          value: { sessionId: 'wd-1', capabilities: { platformName: 'iOS' } },
+          value: {
+            sessionId: 'wd-1',
+            capabilities: { platformName: 'iOS', platformVersion: '17.2' },
+          },
         }),
       'GET /wd/hub/session/wd-1/source': () => cloudWebDriverTestJson({ value: this.source() }),
       'GET /wd/hub/session/wd-1/window/rect': () =>

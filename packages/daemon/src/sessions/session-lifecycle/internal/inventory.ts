@@ -146,6 +146,8 @@ function publicSessionInfo({ address, session }: SessionRef, sessionStore: Sessi
     device: session.device.name,
     id: session.device.id,
     device_id: session.device.id,
+    kind: session.device.kind,
+    ...publicDeviceDescription(session.device),
     createdAt: session.createdAt,
     ...(isApplePlatform(session.device.platform) &&
       !isMacOs(session.device) && {
@@ -486,6 +488,18 @@ function publicDeviceInfo({
     ...device,
     platform: publicPlatformString({ platform: device.platform, appleOs }),
     ...(isApplePlatform(device.platform) && appleOs ? { appleOs } : {}),
+  };
+}
+
+/**
+ * The presentation-only device description `session list` reports beside the session's identity:
+ * the hardware model and OS version the host's discovery read. Omitted when discovery reported
+ * neither, so a caller never reads a guessed OS for a session.
+ */
+function publicDeviceDescription(device: DeviceInfo): Record<string, unknown> {
+  return {
+    ...(device.model ? { model: device.model } : {}),
+    ...(device.osVersion ? { osVersion: device.osVersion } : {}),
   };
 }
 

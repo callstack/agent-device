@@ -29,6 +29,9 @@ function serializeSessionDevice(
     target: device.target,
     device: device.name,
     id: device.id,
+    ...(device.kind ? { kind: device.kind } : {}),
+    ...(device.model ? { model: device.model } : {}),
+    ...(device.osVersion ? { osVersion: device.osVersion } : {}),
     ...(device.platform === 'ios'
       ? {
           device_udid: device.ios?.udid ?? device.id,

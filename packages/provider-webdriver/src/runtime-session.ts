@@ -302,7 +302,7 @@ export class WebDriverSessionManager {
       requestPolicy: this.options.requestPolicy,
     });
     const session = await this.createSessionWithPreparedCleanup(client, prepared, lease, req);
-    const device = this.deviceForLease(lease, prepared);
+    const device = this.deviceForLease(lease, prepared, session.capabilities);
     const capabilities = createCloudWebDriverCapabilities({
       provider: this.options.provider,
       platform: prepared.platform,
@@ -550,7 +550,11 @@ export class WebDriverSessionManager {
     };
   }
 
-  private deviceForLease(lease: DeviceLease, prepared: CloudWebDriverPreparedSession): DeviceInfo {
+  private deviceForLease(
+    lease: DeviceLease,
+    prepared: CloudWebDriverPreparedSession,
+    capabilities: Record<string, unknown>,
+  ): DeviceInfo {
     return {
       ...deviceFieldsFromPublicPlatform(prepared.platform),
       ...(prepared.platform === 'ios' ? { appleOs: 'ios' as const } : {}),
@@ -561,6 +565,7 @@ export class WebDriverSessionManager {
       name: prepared.deviceName,
       kind: 'device',
       target: 'mobile',
+      ...deviceDescriptionFromWebDriverCapabilities(capabilities),
       booted: true,
     };
   }
@@ -610,6 +615,25 @@ export class WebDriverSessionManager {
       });
     }
   }
+}
+
+/**
+ * The OS version an Appium-style hub echoes back in its create-session capabilities. W3C
+ * `platformVersion` and its `appium:` variant both count; a hub that reports neither leaves it unset
+ * rather than repeating what was asked for, so `open` never reports an OS the provider did not grant.
+ */
+function deviceDescriptionFromWebDriverCapabilities(
+  capabilities: Record<string, unknown>,
+): Pick<DeviceInfo, 'osVersion'> {
+  const osVersion = readCapability(capabilities, 'platformVersion');
+  return osVersion ? { osVersion } : {};
+}
+
+function readCapability(capabilities: Record<string, unknown>, key: string): string | undefined {
+  for (const value of [capabilities[key], capabilities[`appium:${key}`]]) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
 }
 
 /**
