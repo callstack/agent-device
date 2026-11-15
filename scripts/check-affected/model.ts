@@ -275,6 +275,16 @@ const replayBackendOwnership: OwnershipRule = ({ file }) =>
           'own:replay-backend-differential',
           'installed replay backends retain live outcome and timing invariants',
         ),
+        ...(file.startsWith('packages/maestro/test/conformance/')
+          ? [
+              reason(
+                'unit',
+                file,
+                'own:maestro-conformance-unit',
+                'the unit suite covers conformance selector projection and its shared helpers',
+              ),
+            ]
+          : []),
       ]
     : [];
 

@@ -570,6 +570,19 @@ test('managed engine and loading changes retain every Maestro oracle lane', () =
   }
 });
 
+test('Maestro conformance Vitest inputs retain their registered unit runner', () => {
+  for (const file of [
+    'packages/maestro/test/conformance/conformance-selector-projection.test.ts',
+    'packages/maestro/test/conformance/conformance-selector-projection.ts',
+    'packages/maestro/test/conformance/conformance-normalize.ts',
+  ]) {
+    assert.ok(fs.existsSync(path.join(repoRoot, file)), file);
+    const result = plan([file]);
+    assert.equal(result.failOpen, false, file);
+    assert.ok(result.checks.includes('unit'), `unit must run for ${file}`);
+  }
+});
+
 test('managed engine non-source inputs retain conservative full selection', () => {
   for (const file of [
     'packages/maestro/package.json',
