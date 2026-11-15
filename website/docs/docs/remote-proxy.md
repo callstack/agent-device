@@ -108,15 +108,20 @@ Outside a macOS app lease, a fresh `open --save-script=<path>` records the sessi
 your machine. Each response that records an action returns a `session-script` artifact, and the
 client replaces the file with it. `close` returns the final script. The client writes only to the
 path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
-A session that another process closes keeps the version from the last recorded action. If the
-daemon cannot write a version, the command still succeeds and shows a warning; the next recorded
-action or `close` delivers the full recording. If `close` cannot write the final script, the
-session still closes and the file keeps the version from the last action. If this machine cannot
-download or save a version, or the version is larger than 8 MiB, the command also succeeds with
-a warning and a `scriptDeliveryFailure`, and the file keeps the previous version. Remote `session save-script`,
-`close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused. A
-`batch` whose steps would close the recording is refused before any step runs; run `close` on its
-own after the batch.
+A session that another process closes keeps the version from the last recorded action.
+
+A script version that is not delivered never fails the command that recorded it. The daemon may
+fail to write it, or this machine may fail to download or save it, for example when it is larger
+than 8 MiB. The command still succeeds, and the file may keep the previous version; the next recorded
+action or `close` delivers the full recording again. If `close` cannot deliver the final script,
+the session still closes and the file keeps the version from the last action. The daemon RPC
+response carries a typed `scriptDeliveryFailure` and a warning. The CLI, SDK, and MCP results do
+not carry `scriptDeliveryFailure` yet, and `close` shows no warning; see
+[#4564](https://github.com/callstack/agent-device/issues/4564).
+
+Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
+batch steps are refused. A `batch` whose steps would close the recording is refused before any step
+runs; run `close` on its own after the batch.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a

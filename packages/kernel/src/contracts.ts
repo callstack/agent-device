@@ -209,6 +209,19 @@ export type DaemonArtifact = {
   scriptRevision?: number;
 };
 
+/**
+ * A remote recording's script version that was not delivered (ADR 0016). The action that recorded
+ * it keeps its success; the response carries this beside a warning with the same text.
+ */
+export type ScriptDeliveryFailure = {
+  reason: 'script_delivery_failed';
+  publicationId: string;
+  message: string;
+  hint: string;
+  /** Why the client could not download or save the version, when the client found the failure. */
+  cause?: string;
+};
+
 export type ResponseCost = {
   wallClockMs: number;
   // Number of real iOS-runner round-trips made while serving the request (the

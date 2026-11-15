@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import type {
+  DaemonArtifact,
+  DaemonResponse,
+  ScriptDeliveryFailure,
+} from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -107,12 +111,13 @@ export function sessionScriptDelivery(
       } catch (error) {
         // A delivery failure never changes the outcome of the action that recorded the version.
         const saved = error as AppError;
-        const failure = {
+        // Only a validated script artifact reaches the save, so its publication ID is a string.
+        const failure: ScriptDeliveryFailure = {
           reason: 'script_delivery_failed',
-          cause: saved.details?.reason,
-          publicationId: artifact.scriptPublicationId,
+          cause: String(saved.details?.reason),
+          publicationId: String(artifact.scriptPublicationId),
           message: saved.message,
-          hint: saved.details?.hint,
+          hint: String(saved.details?.hint),
         };
         data.scriptDeliveryFailure = failure;
         data.warnings = [...readResponseWarnings(data), `${failure.message} ${failure.hint}`];

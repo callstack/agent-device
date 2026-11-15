@@ -1,6 +1,10 @@
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequestMeta, DaemonResponse } from '@agent-device/kernel/contracts';
+import type {
+  DaemonRequestMeta,
+  DaemonResponse,
+  ScriptDeliveryFailure,
+} from '@agent-device/kernel/contracts';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { SessionStore } from './session-store.ts';
 import { asDaemonDeliveredArtifact } from './capture-output-ownership.ts';
@@ -255,7 +259,11 @@ function withRemoteScriptVersion(
   const { publicationId } = delivery;
   const data = response.data ?? {};
   if ('failure' in version) {
-    const failure = { reason: 'script_delivery_failed', publicationId, ...version.failure };
+    const failure: ScriptDeliveryFailure = {
+      reason: 'script_delivery_failed',
+      publicationId,
+      ...version.failure,
+    };
     return {
       ok: true,
       data: {

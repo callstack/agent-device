@@ -12,35 +12,24 @@ function batch(...commands: string[]): DaemonRequest {
   };
 }
 
-test('a batch that would close an armed remote recording is refused before any step runs', async () => {
-  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
-
-  await expect(
-    runBatchCommands(batch('wait', 'close'), 'journey', invoke, true),
-  ).rejects.toMatchObject({
+const refused = {
+  ok: false,
+  error: expect.objectContaining({
     code: 'INVALID_ARGS',
-    details: { reason: 'remote_script_batch_close_unsupported' },
-  });
-  expect(invoke).not.toHaveBeenCalled();
-});
+    details: expect.objectContaining({ reason: 'remote_script_batch_close_unsupported' }),
+  }),
+};
 
-test('a close step spelled differently is refused too', async () => {
+test.each([
+  { name: 'close', close: 'close' },
+  { name: 'a close spelled differently', close: ' CLOSE ' },
+])('a batch with $name in an armed remote recording runs no step', async ({ close }) => {
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
-  await expect(
-    runBatchCommands(batch('wait', ' CLOSE '), 'journey', invoke, true),
-  ).rejects.toMatchObject({ details: { reason: 'remote_script_batch_close_unsupported' } });
+  await expect(runBatchCommands(batch('wait', close), 'journey', invoke, true)).resolves.toEqual(
+    refused,
+  );
   expect(invoke).not.toHaveBeenCalled();
-});
-
-test('malformed steps get the batch refusal, not a type error', async () => {
-  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
-  const req = { ...batch('wait'), flags: { batchSteps: 'close' } } as unknown as DaemonRequest;
-
-  await expect(runBatchCommands(req, 'journey', invoke, true)).resolves.toMatchObject({
-    ok: false,
-    error: { code: 'INVALID_ARGS' },
-  });
 });
 
 test.each([
@@ -56,4 +45,14 @@ test.each([
   await runBatchCommands(batch(...commands), 'journey', invoke, remote);
 
   expect(invoke).toHaveBeenCalledTimes(commands.length);
+});
+
+test('malformed steps get the batch refusal', async () => {
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const req = { ...batch('wait'), flags: { batchSteps: 'close' } } as unknown as DaemonRequest;
+
+  await expect(runBatchCommands(req, 'journey', invoke, true)).resolves.toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS' },
+  });
 });
