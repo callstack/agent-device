@@ -246,11 +246,12 @@ function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
   return { ...record, staging: (record.staging ?? []).filter((listed) => listed !== staging) };
 }
 
-/** Removes a record and every staging directory it lists. */
+/** Removes every staging directory a record lists, then the record, so a failure keeps the list. */
 function removeRecord(file: string): void {
-  const record = readRecord(file);
+  for (const staging of readRecord(file)?.staging ?? []) {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
   fs.rmSync(file, { force: true });
-  for (const staging of record?.staging ?? []) fs.rmSync(staging, { recursive: true, force: true });
 }
 
 /**

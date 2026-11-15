@@ -264,3 +264,20 @@ test('a private file that cannot be opened releases the response', async (t) => 
     await closeLoopbackServer(server);
   }
 });
+
+test('a private file download never recreates a removed staging directory', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'private artifact download parent')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-private-parent-');
+  const destinationPath = path.join(tempRoot, 'retired-staging', 'script.ad');
+  const server = http.createServer((_req, res) => res.end('open Demo\n'));
+  const port = await listenOnLoopback(server);
+
+  try {
+    await assert.rejects(() =>
+      downloadTo(tempRoot, port, { destinationPath, privateFile: { maxBytes: 1024 } }),
+    );
+    assert.equal(fs.existsSync(path.dirname(destinationPath)), false);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

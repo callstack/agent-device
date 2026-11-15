@@ -58,8 +58,10 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
     };
   }
   return {
+    // A private file goes into a directory its caller allocated, which is never recreated here.
     prepare: async () => {
-      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      if (!params.privateFile)
+        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     },
     cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
     materialize: async (res, signal) => {
