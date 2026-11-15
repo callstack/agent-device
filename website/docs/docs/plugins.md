@@ -173,6 +173,6 @@ A replay engine uses the same managed `./agent-device` factory entry and `apiVer
 
 For a format backend such as `maestro`, setup returns `{ replayBackend: { create(host) }, dispose? }`. The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`.
 
-For the native `ad` backend, setup returns `{ execution: { create() }, dispose? }`. The runtime implements `inspectAdReplay`, `runAdReplay`, and `runReplayTestSuite`. Return only the factory for your backend: the host rejects a native setup that provides `replayBackend`, or a format setup that provides `execution`.
+For the native `ad` backend, setup returns `{ execution: { create() }, dispose? }`. The object returned by `create()` implements `inspectAdReplay`, `runAdReplay`, and `runReplayTestSuite`. Return only the factory for your backend: the host rejects a native setup that provides `replayBackend`, or a format setup that provides `execution`.
 
 The daemon owns sessions, policy, selector/ref authority, and device cleanup. `dispose` runs once after requests drain. Client-side source collection and export dispose their scoped plugin registry when the operation ends.
