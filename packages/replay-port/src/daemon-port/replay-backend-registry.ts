@@ -56,13 +56,16 @@ export async function withReplayBackend<T>(
 /** A client/tooling scope owns its plugin registry until close. It never starts providers. */
 export async function openReplayBackend(id: ReplayBackendId, env: NodeJS.ProcessEnv) {
   const { AppError } = await import('@agent-device/kernel/errors');
+  const packageName = await backendPackage(id);
   const [{ storePluginCandidates }, { resolveProviderPlugins, startProviderRegistry }] =
     await Promise.all([
       import('@agent-device/plugins/store'),
       import('@agent-device/plugins/registry'),
     ]);
   const registry = await startProviderRegistry(
-    await resolveProviderPlugins(await storePluginCandidates(env)),
+    await resolveProviderPlugins(
+      (await storePluginCandidates(env)).filter((candidate) => candidate.package === packageName),
+    ),
     env,
     {
       adaptWebDriver: async () => {
@@ -73,11 +76,7 @@ export async function openReplayBackend(id: ReplayBackendId, env: NodeJS.Process
   );
   try {
     const { createReplayBackendHost } = await import('./replay-backend-host.ts');
-    const backend = await registry.resolveReplayBackend(
-      id,
-      createReplayBackendHost(),
-      await backendPackage(id),
-    );
+    const backend = await registry.resolveReplayBackend(id, createReplayBackendHost(), packageName);
     return { backend, close: registry.close };
   } catch (error) {
     await registry.close();

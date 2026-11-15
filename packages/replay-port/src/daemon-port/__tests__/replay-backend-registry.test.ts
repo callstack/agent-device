@@ -1,8 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { getReplayBackendDeclaration } from '../replay-backend-declarations.ts';
 import { getReplayBackend, openReplayBackend } from '../replay-backend-registry.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
 
 test('help declares the exact optional package without requiring a working plugin', () => {
   expect(getReplayBackendDeclaration('maestro')).toMatchObject({
@@ -20,18 +22,24 @@ test('the runtime registry memoizes the installed backend capabilities', async (
   });
 });
 
-test('absence gives a vetted install command and preserves the host installation boundary', async () => {
-  await expect(
-    openReplayBackend('maestro', {
-      AGENT_DEVICE_HOME: mkdtempForTestSync('missing-replay-plugin-'),
-    }),
-  ).rejects.toMatchObject({
+test('client replay absence does not evaluate unrelated provider packages', async () => {
+  const { home, env } = pluginHome();
+  const evaluated = path.join(home, 'provider-evaluated');
+  selectV2Plugin(
+    home,
+    '@example/unrelated',
+    `import fs from 'node:fs';
+     fs.writeFileSync(${JSON.stringify(evaluated)}, 'evaluated');
+     throw new Error('Unrelated provider import');`,
+  );
+  await expect(openReplayBackend('maestro', env)).rejects.toMatchObject({
     details: {
       reason: 'plugin-not-installed',
       package: '@agent-device/maestro',
       installCommand: 'agent-device plugins add @agent-device/maestro',
     },
   });
+  expect(fs.existsSync(evaluated)).toBe(false);
 });
 
 test('an unbound daemon runtime never borrows another runtime or the client store', async () => {
