@@ -24,6 +24,25 @@ test('a batch that would close an armed remote recording is refused before any s
   expect(invoke).not.toHaveBeenCalled();
 });
 
+test('a close step spelled differently is refused too', async () => {
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  await expect(
+    runBatchCommands(batch('wait', ' CLOSE '), 'journey', invoke, true),
+  ).rejects.toMatchObject({ details: { reason: 'remote_script_batch_close_unsupported' } });
+  expect(invoke).not.toHaveBeenCalled();
+});
+
+test('malformed steps get the batch refusal, not a type error', async () => {
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const req = { ...batch('wait'), flags: { batchSteps: 'close' } } as unknown as DaemonRequest;
+
+  await expect(runBatchCommands(req, 'journey', invoke, true)).resolves.toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS' },
+  });
+});
+
 test.each([
   { name: 'a remote recording batch without close', commands: ['wait'], remote: true },
   {
