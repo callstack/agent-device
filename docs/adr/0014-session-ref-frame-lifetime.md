@@ -380,10 +380,11 @@ Each of these is one logical command:
 - Platform sequence chunks.
 - The multi-ref press/click plan (`press @e13,@e14`, and the same `click` form), under the plan rules below.
 
-Each one resolves or plans once, expires once before the first repetition, and executes the original physical point/plan for every repetition.
-It does not re-resolve the target or reactivate the frame between repetitions.
-Failure in any later repetition or chunk leaves the frame expired.
+Each one resolves or plans once and expires the frame once at its first mutating dispatch.
+The repeated-action commands — `--count`, double-tap, hold, jitter, `swipe --count`, platform sequence chunks — execute the original physical point/plan for every repetition.
+They do not re-resolve the target or reactivate the frame between repetitions, and a failure in any later repetition or chunk leaves the frame expired.
 This preserves the explicit repeated-physical-interaction contract, and it prevents later commands from reuse of the frame.
+The multi-ref press/click plan is not a repetition of one physical point: it admits its ordered keys once before dispatch, expires the frame at key 1, and dispatches each later key at its admitted point under the amendment rules below.
 
 #### 2026-11-14 amendment: the multi-ref press/click plan is one logical command
 
