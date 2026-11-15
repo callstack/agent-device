@@ -1,5 +1,6 @@
 import { afterEach, assert, test, vi } from 'vitest';
-import { isRetryableUploadStreamError, isTransferPhaseTimeoutError } from '../upload-stream.ts';
+import { isTransferPhaseTimeoutError } from '@agent-device/host-kit/transport';
+import { isRetryableUploadStreamError } from '../upload-stream.ts';
 import {
   LEGACY_UPLOAD_REQUEST,
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,

@@ -5,90 +5,18 @@ import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  createTransferPhaseWatchdog,
   loadNodeHttpRequester,
+  observeClientRequestPhases,
   observeCompletedRequestWrites,
   readNodeHttpResponseBody,
+  TRANSFER_CONNECT_TIMEOUT_MS,
 } from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
   type UploadProgressStage,
 } from './upload-progress.ts';
-
-export const TRANSFER_CONNECT_TIMEOUT_MS = 30_000;
-
-/** Header wait starts after connection and outgoing flush, never while the body progresses. */
-export const TRANSFER_RESPONSE_HEADER_TIMEOUT_MS = 30_000;
-
-export const TRANSFER_BODY_INACTIVITY_TIMEOUT_MS = 120_000;
-
-export type TransferPhase =
-  | 'connect'
-  | 'request-body'
-  | 'response-headers'
-  | 'response-body'
-  | 'preflight'
-  | 'finalize';
-
-const BODY_PHASES: ReadonlySet<TransferPhase> = new Set(['request-body', 'response-body']);
-
-const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
-
-/** One sequential phase under the earliest caller/aggregate deadline; progress resets body phases only. */
-export type TransferPhaseWatchdog = {
-  signal: AbortSignal;
-  arm(phase: TransferPhase, timeoutMs: number): void;
-  touchBody(): void;
-  /** Stops the armed timer. Call it once the attempt is settled. */
-  dispose(): void;
-};
-
-export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): TransferPhaseWatchdog {
-  const phase = new AbortController();
-  const signal = callerSignal ? AbortSignal.any([callerSignal, phase.signal]) : phase.signal;
-  let armed: { phase: TransferPhase; timeoutMs: number } | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const rearm = () => {
-    if (timer !== undefined) clearTimeout(timer);
-    const current = armed;
-    if (!current) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      phase.abort(createTransferPhaseTimeoutError(current.phase, current.timeoutMs));
-    }, current.timeoutMs);
-    timer.unref();
-  };
-  return {
-    signal,
-    arm(nextPhase, timeoutMs) {
-      if (signal.aborted) return;
-      armed = { phase: nextPhase, timeoutMs };
-      rearm();
-    },
-    touchBody() {
-      if (!armed || !BODY_PHASES.has(armed.phase)) return;
-      rearm();
-    },
-    dispose() {
-      armed = undefined;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
-    },
-  };
-}
-
-function createTransferPhaseTimeoutError(phase: TransferPhase, timeoutMs: number): AppError {
-  return new AppError('COMMAND_FAILED', `Artifact transfer ${phase} timed out`, {
-    reason: TRANSFER_PHASE_TIMEOUT_REASON,
-    transferPhase: phase,
-    timeoutMs,
-  });
-}
-
-/** Whether `error` is a transfer phase's own expiry, which no fallback or retry may restart. */
-export function isTransferPhaseTimeoutError(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === TRANSFER_PHASE_TIMEOUT_REASON;
-}
 
 const UPLOAD_PREPARATION_TIMEOUT_MS = 600_000;
 
@@ -144,7 +72,7 @@ export async function streamFileToHttpRequest(options: {
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  /** Every attempt and hop shares the enclosing aggregate/caller signal. */
+  /** All hops share the enclosing aggregate/caller signal. */
   signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
@@ -182,31 +110,13 @@ async function streamFileToHttpRequestAttempt(options: {
 
   let upload: Promise<void> | undefined;
   let uploadSettled = false;
-  let responseReceived = false;
   return await new Promise<UploadStreamResponse>((resolve, reject) => {
-    let outgoingEnded = false;
-    let transportEstablished = false;
-    let bodyFlushed = false;
-    const settle = (result: UploadStreamResponse) => {
-      stopObservingWrites();
-      watchdog.dispose();
-      resolve(result);
-    };
     const fail = (error: unknown) => {
+      phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
-      // The queued pipeline has to settle before the join in `finally`.
       req.destroy();
-      reject(error);
-    };
-    const advanceOutgoingPhase = () => {
-      if (responseReceived || watchdog.signal.aborted) return;
-      if (!transportEstablished) return;
-      if (bodyFlushed) {
-        watchdog.arm('response-headers', TRANSFER_RESPONSE_HEADER_TIMEOUT_MS);
-      } else {
-        watchdog.arm('request-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
-      }
+      reject(watchdog.signal.aborted ? watchdog.signal.reason : error);
     };
     const req = transport.request(
       {
@@ -221,43 +131,18 @@ async function streamFileToHttpRequestAttempt(options: {
         signal: watchdog.signal,
       },
       (res) => {
-        responseReceived = true;
-        watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
         addAbortSignal(watchdog.signal, res);
-        void handleUploadResponse(res)
-          .then((result) => settle(result))
-          .catch((error: unknown) =>
-            fail(watchdog.signal.aborted ? watchdog.signal.reason : error),
-          );
+        void handleUploadResponse(res).then(resolve).catch(fail);
       },
     );
 
-    req.on('socket', (socket) => {
-      if (socket.connecting) {
-        const secured = (socket as { encrypted?: boolean }).encrypted === true;
-        socket.once(secured ? 'secureConnect' : 'connect', () => {
-          transportEstablished = true;
-          advanceOutgoingPhase();
-        });
-      } else {
-        transportEstablished = true;
-        advanceOutgoingPhase();
-      }
-    });
-    req.on('finish', () => {
-      bodyFlushed = true;
-      advanceOutgoingPhase();
-    });
+    const phases = observeClientRequestPhases(req, watchdog);
     const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
       watchdog.touchBody(),
     );
 
     req.on('error', (err) => {
-      if (responseReceived) return;
-      if (watchdog.signal.aborted) {
-        fail(watchdog.signal.reason);
-        return;
-      }
+      if (phases.responseStarted) return;
       fail(
         new AppError(
           'COMMAND_FAILED',
@@ -285,32 +170,18 @@ async function streamFileToHttpRequestAttempt(options: {
     })().catch((err: unknown) => {
       // After a response, only this attempt's own teardown ends the pipeline, and the server's
       // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
-      if (responseReceived) return;
-      req.destroy();
-      if (watchdog.signal.aborted) {
-        fail(watchdog.signal.reason);
-        return;
-      }
+      if (phases.responseStarted) return;
       const error = err instanceof Error ? err : new Error(String(err));
       fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
 
-    const endOutgoingWork = (): Promise<void> => {
-      if (!outgoingEnded) {
-        outgoingEnded = true;
-        // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
-        // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
-        if (!uploadSettled) req.destroy();
-      }
-      return upload!.then(
-        () => undefined,
-        () => undefined,
-      );
-    };
-
     async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
       const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
-      await endOutgoingWork();
+      // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
+      // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
+      if (!uploadSettled) req.destroy();
+      await upload!.catch(() => undefined);
+      phases.dispose();
       stopObservingWrites();
       watchdog.dispose();
 
