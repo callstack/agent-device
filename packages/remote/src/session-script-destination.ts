@@ -56,7 +56,7 @@ export async function sendRemoteScriptOpen(
   if (!info.baseUrl || !destination) throw new Error('A remote script open needs a destination.');
   const publicationId = crypto.randomUUID();
   const file = recordPath(stateDir, info.baseUrl, req, publicationId);
-  createRecord(file, { destination, force: req.flags?.force === true, revision: 0 });
+  await createRecord(file, { destination, force: req.flags?.force === true, revision: 0 });
   const meta = { ...req.meta, clientArtifactPaths, scriptPublicationId: publicationId };
   let armed = false;
   try {
@@ -308,18 +308,22 @@ function recordPath(
 }
 
 /** Creates a record and removes the records nobody has touched for `STALE_RECORD_MS`. */
-function createRecord(file: string, record: ScriptRecord): void {
+async function createRecord(file: string, record: ScriptRecord): Promise<void> {
   const directory = path.dirname(file);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const staleBefore = Date.now() - STALE_RECORD_MS;
+  const isStale = (entry: string) =>
+    (fs.lstatSync(entry, { throwIfNoEntry: false })?.mtimeMs ?? Infinity) <
+    Date.now() - STALE_RECORD_MS;
   for (const name of fs.readdirSync(directory)) {
     const entry = path.join(directory, name);
-    const stat = fs.lstatSync(entry, { throwIfNoEntry: false });
-    if (name.endsWith('.json') && stat && stat.mtimeMs < staleBefore) {
+    if (!name.endsWith('.json') || !isStale(entry)) continue;
+    // Rechecked under the lock, so a record that a publish just refreshed stays.
+    await withRecordLock(entry, async () => {
+      if (!isStale(entry)) return;
       const staging = readRecord(entry)?.publishing?.staging;
       fs.rmSync(entry, { force: true });
       if (staging) fs.rmSync(staging, { recursive: true, force: true });
-    }
+    });
   }
   writeRecord(file, record);
 }

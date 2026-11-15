@@ -213,7 +213,7 @@
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:42d78f01311e3e0c5f9099ef72e3c6258241e66204747aa176a55cd5191a2145",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:fd0ca790bca919ab5858cc5e844fc9db1781d1b4469e8eacb1920727be3da643",
-    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:46d70f5af3afb9c53f3a7fca1409a9ac31ebca24619bdece7ad12b72416adbc2",
+    "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:4576d6fe1a90c47a2a0ee04573bc2867e7a6c0485297934eb9b49c7c8f56f489",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
   },
   "compatibleChanges": [
