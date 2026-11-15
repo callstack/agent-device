@@ -1,0 +1,122 @@
+# Throwaway trial: boot Apple's iOS simulator on Linux with x86sim and drive it. Not for merge.
+name: x86sim-trial
+on:
+  push:
+    branches: [x86sim-trial]
+  workflow_dispatch:
+concurrency:
+  group: x86sim-trial
+  cancel-in-progress: true
+jobs:
+  trial:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 180
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      X86SIM_VERSION_TAG: v0.2.0
+      OUT: ${{ github.workspace }}/out
+    steps:
+      - name: Host facts
+        run: |
+          mkdir -p "$OUT"
+          set -x
+          uname -a; cat /etc/os-release | head -3; ldd --version | head -1
+          nproc; free -g; df -h / /mnt "$HOME" || true
+          grep -o -w -E 'sse4_1|popcnt|cx16|avx2' /proc/cpuinfo | sort | uniq -c
+          grep overlay /proc/filesystems || true
+          ls -l /dev/fuse /dev/kvm /dev/dri 2>&1 || true
+          sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone 2>&1 || true
+          unshare -r -m true && echo userns-ok || echo userns-blocked
+
+      - name: Allow user namespaces and a user systemd session
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          unshare -r -m true && echo userns-ok
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-dnspython libvulkan1 mesa-vulkan-drivers zstd >/dev/null
+          sudo loginctl enable-linger "$(id -un)"
+          for i in $(seq 1 20); do [ -S "/run/user/$(id -u)/bus" ] && break; sleep 1; done
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+          XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user is-system-running || true
+
+      - name: Download x86sim AppImage
+        run: |
+          gh release download "$X86SIM_VERSION_TAG" -R x86sim/x86sim -p '*.AppImage' -p SHA256SUMS -D "$RUNNER_TEMP/x86sim"
+          cd "$RUNNER_TEMP/x86sim" && sha256sum -c --ignore-missing SHA256SUMS
+          chmod +x x86sim-*.AppImage
+          ln -s "$RUNNER_TEMP"/x86sim/x86sim-*.AppImage "$RUNNER_TEMP/x86sim.AppImage"
+          echo "X=$RUNNER_TEMP/x86sim.AppImage" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: x86sim setup check
+        run: |
+          "$X" version
+          "$X" aot setup check | tee "$OUT/setup-check.txt"
+
+      - name: Fetch iOS runtime from Apple
+        timeout-minutes: 60
+        run: |
+          start=$(date +%s)
+          "$X" x86sim runtime list ios | tee "$OUT/runtimes.txt"
+          build=$(grep -E 'iOS 27\.2( |$)' "$OUT/runtimes.txt" | grep -v -i beta | head -1 | awk '{print $1}')
+          [ -n "$build" ] || build=$(grep -i -v beta "$OUT/runtimes.txt" | grep iOS | head -1 | awk '{print $1}')
+          echo "build=$build"
+          "$X" x86sim runtime fetch "$build" 2>&1 | grep -v -E '^\s*[0-9]+ ' | tail -40
+          echo "runtime fetch: $(( $(date +%s) - start ))s" | tee -a "$OUT/timings.txt"
+          df -h / ; du -sh ~/.local/share/x86sim/runtimes/* || true
+          "$X" aot setup check | tee "$OUT/setup-check-after.txt"
+
+      - name: Create and boot an iPhone
+        timeout-minutes: 60
+        run: |
+          "$X" x86sim device models | head -40
+          "$X" x86sim device create --model "iPhone 17 Pro" ci
+          "$X" x86sim device list
+          start=$(date +%s)
+          "$X" aot --device ci sim start
+          "$X" x86sim wait home 2700
+          echo "boot to home: $(( $(date +%s) - start ))s" | tee -a "$OUT/timings.txt"
+          "$X" aot sim status --device ci || true
+
+      - name: Scripted flow
+        timeout-minutes: 30
+        run: |
+          set -x
+          t() { s=$(date +%s%N); "$@"; rc=$?; echo "$(( ($(date +%s%N) - s) / 1000000 ))ms $*" >> "$OUT/timings.txt"; return $rc; }
+          t "$X" x86sim screenshot "$OUT/01-home.png"
+          t "$X" x86sim listapps --json > "$OUT/apps.json"
+          t "$X" x86sim launch com.apple.Preferences
+          t "$X" x86sim wait app 120 || true
+          sleep 5
+          t "$X" x86sim screenshot "$OUT/02-settings.png"
+          t "$X" x86sim tap 400 900
+          sleep 3
+          t "$X" x86sim screenshot "$OUT/03-after-tap.png"
+          t "$X" x86sim home
+          t "$X" x86sim openurl https://example.com
+          sleep 15
+          t "$X" x86sim screenshot "$OUT/04-safari.png"
+          t "$X" x86sim swipe 600 2000 600 800 300
+          sleep 2
+          t "$X" x86sim screenshot "$OUT/05-swipe.png"
+          t "$X" x86sim spawn --timeout 20 /usr/bin/sw_vers || true
+          t "$X" aot sim status --json > "$OUT/sim-status.json" || true
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          cat "$OUT/timings.txt" 2>/dev/null || true
+          free -g; df -h /
+          systemctl --user list-units --all 'x86sim*' --no-pager 2>&1 | head -40 || true
+          d=~/.local/share/x86sim/var
+          find $d -maxdepth 6 -path '*var/log/*' -name '*.log' -size -5M 2>/dev/null | head -200 | tar czf "$OUT/device-logs.tgz" -T - 2>/dev/null || true
+          find ~/.cache/x86sim -maxdepth 3 -name '*.log' -size -20M 2>/dev/null | tar czf "$OUT/cache-logs.tgz" -T - 2>/dev/null || true
+          journalctl --user --no-pager -n 400 > "$OUT/journal-user.txt" 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: x86sim-trial
+          path: out
