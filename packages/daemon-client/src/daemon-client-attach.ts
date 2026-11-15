@@ -1,14 +1,21 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
-import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type {
+  DaemonClientSettings,
+  EnsuredDaemon,
+  RemoteHealthRecovery,
+} from './daemon-client-lifecycle.ts';
 import { daemonBindingMismatchError } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
 /** Resolves a managed daemon, or observes and verifies the one an attach client may use. */
-export async function connectToDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+export async function connectToDaemon(
+  settings: DaemonClientSettings,
+  healthRecovery?: RemoteHealthRecovery,
+): Promise<EnsuredDaemon> {
   if (settings.remoteBaseUrl || settings.daemonLifecycle !== 'attach') {
-    return await ensureManagedDaemon(settings);
+    return await ensureManagedDaemon(settings, healthRecovery);
   }
   const stateDir = settings.paths.baseDir;
   const observed = await observeLocalDaemon(settings, { refineUnreachable: true }).catch(
