@@ -378,11 +378,25 @@ Each of these is one logical command:
 - Jitter.
 - `swipe --count`.
 - Platform sequence chunks.
+- The multi-ref press/click plan (`press @e13,@e14`, and the same `click` form), under the plan rules below.
 
-Each one resolves or plans once, expires once before the first repetition, and executes the original physical point/plan for every repetition.
-It does not re-resolve the target or reactivate the frame between repetitions.
-Failure in any later repetition or chunk leaves the frame expired.
+Each one resolves or plans once and expires the frame once at its first mutating dispatch.
+The repeated-action commands — `--count`, double-tap, hold, jitter, `swipe --count`, platform sequence chunks — execute the original physical point/plan for every repetition.
+They do not re-resolve the target or reactivate the frame between repetitions, and a failure in any later repetition or chunk leaves the frame expired.
 This preserves the explicit repeated-physical-interaction contract, and it prevents later commands from reuse of the frame.
+The multi-ref press/click plan is not a repetition of one physical point: it admits its ordered keys once before dispatch, expires the frame at key 1, and dispatches each later key at its admitted point under the amendment rules below.
+
+#### 2026-11-14 amendment: the multi-ref press/click plan is one logical command
+
+`press @e13,@e14,...` (2 to 16 snapshot refs, and the same form on `click`) is one logical command with four rules:
+
+1. Every member resolves and admits against the current frame before dispatch.
+2. The frame expires once, at key 1.
+3. Later keys dispatch their admitted points; no member re-resolves.
+4. A failure after key 1 is post-seam: it reports `dispatchedSteps`, `refPlanKey`, and `refPlanPending`, and it never restores the frame.
+
+This widens the earlier one-resolved-target-per-command limit to N pre-admitted targets for this plan shape only.
+Every other one-target constraint in this decision stays unchanged.
 
 ### Partial issuance and MCP
 
@@ -434,7 +448,7 @@ Callers can avoid unnecessary captures with:
 - Selectors.
 - Direct selector fast paths.
 - A settled partial result whose emitted ref is pinned.
-- `--count` for a repeated physical action at one resolved target.
+- `--count` repeats one resolved target (the multi-ref plan in the 2026-11-14 amendment above dispatches its N pre-admitted keys under one logical command, not this row).
 
 The daemon never captures automatically for the sole purpose of a ref renewal.
 
@@ -470,7 +484,7 @@ This decision composes with existing ADRs as follows:
 
 - A stale ref cannot silently mutate a different element after navigation.
   The caller receives a typed failure and must choose a fresh observation or a selector.
-- Ref-oriented workflows that perform multiple logical mutations must capture again between the mutations, consume an honestly issued settled ref, use selectors, or use one repeated-action command such as `--count`.
+- Ref-oriented workflows that perform multiple logical mutations must capture again between the mutations, consume an honestly issued settled ref, use selectors, use one repeated-action command such as `--count`, or issue one multi-ref press/click plan whose members all resolve and admit before key 1 (the 2026-11-14 amendment above).
   Legacy hand-written `.ad` scripts that reuse several bare refs from one snapshot must change.
 - Conservative fused requests may consume ref authority even when the platform later reports that no action was necessary.
   This favors the avoidance of a wrong-screen action over the preservation of refs after an ambiguous dispatch.

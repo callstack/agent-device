@@ -8,6 +8,7 @@ import {
 } from '@agent-device/contracts/click-button';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../../session-snapshot.ts';
+import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
@@ -54,6 +55,8 @@ export type AdmittedTargetedTouch = {
   durationMs: number | undefined;
   staleRefsWarning: string | undefined;
   refContext: RefAdmissionContext | undefined;
+  /** Multi-ref press plan members in dispatch order, bare bodies; absent for a single-ref target. */
+  refs: readonly string[] | undefined;
 };
 
 type ParsedTargetedTouch = Extract<ParsedTouchTarget | ParsedLongPressTarget, { ok: true }>;
@@ -86,6 +89,8 @@ async function readTargetedTouchAdmission(
       ? parseLongPressTarget(positionals)
       : parseTouchTarget(positionals, commandLabel);
   if (!parsedTarget.ok) return { response: parsedTarget.response };
+  const sequenceGuardResponse = sequenceRecordingGuardResponse(session, req, parsedTarget);
+  if (sequenceGuardResponse) return { response: sequenceGuardResponse };
   const staleRefsWarning = readTargetedTouchStalenessWarning(session, req, parsedTarget);
   const refAdmission = admitTargetedTouchRef(
     params,
@@ -107,6 +112,7 @@ async function readTargetedTouchAdmission(
       durationMs: command === 'longpress' ? parsedTarget.durationMs : undefined,
       staleRefsWarning,
       refContext: readRefAdmissionContext(req, parsedTarget, staleRefsWarning),
+      refs: parsedTarget.refs,
     },
   };
 }
@@ -158,6 +164,7 @@ function clickButtonValidationResponse(
  * while the frame is expired. A mutating `find`'s internal dispatch supplies a
  * locator-minted ref (`internal.findResolvedTarget`), so it carries no
  * user-facing staleness — the caller never consumed a `@ref` (ADR 0014).
+ * A multi-ref plan warns per member; distinct warnings join in dispatch order.
  */
 function readTargetedTouchStalenessWarning(
   session: SessionState,
@@ -166,11 +173,54 @@ function readTargetedTouchStalenessWarning(
 ): string | undefined {
   if (parsedTarget.target.kind !== 'ref') return undefined;
   if (req.internal?.findResolvedTarget !== undefined) return undefined;
+  if (parsedTarget.refs) {
+    const warnings = new Set<string>();
+    parsedTarget.refs.forEach((ref, index) => {
+      const warning = resolveRefStalenessWarning({
+        session,
+        ref: `@${ref}`,
+        mintedGeneration: parsedTarget.refGenerations?.[index],
+      });
+      if (warning) warnings.add(warning);
+    });
+    return warnings.size > 0 ? Array.from(warnings).join(' ') : undefined;
+  }
   return resolveRefStalenessWarning({
     session,
     ref: parsedTarget.target.ref,
     mintedGeneration: parsedTarget.refGeneration,
   });
+}
+
+/**
+ * A multi-ref press plan can be neither recorded nor replayed through a target
+ * guard. The recorder binds one target (and its recording-time evidence) to
+ * each recorded step, and a guarded replay dispatch resolves through the
+ * single-ref path — a plan that slipped into either shape would replay its
+ * first key only and report the remaining keys as sent. Refusing at admission
+ * keeps the refusal pre-dispatch: the frame keeps its pre-command state.
+ */
+function sequenceRecordingGuardResponse(
+  session: SessionState,
+  req: InteractionRouteInput['req'],
+  parsedTarget: ParsedTargetedTouch,
+): DaemonResponse | undefined {
+  if (!parsedTarget.refs) return undefined;
+  if (isSessionRecording(session) && !req.flags?.noRecord) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'A multi-ref press sequence cannot be recorded: the recorder binds one target per step, so the recorded step would press only the first key. Record one press per key, or pass --no-record on this step.',
+      { reason: 'sequence-recording-unsupported' },
+    );
+  }
+  if (req.internal?.replayTargetGuard !== undefined) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'A multi-ref press sequence cannot carry a replay target guard: the guard binds one target, so the replayed step would press only the first key. Re-record the journey as one press per key.',
+      { reason: 'sequence-replay-guard-unsupported' },
+    );
+  }
+  return undefined;
 }
 
 function readRefAdmissionContext(
@@ -201,18 +251,33 @@ function admitTargetedTouchRef(
     req.flags,
   );
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse };
-  const admissionResponse = req.internal?.findResolvedTarget
-    ? null
-    : refMutationAdmissionResponse({
-        ref: parsedTarget.target.ref,
-        mintedGeneration: parsedTarget.refGeneration,
-        staleRefsWarning,
-        frame: readRefMutationFrame({
-          session,
+  if (req.internal?.findResolvedTarget) return {};
+  // ADR 0014: every member of a multi-ref plan is admitted against the active
+  // frame before the first dispatch, so a plan one key cannot authorize
+  // refuses whole and the frame keeps its pre-command state.
+  const members: { ref: string; mintedGeneration: number | undefined }[] = parsedTarget.refs
+    ? parsedTarget.refs.map((ref, index) => ({
+        ref: `@${ref}`,
+        mintedGeneration: parsedTarget.refGenerations?.[index],
+      }))
+    : [
+        {
           ref: parsedTarget.target.ref,
           mintedGeneration: parsedTarget.refGeneration,
-        }),
-      });
-  if (admissionResponse) return { response: admissionResponse };
+        },
+      ];
+  for (const member of members) {
+    const admissionResponse = refMutationAdmissionResponse({
+      ref: member.ref,
+      mintedGeneration: member.mintedGeneration,
+      staleRefsWarning,
+      frame: readRefMutationFrame({
+        session,
+        ref: member.ref,
+        mintedGeneration: member.mintedGeneration,
+      }),
+    });
+    if (admissionResponse) return { response: admissionResponse };
+  }
   return {};
 }
