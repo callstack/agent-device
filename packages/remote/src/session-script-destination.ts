@@ -232,11 +232,14 @@ function allocateStaging(file: string, directory: string): string | undefined {
   return staging;
 }
 
-/** Unlists a staging directory the record can no longer name, then removes it. */
+/**
+ * Removes a staging directory the record can no longer name, then unlists it, so a directory that
+ * cannot be removed stays listed for retirement or the sweep.
+ */
 function releaseStaging(file: string, staging: string): void {
+  fs.rmSync(staging, { recursive: true, force: true });
   const record = readRecord(file);
   if (record) writeRecord(file, withoutStaging(record, staging));
-  fs.rmSync(staging, { recursive: true, force: true });
 }
 
 function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
@@ -269,9 +272,9 @@ function publishStaged(
   let current = settlePublishing(record);
   if (record.publishing) {
     // Once the settled record is written, its staging directory can no longer be named.
-    current = withoutStaging(current, record.publishing.staging);
     writeRecord(file, current);
-    fs.rmSync(record.publishing.staging, { recursive: true, force: true });
+    releaseStaging(file, record.publishing.staging);
+    current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
