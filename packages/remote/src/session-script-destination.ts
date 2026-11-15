@@ -246,9 +246,15 @@ function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
   return { ...record, staging: (record.staging ?? []).filter((listed) => listed !== staging) };
 }
 
-/** Removes every staging directory a record lists, then the record, so a failure keeps the list. */
+/**
+ * Removes a record and every staging directory it lists. The record first stops naming an
+ * interrupted version, so no anchor is removed while the record names its inode, and a failure
+ * keeps the list.
+ */
 function removeRecord(file: string): void {
-  for (const staging of readRecord(file)?.staging ?? []) {
+  const record = readRecord(file);
+  if (record?.publishing) writeRecord(file, settlePublishing(record));
+  for (const staging of record?.staging ?? []) {
     fs.rmSync(staging, { recursive: true, force: true });
   }
   fs.rmSync(file, { force: true });

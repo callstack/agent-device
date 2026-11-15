@@ -482,3 +482,31 @@ test('retiring a record removes the staging a crashed download left behind', asy
   expect(fs.existsSync(crashed)).toBe(false);
   expect(records(stateDir)).toEqual([]);
 });
+
+test('a retirement that fails midway never leaves the record naming a removed anchor', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const [name] = records(stateDir);
+  const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
+  const staging = path.join(path.dirname(destination), '.agent-device-script-pending');
+  fs.mkdirSync(staging);
+  fs.writeFileSync(path.join(staging, 'script.ad.anchor'), 'pending');
+  const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+  const publishing = { revision: 2, file: '1:2', staging };
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, publishing, staging: [staging] }));
+  const realRm = fs.rmSync;
+  const rm = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    if (String(target) === recordFile) throw new Error('record removal failed');
+    realRm(target, options);
+  });
+
+  try {
+    await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
+  } finally {
+    rm.mockRestore();
+  }
+
+  expect(fs.existsSync(staging)).toBe(false);
+  expect(JSON.parse(fs.readFileSync(recordFile, 'utf8')).publishing).toBeUndefined();
+});
