@@ -16,7 +16,11 @@ function maestroPlugin(): ReplayEnginePlugin {
               import('@agent-device/capture-kit/png-worker-client'),
             ]);
             releasePngWorker ??= retainPngWorker((reason) =>
-              host.emitDiagnostic({ level: 'warn', phase: 'png_worker_unavailable', data: reason }),
+              host.emitDiagnostic({
+                level: 'warn',
+                phase: 'png_worker_unavailable',
+                data: { reason: reason.kind, detail: reason.detail },
+              }),
             );
             return await maestroReplayBackendPlugin.create(host);
           },

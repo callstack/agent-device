@@ -675,7 +675,6 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
-  // Source test facades stay private to the workspace; package smoke pins the published host entry.
   assert.deepEqual([...maestroPackage.exportTargets.keys()].sort(), [
     '@agent-device/maestro',
     '@agent-device/maestro/agent-device',

@@ -108,9 +108,10 @@ test('a private publication placeholder keeps bundled dependencies in the public
     publishConfig: { exports: { './agent-device': { import: './dist/plugin.mjs' } } },
   };
   assert.deepEqual(violations(staged, 'packages/owner/src/thing.ts'), []);
-  assert.equal(
-    violations({ ...staged, devDependencies: {} }, 'packages/owner/src/thing.ts').length,
-    1,
-  );
-  assert.equal(violations(DEV_ONLY, 'packages/owner/src/thing.ts').length, 1);
+  const undeclared = violations({ ...staged, devDependencies: {} }, 'packages/owner/src/thing.ts');
+  assert.equal(undeclared.length, 1);
+  assert.match(undeclared[0]!.message, /without declaring "@agent-device\/helper"/);
+  const privateDevOnly = violations(DEV_ONLY, 'packages/owner/src/thing.ts');
+  assert.equal(privateDevOnly.length, 1);
+  assert.match(privateDevOnly[0]!.message, /declare it in dependencies/);
 });

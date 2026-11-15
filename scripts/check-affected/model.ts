@@ -256,15 +256,9 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
       ]
     : [];
 
-// Workspace package source (#1490 W0): bundled into the published artifact,
-// type-checked in the root graph, covered by Vitest's module graph, and
-// guarded by layering R11. Fallow scans it too — the W0 ignorePatterns entry
-// claimed its resolver could not follow workspace specifiers, which stopped
-// being true (it resolves @agent-device/* through each exports map), so an
-// extraction into packages/ no longer takes its own dead code out of scope.
 const replayBackendOwnership: OwnershipRule = ({ file }) =>
-  file.startsWith('packages/maestro/') ||
-  file.startsWith('packages/replay-port/') ||
+  (file.endsWith('.ts') &&
+    (file.startsWith('packages/maestro/src/') || file.startsWith('packages/replay-port/src/'))) ||
   /^packages\/plugins\/src\/(?:registry|replay-backend|store|discovery|validate)\./.test(file)
     ? [
         reason(
@@ -282,6 +276,12 @@ const replayBackendOwnership: OwnershipRule = ({ file }) =>
       ]
     : [];
 
+// Workspace package source (#1490 W0): bundled into the published artifact,
+// type-checked in the root graph, covered by Vitest's module graph, and
+// guarded by layering R11. Fallow scans it too — the W0 ignorePatterns entry
+// claimed its resolver could not follow workspace specifiers, which stopped
+// being true (it resolves @agent-device/* through each exports map), so an
+// extraction into packages/ no longer takes its own dead code out of scope.
 const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
   if (!isTs || !/^packages\/[^/]+\/src\//.test(file)) return [];
   const selections = [

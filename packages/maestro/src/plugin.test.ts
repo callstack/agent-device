@@ -97,7 +97,7 @@ test('selected creation retains one worker, forwards its diagnostic to the host 
   expect(host.emitDiagnostic).toHaveBeenCalledExactlyOnceWith({
     level: 'warn',
     phase: 'png_worker_unavailable',
-    data: reason,
+    data: { reason: reason.kind, detail: reason.detail },
   });
 
   await setup.dispose?.();

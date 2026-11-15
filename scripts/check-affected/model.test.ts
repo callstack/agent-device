@@ -559,11 +559,29 @@ test('managed engine and loading changes retain every Maestro oracle lane', () =
     'packages/plugins/src/registry.ts',
     'packages/plugins/src/replay-backend.ts',
     'packages/plugins/src/store.ts',
+    'packages/plugins/src/discovery.ts',
     'packages/plugins/src/validate.ts',
     'packages/replay-port/src/daemon-port/replay-backend-registry.ts',
   ]) {
     const result = plan([file]);
+    assert.equal(result.failOpen, false, file);
     assert.ok(result.checks.includes('maestro-conformance'), file);
     assert.ok(result.checks.includes('maestro-differential'), file);
+  }
+});
+
+test('managed engine non-source inputs retain conservative full selection', () => {
+  for (const file of [
+    'packages/maestro/package.json',
+    'packages/maestro/tsdown.config.ts',
+    'packages/maestro/test/package-artifact.test.mjs',
+    'packages/replay-port/package.json',
+    'packages/replay-port/test/artifact.test.mjs',
+  ]) {
+    const result = plan([file]);
+    assert.equal(result.failOpen, true, file);
+    assert.ok(result.checks.includes('build'), file);
+    assert.ok(result.checks.includes('typecheck'), file);
+    assert.ok(result.checks.includes('package'), file);
   }
 });
