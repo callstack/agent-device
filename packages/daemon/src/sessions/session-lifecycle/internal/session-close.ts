@@ -19,7 +19,11 @@ import {
   isRepairArmedSession,
   recordRepairPlatformClose,
 } from '../../../core/session-replay-transaction.ts';
-import { isAuthoringArmedSession } from '../../../core/session-script-publication-capability.ts';
+import {
+  isAuthoringArmedSession,
+  remoteCloseScriptDelivery,
+  type RemoteCloseScript,
+} from '../../../core/session-script-publication-capability.ts';
 import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
@@ -354,13 +358,14 @@ export async function handleSessionCloseCommands(
     }),
   );
   if (closed.kind === 'response') return closed.response;
-  return buildCloseSuccessResponse({
+  const response = buildCloseSuccessResponse({
     session,
     repair,
     requestedSaveScript: Boolean(req.flags?.saveScript),
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
   });
+  return remoteCloseScriptDelivery(response, closed.remoteScript);
 }
 
 /**
@@ -386,6 +391,8 @@ type SessionCloseFinalization =
       kind: 'closed';
       providerData?: Record<string, unknown>;
       shutdownResult?: TargetShutdownResult;
+      /** What close delivers for a remote recording, taken from the close-time write (ADR 0016). */
+      remoteScript?: RemoteCloseScript;
     };
 
 // Everything between a settled repair decision and a success response:
@@ -422,7 +429,7 @@ async function runCloseTeardownAndRelease(params: {
   const {
     platformCloseError,
     retainExecutionHost,
-    saveScriptError,
+    saveScriptOutcome,
     shutdownPrepared,
     shutdownResult,
   } = await runSessionCloseTeardown({
@@ -478,11 +485,12 @@ async function runCloseTeardownAndRelease(params: {
   if (!closeError) await clearDeviceClaim(session.deviceClaim, params.env);
   sessionStore.retire(ref, { retainExecutionHost });
   if (closeError) throw closeError;
-  if (saveScriptError) throw saveScriptError;
+  if (saveScriptOutcome.error) throw saveScriptOutcome.error;
   return {
     kind: 'closed',
     providerData: leaseRelease.providerData,
     shutdownResult: leaseRelease.shutdownResult ?? shutdownResult,
+    remoteScript: saveScriptOutcome.remote,
   };
 }
 

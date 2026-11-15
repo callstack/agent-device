@@ -214,7 +214,7 @@ function isAllowedUpstreamRoute(method: string | undefined, route: string): bool
       return /^\/upload\/direct\/[0-9a-f-]+$/i.test(route);
     case 'GET':
       return (
-        ['/artifacts', '/artifacts/'].includes(route) ||
+        ['/health', '/artifacts', '/artifacts/'].includes(route) ||
         /^\/artifacts\/[0-9a-f-]+$/i.test(route) ||
         /^\/sessions\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/requests\/(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+\/diagnostics$/.test(
           route,
@@ -308,7 +308,9 @@ function recordUpstreamResponse(
   const contentType = Array.isArray(contentTypeHeader)
     ? contentTypeHeader.join(', ')
     : contentTypeHeader;
-  if (contentType?.includes('json') || contentType?.startsWith('text/')) {
+  // An artifact download is recorded too, so a scenario can compare the served bytes.
+  const textual = contentType?.includes('json') || contentType?.startsWith('text/');
+  if (textual || entry.route.startsWith('/artifacts/')) {
     entry.responseBody = upstreamResponse.body.toString('utf8');
   }
 }

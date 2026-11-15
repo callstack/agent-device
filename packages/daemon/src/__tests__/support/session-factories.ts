@@ -25,7 +25,7 @@ export function repairPublication(
 /** An authoring-variant `scriptPublication` literal for test setups. */
 export function authoringPublication(
   status: 'armed' | 'aborted' | 'published',
-  opts?: { path?: string; force?: boolean },
+  opts?: { path?: string; force?: boolean; remote?: boolean },
 ): SessionScriptPublicationState {
   return {
     kind: 'authoring',
@@ -34,6 +34,9 @@ export function authoringPublication(
       opts?.path !== undefined
         ? { kind: 'explicit', path: opts.path, force: opts?.force === true }
         : { kind: 'default', force: opts?.force === true },
+    ...(opts?.remote
+      ? { remoteDelivery: { publicationId: 'publication-0001', revision: 0, tenantId: undefined } }
+      : {}),
   };
 }
 

@@ -71,7 +71,12 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 ```
 
 - Missing parent directories are created.
-- The script is written on the machine running the daemon, so `--save-script` is rejected when you use a remote daemon.
+- With a local daemon, the script is written on the daemon host when the session closes.
+- With a remote daemon, outside a macOS app lease, the path is on your machine. The file appears when `open` returns, and each later recorded action in the session replaces it with the recording so far. `close` writes the final script there. A session that another process closes keeps the version from the last action.
+- A bare remote `open --save-script` writes `recording-<timestamp>.ad` in your working directory.
+- If the file already exists, `open` fails unless you pass `--force`. Without `--force`, a file that appears before the first version arrives is kept too, and the command fails. With `--force`, the first version replaces it. After that, the session owns the file and replaces it on each update.
+- Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused.
+- The remote daemon must report the `script-artifacts` capability in its `/health` response. Through a proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` fails before the app opens.
 - For a bare file name that could be read as another argument, use `--save-script=workflow.ad` or a path-like value such as `./workflow.ad`.
 
 ## `.ad` line grammar

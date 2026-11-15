@@ -13,6 +13,8 @@ import {
   effectiveWriteForce,
   isSessionScriptPublished,
   markCloseGeneratedPublicationDone,
+  remoteCloseScript,
+  type RemoteCloseScript,
 } from '../../../core/session-script-publication-capability.ts';
 import {
   abortRepairTransaction,
@@ -80,12 +82,18 @@ export function buildRetriableRepairCloseFailureResponse(
   };
 }
 
+/**
+ * The close-time script write. A local failure is `error`, which fails the close. A remote
+ * recording's outcome, including a failed write, is `remote`, which the close discloses instead.
+ */
+export type OrdinaryCloseScript = Readonly<{ error?: AppError; remote?: RemoteCloseScript }>;
+
 export function finalizeOrdinaryCloseScript(params: {
   req: DaemonRequest;
   ref: SessionRef;
   sessionStore: SessionStore;
   platformCloseError: unknown;
-}): AppError | undefined {
+}): OrdinaryCloseScript {
   const { req, ref, sessionStore, platformCloseError } = params;
   const session = sessionStore.requireCurrent(ref);
   if (!platformCloseError) {
@@ -98,11 +106,11 @@ export function finalizeOrdinaryCloseScript(params: {
   const result = sessionStore.writeSessionLog(ref, {
     force: effectiveWriteForce(session, req.flags?.force),
   });
-  if (result.written) {
-    markCloseGeneratedPublicationDone(session, result.path);
-    return undefined;
-  }
-  return result.error ? toOrdinaryCloseSaveScriptFailure(result.error) : undefined;
+  if (result.written) markCloseGeneratedPublicationDone(session, result.path);
+  const error =
+    !result.written && result.error ? toOrdinaryCloseSaveScriptFailure(result.error) : undefined;
+  const remote = remoteCloseScript(session, error !== undefined);
+  return remote ? { remote } : { error };
 }
 
 function toOrdinaryCloseSaveScriptFailure(error: AppError): AppError {

@@ -157,6 +157,8 @@ export type DaemonRequestMeta = {
   sessionIsolation?: SessionIsolationMode;
   uploadedArtifactId?: string;
   clientArtifactPaths?: Record<string, string>;
+  /** The ID a remote client minted for its `open --save-script`; each script version carries it. */
+  scriptPublicationId?: string;
   installSource?: DaemonInstallSource;
   retainMaterializedPaths?: boolean;
   materializedPathRetentionMs?: number;
@@ -185,7 +187,8 @@ export type DaemonArtifactKnownType =
   | 'screen-recording-contact-sheet'
   | 'screen-recording-telemetry'
   | 'trace-log'
-  | 'test-artifacts';
+  | 'test-artifacts'
+  | 'session-script';
 
 export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
 
@@ -200,6 +203,10 @@ export type DaemonArtifact = {
   fileName?: string;
   localPath?: string;
   path?: string;
+  /** The remote `open --save-script` publication a `session-script` artifact belongs to. */
+  scriptPublicationId?: string;
+  /** A `session-script` version number. Versions of one recording grow, so the newest one wins. */
+  scriptRevision?: number;
 };
 
 export type ResponseCost = {

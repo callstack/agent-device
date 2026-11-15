@@ -6,6 +6,7 @@ import {
   effectiveWriteForce,
   isAuthoringArmedSession,
   markActivePublicationDone,
+  remoteScriptDelivery,
   retargetActivePublication,
 } from '../../core/session-script-publication-capability.ts';
 import { isRepairArmedSession } from '../../core/session-replay-transaction.ts';
@@ -74,11 +75,12 @@ export function handleSessionScriptPublication(params: {
   };
 }
 
-type PublicationIneligibility = 'repair' | 'aborted' | 'published' | 'not-armed';
+type PublicationIneligibility = 'repair' | 'remote' | 'aborted' | 'published' | 'not-armed';
 
 /** Why this session cannot publish its active recording, or `undefined` when it can. */
 function publicationIneligibility(session: SessionState): PublicationIneligibility | undefined {
   if (isRepairArmedSession(session)) return 'repair';
+  if (remoteScriptDelivery(session)) return 'remote';
   const state = session.scriptPublication;
   if (state?.kind === 'authoring' && state.status !== 'armed') return state.status;
   return isAuthoringArmedSession(session) ? undefined : 'not-armed';
@@ -91,6 +93,15 @@ const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => A
       'This session has an active .ad repair transaction and cannot use ordinary active-session publication.',
       {
         hint: 'Finish or abort the repair through replay --from and its existing close/teardown protocol.',
+      },
+    ),
+  remote: () =>
+    new AppError(
+      'COMMAND_FAILED',
+      'A remote recording is delivered to its --save-script path, not published from the session.',
+      {
+        reason: 'remote_script_publication_unsupported',
+        hint: 'The --save-script file already holds the recording through the last action, and close writes the final script there.',
       },
     ),
   aborted: () =>

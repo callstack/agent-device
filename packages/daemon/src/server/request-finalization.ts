@@ -14,7 +14,11 @@ import type {
 } from '@agent-device/kernel/contracts';
 import { isDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
-import { captureOutputOwnership, captureOutputTenantId } from '../core/capture-output-ownership.ts';
+import {
+  captureOutputOwnership,
+  captureOutputTenantId,
+  daemonDeliveredArtifact,
+} from '../core/capture-output-ownership.ts';
 
 /** A response artifact plus the capture facts the inventory reports beside it. */
 type PendingArtifact = DaemonArtifact & {
@@ -92,37 +96,49 @@ function registerDownloadableArtifacts(
   trackArtifact: TrackDownloadableArtifact,
 ): DaemonResponseData | undefined {
   if (!data) return data;
+  const register = (artifact: PendingArtifact): DaemonArtifact => {
+    const artifactPath = artifact.path as string;
+    const delivered = daemonDeliveredArtifact(artifact);
+    return {
+      field: artifact.field,
+      // Omitted (not null/undefined-valued) when untyped, matching the
+      // optional wire contract on DaemonArtifact.
+      ...(artifact.artifactType !== undefined ? { artifactType: artifact.artifactType } : {}),
+      artifactId: trackArtifact({
+        artifactPath,
+        tenantId: delivered
+          ? delivered.tenantId
+          : (captureOutputTenantId(data) ?? req.meta?.tenantId),
+        artifactType: artifact.artifactType,
+        fileName: artifact.fileName,
+        ...(artifact.deleteAfterDownload === false ? { deleteAfterDownload: false } : {}),
+        ...(isDeviceRotation(artifact.displayRotation)
+          ? { displayRotation: artifact.displayRotation }
+          : {}),
+      }),
+      fileName: artifact.fileName,
+      localPath: artifact.localPath,
+      scriptPublicationId: artifact.scriptPublicationId,
+      scriptRevision: artifact.scriptRevision,
+    };
+  };
+  if (captureOutputOwnership(data) === 'caller') {
+    // Caller-owned capture output stays at the caller path; a daemon-delivered artifact still registers.
+    if (!data.artifacts?.some(daemonDeliveredArtifact)) return data;
+    return {
+      ...data,
+      artifacts: data.artifacts.map((item) =>
+        daemonDeliveredArtifact(item) ? register(item) : item,
+      ),
+    };
+  }
   const pendingArtifacts = collectPendingArtifacts(req, data);
   if (pendingArtifacts.length === 0) return data;
-  return {
-    ...data,
-    artifacts: pendingArtifacts.map((artifact) => {
-      const artifactPath = artifact.path as string;
-      return {
-        field: artifact.field,
-        // Omitted (not null/undefined-valued) when untyped, matching the
-        // optional wire contract on DaemonArtifact.
-        ...(artifact.artifactType !== undefined ? { artifactType: artifact.artifactType } : {}),
-        artifactId: trackArtifact({
-          artifactPath,
-          tenantId: captureOutputTenantId(data) ?? req.meta?.tenantId,
-          artifactType: artifact.artifactType,
-          fileName: artifact.fileName,
-          ...(artifact.deleteAfterDownload === false ? { deleteAfterDownload: false } : {}),
-          ...(isDeviceRotation(artifact.displayRotation)
-            ? { displayRotation: artifact.displayRotation }
-            : {}),
-        }),
-        fileName: artifact.fileName,
-        localPath: artifact.localPath,
-      };
-    }),
-  };
+  return { ...data, artifacts: pendingArtifacts.map(register) };
 }
 
 function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): PendingArtifact[] {
   const ownership = captureOutputOwnership(data);
-  if (ownership === 'caller') return [];
   const artifacts: PendingArtifact[] = Array.isArray(data.artifacts) ? [...data.artifacts] : [];
   const hasField = (field: string): boolean =>
     artifacts.some((artifact) => artifact?.field === field);
@@ -140,6 +156,7 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
       typeof artifact.field === 'string' &&
       typeof artifact.path === 'string' &&
       (ownership === 'daemon' ||
+        daemonDeliveredArtifact(artifact) !== undefined ||
         (req.internal?.publicNetworkOnly && !['record', 'perf', 'trace'].includes(req.command)) ||
         (typeof artifact.localPath === 'string' && artifact.localPath.length > 0) ||
         (artifact.field === 'fallbackScreenshotPath' && artifact.artifactType === 'screenshot')),

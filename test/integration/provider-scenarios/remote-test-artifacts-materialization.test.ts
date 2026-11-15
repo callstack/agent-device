@@ -108,6 +108,7 @@ test('the composed daemon and client path materializes the directory produced by
             request,
             response,
             createTestHostEnvironment(),
+            path.join(tempDir, 'client-state'),
           );
           assert.equal(materialized.ok, true);
           if (!materialized.ok) return;

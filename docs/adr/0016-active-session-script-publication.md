@@ -6,6 +6,7 @@ Accepted.
 This ADR is implemented on `main`, including the #1349 identity-level destination-guard amendment.
 
 Implementation owners are `packages/daemon/src/sessions/handlers/session-script-publication.ts` and `packages/daemon/src/core/session-script-active-publication.ts`.
+Remote delivery (#4511 amendment) is owned by `packages/daemon/src/core/session-script-publication-capability.ts` and, on the client, `packages/remote/src/session-script-destination.ts`.
 
 ## Rules at a glance
 
@@ -25,6 +26,9 @@ This section is a normative summary.
   Every refusal happens before filesystem work and names its recovery.
 - Repair transactions (ADR 0012) are disjoint from this lifecycle.
   A session with `saveScriptBoundary` set refuses this action without a change to repair state.
+- A remote recording is delivered, not published (#4511 amendment).
+  Each recorded action refreshes the caller's `--save-script` file, and close overwrites it with the final script.
+  `session save-script` refuses a remote recording.
 - `ReplayCommandResult.sessionActive` comes from the daemon's session store, never from a re-parse of the script.
   This signal lets a one-shot client keep the daemon alive on a close-less handoff.
 - Sensitive `fill` inputs must be recorded as placeholders through `fill --record-as <VAR>` (ADR 0017, shipped for #1348).
@@ -171,6 +175,38 @@ The derivation reproduces exactly what the flag held at every transition.
 This amendment deliberately does not answer one real question: should a *committed* repair still capture recording-time evidence?
 The old flag said yes.
 A change to that answer is a behavior change, not a derivation.
+
+**Amendment (#4511, shipped).** A remote caller cannot read the daemon target, so a remote `open --save-script=<path>` delivers its recording to the caller.
+It adds no state name, command, or flag:
+
+- Before it sends the open, the client mints a random publication ID and records the destination and the `--force` grant under it in its state directory (`remote-connections/session-scripts/`), keyed by the endpoint, the tenant, the session, and that ID.
+  The open carries the ID in `meta.scriptPublicationId` and never the caller path.
+  A refused or failed open, or one whose response does not name the ID, removes the record.
+- The daemon arms the recording under that ID, which `open` and `close` name in `scriptPublicationId`.
+  After each successful request that records into the ARMED recording, the daemon writes the recording so far, without a terminal `close`, and returns it as a `session-script` artifact with the ID and a growing `scriptRevision`.
+  The close-time write is the final version and has the highest revision; close takes it from the close-time write itself, so a capture that close stops first never hides recorded actions.
+  Each version, the final one included, is a fresh 0600 file in a 0700 directory under the daemon's sessions directory, and is downloaded once.
+  It registers for download for the tenant that opened the recording, whatever the tenant, capture filters, or network marker of the request that recorded it.
+- The client writes a version only to the destination of a record that matches its ID and scope, and only when its revision is newer than the last published one.
+  Thus, a daemon response never establishes a destination, and another publication's or another session's version writes nothing.
+  The download streams, capped at 8 MiB, into a new 0600 file, created exclusively and never through a symbolic link, in a 0700 staging directory beside the destination.
+  Under the record lock, the record names the version and the staged file's device and inode before the rename or link, and the next version settles that entry from the destination's identity.
+  The staged file stays on disk while the record may name it, so no later file can reuse its inode.
+  The first version is linked exclusively, as a local close-time write is, unless the open granted `--force`; a symbolic or hard link at the destination is replaced as a directory entry and never written through.
+- A close retires the record it names, even when the final download or write fails, and reports the first error.
+  A record that outlives its open stays inert, because only its own ID matches it; creating a record removes records untouched for seven days.
+- If the daemon cannot write a version, the action keeps its success and returns `scriptDeliveryFailure` (`script_delivery_failed`) and a warning without the daemon-host path; the caller file keeps the previous version.
+  A local close that cannot write its script still fails as before.
+- Teardown without `close` writes no daemon file; the caller keeps the version from the last recorded action.
+- At the public HTTP boundary, `saveScript` is accepted only as `true` on `open` with a well-formed publication ID.
+  `session save-script` refuses a remote recording (`remote_script_publication_unsupported`), and remote `close --save-script`, `replay --save-script`, and `--save-script` in batch steps stay refused.
+- The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
+
+The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike.
+Rejected: a remote `session save-script` download, because it added a second publication path and a retry protocol.
+Rejected: delivery only at close, because a session that an external owner closes would lose its recording.
+Rejected: daemon-minted recording IDs bound through per-request claims, because the claim, binding, and tombstone protocol cost more than a client-minted ID that only its own client can match.
+Consequence: each recorded action of a remote ARMED recording costs one script write and one artifact download.
 
 This lifecycle is distinct from the ADR 0012 repair transaction.
 `session save-script` rejects a session with `saveScriptBoundary` set.

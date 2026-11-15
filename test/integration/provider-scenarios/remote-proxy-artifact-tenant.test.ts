@@ -154,6 +154,7 @@ test('Provider-backed integration proxy materializes tenant-owned test artifacts
             request,
             response,
             createTestHostEnvironment(),
+            path.join(tempDir, 'client-state'),
           );
           assert.equal(materialized.ok, true);
           if (!materialized.ok) return;

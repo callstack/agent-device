@@ -25,7 +25,10 @@ import {
   type IdleSessionTombstone,
 } from './session-idle-tombstone.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
-import { effectiveWriteForce } from './session-script-publication-capability.ts';
+import {
+  effectiveWriteForce,
+  remoteScriptDelivery,
+} from './session-script-publication-capability.ts';
 import {
   isUncommittedRepairSession,
   repairSessionSourcePath,
@@ -270,6 +273,10 @@ export class SessionStore {
     return result;
   }
 
+  writeRemoteScriptVersion(ref: SessionRef): SessionScriptWriteResult {
+    return this.scriptWriter.write(this.requireCurrent(ref));
+  }
+
   /**
    * ADR 0012 decision 6, R7 + commit semantics (C2/C5a, BLOCKER 2/3): the
    * teardown finalize step for a session (idle-reap or daemon shutdown).
@@ -300,6 +307,8 @@ export class SessionStore {
   finalizeRepairTeardown(ref: SessionRef): void {
     const session = this.resolveCurrent(ref);
     if (!session) return;
+    // The remote caller already holds the latest version; a daemon-side teardown file would be orphaned.
+    if (remoteScriptDelivery(session)) return;
     this.recordRepairFinalizeCloseIfCommitting(ref);
     // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
     // the only source of `force` is whatever was persisted on the session at

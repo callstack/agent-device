@@ -104,12 +104,28 @@ while the artifact remains in inventory.
 Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it
 and cleans up after its pipeline stops.
 
-Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
-publication with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
+Outside a macOS app lease, a fresh `open --save-script=<path>` records the session to a file on
+your machine. Each response that records an action returns a `session-script` artifact, and the
+client replaces the file with it. `close` returns the final script. The client writes only to the
+path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
+A session that another process closes keeps the version from the last recorded action. If the
+daemon cannot write a version, the command still succeeds and shows a warning; the next recorded
+action or `close` delivers the full recording. If `close` cannot write the final script, the
+session still closes and the file keeps the version from the last action. If this machine cannot
+download or save a version, or the version is larger than 8 MiB, the command fails with
+`script_download_failed` and the file keeps the previous version. Remote `session save-script`,
+`close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused.
+
+Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
+letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
+`scriptRevision` that grows with each version. Download the artifacts by ID and keep the newest.
+
+Remote requests ignore `meta.cwd`. They refuse host tooling paths and `--launch-console`
+with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
 and `reinstall` binaries, `push` payload files, and xctrace template files. `open` targets and launch
 URLs cannot use the `file:` scheme. Serve local web content over HTTP(S) instead. Upload binaries with the
 client, send `push` payloads as inline JSON, and name xctrace templates. Omit these inputs, or use a local daemon for
-host tooling and script publication. Test suite artifacts also use a daemon-chosen output root.
+host tooling. Test suite artifacts also use a daemon-chosen output root.
 
 ## Human takeover
 

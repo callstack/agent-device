@@ -17,8 +17,7 @@ test('remote fill recording errors give a recovery path the remote client suppor
   const remote = attachSessionAddressHints(response, {} as never, settings);
   assert.equal(remote.ok, false);
   if (remote.ok) return;
-  assert.match(remote.error.message, /remote clients cannot start one/);
-  assert.match(remote.error.message, /Connect to a local daemon/);
+  assert.equal(remote.error.message, response.error.message);
   assert.equal(remote.error.details?.reason, 'fill_record_as_requires_armed_recording');
 
   const local = attachSessionAddressHints(response, {} as never, {} as never);

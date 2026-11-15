@@ -30,6 +30,7 @@ import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
   isAuthoringArmedSession,
+  remoteScriptOpen,
 } from '../../../core/session-script-publication-capability.ts';
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import {
@@ -93,6 +94,7 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
   session: SessionState;
   existingSession: SessionState | undefined;
   saveScriptRequested: boolean;
+  remoteDelivery: Parameters<typeof armAuthoringOnOpen>[3];
   responseData: Record<string, unknown>;
   hostCwd: string;
 }): void {
@@ -100,7 +102,9 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
   if (!existingSession && saveScriptRequested) {
     // The recorded `open` action's flag ingress applies the explicit path/force right after
     // this arm (`applyRecordedSaveScriptFlags`), exactly as the field writers used to split it.
-    armAuthoringOnOpen(session, {}, hostCwd);
+    armAuthoringOnOpen(session, {}, hostCwd, params.remoteDelivery);
+    const publicationId = params.remoteDelivery?.publicationId;
+    if (publicationId) responseData.scriptPublicationId = publicationId;
     return;
   }
   if (!isAuthoringArmedSession(existingSession)) return;
@@ -406,6 +410,7 @@ export async function completeOpenCommand(params: {
     session: nextSession,
     existingSession: existingRef ? nextSession : undefined,
     saveScriptRequested: Boolean(req.flags?.saveScript),
+    remoteDelivery: remoteScriptOpen(req.meta),
     responseData: openResult,
     hostCwd: sessionStore.host.cwd,
   });

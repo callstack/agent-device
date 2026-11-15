@@ -5,9 +5,10 @@ import net from 'node:net';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type {
-  DaemonPaths,
-  DaemonTransportPreference,
+import {
+  readDaemonCapabilities,
+  type DaemonPaths,
+  type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonHttpProgressResponse,
@@ -169,6 +170,7 @@ export type RemoteDaemonHealth = {
   rpcProtocolVersion?: number;
   instanceId?: string;
   hostArch?: string;
+  capabilities?: DaemonInfo['capabilities'];
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
@@ -177,7 +179,7 @@ export type RemoteDaemonHealth = {
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'capabilities'
 >;
 
 export async function canConnect(
@@ -376,6 +378,9 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
     ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
+    ...(parsed.capabilities === undefined
+      ? {}
+      : { capabilities: readDaemonCapabilities(parsed.capabilities) }),
   };
 }
 
@@ -500,6 +505,7 @@ async function retryAfterRemoteInstanceMismatch(
   }
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
+  info.capabilities = (health.upstream ?? health).capabilities;
   (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health);
   try {
     return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);

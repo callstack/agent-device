@@ -3,6 +3,7 @@ import { inspectSessionLeaseRetainedOnClose } from '../../lease-lifecycle.ts';
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import type { OrdinaryCloseScript } from './session-close-script.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
@@ -29,7 +30,7 @@ export type PlatformCloseDispatcher = (params: {
 export type SessionCloseTeardownResult = Readonly<{
   platformCloseError: unknown;
   retainExecutionHost: boolean;
-  saveScriptError?: Error;
+  saveScriptOutcome: OrdinaryCloseScript;
   shutdownResult?: TargetShutdownResult;
   shutdownPrepared: boolean;
 }>;
@@ -51,7 +52,7 @@ export async function runSessionCloseTeardown(params: {
     ref: SessionRef;
     sessionStore: SessionStore;
     platformCloseError: unknown;
-  }): Error | undefined;
+  }): OrdinaryCloseScript;
   platformResourceCleanup: PlatformResourceCleanup;
 }): Promise<SessionCloseTeardownResult> {
   const {
@@ -124,8 +125,8 @@ export async function runSessionCloseTeardown(params: {
         shutdownTarget: req.flags?.shutdown === true && lifecycle.owner.kind === 'local-family',
       })) ?? {},
   );
-  const saveScriptError = repairArmed
-    ? undefined
+  const saveScriptOutcome = repairArmed
+    ? {}
     : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
@@ -133,7 +134,7 @@ export async function runSessionCloseTeardown(params: {
   return {
     platformCloseError,
     retainExecutionHost,
-    saveScriptError,
+    saveScriptOutcome,
     shutdownResult: finalization?.shutdown,
     shutdownPrepared: finalization !== undefined,
   };

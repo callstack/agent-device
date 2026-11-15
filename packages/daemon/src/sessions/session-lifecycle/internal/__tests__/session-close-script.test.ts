@@ -104,7 +104,7 @@ test('ordinary publication failure retains its close action after making the err
     ref,
     sessionStore,
     platformCloseError: undefined,
-  });
+  }).error;
 
   expect(session.actions.map(({ command }) => command)).toEqual(['close']);
   expect(result).toMatchObject({
@@ -131,7 +131,7 @@ test('ordinary close keeps the inner hint for a failure reason it does not own',
     ref,
     sessionStore,
     platformCloseError: undefined,
-  });
+  }).error;
 
   expect(result?.details).toMatchObject({
     reason: 'unportable_ref',
@@ -163,7 +163,7 @@ test('#1533: bare close on an aborted authoring session writes no script', () =>
       ref,
       sessionStore,
       platformCloseError: undefined,
-    }),
+    }).error,
   ).toBeUndefined();
 
   expect(sessionStore.get('aborted')?.scriptPublication).toEqual(authoringPublication('aborted'));
@@ -186,7 +186,7 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
       ref,
       sessionStore,
       platformCloseError: undefined,
-    }),
+    }).error,
   ).toBeUndefined();
 
   expect(fs.readdirSync(sessionsDir)).toHaveLength(1);
@@ -213,7 +213,7 @@ test('ordinary close reports a filesystem failure of its script write instead of
     ref,
     sessionStore,
     platformCloseError: undefined,
-  });
+  }).error;
 
   expect(result).toBeInstanceOf(AppError);
   expect(result).toMatchObject({

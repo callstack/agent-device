@@ -15,6 +15,7 @@ import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/regi
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import {
   prepareRemoteRequestArtifacts,
+  sendRemoteScriptOpen,
   type PreparedRemoteRequest,
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
@@ -154,20 +155,25 @@ async function sendToDaemonOnHost(
     async () => {
       const response = await withDiagnosticTimer(
         'daemon_request',
-        async () =>
-          await sendDaemonRequest(
-            info,
-            request,
-            settings.transportPreference,
-            settings.paths,
-            requestTimeoutMs,
-            {
-              host,
-              onProgress: options.onProgress,
-              signal: options.signal,
-              timeoutRecovery: resolveTimeoutRecovery(settings),
-            },
-          ),
+        async () => {
+          const send = (sent: DaemonRequest) =>
+            sendDaemonRequest(
+              info,
+              sent,
+              settings.transportPreference,
+              settings.paths,
+              requestTimeoutMs,
+              {
+                host,
+                onProgress: options.onProgress,
+                signal: options.signal,
+                timeoutRecovery: resolveTimeoutRecovery(settings),
+              },
+            );
+          if (!info.baseUrl || !request.meta?.clientArtifactPaths?.savedScript)
+            return await send(request);
+          return await sendRemoteScriptOpen(info, request, settings.paths.baseDir, send);
+        },
         { requestId, command: req.command },
       );
       return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);

@@ -1,4 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
@@ -129,7 +130,9 @@ export class SessionScriptWriter {
         appendCompleteSentinel: repairArmed,
         activePublication,
       });
-      scriptPath = this.resolveScriptPath(session);
+      const remote =
+        session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
+      scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       // #1258: `options.force` is the caller's already-merged decision
@@ -140,6 +143,7 @@ export class SessionScriptWriter {
         scriptPath,
         script: prepared.script,
         force: options?.force,
+        ...(remote ? { mode: 0o600 } : {}),
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) {
@@ -157,6 +161,18 @@ export class SessionScriptWriter {
         activePublication,
       });
     }
+  }
+
+  /**
+   * A remote recording's caller downloads each version once, so every version, the close-time
+   * script included, gets a fresh private (0600) file in a private (0700) directory that only the
+   * daemon user can read.
+   */
+  private remoteScriptPath(): string {
+    const directory = path.join(this.sessionsDir, 'remote-scripts');
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    fs.chmodSync(directory, 0o700);
+    return path.join(directory, `${crypto.randomUUID()}.ad`);
   }
 
   private resolveScriptPath(session: SessionState): string {
@@ -285,13 +301,15 @@ function publishHealedScriptAtomically(params: {
   scriptPath: string;
   script: string;
   force?: boolean;
+  mode?: number;
 }): void {
-  const { scriptPath, script, force } = params;
+  const { scriptPath, script, force, mode } = params;
   try {
     publishFileSync({
       destination: scriptPath,
       contents: script,
       publish: force ? 'replace' : 'link-exclusive',
+      ...(mode === undefined ? {} : { mode }),
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
