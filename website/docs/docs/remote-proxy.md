@@ -108,6 +108,9 @@ Outside a macOS app lease, a fresh `open --save-script=<path>` records the sessi
 your machine. Each response that records an action returns a `session-script` artifact, and the
 client replaces the file with it. `close` returns the final script. The client writes only to the
 path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
+The daemon must report the `script-artifacts` capability in its `/health` response; through a
+proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` is
+refused before the session starts.
 A session that another process closes keeps the version from the last recorded action.
 
 A script version that is not delivered never fails the command that recorded it. The daemon may
