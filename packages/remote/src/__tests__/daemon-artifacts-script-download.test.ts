@@ -510,3 +510,36 @@ test('a retirement that fails midway never leaves the record naming a removed an
   expect(fs.existsSync(staging)).toBe(false);
   expect(JSON.parse(fs.readFileSync(recordFile, 'utf8')).publishing).toBeUndefined();
 });
+
+test('a stale record that cannot be swept never blocks a new open', async () => {
+  const { stateDir, destination } = journey();
+  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
+  fs.mkdirSync(directory, { recursive: true });
+  const stale = path.join(directory, 'stale.json');
+  const stuck = path.join(path.dirname(destination), '.agent-device-script-stuck');
+  fs.mkdirSync(stuck, { recursive: true });
+  fs.writeFileSync(
+    stale,
+    JSON.stringify({ destination, force: false, revision: 0, staging: [stuck] }),
+  );
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  fs.utimesSync(stale, eightDaysAgo, eightDaysAgo);
+  const realRm = fs.rmSync;
+  const rm = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    if (String(target) === stuck) throw new Error('staging removal failed');
+    realRm(target, options);
+  });
+
+  let opened: Awaited<ReturnType<typeof open>>;
+  try {
+    opened = await open('http://127.0.0.1:9', stateDir, destination, {
+      respond: (id) => ({ ok: true, data: { scriptPublicationId: id } }),
+    });
+  } finally {
+    rm.mockRestore();
+  }
+
+  expect(opened.response).toMatchObject({ ok: true });
+  expect(fs.existsSync(stale)).toBe(true);
+  expect(records(stateDir)).toHaveLength(2);
+});

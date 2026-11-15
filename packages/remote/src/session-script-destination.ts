@@ -375,10 +375,17 @@ async function createRecord(file: string, record: ScriptRecord): Promise<void> {
   for (const name of fs.readdirSync(directory)) {
     const entry = path.join(directory, name);
     if (!name.endsWith('.json') || !isStale(entry)) continue;
-    // Rechecked under the lock, so a record that a publish just refreshed stays.
+    // Rechecked under the lock, so a record that a publish just refreshed stays. A record that
+    // cannot be swept now is retried by a later sweep and never blocks this open.
     await withRecordLock(entry, async () => {
       if (isStale(entry)) removeRecord(entry);
-    });
+    }).catch((error: unknown) =>
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'session_script_sweep_failed',
+        data: { record: name, error: String(error) },
+      }),
+    );
   }
   writeRecord(file, record);
 }
