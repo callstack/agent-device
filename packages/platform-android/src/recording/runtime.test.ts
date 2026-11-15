@@ -102,9 +102,9 @@ test('waits for a SIGINT-accepted recorder to exit before sizing or pulling its 
         return { stdout: '', stderr: '', exitCode: 0, playable: true };
       },
     });
-    const finishing = (await runtime.screenRecordingStart(recordingInput())).pendingHandle
-      .transfer()
-      .finish();
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    calls.length = 0;
+    const finishing = handle.finish();
     await vi.advanceTimersByTimeAsync(0);
     expect(calls).toEqual(['sigint']);
     alive = false;
@@ -719,6 +719,53 @@ test('falls back to sequential rotation when concurrent start is unavailable', a
     await vi.advanceTimersByTimeAsync(170_000);
     expect(starts).toBe(5);
     expect(JSON.parse(manifest).chunks).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('falls back to sequential rotation when a concurrent chunk exits with an empty artifact', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const stopped = new Set<string>();
+    const exitedEmpty = new Set<string>();
+    const emptyPaths = new Set<string>();
+    const runtime = await start({
+      // The device refuses a second recorder while the first one runs: the process exits at once
+      // and leaves a zero-byte artifact behind.
+      start: async ({ remotePath }: { remotePath: string }) => {
+        const pid = String(42 + starts++);
+        if (pid !== '42' && !stopped.has('42')) {
+          exitedEmpty.add(pid);
+          emptyPaths.add(remotePath);
+        }
+        return recordingProcess(pid, remotePath);
+      },
+      size: async (remotePath: string) => (emptyPaths.has(remotePath) ? 0 : 1),
+      remove: async (remotePath: string) => {
+        emptyPaths.delete(remotePath);
+        return true;
+      },
+      signal: async ({ pid }: { pid: string }) => {
+        stopped.add(pid);
+        return true;
+      },
+      isRunning: async (pid: string) => !stopped.has(pid) && !exitedEmpty.has(pid),
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    const committed = JSON.parse(manifest).chunks as { remotePid: string }[];
+    expect(committed).toHaveLength(2);
+    expect(exitedEmpty.size).toBeGreaterThan(0);
+    expect(exitedEmpty.has(committed[1]!.remotePid)).toBe(false);
+    const finishing = handle.finish();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
   } finally {
     vi.useRealTimers();
   }

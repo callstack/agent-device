@@ -193,7 +193,8 @@ async function waitForReady(
 ): Promise<boolean> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     signal?.throwIfAborted();
-    if ((await transport.exists(remotePath, signal)) === true) return true;
+    const size = await transport.size(remotePath, signal);
+    if (typeof size === 'number' && size > 0) return true;
     if ((await transport.inspect(nativeProcess, signal)) !== 'owned-alive') return false;
     if (attempt < 2) await new Promise<void>((resolve) => setTimeout(resolve, 250));
   }
