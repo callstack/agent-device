@@ -181,17 +181,18 @@ It adds no state name, command, or flag:
 
 - Before it sends the open, the client mints a random publication ID and records the destination and the `--force` grant under it in its state directory (`remote-connections/session-scripts/`), keyed by the endpoint, the tenant, the session, and that ID.
   The open carries the ID in `meta.scriptPublicationId` and never the caller path.
-  A refused or failed open, or one whose response does not name the ID, removes the record.
+  A refused or failed open, or one whose response does not name the ID, removes the record; an open that the daemon armed keeps it when only this machine failed to save the first version.
 - The daemon arms the recording under that ID, which `open` and `close` name in `scriptPublicationId`.
   After each successful request that records into the ARMED recording, the daemon writes the recording so far, without a terminal `close`, and returns it as a `session-script` artifact with the ID and a growing `scriptRevision`.
   The close-time write is the final version and has the highest revision; close takes it from the close-time write itself, so a capture that close stops first never hides recorded actions.
   Each version, the final one included, is a fresh 0600 file in a 0700 directory under the daemon's sessions directory, and is downloaded once.
   It registers for download for the tenant that opened the recording, whatever the tenant, capture filters, or network marker of the request that recorded it.
 - The client writes a version only to the destination of a record that matches its ID and scope, and only when its revision is newer than the last published one.
+  The `savedScript` field and the `session-script` type are reserved for this path, so a script artifact under another field writes nothing.
   Thus, a daemon response never establishes a destination, and another publication's or another session's version writes nothing.
   The download streams, capped at 8 MiB, into a new 0600 file, created exclusively and never through a symbolic link, in a 0700 staging directory beside the destination.
   Under the record lock, the record names the version and the staged file's device and inode before the rename or link, and the next version settles that entry from the destination's identity.
-  The staged file stays on disk while the record may name it, so no later file can reuse its inode.
+  A second name keeps the staged inode, and its staging directory, on disk while the record may name it, so no later file can reuse that inode; settling or retiring the entry removes the staging directory.
   The first version is linked exclusively, as a local close-time write is, unless the open granted `--force`; a symbolic or hard link at the destination is replaced as a directory entry and never written through.
 - A close retires the record it names, even when the final download or write fails, and reports the first error.
   A record that outlives its open stays inert, because only its own ID matches it; creating a record removes records untouched for seven days.

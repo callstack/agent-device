@@ -105,7 +105,7 @@ async function open(
   baseUrl: string,
   stateDir: string,
   destination: string,
-  options: { force?: boolean; respond?: (id: string) => DaemonResponse } = {},
+  options: { force?: boolean; respond?: (id: string) => DaemonResponse | undefined } = {},
 ) {
   let sent: DaemonWireRequest | undefined;
   let recordsAtSend: string[] = [];
@@ -309,12 +309,15 @@ test.each([
     const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
     const stat = fs.statSync(matches ? destination : recordFile, { bigint: true });
     const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
-    const publishing = { revision: 5, file: `${stat.dev}:${stat.ino}` };
+    const staging = path.join(path.dirname(destination), '.agent-device-script-crashed');
+    fs.mkdirSync(staging);
+    const publishing = { revision: 5, file: `${stat.dev}:${stat.ino}`, staging };
     fs.writeFileSync(recordFile, JSON.stringify({ ...record, publishing }));
 
     await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v4', 4, id)] });
 
     expect(fs.readFileSync(destination, 'utf8')).toBe(expected);
+    expect(fs.existsSync(staging)).toBe(false);
   },
 );
 
@@ -325,7 +328,7 @@ test.each([
   'a record write that fails $name keeps the staged file only while it is named',
   async ({ failingWrite, kept }) => {
     const { root, stateDir, destination } = journey();
-    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, v2: { body: 'v2\n' } });
     const actual = await vi.importActual<typeof import('@agent-device/host-kit/file')>(
       '@agent-device/host-kit/file',
     );
@@ -338,15 +341,26 @@ test.each([
       actual.publishFileSync(options);
     });
 
-    await expect(open(baseUrl, stateDir, destination)).rejects.toMatchObject({
-      details: { reason: 'script_download_failed' },
-    });
+    let id = '';
+    await expect(
+      open(baseUrl, stateDir, destination, {
+        respond: (minted) => {
+          id = minted;
+          return undefined;
+        },
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'script_download_failed' } });
     vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+    const staging = () =>
+      fs
+        .readdirSync(path.join(root, 'caller'))
+        .filter((n) => n.startsWith('.agent-device-script-'));
+    expect(staging()).toHaveLength(kept ? 1 : 0);
 
-    const staging = fs
-      .readdirSync(path.join(root, 'caller'))
-      .filter((name) => name.startsWith('.agent-device-script-'));
-    expect(staging).toHaveLength(kept ? 1 : 0);
+    // The next version settles the interrupted one and reclaims its staging directory.
+    await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+    expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+    expect(staging()).toEqual([]);
   },
 );
 
@@ -367,4 +381,45 @@ test('creating a record removes records nobody touched for a week', async () => 
 
   expect(fs.existsSync(stale)).toBe(false);
   expect(fs.existsSync(fresh)).toBe(true);
+});
+
+test('a recording whose first download failed still delivers later versions', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: { body: 'open Demo\n', broken: true },
+    v2: { body: 'open Demo\nclose\n' },
+  });
+  let id = '';
+  await expect(
+    open(baseUrl, stateDir, destination, {
+      respond: (minted) => {
+        id = minted;
+        return undefined;
+      },
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'script_download_failed' } });
+
+  await answer(baseUrl, stateDir, request('close'), {
+    scriptPublicationId: id,
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nclose\n');
+  expect(records(stateDir)).toEqual([]);
+});
+
+test('a session-script artifact under another field writes nothing', async () => {
+  const { root, stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, hostile: { body: 'x\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const req = request('click', { cwd: root });
+
+  const response = await answer(baseUrl, stateDir, req, {
+    path: '/daemon/x.ad',
+    artifacts: [{ ...script('hostile', 2, id), field: 'path', fileName: 'victim.ad' }],
+  });
+
+  expect(response).toEqual({ ok: true, data: { artifacts: [] } });
+  expect(fs.existsSync(path.join(root, 'victim.ad'))).toBe(false);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });

@@ -19,14 +19,15 @@ const RECORD_LOCK_TIMEOUT_MS = 30_000;
  * This client's record of one remote `open --save-script`, keyed by the endpoint, tenant, session
  * and the publication ID this client minted for that open. Only this client creates records, so a
  * daemon response never establishes a destination. `revision` is the newest version published.
- * `publishing` names a version and the staged file's identity before the rename, so a crash between
- * the rename and the revision update is settled from the destination's identity.
+ * `publishing` names a version, the staged file's identity, and its staging directory before the
+ * rename, so a crash between the rename and the revision update is settled from the destination's
+ * identity, and the staging directory is removed once nothing can name it.
  */
 type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
-  publishing?: Readonly<{ revision: number; file: string }>;
+  publishing?: Readonly<{ revision: number; file: string; staging: string }>;
 }>;
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
@@ -57,17 +58,25 @@ export async function sendRemoteScriptOpen(
   const file = recordPath(stateDir, info.baseUrl, req, publicationId);
   createRecord(file, { destination, force: req.flags?.force === true, revision: 0 });
   const meta = { ...req.meta, clientArtifactPaths, scriptPublicationId: publicationId };
-  let response: DaemonResponse | undefined;
+  let armed = false;
   try {
-    response = await send({ ...req, meta });
+    const response = await send({ ...req, meta });
+    armed = response.ok && response.data?.scriptPublicationId === publicationId;
     return response;
+  } catch (error) {
+    // The daemon armed the recording when only this machine failed to save its first version.
+    armed = error instanceof AppError && SAVE_FAILURES.has(String(error.details?.reason));
+    throw error;
   } finally {
-    if (!response?.ok || response.data?.scriptPublicationId !== publicationId) {
+    if (!armed) {
       // A record that cannot be removed stays inert, so the open's own outcome is reported.
       await withRecordLock(file, async () => fs.rmSync(file, { force: true })).catch(() => {});
     }
   }
 }
+
+/** The reasons `scriptSaveError` gives, after the daemon answered with a version. */
+const SAVE_FAILURES = new Set(['script_download_failed', 'script_target_exists']);
 
 export type SessionScriptDelivery = Readonly<{
   /** Publishes one script artifact and names it in `data`, or drops it from the response. */
@@ -99,12 +108,16 @@ export function sessionScriptDelivery(
   const retire = async (): Promise<void> => {
     if (closedId === undefined) return;
     const file = recordPath(stateDir, endpoint.baseUrl, req, closedId);
-    await withRecordLock(file, async () => fs.rmSync(file, { force: true }));
+    await withRecordLock(file, async () => {
+      const staging = readRecord(file)?.publishing?.staging;
+      fs.rmSync(file, { force: true });
+      if (staging) fs.rmSync(staging, { recursive: true, force: true });
+    });
   };
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
       const published = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
-      delete data.savedScript;
+      delete data[artifact.field];
       if (published === undefined) return;
       data.savedScript = published;
       kept.push({ ...artifact, localPath: published });
@@ -183,7 +196,7 @@ async function publishScriptVersion(
       requestScope: req.meta,
       privateFile: { maxBytes: MAX_SCRIPT_BYTES },
     });
-    const version = { revision: revision as number, staged, pending };
+    const version = { revision: revision as number, staging, staged, pending };
     return await withRecordLock(file, async () => publishStaged(file, version));
   } catch (error) {
     throw scriptSaveError(record.destination, artifactId, error);
@@ -200,17 +213,26 @@ async function publishScriptVersion(
  */
 function publishStaged(
   file: string,
-  version: Readonly<{ revision: number; staged: string; pending: { named: boolean } }>,
+  version: Readonly<{
+    revision: number;
+    staging: string;
+    staged: string;
+    pending: { named: boolean };
+  }>,
 ): string | undefined {
-  const { revision, staged, pending } = version;
+  const { revision, staging, staged, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
   const current = settlePublishing(record);
-  if (revision <= current.revision) {
-    if (current !== record) writeRecord(file, current);
-    return current.destination;
+  if (current !== record) {
+    writeRecord(file, current);
+    // The settled entry's staging directory can no longer be named.
+    if (record.publishing) fs.rmSync(record.publishing.staging, { recursive: true, force: true });
   }
-  const publishing = { revision, file: fileIdentity(staged) ?? 'missing' };
+  if (revision <= current.revision) return current.destination;
+  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
+  // A second name keeps the inode on disk after the rename while the record may name it.
+  fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
   pending.named = true;
   const exclusive = current.revision === 0 && !current.force;
@@ -310,7 +332,9 @@ function readRecord(file: string): ScriptRecord | undefined {
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
     (publishing === undefined ||
-      (Number.isSafeInteger(publishing?.revision) && typeof publishing?.file === 'string'));
+      (Number.isSafeInteger(publishing?.revision) &&
+        typeof publishing?.file === 'string' &&
+        typeof publishing?.staging === 'string'));
   return valid ? (record as ScriptRecord) : undefined;
 }
 

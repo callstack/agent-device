@@ -481,7 +481,7 @@ export async function materializeRemoteArtifacts(
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
   if (
     response.data?.scriptPublicationId === undefined &&
-    !artifacts.some((artifact) => artifact?.field === 'savedScript')
+    !artifacts.some(isSessionScriptArtifact)
   ) {
     return await download();
   }
@@ -506,8 +506,9 @@ async function downloadResponseArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    // `savedScript` is reserved for the session-script owner, whatever type the daemon advertises.
-    if (scripts && artifact.field === 'savedScript') {
+    // `savedScript` and the session-script type are reserved for the session-script owner, which
+    // drops a script artifact under another field or of another type.
+    if (scripts && isSessionScriptArtifact(artifact)) {
       await scripts.publish(artifact, nextData, nextArtifacts);
       continue;
     }
@@ -534,6 +535,10 @@ async function downloadResponseArtifacts(
   }
   nextData.artifacts = nextArtifacts;
   return { ok: true, data: nextData };
+}
+
+function isSessionScriptArtifact(artifact: DaemonArtifact | undefined): boolean {
+  return artifact?.field === 'savedScript' || artifact?.artifactType === 'session-script';
 }
 
 /**
