@@ -152,7 +152,7 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:e5358b5dbf873bb9b4066921fde767741b97064b0b832e088d639ac76efcc674",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:734f0e341d1ce355cffdcee9b42add5ceb478f4da67c54ef938852b9ec9d4d4c",
     "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
@@ -209,7 +209,10 @@
     "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db",
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
-    "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88"
+    "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:92a06bcb5a8f6480a922a04bda226877f50510d5ea7b147a59cbce6e20304f44",
+    "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:6c1b7a2fe8cb07b24d2a5d8499ba9c98e58afd00906d3a621af6f908b74ed5fd"
   },
   "compatibleChanges": [
     {
@@ -234,8 +237,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:e5358b5dbf873bb9b4066921fde767741b97064b0b832e088d639ac76efcc674",
-      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4511 takes the client state directory and gives the savedScript field its own path: the client writes a session-script artifact only to the destination that its own open --save-script recorded for that endpoint, tenant, session and scriptPublicationId, and only when its scriptRevision is newer than the version already published there. A savedScript artifact of another type, or one without a matching record, is dropped. A close retires the record that the optional response field scriptPublicationId names. Other artifact kinds and the GET /artifacts/:id framing are unchanged."
+      "digest": "sha256:734f0e341d1ce355cffdcee9b42add5ceb478f4da67c54ef938852b9ec9d4d4c",
+      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4511 takes the client state directory and gives the savedScript field its own path: the client writes a session-script artifact only to the destination that its own open --save-script recorded for that endpoint, tenant, session and scriptPublicationId, and only when its scriptRevision is newer than the version already published there. A savedScript artifact of another type, or one without a matching record, is dropped. A close retires the record that the optional response field scriptPublicationId names. The per-artifact download loop moved unchanged into a private helper, so other artifact kinds and the GET /artifacts/:id framing are unchanged."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload",

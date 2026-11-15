@@ -445,7 +445,14 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DownloadRemoteArtifactParams',
         'downloadRemoteArtifact',
         'materializeRemoteArtifacts',
+        'downloadResponseArtifacts',
         'resolveMaterializedArtifactPath',
+      ),
+      // The session-script artifact fields a remote open --save-script reads (ADR 0016).
+      ...from(
+        'packages/remote/src/session-script-destination.ts',
+        'SessionScriptDelivery',
+        'publishScriptVersion',
       ),
       ...from(ARTIFACT_DOWNLOAD, 'RemoteArtifactDownload', 'downloadRemoteArtifactFromUrl'),
     ],
