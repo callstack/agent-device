@@ -6,6 +6,7 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
+  assertScriptArtifactsCapability,
   readDaemonCapabilities,
   type DaemonPaths,
   type DaemonTransportPreference,
@@ -507,6 +508,8 @@ async function retryAfterRemoteInstanceMismatch(
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
   info.capabilities = (health.upstream ?? health).capabilities;
   (await loadRemoteHealthCache()).cacheRemoteDaemonHealth(info, health);
+  // A replacement daemon must still deliver the script that a remote recording asks for.
+  if (req.meta?.scriptPublicationId) assertScriptArtifactsCapability(info.capabilities);
   try {
     return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
   } catch (error) {

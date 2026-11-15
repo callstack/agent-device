@@ -270,6 +270,19 @@ export function readDaemonLifecycleFence(input: unknown): DaemonLifecycleFence |
   return { pid: pid as number, processStartTime };
 }
 
+/**
+ * Refuses a remote `--save-script` before it is sent to a daemon that cannot deliver session
+ * scripts (ADR 0016), because such a daemon records to its own disk and never delivers.
+ */
+export function assertScriptArtifactsCapability(capabilities: readonly string[] | undefined): void {
+  if (capabilities?.includes('script-artifacts')) return;
+  throw new AppError('INVALID_ARGS', 'The remote daemon cannot deliver session scripts.', {
+    reason: 'remote_script_artifacts_unsupported',
+    daemonRequestSent: false,
+    hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
+  });
+}
+
 export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {
   if (!Array.isArray(value)) return [];
   return DAEMON_CAPABILITIES.filter((capability) => value.includes(capability));

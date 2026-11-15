@@ -5,6 +5,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -46,13 +47,7 @@ export async function sendRemoteScriptOpen(
   stateDir: string,
   send: (req: DaemonWireRequest) => Promise<DaemonResponse>,
 ): Promise<DaemonResponse> {
-  if (!info.capabilities?.includes('script-artifacts')) {
-    throw new AppError('INVALID_ARGS', 'The remote daemon cannot deliver session scripts.', {
-      reason: 'remote_script_artifacts_unsupported',
-      daemonRequestSent: false,
-      hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
-    });
-  }
+  assertScriptArtifactsCapability(info.capabilities);
   const { savedScript: destination, ...clientArtifactPaths } = req.meta?.clientArtifactPaths ?? {};
   if (!info.baseUrl || !destination) throw new Error('A remote script open needs a destination.');
   const publicationId = crypto.randomUUID();
@@ -134,20 +129,23 @@ export function sessionScriptDelivery(
       kept.push({ ...artifact, localPath: published });
     },
     settleAfter: async (run) => {
-      let result: DaemonResponse;
-      try {
-        result = await run(delivery);
-      } catch (error) {
-        await retire().catch((retireError: unknown) =>
+      // A record that cannot be retired stays inert, so the close keeps its own outcome.
+      const retireQuietly = () =>
+        retire().catch((retireError: unknown) =>
           emitDiagnostic({
             level: 'warn',
             phase: 'session_script_retire_failed',
             data: { session: req.session, error: String(retireError) },
           }),
         );
+      let result: DaemonResponse;
+      try {
+        result = await run(delivery);
+      } catch (error) {
+        await retireQuietly();
         throw error;
       }
-      await retire();
+      await retireQuietly();
       return result;
     },
   };
@@ -210,7 +208,7 @@ async function publishScriptVersion(
     const version = { revision: revision as number, staging, staged, pending };
     return await withRecordLock(file, async () => publishStaged(file, version));
   } catch (error) {
-    throw scriptSaveError(record.destination, artifactId, error);
+    throw scriptSaveError(record.destination, artifactId, error, req.command === 'close');
   } finally {
     if (staging && !pending.named) {
       await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => undefined);
@@ -273,10 +271,18 @@ function fileIdentity(file: string): string | undefined {
   return stat ? `${stat.dev}:${stat.ino}` : undefined;
 }
 
-function scriptSaveError(destination: string, artifactId: string | undefined, error: unknown) {
+function scriptSaveError(
+  destination: string,
+  artifactId: string | undefined,
+  error: unknown,
+  closing: boolean,
+) {
   const cause = error instanceof Error ? error : undefined;
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
+  const recovery = closing
+    ? 'The session is closed, so no later version follows.'
+    : 'The next recorded action or close delivers the full recording again.';
   return new AppError(
     'COMMAND_FAILED',
     exists
@@ -288,7 +294,7 @@ function scriptSaveError(destination: string, artifactId: string | undefined, er
       artifactId,
       hint: exists
         ? 'Remove the existing file, or start a new recording with open --save-script --force.'
-        : 'The previous script version is unchanged. The next recorded action or close delivers the full recording again.',
+        : `The file may still hold the previous version. ${recovery}`,
     },
     cause,
   );
