@@ -99,7 +99,7 @@ export async function handleAlertCommand(
     params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const action = readAlertAction(req.positionals?.[0]);
-  const timeoutMs = alertWaitTimeoutMs(action, req.positionals?.[1]);
+  const timeoutMs = alertTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
     device,
     action,
@@ -163,12 +163,12 @@ function readAlertAction(raw: string | undefined): AlertAction {
 }
 
 /**
- * The `alert wait` budget before it reaches any leg. Past the contract's window ceiling the
- * budget cannot be armed as a timer at all, so the command refuses the argument instead of
- * starting a wait that would misfire; the driver's own default remains the last line for
+ * The `alert` timeout before it reaches any leg: the window `alert wait` polls in, and the budget
+ * one `alert get` read spends. Past the contract's window ceiling a wait cannot be armed as a timer
+ * at all, so the command refuses the argument instead of starting a wait that would misfire; the driver's own default remains the last line for
  * budgets that arrive by other routes.
  */
-function alertWaitTimeoutMs(action: AlertAction, rawTimeout: string | undefined): number {
+function alertTimeoutMs(action: AlertAction, rawTimeout: string | undefined): number {
   const timeoutMs = parseTimeout(rawTimeout) ?? DEFAULT_TIMEOUT_MS;
   if (action === 'wait' && timeoutMs > MAX_ALERT_WINDOW_MS) {
     throw new AppError(

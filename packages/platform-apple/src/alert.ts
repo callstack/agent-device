@@ -65,7 +65,7 @@ function runAppleAlert(
         command: 'alert',
         action,
         appBundleId: options?.appBundleId,
-        timeoutMs: Math.min(timeoutMs, ALERT_RUNNER_MAX_BUDGET_MS),
+        timeoutMs: alertRunnerBudgetMs(timeoutMs),
       },
       runnerOptions,
     )) as Record<string, unknown>;
@@ -95,11 +95,7 @@ export async function readAppleAlert(
   options: AlertInteractorOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  const requestedMs = options?.timeoutMs;
-  const budgetMs =
-    requestedMs === undefined || !Number.isFinite(requestedMs)
-      ? DEFAULT_ALERT_TIMEOUT_MS
-      : Math.max(requestedMs, ALERT_MIN_READ_BUDGET_MS);
+  const budgetMs = alertRunnerBudgetMs(options?.timeoutMs, ALERT_MIN_READ_BUDGET_MS);
   return await runAppleAlert(device, runnerOptions, options, env)('get', budgetMs);
 }
 
@@ -184,6 +180,18 @@ export async function actOnAppleAlert(
     await sleep(ALERT_POLL_INTERVAL_MS);
   }
   throw withAlertFallbackHint(lastError);
+}
+
+/**
+ * The runner budget for one alert attempt: the caller's window, at least `floorMs` and at most
+ * `ALERT_RUNNER_MAX_BUDGET_MS`, or `DEFAULT_ALERT_TIMEOUT_MS` when the caller gave no window.
+ */
+function alertRunnerBudgetMs(requestedMs: number | undefined, floorMs = 0): number {
+  const windowMs =
+    requestedMs === undefined || !Number.isFinite(requestedMs)
+      ? DEFAULT_ALERT_TIMEOUT_MS
+      : Math.max(requestedMs, floorMs);
+  return Math.min(windowMs, ALERT_RUNNER_MAX_BUDGET_MS);
 }
 
 function remainingBudgetMs(start: number, timeoutMs: number): number {

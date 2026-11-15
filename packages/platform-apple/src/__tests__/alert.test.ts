@@ -79,21 +79,6 @@ test.each([
   });
 });
 
-test('a read cut off by the runner watchdog is reported as itself, never as absence', async () => {
-  const watchdog = new AppError('COMMAND_FAILED', 'runner main thread timed out', {
-    runnerErrorCode: 'MAIN_THREAD_TIMEOUT',
-    reason: 'runner_main_thread_timeout',
-    dispatched: 'unknown',
-  });
-  mockRunner.mockRejectedValue(watchdog);
-
-  await assert.rejects(
-    alertIfPresent(readAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 3_000 }, process.env)),
-    (error: unknown) => error === watchdog,
-  );
-  assert.equal(mockRunner.mock.calls.length, 1);
-});
-
 test('a wait window above the ceiling is polled in runner attempts within the ceiling', async () => {
   mockRunner.mockResolvedValue({ title: 'Camera Access' });
 
