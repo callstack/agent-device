@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
+import { types } from 'node:util';
+import type { ClientRequest, IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
 
 export function consumeTextLines(
@@ -42,11 +43,15 @@ export async function loadNodeHttpRequester(protocol: string): Promise<NodeHttpR
     : (await import('node:http')).default;
 }
 
-export function readNodeHttpResponseBody(res: IncomingMessage): Promise<string> {
+export function readNodeHttpResponseBody(
+  res: IncomingMessage,
+  onChunk?: (chunk: string) => void,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = '';
     res.setEncoding('utf8');
-    res.on('data', (chunk) => {
+    res.on('data', (chunk: string) => {
+      onChunk?.(chunk);
       body += chunk;
     });
     res.on('end', () => resolve(body));
@@ -81,4 +86,54 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
   const hashA = crypto.createHash('sha256').update(a).digest();
   const hashB = crypto.createHash('sha256').update(b).digest();
   return crypto.timingSafeEqual(hashA, hashB);
+}
+
+/**
+ * Reports each non-empty `req.write` chunk that Node completes without an error: its bytes reached
+ * the local kernel, not the peer. A queued write, `drain`, and a completion after the response
+ * started, after `signal` aborted, after a destroy or after disposal are not reported.
+ *
+ * Attach it in the tick that creates the request, before anything writes to it. The wrapper keeps
+ * the arguments, `this`, the backpressure result and one call of the caller's callback with its
+ * error. Disposing removes its listener and restores `write` only while this wrapper is installed.
+ */
+export function observeCompletedRequestWrites(
+  req: ClientRequest,
+  signal: AbortSignal,
+  onCompleted: () => void,
+): () => void {
+  const ownWrite = Object.getOwnPropertyDescriptor(req, 'write');
+  const write = req.write;
+  let observing = true;
+  const onResponse = () => {
+    observing = false;
+  };
+  const observedWrite = function (this: ClientRequest, ...args: unknown[]): boolean {
+    const [chunk, encoding] = args;
+    const callbackIndex = typeof encoding === 'function' ? 1 : 2;
+    const callback = args[callbackIndex];
+    const encodingName = typeof encoding === 'string' ? encoding.toLowerCase() : undefined;
+    const hasBytes =
+      typeof chunk === 'string'
+        ? encodingName === 'hex' || encodingName === 'base64' || encodingName === 'base64url'
+          ? Buffer.from(chunk, encodingName).byteLength > 0
+          : chunk.length > 0
+        : types.isUint8Array(chunk) && chunk.byteLength > 0;
+    if (observing && hasBytes) {
+      args[callbackIndex] = (error?: Error | null) => {
+        if (!error && observing && !req.destroyed && !signal.aborted) onCompleted();
+        if (typeof callback === 'function') callback(error);
+      };
+    }
+    return Reflect.apply(write, this, args);
+  };
+  req.write = observedWrite;
+  req.prependListener('response', onResponse);
+  return () => {
+    observing = false;
+    req.off('response', onResponse);
+    if (req.write !== observedWrite) return;
+    if (ownWrite) Object.defineProperty(req, 'write', ownWrite);
+    else Reflect.deleteProperty(req, 'write');
+  };
 }

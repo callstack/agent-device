@@ -5,24 +5,189 @@
 // abort signal — a rejection the caller swallows would keep streaming a full app bundle to a device
 // nobody owns.
 
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { AppError } from '@agent-device/kernel/errors';
 import { once } from 'node:events';
 import { uploadArtifact } from '../upload-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { observeOutcome } from './support/upload-transfer-fixtures.ts';
 
 const TEST_TOKEN = 'agent-device-upload-cancel-token';
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   for (const dir of tempDirs) {
     await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
   tempDirs.length = 0;
+});
+
+test('cancellation refuses preparation before it reads a missing artifact', async () => {
+  const artifactPath = createTempFile('missing.apk', 'payload');
+  fs.unlinkSync(artifactPath);
+  const control = new AbortController();
+  const reason = new Error('request owner stopped');
+  control.abort(reason);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  await assert.rejects(
+    uploadArtifact({
+      env: process.env,
+      localPath: artifactPath,
+      baseUrl: 'http://127.0.0.1:1',
+      token: TEST_TOKEN,
+      signal: control.signal,
+    }),
+    (error: unknown) => error === reason,
+  );
+  assert.equal(fetch.mock.calls.length, 0);
+});
+
+test('a standalone upload expires its preparation aggregate during hashing without starting a request', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const artifactPath = createTempFile('app.apk', 'payload');
+  const hashSource = new PassThrough();
+  vi.spyOn(fs, 'createReadStream').mockReturnValue(hashSource as unknown as fs.ReadStream);
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  const outcome = uploadArtifact({
+    env: process.env,
+    localPath: artifactPath,
+    baseUrl: 'http://127.0.0.1:1',
+    token: TEST_TOKEN,
+  }).catch((error: unknown) => error);
+  try {
+    await vi.advanceTimersByTimeAsync(600_001);
+    const error = await outcome;
+    assert.ok(error instanceof AppError);
+    assert.deepEqual(error.details, {
+      reason: 'artifact_preparation_deadline_exceeded',
+      transferPhase: 'preparation',
+      timeoutMs: 600_000,
+    });
+    assert.equal(hashSource.destroyed, true);
+    assert.equal(fetch.mock.calls.length, 0);
+  } finally {
+    hashSource.destroy();
+    await outcome;
+  }
+});
+
+test.each([
+  'preflight',
+  'finalize',
+  'retry-preflight',
+  'retry-finalize',
+  'cancel-preflight',
+  'cancel-finalize',
+  'prose-preflight',
+  'prose-finalize',
+])('control request %s distinguishes a deadline from matching error prose', async (stage) => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const caller = new AbortController();
+  const artifactPath = createTempFile('app.apk', 'control-plane-payload');
+  const retry = stage.startsWith('retry-');
+  const prose = stage.startsWith('prose-');
+  const canceled = stage.startsWith('cancel-');
+  const callerReason = new Error('lease ended during control request');
+  const phase = stage.endsWith('preflight') ? 'preflight' : 'finalize';
+  const events: string[] = [];
+  const routes: string[] = [];
+  let uploads = 0;
+  const server = await startServer(async (req, res) => {
+    routes.push(`${req.method} ${req.url}`);
+    if (retry && ++uploads === 1) {
+      req.destroy();
+      return;
+    }
+    await readRequestBody(req);
+    sendJson(res, { ok: true, uploadId: 'control-upload' });
+  });
+  let entered = () => {};
+  const stalled = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let stalledSignal: AbortSignal | undefined;
+  let preflights = 0;
+  let refuseStall: ((error: Error) => void) | undefined;
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const route = new URL(String(input)).pathname;
+    if (route.endsWith('/preflight')) preflights += 1;
+    if (route.endsWith('/' + phase) && (!retry || preflights === 2)) {
+      const signal = init?.signal;
+      assert.ok(signal);
+      stalledSignal = signal;
+      entered();
+      if (prose) throw new Error(`Artifact transfer ${phase} timed out`);
+      return await new Promise<Response>((_resolve, reject) => {
+        refuseStall = reject;
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    }
+    return Response.json({
+      ok: true,
+      uploadId: 'control-upload',
+      upload: { url: `${server.baseUrl}/ticket`, headers: {} },
+    });
+  });
+  const outcome = observeOutcome(
+    uploadArtifact({
+      env: process.env,
+      localPath: artifactPath,
+      baseUrl: server.baseUrl,
+      token: TEST_TOKEN,
+      signal: caller.signal,
+      onProgress: (event) => events.push(event.type),
+    }),
+  );
+  try {
+    await stalled;
+    if (prose) {
+      const result = await outcome;
+      assert.equal(result.error, undefined);
+      assert.equal(result.value, 'control-upload');
+      assert.ok(routes.includes('POST /upload'));
+      assert.equal(stalledSignal?.aborted, false);
+      return;
+    }
+    await vi.advanceTimersByTimeAsync(canceled ? 10_000 : 29_999);
+    assert.equal(stalledSignal?.aborted, false);
+    assert.equal(outcome.settled, false);
+    if (canceled) caller.abort(callerReason);
+    await vi.advanceTimersByTimeAsync(canceled ? 0 : 1);
+    assert.equal(stalledSignal?.aborted, true);
+    assert.equal(outcome.settled, true, 'expiry settles without starting another transfer');
+    const result = await outcome;
+    assert.equal(result.value, undefined);
+    if (canceled) assert.equal(result.error, callerReason);
+    else {
+      assert.ok(result.error instanceof AppError);
+      assert.deepEqual(result.error.details, {
+        reason: 'transfer_phase_timeout',
+        transferPhase: phase,
+        timeoutMs: 30_000,
+      });
+    }
+    assert.equal(caller.signal.aborted, canceled);
+    assert.equal(events.includes('fallback'), false);
+    const expectedTicketLegs = Number(retry) + Number(phase === 'finalize');
+    assert.deepEqual(
+      routes,
+      Array.from({ length: expectedTicketLegs }, () => 'PUT /ticket'),
+    );
+    assert.equal(fetch.mock.calls.length, 1 + expectedTicketLegs);
+  } finally {
+    caller.abort(new Error('fixture cleanup'));
+    refuseStall?.(new Error('fixture cleanup'));
+    await outcome;
+    await server.close();
+  }
 });
 
 test('an aborted signal ends a legacy upload mid-stream instead of finishing the bytes', async () => {
@@ -71,6 +236,59 @@ test('an aborted signal ends a legacy upload mid-stream instead of finishing the
     );
     assert.ok(sawBytes > 0, 'the upload had started streaming before the abort');
     assert.ok(sawBytes < content.length, `the stream stopped early, at ${sawBytes} bytes`);
+  } finally {
+    await server.close();
+  }
+});
+
+test('a cancel during the retried direct upload ends the upload without announcing a fallback', async () => {
+  const artifactPath = createTempFile('app.apk', 'retried-direct-payload');
+  const control = new AbortController();
+  const reason = new Error('request owner stopped');
+  const requests: string[] = [];
+  const events: string[] = [];
+  let ticketLegs = 0;
+  const server = await startServer(async (req, res) => {
+    requests.push(`${req.method} ${req.url}`);
+    if (req.url === '/upload/preflight') {
+      await readRequestBody(req);
+      sendJson(res, {
+        ok: true,
+        uploadId: 'retried-ticket',
+        upload: { url: `${server.baseUrl}/ticket`, headers: {} },
+      });
+      return;
+    }
+    if (req.url === '/ticket') {
+      ticketLegs += 1;
+      // Leg one breaks as a retryable transport failure; the caller cancels during leg two.
+      if (ticketLegs === 1) req.destroy();
+      else control.abort(reason);
+      return;
+    }
+    res.statusCode = 404;
+    res.end('not found');
+  });
+
+  try {
+    await assert.rejects(
+      uploadArtifact({
+        env: process.env,
+        localPath: artifactPath,
+        baseUrl: server.baseUrl,
+        token: TEST_TOKEN,
+        signal: control.signal,
+        onProgress: (event) => events.push(event.type),
+      }),
+      (error: unknown) => error === reason,
+    );
+    assert.equal(events.includes('fallback'), false, events.join(','));
+    assert.deepEqual(requests, [
+      'POST /upload/preflight',
+      'PUT /ticket',
+      'POST /upload/preflight',
+      'PUT /ticket',
+    ]);
   } finally {
     await server.close();
   }

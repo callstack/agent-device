@@ -1,6 +1,7 @@
 export {
   consumeTextLines,
   loadNodeHttpRequester,
+  observeCompletedRequestWrites,
   readNodeHttpRequestBody,
   readNodeHttpResponseBody,
   timingSafeStringEqual,

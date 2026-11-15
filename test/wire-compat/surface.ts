@@ -393,6 +393,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'parseUploadPreflightResult',
         'isStringRecord',
         'requestUploadPreflight',
+        'requestUploadControl',
         'uploadDirectArtifact',
         'tryDirectUploadWithResume',
         'shouldRetryDirectUpload',
