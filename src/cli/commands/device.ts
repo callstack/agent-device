@@ -1,13 +1,21 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
-import { publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   deviceClaimOwnerCannotRelease,
+  deviceClaimRefusalReason,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
+  type DeviceClaim,
+  type DeviceClaimRefusalReason,
   type InspectedDeviceClaim,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
+import {
+  inspectNewSessionAdmission,
+  type ClaimRecoveryRetentionReason,
+  type DeviceClaimAdmission,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -31,14 +39,17 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
-  const claims = (
-    flags.stale
-      ? staleClaims
-      : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification))
-  ).map(serializeClaim);
+  const visible = flags.stale
+    ? staleClaims
+    : inspectedClaims.filter((claim) => !deviceClaimRequiresStaleInspection(claim.classification));
+  const claims = visible.map(serializeClaim);
+  // Acquirability is a --json answer: each device weighs every claim, so the human view, which
+  // renders claims and notices, never pays for it.
+  const devices = flags.json ? await reportDeviceAcquirability(inspectedClaims, host.env) : [];
   const data = {
     claims,
     ...(flags.stale ? {} : { hiddenStaleClaims: staleClaims.length }),
+    devices,
   };
   await writeCommandOutput(flags, data, () =>
     renderDeviceStatus(claims, {
@@ -53,6 +64,86 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, 
   );
   return true;
 };
+
+type DeviceAcquirabilityBlockReason = DeviceClaimRefusalReason | ClaimRecoveryRetentionReason;
+
+type DeviceAcquirabilityReport = {
+  deviceKey: string;
+  device: Record<string, unknown>;
+  acquirable: boolean;
+  /** Why a new session cannot take it now, and the holder to act on; absent when it can. */
+  blockedBy?: DeviceAcquirabilityBlockReason;
+  owner?: { session: string; workspace: string; stateDir: string };
+};
+
+/**
+ * Whether a new session can take each device a selected claim names, answered by the admission
+ * verdict acquisition checks first, so claim order, canonical claim paths and unreadable claims
+ * follow `open`. One entry per device, in inspection order.
+ *
+ * Every device a claim names is reported, including one whose only claims are the stale ones this
+ * view hides: their owner being reclaimable is exactly why they are hidden, and a caller choosing a
+ * device needs that answer without asking for the hidden records. A device no claim names is absent;
+ * `agent-device devices` is what enumerates devices. Only a reported entry carries an answer, so a
+ * device that is unreported for another reason, such as a host whose live claims name only its own
+ * app devices, is not thereby acquirable.
+ *
+ * A reclaimable owner with an open durable resource is reported as blocked by that resource's
+ * pending cleanup: `open` settles it through recovery, which status never runs.
+ */
+async function reportDeviceAcquirability(
+  inspectedClaims: readonly InspectedDeviceClaim[],
+  env: EnvMap,
+): Promise<DeviceAcquirabilityReport[]> {
+  const reports: DeviceAcquirabilityReport[] = [];
+  const seen = new Set<string>();
+  for (const entry of inspectedClaims) {
+    const deviceKey = entry.deviceKey;
+    const device = entry.claim?.device;
+    if (!deviceKey || !device || seen.has(deviceKey)) continue;
+    seen.add(deviceKey);
+    const { family, ...identity } = device;
+    const admission = await inspectNewSessionAdmission({
+      device: { ...identity, platform: family } satisfies DeviceInfo,
+      env,
+    });
+    const { blockedBy, holder } = describeAdmission(admission);
+    reports.push({
+      deviceKey,
+      device: serializeClaimDevice(device),
+      acquirable: blockedBy === undefined,
+      ...(blockedBy ? { blockedBy } : {}),
+      ...(holder
+        ? {
+            owner: {
+              session: holder.session,
+              workspace: holder.workspace,
+              stateDir: holder.stateDir,
+            },
+          }
+        : {}),
+    });
+  }
+  return reports;
+}
+
+function describeAdmission(admission: DeviceClaimAdmission): {
+  blockedBy?: DeviceAcquirabilityBlockReason;
+  holder?: DeviceClaim;
+} {
+  if (admission.status === 'refused') {
+    return {
+      blockedBy:
+        admission.retainedBy ?? deviceClaimRefusalReason(admission.conflict.classification),
+      holder: admission.conflict.claim,
+    };
+  }
+  for (const { claim, recovery } of admission.reclaimed) {
+    const kind = recovery?.status === 'inspectable' ? recovery.recoveryKinds[0] : undefined;
+    if (kind) return { blockedBy: `${kind}-cleanup-pending`, holder: claim };
+  }
+  return { holder: admission.reclaimed[0]?.claim };
+}
 
 /**
  * `device release --stale`: settle and clear matching claims whose owner
