@@ -217,15 +217,34 @@ test('parseTouchTarget decodes pinned members and keeps their generations', () =
 });
 
 test('parseTouchTarget accepts the sequence form for click and rejects it for other commands', () => {
-  expect(parseTouchTarget(['@e1,@e2'], 'click').ok).toBe(true);
-  expect(parseTouchTarget(['@e1,@e2'], 'longpress').ok).toBe(false);
-  expect(parseTouchTarget(['@e1,@e2'], 'hover').ok).toBe(false);
+  const clickParsed = parseTouchTarget(['@e1,@e2'], 'click');
+  expect(clickParsed.ok).toBe(true);
+  // Each non-tap-family command refuses through its own branch.
+  const longpressParsed = parseTouchTarget(['@e1,@e2'], 'longpress');
+  expect(longpressParsed.ok).toBe(false);
+  if (!longpressParsed.ok && !longpressParsed.response.ok) {
+    expect(longpressParsed.response.error.code).toBe('INVALID_ARGS');
+    expect(longpressParsed.response.error.message).toBe(
+      'longpress takes one @ref — only press and click accept a comma-separated ref sequence',
+    );
+  }
+  const hoverParsed = parseTouchTarget(['@e1,@e2'], 'hover');
+  expect(hoverParsed.ok).toBe(false);
+  if (!hoverParsed.ok && !hoverParsed.response.ok) {
+    expect(hoverParsed.response.error.code).toBe('INVALID_ARGS');
+    expect(hoverParsed.response.error.message).toBe(
+      'hover takes one @ref — only press and click accept a comma-separated ref sequence',
+    );
+  }
 });
 
 test('parseTouchTarget rejects a sequence with an empty member', () => {
   for (const positional of ['@e1,,@e2', '@e1,', '@e1,,']) {
     const parsed = parseTouchTarget([positional], 'press');
     expect(parsed.ok, positional).toBe(false);
+    if (parsed.ok || parsed.response.ok) continue;
+    expect(parsed.response.error.code).toBe('INVALID_ARGS');
+    expect(parsed.response.error.message).toContain('empty member between commas');
   }
   // A single @ref without a comma stays the plain single-ref path.
   expect(parseTouchTarget(['@e1'], 'press').ok).toBe(true);
@@ -251,12 +270,24 @@ test('parseTouchTarget keeps a repeated member and rejects non-ref members', () 
   expect(repeated.ok).toBe(true);
   if (!repeated.ok) return;
   expect(repeated.refs).toEqual(['e1', 'e1']);
-  expect(parseTouchTarget(['@e1,label'], 'press').ok).toBe(false);
+  const nonRef = parseTouchTarget(['@e1,label'], 'press');
+  expect(nonRef.ok).toBe(false);
+  if (!nonRef.ok && !nonRef.response.ok) {
+    expect(nonRef.response.error.code).toBe('INVALID_ARGS');
+    expect(nonRef.response.error.message).toContain('expected a snapshot ref');
+    expect(nonRef.response.error.message).toContain('"label"');
+  }
 });
 
 test('parseTouchTarget rejects a sequence above the 16-ref bound', () => {
   const positional = Array.from({ length: 17 }, (_, index) => `@e${index + 1}`).join(',');
-  expect(parseTouchTarget([positional], 'press').ok).toBe(false);
+  const overBound = parseTouchTarget([positional], 'press');
+  expect(overBound.ok).toBe(false);
+  if (!overBound.ok && !overBound.response.ok) {
+    expect(overBound.response.error.code).toBe('INVALID_ARGS');
+    expect(overBound.response.error.message).toContain('lists 17 refs');
+    expect(overBound.response.error.message).toContain('the maximum is 16');
+  }
   const atBound = Array.from({ length: 16 }, (_, index) => `@e${index + 1}`).join(',');
   expect(parseTouchTarget([atBound], 'press').ok).toBe(true);
 });

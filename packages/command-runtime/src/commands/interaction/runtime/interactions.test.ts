@@ -852,10 +852,22 @@ test('runtime press plan dispatches every member as an ordinary press and report
   assert.equal(taps.length, 3);
   assert.deepEqual(result.sequence?.pressed, 3);
   assert.deepEqual(result.sequence?.refs, ['@e1', '@e2', '@e1']);
+  // Each member dispatches its own resolved center: @e1 at (40, 50), @e2 at
+  // (110, 50), and the repeated @e1 again at (40, 50) — asserted literally so
+  // the test fails if any member resolves against a different member's point.
   assert.deepEqual(
-    result.sequence?.points,
     taps.map((tap) => tap.point),
+    [
+      { x: 40, y: 50 },
+      { x: 110, y: 50 },
+      { x: 40, y: 50 },
+    ],
   );
+  assert.deepEqual(result.sequence?.points, [
+    { x: 40, y: 50 },
+    { x: 110, y: 50 },
+    { x: 40, y: 50 },
+  ]);
 });
 
 test('runtime press plan sleeps intervalMs between keys and passes count to every member', async () => {

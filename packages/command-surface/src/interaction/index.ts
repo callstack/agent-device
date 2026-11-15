@@ -498,7 +498,7 @@ const pressCommandFacet = defineCommandFacet({
     summary: 'Short-press a UI target',
     searchHint: 'click touch button',
     cliDetail:
-      'The hold duration is positional on longpress, not press --hold-ms. A comma-separated ref plan (press @e13,@e14,@e15,@e16; 2 to 16 refs, repeats allowed) resolves and admits every key against the current frame, then dispatches the admitted points: key 1 expires the frame, later keys tap where the snapshot showed them; a later refusal carries details.dispatchedSteps, details.refPlanKey, and details.refPlanPending. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key; the response ref is the first key. Recording refuses the plan.',
+      'The hold duration is positional on longpress, not press --hold-ms. A comma-separated ref plan (press @e13,@e14,@e15,@e16; 2 to 16 refs, repeats allowed) resolves and admits every key against the current frame, then dispatches the admitted points: key 1 expires the frame, later keys dispatch where the snapshot showed them; a later refusal carries details.dispatchedSteps, details.refPlanKey, and details.refPlanPending, and sequence.points holds the dispatched points. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key; the response ref is the first key. Recording refuses the plan.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),

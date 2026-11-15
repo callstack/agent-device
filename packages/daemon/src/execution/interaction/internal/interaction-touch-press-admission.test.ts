@@ -415,6 +415,10 @@ test('a plan with distinct stale pins joins its warnings in dispatch order', asy
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s11,@e2~s12']);
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
+    // The refusal carries the typed admission details beside the joined hint:
+    // pre-dispatch, and the frame admission refused a member's stale pin.
+    expect(response.error.details?.dispatched).toBe('no');
+    expect(response.error.details?.reason).toBe('ref_generation_mismatch');
     // The refusal hint carries both members' warnings, in plan order.
     expect(String(response.error.details?.hint)).toBe(
       "Ref @e1 was minted from snapshot s11 but the session's ref frame is now s15 — re-run snapshot -i. " +
