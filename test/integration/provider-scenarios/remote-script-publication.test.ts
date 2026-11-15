@@ -270,7 +270,7 @@ test('a failed final write keeps the close and the client forgets the recording'
   });
 }, 20_000);
 
-test('a failed refresh download through the client reports the one action it ran', async () => {
+test('a failed refresh download through the client keeps the success of the one action it ran', async () => {
   await withProviderScenarioResource(
     () => createAndroidSettingsWorld({ nativeTextInjection: true }),
     async (world) => {
@@ -314,19 +314,12 @@ test('a failed refresh download through the client reports the one action it ran
         const opened = fs.readFileSync(destination, 'utf8');
 
         refuseArtifacts = true;
-        await assert.rejects(
-          client.interactions.fill({
-            selector: 'id="com.android.settings:id/search"',
-            text: 'fixture-input',
-            ...world.selection,
-          }),
-          (error: unknown) => {
-            const details = (error as { details?: Record<string, unknown> }).details;
-            assert.equal(details?.reason, 'script_download_failed');
-            assert.equal(details?.dispatched, 'unknown');
-            return true;
-          },
-        );
+        // The fill succeeded on the device, so a failed script download keeps its success.
+        await client.interactions.fill({
+          selector: 'id="com.android.settings:id/search"',
+          text: 'fixture-input',
+          ...world.selection,
+        });
         assert.equal(world.textInjectionCalls.length, 1);
         assert.equal(fs.readFileSync(destination, 'utf8'), opened);
 

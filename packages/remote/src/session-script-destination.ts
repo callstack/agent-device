@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
-import { AppError, readDispatchDisclosure } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -35,8 +36,8 @@ type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[
 /**
  * Sends a remote `open --save-script`. Before the open leaves, the client mints a publication ID
  * and records the caller destination and the `--force` grant under it. The serialized request
- * carries the ID and omits the destination. A refused open, or one that armed no recording,
- * removes the record; an open that may have armed one keeps it. A record that outlives its open stays inert: only artifacts of its
+ * carries the ID and omits the destination. A daemon answer that does not name the ID removes the
+ * record. A failed open may still have armed the recording, so it keeps the record. A record that outlives its open stays inert: only artifacts of its
  * own ID match it.
  */
 export async function sendRemoteScriptOpen(
@@ -58,29 +59,13 @@ export async function sendRemoteScriptOpen(
   const file = recordPath(stateDir, info.baseUrl, req, publicationId);
   await createRecord(file, { destination, force: req.flags?.force === true, revision: 0 });
   const meta = { ...req.meta, clientArtifactPaths, scriptPublicationId: publicationId };
-  let armed = false;
-  try {
-    const response = await send({ ...req, meta });
-    armed = response.ok && response.data?.scriptPublicationId === publicationId;
-    return response;
-  } catch (error) {
-    // The daemon armed the recording when only this machine failed to save its first version, and
-    // may have armed it when the open was sent but its answer was lost.
-    armed =
-      error instanceof AppError &&
-      (SAVE_FAILURES.has(String(error.details?.reason)) ||
-        readDispatchDisclosure(error.details) === 'unknown');
-    throw error;
-  } finally {
-    if (!armed) {
-      // A record that cannot be removed stays inert, so the open's own outcome is reported.
-      await withRecordLock(file, async () => fs.rmSync(file, { force: true })).catch(() => {});
-    }
+  const response = await send({ ...req, meta });
+  if (!response.ok || response.data?.scriptPublicationId !== publicationId) {
+    // A record that cannot be removed stays inert, so the open's own outcome is reported.
+    await withRecordLock(file, async () => fs.rmSync(file, { force: true })).catch(() => {});
   }
+  return response;
 }
-
-/** The reasons `scriptSaveError` gives, after the daemon answered with a version. */
-const SAVE_FAILURES = new Set(['script_download_failed', 'script_target_exists']);
 
 export type SessionScriptDelivery = Readonly<{
   /** Publishes one script artifact and names it in `data`, or drops it from the response. */
@@ -97,8 +82,9 @@ export type SessionScriptDelivery = Readonly<{
 
 /**
  * Publishes the session-script artifacts of one remote response to the destinations this client
- * recorded, and retires the record that a close names. A close retires it even when a download or
- * a write fails, and the first error is the one reported.
+ * recorded, and retires the record that a close names. A version that cannot be saved keeps the
+ * response successful and adds `scriptDeliveryFailure` and a warning. A close retires its record
+ * even when another artifact fails, and the first error is the one reported.
  */
 export function sessionScriptDelivery(
   endpoint: Required<DaemonArtifactEndpoint>,
@@ -120,8 +106,29 @@ export function sessionScriptDelivery(
   };
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
-      const published = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
       delete data[artifact.field];
+      let published: string | undefined;
+      try {
+        published = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
+      } catch (error) {
+        // A delivery failure never changes the outcome of the action that recorded the version.
+        const saved = error as AppError;
+        const failure = {
+          reason: 'script_delivery_failed',
+          cause: saved.details?.reason,
+          publicationId: artifact.scriptPublicationId,
+          message: saved.message,
+          hint: saved.details?.hint,
+        };
+        data.scriptDeliveryFailure = failure;
+        data.warnings = [...readResponseWarnings(data), `${failure.message} ${failure.hint}`];
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'session_script_delivery_failed',
+          data: { session: req.session, error: String(saved.cause ?? saved) },
+        });
+        return;
+      }
       if (published === undefined) return;
       data.savedScript = published;
       kept.push({ ...artifact, localPath: published });

@@ -101,12 +101,23 @@ function answer(
   );
 }
 
+/** A successful response whose script version could not be saved on this machine. */
+function deliveryFailure(cause: string) {
+  return expect.objectContaining({
+    ok: true,
+    data: expect.objectContaining({
+      scriptDeliveryFailure: expect.objectContaining({ reason: 'script_delivery_failed', cause }),
+      warnings: [expect.stringContaining('script')],
+    }),
+  });
+}
+
 /** A remote `open --save-script`: the daemon arms the publication it is sent, with version 1. */
 async function open(
   baseUrl: string,
   stateDir: string,
   destination: string,
-  options: { force?: boolean; respond?: (id: string) => DaemonResponse | undefined } = {},
+  options: { force?: boolean; respond?: (id: string) => DaemonResponse } = {},
 ) {
   let sent: DaemonWireRequest | undefined;
   let recordsAtSend: string[] = [];
@@ -162,18 +173,6 @@ test.each([
     name: 'a refused open',
     respond: (): DaemonResponse => ({ ok: false, error: { code: 'X', message: 'no' } }),
   },
-  {
-    name: 'a failed open',
-    respond: (): DaemonResponse => {
-      throw new AppError('DEVICE_NOT_FOUND', 'no device');
-    },
-  },
-  {
-    name: 'an open that never left',
-    respond: (): DaemonResponse => {
-      throw new AppError('COMMAND_FAILED', 'refused', { dispatched: 'no' });
-    },
-  },
   { name: 'an open that armed nothing', respond: (): DaemonResponse => ({ ok: true, data: {} }) },
 ])('$name removes its record', async ({ respond }) => {
   const { stateDir, destination } = journey();
@@ -183,7 +182,7 @@ test.each([
   expect(records(stateDir)).toEqual([]);
 });
 
-test('an open whose answer was lost keeps its record', async () => {
+test('a failed open may have armed the recording, so it keeps its inert record', async () => {
   const { stateDir, destination } = journey();
   const lost = new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     dispatched: 'unknown',
@@ -251,9 +250,10 @@ test.each([
     else fs.renameSync(appeared, destination);
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
 
-    await expect(open(baseUrl, stateDir, destination)).rejects.toMatchObject({
-      details: { reason: 'script_target_exists', path: destination },
-    });
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(deliveryFailure('script_target_exists'));
+    expect(response.ok && response.data?.savedScript).toBeUndefined();
     expect(fs.readFileSync(destination, 'utf8')).toBe('appeared\n');
     expect(fs.lstatSync(destination).isSymbolicLink()).toBe(link);
   },
@@ -280,17 +280,12 @@ test('a version over the size cap keeps the previous one and leaves no staging',
 
   await expect(
     answer(baseUrl, stateDir, request('click'), { artifacts: [script('big', 2, id)] }),
-  ).rejects.toMatchObject({
-    details: { reason: 'script_download_failed' },
-    cause: expect.objectContaining({
-      details: expect.objectContaining({ reason: 'artifact_too_large' }),
-    }),
-  });
+  ).resolves.toEqual(deliveryFailure('script_download_failed'));
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(fs.readdirSync(path.join(root, 'caller'))).toEqual(['journey.ad']);
 });
 
-test('close retires the record even when its final download fails, and reports that error', async () => {
+test('close keeps its success and retires the record when its final download fails', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({
     v1: { body: 'open Demo\n' },
@@ -304,7 +299,7 @@ test('close retires the record even when its final download fails, and reports t
       scriptPublicationId: id,
       artifacts: [script('v2', 2, id)],
     }),
-  ).rejects.toMatchObject({ details: { reason: 'script_download_failed' } });
+  ).resolves.toEqual(deliveryFailure('script_download_failed'));
   expect(records(stateDir)).toEqual([]);
   await answer(baseUrl, stateDir, request('click'), { artifacts: [script('late', 3, id)] });
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
@@ -365,15 +360,8 @@ test.each([
       actual.publishFileSync(options);
     });
 
-    let id = '';
-    await expect(
-      open(baseUrl, stateDir, destination, {
-        respond: (minted) => {
-          id = minted;
-          return undefined;
-        },
-      }),
-    ).rejects.toMatchObject({ details: { reason: 'script_download_failed' } });
+    const { id, response } = await open(baseUrl, stateDir, destination);
+    expect(response).toEqual(deliveryFailure('script_download_failed'));
     vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
     const staging = () =>
       fs
@@ -417,15 +405,8 @@ test('a recording whose first download failed still delivers later versions', as
     v1: { body: 'open Demo\n', broken: true },
     v2: { body: 'open Demo\nclose\n' },
   });
-  let id = '';
-  await expect(
-    open(baseUrl, stateDir, destination, {
-      respond: (minted) => {
-        id = minted;
-        return undefined;
-      },
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'script_download_failed' } });
+  const { id, response } = await open(baseUrl, stateDir, destination);
+  expect(response).toEqual(deliveryFailure('script_download_failed'));
 
   await answer(baseUrl, stateDir, request('close'), {
     scriptPublicationId: id,

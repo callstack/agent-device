@@ -181,8 +181,8 @@ It adds no state name, command, or flag:
 
 - Before it sends the open, the client mints a random publication ID and records the destination and the `--force` grant under it in its state directory (`remote-connections/session-scripts/`), keyed by the endpoint, the tenant, the session, and that ID.
   The open carries the ID in `meta.scriptPublicationId` and never the caller path.
-  A refused open, or one whose response does not name the ID, removes the record.
-  An open that may have armed the recording keeps it: one whose first version this machine failed to save, or one that was sent but whose answer was lost.
+  A daemon answer that does not name the ID removes the record.
+  A failed open may still have armed the recording, so it keeps its record.
 - The daemon arms the recording under that ID, which `open` and `close` name in `scriptPublicationId`.
   After each successful request that records into the ARMED recording, the daemon writes the recording so far, without a terminal `close`, and returns it as a `session-script` artifact with the ID and a growing `scriptRevision`.
   The close-time write is the final version and has the highest revision; close takes it from the close-time write itself, so a capture that close stops first never hides recorded actions.
@@ -195,7 +195,8 @@ It adds no state name, command, or flag:
   Under the record lock, the record names the version and the staged file's device and inode before the rename or link, and the next version settles that entry from the destination's identity.
   A second name keeps the staged inode, and its staging directory, on disk while the record may name it, so no later file can reuse that inode; settling or retiring the entry removes the staging directory.
   The first version is linked exclusively, as a local close-time write is, unless the open granted `--force`; a symbolic or hard link at the destination is replaced as a directory entry and never written through.
-- A close retires the record it names, even when the final download or write fails, and reports the first error.
+- If this machine cannot download or save a version, the action also keeps its success and carries the same `scriptDeliveryFailure` and warning; a script delivery failure never changes the outcome of the action that recorded it.
+- A close retires the record it names, even when the final version or another artifact fails, and reports the first error.
   A record that outlives its open stays inert, because only its own ID matches it; creating a record removes records untouched for seven days.
 - If the daemon cannot write a version, the action keeps its success and returns `scriptDeliveryFailure` (`script_delivery_failed`) and a warning without the daemon-host path; the caller file keeps the previous version.
   A local close that cannot write its script still fails as before.

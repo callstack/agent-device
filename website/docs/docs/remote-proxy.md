@@ -112,8 +112,8 @@ A session that another process closes keeps the version from the last recorded a
 daemon cannot write a version, the command still succeeds and shows a warning; the next recorded
 action or `close` delivers the full recording. If `close` cannot write the final script, the
 session still closes and the file keeps the version from the last action. If this machine cannot
-download or save a version, or the version is larger than 8 MiB, the command fails with
-`script_download_failed` and the file keeps the previous version. Remote `session save-script`,
+download or save a version, or the version is larger than 8 MiB, the command also succeeds with
+a warning and a `scriptDeliveryFailure`, and the file keeps the previous version. Remote `session save-script`,
 `close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
