@@ -71,6 +71,9 @@ export function buildSimctlArgsForDevice(
 
 type SimctlListedDevice = { udid?: string; state?: string };
 
+/** The `state` value `simctl list devices -j` reports for a simulator that is turned off. */
+export const SIMCTL_SHUTDOWN_STATE = 'Shutdown';
+
 /** Parses runtime-keyed device lists from `simctl list devices -j` output. */
 export function readSimctlDevicesByRuntime(stdout: string): Record<string, SimctlListedDevice[]> {
   const payload = JSON.parse(stdout) as { devices?: Record<string, SimctlListedDevice[]> };

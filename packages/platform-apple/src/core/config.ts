@@ -65,6 +65,14 @@ export const IOS_FOLDABLE_ORIENTATION_SETTLE_MS = 600;
 // after a keyboard transition. Keep this bounded below the full capture budget.
 export const IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS = 15_000;
 
+/**
+ * The boot-state read a skipped-boot-check capture makes after its own failure. It answers only
+ * whether a re-boot is authorized, so it stays well under the 20s capture it follows: a wedged
+ * CoreSimulator must not spend the recovery budget and turn one bounded capture into a stalled
+ * request. A canceled request wins over this ceiling — the read carries the request's signal.
+ */
+export const IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS = 5_000;
+
 export const IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS = 20_000;
 
 export const IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS = 5;

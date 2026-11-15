@@ -142,6 +142,9 @@ export function createFakeStatusBarSimctl(
 
   return {
     script: (args): FakeAppleToolResponse => {
+      if (args[0] === 'simctl' && args[1] === 'list' && args[2] === 'devices' && args[3] === '-j') {
+        return JSON.stringify({ devices: { runtime: [{ udid, state: 'Booted' }] } });
+      }
       const unexpected = (detail: string): FakeAppleToolResponse => ({
         stderr: `unexpected status bar call: ${detail}`,
         exitCode: 1,
