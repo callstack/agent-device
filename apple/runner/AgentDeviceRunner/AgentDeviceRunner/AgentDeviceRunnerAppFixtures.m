@@ -43,13 +43,19 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 // so the bar shows UIKit's system back button; the interactive pop is off, so only that button can
 // pop it. `--blocked-back` keeps that button but replaces its action, so pressing it navigates
 // nowhere. `--shifting-back` makes that press move the bar down instead, so the back button moves
-// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does,
+// without any navigation. `--ticking-title` counts the detail screen's title down every 0.2 s, as a timer does (`--fast-ticking-title`: every 0.02 s),
 // so its bar changes without any navigation. `--custom-back-item` instead puts a bar button titled
-// "Back" on the root, which is not the system back button and must never be pressed. The root's
-// label reports what happened.
+// "Back" on the root, which is not the system back button and must never be pressed.
+// `--floating-back` hides the bar's back button and floats an unlabeled one in the screen's content
+// beside the bar, as the iPhone Duo does; `--hidden-bar` also hides the bar, so that button is not
+// a navigation bar's. `--content-back-button` adds an in-content button identified `BackButton` at the
+// bottom of the detail screen, which is not the system back button; `--moving-content-back` also moves
+// it every 0.05 s; `--top-content-back` puts it just below the bar instead. The root's label reports
+// what happened. `--alert-back` makes the back press present an alert over the screen instead of popping.
 @interface AgentDeviceBackNavigationFixture : UINavigationController <UINavigationControllerDelegate>
 @property(nonatomic, strong) UILabel *status;
 @property(nonatomic, strong) NSTimer *titleTimer;
+@property(nonatomic, strong) NSTimer *contentTimer;
 @end
 
 @implementation AgentDeviceBackNavigationFixture
@@ -87,10 +93,74 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
         }];
       }
     }
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--floating-back"]) {
+      detail.navigationItem.hidesBackButton = YES;
+      UIButton *floating = [UIButton buttonWithType:UIButtonTypeSystem];
+      floating.accessibilityIdentifier = @"BackButton";
+      floating.accessibilityLabel = @"";
+      [floating setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+      floating.translatesAutoresizingMaskIntoConstraints = NO;
+      __weak UINavigationController *weakSelf = self;
+      [floating addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+        [weakSelf popViewControllerAnimated:NO];
+      }] forControlEvents:UIControlEventTouchUpInside];
+      [detail.view addSubview:floating];
+      [NSLayoutConstraint activateConstraints:@[
+        [floating.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [floating.trailingAnchor constraintEqualToAnchor:detail.view.trailingAnchor constant:-16],
+        [floating.widthAnchor constraintEqualToConstant:44],
+        [floating.heightAnchor constraintEqualToConstant:44],
+      ]];
+      if ([NSProcessInfo.processInfo.arguments containsObject:@"--hidden-bar"]) {
+        [self setNavigationBarHidden:YES animated:NO];
+      }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--alert-back"]) {
+      if (@available(iOS 16.0, *)) {
+        __weak UIViewController *weakDetail = detail;
+        detail.navigationItem.backAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
+          UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Discard?" message:nil
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
+          [alert addAction:[UIAlertAction actionWithTitle:@"Stay" style:UIAlertActionStyleCancel handler:nil]];
+          [weakDetail presentViewController:alert animated:NO completion:nil];
+        }];
+      }
+    }
+    BOOL movingContent = [NSProcessInfo.processInfo.arguments containsObject:@"--moving-content-back"];
+    BOOL topContent = [NSProcessInfo.processInfo.arguments containsObject:@"--top-content-back"];
+    if (movingContent || topContent || [NSProcessInfo.processInfo.arguments containsObject:@"--content-back-button"]) {
+      UIButton *content = [UIButton buttonWithType:UIButtonTypeSystem];
+      content.accessibilityIdentifier = @"BackButton";
+      [content setTitle:@"Content" forState:UIControlStateNormal];
+      content.translatesAutoresizingMaskIntoConstraints = NO;
+      [detail.view addSubview:content];
+      // The constraint on the edge the button hangs from: the top one under `--top-content-back`, else the bottom.
+      CGFloat rest = topContent ? 16 : -16;
+      CGFloat moved = topContent ? 60 : -60;
+      NSLayoutConstraint *edge = topContent
+          ? [content.topAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.topAnchor constant:rest]
+          : [content.bottomAnchor constraintEqualToAnchor:detail.view.safeAreaLayoutGuide.bottomAnchor constant:rest];
+      [NSLayoutConstraint activateConstraints:@[
+        edge,
+        [content.centerXAnchor constraintEqualToAnchor:detail.view.centerXAnchor],
+        [content.widthAnchor constraintEqualToConstant:120],
+        [content.heightAnchor constraintEqualToConstant:44],
+      ]];
+      if (movingContent) {
+        __block BOOL up = NO;
+        __weak UIViewController *weakDetail = detail;
+        self.contentTimer = [NSTimer scheduledTimerWithTimeInterval:0.05 repeats:YES block:^(NSTimer *timer) {
+          up = !up;
+          edge.constant = up ? moved : rest;
+          [weakDetail.view layoutIfNeeded];
+        }];
+      }
+    }
+    BOOL fastTicking = [NSProcessInfo.processInfo.arguments containsObject:@"--fast-ticking-title"];
+    if (fastTicking || [NSProcessInfo.processInfo.arguments containsObject:@"--ticking-title"]) {
       __block NSInteger remaining = 59;
       __weak UIViewController *weakDetail = detail;
-      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer) {
+      self.titleTimer = [NSTimer scheduledTimerWithTimeInterval:(fastTicking ? 0.02 : 0.2) repeats:YES block:^(NSTimer *timer) {
         remaining = remaining > 0 ? remaining - 1 : 59;
         weakDetail.title = [NSString stringWithFormat:@"0:%02ld", (long)remaining];
       }];
