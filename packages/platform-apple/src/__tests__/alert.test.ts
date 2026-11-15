@@ -7,6 +7,8 @@ vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 import {
   ALERT_MIN_READ_BUDGET_MS,
   ALERT_NOT_FOUND_REASON,
+  ALERT_RUNNER_MAX_BUDGET_MS,
+  DEFAULT_ALERT_TIMEOUT_MS,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_WAIT_TIMEOUT_REASON,
   ALERT_POLL_INTERVAL_MS,
@@ -53,18 +55,54 @@ afterEach(() => {
 
 // R59 moved these windows out of the daemon: how long a transient sheet takes to appear, and how
 // many times to re-ask a runner that says it is not there yet, are Apple family mechanics.
-test('a read spends the family default, not the caller window', async () => {
+test.each([
+  ['the caller window', 3_000, 3_000],
+  ['no window', undefined, DEFAULT_ALERT_TIMEOUT_MS],
+  ['a window below the floor', 37, ALERT_MIN_READ_BUDGET_MS],
+  ['a window above the ceiling', 60_000, ALERT_RUNNER_MAX_BUDGET_MS],
+])('a read spends %s as the runner budget', async (_label, timeoutMs, budgetMs) => {
   mockRunner.mockResolvedValue({ title: 'Camera Access' });
 
-  await readAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 37 }, process.env);
+  await readAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    timeoutMs === undefined ? {} : { timeoutMs },
+    process.env,
+  );
 
   assert.equal(mockRunner.mock.calls.length, 1);
   assert.deepEqual(mockRunner.mock.calls[0]?.[1], {
     command: 'alert',
     action: 'get',
     appBundleId: undefined,
-    timeoutMs: 10_000,
+    timeoutMs: budgetMs,
   });
+});
+
+test('a read cut off by the runner watchdog is reported as itself, never as absence', async () => {
+  const watchdog = new AppError('COMMAND_FAILED', 'runner main thread timed out', {
+    runnerErrorCode: 'MAIN_THREAD_TIMEOUT',
+    reason: 'runner_main_thread_timeout',
+    dispatched: 'unknown',
+  });
+  mockRunner.mockRejectedValue(watchdog);
+
+  await assert.rejects(
+    alertIfPresent(readAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 3_000 }, process.env)),
+    (error: unknown) => error === watchdog,
+  );
+  assert.equal(mockRunner.mock.calls.length, 1);
+});
+
+test('a wait window above the ceiling is polled in runner attempts within the ceiling', async () => {
+  mockRunner.mockResolvedValue({ title: 'Camera Access' });
+
+  await awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 120_000 }, process.env);
+
+  assert.equal(
+    (mockRunner.mock.calls[0]?.[1] as { timeoutMs: number } | undefined)?.timeoutMs,
+    ALERT_RUNNER_MAX_BUDGET_MS,
+  );
 });
 
 test('a wait polls until one attempt answers, and the first attempt gets the whole window', async () => {
