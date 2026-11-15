@@ -308,6 +308,24 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.KEYBOARD_RETURN_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code KEYBOARD_RETURN_UNAVAILABLE: `keyboard enter` found no return key to press and no text field to submit through; typing the return can fail after XCTest sent it",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.HARDWARE_CONTROL_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code HARDWARE_CONTROL_UNAVAILABLE: this target cannot perform the asked-for hardware or Siri Remote press, so nothing was pressed",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.IN_APP_BACK_CONTROL_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code IN_APP_BACK_CONTROL_UNAVAILABLE: macOS `back` found no in-app back control in the app's tree and pressed nothing",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.unlisted-code",
     "producer": "ios-runner",
     "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE, which the runner reports as \"the action may not have been performed\"",
@@ -491,6 +509,12 @@
     "id": "android-adb.fill.second-pass-input-failed",
     "producer": "android-adb",
     "trigger": "fill's first clear-and-retype pass typed and failed verification; the second pass's adb input text then failed, so the fill reports unknown with details.dispatchedSteps counting the steps both passes sent",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.keyboard-dismiss.ime-ignored-escape",
+    "producer": "android-adb",
+    "trigger": "keyboard dismiss: the IME kept the keyboard visible through every escape keyevent, which were already sent (details.reason keyboard_dismiss_unavailable)",
     "dispatched": "unknown"
   },
   {

@@ -391,6 +391,10 @@ test('dismissAndroidKeyboard fails explicitly when non-navigation dismiss does n
       await assertRejectsAppError(() => dismissAndroidKeyboard(device), {
         code: 'UNSUPPORTED_OPERATION',
         message: /without back navigation/i,
+        // The refusal is typed, so a caller never reads the prose to learn which of the IME refusals it
+        // got. `unknown` and not `no`: the escape keyevents above reached the device.
+        reason: 'keyboard_dismiss_unavailable',
+        dispatched: 'unknown',
       });
 
       const flat = calls.map((args) => args.join(' '));

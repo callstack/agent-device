@@ -580,6 +580,15 @@ extension RunnerTests {
 
 #endif
 
+  /// macOS `back` has one route: the app's own back control. Finding none sends nothing, so the refusal
+  /// names itself — the host publishes its `details.reason`, and a caller never reads the refusal off
+  /// the message. The literal is pinned as the wire value the host reads.
+  func testInAppBackControlRefusalNamesItsOwnCode() {
+    let refusal = Self.macOSInAppBackControlRefusal
+    XCTAssertEqual(refusal.code, "IN_APP_BACK_CONTROL_UNAVAILABLE")
+    XCTAssertNotNil(refusal.hint)
+  }
+
   func testNavigationVisualObservationSeparatesChangeFromRefusal() {
     // A refused side makes the pair uncomparable, not "unchanged"; reading it as "unchanged" would
     // let a capture that refused become the reason `back` claims its swipe changed nothing.
