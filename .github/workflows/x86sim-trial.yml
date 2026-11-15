@@ -60,8 +60,7 @@ jobs:
         run: |
           start=$(date +%s)
           "$X" x86sim runtime list ios | tee "$OUT/runtimes.txt"
-          build=$(grep -E 'iOS 27\.2( |$)' "$OUT/runtimes.txt" | grep -v -i beta | head -1 | awk '{print $1}')
-          [ -n "$build" ] || build=$(grep -i -v beta "$OUT/runtimes.txt" | grep iOS | head -1 | awk '{print $1}')
+          build=24B8117  # x86sim's default iOS 27.2 build (sim.rs device_runtime)
           echo "build=$build"
           "$X" x86sim runtime fetch "$build" 2>&1 | grep -v -E '^\s*[0-9]+ ' | tail -40
           echo "runtime fetch: $(( $(date +%s) - start ))s" | tee -a "$OUT/timings.txt"
@@ -74,6 +73,7 @@ jobs:
           "$X" x86sim device models | head -40
           "$X" x86sim device create --model "iPhone 17 Pro" ci
           "$X" x86sim device list
+          cat ~/.local/share/x86sim/var/device-a64-ci/runtime || true; ls ~/.local/share/x86sim/runtimes
           start=$(date +%s)
           "$X" aot --device ci sim start
           "$X" x86sim wait home 2700
