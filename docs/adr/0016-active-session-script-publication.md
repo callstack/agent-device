@@ -204,9 +204,11 @@ It adds no state name, command, or flag:
 - Teardown without `close` writes no daemon file; the caller keeps the version from the last recorded action.
 - At the public HTTP boundary, `saveScript` is accepted only as `true` on `open` with a well-formed publication ID.
   `session save-script` refuses a remote recording (`remote_script_publication_unsupported`), and remote `close --save-script`, `replay --save-script`, and `--save-script` in batch steps stay refused.
+  A batch whose steps would close an armed remote recording is refused before any step runs (`remote_script_batch_close_unsupported`), because a batch delivers no script versions from its steps.
 - The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
 
-The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike.
+The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike (#4565).
+Known limitation (#4564): the RPC response is the contract for `scriptDeliveryFailure`; the SDK, CLI, and MCP results do not carry it yet, the SDK close drops its warnings, and a batch delivers no step script versions.
 Rejected: a remote `session save-script` download, because it added a second publication path and a retry protocol.
 Rejected: delivery only at close, because a session that an external owner closes would lose its recording.
 Rejected: daemon-minted recording IDs bound through per-request claims, because the claim, binding, and tombstone protocol cost more than a client-minted ID that only its own client can match.

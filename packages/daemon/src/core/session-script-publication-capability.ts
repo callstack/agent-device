@@ -172,6 +172,11 @@ export function retargetActivePublication(
   };
 }
 
+/** Whether this session records into an armed remote recording that delivers to its caller. */
+export function isArmedRemoteRecording(session: SessionState | undefined): boolean {
+  return isAuthoringArmedSession(session) && remoteScriptDelivery(session) !== undefined;
+}
+
 /** How a remote caller receives this session's script, if the recording was armed remotely. */
 export function remoteScriptDelivery(
   session: SessionState | undefined,

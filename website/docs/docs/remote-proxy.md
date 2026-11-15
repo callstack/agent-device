@@ -114,7 +114,9 @@ action or `close` delivers the full recording. If `close` cannot write the final
 session still closes and the file keeps the version from the last action. If this machine cannot
 download or save a version, or the version is larger than 8 MiB, the command also succeeds with
 a warning and a `scriptDeliveryFailure`, and the file keeps the previous version. Remote `session save-script`,
-`close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused.
+`close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused. A
+`batch` whose steps would close the recording is refused before any step runs; run `close` on its
+own after the batch.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
