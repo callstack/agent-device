@@ -433,24 +433,31 @@ test('a session-script artifact under another field writes nothing', async () =>
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });
 
-test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-  'a close keeps its success when its record cannot be retired',
-  async () => {
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0).each([
+  { name: 'it publishes nothing', artifacts: false },
+  { name: 'its final version also fails', artifacts: true },
+])(
+  'a close keeps its success when its record cannot be retired and $name',
+  async ({ artifacts }) => {
     const { stateDir, destination } = journey();
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, v2: { body: 'final\n' } });
     const { id } = await open(baseUrl, stateDir, destination);
     const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
     fs.chmodSync(directory, 0o500);
+    let response: DaemonResponse;
     try {
-      await expect(
-        answer(baseUrl, stateDir, request('close'), {
-          scriptPublicationId: id,
-          artifacts: [script('v2', 2, id)],
-        }),
-      ).resolves.toEqual(deliveryFailure('script_download_failed'));
+      response = await answer(baseUrl, stateDir, request('close'), {
+        scriptPublicationId: id,
+        ...(artifacts ? { artifacts: [script('v2', 2, id)] } : {}),
+      });
     } finally {
       fs.chmodSync(directory, 0o700);
     }
+    expect(response).toEqual(
+      artifacts
+        ? deliveryFailure('script_download_failed')
+        : { ok: true, data: { scriptPublicationId: id } },
+    );
     expect(records(stateDir)).toHaveLength(1);
   },
 );
