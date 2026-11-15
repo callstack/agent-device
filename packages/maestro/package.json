@@ -2,6 +2,12 @@
   "name": "@agent-device/maestro",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/maestro"
+  },
   "sideEffects": false,
   "type": "module",
   "description": "Optional Maestro compatibility engine plugin for agent-device.",
