@@ -146,7 +146,7 @@ test('HarmonyOS scroll keeps an inset list swipe inside the container and report
   assert.equal(result.requestedPixels, unclamped.pixels);
 });
 
-test('HarmonyOS scroll translates an offset window into the swipe frame before clamping', async () => {
+test('HarmonyOS scroll dispatches an offset-window swipe inside the absolute container', async () => {
   readHarmonyGestureViewport.mockResolvedValue(OFFSET_WINDOW);
   const list: Rect = {
     x: OFFSET_WINDOW.x + INSET_LIST.x,
@@ -156,15 +156,10 @@ test('HarmonyOS scroll translates an offset window into the swipe frame before c
   };
   const result = await scrollHarmony(DEVICE, 'up', { amount: 0.75, containerRect: list });
   const swipe = dispatchedSwipe();
-  const inSnapshotSpace = {
-    x1: swipe.x1 + OFFSET_WINDOW.x,
-    y1: swipe.y1 + OFFSET_WINDOW.y,
-    x2: swipe.x2 + OFFSET_WINDOW.x,
-    y2: swipe.y2 + OFFSET_WINDOW.y,
-  };
 
-  assert.ok(strictlyInside({ x: inSnapshotSpace.x1, y: inSnapshotSpace.y1 }, list));
-  assert.ok(strictlyInside({ x: inSnapshotSpace.x2, y: inSnapshotSpace.y2 }, list));
+  assert.ok(strictlyInside({ x: swipe.x1, y: swipe.y1 }, list), JSON.stringify(swipe));
+  assert.ok(strictlyInside({ x: swipe.x2, y: swipe.y2 }, list), JSON.stringify(swipe));
+  assert.deepEqual(swipe, { x1: result.x1, y1: result.y1, x2: result.x2, y2: result.y2 });
   assert.ok(Number(result.pixels) < Number(result.requestedPixels));
 });
 
@@ -178,23 +173,25 @@ test('HarmonyOS scroll leaves a swipe that already fits its container unchanged'
   assert.equal('requestedPixels' in result, false);
 });
 
-test('HarmonyOS scroll without a container keeps the unclamped swipe', async () => {
+test('HarmonyOS scroll without a container keeps the unclamped swipe in screen coordinates', async () => {
   readHarmonyGestureViewport.mockResolvedValue(OFFSET_WINDOW);
   const plan = await scrollHarmony(DEVICE, 'down', { amount: 0.75 });
-  const expected = buildScrollGesturePlan({
+  const local = buildScrollGesturePlan({
     direction: 'down',
     amount: 0.75,
     referenceWidth: OFFSET_WINDOW.width,
     referenceHeight: OFFSET_WINDOW.height,
   });
+  const swipe = dispatchedSwipe();
 
-  assert.deepEqual(dispatchedSwipe(), {
-    x1: expected.x1,
-    y1: expected.y1,
-    x2: expected.x2,
-    y2: expected.y2,
+  assert.deepEqual(swipe, {
+    x1: local.x1 + OFFSET_WINDOW.x,
+    y1: local.y1 + OFFSET_WINDOW.y,
+    x2: local.x2 + OFFSET_WINDOW.x,
+    y2: local.y2 + OFFSET_WINDOW.y,
   });
-  assert.equal(plan.pixels, expected.pixels);
+  assert.deepEqual(swipe, { x1: plan.x1, y1: plan.y1, x2: plan.x2, y2: plan.y2 });
+  assert.equal(plan.pixels, local.pixels);
   assert.equal('requestedPixels' in plan, false);
 });
 

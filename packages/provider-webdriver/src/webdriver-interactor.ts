@@ -18,7 +18,6 @@ import {
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
-import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capabilitySupported,
@@ -84,11 +83,6 @@ function textEntryClearTargetUnavailableError(): AppError {
     'fill requires a focused element reference to clear and replace the field',
     { reason: 'text_entry_clear_target_unavailable' },
   );
-}
-
-/** The planner's box starts at the frame origin; a snapshot container is absolute. */
-function relativeToFrame(container: Rect, frame: WebDriverWindowRect): Rect {
-  return { ...container, x: container.x - frame.x, y: container.y - frame.y };
 }
 
 function rectContains(rect: WebDriverWindowRect, x: number, y: number): boolean {
@@ -257,25 +251,11 @@ class WebDriverInteractor implements Interactor {
       pixels: options?.pixels,
       referenceWidth: rect.width,
       referenceHeight: rect.height,
-      ...(options?.containerRect === undefined
-        ? {}
-        : { container: relativeToFrame(options.containerRect, rect) }),
+      referenceOrigin: { x: rect.x, y: rect.y },
+      ...(options?.containerRect === undefined ? {} : { container: options.containerRect }),
     });
-    const absolutePlan = {
-      ...plan,
-      x1: plan.x1 + rect.x,
-      y1: plan.y1 + rect.y,
-      x2: plan.x2 + rect.x,
-      y2: plan.y2 + rect.y,
-    };
-    await this.swipe(
-      absolutePlan.x1,
-      absolutePlan.y1,
-      absolutePlan.x2,
-      absolutePlan.y2,
-      durationMs,
-    );
-    return { backend: 'webdriver', ...absolutePlan, distance: plan.pixels, durationMs };
+    await this.swipe(plan.x1, plan.y1, plan.x2, plan.y2, durationMs);
+    return { backend: 'webdriver', ...plan, distance: plan.pixels, durationMs };
   }
 
   async gestureViewport(): Promise<WebDriverWindowRect> {

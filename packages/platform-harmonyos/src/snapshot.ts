@@ -19,7 +19,7 @@ import { readHarmonyKeyboardBand } from './keyboard-band.ts';
 
 const MAX_NODES = 5_000;
 
-// Gesture planning only reads the Application rect's width/height, but every
+// Gesture planning reads the Application rect's origin and size, but every
 // read paid a full layout dump (`uitest dumpLayout` + `file recv` + `rm`).
 // Edge scrolls run several passes back to back, so a short memo collapses
 // them into one dump while staying far below the cadence where a foreground
