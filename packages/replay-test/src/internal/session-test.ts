@@ -14,6 +14,8 @@ import {
 } from './session-test-discovery.ts';
 import { runReplayTestCase, type ReplayTestCaseReport } from './session-test-attempt.ts';
 import type {
+  ReplayTestResolveShardTargets,
+  ReplayTestShardContext,
   ReplayTestEmitProgress,
   ReplayTestIsCanceled,
   ReplayTestExecutionDependencies,
@@ -21,13 +23,8 @@ import type {
   ReplayTestSuiteOutcome,
   ReplayTestSuiteRequest,
   ReplayTestDiscoverSources,
-} from './session-test-types.ts';
-import {
-  buildReplayTestShardPlan,
-  type ReplayTestResolveShardTargets,
-  type ReplayTestShardContext,
-  type ReplayTestShardPlan,
-} from './session-test-sharding.ts';
+} from '@agent-device/contracts/replay-test-execution';
+import { buildReplayTestShardPlan, type ReplayTestShardPlan } from './session-test-sharding.ts';
 import { mergeSnapshotDiagnostics } from '@agent-device/contracts/capture';
 
 type ReplayTestEntry = ReturnType<typeof discoverReplayTestEntries>[number];

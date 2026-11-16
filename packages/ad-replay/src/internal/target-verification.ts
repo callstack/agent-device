@@ -44,7 +44,7 @@
  * not engine policy. This module now only reads already-typed values.
  */
 
-import type { TargetAncestryEntry, TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   firstAncestryMismatch,
   identityFieldMismatches,
@@ -52,37 +52,11 @@ import {
 } from '@agent-device/ad-script';
 import { readSelectorExpression } from '@agent-device/selectors';
 
-/**
- * The verified/observed member's structural position within its capture
- * (document order + sibling) — moved here (from `./step-loop.ts`, which
- * still uses it for `AdReplayVerifiedTargetGuard`) so both this module's
- * typed evidence shapes and the step loop can reference ONE definition
- * without a cycle: this module has no dependency on `./step-loop.ts`, but
- * `./step-loop.ts` already depends on this one.
- */
-export type AdReplayTargetStructuralDenotation = Readonly<{
-  documentOrder: number;
-  sibling: number;
-}>;
-
-/**
- * The guard-mismatch refusal's typed evidence, already narrowed by the
- * daemon adapter from the wire response's `details` bag — the engine never
- * sees the untyped bag itself.
- */
-export type AdReplayGuardMismatchEvidence = Readonly<{
-  targetRole?: 'source' | 'destination';
-  observed: LocalIdentity | undefined;
-  expectedStructural: AdReplayTargetStructuralDenotation | undefined;
-  observedStructural: AdReplayTargetStructuralDenotation | undefined;
-}>;
-
-/** The wait-landmark-mismatch refusal's typed evidence — same translate-before-crossing rule. */
-export type AdReplayLandmarkMismatchEvidence = Readonly<{
-  matchCount: number | undefined;
-  observed: LocalIdentity | undefined;
-  observedAncestry: readonly TargetAncestryEntry[];
-}>;
+import type {
+  AdReplayTargetStructuralDenotation,
+  AdReplayGuardMismatchEvidence,
+  AdReplayLandmarkMismatchEvidence,
+} from '@agent-device/contracts/ad-replay-execution';
 
 // ---------------------------------------------------------------------------
 // Pre-capture verification gating (`verifyReplayActionTarget`'s two branches).

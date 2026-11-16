@@ -16,21 +16,3 @@
  * asks for; a consumer that needs to name one earns it back through the R11 pin.
  */
 export { runReplayTestSuite } from './internal/session-test.ts';
-
-export type {
-  ReplayTestAttemptFailed,
-  ReplayTestAttemptOutcome,
-  ReplayTestAttemptStepSink,
-  ReplayTestBindAttemptCancellation,
-  ReplayTestDiscoverSources,
-  ReplayTestManifest,
-  ReplayTestSource,
-  ReplayTestSuiteRequest,
-} from './internal/session-test-types.ts';
-
-export type {
-  ReplayTestResolveShardTargets,
-  ReplayTestShardContext,
-  ReplayTestShardMode,
-  ReplayTestShardTarget,
-} from './internal/session-test-sharding.ts';

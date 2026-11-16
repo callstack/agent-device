@@ -20,7 +20,10 @@ import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import type { AdReplayStepFailure, AdReplayStepRuntime } from '@agent-device/ad-replay';
+import type {
+  AdReplayStepFailure,
+  AdReplayStepRuntime,
+} from '@agent-device/contracts/ad-replay-execution';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
@@ -39,7 +42,7 @@ import {
   resolveTargetVerificationEntry,
   type TargetBindingDivergenceContext,
 } from './session-replay-target-verification.ts';
-import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
+import type { ReplayTestAttemptStepSink } from '@agent-device/contracts/replay-test-execution';
 
 /**
  * #1555 P5 (decomposition): the daemon's `AdReplayStepRuntime` adapter — extracted verbatim out
