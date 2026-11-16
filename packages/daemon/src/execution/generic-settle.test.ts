@@ -7,7 +7,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { PresentedSurface, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import { makeIosSession } from '../__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import { makeSessionStore, makeSessionStoreWithEnv } from '../__tests__/support/store-factory.ts';
 import {
   activateCompleteRefFrame,
   markSessionSnapshotOutdated,
@@ -712,3 +712,75 @@ for (const change of ['rebuild', 'retire'] as const) {
     }
   });
 }
+
+const ADAPTIVE_ENV = { AGENT_DEVICE_SETTLE_ADAPTIVE: '1' };
+
+test('back --settle with the adaptive switch arms a current stored tree as a fresh baseline', async () => {
+  const sessionStore = makeSessionStoreWithEnv(ADAPTIVE_ENV);
+  const sessionName = 'generic-settle-adaptive-current';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({ sessionName, sessionStore, command: 'back', flags: { ...SETTLE_FLAGS } });
+
+  expect(settleObservationCalls[0]).toMatchObject({
+    quietMs: 25,
+    timeoutMs: 2_000,
+    earlyExit: 'adaptive',
+    observationCurrent: true,
+    baselineFresh: true,
+  });
+});
+
+test('back --settle with the adaptive switch does not trust a stored tree a native read outdated', async () => {
+  const sessionStore = makeSessionStoreWithEnv(ADAPTIVE_ENV);
+  const sessionName = 'generic-settle-adaptive-outdated';
+  const session = seedSession(sessionName, sessionStore);
+  markSessionSnapshotOutdated(session);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({ sessionName, sessionStore, command: 'back', flags: { ...SETTLE_FLAGS } });
+
+  expect(settleObservationCalls[0]).toMatchObject({
+    earlyExit: 'adaptive',
+    observationCurrent: false,
+    baselineFresh: false,
+  });
+});
+
+test('back --settle with the adaptive switch does not trust a baseline the frame answered', async () => {
+  const sessionStore = makeSessionStoreWithEnv(ADAPTIVE_ENV);
+  const sessionName = 'generic-settle-adaptive-frame';
+  // The frame was read interactive-only; a later full read replaced the stored tree, so the frame
+  // answers the baseline and a newer observation exists.
+  const session = makeIosSession(sessionName);
+  setSessionSnapshot(
+    session,
+    buildSnapshotState(snapshotPayload({ nodes: BEFORE_NODES }), { snapshotInteractiveOnly: true }),
+  );
+  activateCompleteRefFrame(session);
+  setSessionSnapshot(session, buildSnapshotState(snapshotPayload({ nodes: AFTER_NODES }), {}));
+  sessionStore.publish(sessionName, session);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({ sessionName, sessionStore, command: 'back', flags: { ...SETTLE_FLAGS } });
+
+  expect(settleObservationCalls[0]?.baseline.presentation?.interactiveOnly).toBe(true);
+  expect(settleObservationCalls[0]).toMatchObject({
+    observationCurrent: false,
+    baselineFresh: false,
+  });
+});
+
+test('back --settle without the adaptive switch forwards no early exit', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-adaptive-off';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({ sessionName, sessionStore, command: 'back', flags: { ...SETTLE_FLAGS } });
+
+  expect(settleObservationCalls[0]?.earlyExit).toBeUndefined();
+  expect(settleObservationCalls[0]?.observationCurrent).toBeUndefined();
+  expect(settleObservationCalls[0]?.baselineFresh).toBe(false);
+});

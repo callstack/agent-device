@@ -85,7 +85,8 @@ export type StableCaptureLoopResult = {
   /**
    * The quiet window the run was holding when it returned: the caller's, or the default resolved
    * from the last capture that paid it. A run that completed no capture never priced a window, so
-   * it reports the general default it started from.
+   * it reports the general default it started from. A run the adaptive early exit settled reports
+   * the span its confirming pair actually held instead.
    */
   quietMs: number;
   /** The most recent completed capture, settled or not. */
@@ -213,7 +214,10 @@ export async function runStableCaptureLoop(
           deadlineMs,
           captures,
         });
-    if (step.settled) return result(true, false, nowMs - start);
+    if (step.settled) {
+      quietMs = step.heldQuietMs ?? quietMs;
+      return result(true, false, nowMs - start);
+    }
     if (step.delayMs <= 0) break;
     await sleep(runtime, step.delayMs);
   }
@@ -270,7 +274,7 @@ function observeStableCapture(params: {
   nowMs: number;
   deadlineMs: number;
   captures: number;
-}): { settled: boolean; delayMs: number } {
+}): { settled: boolean; delayMs: number; heldQuietMs?: number } {
   const { window, adaptive } = params;
   const step = params.pacing.observe({
     signal: params.signal,
@@ -285,10 +289,13 @@ function observeStableCapture(params: {
   const early = adaptive.observe({
     snapshot: params.snapshot,
     signal: params.signal,
+    nowMs: params.nowMs,
     floorInForce: window.floorConfirmed,
   });
-  if (early === 'settle') return { settled: true, delayMs: 0 };
-  if (early === 'confirm' && step.delayMs > 0) {
+  if (early.kind === 'settle') {
+    return { settled: true, delayMs: 0, heldQuietMs: early.heldQuietMs };
+  }
+  if (early.kind === 'confirm' && step.delayMs > 0) {
     return { settled: false, delayMs: Math.min(step.delayMs, adaptive.confirmGapMs) };
   }
   return step;

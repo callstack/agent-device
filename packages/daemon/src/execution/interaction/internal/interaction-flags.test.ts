@@ -23,10 +23,13 @@ function sessionWithFrame() {
 test('the host environment opts a settle request into the adaptive confirmation', () => {
   const session = sessionWithFrame();
 
-  assert.deepEqual(readSettleRequest({ settle: true }, { env: OPT_IN, session }), {
-    earlyExit: 'adaptive',
-    observationCurrent: true,
-  });
+  assert.deepEqual(
+    readSettleRequest(
+      { settle: true, settleQuietMs: 700, timeoutMs: 4_000 },
+      { env: OPT_IN, session },
+    ),
+    { quietMs: 700, timeoutMs: 4_000, earlyExit: 'adaptive', observationCurrent: true },
+  );
 });
 
 test('a ref frame a side effect crossed is not current for the adaptive confirmation', () => {

@@ -12,7 +12,10 @@ import {
   refFrameState,
   refFrameTree,
 } from '../../../core/ref-frame.ts';
-import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import {
+  makeSessionStore,
+  makeSessionStoreWithEnv,
+} from '../../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import {
   clearRequestAbortRegistration,
@@ -682,3 +685,51 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
   expect(settle.settled).toBe(true);
   expect(typeof settle.refsGeneration).toBe('number');
 });
+
+// hover is web-only (refused on this iOS session); it reads the same shared settle options.
+for (const command of ['press', 'click', 'longpress'] as const) {
+  for (const adaptive of [true, false]) {
+    test(`${command} --settle forwards ${adaptive ? 'the adaptive early exit' : 'only its window'} to the settle observation`, async () => {
+      const sessionStore = adaptive
+        ? makeSessionStoreWithEnv({ AGENT_DEVICE_SETTLE_ADAPTIVE: '1' })
+        : makeSessionStore();
+      const sessionName = `settle-forward-${command}-${adaptive}`;
+      seedSession(sessionName, sessionStore);
+      mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES] });
+      const forwarded: unknown[] = [];
+      const recordingSurface = createTouchCommandSurface({
+        observeSettle: async ({ settle }) => {
+          forwarded.push(settle);
+          return { settled: true, waitedMs: 0, captures: 1, quietMs: 25, timeoutMs: 2_000 };
+        },
+      });
+
+      const response = await handleInteractionCommands({
+        createCommandSurface: recordingSurface,
+        req: {
+          token: 't',
+          session: sessionName,
+          command,
+          positionals: ['label=Continue'],
+          flags: { ...SETTLE_FLAGS },
+        },
+        sessionName,
+        sessionStore,
+        contextFromFlags,
+        captureSnapshotForSession: mockCaptureSnapshotForSession,
+        ...getRuntimeBindings(),
+      });
+
+      expectOkData(response);
+      // The seeded snapshot published a complete frame and nothing outdated it, so the observation
+      // is current before the action.
+      expect(forwarded).toEqual([
+        {
+          quietMs: 25,
+          timeoutMs: 2_000,
+          ...(adaptive ? { earlyExit: 'adaptive', observationCurrent: true } : {}),
+        },
+      ]);
+    });
+  }
+}

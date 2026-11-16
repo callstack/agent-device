@@ -1,11 +1,25 @@
 import path from 'node:path';
 import { SessionStore } from '../../core/session-store.ts';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 
 export function makeSessionStore(prefix = 'agent-device-test-'): SessionStore {
   const tempRoot = mkdtempForTestSync(prefix);
   return new SessionStore(path.join(tempRoot, 'sessions'), createLiveTestHostEnvironment());
+}
+
+/** A store whose daemon host environment adds `env`, such as an internal opt-in switch. */
+export function makeSessionStoreWithEnv(env: Record<string, string>): SessionStore {
+  const tempRoot = mkdtempForTestSync('agent-device-test-');
+  const host = createTestHostEnvironment();
+  return new SessionStore(path.join(tempRoot, 'sessions'), {
+    ...host,
+    env: { ...host.env, ...env },
+  });
 }
 
 export function makeStoredSessionRef(session: SessionState, address = session.name): SessionRef {

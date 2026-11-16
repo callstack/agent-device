@@ -83,6 +83,9 @@ test('a changed capture that the next capture confirms settles before the quiet 
   assert.equal(adaptive.settled, true);
   assert.equal(adaptive.captures, 2);
   assert.ok(adaptive.waitedMs < 200, `adaptive held ${adaptive.waitedMs}ms`);
+  // The run reports the span the confirming pair held, not the window it never waited out.
+  assert.equal(adaptive.quietMs, adaptive.waitedMs);
+  assert.ok(quiet.quietMs >= DEFAULT_QUIET_MS);
   assert.ok(adaptive.diff?.lines.some((line) => line.text.includes('Welcome back!')));
   assert.equal(quiet.settled, true);
   assert.ok(quiet.waitedMs >= DEFAULT_QUIET_MS, `quiet window held ${quiet.waitedMs}ms`);
@@ -281,3 +284,14 @@ for (const [label, observationCurrent, early] of [
     assert.equal(result.settle.waitedMs < DEFAULT_QUIET_MS, early, `${result.settle.waitedMs}ms`);
   });
 }
+
+test('a capture on an iOS system surface the baseline did not show keeps the quiet window', async () => {
+  // An app action can raise an in-place system surface (a web sign-in sheet, #2438); two equal
+  // captures of it are not the app settling.
+  const sheet = { ...relabeled(), iosSystemSurfaceBundleId: 'com.apple.SafariViewService' };
+
+  const adaptive = await press({ loop: [sheet], adaptive: true });
+
+  assert.equal(adaptive.settled, true);
+  assert.ok(adaptive.waitedMs >= DEFAULT_QUIET_MS, `adaptive held ${adaptive.waitedMs}ms`);
+});

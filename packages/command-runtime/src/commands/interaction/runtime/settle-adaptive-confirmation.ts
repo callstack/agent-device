@@ -33,43 +33,47 @@ export function createAdaptiveConfirmation(params: {
 }) {
   const { baseline, appBundleId } = params;
   let armed = params.baselineFresh && baseline !== undefined && baseline.nodes.length > 0;
-  let candidate: { signal: StableCaptureSignal; snapshot: SnapshotState } | undefined;
+  let candidate: { signal: StableCaptureSignal; snapshot: SnapshotState; atMs: number } | undefined;
   const disarm = () => {
     armed = false;
     candidate = undefined;
   };
   return {
     /**
-     * Folds one capture in. `settle`: this capture confirmed the previous one. `confirm`: take the
-     * next capture after the short gap. `none`: the quiet window decides.
+     * Folds one capture in. `settle`: this capture confirmed the previous one, and the pair held
+     * still for `heldQuietMs`. `confirm`: take the next capture after the short gap. `none`: the
+     * quiet window decides.
      */
     observe(input: {
       snapshot: SnapshotState;
       signal: StableCaptureSignal;
+      nowMs: number;
       /** A capture proved a broad replacement, so the run owes the broad-replacement floor. */
       floorInForce: boolean;
-    }): 'settle' | 'confirm' | 'none' {
-      if (!armed || !baseline) return 'none';
+    }): { kind: 'settle'; heldQuietMs: number } | { kind: 'confirm' } | { kind: 'none' } {
+      if (!armed || !baseline) return { kind: 'none' };
       const { snapshot, signal } = input;
       if (
         input.floorInForce ||
         hasBusyIndicator(snapshot) ||
         isTransitionalUnion(baseline, snapshot, appBundleId) ||
-        presentedSurfaceChanged(baseline, snapshot)
+        presentedSurfaceChanged(baseline, snapshot) ||
+        surfaceBundleChanged(baseline, snapshot)
       ) {
         disarm();
-        return 'none';
+        return { kind: 'none' };
       }
       if (candidate) {
         const confirmed =
           sameProvenance(candidate.snapshot, snapshot) &&
           stableCaptureSignalsEqual(candidate.signal, signal);
+        const heldQuietMs = input.nowMs - candidate.atMs;
         disarm();
-        return confirmed ? 'settle' : 'none';
+        return confirmed ? { kind: 'settle', heldQuietMs } : { kind: 'none' };
       }
-      if (!differsFromBaseline(baseline, snapshot, appBundleId)) return 'none';
-      candidate = { signal, snapshot };
-      return 'confirm';
+      if (!differsFromBaseline(baseline, snapshot, appBundleId)) return { kind: 'none' };
+      candidate = { signal, snapshot, atMs: input.nowMs };
+      return { kind: 'confirm' };
     },
     /** A private-AX recovery re-read the screen through another backend. */
     disarm,
@@ -135,10 +139,19 @@ function presentedSurfaceChanged(baseline: SurfaceScopedNodes, snapshot: Snapsho
   return before !== undefined && after !== undefined && before !== after;
 }
 
+/**
+ * The capture reads another surface than the baseline: an in-place iOS system surface (a web sign-in
+ * sheet) arriving over the app, or leaving it (#2438). An app capture names none.
+ */
+function surfaceBundleChanged(baseline: SurfaceScopedNodes, snapshot: SnapshotState): boolean {
+  return baseline.surfaceBundleId !== snapshot.iosSystemSurfaceBundleId;
+}
+
 function sameProvenance(left: SnapshotState, right: SnapshotState): boolean {
   return (
     left.producer === right.producer &&
     left.backend === right.backend &&
-    left.presentedSurface === right.presentedSurface
+    left.presentedSurface === right.presentedSurface &&
+    left.iosSystemSurfaceBundleId === right.iosSystemSurfaceBundleId
   );
 }
