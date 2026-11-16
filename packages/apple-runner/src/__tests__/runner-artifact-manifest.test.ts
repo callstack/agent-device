@@ -122,7 +122,7 @@ test('a certified symlink that starts escaping the cache root breaks reuse', asy
     runnerAppPath,
   ]);
 
-  fs.rmSync(linkPath);
+  fs.unlinkSync(linkPath);
   fs.symlinkSync(path.join(outside, 'evil'), linkPath);
 
   const state = mismatchOf(
@@ -143,7 +143,7 @@ test('a symlink that changes target but stays inside the cache is a target chang
     runnerAppPath,
   ]);
 
-  fs.rmSync(linkPath);
+  fs.unlinkSync(linkPath);
   fs.symlinkSync('FrameworksMoved', linkPath);
 
   const state = mismatchOf(
@@ -205,7 +205,7 @@ test('a symlinked product root that stays inside the cache is certified', async 
     [path.join('staged', 'Runner-Runner.app', 'Runner')],
   );
 
-  fs.rmSync(linkedProduct);
+  fs.unlinkSync(linkedProduct);
   const swapped = path.join(derived, 'staged', 'Other.app');
   fs.mkdirSync(swapped, { recursive: true });
   fs.writeFileSync(path.join(swapped, 'Runner'), Buffer.alloc(4096, 9), { mode: 0o755 });
