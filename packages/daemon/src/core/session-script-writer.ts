@@ -144,7 +144,6 @@ export class SessionScriptWriter {
         script: prepared.script,
         force: options?.force,
         parentIdentity: publishDirectoryIdentity(scriptDir),
-        ...(remote ? { mode: 0o600 } : {}),
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) {
@@ -166,8 +165,9 @@ export class SessionScriptWriter {
 
   /**
    * A remote recording's caller downloads each version once, so every version, the close-time
-   * script included, gets a fresh private (0600) file in a private (0700) directory that only the
-   * daemon user can read.
+   * script included, gets a fresh file of its own in a private (0700) directory that only the daemon
+   * user can enter. The file itself is private (0600) like every other published script, which
+   * `publishScriptFileSync` decides.
    */
   private remoteScriptPath(): string {
     const directory = path.join(this.sessionsDir, 'remote-scripts');
@@ -302,17 +302,15 @@ function publishHealedScriptAtomically(params: {
   scriptPath: string;
   script: string;
   force?: boolean;
-  mode?: number;
   parentIdentity?: string;
 }): void {
-  const { scriptPath, script, force, mode, parentIdentity } = params;
+  const { scriptPath, script, force, parentIdentity } = params;
   try {
     publishScriptFileSync({
       destination: scriptPath,
       contents: script,
       publish: force ? 'replace' : 'link-exclusive',
       ...(parentIdentity === undefined ? {} : { parentIdentity }),
-      ...(mode === undefined ? {} : { mode }),
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;

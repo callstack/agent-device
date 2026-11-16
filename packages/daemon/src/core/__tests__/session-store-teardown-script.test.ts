@@ -81,7 +81,8 @@ test.skipIf(process.platform === 'win32')(
       expect(fs.statSync(result.path).mode & 0o777).toBe(0o600);
     }
     expect(localWrite).toMatchObject({ written: true, path: local });
-    const umask = process.umask();
-    expect(fs.statSync(local).mode & 0o777).toBe(0o666 & ~umask);
+    // A recording is a transcript of what someone did on this machine, so the caller's own file is
+    // private too, whatever the umask would have allowed (#4565).
+    expect(fs.statSync(local).mode & 0o777).toBe(0o600);
   },
 );

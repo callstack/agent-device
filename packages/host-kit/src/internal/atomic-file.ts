@@ -48,8 +48,8 @@ export function publishFileSync(options: {
  * Publishes a session script, and nothing else, from a same-directory temporary sibling.
  *
  * This is `publishFileSync` plus the destination-ancestry rule (#4565): the chain is refused before
- * anything is written, and it is checked again immediately before the link or rename, so a directory
- * swapped in by another local user while the file was staged never receives the script.
+ * anything is staged, and it is judged again immediately before the link or rename. The file is created
+ * private, because a recording is a transcript of what someone did on this machine.
  *
  * `parentIdentity` is what {@link publishDirectoryIdentity} returned for a parent the caller created or
  * checked before it staged this file.
@@ -61,15 +61,12 @@ export function publishScriptFileSync(options: {
   publish?: AtomicPublishMode;
   parentIdentity?: string;
 }): void {
+  const mode = options.mode ?? 0o600;
   const expected =
     options.parentIdentity ?? publishDirectoryIdentity(path.dirname(options.destination));
   withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
     assertPrivateScriptDestination(options.destination, expected);
-    fs.writeFileSync(
-      temporaryPath,
-      options.contents,
-      options.mode === undefined ? 'utf8' : { encoding: 'utf8', mode: options.mode },
-    );
+    fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode });
     assertPrivateScriptDestination(options.destination, expected);
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
@@ -186,33 +183,41 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
 }
 
 /**
- * Refuses a script destination when another local user can write a directory on the way to it (#4565).
+ * Refuses a script destination unless every directory on its fully resolved chain is one no other
+ * non-root local user can change (#4565).
  *
  * Node exposes no `openat` or `renameat`, so a publisher cannot resolve a destination relative to a
- * directory handle. What remains is to refuse every chain a second local user can act inside: a
- * directory they can write is one where they can replace a component of this path, or create one before
- * this client does, so the script lands where they choose, or they take it from a directory they own.
+ * directory handle. The window is closed by PERMISSIONS instead of by timing: once no other non-root
+ * user can add or remove an entry in any directory on the chain, nobody can swap a component out or
+ * plant one, so the path this rule judged is the path the publish reaches. Nothing here depends on when
+ * the directory was judged, and no re-check is what makes the write safe.
  *
- * The rule reads each component with `lstat`, so a symbolic link is judged as the link it is and is
- * never mistaken for the directory its target names:
+ * The existing prefix of the destination is resolved once, and every directory of that resolved chain
+ * is judged, so a symbolic link's target is judged too: `/home/me/link` standing for a shared directory
+ * is refused for the same reason that directory would be if the caller had spelled it out. Each
+ * directory then has to satisfy:
  *
- * - A component's mode decides. The sticky bit cancels the exposure: it stops anyone but an entry's
- *   owner or root from removing or replacing that entry, which is how a shared team directory is made
- *   safe, and why the hint names it.
- * - Otherwise a component writable by anyone other than this user is refused, except a group-writable
- *   one whose group is this user's own private group: Ubuntu and Debian set up every home directory
- *   that way, often group-writable, and those have to stay usable.
- * - A symbolic link whose own directory others can create entries in is refused whatever it points at:
- *   it may be one they planted, and its target is theirs to choose. The sticky bit does not help here,
- *   because it guards entries that already exist.
+ * - It is owned by this user or by root. A directory another user owns is theirs to chmod, to empty, and
+ *   to repopulate, whatever its mode says today.
+ * - Its mode opens its contents to nobody else. The sticky bit is the one exception, and only for
+ *   passing THROUGH a directory: it stops anyone but an entry's owner or root from removing or replacing
+ *   that entry, which is how macOS `/tmp` and `/var` stay usable. It cannot refuse a NEW entry by name,
+ *   so nothing may be created inside a directory others can add entries to; that is asked separately.
+ * - A symbolic link the path passes through is one others could not have planted or swapped: in a
+ *   directory where they can add entries, it stands there only because the sticky bit and its owner
+ *   hold it in place.
  *
- * An absent or non-directory component is left alone: the filesystem refuses a publish through it. On
- * Windows, access is an ACL rather than a mode, so this is a no-op there.
+ * A group-writable directory this user owns stays acceptable when its group is this user's own private
+ * group, the shape Ubuntu and Debian give every home directory. {@link privateGroupId} says what that
+ * takes to establish, and what it cannot.
+ *
+ * A component that exists and is neither a directory nor a link is left alone: the filesystem refuses a
+ * publish through it. On Windows, access is an ACL rather than a mode, so this is a no-op there.
  *
  * `parentIdentity` is what {@link publishDirectoryIdentity} returned for the parent the caller created
- * or checked before it staged this file. Whoever owns a directory above it can open that directory to
- * others, swap the parent for one of their own while the file is staged, and close it again, and only
- * the identity catches that.
+ * or checked before it staged this file. The rule above already excludes anyone who could swap that
+ * parent, so the comparison is defense in depth against a host whose ownership or modes moved meanwhile;
+ * it is not what closes the window.
  */
 export function assertPrivateScriptDestination(destination: string, parentIdentity?: string): void {
   if (process.platform === 'win32') return;
@@ -220,17 +225,75 @@ export function assertPrivateScriptDestination(destination: string, parentIdenti
   if (parentIdentity !== undefined && publishDirectoryIdentity(parent) !== parentIdentity) {
     throw scriptAncestryFailure(destination, parent, 'parent_replaced');
   }
-  const privateGids = lazyPrivateGroupIds();
+  const trust = readScriptTrust();
+  assertNoPlantedLink(destination, parent, trust);
+  const existing = deepestExistingDirectory(parent);
+  if (existing.real === undefined) return;
+  const chain = directoryChain(existing.real);
+  for (const ancestor of chain) {
+    const stats = statDirectoryChain(ancestor);
+    if (!stats) continue;
+    const exposure = untrustedAncestryExposure(stats, trust);
+    if (exposure) throw scriptAncestryFailure(destination, ancestor, exposure);
+  }
+  // The script entry is created inside the deepest directory that exists, or below it through
+  // directories that do not exist yet. Where other local users can add entries, one of them can add
+  // this entry first and the recording is theirs, so the creation has to be refused.
+  const deepest = statDirectoryChain(existing.real);
+  if (deepest && othersCreateEntriesIn(deepest, trust)) {
+    throw scriptAncestryFailure(destination, existing.real, 'shared_parent');
+  }
+}
+
+/**
+ * Refuses a symbolic link on the spelled path that another local user could have put there, or could
+ * replace. The link's target is judged through the resolved chain, so this only asks whether the link
+ * itself is stable:
+ *
+ * - In a directory others cannot add entries in, a link nobody but this user or root can write is not
+ *   something they can plant or swap.
+ * - In a directory others CAN add entries in, the sticky bit is what protects an entry that already
+ *   exists: it stops anyone but the entry's owner or root from removing or replacing it. Without the
+ *   sticky bit, any of them can unlink this link and plant one pointing wherever they choose.
+ */
+function assertNoPlantedLink(
+  destination: string,
+  parent: string,
+  trust: ScriptDestinationTrust,
+): void {
   for (const ancestor of directoryChain(parent)) {
     const link = lstatIfPresentSync(ancestor);
-    if (!link) continue;
-    if (link.isSymbolicLink() && othersCreateEntriesIn(path.dirname(ancestor), privateGids)) {
-      throw scriptAncestryFailure(destination, ancestor, 'planted_link');
-    }
-    const directory = link.isSymbolicLink() ? statDirectoryChain(ancestor) : link;
-    if (!directory?.isDirectory()) continue;
-    const exposure = untrustedWritableExposure(directory, privateGids());
+    if (!link?.isSymbolicLink()) continue;
+    const home = lstatIfPresentSync(path.dirname(ancestor));
+    if (!home) continue;
+    const exposure = untrustedLinkExposure(
+      { uid: link.uid },
+      { uid: home.uid, gid: home.gid, mode: home.mode },
+      trust,
+    );
     if (exposure) throw scriptAncestryFailure(destination, ancestor, exposure);
+  }
+}
+
+/**
+ * The real path of the deepest directory `directory` names or leads to, or `undefined` when nothing of it
+ * exists to judge. A component that exists but resolves to nothing (a dangling link) is stepped over like
+ * one that is absent, so the walk never stops with nothing checked.
+ */
+function deepestExistingDirectory(directory: string): Readonly<{ real: string | undefined }> {
+  let current = directory;
+  for (;;) {
+    if (lstatIfPresentSync(current) !== undefined) {
+      try {
+        const real = fs.realpathSync(current);
+        if (statDirectoryChain(real)) return { real };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return { real: undefined };
+    current = parent;
   }
 }
 
@@ -246,59 +309,68 @@ export function publishDirectoryIdentity(directory: string): string | undefined 
 
 /** The group and passwd records the private-group exception reads, in `/etc/group` field order. */
 type HostGroupDatabase = Readonly<{
-  groups: readonly string[];
-  passwd: readonly string[];
+  /** `undefined` when the file could not be read, which is not the same as a file with no records. */
+  groups: readonly string[] | undefined;
+  passwd: readonly string[] | undefined;
 }>;
 
 /**
- * The private group of `current`, in the one shape the exception admits: the group named after them.
+ * The single group the private-group exception admits, or `undefined` when nothing was established.
  *
  * Ubuntu and Debian create one group per user, named after them, and set up that user's home directory
- * with it, often group-writable. Such a home is shared with no other local user, so it stays a valid
- * script destination. Every other group name stays outside the exception: this host's own records
- * cannot bound it, because macOS lists only part of `staff` in `/etc/group` while every local user
- * holds it, and a name service can add members to a group this machine cannot read.
+ * with it, often group-writable and owned by that user. Such a home is shared with no other local user,
+ * so it stays a valid script destination. Every other group stays outside the exception, and the rule
+ * fails closed wherever completeness cannot be established:
  *
- * Membership comes from both places a member can appear: the group's own member list, and the users
- * whose primary group is this one. A member who is neither `current` nor root disqualifies the group.
+ * - Both database files must have been READ. An unreadable file is not an empty one, and an empty
+ *   member list proves nothing.
+ * - The group must be the one this process holds as its PRIMARY group, which `getgid` answers from the
+ *   kernel rather than from a file, and it must carry this user's name.
+ * - The group's own member list may name nobody but this user. macOS lists only part of `staff` in
+ *   `/etc/group` while every local user holds it, so a name that is not this user's ends the claim
+ *   rather than being looked up and forgiven.
+ * - No other record in the passwd file may hold this group as its primary group, and the caller's own
+ *   record must exist there with this uid and this gid.
+ *
+ * What this cannot establish: a name service (LDAP, NSS modules) can add a user whose primary group is
+ * this gid without that user ever appearing in `/etc/passwd`. A host configured that way can still be
+ * refused a group-writable destination it appears to own, which is the residual limitation the
+ * documentation names; the caller's fallback is a directory only they can write.
  */
-export function privateGroupIds(
+export function privateGroupId(
   database: HostGroupDatabase,
-  current: Readonly<{ uid: number | undefined; name: string | undefined }>,
-): Set<number> {
-  const privateIds = new Set<number>();
-  if (current.uid === undefined || current.name === undefined) return privateIds;
-  const uidByName = new Map<string, number>();
-  const primaryMembers = new Map<number, string[]>();
-  for (const line of database.passwd) {
-    const [name, , rawUid, rawGid] = line.split(':');
-    const uid = Number(rawUid);
-    const gid = Number(rawGid);
-    if (!name || !Number.isInteger(uid) || !Number.isInteger(gid)) continue;
-    uidByName.set(name, uid);
-    primaryMembers.set(gid, [...(primaryMembers.get(gid) ?? []), name]);
-  }
-  for (const line of database.groups) {
-    const [name, , rawGid, rawMembers] = line.split(':');
-    const gid = Number(rawGid);
-    if (name !== current.name || !Number.isInteger(gid)) continue;
-    const supplementary = (rawMembers ?? '').split(',').filter((member) => member.length > 0);
-    const ids = [...supplementary, ...(primaryMembers.get(gid) ?? [])].map((member) =>
-      uidByName.get(member),
-    );
-    if (ids.every((id) => id === current.uid || id === 0)) privateIds.add(gid);
-  }
-  return privateIds;
+  current: Readonly<{ uid: number | undefined; gid: number | undefined; name: string | undefined }>,
+): number | undefined {
+  const { uid, gid, name } = current;
+  if (uid === undefined || gid === undefined || name === undefined) return undefined;
+  if (!database.groups || !database.passwd) return undefined;
+  const record = database.groups.find((line) => line.split(':')[0] === name);
+  if (!record) return undefined;
+  const [, , rawGid, rawMembers = ''] = record.split(':');
+  const privateGid = Number(rawGid);
+  if (!Number.isInteger(privateGid) || privateGid !== gid) return undefined;
+  const members = rawMembers.split(',').filter((member) => member.length > 0);
+  if (members.some((member) => member !== name)) return undefined;
+  const own = database.passwd.find((line) => line.split(':')[0] === name);
+  if (!own) return undefined;
+  const [, , ownUid, ownGid] = own.split(':');
+  if (Number(ownUid) !== uid || Number(ownGid) !== gid) return undefined;
+  const sharesPrimary = database.passwd.some((line) => {
+    const [other, , , otherGid] = line.split(':');
+    return other !== name && Number(otherGid) === gid;
+  });
+  return sharesPrimary ? undefined : gid;
 }
 
-/** This host's private groups, read from the group database the first time the chain meets one. */
-function lazyPrivateGroupIds(): () => ReadonlySet<number> {
-  let cached: ReadonlySet<number> | undefined;
-  return () =>
-    (cached ??= privateGroupIds(
+/** This process's identity and the private group its host databases establish, if any. */
+function readScriptTrust(): ScriptDestinationTrust {
+  return {
+    uid: process.getuid?.() ?? -1,
+    privateGid: privateGroupId(
       { groups: readSystemFile('/etc/group'), passwd: readSystemFile('/etc/passwd') },
-      { uid: process.getuid?.(), name: readCurrentUser() },
-    ));
+      { uid: process.getuid?.(), gid: process.getgid?.(), name: readCurrentUser() },
+    ),
+  };
 }
 
 function readCurrentUser(): string | undefined {
@@ -321,59 +393,120 @@ function directoryChain(directory: string): string[] {
   }
 }
 
-/** Why other local users can write in this directory, or `undefined` when only this user and root can. */
-function untrustedWritableExposure(
-  stats: fs.Stats,
-  privateGids: ReadonlySet<number>,
-): AncestryExposure | undefined {
-  if (stats.mode & 0o1000) return undefined;
-  if (stats.mode & 0o002) return 'world_writable';
-  if (stats.mode & 0o020 && !privateGids.has(stats.gid)) return 'shared_group_writable';
+/**
+ * The two ways a directory can be unsafe for a destination: someone else can change what is in it, or
+ * someone else can create the entry the destination names.
+ *
+ * `foreign_owned` — some other user owns it and can chmod, empty, or repopulate it whatever its mode.
+ * `world_writable` / `shared_group_writable` — its mode opens its contents to others.
+ * `shared_parent` — nobody else can change what is in it today, but they can add the missing entry.
+ * `planted_link` — a symbolic link someone else could have put in place of a directory.
+ * `parent_replaced` — the directory the caller staged against is not the one it was.
+ */
+export type ScriptAncestryExposure =
+  | 'foreign_owned'
+  | 'world_writable'
+  | 'shared_group_writable'
+  | 'shared_parent'
+  | 'planted_link'
+  | 'parent_replaced';
+
+/** What this process can rely on when it judges a directory: its identity and its private group. */
+export type ScriptDestinationTrust = Readonly<{
+  uid: number;
+  privateGid: number | undefined;
+}>;
+
+/** The fields of a directory the ancestry rule reads, so the decision is testable without a filesystem. */
+export type DirectoryAuthority = Readonly<{ uid: number; gid: number; mode: number }>;
+
+/**
+ * Whether this directory is one this user can rely on a destination being inside of, and why not if it
+ * is not.
+ *
+ * Ownership is asked first: a directory another user owns is theirs to chmod, to empty, and to
+ * repopulate whatever its mode says today, and no race is needed to do it. Then the mode, because
+ * group- or other-writable contents are open to those users directly. The sticky bit is the one mode
+ * exception, and it is sound only for PASSING THROUGH a directory: it stops anyone but an entry's owner
+ * or root from removing or replacing that entry, so the entries already on the path hold. It cannot
+ * refuse a NEW entry by name, so {@link othersCreateEntriesIn} is asked separately before anything is
+ * created inside.
+ */
+export function untrustedAncestryExposure(
+  directory: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
+  if (directory.mode & 0o1000) return undefined;
+  if (directory.mode & 0o002) return 'world_writable';
+  if (directory.mode & 0o020 && directory.gid !== trust.privateGid) return 'shared_group_writable';
   return undefined;
 }
 
-/** Whether other local users can create an entry here: how a component becomes their symbolic link. */
-function othersCreateEntriesIn(directory: string, privateGids: () => ReadonlySet<number>): boolean {
-  const stats = statDirectoryChain(directory);
-  if (!stats) return false;
-  if (stats.mode & 0o002) return true;
-  return Boolean(stats.mode & 0o020) && !privateGids().has(stats.gid);
+/**
+ * Whether other local users can add an entry here, which is how the destination's own name, or a
+ * directory below it, becomes theirs. The sticky bit is deliberately not consulted: it protects entries
+ * that already exist and cannot refuse a new one.
+ */
+export function othersCreateEntriesIn(
+  directory: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): boolean {
+  if (directory.mode & 0o002) return true;
+  return Boolean(directory.mode & 0o020) && directory.gid !== trust.privateGid;
 }
 
-type AncestryExposure =
-  | 'world_writable'
-  | 'shared_group_writable'
-  | 'planted_link'
-  | 'parent_replaced';
+/** The fields of a symbolic link the ancestry rule reads. */
+export type LinkAuthority = Readonly<{ uid: number }>;
+
+/**
+ * Whether a symbolic link on the path is one another local user could have put there, or could replace,
+ * and whose target is therefore theirs to choose.
+ *
+ * Where nobody but this user or root can add entries, a link cannot appear or change behind this rule.
+ * Where others CAN add entries, the sticky bit is the only thing holding an existing entry in place: it
+ * stops anyone but the entry's owner or root from unlinking and replacing it, so a link this user or root
+ * owns stands, and one anybody else owns does not — it may be theirs, and without the sticky bit any of
+ * them can swap it for one pointing wherever they like.
+ */
+export function untrustedLinkExposure(
+  link: LinkAuthority,
+  home: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  if (!othersCreateEntriesIn(home, trust)) return undefined;
+  if (home.mode & 0o1000 && (link.uid === 0 || link.uid === trust.uid)) return undefined;
+  return 'planted_link';
+}
 
 function scriptAncestryFailure(
   destination: string,
   ancestor: string,
-  exposure: AncestryExposure,
+  exposure: ScriptAncestryExposure,
 ): AppError {
-  const writableByOthers = exposure !== 'parent_replaced';
+  const replaced = exposure === 'parent_replaced';
   return new AppError(
     'COMMAND_FAILED',
-    writableByOthers
-      ? `Refusing to save the script under ${ancestor}: another local user can write that part of the path.`
-      : `The directory for ${destination} changed while the script was staged, so the script was not saved.`,
+    replaced
+      ? `The directory for ${destination} changed while the script was staged, so the script was not saved.`
+      : `Refusing to save the script under ${ancestor}: another local user owns or can write that part of the path.`,
     {
-      reason: writableByOthers ? 'script_ancestor_untrusted' : 'script_ancestry_replaced',
+      reason: replaced ? 'script_ancestry_replaced' : 'script_ancestor_untrusted',
       exposure,
       path: destination,
       ancestor,
-      hint: writableByOthers
-        ? `Save the script under a directory only you can write, or share ${ancestor} safely with the sticky bit (chmod +t) and keep symbolic links out of the path.`
-        : 'Re-record with open --save-script, or save under a directory nobody else can write.',
+      hint: replaced
+        ? 'Re-record with open --save-script, or save under a directory nobody else can write.'
+        : 'Save the script under a directory you own that only you can write, and keep the path out of directories other users own.',
     },
   );
 }
 
-function readSystemFile(file: string): string[] {
+function readSystemFile(file: string): string[] | undefined {
   try {
     return fs.readFileSync(file, 'utf8').split('\n');
   } catch {
-    return [];
+    return undefined;
   }
 }
 

@@ -108,7 +108,7 @@ Outside a macOS app lease, a fresh `open --save-script=<path>` records the sessi
 your machine. Each response that records an action returns a `session-script` artifact, and the
 client replaces the file with it. `close` returns the final script. The client writes only to the
 path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
-Every directory on the way to that path must be one that only you and root can write; see
+Every directory on the way to that path must be one that no other local user can change; see
 [Record a replay script](replay-e2e.md#record-a-replay-script).
 The daemon must report the `script-artifacts` capability in its `/health` response; through a
 proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` is

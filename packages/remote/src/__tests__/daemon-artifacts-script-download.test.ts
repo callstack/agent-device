@@ -471,7 +471,7 @@ test.skipIf(process.platform === 'win32').each([
     plant: (root: string) => {
       const shared = path.join(root, 'shared');
       fs.mkdirSync(shared);
-      fs.chmodSync(shared, 0o1777);
+      fs.chmodSync(shared, 0o777);
       const attacker = path.join(root, 'attacker');
       fs.mkdirSync(attacker);
       fs.symlinkSync(attacker, path.join(shared, 'work'));

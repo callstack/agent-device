@@ -1,11 +1,19 @@
 export {
   assertPrivateScriptDestination,
   isAtomicPublishTemporaryPath,
+  othersCreateEntriesIn,
+  privateGroupId,
   publishDirectoryIdentity,
   publishDurableFileSync,
   publishFileSync,
   publishScriptFileSync,
+  untrustedAncestryExposure,
+  untrustedLinkExposure,
+  type DirectoryAuthority,
   type DurableFilePublishMode,
+  type LinkAuthority,
+  type ScriptAncestryExposure,
+  type ScriptDestinationTrust,
 } from './internal/atomic-file.ts';
 export {
   lstatIfPresent,

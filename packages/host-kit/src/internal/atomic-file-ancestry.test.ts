@@ -7,15 +7,22 @@ import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import {
   assertPrivateScriptDestination,
-  privateGroupIds,
+  othersCreateEntriesIn,
+  privateGroupId,
   publishDirectoryIdentity,
   publishScriptFileSync,
+  untrustedAncestryExposure,
+  untrustedLinkExposure,
+  type DirectoryAuthority,
 } from './atomic-file.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
 /** The group database a test stands in for `/etc/group` and `/etc/passwd`. */
-type Database = Readonly<{ groups: readonly string[]; passwd: readonly string[] }>;
+type Database = Readonly<{
+  groups: readonly string[] | undefined;
+  passwd: readonly string[] | undefined;
+}>;
 
 const realReadFileSync = fs.readFileSync;
 const currentUser = os.userInfo().username;
@@ -34,8 +41,14 @@ afterEach(() => {
  */
 function serveGroupDatabase(database: Database): void {
   vi.spyOn(fs, 'readFileSync').mockImplementation(((file: unknown, options?: unknown) => {
-    if (file === '/etc/group') return `${database.groups.join('\n')}\n`;
-    if (file === '/etc/passwd') return `${database.passwd.join('\n')}\n`;
+    if (file === '/etc/group') {
+      if (!database.groups) throw new Error('simulated unreadable group file');
+      return `${database.groups.join('\n')}\n`;
+    }
+    if (file === '/etc/passwd') {
+      if (!database.passwd) throw new Error('simulated unreadable passwd file');
+      return `${database.passwd.join('\n')}\n`;
+    }
     return realReadFileSync(file as never, options as never) as never;
   }) as typeof fs.readFileSync);
 }
@@ -48,16 +61,33 @@ function hostDatabase(privateGid: number, sharedGid: number): Database {
   };
 }
 
+/** The database of a host whose group files cannot be read at all. */
+function unreadableDatabases(): Database {
+  return { groups: undefined, passwd: undefined };
+}
+
 function root(): string {
   return fs.realpathSync(mkdtempForTestSync('host-kit-ancestry-'));
 }
 
-/** A directory carrying `mode` and `gid`, so the rule reads the group the test chose. */
+/**
+ * A directory carrying `mode` and `gid`, so the rule reads the group the test chose. The group is set
+ * explicitly because a scratch directory inherits one from its parent, not necessarily this user's.
+ */
 function directoryWith(directory: string, mode: number, gid = currentGid): string {
   fs.mkdirSync(directory);
   fs.chownSync(directory, currentUid, gid);
   fs.chmodSync(directory, mode);
   return directory;
+}
+
+/**
+ * Runs the rule as a different local user, so the ownership checks are exercised against real
+ * directories owned by this test's actual user. Nothing else about the process moves: the modes stay
+ * what they are on disk.
+ */
+function asAnotherLocalUser(): void {
+  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
 }
 
 function publish(destination: string, parentIdentity?: string): void {
@@ -87,7 +117,11 @@ function expectRefusal(run: () => void, reason: string, exposure: string, ancest
   expect(details).toMatchObject({ reason, exposure, ancestor });
 }
 
-// --- a chain another local user can act inside is refused ---
+function modeOf(pathname: string): number {
+  return fs.lstatSync(pathname).mode & 0o777;
+}
+
+// --- a directory another user owns, or that others can write, is refused ---
 
 skipOnWindows('publishes to a chain only this user can write', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
@@ -99,6 +133,17 @@ skipOnWindows('publishes to a chain only this user can write', () => {
   expect(fs.readFileSync(path.join(workflows, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
+skipOnWindows('creates the script so that only this user can read it', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const workflows = path.join(root(), 'workflows');
+  fs.mkdirSync(workflows);
+  const destination = path.join(workflows, 'journey.ad');
+
+  publish(destination);
+
+  expect(modeOf(destination)).toBe(0o600);
+});
+
 skipOnWindows('refuses a destination under a world-writable directory', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
   const shared = directoryWith(path.join(root(), 'shared'), 0o777);
@@ -108,28 +153,56 @@ skipOnWindows('refuses a destination under a world-writable directory', () => {
   expect(fs.existsSync(destination)).toBe(false);
 });
 
-skipOnWindows('refuses a world-writable ancestor above the parent', () => {
+skipOnWindows('refuses a destination created inside a directory others can add entries to', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
-  const shared = directoryWith(path.join(root(), 'shared'), 0o777);
-  const work = path.join(shared, 'work');
-  fs.mkdirSync(work);
+  const shared = directoryWith(path.join(root(), 'shared'), 0o777 | 0o1000);
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
-    'world_writable',
+    () => assertPrivateScriptDestination(path.join(shared, 'journey.ad')),
+    'shared_parent',
     shared,
   );
+  expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(false);
 });
 
 skipOnWindows('refuses a destination under a group-writable shared directory', () => {
-  const gid = currentGid;
-  serveGroupDatabase(hostDatabase(4321, gid));
-  const team = directoryWith(path.join(root(), 'team'), 0o775, gid);
+  serveGroupDatabase(hostDatabase(4321, currentGid));
+  const team = directoryWith(path.join(root(), 'team'), 0o775, currentGid);
   const sub = path.join(team, 'sub');
   fs.mkdirSync(sub);
 
   expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
   expect(fs.readdirSync(sub)).toEqual([]);
+});
+
+// --- ownership decides, not the mode alone ---
+
+skipOnWindows('refuses a private-mode directory another user owns, whatever the mode', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const work = directoryWith(path.join(root(), 'foreign'), 0o755);
+  asAnotherLocalUser();
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
+    'foreign_owned',
+    work,
+  );
+});
+
+skipOnWindows('refuses a directory its owner opened up while the file was staged', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const work = path.join(root(), 'work');
+  fs.mkdirSync(work);
+  const destination = path.join(work, 'journey.ad');
+  const realWriteFileSync = fs.writeFileSync;
+  vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+    const result = (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    fs.chmodSync(work, 0o777);
+    return result;
+  }) as typeof fs.writeFileSync);
+
+  expectUntrusted(() => publish(destination), 'world_writable', work);
+  expect(fs.readdirSync(work)).toEqual([]);
 });
 
 // --- the Ubuntu and Debian private-group home keeps working ---
@@ -145,9 +218,15 @@ skipOnWindows('publishes to a group-writable home directory of a private group',
 });
 
 skipOnWindows("refuses the same mode and group once the group is not the user's own", () => {
-  const gid = currentGid;
-  serveGroupDatabase(hostDatabase(4321, gid));
-  const home = directoryWith(path.join(root(), 'home'), 0o775, gid);
+  serveGroupDatabase(hostDatabase(4321, currentGid));
+  const home = directoryWith(path.join(root(), 'home'), 0o775, currentGid);
+
+  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+});
+
+skipOnWindows('refuses the same mode and group once the group database cannot be read', () => {
+  serveGroupDatabase(unreadableDatabases());
+  const home = directoryWith(path.join(root(), 'home'), 0o775, currentGid);
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
 });
@@ -162,32 +241,7 @@ skipOnWindows('publishes to a setgid group-writable private-group home', () => {
   expect(fs.existsSync(path.join(home, 'journey.ad'))).toBe(true);
 });
 
-// --- a sticky shared directory is safe, except through a link planted in it ---
-
-skipOnWindows('publishes to a destination under a sticky world-writable directory', () => {
-  serveGroupDatabase(hostDatabase(currentGid, 4321));
-  const shared = directoryWith(path.join(root(), 'shared'), 0o1777);
-
-  publish(path.join(shared, 'journey.ad'));
-
-  expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(true);
-});
-
-skipOnWindows('refuses a symbolic link planted in a directory others can write', () => {
-  serveGroupDatabase(hostDatabase(currentGid, 4321));
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
-  const attacker = path.join(directory, 'attacker');
-  fs.mkdirSync(attacker);
-  fs.symlinkSync(attacker, path.join(shared, 'work'));
-
-  expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
-    'planted_link',
-    path.join(shared, 'work'),
-  );
-  expect(fs.readdirSync(attacker)).toEqual([]);
-});
+// --- a link is judged as the link it is, and its target is judged too ---
 
 skipOnWindows('follows a symbolic link inside a directory only this user can write', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
@@ -200,6 +254,104 @@ skipOnWindows('follows a symbolic link inside a directory only this user can wri
 
   expect(fs.existsSync(path.join(real, 'journey.ad'))).toBe(true);
 });
+
+skipOnWindows('refuses a symbolic link planted in a directory others can add entries to', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const attacker = path.join(directory, 'attacker');
+  fs.mkdirSync(attacker);
+  fs.symlinkSync(attacker, path.join(shared, 'work'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
+    'planted_link',
+    path.join(shared, 'work'),
+  );
+  expect(fs.readdirSync(attacker)).toEqual([]);
+});
+
+skipOnWindows('refuses a symbolic link whose target is a directory others can write', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const privateWork = path.join(shared, 'private');
+  fs.mkdirSync(privateWork);
+  fs.symlinkSync(privateWork, path.join(directory, 'link'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(directory, 'link', 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+});
+
+skipOnWindows(
+  'refuses a symbolic link another local user owns in a sticky shared directory',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    const shared = directoryWith(path.join(root(), 'shared'), 0o1777);
+    const attacker = path.join(root(), 'attacker');
+    fs.mkdirSync(attacker);
+    fs.symlinkSync(attacker, path.join(shared, 'work'));
+    asAnotherLocalUser();
+
+    expectUntrusted(
+      () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
+      'planted_link',
+      path.join(shared, 'work'),
+    );
+  },
+);
+
+skipOnWindows('keeps working through a root-owned alias whose target is sticky', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const alias = path.join(directory, 'alias');
+  const target = path.join(directory, 'target');
+  fs.mkdirSync(target);
+  fs.chmodSync(target, 0o1777);
+  fs.symlinkSync(target, alias);
+  const work = path.join(alias, 'work');
+  fs.mkdirSync(work);
+  fs.chmodSync(work, 0o700);
+
+  publish(path.join(work, 'journey.ad'));
+
+  expect(fs.existsSync(path.join(target, 'work', 'journey.ad'))).toBe(true);
+});
+
+skipOnWindows('publishes through the host root-owned system alias /tmp', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // macOS reaches `/private/tmp` through `/tmp`, and Linux mounts `/tmp` directly. Either way the
+  // script lands in a sticky root-owned directory, so the alias must not be what ends the publish.
+  if (!fs.existsSync('/tmp') || !fs.lstatSync('/tmp').isSymbolicLink()) return;
+  const work = fs.mkdtempSync('/tmp/agent-device-ancestry-');
+  fs.chmodSync(work, 0o700);
+  const destination = path.join(work, 'journey.ad');
+  try {
+    publish(destination);
+    expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+skipOnWindows(
+  'publishes to a scratch path spelled through a system alias, not resolved away',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // The scratch root of `root()` is the resolved path. This one keeps whatever alias the host spells
+    // its temporary directory with, which is the shape a caller actually passes.
+    const directory = mkdtempForTestSync('host-kit-ancestry-alias-');
+    expect(fs.realpathSync(directory)).not.toBe(directory);
+    const destination = path.join(directory, 'journey.ad');
+
+    publish(destination);
+
+    expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+  },
+);
 
 // --- the destination directory swapped out while the file was staged ---
 
@@ -225,7 +377,6 @@ skipOnWindows('re-checks the chain after staging the file, before the entry is c
   fs.mkdirSync(staged);
   const destination = path.join(staged, 'journey.ad');
   const writeFileSync = fs.writeFileSync;
-  // The window a second local user races: the file is staged, the entry is not created yet.
   vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
     const result = (writeFileSync as (...args: unknown[]) => unknown)(file, ...rest);
     fs.rmSync(staged, { recursive: true, force: true });
@@ -248,68 +399,146 @@ skipOnWindows('publishes into the parent the captured identity still names', () 
   expect(fs.existsSync(path.join(staged, 'journey.ad'))).toBe(true);
 });
 
-// --- privateGroupIds: the one group shape the exception admits ---
+// --- untrustedAncestryExposure: what makes one directory unsafe to publish inside ---
 
-const ADA = { uid: 1000, name: 'ada' };
+const OWN = { uid: currentUid, gid: currentGid, mode: 0o755 };
+const TRUST = { uid: currentUid, privateGid: currentGid };
 
-function database(groups: readonly string[], passwd: readonly string[]) {
+function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
+  return { ...OWN, ...overrides };
+}
+
+test('refuses a directory another user owns even in private mode', () => {
+  expect(untrustedAncestryExposure(directoryOf({ uid: 65534 }), TRUST)).toBe('foreign_owned');
+});
+
+test('refuses a directory that is world-writable', () => {
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o777 }), TRUST)).toBe('world_writable');
+});
+
+test('refuses a directory that is group-writable by a group that is not this user', () => {
+  expect(untrustedAncestryExposure(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(
+    'shared_group_writable',
+  );
+});
+
+test('accepts a directory group-writable by this user', () => {
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
+});
+
+test('accepts a root-owned directory and a directory this user owns', () => {
+  expect(untrustedAncestryExposure(directoryOf({ uid: 0 }), TRUST)).toBeUndefined();
+  expect(untrustedAncestryExposure(directoryOf({}), TRUST)).toBeUndefined();
+});
+
+test('accepts a sticky shared directory for passing through, in any ownership', () => {
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o1777 }), TRUST)).toBeUndefined();
+  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(
+    'foreign_owned',
+  );
+});
+
+// --- untrustedLinkExposure: which link on the path belongs to somebody else ---
+
+test('accepts a link in a directory only this user or root can add entries to', () => {
+  const link = { uid: currentUid };
+  expect(untrustedLinkExposure(link, directoryOf({ mode: 0o755 }), TRUST)).toBeUndefined();
+  expect(untrustedLinkExposure(link, directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
+});
+
+test('refuses a link in a shared directory unless the sticky bit and its owner hold it in place', () => {
+  expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
+    'planted_link',
+  );
+  expect(untrustedLinkExposure({ uid: 65534 }, directoryOf({ mode: 0o1777 }), TRUST)).toBe(
+    'planted_link',
+  );
+});
+
+test('accepts a link this user or root owns in a sticky shared directory', () => {
+  const sticky = directoryOf({ mode: 0o1777 });
+  expect(untrustedLinkExposure({ uid: currentUid }, sticky, TRUST)).toBeUndefined();
+  expect(untrustedLinkExposure({ uid: 0 }, sticky, TRUST)).toBeUndefined();
+});
+
+// --- othersCreateEntriesIn: where another local user could claim the entry ---
+
+test('names a directory others can add entries in, sticky bit or no sticky bit', () => {
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o777 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1777 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(true);
+});
+
+test('names no directory whose group is this user', () => {
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(false);
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1775 }), TRUST)).toBe(false);
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o755 }), TRUST)).toBe(false);
+});
+
+// --- privateGroupId: the one group shape the exception admits ---
+
+const ADA = { uid: 1000, gid: 1000, name: 'ada' };
+
+function database(groups: readonly string[] | undefined, passwd: readonly string[] | undefined) {
   return { groups, passwd };
 }
 
-test('treats the group named after the user, holding only them, as private', () => {
-  const ids = privateGroupIds(
-    database(['ada:x:1000:', 'staff:x:20:root'], ['ada:x:1000:1000:', 'root:x:0:0']),
-    ADA,
-  );
-  expect([...ids]).toEqual([1000]);
+const PRIVATE = ['ada:x:1000:', 'staff:x:20:root'];
+const PRIVATE_PASSWD = ['ada:x:1000:1000:', 'root:x:0:0'];
+
+test('admits the group named after the user, holding only them, as their primary group', () => {
+  expect(privateGroupId(database(PRIVATE, PRIVATE_PASSWD), ADA)).toBe(1000);
 });
 
-test('treats a group as private when only its primary-group link names the user', () => {
-  const ids = privateGroupIds(
-    database(['ada:x:1000:', 'staff:x:20:'], ['root:x:0:0', 'ada:x:1000:1000:']),
-    ADA,
-  );
-  expect([...ids]).toEqual([1000]);
+test('admits it with root named among its members', () => {
+  expect(
+    privateGroupId(database(['ada:x:1000:root'], ['ada:x:1000:1000:', 'root:x:0:0']), ADA),
+  ).toBeUndefined();
 });
 
-test('still treats a group as private with root among its members', () => {
-  const ids = privateGroupIds(
-    database(['ada:x:1000:root', 'staff:x:20:'], ['ada:x:1000:1000:', 'root:x:0:0']),
-    ADA,
-  );
-  expect([...ids]).toEqual([1000]);
-});
-
-test('treats the group named after the user as shared once another user is a member', () => {
-  const ids = privateGroupIds(
-    database(
-      ['ada:x:1000:grace', 'staff:x:20:'],
-      ['ada:x:1000:1000:', 'grace:x:1001:1001:', 'root:x:0:0'],
+test('refuses it once another user is a member', () => {
+  expect(
+    privateGroupId(
+      database(['ada:x:1000:grace'], ['ada:x:1000:1000:', 'grace:x:1001:1001:', 'root:x:0:0']),
+      ADA,
     ),
-    ADA,
-  );
-  expect([...ids]).toEqual([]);
+  ).toBeUndefined();
 });
 
-test('treats the group named after the user as shared once another user has it as primary group', () => {
-  const ids = privateGroupIds(
-    database(['ada:x:1000:', 'staff:x:20:'], ['ada:x:1000:1000:', 'grace:x:1001:1000:']),
-    ADA,
-  );
-  expect([...ids]).toEqual([]);
+test('refuses it once another user has it as their primary group', () => {
+  expect(
+    privateGroupId(database(['ada:x:1000:'], ['ada:x:1000:1000:', 'grace:x:1001:1000:']), ADA),
+  ).toBeUndefined();
 });
 
-test('never treats another group name as private, however few members it lists', () => {
-  const ids = privateGroupIds(database(['team:x:4321:', 'ada:x:1000:'], ['ada:x:1000:1000:']), ADA);
-  expect([...ids]).toEqual([1000]);
+test('refuses a group that is not the primary group of the user, however few members it lists', () => {
+  expect(privateGroupId(database(['ada:x:4321:'], ['ada:x:1000:1000:']), ADA)).toBeUndefined();
 });
 
-test('treats an unreadable group database as having no private group', () => {
-  expect([...privateGroupIds(database([], []), ADA)]).toEqual([]);
+test('refuses a group that does not carry the name of the user', () => {
+  expect(privateGroupId(database(['team:x:1000:'], ['ada:x:1000:1000:']), ADA)).toBeUndefined();
+});
+
+test('refuses it when the group file cannot be read', () => {
+  expect(privateGroupId(database(undefined, PRIVATE_PASSWD), ADA)).toBeUndefined();
+});
+
+test('refuses it when the passwd file cannot be read', () => {
+  expect(privateGroupId(database(PRIVATE, undefined), ADA)).toBeUndefined();
+});
+
+test('refuses it when the user has no passwd record', () => {
+  expect(privateGroupId(database(PRIVATE, ['root:x:0:0']), ADA)).toBeUndefined();
+});
+
+test('refuses it when the passwd record names another uid or gid', () => {
+  const other = { uid: 1002, gid: 1000, name: 'ada' };
+  expect(privateGroupId(database(PRIVATE, PRIVATE_PASSWD), other)).toBeUndefined();
 });
 
 test('gives a caller without a full identity no private group', () => {
-  const groups = database(['ada:x:1000:'], ['ada:x:1000:1000:']);
-  expect([...privateGroupIds(groups, { uid: undefined, name: 'ada' })]).toEqual([]);
-  expect([...privateGroupIds(groups, { uid: 1000, name: undefined })]).toEqual([]);
+  const groups = database(PRIVATE, PRIVATE_PASSWD);
+  expect(privateGroupId(groups, { uid: undefined, gid: 1000, name: 'ada' })).toBeUndefined();
+  expect(privateGroupId(groups, { uid: 1000, gid: undefined, name: 'ada' })).toBeUndefined();
+  expect(privateGroupId(groups, { uid: 1000, gid: 1000, name: undefined })).toBeUndefined();
 });
