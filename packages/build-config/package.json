@@ -1,0 +1,13 @@
+{
+  "name": "@agent-device/build-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared repository bundler configuration.",
+  "exports": {
+    ".": "./tsdown.config.ts"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14"
+  }
+}

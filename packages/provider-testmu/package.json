@@ -29,7 +29,8 @@
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
-    "agent-device": "workspace:*"
+    "agent-device": "workspace:*",
+    "@agent-device/build-config": "workspace:*"
   },
   "publishConfig": {
     "exports": {

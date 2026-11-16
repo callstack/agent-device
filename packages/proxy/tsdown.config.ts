@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { strictBundlerInputOptions } from '../../scripts/plugin-build-config.ts';
+import { strictBundlerInputOptions } from '@agent-device/build-config';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(

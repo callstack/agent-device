@@ -310,6 +310,12 @@ importers:
         specifier: workspace:*
         version: link:../test-kit
 
+  packages/build-config:
+    devDependencies:
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(@arethetypeswrong/core@0.18.5)(@volar/typescript@2.4.30(typescript@7.0.2))(publint@0.3.24)(typescript@7.0.2)(unrun@0.3.1)
+
   packages/capture-kit:
     dependencies:
       '@agent-device/contracts':
@@ -866,6 +872,9 @@ importers:
 
   packages/provider-browserstack:
     devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -909,6 +918,9 @@ importers:
 
   packages/provider-revyl:
     devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -933,6 +945,9 @@ importers:
 
   packages/provider-testmu:
     devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -1025,6 +1040,9 @@ importers:
 
   packages/proxy:
     devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

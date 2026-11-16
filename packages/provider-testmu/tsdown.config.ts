@@ -1,1 +1,1 @@
-export { providerPluginBuildConfig as default } from '../../scripts/plugin-build-config.ts';
+export { providerPluginBuildConfig as default } from '@agent-device/build-config';

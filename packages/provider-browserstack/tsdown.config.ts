@@ -1,5 +1,5 @@
 import { defineConfig } from 'tsdown';
-import { providerPluginBuildConfig } from '../../scripts/plugin-build-config.ts';
+import { providerPluginBuildConfig } from '@agent-device/build-config';
 
 export default defineConfig({
   ...providerPluginBuildConfig,
