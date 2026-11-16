@@ -71,6 +71,9 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 ```
 
 - Missing parent directories are created.
+- Every directory on the way to the script must be one that only you and root can write. Another local user who can write such a directory can replace a directory on the path, or leave a symbolic link there, before the script is moved into place. The script then lands where they choose.
+- A shared team directory is safe once it has the sticky bit (`chmod +t`): it stops anyone but an entry's owner or root from replacing that entry. A group-writable home directory of your own private group, the shape Ubuntu and Debian create, is accepted. A symbolic link inside a directory others can write is refused, whatever it points at.
+- A refused destination names the directory at fault. A local `close` fails and keeps its bytes. A remote recording keeps its success and reports `script_ancestor_untrusted` as the `scriptDeliveryFailure` cause, and the next recorded action or `close` repeats the refusal. Choosing a directory nobody else can write, or adding the sticky bit, clears it.
 - With a local daemon, the script is written on the daemon host when the session closes.
 - With a remote daemon, outside a macOS app lease, the path is on your machine. The file appears when `open` returns, and each later recorded action in the session replaces it with the recording so far. `close` writes the final script there. A session that another process closes keeps the version from the last action.
 - A bare remote `open --save-script` writes `recording-<timestamp>.ad` in your working directory.
