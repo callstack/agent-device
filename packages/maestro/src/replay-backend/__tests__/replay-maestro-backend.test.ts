@@ -7,6 +7,9 @@ import { maestroReplayBackendPlugin } from '../replay-maestro-backend.ts';
 // each test the behavior through the registry; what is pinned here is the adapter's own mapping.
 // None of these capabilities reach host services, so the host is never called.
 const unusedHost: ReplayBackendHost = {
+  emitDiagnostic: () => {
+    throw new Error('host unused');
+  },
   appendTraceEvent: () => {
     throw new Error('host unused');
   },
@@ -16,6 +19,8 @@ const unusedHost: ReplayBackendHost = {
   readScriptSourceFile: () => {
     throw new Error('host unused');
   },
+  readSnapshotClickabilityEvidence: () => undefined,
+  assertSnapshotScreenOrigin: () => Promise.reject(new Error('host unused')),
   scriptSourceRequiredMessage: '',
   resolveTargetDevice: () => Promise.reject(new Error('host unused')),
   requestSignal: () => undefined,

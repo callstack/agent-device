@@ -1,4 +1,9 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
+import {
+  assertSnapshotScreenOrigin,
+  readSnapshotClickabilityEvidence,
+} from '@agent-device/contracts/capture';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { buildReplayBuiltinVars } from '../session-replay-vars.ts';
@@ -16,6 +21,9 @@ import { appendReplayTraceEvent } from './session-replay-trace.ts';
  */
 export function createReplayBackendHost(): ReplayBackendHost {
   return {
+    emitDiagnostic,
+    readSnapshotClickabilityEvidence,
+    assertSnapshotScreenOrigin,
     appendTraceEvent: appendReplayTraceEvent,
     buildBuiltinVars: (params) => buildReplayBuiltinVars({ ...params, metadata: {} }),
     readScriptSourceFile: readReplayScriptSourceFile,

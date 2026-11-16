@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
+import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import {
   MAESTRO_RUNTIME_ADAPTER_POLICY,
   type MaestroObservationIdentity,
@@ -36,7 +36,9 @@ export function createDaemonMaestroSnapshotSource(
     if (!data || !Array.isArray(data.nodes)) {
       throw new AppError('COMMAND_FAILED', 'Maestro snapshot did not return node data.');
     }
-    const snapshot = copySnapshotClickabilityEvidence(data, data as SnapshotState);
+    const snapshot = data as SnapshotState;
+    const clickability = options.readSnapshotClickabilityEvidence(data);
+    if (clickability) attachSnapshotClickabilityEvidence(snapshot, clickability);
     cached = { generation: context.generation, snapshot };
     return snapshot;
   };
