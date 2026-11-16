@@ -19,6 +19,8 @@ public final class PressSequenceTest {
     doesNotCancelARefusedEnd();
     doesNotRetryWhenInjectionAlreadyWaited();
     reportsAnUnavailableAnimationSyncApartFromARefusal();
+    failsATimedOutKeyStartWithATimeoutAndInjectsNoEnd();
+    failsARefusedEndAsARefusal();
   }
 
   private static void endsWithTheStartDownTime() {
@@ -81,6 +83,34 @@ public final class PressSequenceTest {
         PressSequence.AnimationSync.UNAVAILABLE, refusedAfter(0), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.ANIMATION_SYNC_UNAVAILABLE);
     expect(injections.calls, "start 1", "discard 1", "sync");
+  }
+
+  private static void failsATimedOutKeyStartWithATimeoutAndInjectsNoEnd() {
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT), accepted());
+    expectFailure(injections, java.util.concurrent.TimeoutException.class,
+        "Key injection timed out before the app finished handling it; it was cancelled");
+    expect(injections.calls, "start 1", "cancel 1");
+  }
+
+  private static void failsARefusedEndAsARefusal() {
+    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
+    injections.endAccepted = false;
+    expectFailure(injections, IllegalStateException.class, "Key injection was refused");
+    expect(injections.calls, "start 1", "end 1");
+  }
+
+  private static void expectFailure(
+      FakeInjections injections, Class<? extends Exception> type, String message) {
+    try {
+      PressSequence.requireDispatched(PressSequence.run(injections), "Key");
+    } catch (Exception error) {
+      if (error.getClass() != type || !message.equals(error.getMessage())) {
+        throw new AssertionError("Expected " + type.getName() + ": " + message + ", got " + error);
+      }
+      return;
+    }
+    throw new AssertionError("Expected " + type.getName() + ", but the press dispatched");
   }
 
   /** A start the framework accepts. */

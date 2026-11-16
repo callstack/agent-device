@@ -81,31 +81,14 @@ final class AutomationCommandHandler {
       throw new IllegalArgumentException("Invalid tap coordinates");
     }
     dispatch.attempted = true;
-    requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y)), "Touch");
+    PressSequence.requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y)), "Touch");
   }
 
   private static void key(UiAutomation automation, int code, InputDispatch dispatch)
       throws TimeoutException {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
     dispatch.attempted = true;
-    requireDispatched(PressSequence.run(new KeyPress(automation, code)), "Key");
-  }
-
-  private static void requireDispatched(PressSequence.Outcome outcome, String kind)
-      throws TimeoutException {
-    switch (outcome) {
-      case DISPATCHED:
-        return;
-      case ANIMATION_SYNC_UNAVAILABLE:
-        throw new UnsupportedOperationException(
-            kind + " injection was refused and this runtime cannot wait for animations to retry it");
-      case START_TIMED_OUT:
-        throw new TimeoutException(
-            kind + " injection timed out before the app finished handling it; it was cancelled");
-      case START_REFUSED:
-      case END_REFUSED:
-        throw new IllegalStateException(kind + " injection was refused");
-    }
+    PressSequence.requireDispatched(PressSequence.run(new KeyPress(automation, code)), "Key");
   }
 
   private abstract static class Press implements PressSequence.Injections {

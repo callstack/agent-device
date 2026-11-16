@@ -1,5 +1,7 @@
 package com.callstack.agentdevice.snapshothelper;
 
+import java.util.concurrent.TimeoutException;
+
 /**
  * Sequences one tap or key press: a start event, then an end event with the same down time.
  *
@@ -81,6 +83,24 @@ final class PressSequence {
     // ("touched window was removed", "focus left window"). A timed-out end was already enqueued,
     // so the live window still receives it.
     return injections.end(downTime) ? Outcome.DISPATCHED : Outcome.END_REFUSED;
+  }
+
+  /** Turns an outcome into the helper's response: a typed exception for each failed press. */
+  static void requireDispatched(Outcome outcome, String kind)
+      throws TimeoutException {
+    switch (outcome) {
+      case DISPATCHED:
+        return;
+      case ANIMATION_SYNC_UNAVAILABLE:
+        throw new UnsupportedOperationException(
+            kind + " injection was refused and this runtime cannot wait for animations to retry it");
+      case START_TIMED_OUT:
+        throw new TimeoutException(
+            kind + " injection timed out before the app finished handling it; it was cancelled");
+      case START_REFUSED:
+      case END_REFUSED:
+        throw new IllegalStateException(kind + " injection was refused");
+    }
   }
 
   /**
