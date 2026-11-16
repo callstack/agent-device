@@ -14,7 +14,6 @@
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/maestro": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/platform-web": "workspace:*",
@@ -31,7 +30,8 @@
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@agent-device/maestro": "workspace:*"
   },
   "exports": {
     ".": {

@@ -1,3 +1,4 @@
+import type { HostCommandRequest, HostCommandResult } from './platform-runtime-host.ts';
 import type { DiagnosticEventInput } from './host-diagnostics.ts';
 import type { SnapshotClickabilityEvidence } from './snapshot-private-evidence.ts';
 import type { DaemonError } from '@agent-device/kernel/errors';
@@ -237,6 +238,13 @@ export type ReplayBackendHost = Readonly<{
   readSnapshotClickabilityEvidence(owner: object): SnapshotClickabilityEvidence | undefined;
   /** Refuses capture-derived input when the host has no established screen origin. */
   assertSnapshotScreenOrigin(owner: object, label: string): Promise<void>;
+  /** Executes a backend child with the host's subprocess lifecycle and diagnostic scope. */
+  runCommand(
+    request: Omit<HostCommandRequest, 'env' | 'cwd'> &
+      Readonly<{ host: HostEnvironment; stdin?: string; detached?: boolean }>,
+    signal?: AbortSignal,
+  ): Promise<HostCommandResult>;
+  registerSensitiveValue(value: string): void;
   /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
   appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
   /** The `AD_*` variables every replay run is seeded with. */
@@ -272,9 +280,16 @@ export type ReplayBackendHost = Readonly<{
  */
 export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
   id: TId;
+  package: string;
   help: Readonly<{ summary: string; body: string }>;
 }>;
 
 export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
   create(host: ReplayBackendHost): ReplayBackend<TId> | Promise<ReplayBackend<TId>>;
 }>;
+
+export type ReplayBackendResolver = (
+  id: string,
+  host: ReplayBackendHost,
+  packageName?: string,
+) => Promise<ReplayBackend>;

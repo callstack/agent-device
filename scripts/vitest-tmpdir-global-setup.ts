@@ -1,3 +1,4 @@
+import { installWorkspaceMaestro } from './install-workspace-maestro.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,7 @@ let previousTmpDir: string | undefined;
 let unsharedRunDir: string | undefined;
 let previousUnsharedDir: string | undefined;
 let previousUnsharedUnavailable: string | undefined;
+let previousPluginHome: string | undefined;
 
 // State that a sticky shared directory such as /tmp must not hold, the Swift helper cache's among them, lives
 // in the checkout's ignored .tmp/ instead. Each run gets its own directory there, named like its TMPDIR one,
@@ -73,6 +75,9 @@ export function setup(): void {
     fs.mkdirSync(unsharedRunDir, { mode: 0o700 });
     process.env.AGENT_DEVICE_TEST_UNSHARED_DIR = unsharedRunDir;
   }
+  previousPluginHome = process.env.AGENT_DEVICE_HOME;
+  process.env.AGENT_DEVICE_HOME = path.join(testRunTmpDir, 'plugin-home');
+  installWorkspaceMaestro(process.env, true);
 }
 
 // fallow-ignore-next-line unused-export
@@ -86,6 +91,8 @@ export async function teardown(): Promise<void> {
       );
     }
   } finally {
+    if (previousPluginHome === undefined) delete process.env.AGENT_DEVICE_HOME;
+    else process.env.AGENT_DEVICE_HOME = previousPluginHome;
     if (testRunTmpDir) fs.rmSync(testRunTmpDir, { recursive: true, force: true });
     if (unsharedRunDir) fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     restoreEnv('TMPDIR', previousTmpDir);
