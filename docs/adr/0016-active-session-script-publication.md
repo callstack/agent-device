@@ -207,7 +207,7 @@ It adds no state name, command, or flag:
   A batch delivers the newest version its answer names, wherever it names it, and a batch that closes the recording retires the caller record like a standalone close does. Every version is the full recording, so one batch costs at most one download.
   The submitted plan is the only authority for that delivery: a completed prefix is derived from it, an answer entry outside that prefix or naming another command gets no download, and a retirement follows only a close the plan itself ran and finished.
   The steps that finished of a FAILED batch are delivered too, from the error's `partialResults`, cross-checked against the failing step the error names, and the batch error stands.
-  A delivery warning and typed failure ride the batch payload itself, because a batch's human and machine output read only that payload.
+  The batch payload carries `scriptDeliveryFailure` when this client's own delivery, or a finished step, reports one for the recording and no version this client saved came after that report; only the warning written beside that failure rides up, because a batch's human and machine output read only that payload.
 - The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
 
 The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike (#4565).

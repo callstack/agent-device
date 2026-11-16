@@ -90,9 +90,11 @@ export type SessionScriptDelivery = Readonly<{
 
 /**
  * Publishes the session-script artifacts of one remote response to the destinations this client
- * recorded, and retires the record that a close names. A version that cannot be saved keeps the
- * response successful and adds `scriptDeliveryFailure` and a warning. A close retires its record
- * even when another artifact fails, and the first error is the one reported.
+ * recorded, and retires the record a close names: the one this request's own `close` answer names, or
+ * the one `closedPublicationId` names when the caller is answering for a close it already ran. A
+ * version that cannot be saved keeps the response successful and adds `scriptDeliveryFailure` and a
+ * warning. A close retires its record even when another artifact fails, and the first error is the one
+ * reported.
  */
 export function sessionScriptDelivery(
   endpoint: Required<DaemonArtifactEndpoint>,
@@ -100,9 +102,14 @@ export function sessionScriptDelivery(
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
   download: typeof downloadRemoteArtifact,
+  closedPublicationId?: unknown,
 ): SessionScriptDelivery {
-  const named = response.data?.scriptPublicationId;
-  const closedId = req.command === 'close' && typeof named === 'string' ? named : undefined;
+  const closedId =
+    typeof closedPublicationId === 'string'
+      ? closedPublicationId
+      : req.command === 'close' && typeof response.data?.scriptPublicationId === 'string'
+        ? response.data.scriptPublicationId
+        : undefined;
   const retire = async (): Promise<void> => {
     if (closedId === undefined) return;
     const file = recordPath(stateDir, endpoint.baseUrl, req, closedId);
@@ -150,6 +157,24 @@ export function sessionScriptDelivery(
 }
 
 /**
+ * Whether one artifact names a version this client can publish: the `savedScript` field, the
+ * session-script type, a string publication ID and artifact ID, and a positive integer revision.
+ * `publishScriptVersion` refuses anything else, and the batch path reads an untrusted answer through
+ * this same guard, so no response value that cannot name a version reaches a record lookup, a path, or
+ * a download request.
+ */
+export function isPublishableScriptVersion(artifact: DaemonArtifact | undefined): boolean {
+  return (
+    artifact?.field === 'savedScript' &&
+    artifact.artifactType === 'session-script' &&
+    typeof artifact.scriptPublicationId === 'string' &&
+    typeof artifact.artifactId === 'string' &&
+    Number.isSafeInteger(artifact.scriptRevision) &&
+    (artifact.scriptRevision as number) > 0
+  );
+}
+
+/**
  * Publishes one version and returns the destination, `undefined` when no record of this client
  * matches the artifact, or a typed delivery failure. A version no newer than the one published is
  * skipped.
@@ -170,15 +195,9 @@ async function publishScriptVersion(
 ): Promise<PublishOutcome> {
   const { endpoint, req, stateDir } = context;
   const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
-  const file =
-    artifact.field === 'savedScript' &&
-    artifact.artifactType === 'session-script' &&
-    typeof id === 'string' &&
-    typeof artifactId === 'string' &&
-    Number.isSafeInteger(revision) &&
-    (revision as number) > 0
-      ? recordPath(stateDir, endpoint.baseUrl, req, id)
-      : undefined;
+  const file = isPublishableScriptVersion(artifact)
+    ? recordPath(stateDir, endpoint.baseUrl, req, id as string)
+    : undefined;
   const record = file ? readRecord(file) : undefined;
   if (!file || !record) {
     emitDiagnostic({

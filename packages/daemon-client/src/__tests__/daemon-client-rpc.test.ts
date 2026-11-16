@@ -283,7 +283,8 @@ test('a failed remote batch delivers the scripts of the steps that finished and 
         }),
         {
           info: { token: 'daemon-token', pid: 1, baseUrl },
-          req: batchRequest('wait', 'close'),
+          // The report says step 3 failed after 2 finished steps, so the caller submitted three.
+          req: batchRequest('wait', 'close', 'snapshot'),
           stateDir,
           host,
           resolve: () => resolve(),
@@ -433,6 +434,85 @@ test('a failed remote batch whose step report disagrees with its entries deliver
     assert.equal(activeScriptRecords(stateDir).length, 1);
   } finally {
     await closeLoopbackServer(server);
+  }
+});
+
+/**
+ * The runner's step report has to describe a step of THIS caller's plan. A report that names a step
+ * the plan does not have, or names a step under another command, describes work this client never
+ * submitted, so it finishes nothing: no download, and no end to the caller's recording.
+ */
+test('a failed remote batch whose report does not describe the submitted plan delivers nothing', async () => {
+  const reports: Array<
+    Readonly<{ label: string; plan: string[]; details: Record<string, unknown> }>
+  > = [
+    {
+      // Names step 3 of a two-step plan.
+      label: 'a step the plan does not have',
+      plan: ['wait', 'close'],
+      details: { step: 3, command: 'snapshot', executed: 2 },
+    },
+    {
+      // Names a real step of a three-step plan under another command.
+      label: 'a command the plan does not name there',
+      plan: ['wait', 'close', 'snapshot'],
+      details: { step: 3, command: 'wait', executed: 2 },
+    },
+  ];
+
+  for (const report of reports) {
+    const server = scriptServer({ v1: 'open Demo\n', final: 'open Demo\nwait 100\nclose\n' });
+    const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+    const root = fs.realpathSync(mkdtempForTestSync('rpc-batch-report-mismatch-'));
+    const stateDir = path.join(root, 'state');
+    const destination = path.join(root, 'journey.ad');
+    try {
+      const publicationId = await openRemoteRecording(baseUrl, stateDir, destination);
+
+      await new Promise<void>((resolve) => {
+        handleDaemonHttpResponseBody(
+          JSON.stringify({
+            error: {
+              data: {
+                code: 'COMMAND_FAILED',
+                message: `Batch failed at step ${String(report.details.step)}`,
+                details: {
+                  ...report.details,
+                  total: report.plan.length,
+                  // A finished close of this client's publication, planted at the last executed step.
+                  partialResults: [
+                    { step: 1, command: 'wait', ok: true, durationMs: 1, data: { waited: true } },
+                    {
+                      step: 2,
+                      command: 'close',
+                      ok: true,
+                      durationMs: 1,
+                      data: {
+                        scriptPublicationId: publicationId,
+                        artifacts: [scriptArtifact('final', 2, publicationId)],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+          {
+            info: { token: 'daemon-token', pid: 1, baseUrl },
+            req: batchRequest(...report.plan),
+            stateDir,
+            host: createTestHostEnvironment(),
+            resolve: () => resolve(),
+            reject: () => resolve(),
+          },
+        );
+      });
+
+      assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n', report.label);
+      assert.equal(activeScriptRecords(stateDir).length, 1, report.label);
+    } finally {
+      await closeLoopbackServer(server);
+    }
   }
 });
 

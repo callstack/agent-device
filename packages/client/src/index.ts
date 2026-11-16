@@ -606,6 +606,7 @@ function optionalSnapshotResponseFields(
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   const presentedSurface = readPresentedSurfaceFact(data);
   const postGestureOutcome = readPostGestureOutcome(data.postGestureOutcome);
+  const { scriptDeliveryFailure } = readScriptDeliveryDisclosure(data);
   return {
     ...(keyboard ? { keyboard } : {}),
     ...(viewport ? { viewport } : {}),
@@ -615,7 +616,9 @@ function optionalSnapshotResponseFields(
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
     ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-    ...readScriptDeliveryDisclosure(data),
+    // `readSerializedSnapshotCaptureAnnotations` above already reads this response's `warnings`, so
+    // only the typed field needs adding here.
+    ...(scriptDeliveryFailure === undefined ? {} : { scriptDeliveryFailure }),
     ...(typeof data.fallbackScreenshotPath === 'string'
       ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
       : {}),
