@@ -204,18 +204,16 @@ It adds no state name, command, or flag:
 - Teardown without `close` writes no daemon file; the caller keeps the version from the last recorded action.
 - At the public HTTP boundary, `saveScript` is accepted only as `true` on `open` with a well-formed publication ID.
   `session save-script` refuses a remote recording (`remote_script_publication_unsupported`), and remote `close --save-script`, `replay --save-script`, and `--save-script` in batch steps stay refused.
-  A batch delivers the newest version of the caller's own recording that its answer names, wherever it names it, and a batch whose answer proves a finished `close` step retires the caller record like a standalone close does. Every version is the full recording, so one batch costs at most one download.
-  One validated prefix decides all of it: the submitted plan joined with what the answer reports, step by step. An entry that names another command than the plan declares at its position validates no step, so it gets no download, and a retirement follows only a `close` inside that validated prefix. A version of a recording this client never armed is not a candidate, so a foreign revision cannot mask the version the caller is owed.
-  The steps that finished of a FAILED batch are delivered too, from the error's `partialResults`, cross-checked against the failing step the error names, and the batch error stands.
-  The batch payload carries `scriptDeliveryFailure` when this client's own delivery, or a validated step of the recording, reports one and no version this client saved came after that report, because a batch's human and machine output read only that payload. Its `warnings` are the payload's own warnings plus this failure's line, so a daemon-side write failure and a client-side download failure are both reported.
+  A batch whose steps would close an armed remote recording is refused before any step runs (`remote_script_batch_close_unsupported`), because a batch delivers no script versions from its steps.
 - The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
 
 The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike (#4565).
 Every result that can carry a script version discloses a failed delivery: the SDK result, the CLI human output and `--json`, and the MCP tool result each carry `scriptDeliveryFailure` and the warning, so no caller reads a stale file as current.
+Known limitation (#4595): a batch delivers no script versions from its steps, so closing an armed remote recording inside a batch stays refused.
 Rejected: a remote `session save-script` download, because it added a second publication path and a retry protocol.
 Rejected: delivery only at close, because a session that an external owner closes would lose its recording.
 Rejected: daemon-minted recording IDs bound through per-request claims, because the claim, binding, and tombstone protocol cost more than a client-minted ID that only its own client can match.
-Consequence: each recorded action of a remote ARMED recording costs one script write and one artifact download, except inside a batch, where the client takes only the newest version and one batch costs one download.
+Consequence: each recorded action of a remote ARMED recording costs one script write and one artifact download.
 
 This lifecycle is distinct from the ADR 0012 repair transaction.
 `session save-script` rejects a session with `saveScriptBoundary` set.

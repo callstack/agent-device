@@ -477,13 +477,6 @@ export async function materializeRemoteArtifacts(
   if (!info.baseUrl) return response;
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  // A batch answers with one entry per step, and a step's own script artifact sits inside its result,
-  // so a batch is delivered by its own path rather than as one payload.
-  if (req.command === BATCH_COMMAND) {
-    const data = response.data ?? {};
-    const disclosure = await deliverBatchScript(endpoint, req, data, stateDir);
-    return disclosure === undefined ? response : { ok: true, data: { ...data, ...disclosure } };
-  }
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
   if (
@@ -496,110 +489,6 @@ export async function materializeRemoteArtifacts(
   const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
   return await scripts.settleAfter(download);
 }
-
-/**
- * Delivers the session script of the steps a FAILED remote `batch` had completed, and answers the
- * fields its error should disclose about that delivery. The caller keeps its own error either way.
- *
- * Never throws: a request the daemon answered still has to settle with its own error.
- */
-export async function materializeRemoteBatchPartialArtifacts(
-  info: DaemonArtifactEndpoint,
-  req: DaemonWireRequest,
-  details: Record<string, unknown> | undefined,
-  stateDir: string,
-): Promise<Record<string, unknown> | undefined> {
-  if (!info.baseUrl || req.command !== BATCH_COMMAND || !Array.isArray(details?.partialResults))
-    return undefined;
-  try {
-    // The runner's own report travels with the step entries, so the one reader that decides what
-    // finished sees exactly what the daemon claimed about the failed run.
-    const data = {
-      results: details.partialResults,
-      step: details.step,
-      command: details.command,
-      executed: details.executed,
-    };
-    const disclosure = await deliverBatchScript(
-      { baseUrl: info.baseUrl, token: info.token },
-      req,
-      data,
-      stateDir,
-    );
-    return disclosure ? { ...details, ...disclosure } : undefined;
-  } catch (error) {
-    const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'session_script_delivery_failed',
-      data: { session: req.session, error: String(error) },
-    });
-    return undefined;
-  }
-}
-
-/**
- * Delivers a remote `batch` answer's session script: AT MOST ONE version, the newest of this client's
- * own recording that the answer proves the caller earned. Every version is the whole recording, so an
- * older one is worth nothing, and this never changes the batch's outcome. ONE validated prefix — the
- * steps the answer proves ran, of the recording this client armed — decides every part of it: which
- * recording is in play, which version to download, whether the recording is finished, and what to
- * disclose. A step the answer did not prove was run authorizes nothing, and disclosure does not wait
- * on a download or a retirement: a batch that delivers nothing still says why.
- */
-async function deliverBatchScript(
-  endpoint: Required<DaemonArtifactEndpoint>,
-  req: DaemonWireRequest,
-  data: Record<string, unknown>,
-  stateDir: string,
-): Promise<Record<string, unknown> | undefined> {
-  // Both owners load on demand: the batch readers pull in the command registry, and the script owner
-  // the download path, neither of which the client evaluates for a response that names no script.
-  const [{ hasScriptRecord, isPublishableScriptVersion, sessionScriptDelivery }, answer] =
-    await Promise.all([
-      import('./session-script-destination.ts'),
-      import('./remote-batch-answer.ts'),
-    ]);
-  // Only a recording THIS client armed with `open --save-script` is actionable: the record is found by
-  // hashing this client's own endpoint, tenant and session with the ID, so an ID the daemon invents
-  // owns nothing, delivers nothing and retires nothing. The answer repeats IDs across its steps, so each
-  // distinct one is looked up once.
-  const armed = new Map<string, boolean>();
-  const owns = (publicationId: string): boolean => {
-    const known = armed.get(publicationId);
-    if (known !== undefined) return known;
-    const fresh = hasScriptRecord(stateDir, endpoint.baseUrl, req, publicationId);
-    armed.set(publicationId, fresh);
-    return fresh;
-  };
-  const batch = answer.readBatchAnswer(req, data, isPublishableScriptVersion, owns);
-  // The answer's own list is rewritten the way a single response's is: its session-script entries are
-  // the owner's to answer for, and the one it delivers comes back with `localPath`.
-  const listed = asArtifacts(data.artifacts);
-  const listedScripts = listed.some(isSessionScriptArtifact);
-  const kept = listed.filter((artifact) => !isSessionScriptArtifact(artifact));
-  const payload: Record<string, unknown> = {};
-  const scripts = sessionScriptDelivery(
-    endpoint,
-    req,
-    { ok: true, data: payload },
-    stateDir,
-    downloadRemoteArtifact,
-    batch.closed ? batch.publicationId : undefined,
-  );
-  await scripts.settleAfter(async () => {
-    if (batch.version !== undefined) await scripts.publish(batch.version, payload, kept);
-    return { ok: true, data: payload };
-  });
-  return answer.readBatchDisclosure(data, payload, batch, listedScripts ? kept : undefined);
-}
-
-function asArtifacts(value: unknown): DaemonArtifact[] {
-  return Array.isArray(value) ? (value as DaemonArtifact[]) : [];
-}
-
-/** Command name of the request that runs several steps under one response. */
-const BATCH_COMMAND = 'batch';
 
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,
