@@ -126,31 +126,23 @@ final class AutomationCommandHandler {
 
     @Override
     public boolean start(long downTime) {
-      return inject(MotionEvent.ACTION_DOWN, downTime);
+      return inject(MotionEvent.ACTION_DOWN, downTime, 0, true);
     }
 
     @Override
-    public boolean end(long downTime) {
-      return inject(MotionEvent.ACTION_UP, downTime);
+    public boolean end(long downTime, boolean waitForDispatch) {
+      return inject(MotionEvent.ACTION_UP, downTime, 0, waitForDispatch);
     }
 
     /** The verifier records a dropped DOWN as a pointer that is still down; no window receives it. */
     @Override
     public void discardDroppedStart(long downTime) {
-      cancel(downTime);
+      cancelStart(downTime);
     }
 
     @Override
-    public void cancelStart(long downTime) {
-      cancel(downTime);
-    }
-
-    private void cancel(long downTime) {
-      inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
-    }
-
-    private boolean inject(int action, long downTime) {
-      return inject(action, downTime, 0, true);
+    public boolean cancelStart(long downTime) {
+      return inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
     }
 
     private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
@@ -174,12 +166,12 @@ final class AutomationCommandHandler {
 
     @Override
     public boolean start(long downTime) {
-      return inject(KeyEvent.ACTION_DOWN, downTime);
+      return inject(KeyEvent.ACTION_DOWN, downTime, 0, true);
     }
 
     @Override
-    public boolean end(long downTime) {
-      return inject(KeyEvent.ACTION_UP, downTime);
+    public boolean end(long downTime, boolean waitForDispatch) {
+      return inject(KeyEvent.ACTION_UP, downTime, 0, waitForDispatch);
     }
 
     /** The injection verifier checks motion events only, so a dropped key DOWN leaves no state. */
@@ -188,13 +180,13 @@ final class AutomationCommandHandler {
 
     /** Android releases an interrupted key with an ACTION_UP that carries FLAG_CANCELED. */
     @Override
-    public void cancelStart(long downTime) {
-      UiAutomationInputDispatcher.inject(automation, event(KeyEvent.ACTION_UP, downTime,
-          KeyEvent.FLAG_CANCELED), false);
+    public boolean cancelStart(long downTime) {
+      return inject(KeyEvent.ACTION_UP, downTime, KeyEvent.FLAG_CANCELED, false);
     }
 
-    private boolean inject(int action, long downTime) {
-      return UiAutomationInputDispatcher.inject(automation, event(action, downTime, 0), true);
+    private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
+      return UiAutomationInputDispatcher.inject(
+          automation, event(action, downTime, flags), waitForDispatch);
     }
 
     private KeyEvent event(int action, long downTime, int flags) {

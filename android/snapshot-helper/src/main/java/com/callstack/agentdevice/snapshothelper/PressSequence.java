@@ -19,6 +19,17 @@ final class PressSequence {
    */
   static final long INJECTION_TIMEOUT_MS = 30_000;
 
+  /** The framework's cap on one animation sync, {@code WindowManagerService.ANIMATION_COMPLETED_TIMEOUT_MS}. */
+  static final long ANIMATION_SYNC_TIMEOUT_MS = 5_000;
+
+  /**
+   * The longest one press may take, so the helper answers before the host's input timeout. A
+   * synchronous injection can block until {@link #INJECTION_TIMEOUT_MS}, so each one after the first
+   * starts only when that deadline still fits: the retry of a dropped start is skipped, and an end
+   * that does not fit is injected without waiting for dispatch.
+   */
+  static final long PRESS_BUDGET_MS = 40_000;
+
   /** Builds and injects the platform events of one press. */
   interface Injections {
     long now();
@@ -28,13 +39,14 @@ final class PressSequence {
 
     boolean start(long downTime);
 
-    boolean end(long downTime);
+    /** Injects the end event; without {@code waitForDispatch} it cannot report a refusal. */
+    boolean end(long downTime, boolean waitForDispatch);
 
     /** Closes the verifier state of a dropped start that has this down time. */
     void discardDroppedStart(long downTime);
 
-    /** Releases a start that has this down time and that the receiver may hold. */
-    void cancelStart(long downTime);
+    /** Releases a start that has this down time and that the receiver may hold; false if refused. */
+    boolean cancelStart(long downTime);
 
     /** Waits for the framework's animation sync; false when the runtime cannot wait separately. */
     boolean awaitAnimations();
@@ -44,6 +56,7 @@ final class PressSequence {
     DISPATCHED,
     START_REFUSED,
     START_TIMED_OUT,
+    START_TIMED_OUT_CANCEL_REFUSED,
     END_REFUSED,
     ANIMATION_SYNC_UNAVAILABLE,
   }
@@ -52,17 +65,23 @@ final class PressSequence {
     ACCEPTED,
     DROPPED,
     TIMED_OUT,
+    TIMED_OUT_CANCEL_REFUSED,
   }
 
   private PressSequence() {}
 
   static Outcome run(Injections injections) {
-    long downTime = injections.now();
+    long pressStart = injections.now();
+    long downTime = pressStart;
     Start start = start(injections, downTime);
     if (start == Start.DROPPED) {
       if (!injections.skipsAnimationWait()) return Outcome.START_REFUSED;
       discardDroppedStart(injections, downTime);
+      if (!fits(injections, pressStart, ANIMATION_SYNC_TIMEOUT_MS + INJECTION_TIMEOUT_MS)) {
+        return Outcome.START_REFUSED;
+      }
       if (!injections.awaitAnimations()) return Outcome.ANIMATION_SYNC_UNAVAILABLE;
+      if (!fits(injections, pressStart, INJECTION_TIMEOUT_MS)) return Outcome.START_REFUSED;
       downTime = injections.now();
       start = start(injections, downTime);
       if (start == Start.DROPPED) {
@@ -71,12 +90,18 @@ final class PressSequence {
       }
     }
     if (start == Start.TIMED_OUT) return Outcome.START_TIMED_OUT;
+    if (start == Start.TIMED_OUT_CANCEL_REFUSED) return Outcome.START_TIMED_OUT_CANCEL_REFUSED;
     // A refused end gets no cancel. The verifier records an event before the dispatcher drops it,
     // so the press is closed there and a cancel would be inconsistent. The dispatcher drops an end
     // only when no pointer or focus is still down, after it cancelled the receiving window itself
     // ("touched window was removed", "focus left window"). A timed-out end was already enqueued,
     // so the live window still receives it.
-    return injections.end(downTime) ? Outcome.DISPATCHED : Outcome.END_REFUSED;
+    boolean waitForDispatch = fits(injections, pressStart, INJECTION_TIMEOUT_MS);
+    return injections.end(downTime, waitForDispatch) ? Outcome.DISPATCHED : Outcome.END_REFUSED;
+  }
+
+  private static boolean fits(Injections injections, long pressStart, long waitMs) {
+    return injections.now() - pressStart + waitMs <= PRESS_BUDGET_MS;
   }
 
   /** Turns an outcome into the helper's response: a typed exception for each failed press. */
@@ -90,6 +115,9 @@ final class PressSequence {
       case START_TIMED_OUT:
         throw new TimeoutException(
             kind + " injection timed out before the app finished handling it; it was cancelled");
+      case START_TIMED_OUT_CANCEL_REFUSED:
+        throw new TimeoutException(kind + " injection timed out before the app finished handling"
+            + " it, and its cancel was refused, so the app may still hold it");
       case START_REFUSED:
       case END_REFUSED:
         throw new IllegalStateException(kind + " injection was refused");
@@ -103,12 +131,13 @@ final class PressSequence {
   private static Start start(Injections injections, long downTime) {
     if (injections.start(downTime)) return Start.ACCEPTED;
     if (injections.now() - downTime < INJECTION_TIMEOUT_MS) return Start.DROPPED;
+    boolean cancelled;
     try {
-      injections.cancelStart(downTime);
-    } catch (RuntimeException ignored) {
-      // The timed-out start stays the reported failure.
+      cancelled = injections.cancelStart(downTime);
+    } catch (RuntimeException error) {
+      cancelled = false;
     }
-    return Start.TIMED_OUT;
+    return cancelled ? Start.TIMED_OUT : Start.TIMED_OUT_CANCEL_REFUSED;
   }
 
   private static void discardDroppedStart(Injections injections, long downTime) {

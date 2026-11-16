@@ -33,3 +33,28 @@ test('Android helper input reaches the framework only through the dispatcher wit
     /method\.invoke\(automation, event, waitForDispatch, false\)/,
   );
 });
+
+test('the host waits longer for helper input than the helper may spend on one press', () => {
+  const pressBudgetMs = Number(
+    fs
+      .readFileSync(
+        path.join(helperSourceDir, path.dirname(dispatcherFile), 'PressSequence.java'),
+        'utf8',
+      )
+      .match(/static final long PRESS_BUDGET_MS = ([\d_]+);/)?.[1]
+      ?.replaceAll('_', ''),
+  );
+  const hostInputTimeoutMs = Number(
+    fs
+      .readFileSync(
+        path.join(repoRoot, 'packages/platform-android/src/automation-helper.ts'),
+        'utf8',
+      )
+      .match(/input: \{ mutation: true, timeoutMs: ([\d_]+) \}/)?.[1]
+      ?.replaceAll('_', ''),
+  );
+  assert.ok(pressBudgetMs > 0, 'PressSequence.PRESS_BUDGET_MS must be readable');
+  assert.ok(hostInputTimeoutMs > 0, 'the host input timeout must be readable');
+  // The margin covers the socket round trip and the async cancel after the budget.
+  assert.ok(hostInputTimeoutMs >= pressBudgetMs + 5_000);
+});

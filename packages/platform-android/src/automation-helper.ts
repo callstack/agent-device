@@ -38,7 +38,9 @@ type AndroidHelperAppResult =
   | { kind: 'launched'; output: string };
 
 const ACTION_POLICY = {
-  input: { mutation: true, timeoutMs: 30_000 },
+  // Above the helper's press budget (PressSequence.PRESS_BUDGET_MS), so the helper's typed answer
+  // for a press that waited out the framework's injection deadline arrives before this timeout.
+  input: { mutation: true, timeoutMs: 45_000 },
   app: { mutation: true, timeoutMs: 30_000 },
   screenshot: { mutation: false, timeoutMs: 30_000 },
   focus: { mutation: false, timeoutMs: 2_000 },
