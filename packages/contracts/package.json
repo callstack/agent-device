@@ -571,6 +571,10 @@
     "./replay-test-execution": {
       "types": "./src/replay-test-execution.ts",
       "default": "./src/replay-test-execution.ts"
+    },
+    "./replay-execution": {
+      "types": "./src/replay-execution.ts",
+      "default": "./src/replay-execution.ts"
     }
   },
   "devDependencies": {
