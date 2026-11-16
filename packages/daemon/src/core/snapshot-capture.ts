@@ -26,7 +26,10 @@ import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-e
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { clearAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
-import type { SnapshotFreshnessMode } from '@agent-device/capture-kit/snapshot-freshness';
+import {
+  provesFreshAndroidTraversal,
+  type SnapshotFreshnessMode,
+} from '@agent-device/capture-kit/snapshot-freshness';
 import { contextFromFlags } from './context.ts';
 import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './session-state.ts';
@@ -149,6 +152,7 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   if (annotations.androidSnapshot?.systemSurfaceOnly === true) {
     snapshot.systemSurfaceOnly = true;
   }
+  if (provesFreshAndroidTraversal(annotations.androidSnapshot)) snapshot.freshTraversal = true;
   return { data, snapshot, annotations };
 }
 

@@ -7,6 +7,7 @@ export {
   buildSnapshotSignatures,
   isLikelyStaleSnapshotDrop,
   isNavigationSensitiveAction,
+  provesFreshAndroidTraversal,
 } from './android.ts';
 export {
   captureFreshnessRecoveredAttempt,
