@@ -264,6 +264,7 @@ function removeRecord(file: string): void {
       writeRecord(file, { ...settlePublishing(record), retired: true });
     } catch (error) {
       fs.rmSync(file, { force: true });
+      removeStagingQuietly(record);
       throw error;
     }
   }
@@ -271,6 +272,17 @@ function removeRecord(file: string): void {
     fs.rmSync(staging, { recursive: true, force: true });
   }
   fs.rmSync(file, { force: true });
+}
+
+/** Once its record is gone nothing lists these directories, so each gets one removal attempt. */
+function removeStagingQuietly(record: ScriptRecord): void {
+  for (const staging of record.staging ?? []) {
+    try {
+      fs.rmSync(staging, { recursive: true, force: true });
+    } catch {
+      // Left behind for the user; it holds only a partial script version.
+    }
+  }
 }
 
 /**

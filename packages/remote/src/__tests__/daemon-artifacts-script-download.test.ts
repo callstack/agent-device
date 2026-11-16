@@ -542,12 +542,19 @@ test('a close whose staging cannot be removed still ends the record before a del
   expect(delayed.ok && delayed.data?.savedScript).toBeFalsy();
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(fs.existsSync(stuck)).toBe(true);
+  expect(JSON.parse(fs.readFileSync(recordFile, 'utf8'))).toMatchObject({ retired: true });
 });
 
 test('a close that cannot mark its record retired removes the record instead', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, v3: { body: 'forged\n' } });
   const { id } = await open(baseUrl, stateDir, destination);
+  const [name] = records(stateDir);
+  const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
+  const staging = path.join(path.dirname(destination), '.agent-device-script-listed');
+  fs.mkdirSync(staging);
+  const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, staging: [staging] }));
   const publish = vi.mocked(file.publishFileSync);
   const realPublish = publish.getMockImplementation();
   publish.mockImplementation((options) => {
@@ -555,8 +562,9 @@ test('a close that cannot mark its record retired removes the record instead', a
     return realPublish?.(options);
   });
 
+  let closed: DaemonResponse;
   try {
-    await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
+    closed = await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
   } finally {
     publish.mockImplementation(realPublish as typeof file.publishFileSync);
   }
@@ -564,7 +572,9 @@ test('a close that cannot mark its record retired removes the record instead', a
     artifacts: [script('v3', 3, id)],
   });
 
+  expect(closed).toEqual({ ok: true, data: { scriptPublicationId: id } });
   expect(records(stateDir)).toEqual([]);
+  expect(fs.existsSync(staging)).toBe(false);
   expect(delayed.ok && delayed.data?.savedScript).toBeFalsy();
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });
