@@ -5,6 +5,36 @@ import AgentDeviceSnapshotPresentation
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
+  func testPrivateAXRootViewportReportsOnlyAFullScreenRootAtTheOrigin() {
+    let screen = CGRect(x: 0, y: 0, width: 440, height: 956)
+    XCTAssertEqual(
+      Self.privateAXRootViewport(rootFrame: screen, fullScreenFrame: screen),
+      .reported(box: screen, interfaceOrientation: RunnerInterfaceOrientation.unknown)
+    )
+    // No full-screen proof: a placed window's local root looks the same as a full-screen one (#4399).
+    XCTAssertEqual(
+      Self.privateAXRootViewport(rootFrame: screen, fullScreenFrame: .null),
+      .derived(box: screen)
+    )
+    let placed = CGRect(x: 0, y: 0, width: 551, height: 813)
+    XCTAssertEqual(
+      Self.privateAXRootViewport(rootFrame: placed, fullScreenFrame: CGRect(x: 0, y: 0, width: 1024, height: 1366)),
+      .derived(box: placed)
+    )
+    let offset = CGRect(x: 0, y: 20, width: 440, height: 956)
+    XCTAssertEqual(
+      Self.privateAXRootViewport(rootFrame: offset, fullScreenFrame: offset),
+      .derived(box: offset)
+    )
+    // Measured on an iPhone 17 Pro Max simulator in landscape: the private AX root is in interface
+    // space, and AXRuntime reports the screen in native portrait space.
+    let landscape = CGRect(x: 0, y: 0, width: 956, height: 440)
+    XCTAssertEqual(
+      Self.privateAXRootViewport(rootFrame: landscape, fullScreenFrame: screen),
+      .derived(box: landscape)
+    )
+  }
+
   func testPrivateAXAttemptDepthsAppliesRememberedDepth() {
     XCTAssertEqual(
       Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: nil),

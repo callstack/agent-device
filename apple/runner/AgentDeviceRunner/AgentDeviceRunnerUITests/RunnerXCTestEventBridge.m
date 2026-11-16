@@ -436,7 +436,10 @@ CGSize RunnerSoleScreenSize(void) {
 // One contained probe: it checks each selector before sending it and reads the target pid and both
 // frames inside one exception scope, so any failed read answers Unknown. The target pid comes from
 // the existing runner owner for that read (RunnerAXSnapshotBridge).
-static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application) {
+static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreenFrame(
+  id application,
+  CGRect *_Nullable screenFrame
+) {
   if (application == nil) {
     return RunnerFullScreenEvidenceUnknown;
   }
@@ -470,7 +473,20 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
   if (exception != nil) {
     return RunnerFullScreenEvidenceUnknown;
   }
+  if (screenFrame != NULL) *screenFrame = screen;
   return RunnerFullScreenEvidenceFromForeground(targetProcessID, primaryProcessID, window, screen);
+}
+
+static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application) {
+  return RunnerProbeApplicationFillsScreenFrame(application, NULL);
+}
+
+CGRect RunnerFullScreenApplicationFrame(id application) {
+  CGRect screen = CGRectNull;
+  if (RunnerProbeApplicationFillsScreenFrame(application, &screen) != RunnerFullScreenEvidenceFillsScreen) {
+    return CGRectNull;
+  }
+  return screen;
 }
 
 #endif
