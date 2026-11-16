@@ -4,7 +4,7 @@ import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
   type ReplayVarScrubEntry,
-} from '@agent-device/ad-replay/divergence';
+} from '@agent-device/contracts/replay-divergence-data';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { computeReplayRepairHint } from './repair-hint.ts';
