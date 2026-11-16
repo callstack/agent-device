@@ -109,6 +109,26 @@ test('preserves a file fsync error when descriptor cleanup also fails', () => {
   expect(temporaryPaths(root, destination)).toEqual([]);
 });
 
+test('recognizes a temp path spelled through the directory the entry is really created in', () => {
+  // The temp file is a sibling of the destination AS THE FILESYSTEM RESOLVES IT, because that is where the
+  // entry is created. A destination spelled through a symbolic link (`/var` on macOS) therefore has its
+  // temp file one directory over in text, and a caller that compared the two spellings as strings would
+  // call every one of those temp files somebody else's.
+  const root = fixtureRoot('alias');
+  const physical = path.join(root, 'physical');
+  fs.mkdirSync(physical);
+  const alias = path.join(root, 'alias');
+  fs.symlinkSync(physical, alias);
+  const destination = path.join(alias, 'report.json');
+  const staged = path.join(fs.realpathSync(physical), `.report.json.${process.pid}-0000.tmp`);
+
+  expect(isAtomicPublishTemporaryPath(staged, destination)).toBe(true);
+  // Still one directory's worth of names: a sibling that is not this destination's temp file is not it.
+  expect(
+    isAtomicPublishTemporaryPath(path.join(fs.realpathSync(physical), '.other.1.tmp'), destination),
+  ).toBe(false);
+});
+
 function fixtureRoot(label: string): string {
   const root = mkdtempForTestSync(`agent-device-durable-file-${label}-`);
   roots.push(root);

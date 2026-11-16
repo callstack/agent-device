@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-import { lstatIfPresent } from './verified-file.ts';
 
 export type AtomicPublishMode = 'replace' | 'link-exclusive';
 
@@ -194,12 +193,45 @@ function syncDirectoryBestEffort(directory: string): void {
   }
 }
 
-/** Identifies a temp path produced for a particular destination. */
+/**
+ * `lstat` that treats absence as `undefined`; every other errno propagates.
+ *
+ * Owned here, not in a module of its own, because the publish rule sits on the daemon's startup path: a
+ * new module on that edge makes eager code every entry that publishes a file pays for today. The
+ * verified-file guards ask the same question, and this module is on their path already.
+ */
+export function lstatIfPresent(pathname: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(pathname);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+/**
+ * Identifies a temp path produced for a particular destination.
+ *
+ * The temp file is a sibling of the destination AS THE FILESYSTEM RESOLVES IT, because that is where the
+ * entry is created. A destination spelled through a symbolic link (`/var` on macOS) therefore has its temp
+ * file one directory over in TEXT, so a caller that compared the two spellings as strings would call every
+ * one of those temp files somebody else's.
+ */
 export function isAtomicPublishTemporaryPath(value: unknown, destination: string): boolean {
   if (typeof value !== 'string') return false;
-  if (path.dirname(value) !== path.dirname(destination)) return false;
   const name = path.basename(value);
-  return name.startsWith(`.${path.basename(destination)}.`) && name.endsWith('.tmp');
+  if (!name.startsWith(`.${path.basename(destination)}.`) || !name.endsWith('.tmp')) return false;
+  return sameDirectory(path.dirname(value), path.dirname(destination));
+}
+
+/** Whether two directory spellings name one directory, once the filesystem resolves them. */
+function sameDirectory(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    return fs.realpathSync(left) === fs.realpathSync(right);
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -1,6 +1,7 @@
 export {
   assertPrivateScriptDestination,
   isAtomicPublishTemporaryPath,
+  lstatIfPresent,
   publishDirectoryIdentity,
   publishDurableFileSync,
   publishFileSync,
@@ -8,7 +9,6 @@ export {
   type DurableFilePublishMode,
 } from './internal/atomic-file.ts';
 export {
-  lstatIfPresent,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
