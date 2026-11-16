@@ -3,7 +3,7 @@
  * the display rotation. A read still running at the deadline yields `undefined`; the caller then
  * aborts it and reports the fact as absent.
  */
-export async function settledWithin<T>(
+export async function resolvedWithinGrace<T>(
   pending: Promise<T>,
   graceMs: number,
 ): Promise<T | undefined> {

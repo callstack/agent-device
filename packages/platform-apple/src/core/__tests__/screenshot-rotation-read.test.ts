@@ -85,6 +85,39 @@ test('a known single-panel read gets a 2 s budget and 250 ms after the image, th
   }
 });
 
+test('a known single-panel read waits out its grace after the status bar is released', async () => {
+  const events: string[] = [];
+  let finishProbe!: () => void;
+  const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    env: process.env,
+    skipIosSimulatorBootCheck: true,
+    deps: {
+      ensureBooted: async () => {},
+      normalizeDensity: async () => {},
+      isKnownSinglePanel: () => true,
+      withStatusBarHeld: async (_device, capture) => {
+        const result = await capture();
+        events.push('released');
+        // The read answers only once the bar is free, so a grace inside the hold would miss it.
+        finishProbe();
+        return result;
+      },
+      resolveCaptureTarget: async () => {
+        await new Promise<void>((resolve) => {
+          finishProbe = resolve;
+        });
+        events.push('read');
+        return { displayRotation: 'landscape-right' };
+      },
+      captureWithRetry: async () => {
+        events.push('capture');
+      },
+    },
+  });
+  assert.deepEqual(events, ['capture', 'released', 'read']);
+  assert.deepEqual(facts, { displayRotation: 'landscape-right' });
+});
+
 test('a known single-panel capture reports no rotation when its read fails', async () => {
   const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
     env: process.env,

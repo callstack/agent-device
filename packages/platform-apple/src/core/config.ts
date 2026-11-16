@@ -66,8 +66,9 @@ export const IOS_FOLDABLE_ORIENTATION_SETTLE_MS = 600;
 export const IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS = 15_000;
 // A known single-panel capture reads its rotation beside the image, within this budget.
 export const IOS_SIMULATOR_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS = 2_000;
-// A rotation read still running this long after the image is written is aborted, and the capture
-// reports no rotation: the rotation is optional metadata and must not delay the image.
+// A rotation read still running this long after the image is written and the simulator's status
+// bar is released is aborted, and the capture reports no rotation: the rotation is optional
+// metadata and must not delay the image.
 export const IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS = 250;
 
 /**

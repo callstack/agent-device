@@ -17,7 +17,7 @@ import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
-import { settledWithin } from '@agent-device/capture-kit/capture-fact-grace';
+import { resolvedWithinGrace } from '@agent-device/capture-kit/capture-fact-grace';
 import { computeDensityScaledScreenshotSize } from '@agent-device/capture-kit/screenshot-density';
 import {
   IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
@@ -208,18 +208,18 @@ export async function captureSimulatorScreenshotWithFallback(
     return await observesSimulatorShutdown(device, error, options.runnerOptions?.signal);
   };
 
-  const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
+  const captureWithFallback = async (): Promise<void> => {
     if (resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner') {
       try {
         await captureAndNormalize();
-        return await readCaptureFacts();
+        return;
       } catch (error) {
         let screenshotError = error;
         if (await mayRecoverSkippedBootCheck(error)) {
           await deps.ensureBooted(device);
           try {
             await captureAndNormalize();
-            return await readCaptureFacts();
+            return;
           } catch (retryError) {
             screenshotError = retryError;
           }
@@ -243,13 +243,14 @@ export async function captureSimulatorScreenshotWithFallback(
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
-    return await readCaptureFacts();
   };
 
   const holdStatusBar =
     options.normalizeStatusBar === true ? deps.withNormalizedStatusBar : deps.withStatusBarHeld;
   try {
-    return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+    await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+    // The rotation read is metadata, so its grace runs after the status bar is released.
+    return await readCaptureFacts();
   } finally {
     cancelRotationRead();
   }
@@ -257,7 +258,7 @@ export async function captureSimulatorScreenshotWithFallback(
 
 type CaptureTargetPlan = {
   display: AppleDeviceDisplay | undefined;
-  /** The facts to report once the image is written. */
+  /** The facts to report once the image is written and the status bar is released. */
   readCaptureFacts: () => Promise<ScreenshotCaptureFacts>;
   /** Stops a rotation read that runs beside the capture. */
   cancelRotationRead: () => void;
@@ -302,7 +303,7 @@ async function planCaptureTarget(
     display: undefined,
     readCaptureFacts: async () => {
       try {
-        const displayRotation = await settledWithin(
+        const displayRotation = await resolvedWithinGrace(
           rotation,
           IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
         );

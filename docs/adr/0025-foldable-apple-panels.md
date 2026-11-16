@@ -762,7 +762,7 @@ This amendment narrows the capture rule "first resolve the panel table" to devic
 The display inventory caches each device's multi-panel verdict from its latest resolved table for the daemon's lifetime; an unresolved read does not change it.
 When the verdict is single-panel, the capture names no display, so the table read only supplies `displayRotation`.
 That read then starts beside `simctl io screenshot` with a 2s budget, in both simulator sets.
-A read still running 250ms after the image is written is aborted, and the capture reports no rotation, as for an unresolved table.
+A read still running 250ms after the image is written and the status bar is released is aborted, and the capture reports no rotation, as for an unresolved table.
 A multi-panel device or a device with no resolved verdict keeps the read before the capture, so a fold still names the lit panel.
 If a read beside a capture resolves to a multi-panel table, including one that refuses with `capture-panel-unidentified`, that capture has already gone out without `--display`. It takes simctl's implicit default and can be the dark-panel black image.
 The capture then emits `apple_display_single_panel_count_stale` with a retake hint, and the resolved read replaces the verdict, so the next capture reads the table before it captures and names the lit panel.

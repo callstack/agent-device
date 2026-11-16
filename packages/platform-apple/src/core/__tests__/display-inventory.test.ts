@@ -625,7 +625,8 @@ describe('knownAppleMultiScreen', () => {
   });
 
   test('a read its caller aborted reports the cancellation, not a toolchain failure', async () => {
-    // Callers' hints (fold, orientation) point at this diagnostic, so it must fire and say why.
+    // The fold hint points at this diagnostic, so a CoreDevice read its caller aborted must still
+    // fire it and say why. A guest read rethrows the cancellation instead and reaches no hint.
     const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-aborted-read` };
     const controller = new AbortController();
     mockRunXcrun.mockImplementationOnce(async () => {
@@ -639,6 +640,7 @@ describe('knownAppleMultiScreen', () => {
       .filter((event) => event.phase === 'apple_display_inventory_unresolved');
     assert.equal(unresolved.length, 1);
     assert.equal(unresolved[0]?.data?.reason, 'probe-canceled');
+    assert.equal(unresolved[0]?.level, 'info', 'a canceled read is expected, not a warning');
     assert.equal(unresolved[0]?.data?.hint, undefined);
     assert.equal(knownAppleMultiScreen(device), undefined);
   });

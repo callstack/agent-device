@@ -240,7 +240,8 @@ function countIntegratedEntries(payload: unknown): number {
 
 function emitUnresolvedDiagnostic(device: DeviceInfo, reason: string, detail: string): void {
   emitDiagnostic({
-    level: 'warn',
+    // A read its caller stopped, such as a rotation read past its grace, is expected under load.
+    level: reason === 'probe-canceled' ? 'info' : 'warn',
     phase: 'apple_display_inventory_unresolved',
     data: {
       platform: device.platform,
