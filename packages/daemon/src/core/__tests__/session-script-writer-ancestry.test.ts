@@ -152,6 +152,49 @@ skipOnWindows('a recording refuses a destination inside a directory another user
   expect(fs.existsSync(destination)).toBe(false);
 });
 
+skipOnWindows('a recording refuses a directory another user made sticky and owns', () => {
+  const directory = root();
+  // `chmod 1777` on a directory of THEIRS: the sticky bit keeps me from clearing their entries, and does
+  // nothing to stop them renaming the component my path runs through.
+  const team = path.join(directory, 'team');
+  fs.mkdirSync(team);
+  fs.chmodSync(team, 0o1777);
+  const destination = path.join(team, 'journey.ad');
+  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'foreign_owned',
+    ancestor: team,
+  });
+  expect(fs.readdirSync(team)).toEqual([]);
+});
+
+skipOnWindows('a recording refuses a shared directory another user claimed first', () => {
+  const directory = root();
+  // The `mkdir -p <shared>/recordings` shape in a sticky shared directory: whoever creates it owns it,
+  // and the owner can swap it for one of their own whenever they like.
+  const tmp = path.join(directory, 'tmp');
+  fs.mkdirSync(tmp);
+  fs.chmodSync(tmp, 0o1777);
+  const recordings = path.join(tmp, 'recordings');
+  fs.mkdirSync(recordings);
+  fs.chmodSync(recordings, 0o755);
+  const destination = path.join(recordings, 'journey.ad');
+  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'foreign_owned',
+    ancestor: recordings,
+  });
+  expect(fs.readdirSync(recordings)).toEqual([]);
+});
+
 skipOnWindows('a recording refuses an ancestor swapped out for a symbolic link', () => {
   const directory = root();
   const shared = sharedDirectory(path.join(directory, 'shared'), 0o777);
