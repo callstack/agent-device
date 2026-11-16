@@ -131,7 +131,7 @@ async function cloudWebDriverOptions(
   if (!plugin_.setup)
     throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
   const created = (await plugin_.setup({
-    ...createPluginHost(PROVIDER_ENV, undefined),
+    ...createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined),
     clientVersion: '0.0.0',
     runHostCommand,
   })) as {

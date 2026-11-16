@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   ReplayExecution,
   ReplayExecutionResolver,
@@ -63,12 +64,12 @@ async function resolveBackend(
 /** Uses the embedded registry, or owns a client-side store scope until the task settles. */
 export async function withReplayBackend<T>(
   id: ReplayBackendId,
-  env: NodeJS.ProcessEnv,
+  host: HostEnvironment,
   run: (backend: ReplayBackend) => Promise<T> | T,
   resolve?: ReplayBackendResolver,
 ): Promise<T> {
   if (resolve) return await run(await resolveBackend(id, resolve));
-  const scope = await openReplayBackend(id, env);
+  const scope = await openReplayBackend(id, host);
   try {
     return await run(scope.backend);
   } finally {
@@ -77,7 +78,7 @@ export async function withReplayBackend<T>(
 }
 
 /** A client/tooling scope owns its plugin registry until close. It never starts providers. */
-export async function openReplayBackend(id: ReplayBackendId, env: NodeJS.ProcessEnv) {
+export async function openReplayBackend(id: ReplayBackendId, host: HostEnvironment) {
   const { AppError } = await import('@agent-device/kernel/errors');
   const packageName = await backendPackage(id);
   const [{ storePluginCandidates }, { resolveProviderPlugins, startProviderRegistry }] =
@@ -87,9 +88,11 @@ export async function openReplayBackend(id: ReplayBackendId, env: NodeJS.Process
     ]);
   const registry = await startProviderRegistry(
     await resolveProviderPlugins(
-      (await storePluginCandidates(env)).filter((candidate) => candidate.package === packageName),
+      (await storePluginCandidates(host.env)).filter(
+        (candidate) => candidate.package === packageName,
+      ),
     ),
-    env,
+    host,
     {
       adaptWebDriver: async () => {
         throw new AppError('INVALID_ARGS', 'Client replay scope cannot start a provider');

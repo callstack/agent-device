@@ -6,7 +6,7 @@ import { readVersion } from '@agent-device/host-kit/version';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
-import { type EnvMap } from '@agent-device/kernel/source-value';
+import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
@@ -182,7 +182,7 @@ async function resolveProviderConnectionProfile(
 
 export async function verifyResolvedConnectProvider(
   resolved: ResolvedConnectProfile,
-  env: EnvMap,
+  host: HostEnvironment,
 ): Promise<ConnectVerification> {
   if (!resolved.provider) {
     return {
@@ -194,7 +194,8 @@ export async function verifyResolvedConnectProvider(
   }
   const context = {
     flags: resolved.flags,
-    env,
+    env: host.env,
+    cwd: host.cwd,
   };
   const adapter = builtinConnectAdapter(resolved.provider);
   return adapter

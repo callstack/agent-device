@@ -180,7 +180,7 @@ test('AWS Device Farm facade rejects device features it does not read at session
 }, 15_000);
 
 async function testMuWebDriver(env: Record<string, string>) {
-  const setup = await testmu().setup(createPluginHost(env, undefined));
+  const setup = await testmu().setup(createPluginHost({ env, cwd: '/' }, undefined));
   if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
   return setup.webDriver;
 }

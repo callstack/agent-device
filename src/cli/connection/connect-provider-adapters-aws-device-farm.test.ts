@@ -11,7 +11,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { verifyAwsDeviceFarmConnection } from '@agent-device/aws-device-farm/connection-verification';
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
-import { resolveConnectProviderProfile } from './connect-provider-adapters.ts';
+import {
+  resolveConnectProviderProfile,
+  verifyResolvedConnectProvider,
+} from './connect-provider-adapters.ts';
 import {
   mkdtempForTestSync,
   pluginHome,
@@ -48,6 +51,42 @@ afterEach(() => {
 });
 
 const mockedVerifyAwsDeviceFarmConnection = vi.mocked(verifyAwsDeviceFarmConnection);
+
+test('connection verification carries the caller host to the provider command', async () => {
+  const cwd = fs.realpathSync(mkdtempForTestSync('connect-aws-host-'));
+  let observed: unknown;
+  mockedVerifyAwsDeviceFarmConnection.mockImplementationOnce(async (_options, run) => {
+    const result = await run(process.execPath, [
+      '-e',
+      'process.stdout.write(JSON.stringify([process.cwd(), process.env.CONNECT_HOST_VALUE]))',
+    ]);
+    observed = JSON.parse(result.stdout);
+    return {
+      provider: 'aws-device-farm',
+      service: 'AWS Device Farm',
+      verificationMessage: 'ok',
+      project: { reference: 'project' },
+      device: { status: 'verified' },
+      app: { status: 'missing' },
+    };
+  });
+  await verifyResolvedConnectProvider(
+    {
+      provider: 'aws-device-farm',
+      remoteConfigPath: '/unused',
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        platform: 'ios',
+        awsProjectArn: 'project',
+        awsDeviceArn: 'device',
+      },
+    },
+    { cwd, env: { CONNECT_HOST_VALUE: 'supplied' } },
+  );
+  assert.deepEqual(observed, [cwd, 'supplied']);
+});
 
 let pluginHomeDir = '';
 

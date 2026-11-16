@@ -319,7 +319,7 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input, host, deps) => 
         await import('@agent-device/replay-port/replay-backend-registry')
       ).withReplayBackend(
         'maestro',
-        host.env,
+        host,
         (backend) => collectSources(async () => backend),
         deps?.resolveReplayBackend,
       )

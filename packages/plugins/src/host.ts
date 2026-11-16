@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
 
@@ -17,17 +18,19 @@ export type ProviderPluginHost = Readonly<{
 }>;
 
 export function createPluginHost(
-  env: NodeJS.ProcessEnv,
+  host: HostEnvironment,
   options: Record<string, unknown> | undefined,
 ): ProviderPluginHost {
   return Object.freeze({
-    env: Object.freeze({ ...env }),
+    env: Object.freeze({ ...host.env }),
     options: Object.freeze({ ...options }),
     clientVersion: readVersion(),
     createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async (command, args) => {
       const { runCmd } = await import('@agent-device/host-kit/command');
       const { stdout } = await runCmd(command, [...args], {
+        cwd: host.cwd,
+        env: host.env,
         maxBuffer: 10 * 1024 * 1024,
         timeoutMs: 30_000,
       });

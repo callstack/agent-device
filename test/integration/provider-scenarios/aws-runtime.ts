@@ -12,7 +12,7 @@ async function awsDeviceFarmWebDriver(
   runHostCommand: RunHostCommand,
 ) {
   const setup = await awsDeviceFarm().setup({
-    ...createPluginHost(env, undefined),
+    ...createPluginHost({ env, cwd: '/' }, undefined),
     clientVersion,
     runHostCommand,
   });
