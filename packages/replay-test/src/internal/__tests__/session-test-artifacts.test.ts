@@ -9,7 +9,7 @@ import {
   prepareReplayTestAttemptArtifacts,
   resolveReplayTestArtifactsDir,
 } from '../session-test-artifacts.ts';
-import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+import type { ReplayTestAttemptOutcome } from '@agent-device/contracts/replay-test-execution';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test('resolveReplayTestArtifactsDir falls back to the default root when artifactsDir is omitted', () => {

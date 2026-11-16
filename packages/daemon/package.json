@@ -5,7 +5,6 @@
   "type": "module",
   "description": "The agent-device daemon server: request routing, sessions, leases, device claims, snapshot and interaction handling. Internal workspace package bundled into the published agent-device artifact (#3352 daemon extraction).",
   "dependencies": {
-    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
@@ -31,7 +30,8 @@
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
-    "@agent-device/maestro": "workspace:*"
+    "@agent-device/maestro": "workspace:*",
+    "@agent-device/ad-replay": "workspace:*"
   },
   "exports": {
     ".": {

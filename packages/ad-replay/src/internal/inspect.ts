@@ -1,13 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { SessionAction } from '@agent-device/contracts/session';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
   resolveDeclaredScriptPlatform,
-  type ReplayScriptMetadata,
 } from '@agent-device/ad-script';
 import { computeReplayPlanDigest } from './plan-digest.ts';
-import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts';
+import { resolveReplayEntryIndex } from './resume.ts';
 
 /**
  * #1478 P5 stage C2b: the read-only `.ad` inspection façade. Moved out of
@@ -29,23 +27,10 @@ import { resolveReplayEntryIndex, type PendingRecordAndHeal } from './resume.ts'
  * new top-level façade export — they are plain data/a closure hanging off
  * the manifest object `inspectAdReplay` already returns.
  */
-export type AdReplayManifest = Readonly<{
-  actions: SessionAction[];
-  actionLines: number[];
-  metadata: ReplayScriptMetadata;
-  /** SHA-256 digest of the canonical plan (`digestFlags` binds the same platform/target the replay invokes with). */
-  planDigest: string;
-  /** The `--from`/`--plan-digest` resume-point math, closed over this manifest's own `actions`/`planDigest`. */
-  resolveEntryIndex(params: {
-    from: number | undefined;
-    digest: string | undefined;
-    pendingRecordAndHeal: PendingRecordAndHeal | undefined;
-    sessionActionsLength: number;
-  }): { ok: true; value: number } | { ok: false; message: string };
-}>;
-
-/** The request-level `--platform`/`--target` override the plan digest binds (raw flags, before any metadata merge). */
-export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string }>;
+import type {
+  AdReplayManifest,
+  AdReplayDigestFlags,
+} from '@agent-device/contracts/ad-replay-execution';
 
 /**
  * Parses one `.ad` script's TEXT and returns its actions/line table, header
