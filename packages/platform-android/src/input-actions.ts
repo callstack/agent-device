@@ -166,6 +166,11 @@ async function settleAndroidOrientation(
   let observed = await readAndroidDisplayRotation(device, orientation, deadline);
   while (observed !== undefined && observed !== userRotation && Date.now() < deadline) {
     await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, remainingMs(deadline)));
+    // The wait can consume the rest of the budget. A read admitted at or after the deadline would
+    // run on `remainingMs`'s 1 ms floor, could never answer, and its adb timeout would replace the
+    // "did not take effect" fact below (#4562). Recheck the deadline after the wait and keep the
+    // rotation the last in-budget read reported.
+    if (Date.now() >= deadline) break;
     observed = await readAndroidDisplayRotation(device, orientation, deadline);
   }
   if (observed === undefined || observed === userRotation) return;

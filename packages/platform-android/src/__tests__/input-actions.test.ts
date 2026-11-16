@@ -499,7 +499,39 @@ test('pressAndroid dispatches no failure suppression even when one is smuggled p
 });
 
 // The orientation settle polls at its own interval; the clock is the assertion, not the wait.
-vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
+// A test arms `onSleep` to make the wait consume wall clock, as a real settle wait does.
+const { orientationWait, orientationSleep } = vi.hoisted(() => {
+  const wait: { slept: number[]; onSleep: ((ms: number) => void) | undefined } = {
+    slept: [],
+    onSleep: undefined,
+  };
+  return {
+    orientationWait: wait,
+    orientationSleep: async (ms: number) => {
+      wait.slept.push(ms);
+      wait.onSleep?.(ms);
+    },
+  };
+});
+vi.mock('@agent-device/host-kit/retry', () => ({ sleep: orientationSleep }));
+
+/**
+ * Runs a settle with its wait consuming wall clock, as a real settle wait does, and hands the test
+ * the waits the loop took.
+ */
+async function withClockConsumingOrientationWait<T>(
+  run: (slept: number[]) => Promise<T>,
+): Promise<T> {
+  orientationWait.slept.length = 0;
+  orientationWait.onSleep = (ms) => {
+    vi.setSystemTime(Date.now() + ms);
+  };
+  try {
+    return await run(orientationWait.slept);
+  } finally {
+    orientationWait.onSleep = undefined;
+  }
+}
 
 const ORIENTATION_CALLS = [
   ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
@@ -559,6 +591,104 @@ test('setAndroidOrientation fails when the display never reports the requested r
   }
 });
 
+test('a wait that lands on the deadline ends the settle on the last rotation, not a floor-budget read', async () => {
+  // #4562: the deadline was checked only before the wait, so the loop woke at the deadline and
+  // started one more `dumpsys display` on the 1 ms floor of `remainingMs`. No real read answers
+  // inside that floor, and its adb timeout replaced the "did not take effect" fact a pinned
+  // foreground app should produce. Admission is rechecked after the wait, so the settle ends on the
+  // rotation the last in-budget read reported — here the one the display settled at, not the first
+  // one it saw — and no read ever runs on a starved budget.
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  const DISPLAY_ANSWER_MS = 120;
+  const LAST_ROTATION_FROM_READ = 15;
+  const probeBudgets: number[] = [];
+  let reads = 0;
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        if (args[1] !== 'dumpsys') return undefined;
+        probeBudgets.push(options?.timeoutMs ?? -1);
+        if ((options?.timeoutMs ?? 0) < DISPLAY_ANSWER_MS) {
+          return new Error(`adb shell dumpsys display timed out after ${options?.timeoutMs}ms`);
+        }
+        reads += 1;
+        const rotation = reads >= LAST_ROTATION_FROM_READ ? 2 : 0;
+        return `  mCurrentOrientation=${rotation}\n`;
+      },
+      async ({ calls, device }) => {
+        await withClockConsumingOrientationWait(async (slept) => {
+          await assert.rejects(
+            setAndroidOrientation(device, 'landscape-left'),
+            (error: unknown) => {
+              assert.ok(error instanceof Error);
+              assert.doesNotMatch(error.message, /could not confirm the display rotation/);
+              assert.match(
+                error.message,
+                /orientation landscape-left did not take effect: the display still reports rotation 2 after 15000ms/,
+              );
+              const details = (error as { details?: Record<string, unknown> }).details ?? {};
+              assert.equal(details.requestedRotation, 1);
+              assert.equal(details.observedRotation, 2);
+              return true;
+            },
+          );
+          // Reads: the first plus one per 500 ms poll up to t = 14 500. The wait that landed on
+          // t = 15 000 bought no further read, so every read ran on its real budget.
+          assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 30);
+          assert.deepEqual(
+            probeBudgets,
+            Array.from({ length: 30 }, (_, index) => 15_000 - 500 * index),
+          );
+          assert.equal(slept.length, 30);
+          assert.equal(Date.now(), 15_000);
+        });
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a display read that fails on a real budget stays a probe failure after an answered read', async () => {
+  // Deadline admission refuses only a read that would have no budget left. Here the second read is
+  // admitted at t = 500 with a real 14 500 ms budget and fails inside it, so that failure is the
+  // fact — the rotation an earlier read saw must not turn it into "did not take effect".
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  let reads = 0;
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        if (args[1] !== 'dumpsys') return undefined;
+        reads += 1;
+        if (reads > 1) {
+          vi.setSystemTime(Date.now() + (options?.timeoutMs ?? 0));
+          return new Error('adb shell dumpsys display exited with code 1');
+        }
+        return '  mCurrentOrientation=0\n';
+      },
+      async ({ calls, device }) => {
+        await withClockConsumingOrientationWait(async () => {
+          await assert.rejects(
+            setAndroidOrientation(device, 'landscape-left'),
+            (error: unknown) => {
+              assert.ok(error instanceof Error);
+              assert.doesNotMatch(error.message, /did not take effect/);
+              assert.match(
+                error.message,
+                /orientation landscape-left could not confirm the display rotation: adb shell dumpsys display exited with code 1/,
+              );
+              return true;
+            },
+          );
+          assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 2);
+        });
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('a display probe that hangs for the whole budget ends the settle as a failure', async () => {
   vi.useFakeTimers({ now: 0, toFake: ['Date'] });
   try {
@@ -610,6 +740,30 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
       DISPLAY_READ,
     ]);
   });
+});
+
+test('the target rotation reached by a later in-budget read ends the settle as success', async () => {
+  // The closest negative to the deadline cases: the display rotates at the last admitted poll, so
+  // the settle returns on that read and the next wait is never taken.
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  const display = displayReporting(['0', '0', '1']);
+  try {
+    await withFakeAdb(
+      (args) => {
+        if (args[1] === 'dumpsys') vi.setSystemTime(Date.now() + 400);
+        return display(args);
+      },
+      async ({ calls, device }) => {
+        await withClockConsumingOrientationWait(async (slept) => {
+          await setAndroidOrientation(device, 'landscape-left');
+          assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 3);
+          assert.deepEqual(slept, [500, 500]);
+        });
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('unlockAndroidOrientation turns auto-rotate on and neither writes user_rotation nor polls', async () => {
