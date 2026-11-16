@@ -251,6 +251,24 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
           positionals: ['read'],
           expectData: { text: 'runner otp 246810' },
         },
+        // The runner reads the keyboard and the focused field's return control, and the wire shape is
+        // the runner's own two fields — no Android IME fields on an iOS answer.
+        {
+          name: 'read keyboard status',
+          command: 'keyboard',
+          positionals: ['status'],
+          expectData: {
+            platform: 'ios',
+            action: 'status',
+            visible: true,
+            returnKey: 'search',
+            returnKeyLabel: 'Search',
+          },
+          assert: (response) => {
+            assert.equal(response.json?.result?.data?.inputType, undefined);
+            assert.equal(response.json?.result?.data?.inputOwner, undefined);
+          },
+        },
         {
           name: 'dismiss keyboard',
           command: 'keyboard',

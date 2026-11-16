@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { KEYBOARD_RETURN_KEYS } from '@agent-device/contracts/keyboard';
 import {
   COMMAND_OWNER_FILES,
   ownerFilesForCommand,
@@ -60,4 +61,14 @@ test('every system-owned command claims this module, and the module claims nothi
     [...SYSTEM_COMMANDS].sort(),
     'a command the registry attributes to this module is missing from SYSTEM_COMMAND_OUTPUT_SCHEMAS (or vice versa)',
   );
+});
+
+// The `returnKey` word list is written out in the schema rather than spread from the contract,
+// because the module's eager closure is budgeted and one value import of the contract's vocabulary
+// would grow it. This is where the two stay in step: the schema may not advertise a kind the
+// command's result type cannot carry, nor drop one it can.
+test('the keyboard output schema publishes exactly the contract return-key vocabulary', () => {
+  assert.deepEqual(SYSTEM_COMMAND_OUTPUT_SCHEMAS.keyboard.properties?.returnKey?.enum, [
+    ...KEYBOARD_RETURN_KEYS,
+  ]);
 });

@@ -148,11 +148,12 @@ describe('capabilities page matches runtime facts', () => {
       ),
     );
     assert.throws(() => renderPage({ ...data, operations: lost }), /keyboardDismiss/);
-    // And a refusal a cell names must fail the same way once the fact grants it.
+    // And a refusal a cell names must fail the same way once the fact grants it. HarmonyOS is the
+    // column whose keyboard cell still refuses `keyboardStatus`, so granting it there must fail.
     const gained = new Map(operations);
     gained.set(
-      'ios-sim',
-      new Set([...(operations.get('ios-sim') as Set<string>), 'keyboardStatus']),
+      'harmonyos-emulator',
+      new Set([...(operations.get('harmonyos-emulator') as Set<string>), 'keyboardStatus']),
     );
     assert.throws(() => renderPage({ ...data, operations: gained }), /keyboardStatus/);
   });

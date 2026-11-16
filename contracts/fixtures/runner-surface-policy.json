@@ -25,6 +25,7 @@
   "volumeDown": "none",
   "keyboardDismiss": "app-windows",
   "keyboardReturn": "none",
+  "keyboardStatus": "app-windows",
   "alert": "resolved-modal",
   "sequence": "app-windows",
   "recordStart": "observed-screen",

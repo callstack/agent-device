@@ -246,9 +246,10 @@ extension RunnerTests {
 
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
-  /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge.
+  /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge, `keyboardStatus` with
+  /// the return key in `keyboard status`.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
-    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge,
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .keyboardStatus,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
@@ -261,6 +262,14 @@ extension RunnerTests {
     .status, .uptime, .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown,
     .recordStart, .recordStop, .snapshot, .snapshotBridge,
   ]
+
+  /// The commands the witness column below cannot evaluate against the merge-base rule: they did not
+  /// exist there, and that rule's `!isReadOnly` term needs the merge-base's own read-only answer for
+  /// them. `keyboardStatus` is the only one: it is a read that reaches the prepared path, so the
+  /// formula would clear a remembered tap the derived trait keeps. The table below pins its
+  /// `converts: false`, which is what `invalidatesRememberedTextEntryTap` reads, so the answer is
+  /// still asserted — against its own row rather than against a classification the merge-base lacks.
+  private static let commandsWithoutMergeBaseWitness: Set<CommandType> = [.keyboardStatus]
 
   private func assertRememberedTextEntryWitnessInvalidation(
     _ command: Command,
@@ -281,6 +290,7 @@ extension RunnerTests {
     // remembered tap for it too and this column says so for every command, not just that one.
     let mergeBaseClears = type != .tap && type != .type && !wasReadOnlyAtMergeBase
     guard !Self.commandsAnsweredBeforeThePreparedPath.contains(type) else { return }
+    guard !Self.commandsWithoutMergeBaseWitness.contains(type) else { return }
     XCTAssertEqual(
       command.invalidatesRememberedTextEntryTap,
       mergeBaseClears,
@@ -329,6 +339,10 @@ extension RunnerTests {
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),
       (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),
+      (
+        .keyboardStatus,
+        expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true, isReadOnly: true)
+      ),
       (
         .alert,
         expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false, retains: true, isReadOnly: true)

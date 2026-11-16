@@ -263,6 +263,24 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       focusedPackage: stringSchema(),
       focusedResourceId: stringSchema(),
       inputOwner: enumSchema(['app', 'ime', 'unknown']),
+      // `status` on a visible keyboard only: what its return key offers, and where the platform can
+      // read it, the wording the key shows. `command-output-schemas-system.test.ts` pins these twelve
+      // words to `KEYBOARD_RETURN_KEYS`, the one owner of the vocabulary.
+      returnKey: enumSchema([
+        'go',
+        'search',
+        'send',
+        'next',
+        'done',
+        'previous',
+        'join',
+        'route',
+        'continue',
+        'enter',
+        'none',
+        'unknown',
+      ]),
+      returnKeyLabel: stringSchema(),
       message: stringSchema(),
     },
     ['platform', 'action'],
@@ -301,7 +319,7 @@ const foldCommandDescription = `Fold or unfold a foldable iPhone simulator (iPho
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
-  'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when the keyboard stays up \u2014 background taps are never attempted. On iOS a keyboard with no dismiss key adds error.details.reason keyboard_dismiss_unavailable with dispatched: no; one whose key was tapped and stayed visible has no reason and dispatched: unknown. Android reports keyboard_dismiss_unavailable with dispatched: unknown, since its own dismiss keyevents were already sent.';
+  "Report or act on the device keyboard. The status action reports whether the keyboard is visible and, when it is, what its return key offers: `returnKey` is go, search, send, next, done, previous, join, route, continue, enter, none, or unknown, and `returnKeyLabel` is the wording that return key itself shows when the platform can read it, trimmed of surrounding whitespace, which can be an app's custom or a localized string. A label appears only for a key the platform identified as the return key. `none` means the field offers no action key, which only Android can establish; `unknown` means this read could not name the key, not that the keyboard has one: on iOS the identified key carries wording this read does not map, or the keyboard exposes no return key it can identify at all — a number, decimal or phone pad has none, and then no label is reported either; on Android the editor's imeOptions name no action. A hidden keyboard reports neither field. The get action answers the same as status. The dismiss action hides the keyboard. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when the keyboard stays up \u2014 background taps are never attempted. On iOS a keyboard with no dismiss key adds error.details.reason keyboard_dismiss_unavailable with dispatched: no; one whose key was tapped and stayed visible has no reason and dispatched: unknown. Android reports keyboard_dismiss_unavailable with dispatched: unknown, since its own dismiss keyevents were already sent. The enter action presses the return key.";
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
@@ -705,7 +723,7 @@ const keyboardCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Inspect, press, or dismiss the device keyboard',
-    searchHint: 'return',
+    searchHint: 'ime gboard submit',
   },
   metadata: keyboardCommandMetadata,
   run: (client, input) => client.command.keyboard(input),

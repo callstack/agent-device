@@ -18,6 +18,7 @@ import {
   type RunnerCommand,
 } from '@agent-device/apple-runner';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
+import { KEYBOARD_RETURN_KEYS, type KeyboardReturnKey } from '@agent-device/contracts/keyboard';
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
 import {
   macOsHelperSurface,
@@ -220,6 +221,19 @@ export function createAppleInteractor(
         ),
         runnerOpts,
       );
+    },
+    keyboardStatus: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'keyboardStatus', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return {
+        kind: 'keyboard',
+        visible: readRunnerBoolean(result, 'visible') === true,
+        returnKey: readRunnerKeyboardReturnKey(result),
+        returnKeyLabel: readRunnerString(result, 'keyboardReturnKeyLabel'),
+      };
     },
     keyboardDismiss: async () => {
       const result = await runAppleRunnerCommand(
@@ -458,6 +472,32 @@ function readRunnerBoolean(result: Record<string, unknown>, key: string): boolea
 function readRunnerString(result: Record<string, unknown>, key: string): string | undefined {
   const value = result[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * The kinds this owner can answer with: the shared vocabulary without `none`, which only Android's
+ * `IME_ACTION_NONE` reading establishes. Derived from it rather than restated, so one list owns the
+ * words.
+ */
+const APPLE_KEYBOARD_RETURN_KEYS = KEYBOARD_RETURN_KEYS.filter(
+  (key): key is Exclude<KeyboardReturnKey, 'none'> => key !== 'none',
+);
+
+/**
+ * The return key the runner named, degraded to `unknown` when the wire carries a value this owner
+ * cannot answer with: an older runner must not publish a kind the command's contract disallows, and
+ * `none` is one — Apple has no reading that establishes a field offers no action key, so a runner
+ * that answers it is not speaking this vocabulary. Absent is absent — a hidden keyboard reports no
+ * key — which the caller keeps distinct.
+ */
+function readRunnerKeyboardReturnKey(
+  result: Record<string, unknown>,
+): Exclude<KeyboardReturnKey, 'none'> | undefined {
+  const value = readRunnerString(result, 'keyboardReturnKey');
+  if (value === undefined) return undefined;
+  return (APPLE_KEYBOARD_RETURN_KEYS as readonly string[]).includes(value)
+    ? (value as Exclude<KeyboardReturnKey, 'none'>)
+    : 'unknown';
 }
 
 async function setRunnerOrientation(

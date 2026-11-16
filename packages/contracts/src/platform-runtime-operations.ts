@@ -853,11 +853,13 @@ export const alertRuntimePlanUses = Object.freeze([
 ] as const);
 
 /**
- * `keyboard`'s action-selected uses (ADR 0019 §9: one bind per handler). `status` is Android-only
- * (parity with the retired leaf's per-family rejection of `status`/`get` everywhere else);
- * `dismiss` and `enter` are the cross-platform legs. The daemon's `keyboard-runtime.ts` admits
- * and binds exactly one of the three exported uses per request, keyed by the parsed action —
- * never all three.
+ * `keyboard`'s action-selected uses (ADR 0019 §9: one bind per handler). `status` reads the
+ * keyboard, `dismiss` and `enter` press it; the three legs differ in what they do to the device, so
+ * the daemon's `keyboard-runtime.ts` admits and binds exactly one of the three exported uses per
+ * request, keyed by the parsed action — never all three. Which legs one owner serves is the owner's
+ * own facts to say, and no owner serves the same set: Android and the Apple runner serve all three
+ * (the Apple runner on iOS and iPadOS only), HarmonyOS serves `dismiss` and `enter`, and WebDriver
+ * serves all three on Android but only `dismiss` on iOS, whose probe has no `status` result shape.
  */
 export const keyboardRuntimePlanUses = Object.freeze([
   keyboardStatusUse,

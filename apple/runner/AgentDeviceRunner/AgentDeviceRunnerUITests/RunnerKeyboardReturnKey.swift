@@ -16,9 +16,11 @@ import Foundation
 /// `Emergency Call` places a call, which no caller of this should ever report as a submit. Every
 /// other Apple type has a case above.
 ///
-/// `probeLabels` is the order `findKeyboardReturnControl(app:)` presses in. It is the runner's own
-/// vocabulary, so it is not derived from the cases: it carries the two spellings of the plain
-/// return key, in the order that found a hittable control before this rule existed.
+/// `probeLabels` is the order `findKeyboardReturnControl(app:)` presses in. It is the
+/// runner's own vocabulary, so it is not derived from the cases: it carries the two spellings of the
+/// plain return key, in the order that found a hittable control before this rule existed. The
+/// `keyboard status` read does not use it: it reads the keyboard's own key elements, so it needs no
+/// English to find the return key.
 enum RunnerKeyboardReturnKey: String {
   case go
   case search

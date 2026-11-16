@@ -1,5 +1,6 @@
 import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { AppStateRuntimeResult } from './app-state-runtime.ts';
+import type { KeyboardReturnKey } from './keyboard.ts';
 import type { ElementTextTarget } from './element-text-target.ts';
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
@@ -205,22 +206,40 @@ export type SnapshotOptions = BaseSnapshotOptions & {
 };
 
 /**
- * Android's live IME status read. Optional on {@link Interactor}: parity with the retired leaf,
- * which refused `status`/`get` on every other family (no other platform's runner exposes one).
- * A single-member discriminated union rather than a bare object so the daemon can derive its wire
- * `platform` label from `kind` the same way it does for dismiss and enter — an owner can only ever
- * produce its own result shape.
+ * What `keyboard status` answers with, discriminated by which owner produced it: Android's IME
+ * probe fields, or Apple's keyboard read (visible plus the focused field's return key). The daemon
+ * derives the wire `platform` label from `kind` rather than re-deriving it from the device, so an
+ * owner can only ever produce its own result shape.
+ *
+ * `returnKey` is the one field both owners carry, and it is present only on a visible keyboard: a
+ * hidden one has no return key, so neither owner reports one. Each owner names the kinds its own
+ * reading establishes; neither guesses the other's.
  */
-export type KeyboardStatusResult = Readonly<{
-  kind: 'ime-probe';
-  visible: boolean;
-  inputType?: string;
-  type?: string;
-  inputMethodPackage?: string;
-  focusedPackage?: string;
-  focusedResourceId?: string;
-  inputOwner?: string;
-}>;
+export type KeyboardStatusResult =
+  | Readonly<{
+      kind: 'ime-probe';
+      visible: boolean;
+      inputType?: string;
+      type?: string;
+      inputMethodPackage?: string;
+      focusedPackage?: string;
+      focusedResourceId?: string;
+      inputOwner?: string;
+      returnKey?: KeyboardReturnKey;
+      returnKeyLabel?: string;
+    }>
+  | Readonly<{
+      kind: 'keyboard';
+      visible: boolean;
+      /**
+       * The kinds the Apple reading can establish. `none` is excluded: this owner reads the keyboard's
+       * own controls, which can name a key or fail to identify one, and never establishes that the
+       * focused field offers no action (Android's `IME_ACTION_NONE` does). A layout with no return key,
+       * such as a number pad, therefore answers `unknown` with no label rather than `none`.
+       */
+      returnKey?: Exclude<KeyboardReturnKey, 'none'>;
+      returnKeyLabel?: string;
+    }>;
 
 /**
  * Owner-shaped dismiss evidence, discriminated by which owner produced it: Android's IME probe
@@ -482,7 +501,8 @@ export type Interactor = {
   mediaRewind?(): Promise<void>;
   /** Optional (parity with `mediaPlayPause`): presses the media fast-forward key once. */
   mediaFastForward?(): Promise<void>;
-  /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
+  /** Optional: owners with no live keyboard status read leave it undefined. Each owner answers with
+   *  its own {@link KeyboardStatusResult} kind. */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */
   keyboardDismiss?(): Promise<KeyboardDismissResult>;

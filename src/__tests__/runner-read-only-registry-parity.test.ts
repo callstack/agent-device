@@ -50,6 +50,9 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   volumeDown: { command: 'hardware-button', positionals: ['volume-down'] },
   keyboardDismiss: { command: 'keyboard', positionals: ['dismiss'] },
   keyboardReturn: { command: 'keyboard', positionals: ['enter'] },
+  // The new runner read pairs with the registry's own read leg, so the parity check below compares
+  // the runner's read-only trait with `keyboard status`'s recording effect.
+  keyboardStatus: { command: 'keyboard', positionals: ['status'] },
   pasteboardWrite: { command: 'clipboard', positionals: ['write', 'x'] },
 };
 

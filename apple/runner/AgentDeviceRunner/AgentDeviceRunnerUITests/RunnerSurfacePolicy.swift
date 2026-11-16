@@ -16,7 +16,7 @@ extension CommandType {
       return .none
     case .tap, .longPress, .drag, .type, .swipe, .scroll, .findText, .querySelector, .readText,
       .snapshot, .backInApp, .gesture, .gestureViewport, .appSwitcher,
-      .keyboardDismiss, .sequence:
+      .keyboardDismiss, .keyboardStatus, .sequence:
       return .appWindows
     case .screenshot, .recordStart:
       return .observedScreen
