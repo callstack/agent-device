@@ -11,7 +11,7 @@ import {
   findAncestor,
   markNodeAndDescendantsForRemoval,
   type ChildrenByParent,
-} from './tree.ts';
+} from '../../snapshot-tree.ts';
 
 export type AndroidHelperPresentationInput = {
   nodes: SnapshotNode[];
