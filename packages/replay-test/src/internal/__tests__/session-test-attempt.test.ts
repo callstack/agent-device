@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { runReplayTestCase } from '../session-test-attempt.ts';
 import type { ReplayTestRunEntry } from '../session-test-discovery.ts';
-import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
+import type { ReplayTestAttemptOutcome } from '@agent-device/contracts/replay-test-execution';
 import type { ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
