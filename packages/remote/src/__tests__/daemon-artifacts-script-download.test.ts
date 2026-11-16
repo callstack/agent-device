@@ -30,7 +30,7 @@ afterEach(async () => {
 
 async function artifactServer(artifacts: Record<string, Served>): Promise<string> {
   const server = http.createServer((req, res) => {
-    const artifact = artifacts[decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '')];
+    const artifact = artifacts[decodeURIComponent(req.url?.replace(/^\/+artifacts\//, '') ?? '')];
     if (!artifact) {
       res.writeHead(404).end();
       return;
@@ -547,7 +547,10 @@ test('a stale record that cannot be swept never blocks a new open', async () => 
 test('an endpoint spelled with trailing slashes finds the record its open created', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, v2: { body: 'close\n' } });
-  const { id } = await open(`${baseUrl}//`, stateDir, destination);
+  const opened = await open(`${baseUrl}//`, stateDir, destination);
+  const { id } = opened;
+  expect(opened.response).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 
   const response = await answer(baseUrl, stateDir, request('close'), {
     scriptPublicationId: id,
