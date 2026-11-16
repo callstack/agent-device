@@ -58,8 +58,9 @@ final class AutomationCommandHandler {
   }
 
   private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
-    // The host's remaining time for this command; every press inside it answers by this deadline.
-    long deadline = SystemClock.uptimeMillis() + input.getLong("budgetMs");
+    // The host's remaining time for this command bounds every retry decision. A provider-supplied
+    // helper can be newer than its host, which sends no budget; such a press is never retried.
+    long deadline = SystemClock.uptimeMillis() + input.optLong("budgetMs", 0);
     switch (input.getString("kind")) {
       case "tap":
         tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch, deadline);

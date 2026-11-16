@@ -11,9 +11,11 @@ package com.callstack.agentdevice.snapshothelper;
  */
 final class PressSequence {
   /**
-   * The longest a retry can take before it answers: the framework's animation-sync cap
-   * ({@code WindowManagerService.ANIMATION_COMPLETED_TIMEOUT_MS}) plus its synchronous injection
-   * deadline ({@code InputManagerService.INJECTION_TIMEOUT_MILLIS}).
+   * The room a retry decision reserves: the framework's animation-sync cap
+   * ({@code WindowManagerService.ANIMATION_COMPLETED_TIMEOUT_MS}) plus the retried start's injection
+   * deadline ({@code InputManagerService.INJECTION_TIMEOUT_MILLIS}). The end is not reserved: it
+   * blocks only while the app does not finish handling it, which a press without a retry meets the
+   * same way, and a 60 s press request could never reserve a second 30 s deadline.
    */
   static final long RETRY_WORST_CASE_MS = 5_000 + 30_000;
 

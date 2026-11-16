@@ -2,7 +2,6 @@ package com.callstack.agentdevice.snapshothelper;
 
 import android.app.UiAutomation;
 import android.os.SystemClock;
-import android.view.InputDevice;
 import android.view.MotionEvent;
 
 /** Injects a validated touch plan through UiAutomation with real-time sample pacing. */
