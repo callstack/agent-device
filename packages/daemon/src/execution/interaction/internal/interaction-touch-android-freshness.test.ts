@@ -138,41 +138,49 @@ const convergingSurface = createTouchCommandSurface({
   },
 });
 
+function continueCapture(missingRootWindowTypes: number[]) {
+  return {
+    nodes: [
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Continue',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'android',
+    producer: 'android-uiautomator',
+    androidSnapshot: {
+      backend: 'android-helper',
+      cacheInvalidated: true,
+      rootPresent: true,
+      helperTruncated: false,
+      missingRootWindowTypes,
+    },
+  };
+}
+
+// The resolution capture always carries the opposite proof, so only the settled capture decides.
 test.each([
-  { capture: 'proved fresh', outcome: 'retires', missingRootWindowTypes: [], window: undefined },
+  { capture: 'proved fresh', outcome: 'retires', resolved: [2], settled: [], window: undefined },
   {
     capture: 'missing a window root',
     outcome: 'keeps',
-    missingRootWindowTypes: [2],
+    resolved: [],
+    settled: [2],
     window: expect.objectContaining({ action: 'press' }),
   },
 ])(
   'press --settle converged on a capture $capture $outcome the freshness window',
-  async ({ missingRootWindowTypes, window }) => {
+  async ({ resolved, settled, window }) => {
     const sessionStore = makeSessionStore();
     const sessionName = 'android-settle-freshness';
     sessionStore.publish(sessionName, makeAndroidSession(sessionName));
-    mockInteractorSnapshot.mockResolvedValue({
-      nodes: [
-        {
-          index: 0,
-          type: 'android.widget.Button',
-          label: 'Continue',
-          rect: { x: 100, y: 200, width: 80, height: 40 },
-          enabled: true,
-          hittable: true,
-        },
-      ],
-      backend: 'android',
-      producer: 'android-uiautomator',
-      androidSnapshot: {
-        backend: 'android-helper',
-        cacheInvalidated: true,
-        rootPresent: true,
-        helperTruncated: false,
-        missingRootWindowTypes,
-      },
-    });
+    mockInteractorSnapshot
+      .mockResolvedValueOnce(continueCapture(resolved))
+      .mockResolvedValue(continueCapture(settled));
 
     const response = await handleInteractionCommands({
       createCommandSurface: convergingSurface,
@@ -190,6 +198,7 @@ test.each([
     });
 
     expect(response?.ok).toBe(true);
+    expect(mockInteractorSnapshot).toHaveBeenCalledTimes(2);
     expect(sessionStore.get(sessionName)?.androidSnapshotFreshness).toEqual(window);
   },
 );
