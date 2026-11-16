@@ -16,14 +16,6 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./replay-backend": {
-      "types": "./src/replay-backend/replay-maestro-backend.ts",
-      "default": "./src/replay-backend/replay-maestro-backend.ts"
-    },
-    "./replay-backend-declaration": {
-      "types": "./src/replay-backend/replay-maestro-declaration.ts",
-      "default": "./src/replay-backend/replay-maestro-declaration.ts"
-    },
     "./run-script-http": {
       "types": "./src/daemon-port/run-script-http.ts",
       "default": "./src/daemon-port/run-script-http.ts"
@@ -36,6 +28,7 @@
   "devDependencies": {
     "undici": "7.30.1",
     "yaml": "^2.9.0",
+    "@agent-device/test-kit": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",

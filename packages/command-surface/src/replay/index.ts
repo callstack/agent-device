@@ -245,7 +245,7 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   testIme: flags.testIme,
 });
 
-export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
+export const replayDaemonWriter: AsyncDaemonWriter = async (input, host, deps) => {
   const inputPath = requiredDaemonString(input.path, 'replay requires path');
   const replayBackend = readReplayBackend(input);
   const replayShellEnv = collectReplayClientShellEnv(host.env);
@@ -259,6 +259,8 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
     // client-collects-local-input move `replayShellEnv` already makes — and
     // the daemon executes only what arrives in this bundle.
     replayScriptSource: await loadReplayScriptSourceBundle({
+      hostEnv: host.env,
+      resolveReplayBackend: deps?.resolveReplayBackend,
       inputPath,
       cwd: readReplayClientCwd(input, host.cwd),
       replayBackend,
@@ -275,35 +277,52 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
   });
 };
 
-export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
+export const testDaemonWriter: AsyncDaemonWriter = async (input, host, deps) => {
   const inputs = input.paths ?? [];
   const replayBackend = readReplayBackend(input);
   const cwd = readReplayClientCwd(input, host.cwd);
   const replayShellEnv = collectReplayClientShellEnv(host.env);
+  // #1802: `test` inputs belong to the caller, including expansion and source collection.
+  const sourcePaths = discoverReplaySourcePaths({ inputs, cwd, replayBackend });
+  const collectSources = async (resolveReplayBackend = deps?.resolveReplayBackend) => {
+    const sources = [];
+    for (const inputPath of sourcePaths) {
+      sources.push(
+        await loadReplayScriptSourceBundle({
+          hostEnv: host.env,
+          resolveReplayBackend,
+          inputPath,
+          cwd,
+          replayBackend,
+          env: readReplayScriptSourceEnv(
+            input,
+            replayShellEnv,
+            resolveReplayFormat(inputPath, replayBackend),
+          ),
+        }),
+      );
+    }
+    return sources;
+  };
+  const replayScriptSources = sourcePaths.some(
+    (inputPath) => resolveReplayFormat(inputPath, replayBackend) === 'maestro',
+  )
+    ? await (
+        await import('@agent-device/replay-port/replay-backend-registry')
+      ).withReplayBackend(
+        'maestro',
+        host.env,
+        (backend) => collectSources(async () => backend),
+        deps?.resolveReplayBackend,
+      )
+    : await collectSources();
   return request(TEST_COMMAND_NAME, inputs, {
     ...stripReplayTestPresentationInput(input),
     replayUpdate: input.update,
     replayBackend,
     replayEnv: input.env,
     replayShellEnv,
-    // #1802: `test` inputs are paths, directories, and globs on the CALLER's
-    // filesystem. Expanding them here keeps discovery order identical for a
-    // local and a remote daemon and ships each discovered source's text.
-    replayScriptSources: await Promise.all(
-      discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
-        async (inputPath) =>
-          await loadReplayScriptSourceBundle({
-            inputPath,
-            cwd,
-            replayBackend,
-            env: readReplayScriptSourceEnv(
-              input,
-              replayShellEnv,
-              resolveReplayFormat(inputPath, replayBackend),
-            ),
-          }),
-      ),
-    ),
+    replayScriptSources,
   });
 };
 

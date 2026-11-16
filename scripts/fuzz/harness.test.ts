@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LANE_ENVELOPE_SCHEMA_VERSION } from '@agent-device/test-kit';
 import { CASE_GENERATION_INPUTS } from './envelope.ts';
-import { runCases } from './execute.ts';
+import { createCaseRunner, runCases } from './execute.ts';
 import { checkCase } from './invariant.ts';
 import { SELF_CHECK_TARGETS } from './self-check-targets.ts';
 
@@ -245,4 +245,33 @@ describe('artifact promotion', () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+});
+
+it.each([['--help'], ['--target', 'selector', '--iterations', '1']])(
+  'fuzz entrypoint %j does not require an installed Maestro plugin',
+  (...args) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-no-plugin-'));
+    try {
+      const result = runHarness([...args, '--artifact-dir', dir], {
+        AGENT_DEVICE_HOME: path.join(dir, 'empty-home'),
+      });
+      expect(result.status).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+it('concurrent close waits for the worker cleanup and exit', async () => {
+  const runner = await createCaseRunner(targetNamed('self-check-untyped-throw'), 750);
+  let closed = false;
+  const first = runner.close().then(() => {
+    closed = true;
+  });
+  try {
+    await runner.close();
+    expect(closed).toBe(true);
+  } finally {
+    await first;
+  }
 });

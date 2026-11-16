@@ -135,7 +135,7 @@ function renderDaemonStatus(
               plugin.state === 'active'
                 ? 'active'
                 : `failed: ${plugin.error?.message ?? 'unknown'}`;
-            return `  ${plugin.provider ?? '(unknown provider)'} [${plugin.source}] ${origin} - ${outcome}`;
+            return `  ${plugin.provider ?? (plugin.backend ? `replay backend ${plugin.backend}` : '(unknown plugin)')} [${plugin.source}] ${origin} - ${outcome}`;
           }),
         ]),
   ].join('\n');

@@ -1,3 +1,4 @@
+import type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
 import {
   readSerializedSnapshotCaptureAnnotations,
@@ -81,6 +82,8 @@ export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
   deps: {
     transport?: AgentDeviceDaemonTransport;
+    /** The embedded runtime registry, shared by source preparation and execution. */
+    resolveReplayBackend?: ReplayBackendResolver;
     host?: HostEnvironment;
     /** The operator-configured device selector enforced on every request. */
     devicePin?: DevicePin;
@@ -182,7 +185,7 @@ export function createAgentDeviceClient(
     command: DaemonCommandName,
     options: InternalRequestOptions = {},
   ): Promise<T> => {
-    const request = await prepareDaemonCommandRequest(command, options, host);
+    const request = await prepareDaemonCommandRequest(command, options, host, deps);
     return (await execute(
       request.command,
       request.positionals,

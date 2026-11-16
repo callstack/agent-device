@@ -58,6 +58,12 @@ test('selected creation retains one worker, forwards its diagnostic to the host 
   });
   const host: ReplayBackendHost = {
     emitDiagnostic: vi.fn(),
+    runCommand: async () => {
+      throw new Error('subprocess unused');
+    },
+    registerSensitiveValue: () => {
+      throw new Error('sensitive values unused');
+    },
     appendTraceEvent: () => {
       throw new Error('trace unused');
     },

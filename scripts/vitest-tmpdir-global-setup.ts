@@ -1,3 +1,4 @@
+import { installWorkspaceMaestro } from './install-workspace-maestro.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,6 +26,7 @@ import {
 
 let testRunTmpDir: string;
 let previousTmpDir: string | undefined;
+let previousPluginHome: string | undefined;
 let previousSwiftCacheDir: string | undefined;
 
 // setup/teardown are vitest's globalSetup contract: it imports this file by
@@ -53,6 +55,9 @@ export function setup(): void {
     path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
   );
   process.env.TMPDIR = testRunTmpDir;
+  previousPluginHome = process.env.AGENT_DEVICE_HOME;
+  process.env.AGENT_DEVICE_HOME = path.join(testRunTmpDir, 'plugin-home');
+  installWorkspaceMaestro(process.env, true);
 }
 
 // fallow-ignore-next-line unused-export
@@ -63,6 +68,8 @@ export async function teardown(): Promise<void> {
       await stopRunDirectoryConsumers(testRunTmpDir),
     );
   } finally {
+    if (previousPluginHome === undefined) delete process.env.AGENT_DEVICE_HOME;
+    else process.env.AGENT_DEVICE_HOME = previousPluginHome;
     fs.rmSync(testRunTmpDir, { recursive: true, force: true });
     restoreEnv('TMPDIR', previousTmpDir);
     restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);

@@ -14,6 +14,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { request } from '../cli-grammar/common.ts';
 import type {
   AsyncDaemonWriter,
+  DaemonWriterDependencies,
   CommandInput,
   DaemonCommandRequest,
 } from '../cli-grammar/types.ts';
@@ -26,6 +27,7 @@ type PrepareDaemonCommandRequest = (
   input: CommandInput,
   stepNumber: number,
   host: HostEnvironment,
+  deps?: DaemonWriterDependencies,
 ) => Promise<DaemonCommandRequest>;
 
 type PrepareBatchStep = (
@@ -37,11 +39,11 @@ type PrepareBatchStep = (
 export function createBatchDaemonWriter(
   prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
 ): AsyncDaemonWriter {
-  return async (input, host) =>
+  return async (input, host, deps) =>
     request(PUBLIC_COMMANDS.batch, [], {
       ...input,
       batchSteps: await readBatchDaemonSteps(input.steps, (command, input, stepNumber) =>
-        prepareDaemonCommandRequest(command, input, stepNumber, host),
+        prepareDaemonCommandRequest(command, input, stepNumber, host, deps),
       ),
       batchOnError: input.onError,
       batchMaxSteps: input.maxSteps,
