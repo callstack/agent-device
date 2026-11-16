@@ -133,6 +133,13 @@ FOUNDATION_EXPORT RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForegroun
   CGRect screenFrame
 );
 
+// The screen's frame when AXRuntime reports `application` as the primary app filling it, else
+// `CGRectNull`. The same probe the sole-screen route admits a non-phone app with; it reads two frames
+// and walks no tree, so it answers while XCTest's accessibility channel is penalized.
+#if TARGET_OS_IOS
+FOUNDATION_EXPORT CGRect RunnerFullScreenApplicationFrame(id application);
+#endif
+
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
   Class cls,
   NSString *className,
