@@ -150,10 +150,10 @@ function continueCapture(missingRootWindowTypes: number[]) {
         hittable: true,
       },
     ],
-    backend: 'android',
-    producer: 'android-uiautomator',
+    backend: 'android' as const,
+    producer: 'android-uiautomator' as const,
     androidSnapshot: {
-      backend: 'android-helper',
+      backend: 'android-helper' as const,
       cacheInvalidated: true,
       rootPresent: true,
       helperTruncated: false,
