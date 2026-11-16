@@ -10258,7 +10258,7 @@ snapshots:
 
   unrun@0.3.1:
     dependencies:
-      rolldown: 1.2.15
+      rolldown: 1.2.19
 
   unstorage@1.17.6:
     dependencies:
