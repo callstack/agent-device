@@ -11,6 +11,7 @@ import {
   jsonSchemaField,
   leaseDeviceSpecFields,
   optionField,
+  postGestureStabilizationFields,
   stringArrayField,
   stringField,
   stringSchema,
@@ -87,6 +88,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
     launchUrl: stringField(
       'Launch URL for the opened app; does not select the server used by metro reload.',
     ),
+    ...postGestureStabilizationFields(),
     ...leaseDeviceSpecFields(),
   },
 );
@@ -139,6 +141,7 @@ const openCliSchema = {
     'surface',
     ...METRO_RELOAD_FLAGS,
     'launchUrl',
+    'postGestureStabilization',
     ...LEASE_DEVICE_SPEC_FLAGS,
   ],
 } as const satisfies CommandSchemaOverride;
@@ -173,6 +176,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   metroPort: flags.metroPort,
   bundleUrl: flags.bundleUrl,
   launchUrl: flags.launchUrl,
+  postGestureStabilization: flags.postGestureStabilization,
   ...leaseDeviceSpecInputFromFlags(flags),
 });
 

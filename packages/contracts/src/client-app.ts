@@ -23,6 +23,7 @@ import type {
 } from './client-connection.ts';
 import type { AgentDeviceSessionDevice, StartupPerfSample } from './client-device-view.ts';
 import type { LeaseDeviceSpec } from './client-lease.ts';
+import type { PostGestureStabilizationOptions } from './client-gesture.ts';
 
 export type DeviceSelectionReason =
   | 'explicit-selector'
@@ -72,7 +73,8 @@ export type AppDeployResult = {
 
 export type AppOpenOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions &
-  LeaseDeviceSpec & {
+  LeaseDeviceSpec &
+  PostGestureStabilizationOptions & {
     app?: string;
     url?: string;
     surface?: SessionSurface;

@@ -235,16 +235,26 @@ export function movingTargetBaseline(
  * previous action's targets were. The open launched or foregrounded an app, so both describe a screen
  * the open replaced: a verdict against them would charge the open's effect to the earlier action.
  *
+ * A caller that verifies the screen by polling it opts out with `postGestureStabilization: false`,
+ * as on a scroll or swipe: a game or canvas app that labels nothing would otherwise hold the next
+ * capture for the whole budget. When the open launched an app, on any platform, the opt-out also
+ * clears the record an earlier action left pending, so the next capture pays no wait at all.
+ *
  * Apple only: {@link showsFirstScreen} reads the Application and Window roots of an Apple tree, and
  * an Android tree has no root node to tell them apart.
  */
 export function markPostOpenStabilization(
   session: SessionState,
   observation: PostOpenObservation | undefined,
+  flags?: CommandFlags,
 ): void {
+  if (observation === undefined) return;
+  if (flags?.postGestureStabilization === false) {
+    session.deferredSurface = undefined;
+    return;
+  }
   if (!isApplePlatform(session.device.platform)) return;
   if (!supportsPostGestureStabilization(session.device)) return;
-  if (observation === undefined) return;
   session.deferredSurface = {
     kind: 'stabilize',
     action: 'open',

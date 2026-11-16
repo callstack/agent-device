@@ -158,6 +158,37 @@ test('every Apple open that launched an app marks a first-screen wait, and an An
   );
 });
 
+test('an open with postGestureStabilization false marks no wait and drops the replaced record', () => {
+  for (const platform of ['ios', 'android'] as const) {
+    const session = makeSession(platform);
+    session.deferredSurface = {
+      kind: 'stabilize',
+      action: 'scroll',
+      positionals: ['down'],
+      markedAt: Date.now(),
+    };
+
+    markPostOpenStabilization(session, 'observable', { postGestureStabilization: false });
+
+    assert.equal(session.deferredSurface, undefined, platform);
+    assert.equal(isPostGestureStabilizationPending(session), false, platform);
+  }
+});
+
+test('an open that launched no app keeps the pending record despite the opt-out', () => {
+  const session = makeSession('ios');
+  session.deferredSurface = {
+    kind: 'stabilize',
+    action: 'scroll',
+    positionals: ['down'],
+    markedAt: Date.now(),
+  };
+
+  markPostOpenStabilization(session, undefined, { postGestureStabilization: false });
+
+  assert.equal(pendingSurfaceStabilization(session)?.action, 'scroll');
+});
+
 test('the first capture after an open waits through a loading tree for the first screen', async () => {
   vi.useFakeTimers();
   const session = makeSession('ios');
