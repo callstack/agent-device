@@ -12,9 +12,6 @@
   "include": ["src", "../command-registry/src/global.d.ts"],
   "references": [
     {
-      "path": "../ad-replay"
-    },
-    {
       "path": "../ad-script"
     },
     {
@@ -34,9 +31,6 @@
     },
     {
       "path": "../kernel"
-    },
-    {
-      "path": "../replay-test"
     },
     {
       "path": "../selectors"

@@ -54,7 +54,11 @@ function ensureBuiltPackage(): void {
   });
 }
 
-function extractInstalledPackage(tarballPath: string, consumerRoot: string): string {
+function extractInstalledPackage(
+  tarballPath: string,
+  consumerRoot: string,
+  packageName = 'agent-device',
+): string {
   const nodeModulesRoot = path.join(consumerRoot, 'node_modules');
   fs.mkdirSync(nodeModulesRoot, { recursive: true });
   runCmdSync('tar', ['-xzf', tarballPath, '-C', nodeModulesRoot], {
@@ -62,7 +66,8 @@ function extractInstalledPackage(tarballPath: string, consumerRoot: string): str
     timeoutMs: SUBPROCESS_TIMEOUT_MS,
   });
   const extractedPackageRoot = path.join(nodeModulesRoot, 'package');
-  const installedPackageRoot = path.join(nodeModulesRoot, 'agent-device');
+  const installedPackageRoot = path.join(nodeModulesRoot, packageName);
+  fs.mkdirSync(path.dirname(installedPackageRoot), { recursive: true });
   fs.renameSync(extractedPackageRoot, installedPackageRoot);
   return installedPackageRoot;
 }
@@ -92,14 +97,24 @@ async function runNodeModuleJson(cwd: string, args: string[], script: string): P
 
 /** A v2 plugin written against the packed `agent-device/plugins` types, type-checked as a consumer. */
 async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<void> {
+  for (const name of ['maestro', 'replay']) {
+    const tarball = path.join(consumerRoot, `${name}.tgz`);
+    runCmdSync('pnpm', ['pack', '--out', tarball], {
+      cwd: path.join(repoRoot, 'packages', name),
+      timeoutMs: SUBPROCESS_TIMEOUT_MS,
+    });
+    extractInstalledPackage(tarball, consumerRoot, `@agent-device/${name}`);
+  }
   const source = path.join(consumerRoot, 'plugin-contract-smoke.ts');
   fs.writeFileSync(
     source,
     `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
 import { startAgentDevice, type AgentDeviceHost, type StartAgentDeviceOptions, type AgentDeviceClientConfig } from 'agent-device';
+import maestro from '@agent-device/maestro/agent-device';
+import replay from '@agent-device/replay/agent-device';
 
 export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['host']>) {
-  const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example()] };
+  const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example(), maestro(), replay()] };
   const running: AgentDeviceHost = await startAgentDevice(options);
   const config: AgentDeviceClientConfig = running.clientConfig;
   void config;

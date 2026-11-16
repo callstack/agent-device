@@ -1,4 +1,4 @@
-import { installWorkspaceMaestro } from './install-workspace-maestro.ts';
+import { installWorkspaceReplayPlugins } from './install-workspace-replay-plugins.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,7 +77,7 @@ export function setup(): void {
   }
   previousPluginHome = process.env.AGENT_DEVICE_HOME;
   process.env.AGENT_DEVICE_HOME = path.join(testRunTmpDir, 'plugin-home');
-  installWorkspaceMaestro(process.env, true);
+  installWorkspaceReplayPlugins(process.env, true);
 }
 
 // fallow-ignore-next-line unused-export
