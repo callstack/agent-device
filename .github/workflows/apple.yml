@@ -36,6 +36,7 @@ jobs:
     runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 90
     env:
+      AGENT_DEVICE_HOME: ${{ github.workspace }}/.tmp/agent-device-apple-smoke-home
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       IOS_RUNTIME_VERSION: '26.2'
       IOS_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
@@ -161,6 +162,8 @@ jobs:
       # phase reads them as inputs rather than as its own steps. It also takes each member's
       # outcome: a member that failed would otherwise leave the phase skipped, and the phase
       # guard would report an unexplained skip instead of the member that caused it.
+      - if: steps.build.outcome == 'success'
+        run: node --experimental-strip-types scripts/install-workspace-maestro.ts
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run

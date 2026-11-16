@@ -14,10 +14,10 @@
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/maestro": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
-    "@agent-device/session-journal": "workspace:*"
+    "@agent-device/session-journal": "workspace:*",
+    "@agent-device/plugins": "workspace:*"
   },
   "exports": {
     "./command-types": {

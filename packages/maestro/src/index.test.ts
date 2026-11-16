@@ -27,13 +27,7 @@ describe('@agent-device/maestro facade', () => {
       publishConfig: { exports: Record<string, unknown> };
       sideEffects?: boolean;
     };
-    expect(Object.keys(manifest.exports)).toEqual([
-      '.',
-      './replay-backend',
-      './replay-backend-declaration',
-      './run-script-http',
-      './agent-device',
-    ]);
+    expect(Object.keys(manifest.exports)).toEqual(['.', './run-script-http', './agent-device']);
     expect(Object.keys(manifest.publishConfig.exports)).toEqual(['./agent-device']);
     expect(manifest.sideEffects).toBe(false);
   });

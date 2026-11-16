@@ -1,3 +1,9 @@
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  emitDiagnostic,
+  registerDiagnosticSensitiveValue,
+} from '@agent-device/host-kit/diagnostics';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   assertSnapshotScreenOrigin,
@@ -27,11 +33,25 @@ export function makeRuntimeEnvelope(
   overrides: { flags?: CommandFlags; publicNetworkOnly?: boolean } = {},
 ): Pick<
   CreateDaemonMaestroRuntimeOperationsOptions,
-  'flags' | 'publicNetworkOnly' | 'readSnapshotClickabilityEvidence' | 'assertSnapshotScreenOrigin'
+  | 'readSnapshotClickabilityEvidence'
+  | 'assertSnapshotScreenOrigin'
+  | 'flags'
+  | 'publicNetworkOnly'
+  | 'host'
+  | 'registerSensitiveValue'
+  | 'emitDiagnostic'
+  | 'runCommand'
 > {
   return {
     readSnapshotClickabilityEvidence,
     assertSnapshotScreenOrigin,
+    host: createTestHostEnvironment(),
+    emitDiagnostic,
+    runCommand: ({ executable, args, host, ...options }, signal) =>
+      withCommandHost({ host, requestEnv: undefined }, () =>
+        runCmd(executable, args, { ...options, ...host, signal }),
+      ),
+    registerSensitiveValue: registerDiagnosticSensitiveValue,
     publicNetworkOnly: false,
     ...overrides,
   };

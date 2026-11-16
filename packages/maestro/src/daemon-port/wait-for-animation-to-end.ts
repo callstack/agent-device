@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   captureMaestroScreenshot,
@@ -8,6 +9,7 @@ import {
 } from './maestro-screenshot-comparison.ts';
 
 export type MaestroAnimationWaitOptions = {
+  readonly emitDiagnostic: ReplayBackendHost['emitDiagnostic'];
   readonly timeoutMs: number;
   readonly now: () => number;
   readonly signal?: AbortSignal;
@@ -47,8 +49,13 @@ async function capturePairMatches(
   ];
   if (!captures[0] || !captures[1]) return false;
   return (
-    (await compareMaestroScreenshotFiles(firstPath, secondPath, options.signal, 'animation')) ===
-    true
+    (await compareMaestroScreenshotFiles(
+      firstPath,
+      secondPath,
+      options.signal,
+      'animation',
+      options.emitDiagnostic,
+    )) === true
   );
 }
 

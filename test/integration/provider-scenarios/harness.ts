@@ -109,6 +109,7 @@ export async function createProviderScenarioHarness(
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
+    AGENT_DEVICE_HOME: process.env.AGENT_DEVICE_HOME,
     TMPDIR: process.env.TMPDIR,
     // A scenario that seeds claims for its daemon names the directory through the process.
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
