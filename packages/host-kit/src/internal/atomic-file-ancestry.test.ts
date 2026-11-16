@@ -26,6 +26,9 @@ type Database = Readonly<{
 
 const realReadFileSync = fs.readFileSync;
 const currentUser = os.userInfo().username;
+/** The unmocked `stat` calls, so a second fixture here never wraps the first one's mock. */
+const realLstatSync = fs.lstatSync.bind(fs);
+const realStatSync = fs.statSync.bind(fs);
 
 /** This process's ids. Windows has neither, and every test that uses them is skipped there. */
 const currentUid = process.getuid?.() ?? -1;
@@ -65,6 +68,26 @@ function hostDatabase(privateGid: number, sharedGid: number): Database {
 function unreadableDatabases(): Database {
   return { groups: undefined, passwd: undefined };
 }
+
+/**
+ * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
+ * the fixture's and not the CI image's directory tree. Only the ids move: modes and inode numbers stay
+ * what they are on disk. A real foreign owner would need privileges this test does not have.
+ */
+function serveOwnership(owners: Readonly<Record<string, number>>): void {
+  const withUid = (stats: fs.Stats, pathname: string): fs.Stats => {
+    const uid = owners[pathname];
+    if (uid === undefined || stats.uid === uid) return stats;
+    return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { uid }) as fs.Stats;
+  };
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: never, ...rest: never[]) =>
+    withUid(realLstatSync(pathname, ...rest), String(pathname))) as typeof fs.lstatSync);
+  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: never, ...rest: never[]) =>
+    withUid(realStatSync(pathname, ...rest), String(pathname))) as typeof fs.statSync);
+}
+
+/** Some other local user, not this one and not root. */
+const FOREIGN_UID = 65534;
 
 function root(): string {
   return fs.realpathSync(mkdtempForTestSync('host-kit-ancestry-'));
@@ -177,16 +200,97 @@ skipOnWindows('refuses a destination under a group-writable shared directory', (
 
 // --- ownership decides, not the mode alone ---
 
-skipOnWindows('refuses a private-mode directory another user owns, whatever the mode', () => {
+skipOnWindows('refuses a directory another user owns, whatever the mode', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
   const work = directoryWith(path.join(root(), 'foreign'), 0o755);
-  asAnotherLocalUser();
+  serveOwnership({ [work]: FOREIGN_UID });
 
   expectUntrusted(
     () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
     'foreign_owned',
     work,
   );
+});
+
+skipOnWindows(
+  'refuses a sticky directory another user owns, since both bits shield others from them',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // The reviewer's case: a teammate runs `chmod 1777` on a directory of THEIRS. The sticky bit keeps me
+    // from deleting their entries; it does nothing to stop them replacing mine.
+    const team = directoryWith(path.join(root(), 'team'), 0o1777);
+    serveOwnership({ [team]: FOREIGN_UID });
+    const work = path.join(team, 'work');
+    fs.mkdirSync(work);
+
+    expectUntrusted(
+      () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
+      'foreign_owned',
+      team,
+    );
+  },
+);
+
+skipOnWindows(
+  'refuses a recordings directory another local user created first in a sticky /tmp',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // `mkdir -p /tmp/recordings` is the shape: `/tmp` is sticky so nobody can touch anyone else's entry,
+    // and whoever creates that directory first owns it. The owner can rename it aside and put their own in
+    // place, whatever its mode says, so the destination has to be refused.
+    const systemTmp = directoryWith(path.join(root(), 'tmp'), 0o1777);
+    const recordings = path.join(systemTmp, 'recordings');
+    fs.mkdirSync(recordings);
+    fs.chmodSync(recordings, 0o755);
+    serveOwnership({ [systemTmp]: 0, [recordings]: FOREIGN_UID });
+
+    expectUntrusted(
+      () => assertPrivateScriptDestination(path.join(recordings, 'journey.ad')),
+      'foreign_owned',
+      recordings,
+    );
+  },
+);
+
+skipOnWindows('refuses a link standing in a private-mode directory another user owns', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The third input the reviewer names. `<root>/teammate` is theirs at 0755, `link` is a component of my
+  // path, and the target is a directory of mine nothing could object to. Nothing about the target chain
+  // looks wrong: the exposure is that the OWNER of the directory the link stands in can rename that
+  // component and leave one of their own there, pointing wherever they like.
+  const directory = root();
+  const teammate = directoryWith(path.join(directory, 'teammate'), 0o755);
+  serveOwnership({ [teammate]: FOREIGN_UID });
+  const mine = directoryWith(path.join(directory, 'mine'), 0o700);
+  fs.symlinkSync(mine, path.join(teammate, 'link'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(teammate, 'link', 'journey.ad')),
+    'planted_link',
+    path.join(teammate, 'link'),
+  );
+  expect(fs.readdirSync(mine)).toEqual([]);
+});
+
+skipOnWindows('judges the directories a .. in the path walks through', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `<root>/shared/work/../x/journey.ad` is a path a caller can pass. Resolving it first answers
+  // `<root>/shared/x/journey.ad`, which is a DIFFERENT directory from the one that receives the file:
+  // the kernel walks `work` into the link's target and steps back from THERE, so the entry is created
+  // beside that target. The rule has to judge the components it walked, so the link is refused here.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const published = directoryWith(path.join(directory, 'published'), 0o700);
+  const attacker = path.join(published, 'attacker');
+  fs.mkdirSync(attacker);
+  fs.symlinkSync(attacker, path.join(shared, 'work'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(`${shared}/work/../x/journey.ad`),
+    'planted_link',
+    path.join(shared, 'work'),
+  );
+  expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
 skipOnWindows('refuses a directory its owner opened up while the file was staged', () => {
@@ -271,6 +375,29 @@ skipOnWindows('refuses a symbolic link planted in a directory others can add ent
   expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
+skipOnWindows('refuses a private link whose target chain is a shared directory', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `~/rec -> /srv/team/rec`, with `/srv/team` open to the team. The link itself is this user's own in
+  // their own home, so nothing about it looks wrong; only the resolved chain shows the destination
+  // would sit in ground the whole team can write.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  const srv = path.join(directory, 'srv');
+  const team = path.join(srv, 'team');
+  fs.mkdirSync(team, { recursive: true });
+  fs.chmodSync(team, 0o777);
+  const rec = path.join(team, 'rec');
+  fs.mkdirSync(rec);
+  fs.symlinkSync(rec, path.join(home, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    'world_writable',
+    team,
+  );
+});
+
 skipOnWindows('refuses a symbolic link whose target is a directory others can write', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
   const directory = root();
@@ -321,11 +448,11 @@ skipOnWindows('keeps working through a root-owned alias whose target is sticky',
   expect(fs.existsSync(path.join(target, 'work', 'journey.ad'))).toBe(true);
 });
 
-skipOnWindows('publishes through the host root-owned system alias /tmp', () => {
+skipOnWindows('publishes under the host root-owned system temporary directory', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
-  // macOS reaches `/private/tmp` through `/tmp`, and Linux mounts `/tmp` directly. Either way the
-  // script lands in a sticky root-owned directory, so the alias must not be what ends the publish.
-  if (!fs.existsSync('/tmp') || !fs.lstatSync('/tmp').isSymbolicLink()) return;
+  // macOS reaches `/private/tmp` through `/tmp`, Linux mounts `/tmp` directly. Both are sticky and
+  // root-owned, and the script is created in a private directory under it, so neither spelling may
+  // stop the publish.
   const work = fs.mkdtempSync('/tmp/agent-device-ancestry-');
   fs.chmodSync(work, 0o700);
   const destination = path.join(work, 'journey.ad');
@@ -337,21 +464,33 @@ skipOnWindows('publishes through the host root-owned system alias /tmp', () => {
   }
 });
 
-skipOnWindows(
-  'publishes to a scratch path spelled through a system alias, not resolved away',
-  () => {
-    serveGroupDatabase(hostDatabase(currentGid, 4321));
-    // The scratch root of `root()` is the resolved path. This one keeps whatever alias the host spells
-    // its temporary directory with, which is the shape a caller actually passes.
-    const directory = mkdtempForTestSync('host-kit-ancestry-alias-');
-    expect(fs.realpathSync(directory)).not.toBe(directory);
-    const destination = path.join(directory, 'journey.ad');
+skipOnWindows('publishes to a path spelled through an alias of the directory that holds it', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The caller passes a path whose parent is a link, in a chain only this user can write. The alias
+  // leads somewhere legal, so the publish follows it instead of refusing it.
+  const directory = root();
+  const real = path.join(directory, 'workflows');
+  fs.mkdirSync(real);
+  fs.symlinkSync(real, path.join(directory, 'current'));
+  const destination = path.join(directory, 'current', 'journey.ad');
 
-    publish(destination);
+  publish(destination);
 
-    expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
-  },
-);
+  expect(fs.readFileSync(path.join(real, 'journey.ad'), 'utf8')).toBe('context\n');
+});
+
+skipOnWindows('publishes to a scratch path exactly as the host spelled it', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The scratch root keeps the host's own spelling of its temporary directory: an alias on macOS, where
+  // `/var` stands for `/private/var`, and no alias at all on Linux. Neither spelling may stop a publish,
+  // so this asserts the outcome rather than what the host happens to name.
+  const directory = mkdtempForTestSync('host-kit-ancestry-spelled-');
+  const destination = path.join(directory, 'journey.ad');
+
+  publish(destination);
+
+  expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+});
 
 // --- the destination directory swapped out while the file was staged ---
 
@@ -362,12 +501,16 @@ skipOnWindows('refuses a parent replaced by name while the file was staged', () 
   fs.mkdirSync(staged);
   const parentIdentity = publishDirectoryIdentity(staged);
   const destination = path.join(staged, 'journey.ad');
+  // The replacement is a link to another real directory. Removing the directory and creating the same
+  // name again is not enough to make the two differ: a filesystem may hand back the inode it just
+  // freed, and the identity would match by luck.
+  const elsewhere = path.join(directory, 'elsewhere');
+  fs.mkdirSync(elsewhere);
   fs.rmSync(staged, { recursive: true });
-  const replaced = path.join(directory, 'work');
-  fs.mkdirSync(replaced);
+  fs.symlinkSync(elsewhere, staged);
 
-  expectUntrustedReplaced(() => publish(destination, parentIdentity), replaced);
-  expect(fs.readdirSync(replaced)).toEqual([]);
+  expectUntrustedReplaced(() => publish(destination, parentIdentity), staged);
+  expect(fs.readdirSync(elsewhere)).toEqual([]);
 });
 
 skipOnWindows('re-checks the chain after staging the file, before the entry is created', () => {
@@ -376,17 +519,20 @@ skipOnWindows('re-checks the chain after staging the file, before the entry is c
   const staged = path.join(directory, 'work');
   fs.mkdirSync(staged);
   const destination = path.join(staged, 'journey.ad');
+  const attacker = path.join(directory, 'attacker');
+  fs.mkdirSync(attacker);
   const writeFileSync = fs.writeFileSync;
   vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
     const result = (writeFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    // The directory the file was staged in is gone and its name is somebody else's now. A filesystem
+    // hands back a freed inode, so the swap has to be to a directory that is really another one.
     fs.rmSync(staged, { recursive: true, force: true });
-    fs.mkdirSync(staged);
-    fs.chmodSync(staged, 0o777);
+    fs.symlinkSync(attacker, staged);
     return result;
   }) as typeof fs.writeFileSync);
 
   expectUntrustedReplaced(() => publish(destination), staged);
-  expect(fs.readdirSync(staged)).toEqual([]);
+  expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
 skipOnWindows('publishes into the parent the captured identity still names', () => {
@@ -408,8 +554,13 @@ function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority
   return { ...OWN, ...overrides };
 }
 
-test('refuses a directory another user owns even in private mode', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534 }), TRUST)).toBe('foreign_owned');
+test('refuses a directory another user owns, whatever its mode', () => {
+  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o700 }), TRUST)).toBe(
+    'foreign_owned',
+  );
+  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(
+    'foreign_owned',
+  );
 });
 
 test('refuses a directory that is world-writable', () => {
@@ -431,9 +582,16 @@ test('accepts a root-owned directory and a directory this user owns', () => {
   expect(untrustedAncestryExposure(directoryOf({}), TRUST)).toBeUndefined();
 });
 
-test('accepts a sticky shared directory for passing through, in any ownership', () => {
+test('accepts a sticky directory this user or root owns for passing through', () => {
+  expect(untrustedAncestryExposure(directoryOf({ uid: 0, mode: 0o1777 }), TRUST)).toBeUndefined();
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o1777 }), TRUST)).toBeUndefined();
+});
+
+test('refuses a sticky directory another user owns, since both bits shield others FROM that owner', () => {
   expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(
+    'foreign_owned',
+  );
+  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o2775 }), TRUST)).toBe(
     'foreign_owned',
   );
 });
@@ -473,6 +631,16 @@ test('names no directory whose group is this user', () => {
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(false);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o1775 }), TRUST)).toBe(false);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o755 }), TRUST)).toBe(false);
+});
+
+test('names a directory another user owns, whatever its mode', () => {
+  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(true);
+});
+
+test('names no directory this user or root owns that others cannot write', () => {
+  expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o755 }), TRUST)).toBe(false);
+  expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o1777 }), TRUST)).toBe(true);
 });
 
 // --- privateGroupId: the one group shape the exception admits ---

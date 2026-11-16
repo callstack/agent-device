@@ -198,7 +198,8 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
  * directory then has to satisfy:
  *
  * - It is owned by this user or by root. A directory another user owns is theirs to chmod, to empty, and
- *   to repopulate, whatever its mode says today.
+ *   to repopulate, whatever its mode says today, and both the sticky bit and the group bits shield other
+ *   users FROM that owner rather than the reverse.
  * - Its mode opens its contents to nobody else. The sticky bit is the one exception, and only for
  *   passing THROUGH a directory: it stops anyone but an entry's owner or root from removing or replacing
  *   that entry, which is how macOS `/tmp` and `/var` stay usable. It cannot refuse a NEW entry by name,
@@ -221,7 +222,7 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
  */
 export function assertPrivateScriptDestination(destination: string, parentIdentity?: string): void {
   if (process.platform === 'win32') return;
-  const parent = path.dirname(path.resolve(destination));
+  const parent = spelledParent(destination);
   if (parentIdentity !== undefined && publishDirectoryIdentity(parent) !== parentIdentity) {
     throw scriptAncestryFailure(destination, parent, 'parent_replaced');
   }
@@ -229,8 +230,7 @@ export function assertPrivateScriptDestination(destination: string, parentIdenti
   assertNoPlantedLink(destination, parent, trust);
   const existing = deepestExistingDirectory(parent);
   if (existing.real === undefined) return;
-  const chain = directoryChain(existing.real);
-  for (const ancestor of chain) {
+  for (const ancestor of directoryChain(existing.real)) {
     const stats = statDirectoryChain(ancestor);
     if (!stats) continue;
     const exposure = untrustedAncestryExposure(stats, trust);
@@ -243,6 +243,20 @@ export function assertPrivateScriptDestination(destination: string, parentIdenti
   if (deepest && othersCreateEntriesIn(deepest, trust)) {
     throw scriptAncestryFailure(destination, existing.real, 'shared_parent');
   }
+}
+
+/**
+ * The parent of `destination` as it was spelled, made absolute but never normalized.
+ *
+ * `path.resolve` folds a `..` away, which is the one simplification this rule may not make: the kernel
+ * does not make it either, so `.../work/../x` lands an entry beside the target of a link named `work`.
+ * The chain that walk produces is what gets judged.
+ */
+function spelledParent(destination: string): string {
+  if (path.isAbsolute(destination)) return parentDirectory(destination);
+  // A relative destination reaches the filesystem through the working directory, the same way
+  // `path.resolve` names it, and the walk above is what the kernel performs from there.
+  return parentDirectory(path.resolve(destination));
 }
 
 /**
@@ -291,7 +305,7 @@ function deepestExistingDirectory(directory: string): Readonly<{ real: string | 
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     }
-    const parent = path.dirname(current);
+    const parent = parentDirectory(current);
     if (parent === current) return { real: undefined };
     current = parent;
   }
@@ -387,10 +401,25 @@ function directoryChain(directory: string): string[] {
   let current = directory;
   for (;;) {
     chain.push(current);
-    const parent = path.dirname(current);
+    const parent = parentDirectory(current);
     if (parent === current) return chain;
     current = parent;
   }
+}
+
+/**
+ * The parent of `directory`, as the kernel sees it, or the same path when there is no parent.
+ *
+ * `path.dirname` is not usable here: it normalizes, so it folds a `..` segment away. That is the one
+ * simplification this rule may not make. Where `work` is a symbolic link, `.../work/../x` is a real
+ * path that lands beside the link's TARGET, so the rule has to see `.../work` in the chain and judge
+ * the link that stands there. Only a trailing separator is dropped, in linear time.
+ */
+function parentDirectory(directory: string): string {
+  const trimmed = directory.endsWith('/') ? directory.slice(0, -1) : directory;
+  const separator = trimmed.lastIndexOf('/');
+  if (separator < 0) return trimmed;
+  return separator === 0 ? '/' : trimmed.slice(0, separator);
 }
 
 /**
@@ -445,13 +474,18 @@ export function untrustedAncestryExposure(
 
 /**
  * Whether other local users can add an entry here, which is how the destination's own name, or a
- * directory below it, becomes theirs. The sticky bit is deliberately not consulted: it protects entries
- * that already exist and cannot refuse a new one.
+ * directory below it, becomes theirs.
+ *
+ * A directory somebody else owns counts: they can create, rename, or replace any entry in it whatever
+ * its mode says, sticky bit included, since both of those protect other people's entries from them, not
+ * their own. The sticky bit is otherwise deliberately not consulted here — it cannot refuse a NEW entry
+ * by name.
  */
 export function othersCreateEntriesIn(
   directory: DirectoryAuthority,
   trust: ScriptDestinationTrust,
 ): boolean {
+  if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
   return Boolean(directory.mode & 0o020) && directory.gid !== trust.privateGid;
 }
@@ -468,6 +502,10 @@ export type LinkAuthority = Readonly<{ uid: number }>;
  * stops anyone but the entry's owner or root from unlinking and replacing it, so a link this user or root
  * owns stands, and one anybody else owns does not — it may be theirs, and without the sticky bit any of
  * them can swap it for one pointing wherever they like.
+ *
+ * A component the path steps back over with `..` is asked as a directory rather than as a link: there
+ * the caller is not publishing through it, only walking across it, and the directory it lands in is
+ * judged on its own.
  */
 export function untrustedLinkExposure(
   link: LinkAuthority,
