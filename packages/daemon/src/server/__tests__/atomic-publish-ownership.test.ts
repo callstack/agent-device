@@ -23,9 +23,19 @@ const PROCESS_LOCK_SOURCE = new URL(
 test('simple same-directory publishers use the shared atomic publish owner', () => {
   for (const sourcePath of SIMPLE_PUBLISHERS) {
     const source = fs.readFileSync(sourcePath, 'utf8');
-    assert.match(source, /publishFileSync/);
+    assert.match(source, /publish(?:Script)?FileSync/);
     assert.doesNotMatch(source, /fs\.(?:writeFileSync|renameSync)\s*\(/);
   }
+});
+
+// A session script is published through the ancestry-owning entry point, not the plain one: the plain
+// one writes to a destination another local user could have steered (#4565).
+test('the session script publisher uses the destination-ancestry owner', () => {
+  const source = fs.readFileSync(
+    new URL('../../core/session-script-writer.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /publishScriptFileSync/);
 });
 
 // The process lock publishes a file and reclaims a directory, which are two different

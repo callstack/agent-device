@@ -33,6 +33,7 @@
     "packages/kernel/src/contracts.ts#RESPONSE_LEVELS": "sha256:cef29c3b56c299e35a7fee8058b90dc4a6f65a46a420e4f11f77c8ca7d0359c8",
     "packages/kernel/src/contracts.ts#ResponseCost": "sha256:2a44de54e8b5c886b36da1500e22d634ec7e12961d2c93b689d2b1aa8c15f186",
     "packages/kernel/src/contracts.ts#ResponseLevel": "sha256:c7329d28e745b5e69b86aa1a686befa314b98248afbe5e0e2d7d395f0d777f9b",
+    "packages/kernel/src/contracts.ts#ScriptDeliveryFailure": "sha256:186881f8b2e6a0227a6d1a2c802d8f7356fee39d4137800a0c9fa65401aa2765",
     "packages/kernel/src/contracts.ts#SESSION_ISOLATION_MODES": "sha256:3d4b3048e22bb0ceccc98cf8fd93a87a1a1e2dad96fa03cffff6d0ecedb58689",
     "packages/kernel/src/contracts.ts#SessionIsolationMode": "sha256:beea941fe57b000902da28af15a27aa18d0c957408209e3ec372fcf7f605fa7c",
     "packages/kernel/src/contracts.ts#SESSION_RUNTIME_PLATFORMS": "sha256:6164fc8ca226b5beb3ba52a8dddd3c11633a8accec58b9f8972c44c8339a1bf7",
