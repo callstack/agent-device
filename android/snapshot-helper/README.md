@@ -184,6 +184,6 @@ resolve the APK from `apkUrl`, verify `sha256`, install it with `adb install -r 
 `instrumentationRunner`. Manifests up to 0.21.3 also carried an `installArgs` array; it only ever
 spelled `install -r` (plus `-t` while the helper was `testOnly`), so consumers can ignore it.
 
-Capture metadata reports `cacheInvalidated` when the capture cleared the platform node cache through `UiAutomation.clearCache()`. A complete capture with that evidence need not change routes after a control press. A press or click whose `--settle` converged on a complete capture with that evidence opens no freshness window, so the next command reads without freshness recovery. Incomplete captures and captures without that evidence retain freshness recovery.
+Capture metadata reports `cacheInvalidated` when the capture cleared the platform node cache through `UiAutomation.clearCache()`. A complete capture with that evidence need not change routes after a control press. A press or click opens no freshness window when its `--settle` converged, stored its final capture as the session snapshot, and that capture is complete with that evidence, so the next command reads without freshness recovery. Incomplete captures and captures without that evidence retain freshness recovery.
 
 Warm application open commands use the same automation session. Close retains the existing foreground and process-absence checks. A failed application command is never resent.
