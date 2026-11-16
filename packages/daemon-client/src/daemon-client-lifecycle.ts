@@ -222,7 +222,6 @@ function shouldUseOwnedReplayStateDir(
   return isOneShotReplayCommand(req.command) && !explicitStateDir && !rawRemoteBaseUrl;
 }
 
-/**
 /** The command budget for recovering a remote daemon health probe. */
 export type RemoteHealthRecovery = {
   budgetMs: number;
