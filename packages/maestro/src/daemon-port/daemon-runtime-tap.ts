@@ -1,5 +1,4 @@
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import { assertSnapshotScreenOrigin } from '@agent-device/contracts/capture';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -52,7 +51,7 @@ export async function resolveDaemonMaestroTarget(params: {
       { context, snapshot: snapshots.capture, dependencies: options.dependencies },
       deadline,
     );
-    await assertSnapshotScreenOrigin(currentSnapshot.nodes, 'Maestro selector target');
+    await options.assertSnapshotScreenOrigin(currentSnapshot.nodes, 'Maestro selector target');
     const match = resolveTypedMaestroTarget({
       query: input,
       context,

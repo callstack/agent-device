@@ -101,3 +101,17 @@ test('a published package keeps its siblings in devDependencies for every file',
     assert.deepEqual(violations(published, file), [], file);
   }
 });
+
+test('a private publication placeholder keeps bundled dependencies in the publication field', () => {
+  const staged = {
+    ...DEV_ONLY,
+    publishConfig: { exports: { './agent-device': { import: './dist/plugin.mjs' } } },
+  };
+  assert.deepEqual(violations(staged, 'packages/owner/src/thing.ts'), []);
+  const undeclared = violations({ ...staged, devDependencies: {} }, 'packages/owner/src/thing.ts');
+  assert.equal(undeclared.length, 1);
+  assert.match(undeclared[0]!.message, /without declaring "@agent-device\/helper"/);
+  const privateDevOnly = violations(DEV_ONLY, 'packages/owner/src/thing.ts');
+  assert.equal(privateDevOnly.length, 1);
+  assert.match(privateDevOnly[0]!.message, /declare it in dependencies/);
+});
