@@ -250,7 +250,7 @@ async function startOrReuseLocalDaemon(settings: DaemonClientSettings): Promise<
   return await startLocalDaemon(settings);
 }
 
-export async function ensureRemoteDaemon(
+async function ensureRemoteDaemon(
   settings: DaemonClientSettings,
   healthRecovery?: RemoteHealthRecovery,
 ): Promise<EnsuredDaemon> {
