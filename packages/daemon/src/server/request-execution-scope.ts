@@ -837,12 +837,7 @@ function contextFromRequestFlags(
   };
 }
 
-/**
- * The per-`LeaseRegistry` execution-lock map a request's session and device locks are taken from.
- * Exported because the #2833 session-idle reaper expires sessions through this same map: an expiry
- * that did not wait on the session's execution lock could tear down a session mid-command, and a
- * second map would make that race invisible rather than impossible.
- */
+/** The idle reaper shares these locks so expiry cannot tear down an active request. */
 export function getLeaseRegistryExecutionLocks(
   leaseRegistry: LeaseRegistry,
 ): Map<string, Promise<unknown>> {
