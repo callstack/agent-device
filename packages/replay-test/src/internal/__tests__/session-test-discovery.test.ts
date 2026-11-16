@@ -8,7 +8,10 @@ import {
 } from '../session-test-discovery.ts';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { buildReplayTestArtifactSlug } from '../session-test-artifacts.ts';
-import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
+import type {
+  ReplayTestManifest,
+  ReplayTestSource,
+} from '@agent-device/contracts/replay-test-execution';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which
 // it skips and with what message, and rejecting a suite that matched nothing. Inspection is the

@@ -1,4 +1,5 @@
 [
+  "@agent-device/contracts/ad-replay-execution",
   "@agent-device/contracts/alert-contract",
   "@agent-device/contracts/alert-runtime",
   "@agent-device/contracts/android-clipboard-support",
@@ -103,6 +104,9 @@
   "@agent-device/contracts/remote",
   "@agent-device/contracts/replay",
   "@agent-device/contracts/replay-backend",
+  "@agent-device/contracts/replay-divergence-data",
+  "@agent-device/contracts/replay-script-data",
+  "@agent-device/contracts/replay-test-execution",
   "@agent-device/contracts/runner-lease-context",
   "@agent-device/contracts/runtime-contract",
   "@agent-device/contracts/runtime-contract-error",
