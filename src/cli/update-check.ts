@@ -169,7 +169,6 @@ function cachedDistTag(cache: UpdateCheckCache): string {
   return cache.distTag ?? 'latest';
 }
 
-/** A nightly build follows the `nightly` dist-tag; every other build follows `latest`. */
 function distTagFor(version: string): 'latest' | 'nightly' {
   return version.includes('-nightly.') ? 'nightly' : 'latest';
 }
