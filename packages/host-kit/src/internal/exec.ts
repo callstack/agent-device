@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { StringDecoder } from 'node:string_decoder';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
@@ -306,8 +307,8 @@ function runSpawnedCommand(
         }, timeoutMs)
       : null;
 
-    if (!options.binaryStdout) child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     void writeChildStdin(child, options.stdin).catch((error: unknown) => {
       if (abort.didAbort || didTimeout) return;
@@ -326,22 +327,34 @@ function runSpawnedCommand(
       return false;
     }
 
-    child.stdout.on('data', (chunk) => {
+    function appendText(stream: 'stdout' | 'stderr', text: string): void {
+      if (!text) return;
+      if (options.captureOutput !== false) {
+        if (stream === 'stdout') stdout += text;
+        else stderr += text;
+      }
+      if (stream === 'stdout') options.onStdoutChunk?.(text);
+      else options.onStderrChunk?.(text);
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
       if (!acceptOutput('stdout', chunk)) return;
       if (options.binaryStdout) {
         stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         return;
       }
-      const text = String(chunk);
-      if (options.captureOutput !== false) stdout += text;
-      options.onStdoutChunk?.(text);
+      appendText('stdout', stdoutDecoder.write(chunk));
     });
 
-    child.stderr.on('data', (chunk) => {
+    child.stderr.on('data', (chunk: Buffer) => {
       if (!acceptOutput('stderr', chunk)) return;
-      const text = String(chunk);
-      if (options.captureOutput !== false) stderr += text;
-      options.onStderrChunk?.(text);
+      appendText('stderr', stderrDecoder.write(chunk));
+    });
+    child.stdout.on('end', () => {
+      if (!options.binaryStdout && !exceededStream) appendText('stdout', stdoutDecoder.end());
+    });
+    child.stderr.on('end', () => {
+      if (!exceededStream) appendText('stderr', stderrDecoder.end());
     });
 
     child.on('error', (err) => {
