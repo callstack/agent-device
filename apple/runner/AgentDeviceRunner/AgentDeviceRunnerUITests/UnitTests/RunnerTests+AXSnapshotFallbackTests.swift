@@ -26,6 +26,8 @@ extension RunnerTests {
       Self.privateAXRootViewport(rootFrame: offset, fullScreenFrame: offset),
       .derived(box: offset)
     )
+    // Measured on an iPhone 17 Pro Max simulator in landscape: the private AX root is in interface
+    // space, and AXRuntime reports the screen in native portrait space.
     let landscape = CGRect(x: 0, y: 0, width: 956, height: 440)
     XCTAssertEqual(
       Self.privateAXRootViewport(rootFrame: landscape, fullScreenFrame: screen),

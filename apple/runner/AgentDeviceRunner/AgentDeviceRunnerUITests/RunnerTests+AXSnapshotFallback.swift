@@ -282,7 +282,17 @@ extension RunnerTests {
     rootFrame: CGRect
   ) -> SnapshotViewport {
     let fallback = {
-      Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: Self.fullScreenFrame(of: app))
+      let fullScreenFrame = Self.fullScreenFrame(of: app)
+      let viewport = Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: fullScreenFrame)
+      let kind: String
+      if case .reported = viewport { kind = "reported" } else { kind = "derived" }
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PRIVATE_AX_ROOT_VIEWPORT kind=%@ root=%@ fullScreen=%@",
+        kind,
+        String(describing: rootFrame),
+        fullScreenFrame.isNull ? "none" : String(describing: fullScreenFrame)
+      )
+      return viewport
     }
     guard shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId) else {
       return fallback()
