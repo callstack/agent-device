@@ -28,7 +28,7 @@ import {
   resolveDaemonPaths,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { createEnsuredDaemonTransport } from '../index.ts';
+import { createEnsuredDaemonTransport, sendToDaemon as attachToDaemon } from '../index.ts';
 import * as lifecycle from '../daemon-client-lifecycle.ts';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
@@ -662,7 +662,9 @@ test.for([
     assert.equal(joined, true);
     assert.equal(isProcessAlive(winner.pid), expected.alive);
     assert.equal(spawn.mock.calls.length, expected.launches);
-    assert.equal(http.rpcRequests.length, 0);
+    assert.equal(http.rpcRequests.length, 0, 'ensuring never dispatches the request');
+    if (!expected.alive) assert.equal((await attachToDaemon(request(paths))).ok, true);
+    assert.equal(http.rpcRequests.length, expected.rpcs);
     assert.equal(
       stderrCapture.read().includes(`Replacing daemon (pid ${winner.pid}, v0.0.1)`),
       !expected.alive,
