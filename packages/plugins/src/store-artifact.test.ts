@@ -3,7 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+import * as command from '@agent-device/host-kit/command';
 import { mkdtempForTestSync, pluginHome, v2RegistrationSource } from '@agent-device/test-kit';
 import {
   addPluginArtifact,
@@ -17,6 +18,7 @@ function packFixture(
   root: string,
   name: string,
   exportsField: unknown = { './agent-device': './plugin.mjs' },
+  factoryGate?: string,
 ) {
   const source = path.join(root, name);
   fs.mkdirSync(source, { recursive: true });
@@ -39,13 +41,20 @@ function packFixture(
     path.join(source, 'sentinel.cjs'),
     `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'script')`,
   );
-  fs.writeFileSync(
-    path.join(source, 'plugin.mjs'),
-    v2RegistrationSource(name).replace(
-      'export default (options = {}) => (',
-      `export default (options = {}) => (fs.writeFileSync(${JSON.stringify(sentinel)}, 'factory'), `,
-    ),
+  let pluginSource = v2RegistrationSource(name).replace(
+    'export default (options = {}) => (',
+    `export default (options = {}) => (fs.writeFileSync(${JSON.stringify(sentinel)}, 'factory'), `,
   );
+  if (factoryGate) {
+    pluginSource = pluginSource.replace('export default ', 'const createPlugin = ');
+    pluginSource += `\nexport default async (options) => {
+      const gate = globalThis[Symbol.for(${JSON.stringify(factoryGate)})];
+      gate.enter();
+      await gate.resume;
+      return createPlugin(options);
+    };`;
+  }
+  fs.writeFileSync(path.join(source, 'plugin.mjs'), pluginSource);
   const output = execFileSync(
     'npm',
     ['pack', '--ignore-scripts', '--json', '--pack-destination', root],
@@ -161,4 +170,80 @@ test('npm staging rejects an escaping symlink entry and leaves external files un
   assert.equal(fs.readFileSync(outside, 'utf8'), 'outside');
   assert.equal(fs.existsSync(path.join(home, 'escape')), false);
   assert.equal(fs.existsSync(path.join(home, 'config.json')), false);
+});
+
+test('artifact installation rejects replacement bytes consumed by npm', async () => {
+  const root = mkdtempForTestSync('plugin-artifact-replaced-');
+  const originalRoot = path.join(root, 'original');
+  const replacementRoot = path.join(root, 'replacement');
+  const original = packFixture(originalRoot, 'fixture-replaced');
+  const replacement = packFixture(replacementRoot, 'fixture-replaced');
+  assert.notDeepEqual(fs.readFileSync(original.archive), fs.readFileSync(replacement.archive));
+  const { home, env: isolated } = pluginHome();
+  const env = { ...process.env, ...isolated };
+  const runCmd = command.runCmd;
+  let replaced = false;
+  const spy = vi.spyOn(command, 'runCmd').mockImplementation(async (program, args, options) => {
+    if (program === 'npm' && args[0] === 'install' && args.at(-2) === '--') {
+      fs.copyFileSync(replacement.archive, args.at(-1)!);
+      replaced = true;
+    }
+    return runCmd(program, args, options);
+  });
+  try {
+    await assert.rejects(addPluginArtifact(original.archive, { cwd: root, env }), {
+      code: 'INVALID_ARGS',
+      details: { reason: 'artifact_integrity_mismatch' },
+    });
+    assert.equal(replaced, true);
+    assert.equal(fs.existsSync(path.join(home, 'config.json')), false);
+    assert.deepEqual(fs.readdirSync(path.join(home, 'plugins')), []);
+    assert.equal(fs.existsSync(replacement.sentinel), false);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('inventory retains one selection snapshot while a factory awaits', async () => {
+  const root = mkdtempForTestSync('plugin-artifact-inventory-');
+  const key = `agent-device.artifact-inventory.${crypto.randomUUID()}`;
+  const first = packFixture(path.join(root, 'first'), 'fixture-inventory', undefined, key);
+  const second = packFixture(path.join(root, 'second'), 'fixture-inventory');
+  const { env: isolated } = pluginHome();
+  const env = { ...process.env, ...isolated };
+  const original = await addPluginArtifact(first.archive, { cwd: root, env });
+  let enter!: () => void;
+  let continueListing!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    continueListing = resolve;
+  });
+  const gates = globalThis as typeof globalThis & Record<symbol, unknown>;
+  gates[Symbol.for(key)] = { enter, resume };
+  const listing = listPlugins(env, []);
+  try {
+    await entered;
+    await changePlugin('remove', original.name, env);
+    const replacement = await addPluginArtifact(second.archive, { cwd: root, env });
+    assert.notEqual(replacement.integrity, original.integrity);
+    continueListing();
+    const [entry] = await listing;
+    assert.deepEqual(entry, {
+      name: original.name,
+      installation: original.installation,
+      integrity: original.integrity,
+      version: original.version,
+      provider: 'fixture-inventory',
+      compatible: true,
+    });
+    const [current] = await listPlugins(env, []);
+    assert.equal(current?.installation, replacement.installation);
+    assert.equal(current?.integrity, replacement.integrity);
+  } finally {
+    continueListing();
+    await listing;
+    delete gates[Symbol.for(key)];
+  }
 });

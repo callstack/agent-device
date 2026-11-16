@@ -185,15 +185,22 @@ async function loadInstallation({ name, entry, selection }: StoreInstallation) {
  * only once its factory runs, and the registry settles a duplicate then.
  */
 export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<PluginCandidate[]> {
+  return (await readPluginSnapshot(env)).candidates;
+}
+
+async function readPluginSnapshot(env: NodeJS.ProcessEnv): Promise<{
+  candidates: PluginCandidate[];
+  selections: Record<string, PluginSelection>;
+}> {
   const home = storeHome(env);
   let selections: [string, PluginSelection][];
   try {
     selections = Object.entries(readPluginConfig(env).plugins ?? {});
   } catch (error) {
-    return [{ source: 'store', load: () => Promise.reject(error) }];
+    return { candidates: [{ source: 'store', load: () => Promise.reject(error) }], selections: {} };
   }
   const ordered = selections.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  return await Promise.all(
+  const candidates = await Promise.all(
     ordered.map(async ([name, selection]): Promise<PluginCandidate> => {
       try {
         const installation = await readInstallation(home, name, selection);
@@ -216,6 +223,7 @@ export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<Plu
       }
     }),
   );
+  return { candidates, selections: Object.fromEntries(ordered) };
 }
 
 // Only a selection that passed validation names a directory this process may read.
@@ -238,14 +246,11 @@ async function readSelectionVersion(
 
 export async function listPlugins(env: NodeJS.ProcessEnv, builtinProviders: readonly string[]) {
   const { claimProviderIds, resolveProviderPlugins } = await import('./registry.ts');
+  const { candidates, selections } = await readPluginSnapshot(env);
   const resolved = await resolveProviderPlugins([
     ...claimProviderIds(builtinProviders),
-    ...(await storePluginCandidates(env)),
+    ...candidates,
   ]);
-  let selections: Record<string, PluginSelection> = {};
-  try {
-    selections = readPluginConfig(env).plugins ?? {};
-  } catch {}
   return resolved.inventory().map((entry) => ({
     name: entry.package,
     ...(entry.package && selections[entry.package]?.artifact
@@ -402,8 +407,8 @@ export async function addPluginArtifact(
   const bytes = fs.readFileSync(path.resolve(host.cwd, input));
   const integrity = `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`;
   const configPath = resolveUserConfigPath(host.env);
-  const home = path.dirname(configPath);
-  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  const home = fs.realpathSync(path.dirname(configPath));
   const release = await acquireProcessLock({
     lockDirPath: path.join(home, 'plugins.lock'),
     owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
@@ -425,6 +430,10 @@ export async function addPluginArtifact(
         reason: 'invalid_plugin',
       });
     const name = names[0]!;
+    if (lock.packages?.[`node_modules/${name}`]?.integrity !== integrity)
+      throw new AppError('INVALID_ARGS', 'Artifact contents changed during installation', {
+        reason: 'artifact_integrity_mismatch',
+      });
     const directory = installationDirectory(home, name, installation);
     const root = fs.realpathSync(project);
     const actualDirectory = fs.realpathSync(directory);
