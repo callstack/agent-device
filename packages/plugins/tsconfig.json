@@ -11,9 +11,17 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../contracts" },
-    { "path": "../host-kit" },
-    { "path": "../kernel" },
-    { "path": "../test-kit" }
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../host-kit"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../test-kit"
+    }
   ]
 }
