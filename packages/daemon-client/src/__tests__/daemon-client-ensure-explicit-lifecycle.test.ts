@@ -142,7 +142,7 @@ test('attach reports a missing daemon without starting one', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
 
-  const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
+  const error = await failureOf(sendToDaemon(request(stateDir)));
 
   assert.equal(error.details?.reason, 'daemon-not-running');
   assert.match(String(error.details?.hint), /agent-device devices --state-dir /);
@@ -161,7 +161,7 @@ test('attach reports an incompatible daemon with both identities and leaves it r
   });
 
   try {
-    const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
+    const error = await failureOf(sendToDaemon(request(stateDir)));
 
     assert.equal(error.details?.reason, 'daemon-incompatible');
     assert.equal(identityIn(error, 'daemon').version, '0.0.0-stale');
@@ -184,7 +184,7 @@ for (const ownership of ['detached', 'embedded'] as const)
     await closeLoopbackServer(closed.server);
     const { child } = await registerDaemon(paths, { httpPort: closed.port, ownership });
 
-    const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
+    const error = await failureOf(sendToDaemon(request(stateDir)));
 
     assert.equal(error.details?.reason, 'daemon-not-running');
     assert.equal(identityIn(error, 'daemon').pid, child.pid);
@@ -206,29 +206,29 @@ test('attach uses a compatible daemon and never lets a timeout retire it', async
   const send = vi.spyOn(transport, 'sendRequest');
 
   try {
-    const response = await sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' });
+    const response = await sendToDaemon(request(stateDir));
     assert.deepEqual(response, { ok: true, data: { via: 'live' } });
     assert.equal(send.mock.calls.at(-1)?.[5]?.timeoutRecovery, 'none');
 
+    // The removed per-request lifecycle knob cannot resurrect the old kill path: an omitted context
+    // attaches too, and still may not retire the daemon on a timeout.
     await sendToDaemon(request(stateDir));
-    assert.equal(send.mock.calls.at(-1)?.[5]?.timeoutRecovery, 'retire-unresponsive');
+    assert.equal(send.mock.calls.at(-1)?.[5]?.timeoutRecovery, 'none');
     assert.equal(spawn.mock.calls.length, 0);
   } finally {
     await closeLoopbackServer(live.server);
   }
 });
 
-test('a remote connection never starts a local daemon in either lifecycle', async (t) => {
+test('a remote connection never starts a local daemon', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir } = stateDirAndPaths();
   const unreachable = await startScriptedDaemon(okResult({}));
   await closeLoopbackServer(unreachable.server);
   const remote = { daemonBaseUrl: `http://127.0.0.1:${unreachable.port}` };
 
-  for (const daemonLifecycle of ['attach', 'managed'] as const) {
-    const error = await failureOf(sendToDaemon(request(stateDir, remote), { daemonLifecycle }));
-    assert.match(error.message, /Remote daemon is unavailable/);
-  }
+  const error = await failureOf(sendToDaemon(request(stateDir, remote)));
+  assert.match(error.message, /Remote daemon is unavailable/);
   assert.equal(spawn.mock.calls.length, 0);
 });
 
@@ -551,9 +551,7 @@ test('a live daemon on another transport is left alone when it cannot be asked t
     assert.equal(ensured.details?.reason, 'daemon-incompatible');
     assert.equal(ensured.details?.mismatch, 'no-quiesce');
 
-    const attached = await failureOf(
-      sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }),
-    );
+    const attached = await failureOf(sendToDaemon(request(stateDir)));
     assert.equal(attached.details?.reason, 'daemon-incompatible');
     assert.equal(attached.details?.mismatch, 'transport');
 
@@ -733,9 +731,7 @@ test('a registration whose process is gone is not running, whatever version it n
   );
 
   try {
-    const attached = await failureOf(
-      sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }),
-    );
+    const attached = await failureOf(sendToDaemon(request(stateDir)));
     assert.equal(attached.details?.reason, 'daemon-not-running');
 
     // ensureDaemon replaces the dead registration without asking anyone to leave.
