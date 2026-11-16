@@ -63,7 +63,8 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
         }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
-        assert.match(error.message, /v999\.0\.0\) is newer than this client/);
+        assert.equal(error.details?.reason, 'daemon-incompatible');
+        assert.equal(error.details?.mismatch, 'newer');
         assert.match(String(error.details?.hint), /agent-device daemon stop --state-dir /);
         return true;
       },
@@ -112,7 +113,8 @@ test('sendToDaemon refuses a newer socket-only daemon when the client prefers ht
         }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
-        assert.match(error.message, /v999\.0\.0\) is newer than this client/);
+        assert.equal(error.details?.reason, 'daemon-incompatible');
+        assert.equal(error.details?.mismatch, 'newer');
         return true;
       },
     );

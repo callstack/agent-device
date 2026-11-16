@@ -90,18 +90,11 @@ if ('cloudArtifacts' in result) {
 
 ## Daemon lifecycle
 
-A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
+Client calls attach to the local daemon for their state directory without starting, replacing or stopping it, including after a timeout. This includes `client.replay.run()` and `client.replay.test()`. Only CLI/MCP one-shot replay/test operations start and clean up a private daemon. A missing daemon reports `daemon-not-running`; an incompatible daemon reports `daemon-incompatible`.
 
-Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live runtime with `error.details.reason: 'daemon-owner-embedded'` and a hint naming the host PID. It sends no request or signal. If the recorded host lifetime has provably exited, `daemon stop` retires its abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`. Without `--clean`, an unreadable `daemon.json` fails with `daemon-record-unreadable`.
+To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon({ stateDir })` with the same `stateDir` as the client before creating it, including clients used only for replay/test. To own the daemon in your process instead, use `startAgentDevice()` as shown below. CLI and MCP commands continue to ensure the local daemon when needed.
 
-A `'managed'` client reuses a matching embedded runtime. Takeover, drain, and timeout recovery refuse a live embedded or unrecognized owner without a signal. A provably exited owner is retired so you can reuse the state directory.
-
-| Mode | What the client does with the daemon |
-| --- | --- |
-| `'managed'` (default) | Starts a missing daemon, replaces one that does not match the client, and retires an unresponsive one after a timeout. |
-| `'attach'` | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout. |
-
-`'managed'` stays the default until 0.22. Use `'attach'` when your code, or another process, owns the daemon, and call `ensureDaemon()` to start or replace it deliberately:
+Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
@@ -112,7 +105,7 @@ await ensureDaemon({
   stateDir,
   onStart: (reason, previous) => console.log(`started a daemon: ${reason}`, previous),
 });
-const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
+const client = createAgentDeviceClient({ stateDir });
 ```
 
 `ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. A daemon that accepted the quiesce request is never signaled while it drains: the call waits up to 60 s for it to exit and clear its registration. One still running after that fails repeated liveness probes and is force-retired when its process is provably a daemon. A daemon that still answers, or whose process cannot be proven to be a daemon, fails the call with `daemon-drain-timeout`; a force retirement that cannot be confirmed fails it with `daemon_retirement_unconfirmed`. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing, or one that accepted the request to leave and was force-retired after outlasting its drain.
@@ -121,15 +114,15 @@ These failures carry a typed `error.details.reason`:
 
 | Reason | Meaning |
 | --- | --- |
-| `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
-| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-not-running` | A client found no daemon to connect to. Call `ensureDaemon({ stateDir })` for the client's state directory. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon({ stateDir })` for that directory. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
 | `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
 | `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a detached daemon. It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
 | `daemon-owner-embedded` | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Close the runtime in its host process with its `close()` handle. |
 | `daemon-owner-unrecognized` | The record on `stateDir` states an owner this version cannot read, so this client replaced nothing and signaled nothing. Update agent-device if the record comes from a newer build. Otherwise check what owns that process: a host that started it closes it with its own close, and otherwise remove `daemon.json` once that process is gone. |
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 
-`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
+`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` connects to the remote daemon and does not start or stop a local daemon.
 
 ## Running the daemon inside your process
 
@@ -242,7 +235,7 @@ const controller = new AbortController();
 await client.interactions.press({ ref: '@e12', signal: controller.signal });
 ```
 
-With the built-in transport, a signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). A custom transport receives the signal on its context and may cancel differently. The daemon and the session stay alive for other requests. On iOS, a command that already reached the device keeps running there, so the daemon holds the session while the device reports it running. Your promise still rejects at once. The hold ends when the device reports the command finished, when the command's own timeout runs out, or when the device cannot confirm the command (it never received it, or the status check fails). Only in the first case is the canceled work known to be over before the session's next request starts. An abort is not a timeout: it never triggers the runner cleanup or daemon reset that a timeout does. Cancellation covers only the daemon request, so a response-artifact download already underway is not stopped, and a canceled one-shot replay still runs the existing cleanup that can tear down a daemon this client started.
+With the built-in transport, a signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). A custom transport receives the signal on its context and may cancel differently. The daemon and the session stay alive for other requests. On iOS, a command that already reached the device keeps running there, so the daemon holds the session while the device reports it running. Your promise still rejects at once. The hold ends when the device reports the command finished, when the command's own timeout runs out, or when the device cannot confirm the command (it never received it, or the status check fails). Only in the first case is the canceled work known to be over before the session's next request starts. An abort is not a timeout: it never triggers the runner cleanup or daemon reset that a timeout does. Cancellation covers only the daemon request, so a response-artifact download already underway is not stopped.
 
 ```ts
 await client.command.wait({
