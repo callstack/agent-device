@@ -1,4 +1,3 @@
-import { commandSettlementReason } from './exec-settlement.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { constants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
@@ -8,7 +7,12 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
+import {
+  commandSettlementReason,
+  createExecTraceContext,
+  normalizeTimeoutMs,
+  type ExecSettlementReason,
+} from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
@@ -257,7 +261,7 @@ function runSpawnedCommand(
       });
       if (!finish(finalReason)) return;
       const finalExitCode = code ?? 1;
-      if (!abort.didAbort && exceededStream) {
+      if (!abort.didAbort && exceededStream && !didTimeout) {
         reject(
           new AppError('COMMAND_FAILED', `${executable} exceeded its output limit`, {
             cmd,
@@ -302,6 +306,7 @@ function runSpawnedCommand(
     const { settlement, abort } = bindCommandLifecycle(child, options, execTrace, settle);
     timeoutHandle = timeoutMs
       ? setTimeout(() => {
+          if (exceededStream) return;
           execTrace.emit('deadline');
           didTimeout = true;
           settlement.requestKill();
@@ -861,13 +866,6 @@ async function isFilePath(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function normalizeTimeoutMs(value: number | undefined): number | undefined {
-  if (!Number.isFinite(value)) return undefined;
-  const timeout = Math.floor(value as number);
-  if (timeout <= 0) return undefined;
-  return timeout;
 }
 
 /**

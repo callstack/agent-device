@@ -557,3 +557,34 @@ test('bounded text output preserves multibyte characters across pipe chunks', as
     expect(result[stream]).toBe(expected);
   }
 });
+
+test.skipIf(process.platform === 'win32')(
+  'graceful shutdown output does not replace an earlier timeout',
+  async () => {
+    let stdout = '';
+    const error = await runCmdStreaming(
+      process.execPath,
+      [
+        '-e',
+        [
+          "process.on('SIGTERM', () => { process.stderr.write('x'.repeat(129)); clearInterval(keepAlive); });",
+          'const keepAlive = setInterval(() => {}, 100);',
+          "process.stdout.write('ready');",
+        ].join('\n'),
+      ],
+      {
+        timeoutMs: 1_000,
+        maxBuffer: 128,
+        kill: { signal: 'SIGTERM', graceMs: 1_000 },
+        onStdoutChunk: (chunk) => {
+          stdout += chunk;
+        },
+      },
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    assert.equal(stdout, 'ready');
+    assert.ok(isCommandTimeoutError(error));
+  },
+);
