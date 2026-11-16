@@ -599,7 +599,7 @@ test('the next open removes a record a close left retired', async () => {
   expect(fs.existsSync(stuck)).toBe(false);
 });
 
-test('a record that can be neither retired nor removed still has its staging removed', async () => {
+test('a record that can be neither retired nor removed keeps the anchor it names and loses other staging', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
   const { id } = await open(baseUrl, stateDir, destination);
@@ -607,8 +607,15 @@ test('a record that can be neither retired nor removed still has its staging rem
   const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
   const staging = path.join(path.dirname(destination), '.agent-device-script-listed');
   fs.mkdirSync(staging);
+  const anchored = path.join(path.dirname(destination), '.agent-device-script-anchored');
+  fs.mkdirSync(anchored);
+  fs.writeFileSync(path.join(anchored, 'script.ad.anchor'), 'pending');
   const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
-  fs.writeFileSync(recordFile, JSON.stringify({ ...record, staging: [staging] }));
+  const publishing = { revision: 2, file: '1:2', staging: anchored };
+  fs.writeFileSync(
+    recordFile,
+    JSON.stringify({ ...record, publishing, staging: [staging, anchored] }),
+  );
   const publish = vi.mocked(file.publishFileSync);
   const realPublish = publish.getMockImplementation();
   publish.mockImplementation((options) => {
@@ -631,6 +638,7 @@ test('a record that can be neither retired nor removed still has its staging rem
 
   expect(closed).toEqual({ ok: true, data: { scriptPublicationId: id } });
   expect(fs.existsSync(staging)).toBe(false);
+  expect(fs.existsSync(path.join(anchored, 'script.ad.anchor'))).toBe(true);
   expect(records(stateDir)).toHaveLength(1);
 });
 

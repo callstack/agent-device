@@ -263,8 +263,7 @@ function removeRecord(file: string): void {
     try {
       writeRecord(file, { ...settlePublishing(record), retired: true });
     } catch (error) {
-      removeQuietly(file);
-      for (const staging of record.staging ?? []) removeQuietly(staging);
+      removeUnretirableRecord(file, record);
       throw error;
     }
   }
@@ -275,18 +274,32 @@ function removeRecord(file: string): void {
 }
 
 /**
- * One removal attempt for a record that could not be written retired, and for the staging it listed.
- * A failure here never replaces the error that made the record unwritable.
+ * Removes a record that could not be written retired, then its staging. A record still on disk may
+ * name the anchor in its interrupted version's staging, so that directory stays with it.
  */
-function removeQuietly(target: string): void {
+function removeUnretirableRecord(file: string, record: ScriptRecord): void {
+  const kept = removeQuietly(file) ? undefined : record.publishing?.staging;
+  for (const staging of record.staging ?? []) {
+    if (staging !== kept) removeQuietly(staging);
+  }
+}
+
+/**
+ * One removal attempt for a record that could not be written retired, and for the staging it listed.
+ * A failure here never replaces the error that made the record unwritable. Reports whether the
+ * target is gone.
+ */
+function removeQuietly(target: string): boolean {
   try {
     fs.rmSync(target, { recursive: true, force: true });
+    return true;
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
       phase: 'session_script_record_cleanup_failed',
       data: { target, error: String(error) },
     });
+    return false;
   }
 }
 
