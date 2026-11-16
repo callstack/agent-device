@@ -40,6 +40,42 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
+  'a remote recording creates a missing parent at 0700 on a shared umask',
+  async () => {
+    // The umask of a shared checkout: a mode-less creation is 0775, and the check that judges the new
+    // directory right after the `mkdir` refuses the very directory the route just made, so the save fails
+    // AND leaves 0775 `recordings` standing where any local user could write. host-kit creates at 0700 and
+    // a recursive mkdir applies that mode to every level, so the new directory passes the check it is
+    // judged by and the version lands in it.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-umask-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.chmodSync(home, 0o700);
+    const recordings = path.join(home, 'workflows', 'recordings');
+    const destination = path.join(recordings, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    const previous = process.umask(0o002);
+    let result: Awaited<ReturnType<typeof open>>;
+    try {
+      result = await open(baseUrl, stateDir, destination);
+    } finally {
+      process.umask(previous);
+    }
+
+    expect(result.response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.not.objectContaining({ scriptDeliveryFailure: expect.anything() }),
+      }),
+    );
+    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+    expect(fs.lstatSync(path.join(home, 'workflows')).mode & 0o777).toBe(0o700);
+    expect(fs.lstatSync(recordings).mode & 0o777).toBe(0o700);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
   'a remote recording creates the entry in the directory the walk judged, not the spelled one',
   async () => {
     // `home/work -> priv/x`, `priv/y` and `home/elsewhere/y` both private. The version is judged, staged,

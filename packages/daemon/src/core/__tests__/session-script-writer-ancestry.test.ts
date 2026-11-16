@@ -13,10 +13,6 @@ import { makeAuthoringSession } from '../../__tests__/support/session-factories.
 const hostCwd = createLiveTestHostEnvironment().cwd;
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
-const realReadFileSync = fs.readFileSync;
-/** The account the fixtures name for this process, the same one the rule reads back out of passwd. */
-const currentUser = process.env.USER ?? '';
-
 /** This process's ids. Windows has neither, and every test that uses them is skipped there. */
 const currentUid = process.getuid?.() ?? -1;
 const currentGid = process.getgid?.() ?? -1;
@@ -24,37 +20,6 @@ const currentGid = process.getgid?.() ?? -1;
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-/**
- * Serves `groups` and `passwd` for the two group files and the real host for everything else, so the
- * private-group decision is the fixture's and this file's assertions run on every POSIX host instead of
- * only on one whose `/etc/group` happens to agree.
- */
-function serveGroupDatabase(groups: readonly string[], passwd: readonly string[]): void {
-  vi.spyOn(fs, 'readFileSync').mockImplementation(((file: unknown, options?: unknown) => {
-    if (file === '/etc/group') return `${groups.join('\n')}\n`;
-    if (file === '/etc/passwd') return `${passwd.join('\n')}\n`;
-    // The private-group exception is admitted only where the host's own databases are the whole story.
-    if (file === '/etc/nsswitch.conf') return 'passwd: files\ngroup: files\n';
-    return realReadFileSync(file as never, options as never) as never;
-  }) as typeof fs.readFileSync);
-}
-
-/** This host's user owning `currentGid` alone, plus a team group that holds someone else. */
-function privateGroupDatabase(): void {
-  serveGroupDatabase(
-    ['root:x:0:root', `${currentUser}:x:${currentGid}:`, 'team:x:4321:ada'],
-    ['root:x:0:0', `${currentUser}:x:${currentUid}:${currentGid}:`],
-  );
-}
-
-/** The same ids, with this host's group named after somebody else, so it is not private. */
-function foreignGroupNameDatabase(): void {
-  serveGroupDatabase(
-    ['root:x:0:root', `${currentUser}:x:${currentGid + 1}:`, 'team:x:4321:ada'],
-    ['root:x:0:0', `${currentUser}:x:${currentUid}:${currentGid}:`],
-  );
-}
 
 function action(command: string): {
   ts: number;
@@ -474,20 +439,10 @@ skipOnWindows('a recording refuses a link another local user owns on the way in'
   expect(fs.readdirSync(chosen)).toEqual([]);
 });
 
-skipOnWindows('a recording still saves to a group-writable private-group home', () => {
-  privateGroupDatabase();
-  const directory = root();
-  const home = homeDirectory(path.join(directory, 'home'), 0o775);
-  const destination = path.join(home, 'journey.ad');
-
-  const result = writerFor(directory).write(recordingTo(destination));
-
-  expect(result.written).toBe(true);
-  expect(fs.readFileSync(destination, 'utf8')).toContain('open');
-});
-
-skipOnWindows("a recording refuses the same home once the group is not this user's own", () => {
-  foreignGroupNameDatabase();
+skipOnWindows('a recording refuses a group-writable home and says how to close it', () => {
+  // The stock shared-checkout shape on Ubuntu and Debian: the project directory is 0775 and its group is
+  // this user's own. ADR 0016 carries no private-group exception, because membership cannot be proven
+  // from the host's account files, so the mode alone refuses it and the hint names the fix.
   const directory = root();
   const home = homeDirectory(path.join(directory, 'home'), 0o775);
 
@@ -498,4 +453,28 @@ skipOnWindows("a recording refuses the same home once the group is not this user
     exposure: 'shared_group_writable',
     ancestor: home,
   });
+  expect(String(details.hint)).toContain(`chmod g-w ${home}`);
+  expect(fs.readdirSync(home)).toEqual([]);
+});
+
+skipOnWindows('a recording creates a missing parent at 0700 on a shared umask', () => {
+  // The umask of a shared checkout: a mode-less creation is 0775, which is the mode the check right after
+  // it refuses, so the save both fails and leaves the directory it made standing in the project. host-kit
+  // creates at 0700 and a recursive mkdir applies that to every level, so the new parent passes the check
+  // it is judged by and the save goes through.
+  const directory = root();
+  const home = homeDirectory(path.join(directory, 'home'), 0o700);
+  const destination = path.join(home, 'workflows', 'recordings', 'journey.ad');
+  const previous = process.umask(0o002);
+  let result: ReturnType<SessionScriptWriter['write']>;
+  try {
+    result = writerFor(directory).write(recordingTo(destination));
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(result.written).toBe(true);
+  expect(fs.readFileSync(destination, 'utf8')).toContain('open');
+  expect(fs.lstatSync(path.join(home, 'workflows')).mode & 0o777).toBe(0o700);
+  expect(fs.lstatSync(path.join(home, 'workflows', 'recordings')).mode & 0o777).toBe(0o700);
 });

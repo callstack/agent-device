@@ -17,7 +17,7 @@ const currentGid = process.getgid?.() ?? -1;
 // --- what makes one directory unsafe to publish inside ---
 
 const OWN = { uid: currentUid, gid: currentGid, mode: 0o755 };
-const TRUST = { uid: currentUid, privateGid: currentGid };
+const TRUST = { uid: currentUid };
 
 function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
   return { ...OWN, ...overrides };
@@ -36,14 +36,19 @@ test('refuses a directory that is world-writable', () => {
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o777 }), TRUST)).toBe('world_writable');
 });
 
-test('refuses a directory that is group-writable by a group that is not this user', () => {
+test('refuses a directory that is group-writable, whoever owns the group', () => {
+  // ADR 0016 carries no private-group exception: proving a group holds no other user means reading the
+  // host's account files, which cannot be settled on a host whose name service answers membership from
+  // somewhere else. The mode alone decides, so `gid` does not enter the answer.
   expect(untrustedAncestryExposure(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(
     'shared_group_writable',
   );
-});
-
-test('accepts a directory group-writable by this user', () => {
-  expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBe(
+    'shared_group_writable',
+  );
+  expect(untrustedAncestryExposure(directoryOf({ uid: 0, mode: 0o2770 }), TRUST)).toBe(
+    'shared_group_writable',
+  );
 });
 
 test('accepts a root-owned directory and a directory this user owns', () => {
@@ -70,7 +75,13 @@ test('refuses a sticky directory another user owns, since both bits shield other
 test('accepts a link in a directory only this user or root can add entries to', () => {
   const link = { uid: currentUid };
   expect(untrustedLinkExposure(link, directoryOf({ mode: 0o755 }), TRUST)).toBeUndefined();
-  expect(untrustedLinkExposure(link, directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
+  expect(untrustedLinkExposure(link, directoryOf({ uid: 0, mode: 0o755 }), TRUST)).toBeUndefined();
+});
+
+test('refuses a link in a group-writable directory, which is ground others can write', () => {
+  expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o775 }), TRUST)).toBe(
+    'planted_link',
+  );
 });
 
 test('refuses a link in a shared directory unless the sticky bit and its owner hold it in place', () => {
@@ -93,13 +104,12 @@ test('accepts a link this user or root owns in a sticky shared directory', () =>
 test('names a directory others can add entries in, sticky bit or no sticky bit', () => {
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o777 }), TRUST)).toBe(true);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o1777 }), TRUST)).toBe(true);
-  expect(othersCreateEntriesIn(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(true);
 });
 
-test('names no directory whose group is this user', () => {
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(false);
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1775 }), TRUST)).toBe(false);
+test('names no directory that keeps its contents closed to the group', () => {
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o755 }), TRUST)).toBe(false);
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1755 }), TRUST)).toBe(false);
 });
 
 test('names a directory another user owns, whatever its mode', () => {

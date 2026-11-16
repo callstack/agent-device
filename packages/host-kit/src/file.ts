@@ -1,8 +1,8 @@
 export {
   assertPrivateScriptDestination,
-  assertPrivateScriptDestinationPrefix,
   isAtomicPublishTemporaryPath,
   lstatIfPresent,
+  prepareScriptDestination,
   publishDirectoryIdentity,
   publishDurableFileSync,
   publishFileSync,

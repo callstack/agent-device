@@ -19,10 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import {
-  assertPrivateScriptDestinationPrefix,
-  publishScriptFileSync,
-} from '@agent-device/host-kit/file';
+import { publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -136,19 +133,13 @@ export class SessionScriptWriter {
       const remote =
         session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
       scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
-      const scriptDir = path.dirname(scriptPath);
-      // Asked BEFORE the parent is created, and again by the publisher once it exists: a `mkdir -p` into
-      // ground another local user can write would otherwise leave the directories it made behind them,
-      // even though the publish that follows is refused (#4565). The walk covers `scriptDir`'s own
-      // components, which is where `mkdir -p` would build a directory on the far side of a `..`.
-      assertPrivateScriptDestinationPrefix(scriptPath);
-      if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       // #1258: `options.force` is the caller's already-merged decision
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
       // formatting+publish step.
-      // No parent identity travels with this call: the publisher judges the directory the entry is
-      // created in, and that is the one its identity is worth comparing.
+      // host-kit owns the rest (#4565): the publisher walks the chain, refuses a destination another
+      // local user can steer BEFORE creating anything, creates what is missing at 0700 inside the
+      // directory it judged, and judges that completed chain before the entry is created.
       publishHealedScriptAtomically({ scriptPath, script: prepared.script, force: options?.force });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) {
