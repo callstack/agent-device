@@ -46,7 +46,7 @@ export function createAdaptiveConfirmation(params: {
     observe(input: {
       snapshot: SnapshotState;
       signal: StableCaptureSignal;
-      /** The broad-replacement floor raised this capture's window above the producer's own. */
+      /** A capture proved a broad replacement, so the run owes the broad-replacement floor. */
       floorInForce: boolean;
     }): 'settle' | 'confirm' | 'none' {
       if (!armed || !baseline) return 'none';

@@ -285,7 +285,7 @@ function observeStableCapture(params: {
   const early = adaptive.observe({
     snapshot: params.snapshot,
     signal: params.signal,
-    floorInForce: window.requiredQuietMs > window.quietMs,
+    floorInForce: window.floorConfirmed,
   });
   if (early === 'settle') return { settled: true, delayMs: 0 };
   if (early === 'confirm' && step.delayMs > 0) {
@@ -303,10 +303,15 @@ function stableCaptureWindow(
   snapshot: SnapshotState,
   requestedQuietMs: number | undefined,
   confirmation: StableCaptureConfirmation,
-): { quietMs: number; requiredQuietMs: number; pollMs: number } {
+): { quietMs: number; requiredQuietMs: number; pollMs: number; floorConfirmed: boolean } {
   const quietMs = requestedQuietMs ?? defaultQuietMsForCapture(snapshot);
   const requiredQuietMs = confirmation.requiredQuietMs(snapshot, quietMs);
-  return { quietMs, requiredQuietMs, pollMs: stableCapturePollMs(requiredQuietMs) };
+  return {
+    quietMs,
+    requiredQuietMs,
+    pollMs: stableCapturePollMs(requiredQuietMs),
+    floorConfirmed: confirmation.confirmed,
+  };
 }
 
 /**
@@ -488,6 +493,9 @@ function broadTransitionConfirmation(params: {
         ? currentQuietMs
         : Math.max(currentQuietMs, confirmedQuietMs);
     },
+    get confirmed() {
+      return confirmedQuietMs !== undefined;
+    },
   };
 }
 
@@ -497,6 +505,11 @@ type StableCaptureConfirmation = {
     snapshot: Parameters<typeof stableCaptureSignal>[0],
     currentQuietMs: number,
   ) => number;
+  /**
+   * A capture proved the broad replacement, so the floor holds for the rest of the run, whether or
+   * not it raised the window: a requested window above the floor still owes its full span.
+   */
+  readonly confirmed: boolean;
 };
 
 /**

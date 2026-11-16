@@ -52,6 +52,7 @@ async function press(params: {
   stored?: SnapshotState;
   loop: SnapshotState[];
   adaptive: boolean;
+  quietMs?: number;
   target?: Parameters<ReturnType<typeof createSettleDevice>['interactions']['press']>[0];
 }) {
   let captures = 0;
@@ -64,7 +65,10 @@ async function press(params: {
   });
   const result = await device.interactions.press(params.target ?? ref('@e2'), {
     session: 'default',
-    settle: params.adaptive ? { earlyExit: 'adaptive', observationCurrent: true } : {},
+    settle: {
+      ...(params.adaptive ? { earlyExit: 'adaptive' as const, observationCurrent: true } : {}),
+      ...(params.quietMs === undefined ? {} : { quietMs: params.quietMs }),
+    },
   });
   assert.ok(result.settle);
   return result.settle;
@@ -158,6 +162,23 @@ test('a broad replacement owed the confirmation floor keeps the floor', async ()
 
   assert.equal(adaptive.settled, true);
   assert.ok(adaptive.waitedMs >= 1_500, `adaptive lost the floor: ${adaptive.waitedMs}ms`);
+});
+
+test('a broad replacement under a requested window above the floor keeps that window', async () => {
+  // The floor raises nothing here, but the run still proved a broad replacement.
+  const adaptive = await press({
+    stored: { ...elementCatalogTabSnapshot(), presentedSurface: 'unknown' },
+    loop: [elementSettingsTabSnapshot()],
+    adaptive: true,
+    quietMs: 2_000,
+    target: ref(`@${elementCatalogTabSnapshot().nodes.find((node) => node.ref)!.ref}`),
+  });
+
+  assert.equal(adaptive.settled, true);
+  assert.ok(
+    adaptive.waitedMs >= 2_000,
+    `adaptive lost the requested window: ${adaptive.waitedMs}ms`,
+  );
 });
 
 test('a point press whose baseline is the stored tree keeps the quiet window', async () => {
