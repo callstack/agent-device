@@ -1,9 +1,5 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type {
-  DaemonBinding,
-  DaemonLifecycle,
-  EnsureDaemonOptions,
-} from '@agent-device/contracts/client';
+import type { DaemonBinding, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
@@ -42,11 +38,10 @@ export type DaemonClientSettings = {
   /** The environment and working directory this client reads, for every setting below and the launch. */
   host: HostEnvironment;
   paths: DaemonPaths;
-  daemonLifecycle: DaemonLifecycle;
   /**
-   * Whether a daemon that wins a startup race may be retired when this client cannot use it. A
-   * managed client may; `ensureDaemon` may not, because it replaces a daemon only through a quiesce
-   * and judges the winner again instead.
+   * Whether a daemon that wins a startup race may be retired when this client cannot use it. An
+   * explicit owner that may start a daemon may; `ensureDaemon` may not, because it replaces a daemon
+   * only through a quiesce and judges the winner again instead.
    */
   retireIncompatibleContender: boolean;
   /** Told when this client retires an incompatible daemon to start its own; stderr gets a notice otherwise. */
@@ -78,23 +73,24 @@ LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
 LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 /**
- * Whether a timed-out request may retire the daemon it was waiting on. An attach client never may: the
- * daemon is not its to kill, and `ensureDaemon` reuses a compatible daemon that accepts a connection
- * without asking it anything, so that one is ended only by a deliberate stop. Every other caller asks the retirement, which judges the record's owner before it signals anything.
+ * Whether a timed-out request may retire the daemon it was waiting on. Only the one-shot `replay` or
+ * `test` request that owns a private state directory may: that daemon answers to no one else, and its
+ * retirement judges the record's owner before it signals anything. Every other request attaches to a
+ * daemon it did not start, and `ensureDaemon` reuses a compatible daemon that accepts a connection
+ * without asking it anything, so that one is ended only by a deliberate stop.
  */
 export function resolveTimeoutRecovery(
-  settings: DaemonClientSettings,
+  settings: Pick<DaemonClientSettings, 'ownedStateDir'>,
 ): 'retire-unresponsive' | 'none' {
-  if (settings.daemonLifecycle === 'attach') return 'none';
-  return 'retire-unresponsive';
+  return settings.ownedStateDir ? 'retire-unresponsive' : 'none';
 }
 
 export function resolveClientSettings(
   req: Omit<DaemonWireRequest, 'token'>,
   suppliedAuthToken: string | undefined,
   host: HostEnvironment,
-  daemonLifecycle: DaemonLifecycle = 'managed',
   daemonBinding: DaemonBinding | undefined = undefined,
+  ownOneShot = false,
 ): DaemonClientSettings {
   const explicitStateDir = resolveExplicitStateDir(req, host.env);
   const remote = resolveRemoteClientSettings(req, suppliedAuthToken, host.env);
@@ -112,12 +108,13 @@ export function resolveClientSettings(
       },
     );
   }
-  if (daemonBinding) daemonLifecycle = 'attach';
   const transport = resolveTransportClientSettings(req.flags, remote.remoteBaseUrl, host.env);
-  // An attach client owns no daemon, and a private state directory would hold one nobody started. A
-  // pinned client owns one neither: it uses the instance it was given and starts nothing.
+  // A one-shot `replay` or `test` with no explicit state directory runs on a private daemon of its
+  // own: this request starts it, attaches to it, and retires it when it finishes. Nothing else does.
+  // A pinned client owns one neither: it uses the instance it was given and starts nothing.
   const ownedStateDir =
-    daemonLifecycle !== 'attach' &&
+    ownOneShot &&
+    daemonBinding === undefined &&
     shouldUseOwnedReplayStateDir(req, explicitStateDir, remote.rawBaseUrl)
       ? createOwnedReplayStateDir()
       : undefined;
@@ -126,8 +123,7 @@ export function resolveClientSettings(
     paths:
       ownedStateDir?.paths ??
       resolveDaemonPaths(explicitStateDir, { env: host.env, cwd: host.cwd }),
-    daemonLifecycle,
-    retireIncompatibleContender: true,
+    retireIncompatibleContender: ownedStateDir !== undefined,
     transportPreference: transport.preference,
     serverMode: transport.serverMode,
     ownedStateDir,
@@ -175,7 +171,8 @@ export function resolveLocalDaemonSettings(
       env: host.env,
       cwd: host.cwd,
     }),
-    daemonLifecycle: 'managed',
+    // `ensureDaemon` replaces a daemon only through a quiesce, so a contender it cannot use is
+    // judged again, never retired by this call.
     retireIncompatibleContender: false,
     transportPreference: transport.preference,
     serverMode: transport.serverMode,
@@ -237,16 +234,13 @@ function shouldUseOwnedReplayStateDir(
   return isOneShotReplayCommand(req.command) && !explicitStateDir && !rawRemoteBaseUrl;
 }
 
-/**
- * How long the remote `/health` gate may re-probe a daemon that is there but not ready: the budget
- * of the command waiting behind it. Without one, the first failed probe refuses.
- */
+/** The command budget for recovering a remote daemon health probe. */
 export type RemoteHealthRecovery = {
   budgetMs: number;
   signal: AbortSignal | undefined;
 };
 
-export async function ensureManagedDaemon(
+export async function ensureStartedDaemon(
   settings: DaemonClientSettings,
   healthRecovery?: RemoteHealthRecovery,
 ): Promise<EnsuredDaemon> {
@@ -254,13 +248,13 @@ export async function ensureManagedDaemon(
     return await ensureRemoteDaemon(settings, healthRecovery);
   }
 
-  const ensured = await ensureLocalDaemon(settings);
+  const ensured = await startOrReuseLocalDaemon(settings);
   // Checked on both branches: a startup can resolve to a daemon another caller raced in.
   await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir, settings.host);
   return ensured;
 }
 
-async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+async function startOrReuseLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
   const reusable = await readReusableLocalDaemon(settings);
   if (reusable) return { info: reusable, startedByClient: false };
 
@@ -269,7 +263,7 @@ async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
 
 async function ensureRemoteDaemon(
   settings: DaemonClientSettings,
-  healthRecovery: RemoteHealthRecovery | undefined,
+  healthRecovery?: RemoteHealthRecovery,
 ): Promise<EnsuredDaemon> {
   const remoteInfo: DaemonInfo = {
     transport: 'http',
