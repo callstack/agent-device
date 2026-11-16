@@ -23,6 +23,9 @@
     },
     {
       "path": "../provider-webdriver"
+    },
+    {
+      "path": "../test-kit"
     }
   ]
 }

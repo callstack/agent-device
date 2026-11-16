@@ -6,7 +6,7 @@ import type { ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import { createBrowserStackConnection } from './connection.ts';
 import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('./browserstack-connection-verification.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./browserstack-connection-verification.ts')>()),

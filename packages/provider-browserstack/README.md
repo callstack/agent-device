@@ -14,18 +14,27 @@ agent-device connect browserstack --session checkout-android --platform android 
 See the [BrowserStack guide](https://agent-device.dev/docs/browserstack) for setup and supported operations.
 To update the plugin, run `agent-device plugins update @agent-device/browserstack`.
 
-After you add or update the plugin, close your sessions and run `agent-device daemon stop` before reconnecting.
+After you add or update the plugin, close your sessions and run `agent-device daemon stop --state-dir <path>` for your daemon before reconnecting.
 
 ## Use it from JavaScript
 
 The package default-exports a plugin factory. Pass credentials as options, or leave them out to read `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` from the environment:
 
 ```js
+import { startAgentDevice } from 'agent-device';
 import browserstack from '@agent-device/browserstack';
 
-const plugin = browserstack({
-  credentials: { username: 'your-username', accessKey: 'your-access-key' },
+const host = await startAgentDevice({
+  stateDir: './.my-app/agent-device-state',
+  plugins: [
+    browserstack({ credentials: { username: 'your-username', accessKey: 'your-access-key' } }),
+  ],
 });
+try {
+  console.log(await host.client.sessions.list());
+} finally {
+  await host.close();
+}
 ```
 
-Credentials passed as options are used instead of the environment variables, and the daemon does not compare them with your shell.
+Each credential key passed as an option replaces its environment variable. A key left out uses the environment, and only that environment key participates in the credential fingerprint.

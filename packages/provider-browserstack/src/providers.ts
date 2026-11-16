@@ -5,7 +5,7 @@ import { canonicalSchemeReference } from '@agent-device/provider-webdriver/provi
 export const PROVIDER = 'browserstack';
 
 /** The environment variables that hold BrowserStack credentials. */
-export const BROWSERSTACK_CREDENTIAL_VARIABLES = {
+const BROWSERSTACK_CREDENTIAL_VARIABLES = {
   username: 'BROWSERSTACK_USERNAME',
   accessKey: 'BROWSERSTACK_ACCESS_KEY',
 } as const;

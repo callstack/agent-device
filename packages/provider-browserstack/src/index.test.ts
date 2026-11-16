@@ -85,10 +85,10 @@ test('the plugin declares the BrowserStack variables only when it reads credenti
 });
 
 test('a credentials object missing one key still declares the variable it reads from the environment', () => {
-  assert.deepEqual(browserstack({ credentials: { username: 'u' } as never }).credentials, {
+  assert.deepEqual(browserstack({ credentials: { username: 'u' } }).credentials, {
     variables: ['BROWSERSTACK_ACCESS_KEY'],
   });
-  assert.deepEqual(browserstack({ credentials: { accessKey: 'k' } as never }).credentials, {
+  assert.deepEqual(browserstack({ credentials: { accessKey: 'k' } }).credentials, {
     variables: ['BROWSERSTACK_USERNAME'],
   });
 });
@@ -114,7 +114,7 @@ test('credentials passed as options replace the environment, which stays the fal
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
   const captured = capturedAuthorization();
-  await listArtifacts(browserstack({ credentials: { username: 'opt-user' } as never }), {
+  await listArtifacts(browserstack({ credentials: { username: 'opt-user' } }), {
     BROWSERSTACK_USERNAME: 'env-user',
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });

@@ -15,6 +15,7 @@ import type {
   LeaseLifecycleContext,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
+import type { RunHostCommand } from '@agent-device/provider-webdriver';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';

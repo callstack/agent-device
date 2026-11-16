@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown';
+import { strictBundlerInputOptions } from '../../scripts/plugin-build-config.ts';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
@@ -15,10 +16,5 @@ export default defineConfig({
   dts: { tsgo: { path: getTypeScript7ExePath() } },
   hash: false,
   deps: { alwaysBundle: [/^@agent-device\//] },
-  inputOptions: {
-    onLog(level, log, handler) {
-      if (log.code === 'UNRESOLVED_IMPORT') throw new Error(log.message);
-      handler(level, log);
-    },
-  },
+  inputOptions: strictBundlerInputOptions,
 });

@@ -1,19 +1,10 @@
 import { defineConfig } from 'tsdown';
+import { providerPluginBuildConfig } from '../../scripts/plugin-build-config.ts';
 
 export default defineConfig({
-  entry: { 'agent-device': 'src/index.ts' },
-  outDir: 'dist',
-  format: 'esm',
-  platform: 'node',
-  target: 'es2022',
-  minify: true,
-  dts: false,
-  hash: false,
-  deps: { alwaysBundle: [/^@agent-device\//] },
-  inputOptions: {
-    onLog(level, log, handler) {
-      if (log.code === 'UNRESOLVED_IMPORT') throw new Error(log.message);
-      handler(level, log);
-    },
+  ...providerPluginBuildConfig,
+  entry: {
+    'agent-device': 'src/index.ts',
+    'connection-verification': 'src/browserstack-connection-verification.ts',
   },
 });

@@ -30,7 +30,8 @@
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
-    "agent-device": "workspace:*"
+    "agent-device": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
   },
   "publishConfig": {
     "exports": {
@@ -39,7 +40,11 @@
       },
       "./agent-device": {
         "import": "./dist/agent-device.mjs"
-      }
+      },
+      "./connection-verification": {
+        "import": "./dist/connection-verification.mjs"
+      },
+      "./package.json": "./package.json"
     },
     "access": "public"
   },

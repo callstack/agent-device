@@ -4,7 +4,7 @@ import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import manifest from '@agent-device/browserstack/package.json' with { type: 'json' };
 
 /** The BrowserStack package as an installed store plugin, without touching the on-disk store. */
-export function browserstackPluginCandidate(): PluginCandidate {
+function browserstackPluginCandidate(): PluginCandidate {
   return {
     source: 'store',
     package: manifest.name as string,

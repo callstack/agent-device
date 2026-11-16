@@ -19,7 +19,7 @@ export type CloudWebDriverProviderDeclaration = Readonly<{
   credentialVariables?: readonly string[];
 }>;
 
-const HOSTED_WEBDRIVER_CONNECTION: ConnectionProviderCapabilities = {
+export const HOSTED_WEBDRIVER_CONNECTION: ConnectionProviderCapabilities = {
   leaseKind: 'direct-device-provider',
   requiresAppAttachment: false,
   requiresRemoteDaemon: false,

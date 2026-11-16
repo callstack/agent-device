@@ -1,8 +1,9 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import { HOSTED_WEBDRIVER_CONNECTION } from '@agent-device/provider-webdriver/providers';
 
 export type BrowserStackOptions = {
-  /** Used instead of `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` when set. */
-  credentials?: { username: string; accessKey: string };
+  /** Each supplied key replaces its environment variable; omitted keys use the environment. */
+  credentials?: { username?: string; accessKey?: string };
 };
 
 // The connection and WebDriver code load when they are first used, so importing the package for its
@@ -43,15 +44,7 @@ function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
     provider: 'browserstack',
     credentials: { variables: environmentVariables },
     connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: false,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: true,
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: true,
-      },
+      capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
       resolve: async (context) =>
         (await loadConnection(withCredentials(context.host))).resolve(context),
       verify: async (context) =>
