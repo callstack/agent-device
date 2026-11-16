@@ -2,8 +2,23 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  /// Runs a `type` command. A focus step that could not confirm its input typed nothing, so it
+  /// answers as `TEXT_INPUT_NOT_FOCUSED`.
   @MainActor
   func executeTypeCommand(activeApp: XCUIApplication, command: Command) throws -> Response {
+    do {
+      return try typeCommandResponse(activeApp: activeApp, command: command)
+    } catch is TextEntryFocusNotConfirmed {
+      return textEntryFailureResponse(.notFocused)
+    }
+  }
+
+  private func textEntryFailureResponse(_ failure: TextEntryFailure) -> Response {
+    Response(ok: false, error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint))
+  }
+
+  @MainActor
+  private func typeCommandResponse(activeApp: XCUIApplication, command: Command) throws -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
@@ -122,10 +137,7 @@ extension RunnerTests {
       commandId: command.commandId
     )
     if let failure = textResult.failure {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
-      )
+      return textEntryFailureResponse(failure)
     }
     if textResult.verified == false {
       return Response(

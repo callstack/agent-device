@@ -220,7 +220,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 }
 @end
 
-@interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
+@interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate, UITextFieldDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
 @property(nonatomic, strong) UILabel *navigationBackStatus;
@@ -658,6 +658,22 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 static const CGFloat AgentDeviceTextEntryFieldTopInset = 24;
 static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
 static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
+
+static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSString *text) {
+  UITextField *field = [[UITextField alloc] init];
+  field.accessibilityIdentifier = identifier;
+  field.text = text;
+  field.borderStyle = UITextBorderStyleRoundedRect;
+  field.translatesAutoresizingMaskIntoConstraints = NO;
+  return field;
+}
+
+// Under `--agent-device-text-entry-overlapping-sheet-refuses-focus`, the sheet's field is the only
+// field with this delegate, and it never takes focus.
+- (BOOL)textFieldShouldBeginEditing:(UITextField *)textField {
+  (void)textField;
+  return NO;
+}
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   if (self.maskedDeliveryStatus != nil) {
@@ -1239,6 +1255,44 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.textEntryDigitSlots.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
       ]];
     }
+  }
+
+  // A sheet over a form, which leaves the form's field in the accessibility tree. The field the sheet
+  // covers is smaller than the sheet's field and shares its center, so a fill's point names both, and
+  // ordering by size alone picks the covered one. The sheet's second field raises the keyboard without
+  // touching either of them.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet"]) {
+    UITextField *background = AgentDeviceOverlappingSheetField(@"agent-device-overlap-background-input", @"background");
+    UITextField *foreground = AgentDeviceOverlappingSheetField(@"agent-device-overlap-foreground-input", @"stale");
+    UITextField *neighbour = AgentDeviceOverlappingSheetField(@"agent-device-overlap-sheet-neighbour", @"");
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet-refuses-focus"]) {
+      foreground.delegate = self;
+    }
+    UIView *sheet = [[UIView alloc] init];
+    sheet.backgroundColor = UIColor.systemBackgroundColor;
+    sheet.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:background];
+    [self.view addSubview:sheet];
+    [sheet addSubview:foreground];
+    [sheet addSubview:neighbour];
+    [NSLayoutConstraint activateConstraints:@[
+      [background.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [background.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-96],
+      [background.widthAnchor constraintEqualToConstant:240],
+      [background.heightAnchor constraintEqualToConstant:34],
+      [sheet.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+      [sheet.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+      [sheet.topAnchor constraintEqualToAnchor:background.topAnchor constant:-40],
+      [sheet.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+      [foreground.centerXAnchor constraintEqualToAnchor:background.centerXAnchor],
+      [foreground.centerYAnchor constraintEqualToAnchor:background.centerYAnchor],
+      [foreground.widthAnchor constraintEqualToConstant:300],
+      [foreground.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+      [neighbour.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [neighbour.topAnchor constraintEqualToAnchor:foreground.bottomAnchor constant:AgentDeviceTextEntryNeighbourGap],
+      [neighbour.widthAnchor constraintEqualToConstant:300],
+      [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+    ]];
   }
 
   // The shape a SpringBoard confirmation root carries on an older iOS: the window's own title

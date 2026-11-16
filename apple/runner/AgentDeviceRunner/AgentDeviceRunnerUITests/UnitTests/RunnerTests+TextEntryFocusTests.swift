@@ -154,6 +154,74 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testFillWithKeyboardDownTypesIntoTheSheetInputNotTheOneItCovers() throws {
+    for delayMs in [0, 80] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: delayMs)
+    }
+  }
+
+  @MainActor
+  func testFillWithKeyboardUpTypesIntoTheSheetInputNotTheOneItCovers() throws {
+    for delayMs in [0, 80] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+      app.textFields["agent-device-overlap-sheet-neighbour"].tap()
+      try XCTSkipUnless(
+        app.keyboards.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout),
+        "software keyboard is down: this simulator cannot exercise the keyboard-visible fill branch"
+      )
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: delayMs)
+    }
+  }
+
+  @MainActor
+  func testFillRefusesWhenTheSheetInputUnderThePointTakesNoFocus() throws {
+    let (foreground, background) = try launchOverlappingSheet(extra: ["--agent-device-text-entry-overlapping-sheet-refuses-focus"])
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+    let failures = currentXCTestFailureCount()
+
+    let response = try executeWitnessEntry(foreground, text: "sheetvalue")
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
+    XCTAssertEqual(foreground.value as? String, "stale")
+    XCTAssertEqual(background.value as? String, "background")
+  }
+
+  /// The overlapping-sheet fixture, with the shape its tests depend on checked first: the sheet
+  /// input's center also lies in the input the sheet covers, which is the smaller of the two and
+  /// which XCTest reports not hittable.
+  @MainActor
+  private func launchOverlappingSheet(extra: [String] = []) throws -> (foreground: XCUIElement, background: XCUIElement) {
+    app.launchArguments = ["--agent-device-text-entry-overlapping-sheet"] + extra
+    app.launch()
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let foreground = app.textFields["agent-device-overlap-foreground-input"]
+    let background = app.textFields["agent-device-overlap-background-input"]
+    XCTAssertTrue(foreground.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(background.exists)
+    let sheetFrame = foreground.frame
+    let coveredFrame = background.frame
+    XCTAssertTrue(coveredFrame.contains(CGPoint(x: sheetFrame.midX, y: sheetFrame.midY)))
+    XCTAssertLessThan(coveredFrame.width * coveredFrame.height, sheetFrame.width * sheetFrame.height)
+    XCTAssertFalse(background.isHittable)
+    return (foreground, background)
+  }
+
+  @MainActor
+  private func assertOverlappingSheetFill(foreground: XCUIElement, background: XCUIElement, delayMs: Int) throws {
+    let failures = currentXCTestFailureCount()
+    let response = try executeWitnessEntry(foreground, text: "sheetvalue", delayMs: delayMs)
+    XCTAssertTrue(response.ok, "delayMs=\(delayMs): \(String(describing: response.error))")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures), "delayMs=\(delayMs)")
+    XCTAssertEqual(foreground.value as? String, "sheetvalue", "delayMs=\(delayMs)")
+    XCTAssertEqual(background.value as? String, "background", "delayMs=\(delayMs)")
+  }
+
+  @MainActor
   private func launchTextEntryWitness(prefilled: Bool = false, extra: [String] = []) throws -> XCUIElement {
     app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-witness"]
       + (prefilled ? ["--agent-device-text-entry-witness-prefill"] : []) + extra
@@ -166,10 +234,16 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func executeWitnessEntry(_ field: XCUIElement, text: String, mode: String = "replace", prepared: Bool = false) throws -> Response {
+  private func executeWitnessEntry(
+    _ field: XCUIElement,
+    text: String,
+    mode: String = "replace",
+    delayMs: Int = 0,
+    prepared: Bool = false
+  ) throws -> Response {
     let frame = field.frame
     let command = try runnerCommandFixture(
-      #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(frame.midX),"y":\#(frame.midY)}"#
+      #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(frame.midX),"y":\#(frame.midY),"delayMs":\#(delayMs)}"#
     )
     if prepared {
       return try executeOnMainPrepared(command: command, activeApp: app)

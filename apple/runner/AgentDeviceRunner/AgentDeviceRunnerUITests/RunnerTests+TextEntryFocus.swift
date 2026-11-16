@@ -1,5 +1,8 @@
 import XCTest
 
+/// The focus step tapped, but the input it aimed at did not report focus, so nothing was typed.
+struct TextEntryFocusNotConfirmed: Error {}
+
 extension RunnerTests {
   /// Books the tap as the address for the next bare `type`. `element` is a text input the caller
   /// classified BEFORE dispatching, or nil when the tap hit nothing worth typing into; that is the whole
@@ -141,7 +144,8 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true, contentTranslation: contentTranslation)
     }
 
-    let input = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
+    let candidates = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation)
+    let input = candidates.first
 #if os(iOS)
     if reusingFocusedInput, let input, let identity = input.identity, identity.isDistinguishable,
        let snapshot = input.snapshot, snapshotHasKeyboardFocus(snapshot) {
@@ -163,6 +167,11 @@ extension RunnerTests {
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).
     let tapPoint = input?.frameOnScreen.flatMap { $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY) } ?? requestedPoint
     _ = try tapAt(app: app, x: tapPoint.x, y: tapPoint.y, context: tapContext)
+#if os(iOS)
+    if candidates.count > 1, let input {
+      return try overlappingTextEntryTarget(app: app, input: input, requestedPoint: requestedPoint, contentTranslation: contentTranslation)
+    }
+#endif
     // A visible keyboard is not enough evidence for app.typeText, because focus may still
     // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
     // so after tapping it the iOS readiness timeout cannot prove anything stronger.
@@ -195,6 +204,43 @@ extension RunnerTests {
       : (try waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
     return focusedTextEntryTarget(element, requestedPoint: requestedPoint, contentTranslation: contentTranslation)
   }
+
+#if os(iOS)
+  /// The target for `input` when other inputs answer the same point, as fields a sheet covers do. A
+  /// keyboard, already up or coming up, shows only that some input took focus, so `input` itself must
+  /// report keyboard focus, read through its own handle with its identity unchanged. The target binds
+  /// that identity for the clear, the typing, and the read-back. Without that report the focus step
+  /// refuses: no other input under the point stands in for the one the tap was aimed at.
+  private func overlappingTextEntryTarget(
+    app: XCUIApplication,
+    input: ResolvedTextEntryInput,
+    requestedPoint: CGPoint,
+    contentTranslation: TextEntryContentTranslation
+  ) throws -> TextEntryTarget {
+    let deadline = Date().addingTimeInterval(TextEntryTiming.readinessTimeout)
+    var polls = 0
+    repeat {
+      polls += 1
+      if let read = ResolvedTextEntryInput(reading: input.element, contentTranslation: contentTranslation),
+         let identity = read.identity, input.identity == nil || identity == input.identity,
+         let snapshot = read.snapshot,
+         snapshotHasKeyboardFocus(snapshot) || keyboardFocusConfirmed(app: app, read: read) {
+        NSLog("%@%@ polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, TextEntryFocusEvidence.inputReportsKeyboardFocusName, polls)
+        return TextEntryTarget(
+          element: read.element,
+          refreshPoint: textEntryRefreshPoint(frame: read.frameOnScreen, fallbackTo: requestedPoint),
+          prefersFocusedElement: false,
+          contentTranslation: contentTranslation,
+          boundIdentity: identity,
+          postFocusRead: read
+        )
+      }
+      sleepFor(TextEntryTiming.pollInterval)
+    } while Date() < deadline
+    NSLog("%@none polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, polls)
+    throw TextEntryFocusNotConfirmed()
+  }
+#endif
 
   /// The target the focus step hands to text entry, with the read its refresh point came from.
   private func focusedTextEntryTarget(

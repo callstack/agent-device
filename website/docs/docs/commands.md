@@ -526,7 +526,7 @@ A comma-separated ref plan — `press @e13,@e14` or the same form on `click` —
 
 Text-entry errors and what to do:
 
-- `TEXT_INPUT_NOT_FOCUSED` (`type`): focus a visible text input and retry. If accessibility does not expose the input, focus it by coordinates.
+- `TEXT_INPUT_NOT_FOCUSED` (`type`, iOS `fill`): focus a visible text input and retry. If accessibility does not expose the input, focus it by coordinates. An iOS `fill` whose point lies on more than one input, as on a sheet over a form, types into the uncovered one only after that input reports keyboard focus; otherwise it returns this code and types nothing.
 - `NO_TEXT_INPUT_AT_POINT` (iOS `fill` under a degraded XCTest channel — coordinate, ref, selector, and replay fills all aim at a point): the runner identified no text input under that point and refused before dispatching anything (`error.details.reason` is `no_text_input_at_point`, `dispatched: no`), so no field changed. A ref or selector fill aims at the centre of the rect it resolved to, so an outer container or a non-input node can land outside the real field: run `snapshot -i`, pick the input node itself, and aim inside its rect.
 - `TEXT_INPUT_PROBE_UNAVAILABLE` (iOS `fill` under a degraded XCTest channel — coordinate, ref, selector, and replay fills all aim at a point): the runner's input lookup could not answer, so it refused before dispatching anything (`error.details.reason` is `text_input_probe_unavailable`, `dispatched: no`). This does not mean the point has no input. Retry the fill, or run `snapshot -i` once its capture reads back. A ref or selector fill aims at the centre of its resolved rect.
 - `TEXT_INPUT_SYNTHESIS_UNAVAILABLE` (iOS `type "\n"` with the software keyboard hidden): show the software keyboard, then retry.
