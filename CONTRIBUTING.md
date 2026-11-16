@@ -213,13 +213,19 @@ source-to-artifact attestation over every downloaded tarball. Its predicate reco
 `0.22` source commit, repository, version, and trusted workflow commit. A signing failure stops
 the job before npm publication. The nightly summary links the signed attestation.
 
-Verify a downloaded tarball through GitHub before using its source binding:
+Select the expected Release run and obtain its workflow commit from GitHub, independently of
+the attestation predicate. Verify the downloaded tarball against that exact main-owned signer:
 
 ```bash
+WORKFLOW_SHA="$(gh run view "$RELEASE_RUN_ID" --repo callstack/agent-device --json headSha --jq .headSha)"
 gh attestation verify "$TARBALL" --repo callstack/agent-device \
+  --signer-workflow callstack/agent-device/.github/workflows/release.yml \
+  --source-ref refs/heads/main --signer-digest "$WORKFLOW_SHA" \
   --predicate-type https://agent-device.dev/attestations/release-source/v1 --format json
 ```
 
+These flags verify the certificate's workflow identity, main ref, and workflow commit.
+Do not take the expected signer SHA from `predicate.workflowCommit`, which the signer supplies.
 Compare `verificationResult.statement.predicate.source.commit` with the planned source SHA
 and the `nightly-0.22/v<version>` source tag. The signature verifies the binding between that
 source and the package digest; npm's own provenance still identifies the main workflow commit.
