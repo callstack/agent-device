@@ -254,7 +254,8 @@ function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
  * first written retired, so it authorizes nothing more even when a staging directory cannot be
  * removed; the sweep finishes the cleanup later. Writing it retired also stops it naming an
  * interrupted version, so no anchor is removed while the record names its inode. A record that
- * cannot be written retired is removed at once, so no failure leaves it authorizing a version.
+ * cannot be written retired is removed at once. Only a state directory that allows neither write
+ * leaves the record active; the close logs that failure and keeps its own outcome.
  */
 function removeRecord(file: string): void {
   const record = parseRecord(file);
