@@ -3,6 +3,7 @@ import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contra
 import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
+import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
@@ -234,8 +235,8 @@ export function movingTargetBaseline(
  * previous action's targets were. The open launched or foregrounded an app, so both describe a screen
  * the open replaced: a verdict against them would charge the open's effect to the earlier action.
  *
- * Apple only: the first-screen rule tells the first screen from a launch surface by the
- * Application and Window roots, and an Android tree has no root node to tell them apart.
+ * Apple only: {@link showsFirstScreen} reads the Application and Window roots of an Apple tree, and
+ * an Android tree has no root node to tell them apart.
  */
 export function markPostOpenStabilization(
   session: SessionState,
@@ -252,6 +253,28 @@ export function markPostOpenStabilization(
     readiness: 'first-screen',
   };
 }
+
+/**
+ * Whether a launched app's tree shows its first screen: some node besides the Application and Window
+ * roots carries a label or value that is not a busy indicator's. Launch surfaces carry none. Measured
+ * on Bluesky, the storyboard splash is one unlabeled full-screen Image and the empty React Native
+ * root is one unlabeled view, and each can hold unchanged for longer than a second. A busy indicator
+ * is labeled ("In progress") but says only that the screen is not ready. No node count or quiet
+ * window is needed: a one-button screen is ready at once, and a two-image splash never is.
+ */
+function showsFirstScreen(nodes: readonly SnapshotNode[]): boolean {
+  return nodes.some(
+    (node) =>
+      !isViewportRootNode(node) &&
+      Boolean(node.label?.trim() || node.value?.trim()) &&
+      !BUSY_INDICATOR_ROLES.has(formatRole(node.type ?? '')),
+  );
+}
+
+const BUSY_INDICATOR_ROLES: ReadonlySet<string> = new Set([
+  'activity-indicator',
+  'progress-indicator',
+]);
 
 function clearSurfaceStabilization(session: SessionState | undefined): void {
   if (session?.deferredSurface?.kind !== 'stabilize') return;
@@ -392,8 +415,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
-        countFirstScreenContent: (value) =>
-          readSnapshot(value).nodes.filter((node) => !isViewportRootNode(node)).length,
+        showsFirstScreen: (value) => showsFirstScreen(readSnapshot(value).nodes),
       },
     });
   } finally {

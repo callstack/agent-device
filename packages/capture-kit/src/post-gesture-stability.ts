@@ -53,33 +53,6 @@ const FIRST_SCREEN_SCHEDULE: ObservationSchedule = {
   minPolls: 2,
 };
 
-/**
- * At most this many nodes besides the Application and Window roots is a sparse first screen. With
- * its root that is the five-node tree the settle loop already calls nearly empty.
- */
-const FIRST_SCREEN_SPARSE_CONTENT_NODES = 4;
-
-/**
- * How long a sparse first screen must stay unchanged before it counts as the real first screen. A
- * screen with one button is ready after this window; a loading surface that changes within it is
- * not.
- */
-const FIRST_SCREEN_SPARSE_QUIET_MS = 1_500;
-
-/**
- * Whether a quiet pair can stand as a launched app's first screen, from the nodes it holds besides
- * the Application and Window roots. A tree with no such node is a launch or loading surface and never
- * qualifies, whatever quality verdict the producer gave it: the iOS runner marks exactly that
- * root-only tree sparse, and a runner that predates verdicts publishes it with none. A sparse tree
- * qualifies once it has stayed unchanged for {@link FIRST_SCREEN_SPARSE_QUIET_MS}. Any other tree
- * qualifies at once.
- */
-function isFirstScreenReady(contentNodes: number, quietForMs: number): boolean {
-  if (contentNodes === 0) return false;
-  if (contentNodes > FIRST_SCREEN_SPARSE_CONTENT_NODES) return true;
-  return quietForMs >= FIRST_SCREEN_SPARSE_QUIET_MS;
-}
-
 export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 
 /**
@@ -127,7 +100,7 @@ export type PostGestureStabilityPending<S> = {
   baseline?: PostGesturePreActionBaseline<S>;
   /**
    * `first-screen`: an app launch marked this record. A quiet pair settles the loop only when
-   * {@link isFirstScreenReady} accepts it, under {@link FIRST_SCREEN_SCHEDULE}.
+   * `showsFirstScreen` accepts it, under {@link FIRST_SCREEN_SCHEDULE}.
    */
   readiness?: 'first-screen';
 };
@@ -151,10 +124,11 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   /** Why `surfacesIdentical` said no, for the veto diagnostic. */
   summarizeDivergence: (baseline: S, current: S) => Record<string, number>;
   /**
-   * How many nodes one attempt holds besides the Application and Window roots. Read only for a
-   * launch record.
+   * Whether one attempt shows a launched app's first screen rather than its launch or loading
+   * surface. The producer owns the rule because only it can read the tree. Read only for a launch
+   * record.
    */
-  countFirstScreenContent: (value: T) => number;
+  showsFirstScreen: (value: T) => boolean;
 };
 
 export type PostGestureStabilityOutcome<T> = {
@@ -245,14 +219,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   // A rebase or a distrust verdict keeps polling on a pair that DID agree, so
   // the budget can expire on a surface that is already at rest.
   let lastPairAgreed = false;
-  // When the latest surface was first read, for the first-screen quiet window.
-  let quietSinceMs = startedAt;
   const firstScreen = pending.readiness === 'first-screen';
-  const firstScreenReady = (value: T): boolean =>
-    isFirstScreenReady(
-      hooks.countFirstScreenContent(value),
-      lastPairAgreed ? now() - quietSinceMs : 0,
-    );
   let surfaceCache: CapturedSurface<T, S> | undefined;
 
   const surfaceOf = (value: T): CapturedSurface<T, S> => {
@@ -269,20 +236,14 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
     verdict: (latest, previousValue) => {
       attempts += 1;
       const current = surfaceOf(latest);
-      if (previousValue === undefined) {
-        quietSinceMs = now();
-        return { kind: 'continue' };
-      }
+      if (previousValue === undefined) return { kind: 'continue' };
 
       const previous = surfaceOf(previousValue);
       lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
-      if (!lastPairAgreed) {
-        quietSinceMs = now();
-        return { kind: 'continue' };
-      }
+      if (!lastPairAgreed) return { kind: 'continue' };
 
       const elapsedMs = now() - startedAt;
-      if (firstScreen && !firstScreenReady(latest)) return { kind: 'continue' };
+      if (firstScreen && !hooks.showsFirstScreen(latest)) return { kind: 'continue' };
       // A capture plan may fall back or be pre-empted by the XCTest-channel penalty at any time,
       // so the serving surface can change mid-poll. This quiet pair says nothing about the
       // gesture: adopt it as a post-action baseline and keep going (#1569). The pair that rebases
@@ -340,15 +301,9 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   });
   // minPolls guarantees at least one judged value before an `expired` end can fire.
   const value = observed.last as T;
-  // Loading means no first screen at all. A first screen counts as settled at the deadline only
-  // under the same rule the loop uses (a small tree must have been quiet for the full window);
-  // otherwise it is unsettled.
-  if (firstScreen) {
-    if (hooks.countFirstScreenContent(value) === 0) {
-      return { value, postGestureOutcome: postGestureOutcome('loading', pending) };
-    }
-    if (lastPairAgreed && firstScreenReady(value)) return { value };
-    return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
+  // Loading means the last read still showed no first screen.
+  if (firstScreen && !hooks.showsFirstScreen(value)) {
+    return { value, postGestureOutcome: postGestureOutcome('loading', pending) };
   }
   if (lastPairAgreed) return { value };
   return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };

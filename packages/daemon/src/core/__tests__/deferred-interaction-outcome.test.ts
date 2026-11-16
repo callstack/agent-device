@@ -18,7 +18,7 @@ import {
   pickupSnapshot,
 } from './post-gesture-stabilization-fixtures.ts';
 
-/** A first screen with more than a sparse tree's content: a header and five rows. */
+/** A first screen: a header and five rows. */
 function homeScreenSnapshot(y = 500) {
   return makeSnapshotState([
     { index: 0, type: 'Application', label: 'App', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -192,6 +192,86 @@ test('the first capture after an open does not count the Window root as first-sc
   const result = await pendingResult;
 
   assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
+});
+
+const APP_ROOT = {
+  index: 0,
+  type: 'Application',
+  label: 'App',
+  rect: { x: 0, y: 0, width: 390, height: 844 },
+};
+
+test('the first capture after an open waits through a splash image however long it holds', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  // The storyboard splash a launched React Native app shows: one unlabeled full-screen image.
+  const splash = makeSnapshotState([
+    APP_ROOT,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Image',
+      identifier: 'SplashScreenLegacy',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+    },
+  ]);
+  const home = homeScreenSnapshot();
+  const { capture } = scriptedCapture([...Array.from({ length: 12 }, () => splash), home, home]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(4_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot, home);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
+test('the first capture after an open does not take a busy indicator for the first screen', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const spinner = makeSnapshotState([
+    APP_ROOT,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'ActivityIndicator',
+      label: 'In progress',
+      rect: { x: 180, y: 400, width: 30, height: 30 },
+    },
+  ]);
+  const { capture } = scriptedCapture([spinner]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(11_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
+});
+
+test('the first capture after an open settles a one-button first screen on its first quiet pair', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const oneButton = makeSnapshotState([
+    APP_ROOT,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 20, y: 700, width: 350, height: 50 },
+    },
+  ]);
+  const { capture, calls } = scriptedCapture([oneButton, oneButton]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(1_000);
+  const result = await pendingResult;
+
+  assert.equal(calls(), 2);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
 });
 
 test('the first capture after an open waits through a root-only tree whatever its quality verdict', async () => {
