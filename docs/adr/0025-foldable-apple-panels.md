@@ -100,8 +100,8 @@ It is the only reader of panel tables, and it selects the source.
   The inventory reports measured `primary`, panel power, geometry, and orientation.
   It leaves exact pose to the app under test through `UIHinge.status`.
   If a caller needs pose, it asks the operator and takes another snapshot.
-- **No cache.**
-  The probe executes per capture. Only the resolved panel count is kept (see the 2026-11-16 amendment).
+- **No cached lit-panel inventory.**
+  The probe executes per capture. The daemon caches only each device's multi-panel verdict, a hardware fact (see the 2026-11-16 amendment).
   An operator changes the lit panel through a fold or open action.
   Cached inventory could resume capture of the dark panel and recreate the failure.
   `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` limits the probe to 5s, below the subsequent 20s screenshot deadline.
@@ -758,13 +758,14 @@ Consequences:
 
 ## Amendment: a single-panel table read runs beside the capture (2026-11-16)
 
-This amendment narrows the capture rule "first resolve the panel table" to devices not known to be single-panel.
-The display inventory keeps each device's panel count from its latest resolved table for the daemon's lifetime; an unresolved read does not change it.
-When that count is one, the capture names no display, so the table read only supplies `displayRotation`.
+This amendment narrows the capture rule "first resolve the panel table" to devices known to be single-panel.
+The display inventory caches each device's multi-panel verdict from its latest resolved table for the daemon's lifetime; an unresolved read does not change it.
+When the verdict is single-panel, the capture names no display, so the table read only supplies `displayRotation`.
 That read then starts beside `simctl io screenshot` with a 2s budget, in both simulator sets.
 A read still running 250ms after the image is written is aborted, and the capture reports no rotation, as for an unresolved table.
-A multi-panel device or a device with no resolved count keeps the read before the capture, so a fold still names the lit panel.
-If a read beside a capture resolves to a named panel, the capture emits `apple_display_single_panel_count_stale`, and the new count routes the next capture.
+A multi-panel device or a device with no resolved verdict keeps the read before the capture, so a fold still names the lit panel.
+If a read beside a capture resolves to a multi-panel table, that capture has already gone out without `--display`. It takes simctl's implicit default and can be the dark-panel black image.
+The capture then emits `apple_display_single_panel_count_stale` with a retake hint, and the resolved read replaces the verdict, so the next capture reads the table before it captures and names the lit panel.
 
 Rejected alternatives:
 

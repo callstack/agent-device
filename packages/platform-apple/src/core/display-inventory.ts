@@ -100,9 +100,9 @@ const DISPLAYS_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not report 'devicectl device info displays'. Update Xcode to a version that ships the display-information feature before targeting multi-display Apple devices.";
 
 /**
- * Each device's integrated panel count, from its latest resolved panel table. The count is a
- * hardware fact, so it is kept for the daemon's lifetime; the table itself is not (see
- * {@link queryAppleDisplayInventory}).
+ * Each device's multi-panel verdict: whether its latest resolved panel table listed more than one
+ * integrated panel. The verdict is a hardware fact, so it is kept for the daemon's lifetime; the
+ * table itself is not (see {@link queryAppleDisplayInventory}).
  */
 const multiScreenByDevice = new Map<string, boolean>();
 
@@ -120,7 +120,7 @@ export function knownAppleMultiScreen(device: DeviceInfo): boolean | undefined {
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
- * the dark panel. Only the panel count it resolves is kept ({@link knownAppleMultiScreen}).
+ * the dark panel. Only the multi-panel verdict it resolves is kept ({@link knownAppleMultiScreen}).
  *
  * A failure to ask is reported as an unresolved inventory instead of an error:
  * every caller has a correct pre-inventory path, and a missing host feature must

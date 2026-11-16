@@ -42,24 +42,46 @@ test('a known single-panel capture reads its rotation beside the image', async (
   assert.deepEqual(facts, { displayRotation: 'landscape-left' });
 });
 
-test('a known single-panel capture reports no rotation when its read misses the grace', async () => {
-  let probeSignal: AbortSignal | undefined;
-  const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
-    env: process.env,
-    skipIosSimulatorBootCheck: true,
-    deps: {
-      ensureBooted: async () => {},
-      normalizeDensity: async () => {},
-      isKnownSinglePanel: () => true,
-      resolveCaptureTarget: async (_device, options) => {
-        probeSignal = options?.signal;
-        return await new Promise<never>(() => {});
+test('a known single-panel read gets a 2 s budget and 250 ms after the image, then is aborted', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    let probeOptions: { timeoutMs?: number; signal?: AbortSignal } | undefined;
+    let captured = false;
+    let facts: object | undefined;
+    const capture = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+      env: process.env,
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        ensureBooted: async () => {},
+        normalizeDensity: async () => {},
+        isKnownSinglePanel: () => true,
+        resolveCaptureTarget: async (_device, options) => {
+          probeOptions = options;
+          return await new Promise<never>(() => {});
+        },
+        captureWithRetry: async () => {
+          captured = true;
+        },
       },
-      captureWithRetry: async () => {},
-    },
-  });
-  assert.deepEqual(facts, {});
-  assert.equal(probeSignal?.aborted, true, 'the late read is aborted');
+    });
+    void capture.then((result) => {
+      facts = result;
+    });
+
+    await vi.advanceTimersByTimeAsync(249);
+    assert.equal(captured, true);
+    assert.equal(probeOptions?.timeoutMs, 2_000);
+    assert.equal(facts, undefined, 'the capture waits out the grace');
+    assert.equal(probeOptions?.signal?.aborted, false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    assert.deepEqual(facts, {}, 'the capture reports no rotation once the grace ends');
+    assert.equal(probeOptions?.signal?.aborted, true, 'the late read is aborted');
+  } finally {
+    // A failed assertion must not leave the capture holding the simulator's status bar lock.
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+  }
 });
 
 test('a known single-panel capture reports no rotation when its read fails', async () => {

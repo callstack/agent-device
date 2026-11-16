@@ -35,7 +35,7 @@ const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
 let panelTableReads = 0;
 const latestResolvedRead = new Map<string, number>();
 
-// Resolved panel counts are hardware facts that the panel table read keeps per daemon
+// A resolved multi-panel verdict is a hardware fact that the panel table read keeps per daemon
 // (knownAppleMultiScreen), so each simulator is probed once.
 function recordResolvedRead(device: DeviceInfo, read: number): void {
   unansweredPanelTables.delete(device.id);
