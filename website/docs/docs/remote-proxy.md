@@ -118,7 +118,7 @@ fail to write it, or this machine may fail to download or save it, for example w
 than 8 MiB. The command still succeeds, and the file may keep the previous version; the next recorded
 action or `close` delivers the full recording again. If `close` cannot deliver the final script,
 the session still closes and the file keeps the version from the last action. Every result that
-recorded a version discloses it: the CLI prints a `Warning:` line and carries a typed
+recorded a version discloses it: the CLI prints a warning and carries a typed
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
