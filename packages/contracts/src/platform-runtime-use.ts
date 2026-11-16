@@ -27,7 +27,7 @@ type RuntimeUseInput<
  * Runtime validation keeps declarations built from dynamic data fail-closed too.
  */
 export function runtimeUse<Operations extends object>() {
-  return <
+  const define = <
     const Required extends readonly RuntimeOperationKey<Operations>[],
     const Preferred extends readonly Exclude<RuntimeOperationKey<Operations>, Required[number]>[] =
       readonly [],
@@ -68,6 +68,7 @@ export function runtimeUse<Operations extends object>() {
       conditional.length === 0 ? { required, preferred } : { required, preferred, conditional },
     ) as RuntimeUse<Operations, Required, Preferred, Conditional>;
   };
+  return define;
 }
 
 function freezeUniqueKeys<Keys extends readonly string[]>(keys: Keys, label: string): Keys {
