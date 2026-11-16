@@ -52,14 +52,21 @@ test.skipIf(process.platform === 'win32').for(['fresh', 'loose'])(
 );
 
 test.for(['EPERM', 'EROFS'])(
-  'a launched daemon starts when chmod on its state paths fails with %s',
+  'a launched daemon starts when forcing a mode on its state paths fails with %s',
   async (code) => {
     const paths = resolveDaemonPaths(
       path.join(mkdtempForTestSync('agent-device-launch-chmod-'), 'state'),
     );
-    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+    // A state directory an older version left group-writable, so the repair has something to do.
+    fs.mkdirSync(paths.baseDir, { mode: 0o755 });
+    fs.chmodSync(paths.baseDir, 0o775);
+    // Neither way of forcing a mode works: a mount that refuses chmod, or one whose semantics this host
+    // does not implement. Startup reports that and starts anyway rather than dying on a host it cannot fix.
+    const failing = () => {
       throw Object.assign(new Error(code), { code });
-    });
+    };
+    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(failing);
+    const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(failing);
     try {
       const launch = launchDaemonProcess({
         env: process.env,
@@ -68,13 +75,31 @@ test.for(['EPERM', 'EROFS'])(
         args: ['-e', ''],
         serverMode: 'socket',
       });
+
       await launch.exited;
+
+      // Each path is asked for the mode in the one way that is safe for it: the state DIRECTORY through a
+      // descriptor opened on the entry the repair judged, so the mode cannot travel through a planted link,
+      // and the log FILE by its name.
+      assert.deepEqual(
+        fchmod.mock.calls.map(([, mode]) => mode),
+        [0o700],
+      );
       assert.deepEqual(
         chmod.mock.calls.map(([target]) => target),
-        [paths.baseDir, paths.logPath],
+        [paths.logPath],
+      );
+      assert.deepEqual(
+        fchmod.mock.calls.map(([, mode]) => mode),
+        [0o700],
+      );
+      assert.deepEqual(
+        chmod.mock.calls.map(([target]) => target),
+        [paths.logPath],
       );
     } finally {
       chmod.mockRestore();
+      fchmod.mockRestore();
     }
   },
 );

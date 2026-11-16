@@ -13,11 +13,22 @@ import {
   publish,
 } from './atomic-file-host.fixtures.ts';
 import {
-  assertPrivateScriptDestination,
-  publishDirectoryIdentity,
+  confirmScriptDestination,
+  prepareScriptDestination,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+
+/**
+ * Where the rule says an entry is created, and nothing more.
+ *
+ * `prepareScriptDestination` is the call both routes make before they stage anything, so asking it is what a
+ * route sees: it walks, judges, and answers the directory. Every ground this suite builds already stands, so
+ * the creation it also owns never runs here.
+ */
+function judgedDirectory(destination: string): string {
+  return prepareScriptDestination(destination).directory;
+}
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
@@ -79,11 +90,7 @@ skipOnWindows('refuses a destination under a world-writable directory', () => {
 skipOnWindows('refuses a destination created inside a directory others can add entries to', () => {
   const shared = directoryWith(path.join(root(), 'shared'), 0o777 | 0o1000);
 
-  expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(shared, 'journey.ad')),
-    'shared_parent',
-    shared,
-  );
+  expectUntrusted(() => judgedDirectory(path.join(shared, 'journey.ad')), 'shared_parent', shared);
   expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(false);
 });
 
@@ -102,11 +109,7 @@ skipOnWindows('refuses a directory another user owns, whatever the mode', () => 
   const work = directoryWith(path.join(root(), 'foreign'), 0o755);
   serveOwnership({ [work]: FOREIGN_UID });
 
-  expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
-    'foreign_owned',
-    work,
-  );
+  expectUntrusted(() => judgedDirectory(path.join(work, 'journey.ad')), 'foreign_owned', work);
 });
 
 skipOnWindows(
@@ -119,11 +122,7 @@ skipOnWindows(
     const work = path.join(team, 'work');
     fs.mkdirSync(work);
 
-    expectUntrusted(
-      () => assertPrivateScriptDestination(path.join(work, 'journey.ad')),
-      'foreign_owned',
-      team,
-    );
+    expectUntrusted(() => judgedDirectory(path.join(work, 'journey.ad')), 'foreign_owned', team);
   },
 );
 
@@ -140,7 +139,7 @@ skipOnWindows(
     serveOwnership({ [systemTmp]: 0, [recordings]: FOREIGN_UID });
 
     expectUntrusted(
-      () => assertPrivateScriptDestination(path.join(recordings, 'journey.ad')),
+      () => judgedDirectory(path.join(recordings, 'journey.ad')),
       'foreign_owned',
       recordings,
     );
@@ -159,7 +158,7 @@ skipOnWindows('refuses a link standing in a private-mode directory another user 
   fs.symlinkSync(mine, path.join(teammate, 'link'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(teammate, 'link', 'journey.ad')),
+    () => judgedDirectory(path.join(teammate, 'link', 'journey.ad')),
     'foreign_owned',
     teammate,
   );
@@ -179,7 +178,7 @@ skipOnWindows('refuses a private link standing on shared ground two levels up', 
   fs.symlinkSync(privateWork, path.join(mine, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(mine, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(mine, 'rec', 'journey.ad')),
     'world_writable',
     shared,
   );
@@ -202,7 +201,7 @@ skipOnWindows('refuses a chain that leaves a shared directory through an interme
   fs.symlinkSync(path.join(team, 'relay'), path.join(home, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
     'world_writable',
     team,
   );
@@ -222,7 +221,7 @@ skipOnWindows('judges the directory a .. steps back into', () => {
   fs.symlinkSync(dir, path.join(privateHome, 'link'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(`${privateHome}/link/../x/journey.ad`),
+    () => judgedDirectory(`${privateHome}/link/../x/journey.ad`),
     'world_writable',
     elsewhere,
   );
@@ -244,7 +243,7 @@ skipOnWindows('refuses the ground under a link that leads into a shared director
   fs.symlinkSync(path.join(shared, 'mine', 'relay', 'subdir'), path.join(home, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
     'world_writable',
     shared,
   );
@@ -269,7 +268,7 @@ skipOnWindows(
     fs.symlinkSync(path.join('..', 'shared', 'mine', 'relay', 'sub'), path.join(home, 'rec'));
 
     expectUntrusted(
-      () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+      () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
       'world_writable',
       shared,
     );
@@ -336,7 +335,7 @@ skipOnWindows(
       return (realStatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
     }) as typeof fs.statSync);
 
-    expect(assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`)).toBe(below);
+    expect(judgedDirectory(`${home}/a/../b/below/journey.ad`)).toBe(below);
 
     // Every step is an `lstat` of the ENTRY. `stat` would resolve the same name a second time and answer
     // whatever stands there by then, which is the window the walk exists to close.
@@ -347,38 +346,6 @@ skipOnWindows(
     expect(lstatPaths.filter((read) => read === sub)).toHaveLength(2);
   },
 );
-
-skipOnWindows('refuses a directory whose name answers a different entry on the second look', () => {
-  // The walk judges an entry by its own `lstat` and remembers that identity. Here the second route into
-  // `sub` finds a DIFFERENT entry under that name — the swap the permission rule exists to exclude — so the
-  // walk refuses instead of standing on ground it never judged.
-  const directory = root();
-  const home = directoryWith(path.join(directory, 'home'), 0o700);
-  const sub = directoryWith(path.join(home, 'sub'), 0o700);
-  fs.mkdirSync(path.join(sub, 'below'));
-  fs.symlinkSync(sub, path.join(home, 'a'));
-  fs.symlinkSync(sub, path.join(home, 'b'));
-  const realLstatSync = fs.lstatSync;
-  let crossed = 0;
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
-    const stats = (realLstatSync as (...args: unknown[]) => unknown)(
-      pathname,
-      ...rest,
-    ) as fs.BigIntStats;
-    // The first route in sees the real `sub`; the second sees another entry answering that name.
-    if (String(pathname) === sub && crossed++ > 0) {
-      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
-        ino: stats.ino + 1n,
-      });
-    }
-    return stats;
-  }) as typeof fs.lstatSync);
-
-  expectUntrustedReplaced(
-    () => assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`),
-    sub,
-  );
-});
 
 skipOnWindows(
   'refuses a destination that is not absolute, before judging or creating anything',
@@ -395,11 +362,7 @@ skipOnWindows(
       process.chdir(home);
 
       expectUntrusted(() => publish('journey.ad'), 'relative_destination', '.');
-      expectUntrusted(
-        () => assertPrivateScriptDestination('work/journey.ad'),
-        'relative_destination',
-        'work',
-      );
+      expectUntrusted(() => judgedDirectory('work/journey.ad'), 'relative_destination', 'work');
       // Refused at the entry, so nothing below the working directory was created either.
       expect(fs.readdirSync(home)).toEqual([]);
     } finally {
@@ -416,7 +379,7 @@ skipOnWindows('refuses a relative target that lands in ground others can write',
   fs.symlinkSync('open', path.join(home, 'rel'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rel', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rel', 'journey.ad')),
     'world_writable',
     open,
   );
@@ -437,7 +400,7 @@ skipOnWindows('applies a .. inside a target to the directory the walk reached', 
   fs.symlinkSync('priv/../x', path.join(home, 'rel'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rel', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rel', 'journey.ad')),
     'world_writable',
     shared,
   );
@@ -466,15 +429,11 @@ skipOnWindows('refuses the spelled spelling of a link the walk also follows', ()
   fs.symlinkSync(shared, path.join(home, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
     'world_writable',
     shared,
   );
-  expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(shared, 'journey.ad')),
-    'world_writable',
-    shared,
-  );
+  expectUntrusted(() => judgedDirectory(path.join(shared, 'journey.ad')), 'world_writable', shared);
 });
 
 skipOnWindows('applies .. to the directory the walk is in, not to the spelling', () => {
@@ -490,11 +449,7 @@ skipOnWindows('applies .. to the directory the walk is in, not to the spelling',
   fs.mkdirSync(path.join(home, 'y'));
   fs.symlinkSync(privX, path.join(home, 'work'));
 
-  expectUntrusted(
-    () => assertPrivateScriptDestination(`${home}/work/../y/journey.ad`),
-    'world_writable',
-    privY,
-  );
+  expectUntrusted(() => judgedDirectory(`${home}/work/../y/journey.ad`), 'world_writable', privY);
   expect(fs.readdirSync(privY)).toEqual([]);
 });
 
@@ -512,7 +467,7 @@ skipOnWindows('refuses a link whose target stands in ground another local user o
   fs.symlinkSync(relay, path.join(home, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
     'planted_link',
     relay,
   );
@@ -546,11 +501,7 @@ skipOnWindows('refuses a link loop instead of trusting where the walk ran out', 
   const loop = path.join(work, 'loop');
   fs.symlinkSync(loop, loop);
 
-  expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(loop, 'journey.ad')),
-    'link_loop_exceeded',
-    loop,
-  );
+  expectUntrusted(() => judgedDirectory(path.join(loop, 'journey.ad')), 'link_loop_exceeded', loop);
   expect(fs.readdirSync(work)).toEqual(['loop']);
 });
 
@@ -580,7 +531,7 @@ skipOnWindows('follows thirty link hops, and refuses the thirty-first', () => {
   fs.rmSync(path.join(real, 'journey.ad'), { force: true });
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(chain(31), 'journey.ad')),
+    () => judgedDirectory(path.join(chain(31), 'journey.ad')),
     'link_loop_exceeded',
     path.join(work, 'link30'),
   );
@@ -595,7 +546,7 @@ skipOnWindows('refuses a path component that cannot carry a publish', () => {
   fs.writeFileSync(blocker, 'not a directory\n');
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(blocker, 'journey.ad')),
+    () => judgedDirectory(path.join(blocker, 'journey.ad')),
     'not_a_directory',
     blocker,
   );
@@ -650,7 +601,7 @@ skipOnWindows('refuses a link planted in a directory others can add entries to',
   fs.symlinkSync(attacker, path.join(shared, 'work'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
+    () => judgedDirectory(path.join(shared, 'work', 'journey.ad')),
     'world_writable',
     shared,
   );
@@ -673,7 +624,7 @@ skipOnWindows('refuses a private link whose target chain is a shared directory',
   fs.symlinkSync(rec, path.join(home, 'rec'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    () => judgedDirectory(path.join(home, 'rec', 'journey.ad')),
     'world_writable',
     team,
   );
@@ -687,7 +638,7 @@ skipOnWindows('refuses a symbolic link whose target is a directory others can wr
   fs.symlinkSync(privateWork, path.join(directory, 'link'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(path.join(directory, 'link', 'journey.ad')),
+    () => judgedDirectory(path.join(directory, 'link', 'journey.ad')),
     'world_writable',
     shared,
   );
@@ -708,7 +659,7 @@ skipOnWindows(
     serveOwnership({ [shared]: 0, [link]: FOREIGN_UID });
 
     expectUntrusted(
-      () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
+      () => judgedDirectory(path.join(shared, 'work', 'journey.ad')),
       'planted_link',
       link,
     );
@@ -781,20 +732,20 @@ skipOnWindows('publishes to a scratch path exactly as the host spelled it', () =
 
 // --- the destination directory swapped out while the file was staged ---
 
-// Only a caller that captured the identity EARLIER passes one: the remote client does, because a download
-// runs between the walk that judged the directory and the rename that creates the entry. The local
-// publisher asks for no comparison of its own — the ownership rule is what excludes anyone who could make
-// that swap — so these two cover the remote route's single comparison.
+// Only a caller that holds an answer from an earlier walk confirms it: the remote client does, because a
+// download runs between the walk that judged the directory and the rename that creates the entry. The local
+// publisher asks for no comparison of its own - the ownership rule is what excludes anyone who could make
+// that swap - so these two cover the one comparison this rule keeps.
 
 skipOnWindows('refuses a parent replaced by name while the file was staged', () => {
   const directory = root();
   const staged = path.join(directory, 'work');
   fs.mkdirSync(staged);
-  const parentIdentity = publishDirectoryIdentity(staged);
   const destination = path.join(staged, 'journey.ad');
-  // The replacement is a link to another real directory. Removing the directory and creating the same
-  // name again is not enough to make the two differ: a filesystem may hand back the inode it just
-  // freed, and the identity would match by luck.
+  const prepared = prepareScriptDestination(destination);
+  // The replacement is a link to another real directory. Removing the directory and creating the same name
+  // again is not enough to make the two differ: a filesystem may hand back the inode it just freed, and the
+  // identity would match by luck.
   const elsewhere = path.join(directory, 'elsewhere');
   fs.mkdirSync(elsewhere);
   fs.rmSync(staged, { recursive: true });
@@ -802,92 +753,31 @@ skipOnWindows('refuses a parent replaced by name while the file was staged', () 
 
   // The refusal names the directory the entry would really have been created in, which is where the link
   // leads. The spelled name is a pointer, not a place.
-  expectUntrustedReplaced(
-    () => assertPrivateScriptDestination(destination, parentIdentity),
-    elsewhere,
-  );
+  expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), elsewhere);
   expect(fs.existsSync(path.join(elsewhere, 'journey.ad'))).toBe(false);
 });
 
-skipOnWindows('accepts the identity a caller captured for the directory the walk answers', () => {
-  const directory = root();
-  const staged = path.join(directory, 'work');
-  fs.mkdirSync(staged);
-  const destination = path.join(staged, 'journey.ad');
+skipOnWindows(
+  'confirms the directory an earlier answer named, and reports where to create the entry',
+  () => {
+    const directory = root();
+    const staged = path.join(directory, 'work');
+    fs.mkdirSync(staged);
+    const destination = path.join(staged, 'journey.ad');
+    const prepared = prepareScriptDestination(destination);
 
-  expect(assertPrivateScriptDestination(destination, publishDirectoryIdentity(staged))).toBe(
-    staged,
-  );
-  expect(assertPrivateScriptDestination(destination)).toBe(staged);
-});
+    expect(confirmScriptDestination(destination, prepared)).toBe(staged);
+  },
+);
 
 // --- a step swapped out while the walk is still running ---
-
-skipOnWindows('refuses a directory swapped for a link between the lstat and entering it', () => {
-  // The attacker owns `decoy` and stands in a sticky shared parent, where they may replace their own
-  // entry. Between the walk's `lstat` of `decoy` and the moment it would enter that name, they swap it
-  // for a link to their own directory. Entering it is what redirects the publish, so the walk judges the
-  // entry its OWN lstat saw: a name that answers something else by then is refused, and a link planted
-  // afterwards is never stepped through on the strength of its target.
-  const directory = root();
-  const sticky = directoryWith(path.join(directory, 'tmp'), 0o1777);
-  const decoy = path.join(sticky, 'decoy');
-  fs.mkdirSync(decoy);
-  const attacker = path.join(directory, 'attacker');
-  fs.mkdirSync(attacker);
-  fs.chmodSync(attacker, 0o700);
-  const realLstatSync = fs.lstatSync;
-  let looks = 0;
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
-    // The first look is the walk's judgment: the attacker's OWN directory. The swap lands immediately
-    // after that judgment, so every later look at this name answers a link.
-    if (String(pathname) === decoy && ++looks === 2) {
-      fs.renameSync(decoy, `${decoy}.real`);
-      fs.symlinkSync(attacker, decoy);
-    }
-    return (realLstatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
-  }) as typeof fs.lstatSync);
-
-  const destination = path.join(decoy, 'sub', 'journey.ad');
-
-  expectUntrustedReplaced(() => publish(destination), decoy);
-  // Nothing was staged in the directory the link leads to, which is what the swap was for.
-  expect(fs.readdirSync(attacker)).toEqual([]);
-});
-
-skipOnWindows('refuses an answer whose directory was swapped for a link before staging', () => {
-  // The walk can be asked for an answer and then hand it to a caller that stages bytes there. If the name
-  // the answer is spelled by answers a link in between, `mkdir`, `mkdtemp` and `rename` would all travel
-  // through it, so the answer is confirmed against the entry the walk judged before anyone writes.
-  const directory = root();
-  const home = directoryWith(path.join(directory, 'home'), 0o700);
-  const work = path.join(home, 'work');
-  fs.mkdirSync(work);
-  const attacker = path.join(directory, 'attacker');
-  fs.mkdirSync(attacker);
-  fs.chmodSync(attacker, 0o700);
-  const realLstatSync = fs.lstatSync;
-  let looks = 0;
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
-    // The first look judges `work` as the directory the entry is created in. The swap lands immediately
-    // after that judgment and before anything is staged there.
-    if (String(pathname) === work && ++looks === 2) {
-      fs.rmdirSync(work);
-      fs.symlinkSync(attacker, work);
-    }
-    return (realLstatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
-  }) as typeof fs.lstatSync);
-
-  expectUntrustedReplaced(() => publish(path.join(work, 'journey.ad')), work);
-  expect(fs.readdirSync(attacker)).toEqual([]);
-});
 
 skipOnWindows(
   'identifies an entry by its bigint inode, so two large inodes do not collapse',
   () => {
-    // Directory identities are compared for equality, so they are read as BIGINT. A numeric `ino` cannot hold
-    // every inode a filesystem hands out: 2^53 + 1 and 2^53 answer the same Number, and a swap between the
-    // two would then look like the same directory.
+    // Directory identities are compared for equality by `confirmScriptDestination`, so they are read as
+    // BIGINT. A numeric `ino` cannot hold every inode a filesystem hands out: 2^53 + 1 and 2^53 answer the
+    // same Number, and a swap between the two would then look like the same directory.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const work = path.join(home, 'work');
@@ -901,7 +791,8 @@ skipOnWindows(
         options,
       ) as fs.Stats;
       if (String(pathname) !== work) return stats;
-      // Two distinct entries, one per look: the inode the walk judges, then the one the name answers after.
+      // Two distinct entries, one per look: the inode the walk answers, then the one the name holds when
+      // the staged version is confirmed.
       const ino = look++ === 0 ? LOW : LOW + 1n;
       const bigint = (options as { bigint?: boolean } | undefined)?.bigint === true;
       return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
@@ -911,6 +802,8 @@ skipOnWindows(
 
     // A numeric read would answer Number(2^53 + 1n) === Number(2^53n), and the swap would pass.
     expect(Number(LOW + 1n)).toBe(Number(LOW));
-    expectUntrustedReplaced(() => publish(path.join(work, 'journey.ad')), work);
+    const destination = path.join(work, 'journey.ad');
+    const prepared = prepareScriptDestination(destination);
+    expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), work);
   },
 );

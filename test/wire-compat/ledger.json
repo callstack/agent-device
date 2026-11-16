@@ -214,7 +214,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:42d78f01311e3e0c5f9099ef72e3c6258241e66204747aa176a55cd5191a2145",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:7933a02d17d7d8a48e9ba542480a9703ad8688f5ac30c186e503700fe982254e",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:28fe42532406633c86578f468b2ccc5c7fa43764fd62cfec35975678ff080e66",
     "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
@@ -222,8 +222,8 @@
   "compatibleChanges": [
     {
       "declaration": "packages/remote/src/session-script-destination.ts#publishScriptVersion",
-      "digest": "sha256:7933a02d17d7d8a48e9ba542480a9703ad8688f5ac30c186e503700fe982254e",
-      "rationale": "#4565 adds one call ahead of the `mkdir` that creates a missing parent: the destination-ancestry rule is asked over the directories that already exist, so a destination it is going to refuse leaves no directories behind. Nothing on the wire changes: no request field is added, removed or renamed, no response field, route, status or artifact framing moves, and the download contract this declaration consumes is untouched. A released daemon receives exactly the same request and answers the same way; a released caller resolves the same paths on its own disk. A skewed peer parses every payload as before. #4565 revises that local sequencing only: the `mkdir` moves into host-kit's one destination call, which refuses an unsafe destination before creating anything and creates each missing level at 0700 inside the directory it judged. That call now ANSWERS the judged directory and its identity, so this route stages each version beside the destination without walking the destination a second time, and confirms the identity before the rename. Nothing on the wire moves: same request fields, same response fields, same routes, status and artifact framing, and the download contract this declaration consumes is untouched. A released daemon receives the same request and answers the same way; a released caller resolves the same paths on its own disk."
+      "digest": "sha256:28fe42532406633c86578f468b2ccc5c7fa43764fd62cfec35975678ff080e66",
+      "rationale": "#4565 changes only how the caller resolves a destination locally. The route, its request fields, its response fields, its status and its artifact framing are untouched, and so is the download contract this declaration consumes. Host-kit owns the sequence: it walks the destination and refuses it before creating anything, creates each missing level at 0700 inside the directory it judged, and answers with that directory and its identity; the route stages each version inside the directory that answer names and, after the download, confirms it through host-kit's one confirmation call before the rename. A released daemon receives the same request and answers the same way; a released caller resolves the same paths on its own disk, and a skewed peer parses every payload as before."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",

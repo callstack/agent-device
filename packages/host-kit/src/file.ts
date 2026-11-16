@@ -1,9 +1,9 @@
 export {
-  assertPrivateScriptDestination,
+  confirmScriptDestination,
+  scriptAncestryReason,
   isAtomicPublishTemporaryPath,
   lstatIfPresent,
   prepareScriptDestination,
-  publishDirectoryIdentity,
   publishDurableFileSync,
   publishFileSync,
   publishScriptFileSync,

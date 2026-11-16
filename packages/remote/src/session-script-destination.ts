@@ -17,9 +17,9 @@ import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
-  assertPrivateScriptDestination,
+  confirmScriptDestination,
+  scriptAncestryReason,
   prepareScriptDestination,
-  publishDirectoryIdentity,
   publishFileSync,
   withProcessLock,
   type ScriptDestination,
@@ -431,7 +431,9 @@ async function publishScriptVersion(
       revision: revision as number,
       staging,
       staged,
-      parentIdentity: allocated.parentIdentity,
+      // The directory host-kit answered when staging was allocated, so the publish can confirm the ground
+      // one time before the rename, through the same call that refuses it.
+      prepared: allocated.prepared,
       pending,
     };
     return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
@@ -451,36 +453,28 @@ async function publishScriptVersion(
 
 /**
  * Creates a staging directory beside the destination and lists it in the record before any script
- * bytes reach it, and reports the destination directory's identity so the publish can confirm it is still
- * the same one.
+ * bytes reach it, and reports the confirmed destination so the publish can confirm it once more.
  *
  * Staging sits in the directory the ancestry walk JUDGED — the `prepareScriptDestination` answer, not
  * `path.dirname` of the spelled destination. Where a `..` or a link in the destination leads elsewhere, the
  * spelled parent is a directory nobody judged, and a staging directory in it is one another local user can
- * populate before the rename does. The identity is the one that answer carried, so the walk is not asked
- * twice for one version.
+ * populate before the rename does. The answer is used as it stands: nobody the rule accepted can move it
+ * before this call, and the check the route owes comes after the download, at {@link confirmScriptDestination}.
  */
 function allocateStaging(
   file: string,
   prepared: ScriptDestination,
-): { staging: string; parentIdentity: string | undefined } | undefined {
+): { staging: string; prepared: ScriptDestination } | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
-  const directory = prepared.directory;
-  // One identity check, not a second walk: the answer is only used where the name still holds the entry the
-  // walk judged it for. Nothing is staged in a directory that moved in between.
-  if (publishDirectoryIdentity(directory) !== prepared.identity) {
-    throw destinationMoved(record.destination, directory);
-  }
-  const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
-  const parentIdentity = prepared.identity;
+  const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
   try {
     writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  return { staging, parentIdentity };
+  return { staging, prepared };
 }
 
 /**
@@ -561,11 +555,11 @@ function publishStaged(
     revision: number;
     staging: string;
     staged: string;
-    parentIdentity: string | undefined;
+    prepared: ScriptDestination;
     pending: { named: boolean };
   }>,
 ): string | undefined {
-  const { revision, staging, staged, parentIdentity, pending } = version;
+  const { revision, staging, staged, prepared, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
   let current = settlePublishing(record);
@@ -576,12 +570,10 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
-  // Re-asked here, under the record lock and right before the entry is created: whoever could write an
-  // ancestor while the version was downloaded cannot move it now (#4565). The identity handed in was taken
-  // from the directory the walk judged when staging was created, so a walk that now answers a DIFFERENT
-  // directory — an ancestor swapped for a link meanwhile — fails the comparison instead of renaming bytes
-  // into ground nobody judged.
-  const judged = assertPrivateScriptDestination(current.destination, parentIdentity);
+  // Confirmed here, under the record lock and right before the entry is created, because the download ran
+  // in between: host-kit walks the destination again and refuses if it now answers a DIFFERENT directory
+  // than the one staging was allocated in, so bytes are never renamed into ground nobody judged (#4565).
+  const judged = confirmScriptDestination(current.destination, prepared);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
@@ -619,21 +611,6 @@ function fileIdentity(file: string): string | undefined {
   return stat ? `${stat.dev}:${stat.ino}` : undefined;
 }
 
-/** The judged answer no longer names the entry it was judged for, so this version publishes nowhere. */
-function destinationMoved(destination: string, directory: string): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `The directory for ${destination} changed while the script was staged, so the script was not saved.`,
-    {
-      reason: 'script_ancestry_replaced',
-      exposure: 'parent_replaced',
-      path: destination,
-      ancestor: directory,
-      hint: 'Re-record with open --save-script, or save under a directory nobody else can write.',
-    },
-  );
-}
-
 function scriptDeliveryFailure(
   destination: string,
   publicationId: string,
@@ -642,7 +619,7 @@ function scriptDeliveryFailure(
 ): ScriptDeliveryFailure {
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
-  const refusal = scriptAncestryRefusal(error);
+  const refusal = scriptAncestryReason(error);
   if (refusal) {
     return {
       reason: 'script_delivery_failed',
@@ -673,18 +650,6 @@ function scriptDeliveryFailure(
         message: `The remote script could not be saved to ${destination}.`,
         hint: `The file may still hold the previous version. ${recovery}`,
       };
-}
-
-/**
- * The typed reason a destination-ancestry refusal reported (#4565), so a caller can tell an unsafe
- * destination from a download that failed. Anything else is `undefined`.
- */
-function scriptAncestryRefusal(error: unknown): string | undefined {
-  if (!(error instanceof AppError)) return undefined;
-  const reason = error.details?.reason;
-  return reason === 'script_ancestor_untrusted' || reason === 'script_ancestry_replaced'
-    ? reason
-    : undefined;
 }
 
 function recordPath(

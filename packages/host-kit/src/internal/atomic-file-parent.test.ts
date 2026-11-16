@@ -2,20 +2,25 @@
 // a publish does when the walk stops short of it (#4565). Every name the path spells is resolved one step
 // at a time the way the kernel walks it, so a `..` is only answerable once the directory it steps back
 // from exists.
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   ancestryRoot as root,
   directoryWith,
   expectUntrusted,
+  FOREIGN_UID,
   modeOf,
   publish,
   withSharedUmask,
 } from './atomic-file-host.fixtures.ts';
-import { assertPrivateScriptDestination, prepareScriptDestination } from './atomic-file.ts';
+import { confirmScriptDestination, prepareScriptDestination } from './atomic-file.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 skipOnWindows(
   'refuses a destination that steps back out of a missing directory, and creates none',
@@ -86,21 +91,141 @@ skipOnWindows('answers the created directory as the one to publish into', () => 
   expect(modeOf(judged)).toBe(0o700);
 });
 
-skipOnWindows('refuses a destination whose parent does not exist, and publishes nowhere', () => {
-  // `assertPrivateScriptDestination` creates nothing, so a walk that stopped at an absent name has no
-  // answer to publish into. The nearest ancestor it did reach would be a file the caller never asked
-  // for: `root/journey.ad` instead of `root/missing/journey.ad`.
+skipOnWindows('refuses a destination whose parent is gone by the time the answer is used', () => {
+  // The one walk that creates is host-kit's own, so what this pins is the other half: an ANSWER is only
+  // usable while the chain it named still stands. `missing` goes away after the answer was given, so there
+  // is no directory the entry belongs in. Answering the nearest ancestor that did stand would write
+  // `root/journey.ad` for a destination spelling `root/missing/journey.ad` — a file nobody asked for, in a
+  // directory whose permissions were never what the answer promised.
   const directory = root();
   const missing = path.join(directory, 'missing');
   const destination = path.join(missing, 'journey.ad');
+  const prepared = prepareScriptDestination(destination);
+
+  fs.rmSync(missing, { recursive: true, force: true });
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(destination),
+    () => confirmScriptDestination(destination, prepared),
     'unreachable_parent',
     directory,
   );
   expect(fs.readdirSync(directory)).toEqual([]);
 });
+
+skipOnWindows(
+  'adopts a missing level another process created, and creates the rest below it',
+  () => {
+    // Two sessions saving into the same new directory meet HERE: one wins `mkdir`, and the other finds the
+    // name taken. Refusing that (which an earlier shape did, with `entry_appeared`) made a routine
+    // concurrent save fail. The appeared entry is therefore JUDGED the way every other step is judged, by
+    // the single `lstat` of the name, and this user's own private directory is the ordinary answer (ADR 0016).
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const appeared = path.join(home, 'recordings');
+    const realMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      // The other process creates the level the instant this call reaches for the missing name.
+      if (String(pathname) === appeared && !fs.existsSync(appeared)) {
+        realMkdirSync(appeared, { mode: 0o700 });
+      }
+      return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.mkdirSync);
+
+    const destination = path.join(appeared, 'journey.ad');
+
+    expect(prepareScriptDestination(destination).directory).toBe(appeared);
+    publish(destination);
+    expect(fs.readFileSync(path.join(appeared, 'journey.ad'), 'utf8')).toBe('context\n');
+  },
+);
+
+skipOnWindows(
+  'refuses a missing level that appeared as another user directory, and creates nothing below it',
+  () => {
+    // Judged, not trusted: an appeared name is NOT this call's creation, so it cannot be taken on faith
+    // that it was made at the private mode. Ownership is asked of the same `lstat` the walk judges ground
+    // with, and a directory another local user owns is theirs to repopulate or replace, whatever its mode.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const appeared = path.join(home, 'recordings');
+    const realMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      if (String(pathname) === appeared && !fs.existsSync(appeared)) {
+        realMkdirSync(appeared, { mode: 0o700 });
+        fs.chmodSync(appeared, 0o700);
+      }
+      return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.mkdirSync);
+    // Seen as it appears, and judged foreign by the walk and by the creation alike.
+    const seen = serveOwnership(appeared, FOREIGN_UID);
+
+    const destination = path.join(appeared, 'journey.ad');
+
+    expectUntrusted(() => prepareScriptDestination(destination), 'foreign_owned', appeared);
+    expect(seen()).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(appeared, 'journey.ad'))).toBe(false);
+  },
+);
+
+skipOnWindows(
+  'refuses a missing level that appeared group-writable, rather than adopting it',
+  () => {
+    // The mode decides, because membership cannot be proven (ADR 0016): an appeared directory at 0775 is one
+    // the group can add names in, so the destination's own name can be made there by another member first.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const appeared = path.join(home, 'recordings');
+    const realMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      if (String(pathname) === appeared && !fs.existsSync(appeared)) {
+        realMkdirSync(appeared, { mode: 0o775 });
+        fs.chmodSync(appeared, 0o775);
+      }
+      return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.mkdirSync);
+
+    const destination = path.join(appeared, 'journey.ad');
+
+    expectUntrusted(() => prepareScriptDestination(destination), 'shared_group_writable', appeared);
+  },
+);
+
+skipOnWindows(
+  'refuses a missing level that appeared sticky and world-writable, where any user can name the entry',
+  () => {
+    // The sticky bit is what lets the rule PASS THROUGH such a directory: it holds the entries already there
+    // in place. It cannot refuse a NEW entry by name, so a level that appeared open to the world is refused
+    // for the entry the destination spells, even though this user owns it.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const appeared = path.join(home, 'recordings');
+    const realMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      if (String(pathname) === appeared && !fs.existsSync(appeared)) {
+        realMkdirSync(appeared, { mode: 0o777 });
+        fs.chmodSync(appeared, 0o1777);
+      }
+      return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.mkdirSync);
+
+    const destination = path.join(appeared, 'journey.ad');
+
+    expectUntrusted(() => prepareScriptDestination(destination), 'shared_parent', appeared);
+  },
+);
+
+/** Reports `uid` for one path from this point on, and how many times the rule looked at it. */
+function serveOwnership(target: string, uid: number): () => number {
+  const realLstatSync = fs.lstatSync.bind(fs);
+  let looks = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    const stats = realLstatSync(pathname as never, ...(rest as never[]));
+    if (String(pathname) !== target || stats === undefined) return stats;
+    looks += 1;
+    return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { uid });
+  }) as typeof fs.lstatSync);
+  return () => looks;
+}
 
 skipOnWindows('refuses a missing level planted as a link, and creates nothing beyond it', () => {
   // The walk stops at `new`, which does not exist yet, so the parent it stopped in is sticky and open to
@@ -143,8 +268,10 @@ test('refuses a destination that is not absolute on every platform, and creates 
     'relative_destination',
     path.join('recordings'),
   );
+  // The confirm call refuses from the same check, before its platform branch: on Windows no walk runs at
+  // all, so a relative name cannot be left to the walk to catch.
   expectUntrusted(
-    () => assertPrivateScriptDestination(relative),
+    () => confirmScriptDestination(relative, { directory: relative, identity: undefined }),
     'relative_destination',
     path.join('recordings'),
   );
