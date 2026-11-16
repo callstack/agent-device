@@ -414,13 +414,6 @@ async function rewrittenUploadPreflightResponse(params: {
   publicOrigin: string | undefined;
 }): Promise<Response> {
   const { request, upstreamResponse, headers, uploadHeaders, publicOrigin } = params;
-  if (
-    upstreamResponse.status === 204 ||
-    upstreamResponse.status === 205 ||
-    upstreamResponse.status === 304
-  ) {
-    return new Response(null, { status: upstreamResponse.status, headers });
-  }
   const text = await upstreamResponse.text();
   headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
   return new Response(
@@ -543,9 +536,9 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     upstreamTimeoutMs: options.upstreamTimeoutMs,
     upstreamFetch,
     upstreamTransport: async (route, request) => {
-      const { isTransferRoute, createNodeTransferFetch, settleUpstreamFetch } =
-        await import('./transfer-transport.ts');
       if (!isTransferRoute(route, request.method)) return upstreamFetch(request);
+      const { createNodeTransferFetch, settleUpstreamFetch } =
+        await import('./transfer-transport.ts');
       return customUpstreamFetch
         ? settleUpstreamFetch(customUpstreamFetch, request)
         : createNodeTransferFetch()(request);
@@ -584,9 +577,7 @@ function resolveProxyRoute(requestUrl: string): string {
 
 function isSupportedDaemonRoute(route: string, method: string): boolean {
   if (route === '/rpc') return method === 'POST';
-  if (isSupportedUploadRoute(route, method)) return true;
-  if (route === '/artifacts' || route === '/artifacts/') return method === 'GET';
-  if (route.startsWith('/artifacts/')) return method === 'GET';
+  if (isTransferRoute(route, method)) return true;
   if (isRequestDiagnosticsRoute(route)) return method === 'GET';
   return false;
 }
@@ -605,6 +596,13 @@ function isRequestDiagnosticsRoute(route: string): boolean {
     segments[5] === 'diagnostics' &&
     segments[2] !== '' &&
     segments[4] !== ''
+  );
+}
+
+function isTransferRoute(route: string, method: string): boolean {
+  return (
+    isSupportedUploadRoute(route, method) ||
+    (method === 'GET' && (route === '/artifacts' || route.startsWith('/artifacts/')))
   );
 }
 
@@ -887,15 +885,16 @@ function rpcErrorResponse(rpcId: unknown, error: unknown): Response {
 }
 
 async function proxyErrorResponse(error: unknown, request: Request): Promise<Response> {
-  const { isTransferRoute, transferWireDetails } = await import('./transfer-transport.ts');
-  const transfer = isTransferRoute(resolveProxyRoute(request.url), request.method);
+  const details = isTransferRoute(resolveProxyRoute(request.url), request.method)
+    ? (await import('./transfer-transport.ts')).transferWireDetails(error)
+    : {};
   const normalized = normalizeError(error);
   return Response.json(
     {
       ok: false,
       error: normalized.message,
       code: normalized.code,
-      ...(transfer ? transferWireDetails(error) : {}),
+      ...details,
     },
     { status: normalized.code === 'INVALID_ARGS' ? 400 : 500 },
   );

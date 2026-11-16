@@ -801,3 +801,50 @@ test.each(['iterator stop', 'request close', 'outgoing pump'] as const)(
     expect(vi.getTimerCount()).toBe(0);
   },
 );
+
+test.each(['phase expiry', 'caller abort'] as const)(
+  'a failure survives %s during joined cleanup',
+  async (late) => {
+    const entered = deferred<void>();
+    const origin = await upstream(() => entered.resolve());
+    controlledClock();
+    const closeEntered = deferred<void>();
+    const allowClose = deferred<void>();
+    onTestFinished(() => allowClose.resolve());
+    const observed = observeRequest((req) => {
+      const once = req.once;
+      const registration = vi.spyOn(req, 'once').mockImplementation((event, listener) => {
+        if (event !== 'close') return Reflect.apply(once, req, [event, listener]);
+        registration.mockRestore();
+        return Reflect.apply(once, req, [
+          event,
+          (...args: unknown[]) => {
+            closeEntered.resolve();
+            void allowClose.promise.then(() => Reflect.apply(listener, req, args));
+          },
+        ]);
+      });
+      onTestFinished(() => registration.mockRestore());
+    });
+    const caller = new AbortController();
+    const original = new AppError('COMMAND_FAILED', 'upstream failed before cleanup', {
+      reason: 'transfer_upstream_closed',
+    });
+    let settled = false;
+    const result = createNodeTransferFetch()(
+      new Request(`${origin}/artifacts/build`, { signal: caller.signal }),
+    ).catch((error: unknown) => {
+      settled = true;
+      return error;
+    });
+    await entered.promise;
+    (await observed.made).destroy(original);
+    await closeEntered.promise;
+    expect(settled).toBe(false);
+    if (late === 'phase expiry') await vi.advanceTimersByTimeAsync(30_000);
+    else caller.abort(new Error('later caller abort'));
+    allowClose.resolve();
+    expect(await result).toBe(original);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);

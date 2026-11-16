@@ -16,6 +16,13 @@ const options = {
   clientToken: 'client-secret',
 };
 
+const rpcBody = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'agent-device.command',
+  params: { token: 'client-secret', command: 'version' },
+});
+
 async function listen(server: http.Server): Promise<string> {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -255,15 +262,7 @@ test('a custom transport receives every route family including transfers', async
         headers: { authorization: 'Bearer client-secret', 'content-type': 'application/json' },
         ...(method === 'POST' || method === 'PUT'
           ? {
-              body:
-                path === '/rpc'
-                  ? JSON.stringify({
-                      jsonrpc: '2.0',
-                      id: 1,
-                      method: 'agent-device.command',
-                      params: { token: 'client-secret', command: 'version' },
-                    })
-                  : '{}',
+              body: path === '/rpc' ? rpcBody : '{}',
             }
           : {}),
       }),
@@ -285,6 +284,103 @@ test('a custom transport receives every route family including transfers', async
     seen.every((request) => request.headers.get('authorization') === 'Bearer daemon-secret'),
   ).toBe(true);
 });
+
+test('admitted transfers use Node while RPC and diagnostics use Fetch', async () => {
+  const daemon = await listen(
+    http.createServer((req, res) => {
+      req.resume();
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        req.url === '/upload/preflight'
+          ? JSON.stringify({
+              uploadId: 'ticket',
+              upload: { url: `http://${req.headers.host}/upload/direct/ticket` },
+            })
+          : '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
+      );
+    }),
+  );
+  const node = vi.spyOn(http, 'request');
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  onTestFinished(() => {
+    node.mockRestore();
+    fetch.mockRestore();
+  });
+  const proxy = createDaemonProxy({ ...options, upstreamBaseUrl: daemon });
+  for (const [method, path, transfer] of [
+    ['POST', '/upload', true],
+    ['POST', '/upload/preflight', true],
+    ['POST', '/upload/finalize', true],
+    ['PUT', '/upload/direct/ticket', true],
+    ['GET', '/artifacts', true],
+    ['GET', '/artifacts/', true],
+    ['GET', '/artifacts/build', true],
+    ['POST', '/rpc', false],
+    ['GET', '/sessions/s/requests/r/diagnostics', false],
+  ] as const) {
+    node.mockClear();
+    fetch.mockClear();
+    const response = await proxy.handle(
+      new Request(`http://gateway.test${path}`, {
+        method,
+        headers: { authorization: 'Bearer client-secret', 'content-type': 'application/json' },
+        ...(method === 'POST' || method === 'PUT'
+          ? { body: path === '/rpc' ? rpcBody : '{}' }
+          : {}),
+      }),
+    );
+    expect(response.status, path).toBe(200);
+    await response.text();
+    expect(node.mock.calls.length, path).toBe(transfer ? 1 : 0);
+    expect(fetch.mock.calls.length, path).toBe(transfer ? 0 : 1);
+  }
+  for (const [method, path] of [
+    ['GET', '/upload'],
+    ['POST', '/upload/direct/x'],
+    ['POST', '/artifacts/x'],
+    ['PUT', '/upload/direct'],
+  ] as const) {
+    expect((await proxy.handle(new Request(`http://gateway.test${path}`, { method }))).status).toBe(
+      404,
+    );
+  }
+});
+
+test.each([false, true])(
+  'non-transfer routes never load transfer mechanics (failure=%s)',
+  async (failure) => {
+    vi.resetModules();
+    vi.doMock('./transfer-transport.ts', () => {
+      throw new Error('transfer mechanics loaded');
+    });
+    onTestFinished(() => {
+      vi.doUnmock('./transfer-transport.ts');
+      vi.resetModules();
+    });
+    const { createDaemonProxy: create } = await import('./daemon-proxy.ts');
+    const proxy = create({
+      ...options,
+      upstreamFetch: async () => {
+        if (failure) throw new AppError('COMMAND_FAILED', 'original non-transfer failure');
+        return Response.json({ jsonrpc: '2.0', id: 1, result: { ok: true } });
+      },
+    });
+    for (const path of ['/rpc', '/health', '/sessions/s/requests/r/diagnostics']) {
+      const response = await proxy.handle(
+        new Request(`http://gateway.test${path}`, {
+          method: path === '/rpc' ? 'POST' : 'GET',
+          headers: { authorization: 'Bearer client-secret' },
+          ...(path === '/rpc' ? { body: rpcBody } : {}),
+        }),
+      );
+      expect(response.status, path).toBe(failure ? 500 : 200);
+      const body = await response.json();
+      if (failure) expect(JSON.stringify(body)).toContain('original non-transfer failure');
+      expect(body).not.toHaveProperty('transferPhase');
+      expect(body).not.toHaveProperty('timeoutMs');
+    }
+  },
+);
 
 test('an explicit operator cap settles an ignored custom request and reaches its bounded signal', async () => {
   let bounded!: Request;
@@ -365,44 +461,5 @@ test.each([205, 304, 400, 500, 599])(
       status,
       body: noBody ? {} : { answer: 'upstream' },
     });
-  },
-);
-
-test.each([
-  { transport: 'node', status: 204 },
-  { transport: 'node', status: 205 },
-  { transport: 'node', status: 304 },
-  { transport: 'custom', status: 204 },
-  { transport: 'custom', status: 205 },
-  { transport: 'custom', status: 304 },
-])(
-  'preflight preserves null-body $status and request identity through $transport transport',
-  async ({ transport, status }) => {
-    const headers = { 'x-request-id': 'daemon-preflight-request' };
-    const daemon = await listen(
-      http.createServer((req, res) => {
-        req.resume();
-        res.writeHead(status, headers);
-        res.end();
-      }),
-    );
-    const origin = await listen(
-      createDaemonProxyServer({
-        ...options,
-        upstreamBaseUrl: daemon,
-        ...(transport === 'custom'
-          ? { upstreamFetch: async () => new Response(null, { status, headers }) }
-          : {}),
-      }),
-    );
-    const response = await fetch(`${origin}/upload/preflight`, {
-      method: 'POST',
-      headers: { authorization: 'Bearer client-secret', 'content-type': 'application/json' },
-      body: '{}',
-      redirect: 'error',
-    });
-    expect(response.status).toBe(status);
-    expect(response.headers.get('x-request-id')).toBe('daemon-preflight-request');
-    expect(await response.text()).toBe('');
   },
 );

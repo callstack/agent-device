@@ -16,14 +16,6 @@ const PROXY_TRANSFER_AGGREGATE_MS = 600_000;
 const TRANSFER_FORWARDING_DEADLINE_REASON = 'transfer_forwarding_deadline_exceeded';
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-export function isTransferRoute(route: string, method: string): boolean {
-  if (route === '/upload' || route === '/upload/preflight' || route === '/upload/finalize') {
-    return method === 'POST';
-  }
-  if (route.startsWith('/upload/direct/')) return method === 'PUT';
-  return (route === '/artifacts' || route.startsWith('/artifacts/')) && method === 'GET';
-}
-
 /** Forwards one exchange over the runtime's default global Node agent, without redirects or retries. */
 export function createNodeTransferFetch(): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -31,9 +23,8 @@ export function createNodeTransferFetch(): (request: Request) => Promise<Respons
     try {
       return await exchangeOverNodeHttp(request, exchange);
     } catch (error) {
-      const failure = exchange.classify(error);
       exchange.dispose();
-      throw failure;
+      throw error;
     }
   };
 }

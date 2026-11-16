@@ -7,17 +7,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isTransferPhaseTimeoutError } from '@agent-device/host-kit/transport';
 import {
   createNodeTransferFetch,
-  isTransferRoute,
   settleUpstreamFetch,
   transferWireDetails,
 } from './transfer-transport.ts';
-
-/**
- * These cases run the real `node:http` client against real loopback servers, so they exercise the
- * event order the transport depends on. Nothing here waits on a real 30- or 120-second ceiling: the
- * phase budgets are covered at their owner in `@agent-device/host-kit` transport tests, and the
- * budget arithmetic a transfer applies is asserted from the typed reason each failure carries.
- */
 
 const servers: http.Server[] = [];
 
@@ -33,7 +25,6 @@ afterAll(async () => {
   );
 });
 
-/** Starts a loopback upstream and returns its origin. */
 function startUpstream(handler: http.RequestListener): Promise<string> {
   const server = http.createServer(handler);
   servers.push(server);
@@ -49,7 +40,6 @@ function transferFetch() {
   return createNodeTransferFetch();
 }
 
-/** A streamed body that keeps producing chunks, so backpressure and drain waits are exercised. */
 function streamedBody(totalBytes: number, chunkBytes: number): ReadableStream<Uint8Array> {
   let sent = 0;
   return new ReadableStream<Uint8Array>({
@@ -64,31 +54,6 @@ function streamedBody(totalBytes: number, chunkBytes: number): ReadableStream<Ui
     },
   });
 }
-
-test('the transfer route set covers the artifact routes and leaves the Fetch routes alone', () => {
-  expect(
-    [
-      isTransferRoute('/upload', 'POST'),
-      isTransferRoute('/upload/preflight', 'POST'),
-      isTransferRoute('/upload/finalize', 'POST'),
-      isTransferRoute('/upload/direct/abc', 'PUT'),
-      isTransferRoute('/artifacts', 'GET'),
-      isTransferRoute('/artifacts/art-1', 'GET'),
-    ].every(Boolean),
-  ).toBe(true);
-
-  expect(
-    [
-      isTransferRoute('/rpc', 'POST'),
-      isTransferRoute('/health', 'GET'),
-      isTransferRoute('/sessions/s1/requests/r1/diagnostics', 'GET'),
-      isTransferRoute('/upload', 'GET'),
-      isTransferRoute('/upload/direct/abc', 'POST'),
-      isTransferRoute('/artifacts/art-1', 'POST'),
-      isTransferRoute('/upload/direct', 'PUT'),
-    ].some(Boolean),
-  ).toBe(false);
-});
 
 test('a location-less 308 chunk answer keeps its resume offsets', async () => {
   const origin = await startUpstream((_req, res) => {
