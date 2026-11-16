@@ -16,7 +16,11 @@ test('a native .ad bundle carries the entry script resolved against the caller c
   const script = 'open "Demo"\nclick "Save"\n';
   fs.writeFileSync(path.join(root, 'flow.ad'), script);
 
-  const bundle = await loadReplayScriptSourceBundle({ inputPath: './flow.ad', cwd: root });
+  const bundle = await loadReplayScriptSourceBundle({
+    hostEnv: process.env,
+    inputPath: './flow.ad',
+    cwd: root,
+  });
 
   expect(bundle.entry).toBe(path.join(root, 'flow.ad'));
   expect(bundle.files).toEqual({ [path.join(root, 'flow.ad')]: script });
@@ -33,6 +37,7 @@ test('a Maestro bundle carries the entry flow and its transitive runFlow include
   fs.writeFileSync(path.join(root, 'tail.yaml'), '---\n- back\n');
 
   const bundle = await loadReplayScriptSourceBundle({
+    hostEnv: process.env,
     inputPath: './flow.yaml',
     cwd: root,
     replayBackend: 'maestro',
@@ -54,7 +59,11 @@ test('a missing entry script fails as INVALID_ARGS naming the path as typed', as
   const root = mkdtempForTestSync('agent-device-bundle-missing-');
 
   await expect(
-    loadReplayScriptSourceBundle({ inputPath: './flows/login.ad', cwd: root }),
+    loadReplayScriptSourceBundle({
+      hostEnv: process.env,
+      inputPath: './flows/login.ad',
+      cwd: root,
+    }),
   ).rejects.toThrow(
     expect.objectContaining({
       code: 'INVALID_ARGS',
@@ -70,7 +79,9 @@ test('an oversized bundle is refused with the limit named', async () => {
     `open "Demo"\n${'#'.repeat(REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES)}\n`,
   );
 
-  await expect(loadReplayScriptSourceBundle({ inputPath: './flow.ad', cwd: root })).rejects.toThrow(
+  await expect(
+    loadReplayScriptSourceBundle({ hostEnv: process.env, inputPath: './flow.ad', cwd: root }),
+  ).rejects.toThrow(
     expect.objectContaining({
       code: 'INVALID_ARGS',
       message: expect.stringContaining(`over the ${REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES}-byte`),

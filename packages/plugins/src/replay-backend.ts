@@ -13,3 +13,5 @@ export type ReplayEngineSetup = Readonly<{
   replayBackend: ReplayBackendPlugin;
   dispose?(): Promise<void> | void;
 }>;
+
+export type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';

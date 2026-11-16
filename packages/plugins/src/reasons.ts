@@ -7,6 +7,12 @@ import type { ReasonTable } from '@agent-device/kernel/errors';
 export const PLUGIN_REASONS = {
   // Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns.
   duplicateProvider: { reason: 'duplicate_provider' },
+  // Two plugins claim the same replay backend.
+  duplicateReplayBackend: { reason: 'duplicate_replay_backend' },
+  // A request tries to load a plugin after the registry closed.
+  registryClosed: { reason: 'plugin-registry-closed' },
+  // The requested plugin is absent from the registry.
+  notInstalled: { reason: 'plugin-not-installed' },
   // The package exports no plugin entry or declares no provider contract this build can load.
   incompatiblePlugin: { reason: 'incompatible_plugin' },
   // The plugin's metadata or code could not be read, resolved, or loaded.
