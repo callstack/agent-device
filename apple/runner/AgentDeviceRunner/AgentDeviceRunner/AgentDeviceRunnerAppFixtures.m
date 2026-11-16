@@ -259,6 +259,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, weak) UITextField *keyboardBusyField;
 @property(nonatomic, strong) UILabel *keyboardBusyAnswer;
 @property(nonatomic, strong) NSTimer *keyboardBusyBackstop;
+@property(nonatomic, assign) BOOL popoverLateFocusGranted;
 @end
 
 // A one-time-code field that announces how many digits it holds instead of the digits, the way
@@ -668,10 +669,28 @@ static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSStr
   return field;
 }
 
-// Under `--agent-device-text-entry-overlapping-sheet-refuses-focus`, the sheet's field is the only
-// field with this delegate, and it never takes focus.
+// Long enough that a read made right after the tap still finds focus where it was, and well inside
+// the runner's 2 s wait for focus to land.
+static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
+
+// The fields with this delegate: under `--agent-device-text-entry-overlapping-sheet-refuses-focus`,
+// the sheet's field, which never takes focus; under
+// `--agent-device-text-entry-overlapping-popover-covered-late-focus`, the popover's field, which takes
+// focus a beat after the tap that asked for it, as a field whose focus goes through app code can.
 - (BOOL)textFieldShouldBeginEditing:(UITextField *)textField {
-  (void)textField;
+  if (![textField.accessibilityIdentifier isEqualToString:@"agent-device-popover-input"]) {
+    return NO;
+  }
+  if (self.popoverLateFocusGranted) {
+    self.popoverLateFocusGranted = NO;
+    return YES;
+  }
+  __weak AgentDeviceRunnerFixtureViewController *weakSelf = self;
+  __weak UITextField *weakField = textField;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(AgentDevicePopoverLateFocusSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    weakSelf.popoverLateFocusGranted = YES;
+    [weakField becomeFirstResponder];
+  });
   return NO;
 }
 
@@ -1312,6 +1331,21 @@ static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSStr
       [popoverField.widthAnchor constraintEqualToConstant:180],
       [popoverField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    // A banner over the popover field's center leaves the field under the popover the only one XCTest
+    // reports hittable, and the popover field takes focus late (see its delegate above).
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-popover-covered-late-focus"]) {
+      popoverField.delegate = self;
+      UIView *banner = [[UIView alloc] init];
+      banner.backgroundColor = UIColor.systemOrangeColor;
+      banner.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:banner];
+      [NSLayoutConstraint activateConstraints:@[
+        [banner.centerXAnchor constraintEqualToAnchor:popoverField.centerXAnchor],
+        [banner.centerYAnchor constraintEqualToAnchor:popoverField.centerYAnchor],
+        [banner.widthAnchor constraintEqualToConstant:40],
+        [banner.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight + 8],
+      ]];
+    }
   }
 
   // The shape a SpringBoard confirmation root carries on an older iOS: the window's own title

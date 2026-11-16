@@ -228,6 +228,89 @@ extension RunnerTests {
     }
   }
 
+  /// The field under the popover holds focus and is the only input at the point XCTest reports
+  /// hittable, while the popover's field, which the tap at the point reaches, takes focus a beat
+  /// later. On either channel the fill waits for that focus and types into the popover's field, not
+  /// into the field that held focus when the tap was dispatched.
+  @MainActor
+  func testFillTypesIntoThePopoverFieldThatTakesFocusLateNotTheFieldThatHeldFocus() throws {
+    for penalized in [false, true] {
+      let context = "penalized=\(penalized)"
+      let (popoverField, partlyCovered, point) = try launchOverlappingPopover(coveredLateFocus: true)
+      defer { tearDownSynthesizedReplacementField() }
+      partlyCovered.tap()
+      XCTAssertTrue(keyboardFocusConfirmed(app: app, element: partlyCovered), context)
+      if penalized { try penalizeOverlappingFixtureChannel() }
+      let failures = currentXCTestFailureCount()
+
+      let response = try executeWitnessEntry(popoverField, text: "popovervalue", at: point)
+
+      XCTAssertTrue(response.ok, "\(context): \(String(describing: response.error))")
+      XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
+      XCTAssertEqual(popoverField.value as? String, "popovervalue", context)
+      XCTAssertEqual(partlyCovered.value as? String, "background", context)
+    }
+  }
+
+  /// The sheet's field already holds focus, so the tap at its center moves none. On either channel,
+  /// once no input there has taken focus, the fill types into it as the only uncovered input there.
+  @MainActor
+  func testFillTypesIntoTheFocusedSheetInputWhenTheTapMovesNoFocus() throws {
+    for penalized in [false, true] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { tearDownSynthesizedReplacementField() }
+      foreground.tap()
+      XCTAssertTrue(keyboardFocusConfirmed(app: app, element: foreground), "penalized=\(penalized)")
+      if penalized { try penalizeOverlappingFixtureChannel() }
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: 0)
+    }
+  }
+
+  /// Private synthesis clears the popover's field, which the tap at the point reached, and is gone
+  /// before the text is posted. Another lookup and tap at that point would find both fields
+  /// hittable and the popover's field already focused, so it would refuse on the emptied field; the
+  /// fallback types into the bound field instead.
+  @MainActor
+  func testFillWhoseSynthesisStopsAfterTheClearTypesIntoTheBoundPopoverField() throws {
+    let (popoverField, partlyCovered, point) = try launchOverlappingPopover()
+    defer { tearDownSynthesizedReplacementField() }
+    popoverField.tap()
+    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: popoverField))
+    try penalizeOverlappingFixtureChannel()
+    let bound = try requireTextInputAtPoint(app: app, x: popoverField.frame.midX, y: popoverField.frame.midY)
+    let failures = currentXCTestFailureCount()
+
+    let result = try typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: point,
+        prefersFocusedElement: false,
+        contentTranslation: .none,
+        inputAtRefreshPoint: bound
+      ),
+      text: "popovervalue",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestUnavailable: true,
+      synthesizer: SynthesisGoneAfterTheClear()
+    )
+
+    XCTAssertNil(result.failure)
+    XCTAssertEqual(result.textEntryRoute, "xctest-element")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
+    XCTAssertEqual(popoverField.value as? String, "popovervalue")
+    XCTAssertEqual(partlyCovered.value as? String, "background")
+  }
+
+  /// Clears through private synthesis, then answers the text post as unavailable.
+  private struct SynthesisGoneAfterTheClear: TextEntrySynthesizing {
+    func enterText(app: XCUIApplication, text: String, replacingExistingText: Bool) -> SynthesizedTextEntryAction {
+      guard replacingExistingText else { return .fallback }
+      return PrivateXCTestTextEntrySynthesizer().enterText(app: app, text: text, replacingExistingText: true)
+    }
+  }
+
   /// The overlapping-sheet fixture, with the shape its tests depend on checked first: the sheet
   /// input's center also lies in the input the sheet covers, which is the smaller of the two and
   /// which XCTest reports not hittable.
@@ -246,13 +329,17 @@ extension RunnerTests {
     return (foreground, background)
   }
 
-  /// The overlapping-popover fixture, with the shape its test depends on checked first: a point in
+  /// The overlapping-popover fixture, with the shape its tests depend on checked first: a point in
   /// both fields, the partly covered field the smaller, its center outside the popover's field, and
-  /// both fields hittable.
+  /// the partly covered field hittable. The popover's field is hittable too, unless
+  /// `coveredLateFocus` puts a banner over its center and makes it take focus late.
   @MainActor
-  private func launchOverlappingPopover() throws -> (popoverField: XCUIElement, partlyCovered: XCUIElement, point: CGPoint) {
+  private func launchOverlappingPopover(
+    coveredLateFocus: Bool = false
+  ) throws -> (popoverField: XCUIElement, partlyCovered: XCUIElement, point: CGPoint) {
     let (popoverField, partlyCovered) = launchOverlappingInputs(
-      ["--agent-device-text-entry-overlapping-popover"],
+      ["--agent-device-text-entry-overlapping-popover"]
+        + (coveredLateFocus ? ["--agent-device-text-entry-overlapping-popover-covered-late-focus"] : []),
       top: "agent-device-popover-input",
       under: "agent-device-popover-partly-covered-input"
     )
@@ -264,7 +351,7 @@ extension RunnerTests {
     XCTAssertFalse(popoverFrame.contains(CGPoint(x: coveredFrame.midX, y: coveredFrame.midY)))
     XCTAssertLessThan(coveredFrame.width * coveredFrame.height, popoverFrame.width * popoverFrame.height)
     XCTAssertTrue(partlyCovered.isHittable)
-    XCTAssertTrue(popoverField.isHittable)
+    XCTAssertEqual(popoverField.isHittable, !coveredLateFocus)
     return (popoverField, partlyCovered, point)
   }
 

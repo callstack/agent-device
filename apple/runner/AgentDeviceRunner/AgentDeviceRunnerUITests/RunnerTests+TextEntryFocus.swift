@@ -220,9 +220,10 @@ extension RunnerTests {
   /// tap reached, read again through its own handle with its identity unchanged. A sheet or popover
   /// leaves the inputs it covers in the tree, and neither size nor `isHittable`, which tests an
   /// input's own hit point, names the input on top at the caller's point. An input that takes
-  /// keyboard focus after the tap is the one it reached. An input that already held focus keeps it
-  /// whatever the tap hit, so it counts only as the one candidate uncovered. Without either, this
-  /// throws before any clear or typing is dispatched.
+  /// keyboard focus after the tap is the one it reached, even when that focus lands some polls
+  /// later. An input that already held focus keeps it whatever the tap hit, so it counts only when no
+  /// candidate took focus by the deadline, and only as the one candidate uncovered then. Without
+  /// either, this throws before any clear or typing is dispatched.
   func textInputTheTapReached(
     candidates: [ResolvedTextEntryInput],
     contentTranslation: TextEntryContentTranslation
@@ -230,26 +231,33 @@ extension RunnerTests {
     let heldFocusBeforeTap = candidates.map { candidate in
       candidate.snapshot.map { snapshotHasKeyboardFocus($0) } == true
     }
-    var uncoveredAfterTap: [Bool]?
+    var stillHeld: (index: Int, input: TextInputAtPoint, read: ResolvedTextEntryInput)?
     let deadline = Date().addingTimeInterval(TextEntryTiming.readinessTimeout)
     var polls = 0
     repeat {
       polls += 1
+      stillHeld = nil
       for (index, candidate) in candidates.enumerated() {
         guard let identity = candidate.identity else { continue }
         let input = TextInputAtPoint(element: candidate.element, identity: identity)
         guard let read = textInputIfStillResolves(input, contentTranslation: contentTranslation),
               let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) else { continue }
-        if heldFocusBeforeTap[index] {
-          let uncovered = uncoveredAfterTap ?? candidates.map { self.isUncoveredTextInput($0) }
-          uncoveredAfterTap = uncovered
-          guard uncovered[index], uncovered.filter({ $0 }).count == 1 else { continue }
+        guard !heldFocusBeforeTap[index] else {
+          stillHeld = (index, input, read)
+          continue
         }
         NSLog("%@%@ polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, TextEntryFocusEvidence.inputReportsKeyboardFocusName, polls)
         return (input, read)
       }
       sleepFor(TextEntryTiming.pollInterval)
     } while Date() < deadline
+    if let stillHeld {
+      let uncovered = candidates.map { isUncoveredTextInput($0) }
+      if uncovered[stillHeld.index], uncovered.filter({ $0 }).count == 1 {
+        NSLog("%@%@ polls=%d overlapping=1 held=1", TextEntryFocusEvidence.logMarker, TextEntryFocusEvidence.inputReportsKeyboardFocusName, polls)
+        return (stillHeld.input, stillHeld.read)
+      }
+    }
     NSLog("%@none polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, polls)
     throw TextEntryFocusNotConfirmed()
   }

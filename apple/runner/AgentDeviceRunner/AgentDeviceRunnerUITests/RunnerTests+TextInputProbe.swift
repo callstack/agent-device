@@ -209,17 +209,7 @@ extension RunnerTests {
       }
     }
     guard !shouldStop() else { return [] }
-    let bySize = inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
-    guard bySize.count > 1 else { return bySize }
-    // A sheet or overlay can cover an input that stays in the tree, so several inputs answer one
-    // point, and a covered one can be the smallest. A tap at the point reaches only an uncovered one.
-    var uncovered: [ResolvedTextEntryInput] = []
-    var covered: [ResolvedTextEntryInput] = []
-    for input in bySize {
-      if shouldStop() { return [] }
-      if isUncoveredTextInput(input) { uncovered.append(input) } else { covered.append(input) }
-    }
-    return uncovered + covered
+    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
 
   /// Whether XCTest reports `input` hittable: on screen, and covered by no other element at its hit

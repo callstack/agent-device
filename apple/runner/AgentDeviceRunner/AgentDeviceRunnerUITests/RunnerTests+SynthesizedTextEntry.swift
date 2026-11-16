@@ -416,6 +416,22 @@ extension RunnerTests {
     }
     if synthesisAvailable.stoppedEarly {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
+      // The bound input still holds focus, so it stays the target: another lookup and tap at the
+      // point, after the clear ran, could pick another input there or refuse on this one.
+      if let input = request.target.inputAtRefreshPoint,
+         let read = textInputIfStillResolves(input, contentTranslation: request.target.contentTranslation),
+         let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
+        return .fallback(
+          TextEntryTarget(
+            element: nil,
+            refreshPoint: request.target.refreshPoint,
+            prefersFocusedElement: false,
+            contentTranslation: request.target.contentTranslation,
+            inputAtRefreshPoint: input,
+            postFocusRead: read
+          )
+        )
+      }
       guard let point = request.target.refreshPoint else { return .notApplicable }
       return .fallback(
         try focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
