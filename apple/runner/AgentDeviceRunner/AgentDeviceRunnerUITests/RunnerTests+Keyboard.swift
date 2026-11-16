@@ -493,20 +493,30 @@ extension RunnerTests {
 #endif
   }
 
-  private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
+  /// The keyboard's own return control, in the order `RunnerKeyboardReturnKey.probeLabels` tries its
+  /// labels. On iOS, `nil` means no listed label was hittable. On other platforms nothing is queried
+  /// and `nil` is returned, so callers must not read it as an absent return control.
+  func findKeyboardReturnControl(app: XCUIApplication) -> XCUIElement? {
 #if os(iOS)
-    for label in ["return", "Return", "Enter", "Go", "Search", "Next", "Done", "Send", "Join"] {
+    for label in RunnerKeyboardReturnKey.probeLabels {
       let candidates = [
         app.keyboards.buttons[label],
         app.keyboards.keys[label],
       ]
       if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        hittable.tap()
-        return true
+        return hittable
       }
     }
 #endif
-    return false
+    return nil
+  }
+
+  private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
+    guard let control = findKeyboardReturnControl(app: app) else {
+      return false
+    }
+    control.tap()
+    return true
   }
 
   private func isKeyboardAccessoryControl(_ element: XCUIElement, keyboardFrame: CGRect) -> Bool {
