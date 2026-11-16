@@ -98,7 +98,7 @@ test('a checkout named through a symlink stamps the same repository-relative lab
       'src/daemon.ts',
     ]);
   } finally {
-    fs.rmSync(linkedRoot, { force: true });
+    fs.unlinkSync(linkedRoot);
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -117,7 +117,7 @@ test('an installed dependency is not followed into through a symlinked root', ()
       'src/daemon.ts',
     ]);
   } finally {
-    fs.rmSync(linkedRoot, { force: true });
+    fs.unlinkSync(linkedRoot);
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
