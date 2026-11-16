@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import type { ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
-import { createBrowserStackConnection } from './browserstack-connection.ts';
-import { verifyBrowserStackConnection } from './connection-verification.ts';
-import type { CloudWebDriverProviderHost } from './provider-plugin.ts';
+import { createBrowserStackConnection } from './connection.ts';
+import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
-vi.mock('./connection-verification.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./connection-verification.ts')>()),
+vi.mock('./browserstack-connection-verification.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./browserstack-connection-verification.ts')>()),
   verifyBrowserStackConnection: vi.fn(),
 }));
 
@@ -26,13 +26,12 @@ const FLAGS = {
   providerApp: 'bs://app-id',
 };
 
-function host(env: Record<string, string | undefined> = CREDENTIALS): CloudWebDriverProviderHost {
+function host(env: Record<string, string | undefined> = CREDENTIALS): ProviderPluginHost {
   return {
     env,
+    options: {},
     clientVersion: '1.2.3',
-    runHostCommand: async () => {
-      throw new Error('BrowserStack runs no host commands');
-    },
+    createError: (code, message, details) => new AppError(code, message, details),
   };
 }
 

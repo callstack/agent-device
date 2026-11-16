@@ -126,17 +126,12 @@ test('connect testmu generates a local provider profile and verifies the virtual
 test('connect canonicalizes an upper-case app scheme and refuses an empty app id', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-app-scheme-');
   const base = { json: false, help: false, version: false, platform: 'ios' as const };
-  const connect = async (provider: 'testmu' | 'browserstack', providerApp: string) =>
+  const connect = async (provider: 'testmu', providerApp: string) =>
     await resolveConnectProviderProfile({
       provider,
       stateDir: path.join(tempRoot, `.state-${provider}`),
       cwd: tempRoot,
-      env: {
-        LT_USERNAME: 'u',
-        LT_ACCESS_KEY: 'k',
-        BROWSERSTACK_USERNAME: 'u',
-        BROWSERSTACK_ACCESS_KEY: 'k',
-      },
+      env: { LT_USERNAME: 'u', LT_ACCESS_KEY: 'k' },
       flags: { ...base, device: 'iPhone 16', providerOsVersion: '18.0', providerApp },
     });
 
@@ -145,22 +140,17 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
     assert.equal(readGeneratedConfig(upperCase.remoteConfigPath).providerApp, 'lt://APP1');
     // Connect verification reads these flags, so they must carry the canonical reference too.
     assert.equal(upperCase.flags.providerApp, 'lt://APP1');
-    assert.equal(
-      readGeneratedConfig((await connect('browserstack', 'Bs://abc')).remoteConfigPath).providerApp,
-      'bs://abc',
-    );
     for (const [provider, app] of [
       ['testmu', 'lt://'],
       ['testmu', 'lt://a b'],
       ['testmu', 'LT://a/b'],
-      ['browserstack', 'bs://'],
     ] as const) {
       await assert.rejects(
         connect(provider, app),
         (error: unknown) =>
           error instanceof AppError &&
           error.code === 'INVALID_ARGS' &&
-          /valid lt:\/\/ app reference|is not a bs:\/\/ app id/.test(error.message),
+          /valid lt:\/\/ app reference/.test(error.message),
       );
     }
   } finally {
@@ -289,16 +279,6 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
 
   try {
     for (const [provider, flags, env] of [
-      [
-        'browserstack',
-        {
-          ...base,
-          device: 'Google Pixel 8',
-          providerOsVersion: '14.0',
-          providerApp: 'bs://app-id',
-        },
-        { BROWSERSTACK_USERNAME: 'u', BROWSERSTACK_ACCESS_KEY: 'k' },
-      ],
       [
         'aws-device-farm',
         {

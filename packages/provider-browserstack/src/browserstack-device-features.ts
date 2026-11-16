@@ -4,8 +4,8 @@ import {
   type CloudProviderProfileFields,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireProviderDeviceOrientation } from './webdriver-utils.ts';
-import type { CloudWebDriverPlatform } from './runtime.ts';
+import { requireProviderDeviceOrientation } from '@agent-device/provider-webdriver/plugin';
+import type { CloudWebDriverPlatform } from '@agent-device/provider-webdriver/plugin';
 
 /**
  * BrowserStack "device feature" session capabilities.

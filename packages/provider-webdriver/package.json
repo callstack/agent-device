@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "BrowserStack and AWS Device Farm WebDriver providers for agent-device. Internal workspace package bundled into the published artifact.",
+  "description": "AWS Device Farm WebDriver provider for agent-device. Internal workspace package bundled into the published artifact.",
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",

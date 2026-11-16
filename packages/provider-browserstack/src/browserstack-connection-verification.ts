@@ -1,8 +1,11 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  fetchProviderVerificationJson,
+  sameOsVersion,
+} from '@agent-device/provider-webdriver/plugin';
 import { parseBrowserStackAppReference } from './browserstack.ts';
 import { isBrowserStackAppReference } from './providers.ts';
-import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   ProviderConnectionResource,
   ProviderConnectionVerification,

@@ -119,6 +119,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'apple-runner',
   ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
+  'provider-browserstack',
   'provider-limrun',
   'provider-revyl',
   'provider-testmu',
