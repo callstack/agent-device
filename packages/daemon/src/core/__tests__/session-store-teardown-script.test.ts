@@ -86,3 +86,53 @@ test.skipIf(process.platform === 'win32')(
     expect(fs.statSync(local).mode & 0o777).toBe(0o600);
   },
 );
+
+test.skipIf(process.platform === 'win32')(
+  'on a umask-002 host the daemon creates and repairs its own state directories at 0700',
+  () => {
+    // A stock Ubuntu login runs umask 002, and the daemon creates `sessions/` itself: a mode-less `mkdir`
+    // there is 0775. Every script path the daemon picks for itself is walked through that directory, and a
+    // group-writable directory on the way is refused, so the daemon would refuse its own default recordings
+    // and every remote-delivered version. `ensureSessionDir` runs on `open`, so this is the first thing a
+    // session does. (ADR 0016)
+    const root = mkdtempForTestSync('agent-device-shared-umask-');
+    // What the daemon's own state dir is forced to on startup, whatever created it.
+    fs.chmodSync(root, 0o700);
+    const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
+    const session = (name: string, remote: boolean) =>
+      store.publish(
+        name,
+        makeAuthoringSession(name, {
+          scriptPublication: authoringPublication('armed', { remote }),
+          actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+        }),
+      );
+    const previous = process.umask(0o002);
+    let defaultPath: ReturnType<SessionStore['writeSessionLog']>;
+    let version: ReturnType<SessionStore['writeRemoteScriptVersion']>;
+    try {
+      store.ensureSessionDir('journey');
+      defaultPath = store.writeSessionLog(session('journey', false));
+      version = store.writeRemoteScriptVersion(session('download', true));
+    } finally {
+      process.umask(previous);
+    }
+
+    if (!defaultPath.written) throw new Error(`default recording refused: ${refusal(defaultPath)}`);
+    if (!version.written) throw new Error(`remote version refused: ${refusal(version)}`);
+    expect(path.dirname(defaultPath.path)).toBe(path.join(root, 'sessions'));
+    expect(path.dirname(version.path)).toBe(path.join(root, 'sessions', 'remote-scripts'));
+    for (const directory of [
+      path.join(root, 'sessions'),
+      path.join(root, 'sessions', 'journey'),
+      path.join(root, 'sessions', 'remote-scripts'),
+    ]) {
+      expect(fs.lstatSync(directory).mode & 0o777).toBe(0o700);
+    }
+  },
+);
+
+/** Why a write that had to succeed did not, from the typed reason the writer returned. */
+function refusal(result: object): string {
+  return JSON.stringify(result);
+}

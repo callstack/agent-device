@@ -277,6 +277,47 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /**
+ * Creates one of the daemon's own state directories, and repairs one that already exists, to 0700.
+ *
+ * Every directory on the chain of a script destination the daemon picks for itself — the state dir,
+ * `sessions/`, `remote-scripts/` — is judged by the destination-ancestry rule on the way to a recording
+ * (ADR 0016), and that rule refuses a group-writable directory. A mode-less `mkdir` under the shared-checkout
+ * umask 002 creates `sessions/` at 0775, so the daemon would refuse its own default recordings and every
+ * remote-delivered version. Creation carries the mode and the repair forces it, because a state dir an older
+ * version created at 0775 is the same refusal.
+ *
+ * Returns the path so a caller can name what it just made without a second `mkdir` of its own.
+ */
+export function ensurePrivateDaemonStateDir(directory: string): string {
+  const firstCreated = fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
+  // `mkdir` reports the FIRST directory it made, and everything from there down is this call's to force
+  // private. Repairing only the leaf would leave the level ABOVE a session directory, `sessions/`, at the
+  // 0775 a umask-002 creation gives it, which is the directory every recording is walked through.
+  for (const level of createdStateLevels(firstCreated, directory)) {
+    repairStateMode(level, STATE_DIR_MODE);
+  }
+  return directory;
+}
+
+/** Every level one creation made: `firstCreated` itself, down to `directory`. */
+function createdStateLevels(
+  firstCreated: string | undefined,
+  directory: string,
+): readonly string[] {
+  const below =
+    firstCreated === undefined || firstCreated === directory
+      ? []
+      : path.relative(firstCreated, directory).split(path.sep);
+  if (firstCreated === undefined || below.length === 0 || below[0] === '..') return [directory];
+  return [
+    firstCreated,
+    ...below.map((_, index) => path.join(firstCreated, ...below.slice(0, index + 1))),
+  ];
+}
+
+const STATE_DIR_MODE = 0o700;
+
+/**
  * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
  * only toggles the read-only bit, so it cannot make the path private. The repair never decides
  * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
@@ -314,8 +355,7 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
-  repairStateMode(input.paths.baseDir, 0o700);
+  ensurePrivateDaemonStateDir(input.paths.baseDir);
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
     repairStateMode(input.paths.logPath, 0o600);

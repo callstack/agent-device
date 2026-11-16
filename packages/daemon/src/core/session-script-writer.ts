@@ -1,11 +1,11 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   inferFillText,
   appendScriptSeriesFlags,
@@ -166,9 +166,7 @@ export class SessionScriptWriter {
    * `publishScriptFileSync` decides.
    */
   private remoteScriptPath(): string {
-    const directory = path.join(this.sessionsDir, 'remote-scripts');
-    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    fs.chmodSync(directory, 0o700);
+    const directory = ensurePrivateDaemonStateDir(path.join(this.sessionsDir, 'remote-scripts'));
     return path.join(directory, `${crypto.randomUUID()}.ad`);
   }
 

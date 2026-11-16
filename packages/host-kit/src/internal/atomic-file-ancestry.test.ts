@@ -309,33 +309,75 @@ skipOnWindows(
   },
 );
 
-skipOnWindows('reads each directory it stands in once, however many routes lead back to it', () => {
-  // `a` and `b` are two names for ONE directory, and the spelling enters through `a`, steps back with `..`
-  // and enters again through `b`, so the walk crosses `sub` twice and finishes below it. Where it ends is
-  // the assertion that both routes were really taken: a walk that gave up on the second name would answer
-  // `home` here instead. Each path is read from the host once per walk, so ground come back to by a `..`
-  // or by an alias of it is not asked for a second time.
+skipOnWindows(
+  'judges every step from lstat alone, however many routes lead back to one directory',
+  () => {
+    // `a` and `b` are two names for ONE directory, and the spelling enters through `a`, steps back with `..`
+    // and enters again through `b`, so the walk crosses `sub` twice and finishes below it. Where it ends is
+    // the assertion that both routes were really taken: a walk that gave up on the second name would answer
+    // `home` here instead.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const sub = directoryWith(path.join(home, 'sub'), 0o700);
+    const below = path.join(sub, 'below');
+    fs.mkdirSync(below);
+    fs.symlinkSync(sub, path.join(home, 'a'));
+    fs.symlinkSync(sub, path.join(home, 'b'));
+    const lstatPaths: string[] = [];
+    const realLstatSync = fs.lstatSync;
+    vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      lstatPaths.push(String(pathname));
+      return (realLstatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.lstatSync);
+    const statPaths: string[] = [];
+    const realStatSync = fs.statSync;
+    vi.spyOn(fs, 'statSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      statPaths.push(String(pathname));
+      return (realStatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.statSync);
+
+    expect(assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`)).toBe(below);
+
+    // Every step is an `lstat` of the ENTRY. `stat` would resolve the same name a second time and answer
+    // whatever stands there by then, which is the window the walk exists to close.
+    expect(statPaths).toEqual([]);
+    // Both aliases were followed, and the directory they name was judged on each route into it.
+    expect(lstatPaths).toContain(path.join(home, 'a'));
+    expect(lstatPaths).toContain(path.join(home, 'b'));
+    expect(lstatPaths.filter((read) => read === sub)).toHaveLength(2);
+  },
+);
+
+skipOnWindows('refuses a directory whose name answers a different entry on the second look', () => {
+  // The walk judges an entry by its own `lstat` and remembers that identity. Here the second route into
+  // `sub` finds a DIFFERENT entry under that name — the swap the permission rule exists to exclude — so the
+  // walk refuses instead of standing on ground it never judged.
   const directory = root();
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const sub = directoryWith(path.join(home, 'sub'), 0o700);
-  const below = path.join(sub, 'below');
-  fs.mkdirSync(below);
+  fs.mkdirSync(path.join(sub, 'below'));
   fs.symlinkSync(sub, path.join(home, 'a'));
   fs.symlinkSync(sub, path.join(home, 'b'));
-  const reads: string[] = [];
-  const realStatSync = fs.statSync;
-  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
-    reads.push(String(pathname));
-    return (realStatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
-  }) as typeof fs.statSync);
+  const realLstatSync = fs.lstatSync;
+  let crossed = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    const stats = (realLstatSync as (...args: unknown[]) => unknown)(
+      pathname,
+      ...rest,
+    ) as fs.BigIntStats;
+    // The first route in sees the real `sub`; the second sees another entry answering that name.
+    if (String(pathname) === sub && crossed++ > 0) {
+      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
+        ino: stats.ino + 1n,
+      });
+    }
+    return stats;
+  }) as typeof fs.lstatSync);
 
-  expect(assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`)).toBe(below);
-
-  // The shared prefix, `home`, `sub` and `below`: no path is read a second time, including the one the
-  // two aliases both name.
-  expect(new Set(reads).size).toBe(reads.length);
-  expect(reads.filter((read) => read === sub)).toHaveLength(1);
-  expect(reads.filter((read) => read === home)).toHaveLength(1);
+  expectUntrustedReplaced(
+    () => assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`),
+    sub,
+  );
 });
 
 skipOnWindows(
@@ -778,3 +820,97 @@ skipOnWindows('accepts the identity a caller captured for the directory the walk
   );
   expect(assertPrivateScriptDestination(destination)).toBe(staged);
 });
+
+// --- a step swapped out while the walk is still running ---
+
+skipOnWindows('refuses a directory swapped for a link between the lstat and entering it', () => {
+  // The attacker owns `decoy` and stands in a sticky shared parent, where they may replace their own
+  // entry. Between the walk's `lstat` of `decoy` and the moment it would enter that name, they swap it
+  // for a link to their own directory. Entering it is what redirects the publish, so the walk judges the
+  // entry its OWN lstat saw: a name that answers something else by then is refused, and a link planted
+  // afterwards is never stepped through on the strength of its target.
+  const directory = root();
+  const sticky = directoryWith(path.join(directory, 'tmp'), 0o1777);
+  const decoy = path.join(sticky, 'decoy');
+  fs.mkdirSync(decoy);
+  const attacker = path.join(directory, 'attacker');
+  fs.mkdirSync(attacker);
+  fs.chmodSync(attacker, 0o700);
+  const realLstatSync = fs.lstatSync;
+  let looks = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    // The first look is the walk's judgment: the attacker's OWN directory. The swap lands immediately
+    // after that judgment, so every later look at this name answers a link.
+    if (String(pathname) === decoy && ++looks === 2) {
+      fs.renameSync(decoy, `${decoy}.real`);
+      fs.symlinkSync(attacker, decoy);
+    }
+    return (realLstatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.lstatSync);
+
+  const destination = path.join(decoy, 'sub', 'journey.ad');
+
+  expectUntrustedReplaced(() => publish(destination), decoy);
+  // Nothing was staged in the directory the link leads to, which is what the swap was for.
+  expect(fs.readdirSync(attacker)).toEqual([]);
+});
+
+skipOnWindows('refuses an answer whose directory was swapped for a link before staging', () => {
+  // The walk can be asked for an answer and then hand it to a caller that stages bytes there. If the name
+  // the answer is spelled by answers a link in between, `mkdir`, `mkdtemp` and `rename` would all travel
+  // through it, so the answer is confirmed against the entry the walk judged before anyone writes.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const work = path.join(home, 'work');
+  fs.mkdirSync(work);
+  const attacker = path.join(directory, 'attacker');
+  fs.mkdirSync(attacker);
+  fs.chmodSync(attacker, 0o700);
+  const realLstatSync = fs.lstatSync;
+  let looks = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    // The first look judges `work` as the directory the entry is created in. The swap lands immediately
+    // after that judgment and before anything is staged there.
+    if (String(pathname) === work && ++looks === 2) {
+      fs.rmdirSync(work);
+      fs.symlinkSync(attacker, work);
+    }
+    return (realLstatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.lstatSync);
+
+  expectUntrustedReplaced(() => publish(path.join(work, 'journey.ad')), work);
+  expect(fs.readdirSync(attacker)).toEqual([]);
+});
+
+skipOnWindows(
+  'identifies an entry by its bigint inode, so two large inodes do not collapse',
+  () => {
+    // Directory identities are compared for equality, so they are read as BIGINT. A numeric `ino` cannot hold
+    // every inode a filesystem hands out: 2^53 + 1 and 2^53 answer the same Number, and a swap between the
+    // two would then look like the same directory.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const work = path.join(home, 'work');
+    fs.mkdirSync(work);
+    const LOW = 2n ** 53n;
+    const realLstatSync = fs.lstatSync;
+    let look = 0;
+    vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, options?: unknown) => {
+      const stats = (realLstatSync as (...args: unknown[]) => unknown)(
+        pathname,
+        options,
+      ) as fs.Stats;
+      if (String(pathname) !== work) return stats;
+      // Two distinct entries, one per look: the inode the walk judges, then the one the name answers after.
+      const ino = look++ === 0 ? LOW : LOW + 1n;
+      const bigint = (options as { bigint?: boolean } | undefined)?.bigint === true;
+      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
+        ino: bigint ? ino : Number(ino),
+      });
+    }) as typeof fs.lstatSync);
+
+    // A numeric read would answer Number(2^53 + 1n) === Number(2^53n), and the swap would pass.
+    expect(Number(LOW + 1n)).toBe(Number(LOW));
+    expectUntrustedReplaced(() => publish(path.join(work, 'journey.ad')), work);
+  },
+);

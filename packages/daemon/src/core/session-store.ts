@@ -4,6 +4,7 @@ import {
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
+import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -369,8 +370,7 @@ export class SessionStore {
     const session = this.resolveCurrent(ref);
     if (!session) return;
     try {
-      const dir = this.resolveSessionDir(ref.address);
-      fs.mkdirSync(dir, { recursive: true });
+      ensurePrivateDaemonStateDir(this.resolveSessionDir(ref.address));
       const tombstone: RepairSessionTombstone = {
         owner: ref.address,
         reapedAt: Date.now(),
@@ -439,7 +439,7 @@ export class SessionStore {
    */
   writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
     try {
-      fs.mkdirSync(this.resolveSessionDir(sessionName), { recursive: true });
+      ensurePrivateDaemonStateDir(this.resolveSessionDir(sessionName));
       fs.writeFileSync(
         resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
         `${JSON.stringify(tombstone)}\n`,
@@ -520,10 +520,10 @@ export class SessionStore {
     return path.dirname(this.sessionsDir);
   }
 
+  // The daemon-paths owner creates and repairs each level (ADR 0016): under the shared-checkout umask a
+  // mode-less creation is 0775, and the script-destination rule then refuses the daemon's own recordings.
   ensureSessionDir(sessionName: string): string {
-    const sessionDir = this.resolveSessionDir(sessionName);
-    fs.mkdirSync(sessionDir, { recursive: true });
-    return sessionDir;
+    return ensurePrivateDaemonStateDir(this.resolveSessionDir(sessionName));
   }
 
   /** Path to session-scoped app log file. Agent can grep this for token-efficient debugging. */

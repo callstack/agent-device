@@ -2,7 +2,7 @@
 // a publish does when the walk stops short of it (#4565). Every name the path spells is resolved one step
 // at a time the way the kernel walks it, so a `..` is only answerable once the directory it steps back
 // from exists.
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -78,7 +78,7 @@ skipOnWindows('answers the created directory as the one to publish into', () => 
 
   let judged = '';
   withSharedUmask(() => {
-    judged = prepareScriptDestination(destination);
+    judged = prepareScriptDestination(destination).directory;
   });
 
   expect(judged).toBe(path.join(home, 'nested', 'deeper'));
@@ -100,4 +100,54 @@ skipOnWindows('refuses a destination whose parent does not exist, and publishes 
     directory,
   );
   expect(fs.readdirSync(directory)).toEqual([]);
+});
+
+skipOnWindows('refuses a missing level planted as a link, and creates nothing beyond it', () => {
+  // The walk stops at `new`, which does not exist yet, so the parent it stopped in is sticky and open to
+  // other local users adding names. In that window they can put a LINK at `new`: a recursive `mkdir`
+  // resolves the whole tail as text and follows it, so the publish creates a directory on the far side of
+  // a link nobody judged — and as root it would do so with privileges. Creating one name at a time inside
+  // the directory this call established finds the name taken instead, and refuses.
+  const directory = root();
+  const sticky = directoryWith(path.join(directory, 'sticky'), 0o1777);
+  const elsewhere = path.join(directory, 'elsewhere');
+  fs.mkdirSync(elsewhere);
+  fs.chmodSync(elsewhere, 0o700);
+  const planted = path.join(sticky, 'new');
+  const realMkdirSync = fs.mkdirSync;
+  vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    // The attacker plants the link the instant this call reaches for the missing name.
+    if (String(pathname) === planted && !fs.existsSync(planted)) {
+      fs.symlinkSync(elsewhere, planted);
+    }
+    return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.mkdirSync);
+
+  const destination = path.join(sticky, 'new', 'tail', 'journey.ad');
+
+  expectUntrusted(() => prepareScriptDestination(destination), 'entry_appeared', planted);
+  expect(fs.readdirSync(elsewhere)).toEqual([]);
+  expect(fs.readdirSync(sticky)).toEqual(['new']);
+});
+
+test('refuses a destination that is not absolute on every platform, and creates nothing', () => {
+  // Not skipped on Windows: there the ancestry walk is a no-op, so the walk that would otherwise catch a
+  // relative name never runs, and a relative destination would reach `mkdir` outright. The check therefore
+  // has to happen before the platform branch, which is what this test pins. Walking a relative name would
+  // mean judging the process's working directory by the NAME Node answers after the last `chdir`, while the
+  // kernel resolves the write in the moved one.
+  const relative = path.join('recordings', 'journey.ad');
+
+  expectUntrusted(
+    () => prepareScriptDestination(relative),
+    'relative_destination',
+    path.join('recordings'),
+  );
+  expectUntrusted(
+    () => assertPrivateScriptDestination(relative),
+    'relative_destination',
+    path.join('recordings'),
+  );
+  // Nothing was created for a destination that was refused at the entry.
+  expect(fs.existsSync('recordings')).toBe(false);
 });

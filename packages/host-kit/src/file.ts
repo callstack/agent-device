@@ -8,6 +8,7 @@ export {
   publishFileSync,
   publishScriptFileSync,
   type DurableFilePublishMode,
+  type ScriptDestination,
 } from './internal/atomic-file.ts';
 export {
   NOT_REGULAR_FILE_HINT,

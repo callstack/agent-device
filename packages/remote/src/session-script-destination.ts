@@ -22,6 +22,7 @@ import {
   publishDirectoryIdentity,
   publishFileSync,
   withProcessLock,
+  type ScriptDestination,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
@@ -411,11 +412,11 @@ async function publishScriptVersion(
   try {
     // host-kit owns the creation sequence (#4565): walk, refuse before anything is created, create what
     // is missing at 0700 inside the judged directory, judge the completed chain. A destination this route
-    // is going to refuse therefore leaves no directories behind in the shared ground it names.
-    prepareScriptDestination(record.destination);
-    const allocated = await withRecordLock(file, async () =>
-      allocateStaging(file, record.destination),
-    );
+    // is going to refuse therefore leaves no directories behind in the shared ground it names. The ANSWER
+    // is what staging is allocated in, so this route walks a destination once per version rather than
+    // walking it again for the sake of being told the same directory.
+    const prepared = prepareScriptDestination(record.destination);
+    const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
     staging = allocated?.staging;
     if (!staging || !allocated) return { published: undefined };
     const staged = path.join(staging, 'script.ad');
@@ -450,24 +451,29 @@ async function publishScriptVersion(
 
 /**
  * Creates a staging directory beside the destination and lists it in the record before any script
- * bytes reach it, and reports the destination directory's identity so the publish can confirm it is
- * still the same one. Refuses an ancestor another local user can write (#4565), so nothing is
- * downloaded into a directory they control.
+ * bytes reach it, and reports the destination directory's identity so the publish can confirm it is still
+ * the same one.
  *
- * Staging sits in the directory the ancestry walk JUDGED, which is the destination's parent as the
- * kernel resolves it — not `path.dirname` of the spelled destination. Where a `..` or a link in the
- * destination leads elsewhere, the spelled parent is a directory nobody judged, and a staging directory
- * in it is a directory another local user can populate before the rename does.
+ * Staging sits in the directory the ancestry walk JUDGED — the `prepareScriptDestination` answer, not
+ * `path.dirname` of the spelled destination. Where a `..` or a link in the destination leads elsewhere, the
+ * spelled parent is a directory nobody judged, and a staging directory in it is one another local user can
+ * populate before the rename does. The identity is the one that answer carried, so the walk is not asked
+ * twice for one version.
  */
 function allocateStaging(
   file: string,
-  destination: string,
+  prepared: ScriptDestination,
 ): { staging: string; parentIdentity: string | undefined } | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
-  const directory = assertPrivateScriptDestination(destination);
+  const directory = prepared.directory;
+  // One identity check, not a second walk: the answer is only used where the name still holds the entry the
+  // walk judged it for. Nothing is staged in a directory that moved in between.
+  if (publishDirectoryIdentity(directory) !== prepared.identity) {
+    throw destinationMoved(record.destination, directory);
+  }
   const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
-  const parentIdentity = publishDirectoryIdentity(directory);
+  const parentIdentity = prepared.identity;
   try {
     writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
   } catch (error) {
@@ -611,6 +617,21 @@ function settlePublishing(record: ScriptRecord): ScriptRecord {
 function fileIdentity(file: string): string | undefined {
   const stat = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
   return stat ? `${stat.dev}:${stat.ino}` : undefined;
+}
+
+/** The judged answer no longer names the entry it was judged for, so this version publishes nowhere. */
+function destinationMoved(destination: string, directory: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `The directory for ${destination} changed while the script was staged, so the script was not saved.`,
+    {
+      reason: 'script_ancestry_replaced',
+      exposure: 'parent_replaced',
+      path: destination,
+      ancestor: directory,
+      hint: 'Re-record with open --save-script, or save under a directory nobody else can write.',
+    },
+  );
 }
 
 function scriptDeliveryFailure(
