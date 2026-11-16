@@ -78,35 +78,41 @@ final class AutomationCommandHandler {
         || x < 0 || y < 0) {
       throw new IllegalArgumentException("Invalid tap coordinates");
     }
-    long down = SystemClock.uptimeMillis();
-    touch(automation, down, MotionEvent.ACTION_DOWN, (float) x, (float) y, dispatch);
-    touch(automation, down, MotionEvent.ACTION_UP, (float) x, (float) y, dispatch);
-  }
-
-  private static void touch(UiAutomation automation, long down, int action, float x, float y, InputDispatch dispatch) {
-    MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0);
-    event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+    float pointX = (float) x;
+    float pointY = (float) y;
+    dispatch.attempted = true;
+    long down = UiAutomationInputDispatcher.injectStart(
+        automation, downTime -> touchEvent(downTime, MotionEvent.ACTION_DOWN, pointX, pointY));
+    if (down < 0) throw new IllegalStateException("Touch injection was refused");
+    MotionEvent up = touchEvent(down, MotionEvent.ACTION_UP, pointX, pointY);
     try {
-      dispatch.attempted = true;
-      if (!automation.injectInputEvent(event, true)) {
+      if (!UiAutomationInputDispatcher.inject(automation, up, true)) {
         throw new IllegalStateException("Touch injection was refused");
       }
     } finally {
-      event.recycle();
+      up.recycle();
     }
+  }
+
+  private static MotionEvent touchEvent(long down, int action, float x, float y) {
+    MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0);
+    event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+    return event;
   }
 
   private static void key(UiAutomation automation, int code, InputDispatch dispatch) {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
-    long down = SystemClock.uptimeMillis();
-    for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
-      KeyEvent event = new KeyEvent(down, SystemClock.uptimeMillis(), action, code, 0, 0,
-          KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
-      dispatch.attempted = true;
-      if (!automation.injectInputEvent(event, true)) {
-        throw new IllegalStateException("Key injection was refused");
-      }
+    dispatch.attempted = true;
+    long down = UiAutomationInputDispatcher.injectStart(
+        automation, downTime -> keyEvent(downTime, KeyEvent.ACTION_DOWN, code));
+    if (down < 0 || !UiAutomationInputDispatcher.inject(automation, keyEvent(down, KeyEvent.ACTION_UP, code), true)) {
+      throw new IllegalStateException("Key injection was refused");
     }
+  }
+
+  private static KeyEvent keyEvent(long down, int action, int code) {
+    return new KeyEvent(down, SystemClock.uptimeMillis(), action, code, 0, 0,
+        KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
   }
 
   private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch) {
