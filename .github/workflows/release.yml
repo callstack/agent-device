@@ -139,6 +139,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      attestations: write
+    outputs:
+      source_attestation: ${{ steps.source-attestation.outputs.attestation-url }}
     steps:
       - name: Checkout publisher
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
@@ -161,6 +164,25 @@ jobs:
           name: npm-packages-${{ needs.plan.outputs.commit }}
           path: ${{ runner.temp }}/npm-packages
 
+      - name: Bind the internal nightly source to the package bytes
+        id: source-attestation
+        if: needs.plan.outputs.dist_tag == 'nightly-0.22'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/npm-packages/*.tgz
+          create-storage-record: 'false'
+          predicate-type: https://agent-device.dev/attestations/release-source/v1
+          predicate: |
+            {
+              "source": {
+                "repository": "${{ github.server_url }}/${{ github.repository }}",
+                "ref": "refs/heads/0.22",
+                "commit": "${{ needs.plan.outputs.commit }}"
+              },
+              "workflowCommit": "${{ github.workflow_sha }}",
+              "version": "${{ needs.plan.outputs.version }}"
+            }
+
       - name: Publish
         env:
           VERSION: ${{ needs.plan.outputs.version }}
@@ -182,11 +204,12 @@ jobs:
           TAG: ${{ needs.plan.outputs.nightly_tag }}
           DIST_TAG: ${{ needs.plan.outputs.dist_tag }}
           COMMIT: ${{ needs.plan.outputs.commit }}
+          SOURCE_ATTESTATION: ${{ needs.publish.outputs.source_attestation }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
           echo "Published $TAG from $COMMIT: npm install agent-device@$DIST_TAG" >> "$GITHUB_STEP_SUMMARY"
           if [ "$DIST_TAG" = 'nightly-0.22' ]; then
-            echo "npm provenance identifies the main workflow commit $GITHUB_SHA; source tag $TAG identifies build commit $COMMIT." >> "$GITHUB_STEP_SUMMARY"
+            echo "npm provenance identifies the main workflow commit $GITHUB_SHA; the signed source-to-package attestation binds build commit $COMMIT: $SOURCE_ATTESTATION" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   github-release:

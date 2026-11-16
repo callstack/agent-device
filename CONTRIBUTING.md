@@ -195,9 +195,11 @@ keeps changing is indistinguishable from a republished ("rug-pull") version.
 ### Activate the 0.22 nightly channel
 
 The `nightly-0.22` channel is unavailable until these changes are reviewed and merged and its
-first publish succeeds. Merge the `0.22` prerequisite first: enable CI pushes on `0.22`, stamp
-`0.22.0-dev` with the existing version script, and include the update notifier's `nightly-0.22`
-routing. Require successful push CI at the resulting `0.22` HEAD. Then merge this release
+first publish succeeds. This channel is for internal testing. Keep its routing in release
+automation and contributor instructions, without changing the CLI updater or public installation
+guide. Merge the `0.22` prerequisite first: enable CI pushes on `0.22` and stamp `0.22.0-dev`
+with the existing version script. Require successful push CI at the resulting `0.22` HEAD.
+Then merge this release
 configuration into `main`. Its next 01:53 UTC schedule can publish that source; merging the
 configuration activates the schedule. Do not dispatch it before the independent review.
 
@@ -206,9 +208,21 @@ The planner and publisher use the workflow commit; the build uses the planned so
 The version-stamping entrypoint uses the workflow commit and calls the source commit's workspace
 and MCP metadata helpers. The publisher verifies each package's name and version before publishing.
 For `nightly-0.22`, npm provenance identifies the `main` workflow commit, not the `0.22` build
-commit. To trace the package contents, use the `nightly-0.22/v<version>` source tag and the planned
-source SHA in the Release run. The tag-nightly summary records both commits. A maintainer must
-explicitly accept this provenance distinction before merging the activation configuration.
+commit. Before publishing any internal nightly package, the publisher signs a separate
+source-to-artifact attestation over every downloaded tarball. Its predicate records the planned
+`0.22` source commit, repository, version, and trusted workflow commit. A signing failure stops
+the job before npm publication. The nightly summary links the signed attestation.
+
+Verify a downloaded tarball through GitHub before using its source binding:
+
+```bash
+gh attestation verify "$TARBALL" --repo callstack/agent-device \
+  --predicate-type https://agent-device.dev/attestations/release-source/v1 --format json
+```
+
+Compare `verificationResult.statement.predicate.source.commit` with the planned source SHA
+and the `nightly-0.22/v<version>` source tag. The signature verifies the binding between that
+source and the package digest; npm's own provenance still identifies the main workflow commit.
 Do not grant the `0.22` branch deployment access. Private optional plugins remain unpublished;
 this channel does not replace their placeholder, trusted-publisher, or native validation prerequisites.
 

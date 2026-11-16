@@ -11,7 +11,13 @@ type Job = {
   'runs-on'?: string;
   environment?: string;
   permissions?: Record<string, string>;
-  steps?: Array<{ uses?: string; with?: Record<string, string> }>;
+  steps?: Array<{
+    id?: string;
+    name?: string;
+    if?: string;
+    uses?: string;
+    with?: Record<string, string>;
+  }>;
   uses?: string;
 };
 const workflow = parse(source) as {
@@ -92,4 +98,32 @@ test('both nightly schedules keep separate concurrency groups for cron and manua
     "(github.event.schedule == '53 1 * * *' || inputs.source_branch == '0.22') && 'release-nightly-0.22'",
   );
   expect(workflow.concurrency.group).toContain("|| 'release-nightly'");
+});
+
+test('the internal nightly signs the planned source and every package before npm publication', () => {
+  const publisher = workflow.jobs.publish;
+  const steps = publisher?.steps ?? [];
+  const binding = steps.find((step) => step.id === 'source-attestation');
+  expect(binding).toBeDefined();
+  expect(binding?.if).toBe("needs.plan.outputs.dist_tag == 'nightly-0.22'");
+  expect(binding?.uses).toMatch(/^actions\/attest@[a-f0-9]{40}$/);
+  expect(binding?.with?.['subject-path']).toBe('${{ runner.temp }}/npm-packages/*.tgz');
+  expect(binding?.with?.['create-storage-record']).toBe('false');
+  expect(binding?.with?.['predicate-type']).toBe(
+    'https://agent-device.dev/attestations/release-source/v1',
+  );
+  const predicate = JSON.parse(binding?.with?.predicate ?? '{}');
+  expect(predicate.source).toEqual({
+    repository: '${{ github.server_url }}/${{ github.repository }}',
+    ref: 'refs/heads/0.22',
+    commit: '${{ needs.plan.outputs.commit }}',
+  });
+  expect(predicate.workflowCommit).toBe('${{ github.workflow_sha }}');
+  expect(predicate.version).toBe('${{ needs.plan.outputs.version }}');
+  expect(publisher?.permissions?.attestations).toBe('write');
+  const writers = Object.entries(workflow.jobs)
+    .filter(([, job]) => job.permissions?.attestations === 'write')
+    .map(([name]) => name);
+  expect(writers).toEqual(['publish']);
+  expect(steps.indexOf(binding!)).toBeLessThan(steps.findIndex((step) => step.name === 'Publish'));
 });
