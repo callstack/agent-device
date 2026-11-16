@@ -597,6 +597,33 @@ describe('knownAppleMultiScreen', () => {
     assert.equal(knownAppleMultiScreen(device), true);
   });
 
+  test('a refused multi-panel table still records the multi-panel verdict', async () => {
+    // A single-panel capture's read beside it relies on this to send the next capture through the
+    // table read, even when the table names no panel to capture.
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-unidentified` };
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_17_SINGLE_PANEL));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockReadHostTextFile.mockResolvedValueOnce(
+      JSON.stringify({
+        result: {
+          displays: IPHONE_DUO_CLOSED.result.displays.map((entry) => ({
+            ...entry,
+            primary: false,
+            backlightState: 'activeOn',
+          })),
+        },
+      }),
+    );
+    await assert.rejects(
+      resolveAppleCaptureTarget(device),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'capture-panel-unidentified',
+    );
+    assert.equal(knownAppleMultiScreen(device), true);
+  });
+
   test('a read its caller aborted reports the cancellation, not a toolchain failure', async () => {
     // Callers' hints (fold, orientation) point at this diagnostic, so it must fire and say why.
     const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-aborted-read` };

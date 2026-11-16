@@ -8,6 +8,7 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 });
 
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { AppError } from '@agent-device/kernel/errors';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
@@ -162,4 +163,41 @@ test('a read beside the capture that names a panel reports the stale single-pane
       .mocked(emitDiagnostic)
       .mock.calls.some(([event]) => event.phase === 'apple_display_single_panel_count_stale'),
   );
+});
+
+test('a read beside the capture that refuses an unidentified panel reports the stale count', async () => {
+  vi.mocked(emitDiagnostic).mockClear();
+  const captureStale = async (error: Error) => {
+    vi.mocked(emitDiagnostic).mockClear();
+    const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+      env: process.env,
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        ensureBooted: async () => {},
+        normalizeDensity: async () => {},
+        isKnownSinglePanel: () => true,
+        resolveCaptureTarget: async () => {
+          throw error;
+        },
+        captureWithRetry: async () => {},
+      },
+    });
+    assert.deepEqual(facts, {});
+    return vi
+      .mocked(emitDiagnostic)
+      .mock.calls.some(([event]) => event.phase === 'apple_display_single_panel_count_stale');
+  };
+
+  assert.equal(
+    await captureStale(
+      new AppError('COMMAND_FAILED', 'which panel?', { reason: 'capture-panel-unidentified' }),
+    ),
+    true,
+  );
+  // Only the typed refusal says the table listed several panels; other failures say nothing.
+  assert.equal(
+    await captureStale(new AppError('COMMAND_FAILED', 'capture-panel-unidentified')),
+    false,
+  );
+  assert.equal(await captureStale(new Error('devicectl failed')), false);
 });

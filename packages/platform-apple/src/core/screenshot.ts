@@ -287,10 +287,16 @@ async function planCaptureTarget(
     })
     .then(
       (target) => {
-        if (target.display) emitSinglePanelCountStaleDiagnostic(device, target.display);
+        if (target.display) emitSinglePanelCountStaleDiagnostic(device, target.display.name);
         return target.displayRotation;
       },
-      () => undefined,
+      (error: unknown) => {
+        // A multi-panel table that names no panel refuses; this capture still went out unnamed.
+        if (error instanceof AppError && error.details?.reason === 'capture-panel-unidentified') {
+          emitSinglePanelCountStaleDiagnostic(device, undefined);
+        }
+        return undefined;
+      },
     );
   return {
     display: undefined,
@@ -309,15 +315,18 @@ async function planCaptureTarget(
   };
 }
 
-/** The read resolved a named panel, so this capture went out without the display it needed. */
-function emitSinglePanelCountStaleDiagnostic(device: DeviceInfo, display: AppleDeviceDisplay) {
+/**
+ * The read resolved a multi-panel table, so this capture went out without the display it needed.
+ * That read already recorded the multi-panel verdict, so the next capture reads the table first.
+ */
+function emitSinglePanelCountStaleDiagnostic(device: DeviceInfo, display: string | undefined) {
   emitDiagnostic({
     level: 'warn',
     phase: 'apple_display_single_panel_count_stale',
     data: {
       deviceId: device.id,
-      display: display.name,
-      hint: 'The device was known to have one panel, but its panel table now names a panel to capture. Retake the screenshot; the next capture names that panel.',
+      ...(display ? { display } : {}),
+      hint: 'The device was known to have one panel, but its panel table now lists several, so this capture named no panel and may show a dark one. Retake the screenshot; the next capture reads the panel table first.',
     },
   });
 }
