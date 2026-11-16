@@ -53,6 +53,11 @@ export function stableCaptureSignalsHaveBroadReplacement(
   // semantic replacement. Both signals carry the same chrome-free visible projection the settle
   // diff collapses, and the transition baseline is only armed for XCTest sessions.
   if (!left || left.nodes.length === 0 || right.nodes.length === 0) return false;
+  return sharedIdentityCount(left, right) / Math.max(left.nodes.length, right.nodes.length) < 0.5;
+}
+
+/** How many nodes the two signals share by semantic identity, each node matched at most once. */
+export function sharedIdentityCount(left: StableCaptureSignal, right: StableCaptureSignal): number {
   const remainingIdentities = new Map<string, number>();
   for (const node of left.nodes) {
     remainingIdentities.set(node.identity, (remainingIdentities.get(node.identity) ?? 0) + 1);
@@ -64,7 +69,7 @@ export function stableCaptureSignalsHaveBroadReplacement(
     sharedNodes += 1;
     remainingIdentities.set(node.identity, remaining - 1);
   }
-  return sharedNodes / Math.max(left.nodes.length, right.nodes.length) < 0.5;
+  return sharedNodes;
 }
 
 /**

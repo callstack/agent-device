@@ -60,6 +60,8 @@ export function welcomeSnapshot(): SnapshotState {
 
 export function createSettleDevice(params: {
   stored: SnapshotState;
+  /** The ADR 0014 ref frame, when the scenario issued one apart from the stored observation. */
+  refFrame?: SnapshotState;
   captureSnapshot: () => Promise<BackendSnapshotResult> | BackendSnapshotResult;
   tap?: () => Promise<Record<string, unknown>>;
   clock?: ReturnType<typeof createFakeClock>;
@@ -78,6 +80,7 @@ export function createSettleDevice(params: {
       {
         name: 'default',
         snapshot: params.stored,
+        ...(params.refFrame ? { refFrameSnapshot: params.refFrame } : {}),
         ...(params.appBundleId ? { appBundleId: params.appBundleId } : {}),
       },
     ]),

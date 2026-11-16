@@ -301,6 +301,18 @@ export type SettleTailEntry = {
 export type SettleParams = {
   quietMs?: number;
   timeoutMs?: number;
+  /**
+   * Internal prototype switch, never a CLI flag: 'adaptive' lets a baseline-differing capture that one
+   * short confirmation agrees with settle before the quiet window. The daemon sets it only when the
+   * host environment opts in (AGENT_DEVICE_SETTLE_ADAPTIVE=1).
+   */
+  earlyExit?: 'adaptive';
+  /**
+   * With `earlyExit`: when the action began, the session's ref frame was active, its tree was the
+   * newest observation, and no native read had outdated it. A baseline this action did not capture
+   * itself (the ref frame or the stored tree) is fresh only then.
+   */
+  observationCurrent?: boolean;
 };
 
 /**

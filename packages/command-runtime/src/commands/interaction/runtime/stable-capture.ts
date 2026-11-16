@@ -25,6 +25,10 @@ import {
 } from './stable-capture-signal.ts';
 import { preferredSnapshotBackendForVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
+import {
+  ADAPTIVE_CONFIRMATION_GAP_MS,
+  createAdaptiveConfirmation,
+} from './settle-adaptive-confirmation.ts';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -110,6 +114,11 @@ export async function runStableCaptureLoop(
      * captures in its presentation, so the settled tree and the baseline share one view (#4486).
      */
     broadTransitionBaseline?: SurfaceScopedNodes;
+    /**
+     * Internal prototype: settle on a baseline-differing capture that one short confirmation agrees
+     * with (see settle-adaptive-confirmation.ts). Absent keeps the quiet window alone.
+     */
+    adaptiveConfirmation?: { baselineFresh: boolean };
   },
 ): Promise<StableCaptureLoopResult> {
   const { timeoutMs } = params;
@@ -135,6 +144,13 @@ export async function runStableCaptureLoop(
   // loop recovers on private AX, the rest of the loop stays on it.
   let preferredBackend: SnapshotPreferredBackend | undefined;
   const pacing = createStableCapturePacing(start);
+  const adaptive = params.adaptiveConfirmation
+    ? createAdaptiveConfirmation({
+        baseline: params.broadTransitionBaseline,
+        baselineFresh: params.adaptiveConfirmation.baselineFresh,
+        appBundleId: session?.appBundleId,
+      })
+    : undefined;
   let captures = 0;
   let lastCapture: CapturedSnapshot | undefined;
   const result = (
@@ -199,13 +215,25 @@ export async function runStableCaptureLoop(
     if (recovered) {
       privateAxRecoveryBudgetReset = true;
       deadlineMs = recovered.deadlineMs;
+      adaptive?.disarm();
     }
     const step = recovered
       ? { settled: false, delayMs: recovered.delayMs }
       : pacing.observe({ signal, nodeCount, nowMs, requiredQuietMs, pollMs, deadlineMs, captures });
     if (step.settled) return result(true, false, nowMs - start);
+    const early = recovered
+      ? 'none'
+      : adaptive?.observe({
+          snapshot: capture.snapshot,
+          signal,
+          floorInForce: requiredQuietMs > window.quietMs,
+        });
+    if (early === 'settle') return result(true, false, nowMs - start);
     if (step.delayMs <= 0) break;
-    await sleep(runtime, step.delayMs);
+    await sleep(
+      runtime,
+      early === 'confirm' ? Math.min(step.delayMs, ADAPTIVE_CONFIRMATION_GAP_MS) : step.delayMs,
+    );
   }
   return result(false, false, now(runtime) - start);
 }

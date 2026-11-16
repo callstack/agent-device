@@ -90,16 +90,22 @@ export async function planGenericSettleObservation(
   if (!commandSupportsSettleObservation(params.command)) return {};
   const invalidSettleFlags = settleFlagGuardResponse(params.command, params.flags);
   if (invalidSettleFlags) return { response: invalidSettleFlags };
-  const settle = readSettleRequest(params.flags);
+  const settle = readSettleRequest(params.flags, {
+    env: params.sessionStore.host.env,
+    session: params.session,
+  });
   if (!settle) return {};
   const { presentedSurface: _unverified, ...frame } = surfaceScopedNodes(
     refFrameTree(params.session),
   );
-  const baseline = await postActionBaseline({
-    frame,
-    candidates: [storedTreeBaseline(params.session.snapshot)],
-  });
-  return { observe: async () => await observeSettled(params, settle, baseline) };
+  const stored = storedTreeBaseline(params.session.snapshot);
+  const baseline = await postActionBaseline({ frame, candidates: [stored] });
+  // The generic route captures nothing before the action, so the stored tree is fresh only while the
+  // daemon reports the session observation current.
+  const baselineFresh = baseline === stored && settle.observationCurrent === true;
+  return {
+    observe: async () => await observeSettled(params, { ...settle, baselineFresh }, baseline),
+  };
 }
 
 /**
@@ -124,7 +130,7 @@ function storedTreeBaseline(snapshot: SnapshotState | undefined): SurfaceScopedN
  */
 async function observeSettled(
   context: GenericSettleContext,
-  settle: SettleParams,
+  settle: SettleParams & { baselineFresh: boolean },
   baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
   const runtime = await createGenericSettleRuntime(context);

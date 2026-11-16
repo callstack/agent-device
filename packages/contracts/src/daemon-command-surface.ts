@@ -300,6 +300,8 @@ export type DaemonSettleObservationOptions = CommandContext &
   Readonly<{
     /** The pre-action tree the settled diff is taken against, and the surface it describes. */
     baseline: SurfaceScopedNodes;
+    /** Whether `baseline` describes the screen right before this action (adaptive settle only). */
+    baselineFresh?: boolean;
   }>;
 
 /**

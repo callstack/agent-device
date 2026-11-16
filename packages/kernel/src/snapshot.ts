@@ -573,6 +573,20 @@ export function formatRole(type: string): string {
   return lookupRoleLabel(normalized) || normalized || 'element';
 }
 
+const BUSY_INDICATOR_ROLES: ReadonlySet<string> = new Set([
+  'activity-indicator',
+  'progress-indicator',
+  'progressbar',
+]);
+
+/**
+ * Whether a node is a busy indicator: a spinner or progress element that says only that the screen
+ * is not ready yet. Apple reports activity and progress indicators; Android reports a ProgressBar.
+ */
+export function isBusyIndicatorNode(node: Pick<SnapshotNode, 'type'>): boolean {
+  return BUSY_INDICATOR_ROLES.has(formatRole(node.type ?? ''));
+}
+
 /**
  * Reasons the Apple runner can stamp when serving a command required re-activating the session app
  * (#2682). Mirrors its `activateTarget(bundleId:reason:)` call sites.

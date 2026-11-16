@@ -118,6 +118,7 @@ function buildTargetedRuntimeOptions(
         requestId: req.meta?.requestId,
         clickButton: admitted.clickButton,
         flags: req.flags,
+        settle: readSettleRequest(req.flags, { env: params.sessionStore.host.env, session }),
         durationMs,
         expectedResolvedTarget: req.internal?.replayTargetGuard,
         preresolvedTarget: req.internal?.findResolvedTarget,
@@ -164,17 +165,17 @@ async function runTargetedTouchInteraction(params: {
   requestId: string | undefined;
   clickButton: ReturnType<typeof resolveClickButton>;
   flags: CommandFlags | undefined;
+  settle: ReturnType<typeof readSettleRequest>;
   durationMs?: number;
   expectedResolvedTarget?: ReplayTargetGuardDenotation;
   /** #1654: a mutating `find`'s already-resolved node; see daemon/daemon-request.ts. */
   preresolvedTarget?: PreresolvedInteractionTarget;
 }): Promise<TargetedTouchResult> {
-  const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =
-    params;
+  const { runtime, command, target, sessionName, requestId, expectedResolvedTarget } = params;
   const shared = {
     session: sessionName,
     requestId,
-    settle: readSettleRequest(flags),
+    settle: params.settle,
     expectedResolvedTarget,
   };
   switch (command) {

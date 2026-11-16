@@ -78,7 +78,10 @@ export async function dispatchFillViaRuntime(params: FillParams): Promise<Daemon
         delayMs: req.flags?.delayMs,
         allowNonHittableCoordinateFallback: req.flags?.maestro?.allowNonHittableCoordinateFallback,
         verify: req.flags?.verify,
-        settle: readSettleRequest(req.flags),
+        settle: readSettleRequest(req.flags, {
+          env: params.sessionStore.host.env,
+          session: admission.admitted.session,
+        }),
         expectedResolvedTarget: replayTargetGuard,
         preresolvedTarget: req.internal?.findResolvedTarget,
       }),
