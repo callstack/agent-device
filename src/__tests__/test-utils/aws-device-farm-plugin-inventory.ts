@@ -6,7 +6,7 @@ import awsDeviceFarm from '@agent-device/aws-device-farm';
 import manifest from '@agent-device/aws-device-farm/package.json' with { type: 'json' };
 
 /** The AWS Device Farm package as an installed store plugin, without touching the on-disk store. */
-export function awsDeviceFarmPluginCandidate(): PluginCandidate {
+function awsDeviceFarmPluginCandidate(): PluginCandidate {
   return {
     source: 'store',
     package: manifest.name as string,

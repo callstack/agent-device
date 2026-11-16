@@ -6,7 +6,7 @@ import type { RunHostCommand } from '@agent-device/plugins/host';
 export const AWS_DEVICE_FARM_PROVIDER = 'aws-device-farm';
 
 /** The WebDriver descriptor the AWS Device Farm plugin's `setup` builds from `env`, as `clientVersion` hosted. */
-export async function awsDeviceFarmWebDriver(
+async function awsDeviceFarmWebDriver(
   env: Record<string, string>,
   clientVersion: string,
   runHostCommand: RunHostCommand,

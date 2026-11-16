@@ -380,7 +380,6 @@
     "@agent-device/browserstack": "workspace:*",
     "@agent-device/revyl": "workspace:*",
     "@agent-device/webos": "workspace:*",
-    "@agent-device/tizen": "workspace:*",
-    "@agent-device/build-config": "workspace:*"
+    "@agent-device/tizen": "workspace:*"
   }
 }

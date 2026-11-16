@@ -12,10 +12,6 @@
     "@agent-device/xml": "workspace:*"
   },
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
     "./providers": {
       "types": "./src/providers.ts",
       "default": "./src/providers.ts"
