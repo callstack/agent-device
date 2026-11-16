@@ -4,7 +4,8 @@ import {
   getLiveAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session-lifecycle.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
+import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
 import { getAndroidSnapshotHelperSessionDeviceKey } from './snapshot-helper-retirement.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from './snapshot-helper-session.ts';
 import {
@@ -39,7 +40,7 @@ type AndroidHelperAppResult =
 
 const ACTION_POLICY = {
   // A press can block on the framework's 30 s injection deadline, and its one retry needs 35 s of
-  // room (PressSequence.RETRY_WORST_CASE_MS), so input gets more than the other actions.
+  // room (PressSequence.RETRY_WORST_CASE_MS), so input may wait longer than the other actions.
   input: { mutation: true, timeoutMs: 45_000 },
   app: { mutation: true, timeoutMs: 30_000 },
   screenshot: { mutation: false, timeoutMs: 30_000 },
@@ -77,13 +78,14 @@ export async function runAndroidAutomationHelper(
   if (!(await getLiveAndroidSnapshotHelperSession(deviceKey))?.commands.has(action))
     return undefined;
   const prepared = await prepareAndroidAutomationHelper(device);
+  const timeoutMs = action === 'input' ? inputTimeoutMs() : ACTION_POLICY[action].timeoutMs;
   try {
     const headers = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey,
       action,
       helper: androidAutomationHelperIdentity(prepared.artifact),
-      payloadBase64: encodeHelperPayload(request),
-      timeoutMs: ACTION_POLICY[action].timeoutMs,
+      payloadBase64: encodeHelperPayload(request, timeoutMs),
+      timeoutMs,
     });
     if (!headers) return undefined;
     switch (action) {
@@ -136,11 +138,22 @@ function decodeHelperIndex(value: string | undefined): number | undefined {
   return value !== undefined && /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
-function encodeHelperPayload(request: AndroidAutomationRequest): string | undefined {
+/** The host waits for input up to its cap, or until the request's own deadline when that is sooner. */
+function inputTimeoutMs(): number {
+  const capMs = ACTION_POLICY.input.timeoutMs;
+  const requestDeadlineMs = getRequestDeadlineMs(getDiagnosticsMeta().requestId);
+  if (requestDeadlineMs === undefined) return capMs;
+  return Math.max(0, Math.min(capMs, requestDeadlineMs - Date.now()));
+}
+
+function encodeHelperPayload(
+  request: AndroidAutomationRequest,
+  timeoutMs: number,
+): string | undefined {
   if (!('input' in request)) return undefined;
   const payload =
     request.action === 'input'
-      ? { ...request.input, budgetMs: ACTION_POLICY.input.timeoutMs - INPUT_ANSWER_MARGIN_MS }
+      ? { ...request.input, budgetMs: Math.max(0, timeoutMs - INPUT_ANSWER_MARGIN_MS) }
       : request.input;
   return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
