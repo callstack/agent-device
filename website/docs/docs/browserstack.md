@@ -3,7 +3,17 @@ title: BrowserStack
 description: Drive BrowserStack App Automate sessions with agent-device.
 ---
 
-Use BrowserStack App Automate to run agent-device on hosted Android and iOS devices over WebDriver. You need a BrowserStack account with App Automate access.
+Use BrowserStack App Automate to run agent-device on hosted Android and iOS devices over WebDriver. You need a BrowserStack account with App Automate access and the `@agent-device/browserstack` plugin.
+
+## Install the plugin
+
+```bash
+agent-device plugins add @agent-device/browserstack
+```
+
+The plugin is an optional npm package installed under `AGENT_DEVICE_HOME`.
+After you add or update it, close open sessions and run `agent-device daemon stop`
+with the state directory you use; the next device command loads the plugin.
 
 ## Set credentials and connect
 

@@ -1,0 +1,31 @@
+# @agent-device/browserstack
+
+Use BrowserStack App Automate Android and iOS devices with [agent-device](https://agent-device.dev).
+You need a BrowserStack account with App Automate access.
+
+```sh
+npm install -g agent-device
+agent-device plugins add @agent-device/browserstack
+export BROWSERSTACK_USERNAME=your-username
+export BROWSERSTACK_ACCESS_KEY=your-access-key
+agent-device connect browserstack --session checkout-android --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
+```
+
+See the [BrowserStack guide](https://agent-device.dev/docs/browserstack) for setup and supported operations.
+To update the plugin, run `agent-device plugins update @agent-device/browserstack`.
+
+After you add or update the plugin, close your sessions and run `agent-device daemon stop` before reconnecting.
+
+## Use it from JavaScript
+
+The package default-exports a plugin factory. Pass credentials as options, or leave them out to read `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` from the environment:
+
+```js
+import browserstack from '@agent-device/browserstack';
+
+const plugin = browserstack({
+  credentials: { username: 'your-username', accessKey: 'your-access-key' },
+});
+```
+
+Credentials passed as options are used instead of the environment variables, and the daemon does not compare them with your shell.
