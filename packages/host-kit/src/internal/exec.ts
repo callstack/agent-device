@@ -1,3 +1,4 @@
+import { commandSettlementReason } from './exec-settlement.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { constants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
@@ -248,7 +249,7 @@ function runSpawnedCommand(
     }
     function settle(code: number | null): void {
       const finalReason = commandSettlementReason({
-        abort,
+        didAbort: abort.didAbort,
         exceededStream,
         didTimeout,
         code,
@@ -364,7 +365,6 @@ function runSpawnedCommand(
   });
 }
 
-/** Returns the result with `signal` added when a signal terminated the process. */
 function execResult(ended: { signalCode: string | null }, result: ExecResult): ExecResult {
   return ended.signalCode ? { ...result, signal: ended.signalCode } : result;
 }
@@ -874,18 +874,6 @@ function normalizeTimeoutMs(value: number | undefined): number | undefined {
  * A killed command settles when its direct child exits: descendants can keep inherited pipes
  * open indefinitely. Both kill/exit orderings must settle once without waiting for `close`.
  */
-function commandSettlementReason(input: {
-  abort: CommandAbort;
-  exceededStream: 'stdout' | 'stderr' | undefined;
-  didTimeout: boolean;
-  code: number | null;
-  allowFailure: boolean | undefined;
-}): ExecSettlementReason {
-  if (input.abort.didAbort) return 'abort';
-  if (input.exceededStream) return 'output_limit';
-  if (input.didTimeout) return 'timeout';
-  return (input.code ?? 1) !== 0 && !input.allowFailure ? 'exit_failure' : 'success';
-}
 
 function bindCommandLifecycle(
   child: ReturnType<typeof spawn>,
