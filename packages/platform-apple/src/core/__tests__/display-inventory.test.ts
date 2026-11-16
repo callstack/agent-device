@@ -597,7 +597,8 @@ describe('knownAppleMultiScreen', () => {
     assert.equal(knownAppleMultiScreen(device), true);
   });
 
-  test('a read its caller aborted reports no unresolved-table diagnostic', async () => {
+  test('a read its caller aborted reports the cancellation, not a toolchain failure', async () => {
+    // Callers' hints (fold, orientation) point at this diagnostic, so it must fire and say why.
     const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-aborted-read` };
     const controller = new AbortController();
     mockRunXcrun.mockImplementationOnce(async () => {
@@ -606,12 +607,12 @@ describe('knownAppleMultiScreen', () => {
     });
     const inventory = await queryAppleDisplayInventory(device, { signal: controller.signal });
     assert.equal(inventory.unresolved, true);
-    assert.equal(
-      mockEmitDiagnostic.mock.calls.some(
-        ([event]) => event.phase === 'apple_display_inventory_unresolved',
-      ),
-      false,
-    );
+    const unresolved = mockEmitDiagnostic.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.phase === 'apple_display_inventory_unresolved');
+    assert.equal(unresolved.length, 1);
+    assert.equal(unresolved[0]?.data?.reason, 'probe-canceled');
+    assert.equal(unresolved[0]?.data?.hint, undefined);
     assert.equal(knownAppleMultiScreen(device), undefined);
   });
 });

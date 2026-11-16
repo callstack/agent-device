@@ -135,8 +135,7 @@ export async function queryAppleDisplayInventory(
       ? await readGuestPanelTable(device, options)
       : await readCoreDevicePanelTable(device, options);
   if (!table.ok) {
-    // A caller that aborted the read already knows it did not answer.
-    if (!options.signal?.aborted) emitUnresolvedDiagnostic(device, table.reason, table.detail);
+    emitUnresolvedDiagnostic(device, table.reason, table.detail);
     return unresolvedInventory();
   }
   const inventory = inventoryFromPanelTable(device, table.payload);
@@ -163,7 +162,8 @@ async function readCoreDevicePanelTable(
     return { ok: false, reason: outcome.reason, detail: outcome.result.stderr.trim() };
   } catch (error) {
     // exec classifies its own kills, so a probe that never answered is told apart
-    // from a toolchain that refused the subcommand.
+    // from a toolchain that refused the subcommand, and a caller that stopped the read is named.
+    if (options.signal?.aborted) return probeFailure(error, 'probe-canceled');
     return probeFailure(error, isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed');
   }
 }
