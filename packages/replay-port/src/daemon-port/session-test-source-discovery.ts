@@ -9,7 +9,7 @@ import type {
   ReplayTestDiscoverSources,
   ReplayTestManifest,
   ReplayTestSource,
-} from '@agent-device/replay-test';
+} from '@agent-device/contracts/replay-test-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { getReplayBackend } from './replay-backend-registry.ts';
 

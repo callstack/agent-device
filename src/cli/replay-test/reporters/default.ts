@@ -7,7 +7,7 @@ import {
 import { formatDurationSeconds, formatReplayCount } from '../duration-format.ts';
 import { colorize, supportsColor } from '@agent-device/command-output';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
-import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
+import { formatReplayDivergenceReport } from '@agent-device/contracts/replay-divergence-data';
 import type {
   ReplayTestReporter,
   ReplayTestReporterContext,

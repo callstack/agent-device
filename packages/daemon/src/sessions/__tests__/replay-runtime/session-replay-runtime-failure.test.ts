@@ -15,7 +15,7 @@ import path from 'node:path';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
+import { formatReplayDivergenceReport } from '@agent-device/contracts/replay-divergence-data';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,

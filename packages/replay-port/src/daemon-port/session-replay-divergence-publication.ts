@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { type ReplayDivergence } from '@agent-device/contracts/divergence';
-import { boundReplayDivergence } from '@agent-device/ad-replay/divergence';
+import { boundReplayDivergence } from '@agent-device/contracts/replay-divergence-data';
 import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
 import type {
   ReplaySessionObservation,
