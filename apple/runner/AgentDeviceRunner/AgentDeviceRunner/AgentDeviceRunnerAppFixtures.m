@@ -1331,19 +1331,23 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
       [popoverField.widthAnchor constraintEqualToConstant:180],
       [popoverField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
-    // A banner over the popover field's center leaves the field under the popover the only one XCTest
-    // reports hittable, and the popover field takes focus late (see its delegate above).
+    // A hint label over the whole popover field, as a custom placeholder can be: a label takes no
+    // touches, so a tap there still reaches the popover field, but XCTest's hit test meets the label at
+    // every point it tries on that field (its center, its corners, just past its edges), so only the
+    // field under the popover reads hittable. A plain view would not do: it is no accessibility
+    // element, and that hit test looks through it. The popover field also takes focus late (see its
+    // delegate above).
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-popover-covered-late-focus"]) {
       popoverField.delegate = self;
-      UIView *banner = [[UIView alloc] init];
-      banner.backgroundColor = UIColor.systemOrangeColor;
-      banner.translatesAutoresizingMaskIntoConstraints = NO;
-      [self.view addSubview:banner];
+      UILabel *hint = [[UILabel alloc] init];
+      hint.text = @"hint";
+      hint.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:hint];
       [NSLayoutConstraint activateConstraints:@[
-        [banner.centerXAnchor constraintEqualToAnchor:popoverField.centerXAnchor],
-        [banner.centerYAnchor constraintEqualToAnchor:popoverField.centerYAnchor],
-        [banner.widthAnchor constraintEqualToConstant:40],
-        [banner.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight + 8],
+        [hint.leadingAnchor constraintEqualToAnchor:popoverField.leadingAnchor constant:-4],
+        [hint.trailingAnchor constraintEqualToAnchor:popoverField.trailingAnchor constant:4],
+        [hint.topAnchor constraintEqualToAnchor:popoverField.topAnchor constant:-4],
+        [hint.bottomAnchor constraintEqualToAnchor:popoverField.bottomAnchor constant:4],
       ]];
     }
   }

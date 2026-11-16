@@ -332,7 +332,7 @@ extension RunnerTests {
   /// The overlapping-popover fixture, with the shape its tests depend on checked first: a point in
   /// both fields, the partly covered field the smaller, its center outside the popover's field, and
   /// the partly covered field hittable. The popover's field is hittable too, unless
-  /// `coveredLateFocus` puts a banner over its center and makes it take focus late.
+  /// `coveredLateFocus` lays a label over it and makes it take focus late.
   @MainActor
   private func launchOverlappingPopover(
     coveredLateFocus: Bool = false
