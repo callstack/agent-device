@@ -1260,11 +1260,11 @@ static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSStr
   // A sheet over a form, which leaves the form's field in the accessibility tree. The field the sheet
   // covers is smaller than the sheet's field and shares its center, so a fill's point names both, and
   // ordering by size alone picks the covered one. The sheet's second field raises the keyboard without
-  // touching either of them.
+  // touching either of them, and holds text that keystrokes sent to the wrong responder would change.
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet"]) {
     UITextField *background = AgentDeviceOverlappingSheetField(@"agent-device-overlap-background-input", @"background");
     UITextField *foreground = AgentDeviceOverlappingSheetField(@"agent-device-overlap-foreground-input", @"stale");
-    UITextField *neighbour = AgentDeviceOverlappingSheetField(@"agent-device-overlap-sheet-neighbour", @"");
+    UITextField *neighbour = AgentDeviceOverlappingSheetField(@"agent-device-overlap-sheet-neighbour", @"neighbour");
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet-refuses-focus"]) {
       foreground.delegate = self;
     }
@@ -1292,6 +1292,25 @@ static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSStr
       [neighbour.topAnchor constraintEqualToAnchor:foreground.bottomAnchor constant:AgentDeviceTextEntryNeighbourGap],
       [neighbour.widthAnchor constraintEqualToConstant:300],
       [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+    ]];
+  }
+
+  // A popover's field over part of a smaller form field, leaving that field's center exposed: XCTest
+  // reports both hittable, and a point in the overlap lies on both.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-popover"]) {
+    UITextField *partlyCovered = AgentDeviceOverlappingSheetField(@"agent-device-popover-partly-covered-input", @"background");
+    UITextField *popoverField = AgentDeviceOverlappingSheetField(@"agent-device-popover-input", @"stale");
+    [self.view addSubview:partlyCovered];
+    [self.view addSubview:popoverField];
+    [NSLayoutConstraint activateConstraints:@[
+      [partlyCovered.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [partlyCovered.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-96],
+      [partlyCovered.widthAnchor constraintEqualToConstant:160],
+      [partlyCovered.heightAnchor constraintEqualToConstant:34],
+      [popoverField.leadingAnchor constraintEqualToAnchor:partlyCovered.centerXAnchor constant:10],
+      [popoverField.centerYAnchor constraintEqualToAnchor:partlyCovered.centerYAnchor],
+      [popoverField.widthAnchor constraintEqualToConstant:180],
+      [popoverField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
   }
 

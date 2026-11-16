@@ -60,9 +60,11 @@ extension RunnerTests {
       // answer both refuse here, each under its own reason.
       let contentTranslation = liveContentTranslation(app: activeApp)
       let inputAtPoint: TextInputAtPoint
+      let inputsAtPoint: [ResolvedTextEntryInput]
       switch try coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
-      case .input(let input):
+      case .input(let input, let candidates):
         inputAtPoint = input
+        inputsAtPoint = candidates
       case .absent:
         return noTextInputAtPointResponse()
       case .unavailable:
@@ -71,13 +73,18 @@ extension RunnerTests {
       let context = treeContext
       switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
       case .performed:
+        // The synthesized clear and typing reach whichever input holds focus, so where the point
+        // lies on several inputs, the one the tap reached is bound before any keystroke.
+        let boundInput = try inputsAtPoint.count > 1
+          ? textInputTheTapReached(candidates: inputsAtPoint, contentTranslation: contentTranslation).input
+          : inputAtPoint
         resolvedCoordinateContext = context
         resolvedCoordinateTarget = TextEntryTarget(
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
           contentTranslation: contentTranslation,
-          inputAtRefreshPoint: inputAtPoint
+          inputAtRefreshPoint: boundInput
         )
       case .xctestFallback:
         break
