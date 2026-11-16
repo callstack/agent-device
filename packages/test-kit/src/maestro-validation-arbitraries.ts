@@ -7,8 +7,7 @@
 // cannot silently drift from the converter.
 
 import fc from 'fast-check';
-import { encodeValidationCase } from './validation-case.ts';
-import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
+import { ACCEPT, SAFE_VALUES, encodeValidationCase } from './validation-values.ts';
 
 // ---------------------------------------------------------------------------------------------
 

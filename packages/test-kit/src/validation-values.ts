@@ -19,3 +19,15 @@ export const SAFE_VALUES = [
 
 /** The accept expectation, shared so a valid case reads the same in both generators. */
 export const ACCEPT = { outcome: 'accept' } as const;
+
+export type ValidationExpectation = { outcome: 'accept' } | { outcome: 'reject'; code: string };
+
+export type ValidationCase = {
+  payload: string[] | string;
+  mutation: string;
+  expect: ValidationExpectation;
+};
+
+export function encodeValidationCase(validationCase: ValidationCase): string {
+  return JSON.stringify(validationCase);
+}

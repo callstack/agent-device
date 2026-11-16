@@ -7,7 +7,7 @@
 import type fc from 'fast-check';
 import type { FuzzTargetName } from './target-types.ts';
 import { cliValidationArb } from './validation-arbitraries-cli.ts';
-import { maestroValidationArb } from './validation-arbitraries-maestro.ts';
+import { maestroValidationArb } from '@agent-device/test-kit';
 
 /** The generator for a validation target, or `undefined` for the classic targets. */
 export function validationArbitraryFor(target: FuzzTargetName): fc.Arbitrary<string> | undefined {
