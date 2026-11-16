@@ -512,11 +512,15 @@ extension RunnerTests {
   }
 
   private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
+#if os(iOS)
     guard let control = findKeyboardReturnControl(app: app) else {
       return false
     }
     control.tap()
     return true
+#else
+    return false
+#endif
   }
 
   private func isKeyboardAccessoryControl(_ element: XCUIElement, keyboardFrame: CGRect) -> Bool {
