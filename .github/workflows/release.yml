@@ -80,11 +80,10 @@ jobs:
     name: Build ${{ needs.plan.outputs.version }}
     needs: plan
     if: contains(fromJSON('["dry-run", "nightly", "stable"]'), needs.plan.outputs.mode)
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: macos-26
     timeout-minutes: 120
     permissions:
       contents: read
-    cache-mode: none
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
@@ -185,6 +184,9 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
           echo "Published $TAG from $COMMIT: npm install agent-device@$DIST_TAG" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DIST_TAG" = 'nightly-0.22' ]; then
+            echo "npm provenance identifies the main workflow commit $GITHUB_SHA; source tag $TAG identifies build commit $COMMIT." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   github-release:
     name: Draft GitHub release

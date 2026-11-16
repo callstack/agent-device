@@ -205,6 +205,10 @@ Keep the existing `release.yml` trusted publisher and `npm-publish` policies (`m
 The planner and publisher use the workflow commit; the build uses the planned source commit.
 The version-stamping entrypoint uses the workflow commit and calls the source commit's workspace
 and MCP metadata helpers. The publisher verifies each package's name and version before publishing.
+For `nightly-0.22`, npm provenance identifies the `main` workflow commit, not the `0.22` build
+commit. To trace the package contents, use the `nightly-0.22/v<version>` source tag and the planned
+source SHA in the Release run. The tag-nightly summary records both commits. A maintainer must
+explicitly accept this provenance distinction before merging the activation configuration.
 Do not grant the `0.22` branch deployment access. Private optional plugins remain unpublished;
 this channel does not replace their placeholder, trusted-publisher, or native validation prerequisites.
 

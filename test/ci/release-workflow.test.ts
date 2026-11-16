@@ -8,6 +8,7 @@ const source = fs.readFileSync(path.join(repoRoot, '.github/workflows/release.ym
 
 type Job = {
   'cache-mode'?: string;
+  'runs-on'?: string;
   environment?: string;
   permissions?: Record<string, string>;
   steps?: Array<{ uses?: string; with?: Record<string, string> }>;
@@ -52,8 +53,9 @@ test('the publisher authenticates through OIDC alone', () => {
   expect(setupNode?.with).not.toHaveProperty('registry-url');
 });
 
-test('the release build has no cache token access and restores no dependency cache', () => {
-  expect(workflow.jobs.build?.['cache-mode']).toBe('none');
+test('the release build uses a GitHub-hosted runner and restores no dependency cache', () => {
+  expect(workflow.jobs.build?.['runs-on']).toBe('macos-26');
+  expect(workflow.jobs.build).not.toHaveProperty('cache-mode');
   const setup = workflow.jobs.build?.steps?.find(
     (step) => step.uses === './.github/actions/setup-node-pnpm',
   );
