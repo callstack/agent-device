@@ -18,19 +18,18 @@ import type {
 } from './remote-config-fields.ts';
 
 /**
- * Who owns the daemon on a client's state directory.
+ * The one daemon lifecycle a client has: `attach`. A client connects to the daemon registered in its
+ * state directory, and never starts, replaces, retires or timeout-kills one. A missing daemon fails
+ * with `details.reason: 'daemon-not-running'` and an incompatible one with `'daemon-incompatible'`.
  *
- * - `managed`: the client starts a missing daemon and replaces an incompatible one itself, and may
- *   retire a hung one after a timeout. This is the default until 0.22.
- * - `attach`: the client only connects to the daemon registered in the state directory. It never
- *   starts, replaces or kills one. A missing daemon fails with `details.reason: 'daemon-not-running'`
- *   and an incompatible one with `'daemon-incompatible'`; `ensureDaemon()` is the explicit way to
- *   start or replace one.
+ * `ensureDaemon()` is the explicit way to start or replace a detached daemon. `startAgentDevice()`
+ * imported from `agent-device` is the way to own one in your own process. Both refuse a daemon that
+ * holds another client's work.
  *
- * Independent of `daemonTransport`, `daemonServerMode` and `daemonBaseUrl`: a remote connection
- * never starts or retires a local daemon in either mode.
+ * Independent of `daemonTransport`, `daemonServerMode` and `daemonBaseUrl`: a remote connection never
+ * starts or retires a local daemon.
  */
-export type DaemonLifecycle = 'attach' | 'managed';
+export type DaemonLifecycle = 'attach';
 
 /** What a client can learn about a daemon without talking to it: how it identifies itself on disk. */
 export type DaemonIdentity = {
@@ -89,8 +88,6 @@ export type DaemonConnection = {
 
 export type AgentDeviceDaemonTransportContext = {
   authToken?: string;
-  /** How this request treats the local daemon; `managed` when omitted. */
-  daemonLifecycle?: DaemonLifecycle;
   /** See {@link DaemonBinding}. A client built with one sends this same pin on every request. */
   daemonBinding?: DaemonBinding;
   /**
@@ -109,7 +106,10 @@ export type AgentDeviceDaemonTransport = (
 
 export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
   CloudProviderProfileFields & {
-    /** See `DaemonLifecycle`. */
+    /**
+     * See `DaemonLifecycle`. Only `'attach'` is accepted, and it is the default; the removed
+     * `'managed'` value fails validation instead of starting a daemon.
+     */
     daemonLifecycle?: DaemonLifecycle;
     /**
      * Pins this client to one daemon instance: every request addresses that instance, authenticates

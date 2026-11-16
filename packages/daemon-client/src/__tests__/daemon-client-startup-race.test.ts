@@ -12,6 +12,7 @@ import {
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   beginStderrCapture,
+  createTestHostEnvironment,
   closeLoopbackServer,
   mkdtempForTestSync,
   startHttpDaemonFixture,
@@ -27,9 +28,14 @@ import {
   resolveDaemonPaths,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { createEnsuredDaemonTransport } from '../index.ts';
 import * as lifecycle from '../daemon-client-lifecycle.ts';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
+
+// The startup machinery's owner since 0.22 is the explicit ensure: the CLI and MCP transport ensures
+// the shared daemon once and attaches every request to it. Driving it here keeps these startup rows
+// on the seam that still starts a daemon; a plain client request only attaches.
+const sendToDaemon = createEnsuredDaemonTransport();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -635,7 +641,12 @@ test.for([
   });
   const stderrCapture = beginStderrCapture();
   try {
-    const pending = sendToDaemon(request(paths));
+    const host = createTestHostEnvironment();
+    const settings = {
+      ...lifecycle.resolveClientSettings(request(paths), undefined, host),
+      retireIncompatibleContender: true,
+    };
+    const pending = lifecycle.ensureStartedDaemon(settings);
     if (expected.alive)
       await assert.rejects(pending, (error: unknown) => {
         assert.ok(error instanceof AppError);
@@ -645,13 +656,13 @@ test.for([
         return true;
       });
     else {
-      assert.equal((await pending).ok, true);
+      assert.equal((await pending).startedByClient, true);
       await winner.exited;
     }
     assert.equal(joined, true);
     assert.equal(isProcessAlive(winner.pid), expected.alive);
     assert.equal(spawn.mock.calls.length, expected.launches);
-    assert.equal(http.rpcRequests.length, expected.rpcs);
+    assert.equal(http.rpcRequests.length, 0);
     assert.equal(
       stderrCapture.read().includes(`Replacing daemon (pid ${winner.pid}, v0.0.1)`),
       !expected.alive,
@@ -725,7 +736,7 @@ test.for(['default', 'private replay'] as const)(
     if (await skipWhenLoopbackUnavailable(t)) return;
     const http = await startHttpDaemonFixture({ devices: [], sessionActive: false });
     const defaultPaths = resolveDaemonPaths(mkdtempForTestSync('daemon-missed-birth-'));
-    const ensure = vi.spyOn(lifecycle, 'ensureManagedDaemon');
+    const ensure = vi.spyOn(lifecycle, 'ensureStartedDaemon');
     let paths: DaemonPaths | undefined;
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();
@@ -763,8 +774,7 @@ test.for(['default', 'private replay'] as const)(
           : { session: 'default', command: 'replay', positionals: [], flags: {} },
       );
       assert.equal(response.ok, true);
-      assert.equal(ensure.mock.calls.length, 1);
-      assert.equal((await ensure.mock.results[0]!.value).startedByClient, true);
+      assert.equal(ensure.mock.calls.length, route === 'private replay' ? 1 : 0);
       assert.equal(spawn.mock.calls.length, 1);
       assert.equal(http.rpcRequests.length, 1);
       assert.ok(paths && child);

@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { ensureManagedDaemon, resolveClientSettings } from './daemon-client-lifecycle.ts';
+import { ensureStartedDaemon, resolveClientSettings } from './daemon-client-lifecycle.ts';
 
 export type ProxyUpstreamDaemonOptions = {
   stateDir?: string;
@@ -15,22 +15,27 @@ export type ProxyUpstreamDaemon = {
 export async function ensureProxyUpstreamDaemon(
   options: ProxyUpstreamDaemonOptions,
 ): Promise<ProxyUpstreamDaemon> {
-  const settings = resolveClientSettings(
-    {
-      session: 'default',
-      command: 'proxy',
-      positionals: [],
-      flags: {
-        stateDir: options.stateDir,
-        daemonBaseUrl: '',
-        daemonTransport: 'http',
-        daemonServerMode: 'http',
+  // `proxy` owns the local daemon it forwards to: it starts a missing one and may retire a startup
+  // contender it cannot use. A client request never takes this path.
+  const settings = {
+    ...resolveClientSettings(
+      {
+        session: 'default',
+        command: 'proxy',
+        positionals: [],
+        flags: {
+          stateDir: options.stateDir,
+          daemonBaseUrl: '',
+          daemonTransport: 'http',
+          daemonServerMode: 'http',
+        },
       },
-    },
-    undefined,
-    options.host,
-  );
-  const daemon = await ensureManagedDaemon(settings);
+      undefined,
+      options.host,
+    ),
+    retireIncompatibleContender: true,
+  };
+  const daemon = await ensureStartedDaemon(settings);
   return {
     httpPort: daemon.info.httpPort,
     token: daemon.info.token,

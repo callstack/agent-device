@@ -90,18 +90,11 @@ if ('cloudArtifacts' in result) {
 
 ## Daemon lifecycle
 
-A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
+A client attaches to the local daemon for its state directory. It never starts, replaces or stops that daemon, including after a timeout. A missing daemon reports `daemon-not-running`; an incompatible daemon reports `daemon-incompatible`.
 
-Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live runtime with `error.details.reason: 'daemon-owner-embedded'` and a hint naming the host PID. It sends no request or signal. If the recorded host lifetime has provably exited, `daemon stop` retires its abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`. Without `--clean`, an unreadable `daemon.json` fails with `daemon-record-unreadable`.
+To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon()` before creating the client. To own the daemon in your process instead, use `startAgentDevice()` as shown below. CLI and MCP commands continue to ensure the local daemon when needed.
 
-A `'managed'` client reuses a matching embedded runtime. Takeover, drain, and timeout recovery refuse a live embedded or unrecognized owner without a signal. A provably exited owner is retired so you can reuse the state directory.
-
-| Mode | What the client does with the daemon |
-| --- | --- |
-| `'managed'` (default) | Starts a missing daemon, replaces one that does not match the client, and retires an unresponsive one after a timeout. |
-| `'attach'` | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout. |
-
-`'managed'` stays the default until 0.22. Use `'attach'` when your code, or another process, owns the daemon, and call `ensureDaemon()` to start or replace it deliberately:
+Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
@@ -112,7 +105,7 @@ await ensureDaemon({
   stateDir,
   onStart: (reason, previous) => console.log(`started a daemon: ${reason}`, previous),
 });
-const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
+const client = createAgentDeviceClient({ stateDir });
 ```
 
 `ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. A daemon that accepted the quiesce request is never signaled while it drains: the call waits up to 60 s for it to exit and clear its registration. One still running after that fails repeated liveness probes and is force-retired when its process is provably a daemon. A daemon that still answers, or whose process cannot be proven to be a daemon, fails the call with `daemon-drain-timeout`; a force retirement that cannot be confirmed fails it with `daemon_retirement_unconfirmed`. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing, or one that accepted the request to leave and was force-retired after outlasting its drain.
@@ -129,7 +122,7 @@ These failures carry a typed `error.details.reason`:
 | `daemon-owner-unrecognized` | The record on `stateDir` states an owner this version cannot read, so this client replaced nothing and signaled nothing. Update agent-device if the record comes from a newer build. Otherwise check what owns that process: a host that started it closes it with its own close, and otherwise remove `daemon.json` once that process is gone. |
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 
-`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
+`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` connects to the remote daemon and does not start or stop a local daemon.
 
 ## Running the daemon inside your process
 

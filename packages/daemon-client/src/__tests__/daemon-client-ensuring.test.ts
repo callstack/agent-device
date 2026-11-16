@@ -31,8 +31,9 @@ import { createEnsuredDaemonTransport, type sendToDaemon } from '../index.ts';
 import * as ensureModule from '../daemon-client-ensure.ts';
 
 // The CLI and MCP reach the daemon through `withEnsuredDaemon`. The transport underneath is a
-// recorder, so what these tests read is the lifecycle each request was handed and what ensuring
-// did to the state directory before it.
+// recorder, so what these tests read is the context each request was handed — which ensuring passes
+// through unchanged, since every request attaches — and what ensuring did to the state directory
+// before it.
 
 const spawn = vi.mocked(runCmdDetachedMonitored);
 
@@ -44,9 +45,13 @@ afterEach(async () => {
 });
 
 function recordingTransport() {
-  const sent: Array<{ command: string; lifecycle: string | undefined }> = [];
+  const sent: Array<{
+    command: string;
+    /** The exact context object the caller passed, proving ensuring hands it over unchanged. */
+    context: unknown;
+  }> = [];
   const transport: typeof sendToDaemon = async (req, context) => {
-    sent.push({ command: req.command, lifecycle: context?.daemonLifecycle });
+    sent.push({ command: req.command, context });
     return { ok: true, data: {} };
   };
   return { sent, transport };
@@ -74,8 +79,8 @@ test('the first request ensures a missing daemon once and every request attaches
 
     assert.equal(spawn.mock.calls.length, 1);
     assert.deepEqual(sent, [
-      { command: 'devices', lifecycle: 'attach' },
-      { command: 'snapshot', lifecycle: 'attach' },
+      { command: 'devices', context: undefined },
+      { command: 'snapshot', context: undefined },
     ]);
   } finally {
     await closeLoopbackServer(fresh.server);
@@ -108,7 +113,7 @@ test('an idle incompatible daemon is replaced, and the replacement is reported',
     assert.deepEqual(replaced, [
       { stateDir: paths.baseDir, pid: child.pid, reason: 'incompatible' },
     ]);
-    assert.equal(sent[0]?.lifecycle, 'attach');
+    assert.deepEqual(sent[0]?.context, undefined, 'ensuring hands the caller context through');
     assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(stale.server);
@@ -146,7 +151,7 @@ test('a busy incompatible daemon fails the request before it is sent and keeps r
   }
 });
 
-test('a remote connection passes through without ensuring or choosing a lifecycle', async () => {
+test('a remote connection passes through untouched by ensuring', async () => {
   const { stateDir } = stateDirAndPaths();
   const { sent, transport } = recordingTransport();
   const ensuring = withEnsuredDaemon(transport);
@@ -156,8 +161,8 @@ test('a remote connection passes through without ensuring or choosing a lifecycl
   await ensuring(request('snapshot', { stateDir }));
 
   assert.deepEqual(sent, [
-    { command: 'devices', lifecycle: undefined },
-    { command: 'snapshot', lifecycle: undefined },
+    { command: 'devices', context: undefined },
+    { command: 'snapshot', context: undefined },
   ]);
   assert.equal(spawn.mock.calls.length, 0);
 });
@@ -172,11 +177,11 @@ test('a one-shot replay on its own private daemon passes through, an explicit st
 
   try {
     await ensuring(request('replay', { daemonTransport: 'http' }));
-    assert.deepEqual(sent, [{ command: 'replay', lifecycle: undefined }]);
+    assert.deepEqual(sent, [{ command: 'replay', context: undefined }]);
     assert.equal(spawn.mock.calls.length, 0);
 
     await ensuring(request('replay', { stateDir, daemonTransport: 'http' }));
-    assert.equal(sent[1]?.lifecycle, 'attach');
+    assert.equal(sent[1]?.command, 'replay');
     assert.equal(spawn.mock.calls.length, 1);
   } finally {
     await closeLoopbackServer(fresh.server);
@@ -270,7 +275,7 @@ test('a failed ensure is retried by the next request instead of being remembered
     launchesFreshDaemonAt(spawn, paths, fresh.port);
     await ensuring(request('devices', flags));
 
-    assert.deepEqual(sent, [{ command: 'devices', lifecycle: 'attach' }]);
+    assert.deepEqual(sent, [{ command: 'devices', context: undefined }]);
   } finally {
     await closeLoopbackServer(stale.server);
     await closeLoopbackServer(fresh.server);
@@ -323,10 +328,15 @@ test('a request canceled before it starts does not start a daemon', async (t) =>
   const canceled = AbortSignal.abort();
 
   try {
-    await ensuring(request('devices', { stateDir, daemonTransport: 'http' }), { signal: canceled });
+    const signal = { signal: canceled } as const;
+    await ensuring(request('devices', { stateDir, daemonTransport: 'http' }), signal);
 
-    assert.equal(spawn.mock.calls.length, 0);
-    assert.deepEqual(sent, [{ command: 'devices', lifecycle: 'attach' }]);
+    assert.equal(spawn.mock.calls.length, 0, 'a caller that has given up starts nothing');
+    assert.deepEqual(
+      sent,
+      [{ command: 'devices', context: signal }],
+      'the canceled request goes through with its own context, and ensuring adds nothing',
+    );
   } finally {
     await closeLoopbackServer(fresh.server);
   }

@@ -46,7 +46,7 @@ export function withEnsuredDaemon(
     const stateDir = resolveDaemonPaths(target.stateDir, { env: host.env, cwd: host.cwd }).baseDir;
     // A caller that has already given up starts nothing: attaching refuses before any connection.
     if (context?.signal?.aborted) {
-      return await transport(req, { ...context, daemonLifecycle: 'attach' });
+      return await transport(req, context);
     }
     // A finished ensure is kept for the rest of this transport's life. A rejected one is dropped so
     // the next request retries, and one whose daemon has since gone is dropped by the attach below.
@@ -64,7 +64,7 @@ export function withEnsuredDaemon(
       return { relied: pending };
     };
     const { relied } = await ensure();
-    const attach = async () => await transport(req, { ...context, daemonLifecycle: 'attach' });
+    const attach = async () => await transport(req, context);
     try {
       return await attach();
     } catch (error) {

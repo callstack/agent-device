@@ -32,12 +32,25 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { sendToDaemon as attach, createEnsuredDaemonTransport } from '../index.ts';
+import { ensureStartedDaemon, resolveClientSettings } from '../daemon-client-lifecycle.ts';
+import { captureHostEnvironment, readProcessStartTime } from '@agent-device/host-kit/process';
+
+const ensuredTransport = createEnsuredDaemonTransport();
+async function sendToDaemon(req: Parameters<typeof attach>[0]) {
+  if (req.command === 'replay' || req.command === 'test') return await ensuredTransport(req);
+  if (req.command === 'snapshot') return await attach(req);
+  const host = captureHostEnvironment(process);
+  await ensureStartedDaemon({
+    ...resolveClientSettings(req, undefined, host),
+    retireIncompatibleContender: true,
+  });
+  return await attach(req);
+}
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { tryAcquireProcessLock, inspectProcessLock } from '@agent-device/host-kit/file';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
-import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { readVersion } from '@agent-device/host-kit/version';
 
@@ -407,7 +420,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
     assert.equal(mockRunCmdDetached.mock.calls.length, 1);
     assert.equal(freshLock.state, 'held');
     if (freshLock.state === 'held') assert.notEqual(freshLock.owner.startTime, staleStartTime);
-    assert.deepEqual(daemon.seenPaths, ['GET /health', 'POST /rpc']);
+    assert.deepEqual(daemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
   } finally {
     if (stale.status === 'acquired') await stale.acquisition.release();
     await closeLoopbackServer(daemon.server);
@@ -465,7 +478,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
       assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
       assert.equal(mockRunCmdDetached.mock.calls.length, 1);
       assert.deepEqual(staleDaemon.seenPaths, []);
-      assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
+      assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
       const staleVersion = fixture.version ?? readVersion();
       assert.equal(
         stderrCapture.read(),
@@ -546,7 +559,7 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
 
     assert.deepEqual(response, { ok: true, data: { via: 'fresh-http-daemon' } });
     assert.equal(mockRunCmdDetached.mock.calls.length, 1);
-    assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
+    assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
     assert.equal(
       stderrCapture.read(),
       `Replacing daemon (pid 999999, v${readVersion()}) in ${paths.baseDir}: unreachable\n`,
@@ -573,7 +586,7 @@ test('sendToDaemon falls back from failed socket transport to HTTP using daemon 
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await attach({
       session: 'default',
       command: 'transport-fallback-smoke',
       positionals: [],
@@ -609,7 +622,7 @@ test('sendToDaemon does not replay over HTTP after the socket request is written
   try {
     let thrown: unknown;
     try {
-      await sendToDaemon({
+      await attach({
         session: 'default',
         command: 'open',
         positionals: ['Demo'],

@@ -47,9 +47,10 @@ type SendRequestOptions = {
    */
   signal?: AbortSignal;
   /**
-   * What a timed-out request may do to the daemon. `retire-unresponsive`, the default, lets the
-   * liveness probe retire a daemon that answers nothing; `none` leaves every daemon alone, which is
-   * how an attach client and the quiesce request itself time out.
+   * What a timed-out request may do to the daemon. `none`, the default, leaves every daemon alone,
+   * which is how an attach client, a lease beat and the quiesce request itself time out.
+   * `retire-unresponsive` lets the liveness probe retire a daemon that answers nothing, and only the
+   * one-shot `replay` or `test` owner of a private state directory asks for it.
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
 };
@@ -420,7 +421,7 @@ async function recoverFromTimeout(
   return await handleRequestTimeout({
     info,
     statePaths,
-    retireUnresponsive: options.timeoutRecovery !== 'none',
+    retireUnresponsive: options.timeoutRecovery === 'retire-unresponsive',
     requestSent: error.details.daemonRequestSent !== false,
     ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
   });
