@@ -1,3 +1,5 @@
+import type { DiagnosticEventInput } from './host-diagnostics.ts';
+import type { SnapshotClickabilityEvidence } from './snapshot-private-evidence.ts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -230,6 +232,11 @@ export type ReplayBackendDeviceBinding = Readonly<{
  * session policy is a member; stateless workspace packages stay direct imports of the plugin.
  */
 export type ReplayBackendHost = Readonly<{
+  emitDiagnostic(event: DiagnosticEventInput): void;
+  /** Reads capture-local facts from the host's private evidence owner, without wire fields. */
+  readSnapshotClickabilityEvidence(owner: object): SnapshotClickabilityEvidence | undefined;
+  /** Refuses capture-derived input when the host has no established screen origin. */
+  assertSnapshotScreenOrigin(owner: object, label: string): Promise<void>;
   /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
   appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
   /** The `AD_*` variables every replay run is seeded with. */
@@ -269,5 +276,5 @@ export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
 }>;
 
 export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
-  create(host: ReplayBackendHost): ReplayBackend<TId>;
+  create(host: ReplayBackendHost): ReplayBackend<TId> | Promise<ReplayBackend<TId>>;
 }>;

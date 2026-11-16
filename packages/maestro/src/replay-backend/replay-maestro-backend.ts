@@ -44,6 +44,6 @@ function createMaestroReplayBackend(host: ReplayBackendHost): ReplayBackend<'mae
   };
 }
 
-export const maestroReplayBackendPlugin: ReplayBackendPlugin<'maestro'> = {
+export const maestroReplayBackendPlugin = {
   create: createMaestroReplayBackend,
-};
+} satisfies ReplayBackendPlugin<'maestro'>;
