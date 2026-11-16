@@ -9,6 +9,7 @@ import {
   stringSchema,
 } from './command-input.ts';
 import { DIFF_COMMAND_OUTPUT_SCHEMAS } from './capture/diff.ts';
+import { AUDIT_COMMAND_OUTPUT_SCHEMAS } from './capture/snapshot.ts';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from './capture/wait.ts';
 import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from './management/prepare.ts';
 import { DOCTOR_COMMAND_OUTPUT_SCHEMAS } from './management/doctor.ts';
@@ -190,6 +191,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // command surface and projects it here. This spread stays last: a hand-written entry for
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
+  ...AUDIT_COMMAND_OUTPUT_SCHEMAS,
   ...DIFF_COMMAND_OUTPUT_SCHEMAS,
   ...WAIT_COMMAND_OUTPUT_SCHEMAS,
   ...PREPARE_COMMAND_OUTPUT_SCHEMAS,

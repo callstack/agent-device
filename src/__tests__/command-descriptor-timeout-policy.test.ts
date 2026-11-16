@@ -80,6 +80,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
   assert.deepEqual(preserving.sort(), [
+    'audit',
     'back',
     'click',
     'fill',

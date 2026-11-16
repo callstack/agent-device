@@ -26,7 +26,7 @@ A provider column answers for that provider in its default configuration. Provid
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Accessibility snapshot and snapshot diff](/docs/snapshots) | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Accessibility snapshot, snapshot diff, and audit](/docs/snapshots) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Refs, selectors, element lookup, and attribute reads](/docs/selectors) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -35,7 +35,7 @@ A provider column answers for that provider in its default configuration. Provid
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
-| [Accessibility snapshot and snapshot diff](/docs/snapshots) | Yes | Yes | Yes | Yes | No |
+| [Accessibility snapshot, snapshot diff, and audit](/docs/snapshots) | Yes | Yes | Yes | Yes | No |
 | [Refs, selectors, element lookup, and attribute reads](/docs/selectors) | Yes | Yes | Yes | Yes | No |
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes | No |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | No |
@@ -44,7 +44,7 @@ A provider column answers for that provider in its default configuration. Provid
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
-| [Accessibility snapshot and snapshot diff](/docs/snapshots) | Yes | Yes | Yes | Yes |
+| [Accessibility snapshot, snapshot diff, and audit](/docs/snapshots) | Yes | Yes | Yes | Yes |
 | [Refs, selectors, element lookup, and attribute reads](/docs/selectors) | Yes | Yes | Yes | Yes |
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes |
@@ -53,14 +53,14 @@ A provider column answers for that provider in its default configuration. Provid
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Accessibility snapshot and snapshot diff](/docs/snapshots) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Accessibility snapshot, snapshot diff, and audit](/docs/snapshots) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Refs, selectors, element lookup, and attribute reads](/docs/selectors) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
 What a **Yes** does not claim:
 
-- **Accessibility snapshot and snapshot diff**: A capture returns a tree only when the app or desktop exposes an accessibility tree.
+- **Accessibility snapshot, snapshot diff, and audit**: A capture returns a tree only when the app or desktop exposes an accessibility tree.
 
 ## Interact with the app
 

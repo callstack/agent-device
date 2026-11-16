@@ -148,6 +148,8 @@ export type CaptureDiffOptions = DeviceCommandBaseOptions &
     out?: string;
   };
 
+export type CaptureAuditOptions = DeviceCommandBaseOptions;
+
 export type SelectorSnapshotCommandOptions = Pick<
   CaptureSnapshotOptions,
   'depth' | 'scope' | 'raw'

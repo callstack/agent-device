@@ -3,10 +3,12 @@
 // composition root assigns `createCommandSurfaceAgentDevice` to this type, so the compiler
 // checks every signature against the implementation on each build.
 
+import type { DeviceTarget } from '@agent-device/kernel/device';
 import type { SessionSurface } from './session-surface.ts';
 import type { ArtifactDescriptor, FileOutputRef } from './artifact-adapter.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ClickButton } from './click-button.ts';
+import type { AuditSnapshotCommandResult } from './audit.ts';
 import type { DiffSnapshotCommandResult } from './diff.ts';
 import type { PostGestureOutcome } from './snapshot-model.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -62,6 +64,9 @@ export type DaemonSelectorSnapshotOptions = Readonly<{
 
 /** The options of the daemon's `snapshot` / `diff snapshot` calls. */
 export type DaemonSnapshotOptions = CommandContext & SnapshotCommandOptionFields;
+
+/** The options of the daemon's `audit` call: one full-screen capture, no snapshot scoping. */
+export type DaemonAuditOptions = CommandContext & Readonly<{ target?: DeviceTarget }>;
 
 /** What the daemon's `screenshot` route and its two observation paths receive. */
 export type DaemonScreenshotResult = Readonly<{
@@ -317,6 +322,7 @@ export type DaemonCommandSurfaceCapture = Readonly<{
   screenshot: (options: DaemonScreenshotCommandOptions) => Promise<DaemonScreenshotResult>;
   snapshot: (options: DaemonSnapshotOptions) => Promise<DaemonSnapshotResult>;
   diffSnapshot: (options: DaemonSnapshotOptions) => Promise<DiffSnapshotCommandResult>;
+  auditSnapshot: (options: DaemonAuditOptions) => Promise<AuditSnapshotCommandResult>;
 }>;
 
 /** The four selector reads the daemon's selector and wait routes serve. Function-typed

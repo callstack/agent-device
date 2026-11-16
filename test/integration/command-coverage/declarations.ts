@@ -13,6 +13,7 @@ import {
 import {
   ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_AUDIO_CONTRACT_EVIDENCE,
+  ANDROID_AUDIT_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HARDWARE_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
@@ -747,6 +748,28 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.commandEvidenceLive(
       'the command-evidence lane observes a non-empty calculator snapshot mutation',
+    ),
+  },
+  [C.audit]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_AUDIT_CONTRACT_EVIDENCE,
+      'audit converts captured pixels to dp with the captured display density',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'test/integration/provider-scenarios/ios-audit.test.ts',
+      'Provider-backed integration audit publishes pinned finding refs and keeps stale plain refs refused',
+      'audit publishes pinned finding refs the next press accepts and keeps stale plain refs refused',
+    ),
+    macos: macos.gap('No macOS audit evidence exists yet'),
+    tvos: tvos.gap('No tvOS audit evidence exists yet'),
+    web: web.contract(
+      'packages/capture-kit/src/snapshot/__tests__/snapshot-audit.test.ts',
+      'audits web ARIA roles for names and coverage but not size',
+      'audit reads web ARIA roles for names and coverage and reports a size limitation',
+    ),
+    linux: linux.accepted(
+      'No Linux-specific audit evidence exists',
+      'Linux rects carry no point or dp unit, so audit would check only names and coverage there, and no lane observes Linux audit findings.',
     ),
   },
   [C.wait]: {

@@ -80,8 +80,8 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
     rows: [
       {
         id: 'snapshot-tree',
-        label: 'Accessibility snapshot and snapshot diff',
-        commands: ['snapshot', 'diff'],
+        label: 'Accessibility snapshot, snapshot diff, and audit',
+        commands: ['snapshot', 'diff', 'audit'],
         link: docs('snapshots'),
         advertises: ['captureSnapshot'],
         note: 'A capture returns a tree only when the app or desktop exposes an accessibility tree.',

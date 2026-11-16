@@ -3,13 +3,14 @@ import { alertCommandFacet } from './alert.ts';
 import { diffCommandFacet } from './diff.ts';
 import { screenshotCommandFacet } from './screenshot.ts';
 import { settingsCommandFacet } from './settings.ts';
-import { snapshotCommandFacet } from './snapshot.ts';
+import { auditCommandFacet, snapshotCommandFacet } from './snapshot.ts';
 import { waitCommandFacet } from './wait.ts';
 
 const captureCommandFacets = [
   snapshotCommandFacet,
   screenshotCommandFacet,
   diffCommandFacet,
+  auditCommandFacet,
   waitCommandFacet,
   alertCommandFacet,
   settingsCommandFacet,

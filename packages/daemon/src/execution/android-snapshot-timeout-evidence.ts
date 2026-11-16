@@ -36,13 +36,13 @@ import {
 export async function maybeBuildAndroidSnapshotTimeoutFailure(
   params: {
     error: unknown;
-    command: 'snapshot' | 'diff';
+    command: 'snapshot' | 'diff' | 'audit';
     logPath: string;
     session: SessionState | undefined;
     device: SessionState['device'];
   } & ScreenshotRuntimeBindings,
 ): Promise<Extract<DaemonResponse, { ok: false }> | undefined> {
-  if (params.command !== 'snapshot') return undefined;
+  if (params.command === 'diff') return undefined;
   if (params.device.platform !== 'android') return undefined;
 
   const normalized = normalizeError(params.error);

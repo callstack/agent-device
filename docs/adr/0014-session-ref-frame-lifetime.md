@@ -158,6 +158,7 @@ These outputs are partial external publications:
 - Snapshot diffs.
 - Digests that omit the namespace.
 - `find`.
+- `audit` finding refs.
 - Settled diffs/tails.
 - Replay divergence screens.
 
@@ -400,7 +401,7 @@ Every other one-target constraint in this decision stays unchanged.
 
 ### Partial issuance and MCP
 
-`find`, settled diffs/tails, and replay divergence screens publish only the refs that they actually return.
+`find`, `audit`, settled diffs/tails, and replay divergence screens publish only the refs that they actually return.
 They must not call a whole-frame "refs issued" marker.
 
 Read-only `find` may partially publish its returned ref.

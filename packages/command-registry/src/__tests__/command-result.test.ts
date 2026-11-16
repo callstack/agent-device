@@ -1,4 +1,5 @@
 import type {
+  AuditSnapshotCommandResult,
   DiffSnapshotCommandResult,
   ViewportCommandResult,
 } from '@agent-device/contracts/capture';
@@ -70,6 +71,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     TriggerAppEventCommandResult
   > = true;
   const doctor: Equal<CommandResult<'doctor'>, DoctorCommandResult> = true;
+  const audit: Equal<CommandResult<'audit'>, AuditSnapshotCommandResult> = true;
   const diff: Equal<CommandResult<'diff'>, DiffSnapshotCommandResult> = true;
   const replay: Equal<CommandResult<'replay'>, ReplayCommandResult> = true;
   const replayTest: Equal<CommandResult<'test'>, ReplaySuiteResult> = true;
@@ -98,6 +100,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     push,
     triggerAppEvent,
     doctor,
+    audit,
     diff,
     replay,
     replayTest,
@@ -143,6 +146,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'push'
     | 'trigger-app-event'
     | 'doctor'
+    | 'audit'
     | 'diff'
     | 'replay'
     | 'test'

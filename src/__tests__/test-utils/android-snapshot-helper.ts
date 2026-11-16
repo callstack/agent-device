@@ -25,7 +25,10 @@ export const ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT: AndroidSnapshotHelperArti
   },
 };
 
-export function androidSnapshotHelperOutput(xml: string): string {
+export function androidSnapshotHelperOutput(
+  xml: string,
+  options: { pixelDensity?: number } = {},
+): string {
   return [
     'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_STATUS: helperApiVersion=1',
@@ -37,6 +40,9 @@ export function androidSnapshotHelperOutput(xml: string): string {
     'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
     'INSTRUMENTATION_RESULT: ok=true',
+    ...(options.pixelDensity === undefined
+      ? []
+      : [`INSTRUMENTATION_RESULT: pixelDensity=${options.pixelDensity}`]),
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
 }

@@ -25,6 +25,11 @@ const fakeCommandSurface: DaemonCommandSurface = {
       summary: { additions: 0, removals: 0, unchanged: 0 },
       lines: [],
     })),
+    auditSnapshot: vi.fn(async () => ({
+      findings: [],
+      checks: { snapshot: 'complete' as const, platform: 'not-requested' as const },
+      limitations: [],
+    })),
   },
   selectors: {
     find: vi.fn(async () => {

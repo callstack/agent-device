@@ -29,6 +29,7 @@ import type {
   AudioOptions,
   BackCommandOptions,
   BatchRunOptions,
+  CaptureAuditOptions,
   CaptureDiffOptions,
   CaptureScreenshotOptions,
   CaptureScreenshotResult,
@@ -203,6 +204,7 @@ export type AgentDeviceClient = {
     snapshot: (options?: CaptureSnapshotOptions) => Promise<CaptureSnapshotResult>;
     screenshot: (options?: CaptureScreenshotOptions) => Promise<CaptureScreenshotResult>;
     diff: (options: CaptureDiffOptions) => Promise<CommandResult<'diff'>>;
+    audit: (options?: CaptureAuditOptions) => Promise<CommandResult<'audit'>>;
   };
   interactions: {
     gesture: (options: GestureOptions) => Promise<CommandRequestResult>;

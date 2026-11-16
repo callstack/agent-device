@@ -538,6 +538,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/screenshot-diff-regions',
     '@agent-device/capture-kit/screenshot-overlay',
     '@agent-device/capture-kit/scroll-edge-state',
+    '@agent-device/capture-kit/snapshot-audit',
     '@agent-device/capture-kit/snapshot-baseline',
     '@agent-device/capture-kit/snapshot-chrome',
     '@agent-device/capture-kit/snapshot-chrome-fixtures',

@@ -164,7 +164,7 @@ function canUseShortAndroidSnapshotIdleWait(session: SessionState | undefined): 
 /** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */
 export async function resolveBoundSnapshotCaptureRuntime(
   params: SnapshotRuntimeRouteParams,
-  command: 'snapshot' | 'diff',
+  command: 'snapshot' | 'diff' | 'audit',
 ): Promise<ResolvedSnapshotCaptureRuntime> {
   const { req, sessionName, sessionStore } = params;
   const { ref, session, device } = await resolveSessionDevice(

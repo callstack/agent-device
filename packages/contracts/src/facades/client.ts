@@ -19,6 +19,7 @@ export type {
   MaterializationReleaseResult,
 } from '../client-app.ts';
 export type {
+  CaptureAuditOptions,
   CaptureDiffOptions,
   CaptureScreenshotOptions,
   CaptureScreenshotResult,
