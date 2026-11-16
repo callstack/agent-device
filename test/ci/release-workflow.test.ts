@@ -55,7 +55,7 @@ test('the publisher authenticates through OIDC alone', () => {
 
 test('the release build uses a GitHub-hosted runner and restores no dependency cache', () => {
   expect(workflow.jobs.build?.['runs-on']).toBe('macos-26');
-  expect(workflow.jobs.build).not.toHaveProperty('cache-mode');
+  expect(workflow.jobs.build?.['cache-mode']).toBe('none');
   const setup = workflow.jobs.build?.steps?.find(
     (step) => step.uses === './.github/actions/setup-node-pnpm',
   );
