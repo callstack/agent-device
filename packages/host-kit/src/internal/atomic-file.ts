@@ -57,7 +57,6 @@ export function publishScriptFileSync(options: {
   destination: string;
   contents: string;
   publish?: AtomicPublishMode;
-  parentIdentity?: string;
 }): void {
   // The directory the entry is created in is the walk's ANSWER, asked for inside this call and twice:
   // never `path.dirname` of the spelled destination, because a `..` or a link in the destination sends the
@@ -66,7 +65,7 @@ export function publishScriptFileSync(options: {
   let temporaryPath: string | undefined;
   try {
     const judged = assertPrivateScriptDestination(options.destination);
-    const expected = options.parentIdentity ?? publishDirectoryIdentity(judged);
+    const expected = publishDirectoryIdentity(judged);
     temporaryPath = createAtomicPublishTempPath(judged, options.destination);
     fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode: SCRIPT_FILE_MODE });
     const stillJudged = assertPrivateScriptDestination(options.destination, expected);
@@ -212,10 +211,12 @@ export function lstatIfPresent(pathname: string): fs.Stats | undefined {
 /**
  * Identifies a temp path produced for a particular destination.
  *
- * The temp file is a sibling of the destination AS THE FILESYSTEM RESOLVES IT, because that is where the
- * entry is created. A destination spelled through a symbolic link (`/var` on macOS) therefore has its temp
- * file one directory over in TEXT, so a caller that compared the two spellings as strings would call every
- * one of those temp files somebody else's.
+ * The temp file is a sibling of the directory the entry is CREATED in, which is not the directory the
+ * destination's spelling names: `home/work/../y` with `work` a link names `home/y` as text, while the
+ * entry lands beside the link's target. The two directories are therefore asked of the filesystem and
+ * compared as device and inode. `lstat` or `realpathSync` would apply a spelled `..` textually and answer
+ * the wrong one, which rejects the real temp sibling and accepts a look-alike planted beside the
+ * directory the text names.
  */
 export function isAtomicPublishTemporaryPath(value: unknown, destination: string): boolean {
   if (typeof value !== 'string') return false;
@@ -224,13 +225,22 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
   return sameDirectory(path.dirname(value), path.dirname(destination));
 }
 
-/** Whether two directory spellings name one directory, once the filesystem resolves them. */
+/** Whether two directory spellings name one directory, by device and inode rather than by path text. */
 function sameDirectory(left: string, right: string): boolean {
   if (left === right) return true;
+  const here = statOrNull(left);
+  const there = statOrNull(right);
+  return (
+    here !== undefined && there !== undefined && here.dev === there.dev && here.ino === there.ino
+  );
+}
+
+/** `stat` where any failure is "cannot tell": a temp file nobody can point at is treated as foreign. */
+function statOrNull(pathname: string): fs.Stats | undefined {
   try {
-    return fs.realpathSync(left) === fs.realpathSync(right);
+    return fs.statSync(pathname);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -302,15 +312,24 @@ export function assertPrivateScriptDestination(
 }
 
 /**
- * The parent of `destination`, cut at its last separator and never normalized.
+ * The parent of `destination` as a chain of components from the root, never normalized.
  *
  * `path.resolve` folds a `..` away, which is the one simplification this may not make: the kernel does
  * not make it either, so `.../work/../x` lands its entry beside the target of the link named `work`. The
- * spelled components are what the walk resolves. A destination with no directory in it, `journey.ad`,
- * has the working directory as its parent, which `path.dirname` already answers as `.`.
+ * spelled components are what the walk resolves.
+ *
+ * A RELATIVE destination is resolved against the working directory, but it is not made absolute by
+ * joining the two: the working directory's OWN components are queued first and the destination's follow
+ * them raw. Standing the walk in the cwd instead would judge the cwd and nothing above it, and a caller
+ * who cannot write `/shared` can still swap the `/shared/mine` the cwd names, which is the entry this
+ * rule exists to refuse. `path.resolve('')` answers the cwd the way the kernel sees it.
  */
-function spelledParent(destination: string): string {
-  return path.dirname(destination);
+function absoluteParent(destination: string): string {
+  const parent = path.dirname(destination);
+  if (path.isAbsolute(parent)) return parent;
+  // `path.resolve('')` is the cwd; `path.dirname` of it is its parent, and the components of both, in
+  // order, are what the walk has to walk. `path.resolve(destination)` must NOT be used: it folds.
+  return `${path.resolve('')}/${parent === '.' ? '' : parent}`;
 }
 
 /**
@@ -376,11 +395,12 @@ type WalkOutcome = Readonly<{
  *   {@link MAX_SCRIPT_PATH_LINK_HOPS}, and crossing it is refused rather than trusted.
  * - A component that is neither a directory nor a link cannot carry a publish, and is refused.
  *
- * A relative destination starts from the process's resolved working directory: the caller already stands
- * there, and the walk cannot step above it.
+ * A relative destination is walked from the root too, over the resolved working directory's components
+ * first: the caller stands in the working directory, but that directory is still a name in its parent,
+ * and the parent is judged like any other.
  */
 function walkParent(destination: string, trust: ScriptDestinationTrust): WalkOutcome {
-  let step = startWalk(spelledParent(destination), trust);
+  let step = startWalk(absoluteParent(destination), trust);
   // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
   for (;;) {
     if (step.kind === 'reject') {
@@ -404,13 +424,10 @@ function refusalAt(
   return scriptAncestryFailure(destination, step.path, step.exposure);
 }
 
-/** The first state: `/` for an absolute spelling, the resolved working directory for a relative one. */
+/** The first state: the root, with every component of the parent still to resolve. */
 function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
   const queue = pathComponents(parent);
-  // The caller already stands in the working directory, so it is where a relative walk starts rather
-  // than a step it has to earn. `path.resolve('')` answers it the way the kernel sees it.
   const ground: WalkGround = { stats: new Map(), judged: new Set() };
-  if (!path.isAbsolute(parent)) return standIn(path.resolve(''), queue, trust, 0, ground);
   return standIn('/', queue, trust, 0, ground);
 }
 

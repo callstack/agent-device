@@ -113,12 +113,8 @@ function directoryWith(directory: string, mode: number, gid = currentGid): strin
   return directory;
 }
 
-function publish(destination: string, parentIdentity?: string): void {
-  publishScriptFileSync({
-    destination,
-    contents: 'context\n',
-    ...(parentIdentity === undefined ? {} : { parentIdentity }),
-  });
+function publish(destination: string): void {
+  publishScriptFileSync({ destination, contents: 'context\n' });
 }
 
 function expectUntrusted(run: () => void, exposure: string, ancestor: string): void {
@@ -423,17 +419,19 @@ skipOnWindows(
 
 skipOnWindows('reads each directory it stands in once, however many routes lead back to it', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
-  // `a` and `b` are two aliases of the same directory, and the spelling passes through both with a `..`
-  // between them, so the walk returns over ground it already crossed — the scratch root three times here,
-  // and the alias's target once for each route. A directory's judgment does not depend on the route taken
-  // to it, so each path is read once and each physical directory is judged once.
+  // `a` and `b` are two names for ONE directory, and the spelling enters through `a`, steps back with `..`
+  // and enters again through `b`, so the walk crosses `sub` twice and finishes below it. Where it ends is
+  // the assertion that both routes were really taken: a walk that gave up on the second name would answer
+  // `home` here instead, and the reads would not include `sub` twice as a path. A directory's judgment
+  // does not depend on the route taken to it, so each path is read once per walk and each physical
+  // directory is judged once.
   const directory = root();
   const home = directoryWith(path.join(directory, 'home'), 0o700);
-  const target = directoryWith(path.join(directory, 'target'), 0o700);
-  const sub = path.join(target, 'sub');
-  fs.mkdirSync(sub);
-  fs.symlinkSync(target, path.join(home, 'a'));
-  fs.symlinkSync(target, path.join(home, 'b'));
+  const sub = directoryWith(path.join(home, 'sub'), 0o700);
+  const below = path.join(sub, 'below');
+  fs.mkdirSync(below);
+  fs.symlinkSync(sub, path.join(home, 'a'));
+  fs.symlinkSync(sub, path.join(home, 'b'));
   const reads: string[] = [];
   const realStatSync = fs.statSync;
   vi.spyOn(fs, 'statSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
@@ -441,9 +439,13 @@ skipOnWindows('reads each directory it stands in once, however many routes lead 
     return (realStatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
   }) as typeof fs.statSync);
 
-  assertPrivateScriptDestination(`${home}/a/../b/sub/journey.ad`);
+  expect(assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`)).toBe(below);
 
+  // The shared prefix, `home`, `sub` and `below`: no path is read a second time, so neither is the ground
+  // the two aliases share judged a second time.
   expect(new Set(reads).size).toBe(reads.length);
+  expect(reads.filter((read) => read === sub)).toHaveLength(1);
+  expect(reads.filter((read) => read === home)).toHaveLength(1);
 });
 
 skipOnWindows('starts a destination with no directory in it at the working directory', () => {
@@ -456,6 +458,49 @@ skipOnWindows('starts a destination with no directory in it at the working direc
 
   expect(identity).toBeDefined();
   expect(assertPrivateScriptDestination('journey.ad', identity)).toBe(cwd);
+});
+
+skipOnWindows(
+  'refuses a relative destination whose working directory sits in shared ground',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // `cd /shared/mine && publish journey.ad` where `/shared` is 0777 and NOT sticky. The destination names
+    // no directory at all, so the tempting answer is to start the walk in the working directory and judge
+    // it. That judges `mine` and nothing above it, and `mine` is a name in `/shared`: anyone who can add an
+    // entry there can point `mine` at a directory of their own before the rename, which is the swap this
+    // rule exists to refuse. So a relative destination is walked from the root, over the working
+    // directory's own components, and `/shared` is judged like any other ancestor.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+    const previous = path.resolve('');
+    try {
+      process.chdir(mine);
+
+      expectUntrusted(() => assertPrivateScriptDestination('journey.ad'), 'world_writable', shared);
+      expect(fs.readdirSync(mine)).toEqual([]);
+    } finally {
+      process.chdir(previous);
+    }
+  },
+);
+
+skipOnWindows('answers the working directory for a relative destination over a safe chain', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The same shape with every ancestor private: the answer is the ABSOLUTE working directory, which is
+  // what the publisher stages in, and the identity a caller captured for `.` matches it.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const mine = directoryWith(path.join(home, 'mine'), 0o700);
+  const previous = path.resolve('');
+  try {
+    process.chdir(mine);
+    const identity = publishDirectoryIdentity('.');
+
+    expect(assertPrivateScriptDestination('journey.ad', identity)).toBe(mine);
+  } finally {
+    process.chdir(previous);
+  }
 });
 
 skipOnWindows('refuses a relative target that lands in ground others can write', () => {
@@ -865,6 +910,11 @@ skipOnWindows('publishes to a scratch path exactly as the host spelled it', () =
 
 // --- the destination directory swapped out while the file was staged ---
 
+// The identity a caller captures before it stages something is handed back to
+// `assertPrivateScriptDestination`, which is what compares them. The script publisher takes it from the
+// directory the walk judged, so only a caller who captured it EARLIER — the remote client, across a
+// download — passes one from outside. These two are that comparison.
+
 skipOnWindows('refuses a parent replaced by name while the file was staged', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
   const directory = root();
@@ -882,8 +932,11 @@ skipOnWindows('refuses a parent replaced by name while the file was staged', () 
 
   // The refusal names the directory the entry would really have been created in, which is where the link
   // leads. The spelled name is a pointer, not a place.
-  expectUntrustedReplaced(() => publish(destination, parentIdentity), elsewhere);
-  expect(fs.readdirSync(elsewhere)).toEqual([]);
+  expectUntrustedReplaced(
+    () => assertPrivateScriptDestination(destination, parentIdentity),
+    elsewhere,
+  );
+  expect(fs.existsSync(path.join(elsewhere, 'journey.ad'))).toBe(false);
 });
 
 skipOnWindows('re-checks the chain after staging the file, before the entry is created', () => {
@@ -908,12 +961,15 @@ skipOnWindows('re-checks the chain after staging the file, before the entry is c
   expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
-skipOnWindows('publishes into the parent the captured identity still names', () => {
+skipOnWindows('accepts the identity a caller captured for the directory the walk answers', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
-  const staged = path.join(root(), 'work');
+  const directory = root();
+  const staged = path.join(directory, 'work');
   fs.mkdirSync(staged);
+  const destination = path.join(staged, 'journey.ad');
 
-  publish(path.join(staged, 'journey.ad'), publishDirectoryIdentity(staged));
-
-  expect(fs.existsSync(path.join(staged, 'journey.ad'))).toBe(true);
+  expect(assertPrivateScriptDestination(destination, publishDirectoryIdentity(staged))).toBe(
+    staged,
+  );
+  expect(assertPrivateScriptDestination(destination)).toBe(staged);
 });

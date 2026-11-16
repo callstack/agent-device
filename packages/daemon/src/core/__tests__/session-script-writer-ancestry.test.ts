@@ -139,41 +139,52 @@ skipOnWindows('a recording refuses a destination under a world-writable director
 });
 
 skipOnWindows('a recording refuses a destination inside a directory another user owns', () => {
+  // The fixture says WHOSE directory it is, so this is the real question — a second local user's
+  // directory, mode 0755 and readable, judged by a rule that runs as THIS user. Moving the caller's uid
+  // instead would make every directory in the scratch tree foreign and refuse for the wrong reason.
   const directory = root();
   const foreign = path.join(directory, 'foreign');
   fs.mkdirSync(foreign);
   fs.chmodSync(foreign, 0o755);
   const destination = path.join(foreign, 'journey.ad');
-  // The directory is this test user's own, so the rule is run as somebody else: a real second local
-  // user looking at a directory they cannot own but can read.
-  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
+  serveHostOwnership({ [foreign]: FOREIGN_UID });
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'foreign_owned',
+    ancestor: foreign,
+  });
   expect(fs.existsSync(destination)).toBe(false);
 });
 
 skipOnWindows('a recording refuses a directory another user made sticky and owns', () => {
-  const directory = root();
   // `chmod 1777` on a directory of THEIRS: the sticky bit keeps me from clearing their entries, and does
   // nothing to stop them renaming the component my path runs through.
+  const directory = root();
   const team = path.join(directory, 'team');
   fs.mkdirSync(team);
   fs.chmodSync(team, 0o1777);
   const destination = path.join(team, 'journey.ad');
-  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
+  serveHostOwnership({ [team]: FOREIGN_UID });
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'foreign_owned',
+    ancestor: team,
+  });
   expect(fs.readdirSync(team)).toEqual([]);
 });
 
 skipOnWindows('a recording refuses a shared directory another user claimed first', () => {
-  const directory = root();
   // The `mkdir -p <shared>/recordings` shape in a sticky shared directory: whoever creates it owns it,
-  // and the owner can swap it for one of their own whenever they like.
+  // and the owner can swap it for one of their own whenever they like. Only `recordings` is theirs: the
+  // sticky `tmp` above it is this user's, so the refusal has to name the claimed directory and not the
+  // scratch root above it.
+  const directory = root();
   const tmp = path.join(directory, 'tmp');
   fs.mkdirSync(tmp);
   fs.chmodSync(tmp, 0o1777);
@@ -181,11 +192,15 @@ skipOnWindows('a recording refuses a shared directory another user claimed first
   fs.mkdirSync(recordings);
   fs.chmodSync(recordings, 0o755);
   const destination = path.join(recordings, 'journey.ad');
-  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
+  serveHostOwnership({ [recordings]: FOREIGN_UID });
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'foreign_owned',
+    ancestor: recordings,
+  });
   expect(fs.readdirSync(recordings)).toEqual([]);
 });
 
