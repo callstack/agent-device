@@ -223,6 +223,17 @@ const SCOPED_SITES: Record<string, ScopedDrive> = {
     IOS_SIMULATOR,
     () => queryAppleRunnerSelector(IOS_SIMULATOR, { key: 'label', value: 'Go' }, APP, {}),
   ],
+  'ios-simulator.runner-selector-query.hittability-probe': [
+    IOS_SIMULATOR,
+    () =>
+      queryAppleRunnerSelector(
+        IOS_SIMULATOR,
+        { key: 'label', value: 'Go' },
+        APP,
+        {},
+        'hittability',
+      ),
+  ],
   'macos.screenshot-runner.fullscreen': [
     MACOS_DEVICE,
     (outPath) =>

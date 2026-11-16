@@ -9,7 +9,7 @@
  * would replace their evidence with another observation, so those targets bypass admission.
  *
  * A target nested in a larger touch control gets one native hittability read first
- * (`hittable-target-check.ts`): a control the platform reports as not hittable refuses here, since
+ * (`refuseUnhittableTarget` below): a control the platform reports as not hittable refuses here, since
  * a tap at its centre would land on another element.
  */
 import type {
@@ -38,9 +38,18 @@ import {
 } from './moving-target-gate.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
+/**
+ * `allowNonHittableCoordinateFallback` is the Maestro replay policy: replay taps resolved bounds even
+ * when the platform says the element is not hittable, so it keeps the hittability read out.
+ */
+type AdmissionOptions = CommandContext & {
+  target: InteractionTarget;
+  allowNonHittableCoordinateFallback?: boolean;
+};
+
 export async function admitResolvedTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
+  options: AdmissionOptions,
   params: ResolveInteractionTargetParams,
   resolved: ResolvedInteractionTarget,
 ): Promise<ResolvedInteractionTarget> {
@@ -230,7 +239,7 @@ function needsHittabilityRead(resolved: ResolvedElementTarget): boolean {
  */
 async function refuseUnhittableTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext,
+  options: AdmissionOptions,
   resolved: ResolvedElementTarget,
   read: <T>(
     read: (signal: AbortSignal | undefined) => Promise<T>,
@@ -239,6 +248,7 @@ async function refuseUnhittableTarget(
 ): Promise<void> {
   const node = resolved.node;
   const probe = runtime.backend.probeTargetHittability;
+  if (options.allowNonHittableCoordinateFallback === true) return;
   if (!node || !probe || !needsHittabilityRead(resolved)) return;
   const verdict = await read(
     (signal) =>

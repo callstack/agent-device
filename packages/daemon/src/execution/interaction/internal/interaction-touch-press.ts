@@ -224,6 +224,9 @@ function pressRuntimeOptions(
     // longpress or hover, so declaring it on their options would be an
     // unconsumed claim (#1649 review).
     preresolvedTarget: params.preresolvedTarget,
+    ...(flags?.maestro?.allowNonHittableCoordinateFallback === true
+      ? { allowNonHittableCoordinateFallback: true }
+      : {}),
   };
 }
 

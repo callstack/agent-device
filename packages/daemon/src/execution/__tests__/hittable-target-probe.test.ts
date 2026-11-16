@@ -79,6 +79,21 @@ test('probeIosTargetHittability: asks the lean probe with the derived selector a
   });
 });
 
+test('probeIosTargetHittability: hands the admission read signal to the native read', async () => {
+  const signal = new AbortController().signal;
+  const querySelector = vi.fn<ProbeQuery>(async () => ({ found: false }));
+
+  await probeIosTargetHittability({
+    session: makeSession(),
+    node: { label: 'Delete Avocado', rect: TARGET },
+    querySelector,
+    execution: {},
+    signal,
+  });
+
+  assert.equal(querySelector.mock.calls[0]?.[0].signal, signal);
+});
+
 test('probeIosTargetHittability: a node with no label or identifier is unknown without a read', async () => {
   const querySelector = vi.fn<ProbeQuery>();
 

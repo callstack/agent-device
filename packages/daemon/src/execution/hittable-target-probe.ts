@@ -35,14 +35,17 @@ export async function probeIosTargetHittability(params: {
   node: Pick<SnapshotNode, 'identifier' | 'label' | 'rect'>;
   querySelector: QuerySelectorRuntimeOperations['querySelector'];
   execution: SnapshotRuntimeExecution;
+  /** The admission read's own signal: cancellation and the request deadline end the native read. */
+  signal?: AbortSignal;
 }): Promise<TargetHittability> {
-  const { session, node, querySelector, execution } = params;
+  const { session, node, querySelector, execution, signal } = params;
   const selector = deriveDirectIosNodeSelector(node);
   if (!selector) return 'unknown';
   try {
     const { hittability } = await querySelector({
       selector,
       probe: 'hittability',
+      ...(signal ? { signal } : {}),
       ...(session.appBundleId === undefined
         ? {}
         : { options: { appBundleId: session.appBundleId } }),

@@ -59,7 +59,7 @@ test('a wrapper that reports the same rect as its control does not gate the cont
 
 test('a button that only overlaps a larger touch control is not gated', () => {
   const card = node(1, 'Button', 'Lemon Herb Rice', { x: 32, y: 427, width: 308, height: 90 });
-  const save = node(2, 'Button', 'Save Lemon Herb Rice', { x: 348, y: 429, width: 22, height: 22 });
+  const save = node(2, 'Button', 'Save Lemon Herb Rice', { x: 338, y: 429, width: 22, height: 22 });
 
   assert.equal(gateOf([APP, card, save], 'Save Lemon Herb Rice'), false);
 });

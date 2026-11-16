@@ -155,10 +155,11 @@ function readTargetHittabilityProbe(
 ): InteractionRuntimeInput['probeTargetHittability'] {
   const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
   if (!querySelector) return undefined;
-  return async (node) =>
+  return async (node, signal) =>
     await probeIosTargetHittability({
       session,
       node,
+      signal,
       querySelector,
       execution: runtimeExecutionFromContext(
         params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
@@ -242,8 +243,8 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
       : {}),
     ...(params.probeTargetHittability
       ? {
-          probeTargetHittability: async (_context, node) =>
-            await params.probeTargetHittability!(node),
+          probeTargetHittability: async (context, node) =>
+            await params.probeTargetHittability!(node, context.signal),
         }
       : {}),
     ...touchBackendMembers(

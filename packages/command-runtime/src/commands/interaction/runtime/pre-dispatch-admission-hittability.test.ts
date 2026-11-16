@@ -106,6 +106,23 @@ test('a probe that rejects the request cancels before any tap', async () => {
 
   await assert.rejects(
     device.interactions.press(refOf('Delete Avocado'), { signal: controller.signal }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'request_canceled');
+      assert.equal(details?.dispatched, 'no');
+      return true;
+    },
   );
   assert.deepEqual(taps, []);
+});
+
+test('the Maestro replay fallback keeps the hittability read out of a gated press', async () => {
+  const { device, probes, taps } = createPressDevice('notHittable');
+
+  await device.interactions.press(refOf('Delete Avocado'), {
+    allowNonHittableCoordinateFallback: true,
+  });
+
+  assert.deepEqual(probes, []);
+  assert.equal(taps.length, 1);
 });

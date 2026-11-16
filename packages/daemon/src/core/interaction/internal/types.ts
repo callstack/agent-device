@@ -129,6 +129,7 @@ export type InteractionRuntimeInput = {
       import('@agent-device/kernel/snapshot').SnapshotNode,
       'identifier' | 'label' | 'rect'
     >,
+    signal: AbortSignal | undefined,
   ) => Promise<import('@agent-device/contracts/backend').TargetHittability>;
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
