@@ -5,11 +5,12 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   OpenApplicationInput,
   OpenApplicationOutcome,
+  OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { runCmd } from '@agent-device/host-kit/command';
 import { runHarmonyShell } from './hdc.ts';
-import { parseHarmonyForegroundApp } from './app-state.ts';
+import { parseHarmonyForegroundRead } from './app-state.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -262,18 +263,10 @@ const HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS = 500;
 /** One `aa dump -l` read; a read never outlives the poll's own budget remainder. */
 const HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS = 5_000;
 
-/** What one bounded foreground poll decided about a launched bundle. */
-export type HarmonyOpenForegroundRead = Readonly<{
-  confirmed: boolean;
-  foregroundPackage?: string;
-  /** `unreadable` when the budget closed without one parseable foreground read. */
-  probeState?: 'unreadable';
-}>;
-
 /**
  * Reads which HarmonyOS mission holds the foreground until the launched bundle does, the poll
- * budget runs out, or the request is aborted. A read that names no FOREGROUND mission (the
- * lock-screen shape) or fails to run counts as unconfirmed and keeps polling.
+ * budget runs out, or the request is aborted. Answers the contract's verification fact when the
+ * budget closed unconfirmed, and `undefined` when the launched bundle held the foreground.
  */
 export async function pollHarmonyOpenForeground(
   device: DeviceInfo,
@@ -283,7 +276,7 @@ export async function pollHarmonyOpenForeground(
     pollBudgetMs?: number;
     pollIntervalMs?: number;
   }> = {},
-): Promise<HarmonyOpenForegroundRead> {
+): Promise<OpenForegroundVerification | undefined> {
   const pollBudgetMs = options.pollBudgetMs ?? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
   const pollIntervalMs = options.pollIntervalMs ?? HARMONY_OPEN_FOREGROUND_POLL_INTERVAL_MS;
   const deadlineAtMs = Date.now() + pollBudgetMs;
@@ -295,15 +288,20 @@ export async function pollHarmonyOpenForeground(
     // push the poll past its deadline.
     const remainingMs = deadlineAtMs - Date.now();
     if (remainingMs <= 0) break;
-    const foregroundPackageRead = await readHarmonyForegroundMission(
+    const missionRead = await readHarmonyForegroundMission(
       device,
       options.signal,
       Math.min(remainingMs, HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS),
     );
-    if (foregroundPackageRead !== undefined) {
+    if (missionRead.kind === 'foreground') {
       sawReadable = true;
-      if (foregroundPackageRead === bundleId) return { confirmed: true };
-      foregroundPackage = foregroundPackageRead;
+      if (missionRead.package === bundleId) return undefined;
+      foregroundPackage = missionRead.package;
+    } else if (missionRead.kind === 'no-foreground-mission') {
+      // A read that answered with no FOREGROUND mission is the lock-screen
+      // shape: evidence the app stayed behind a system surface, not a probe
+      // that failed to run.
+      sawReadable = true;
     }
     const remainingAfterRead = deadlineAtMs - Date.now();
     if (remainingAfterRead <= 0) break;
@@ -311,28 +309,40 @@ export async function pollHarmonyOpenForeground(
       signal: options.signal,
     });
   }
-  return {
-    confirmed: false,
-    ...(foregroundPackage !== undefined ? { foregroundPackage } : {}),
-    ...(sawReadable ? {} : { probeState: 'unreadable' as const }),
-  };
+  if (!sawReadable) return { state: 'probe-failed' };
+  if (foregroundPackage !== undefined) {
+    return { state: 'other-foreground', foregroundPackage };
+  }
+  return { state: 'no-foreground' };
 }
 
-/** One foreground read; a failed or unreadable read answers undefined instead of throwing. */
+/**
+ * One foreground read. `no-foreground-mission` is the lock-screen shape; `failed` is a read that
+ * threw, timed out, or produced output with no parseable mission list.
+ */
+type HarmonyForegroundMissionRead =
+  | { kind: 'foreground'; package: string }
+  | { kind: 'no-foreground-mission' }
+  | { kind: 'failed' };
+
 async function readHarmonyForegroundMission(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
   timeoutMs: number,
-): Promise<string | undefined> {
+): Promise<HarmonyForegroundMissionRead> {
   try {
     const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
       signal,
       timeoutMs,
     });
-    return parseHarmonyForegroundApp(result.stdout)?.package;
+    const parse = parseHarmonyForegroundRead(result.stdout);
+    if (parse.kind === 'foreground') return { kind: 'foreground', package: parse.package };
+    return parse.kind === 'no-foreground-mission'
+      ? { kind: 'no-foreground-mission' }
+      : { kind: 'failed' };
   } catch (error) {
     if (signal?.aborted) throw error;
-    return undefined;
+    return { kind: 'failed' };
   }
 }
 
@@ -349,11 +359,12 @@ export async function verifyHarmonyOpenForeground(
 ): Promise<OpenApplicationOutcome> {
   const bundleId = outcome.appBundleId ?? input.appBundleId;
   if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
-  const read = await pollHarmonyOpenForeground(device, bundleId, { signal });
-  if (read.confirmed) return outcome;
-  if (read.probeState === 'unreadable') {
-    // A budget with zero parseable reads is a failed probe, not evidence the
-    // app stayed backgrounded, so it carries its own reason.
+  const verification = await pollHarmonyOpenForeground(device, bundleId, { signal });
+  if (verification === undefined) return outcome;
+  if (verification.state === 'probe-failed') {
+    // A budget whose every read failed is a probe that never ran to an
+    // answer, not evidence the app stayed backgrounded, so it carries its
+    // own reason.
     if (input.execution.foreground === true) {
       throw new AppError(
         'COMMAND_FAILED',
@@ -364,7 +375,7 @@ export async function verifyHarmonyOpenForeground(
         },
       );
     }
-    return { ...outcome, timing: { ...outcome.timing, foregroundVerification: read } };
+    return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
   }
   if (input.execution.foreground === true) {
     throw new AppError(
@@ -373,13 +384,13 @@ export async function verifyHarmonyOpenForeground(
       {
         reason: 'open-not-foreground',
         hint: 'Unlock the device screen, then run the open again.',
-        ...(read.foregroundPackage === undefined
-          ? {}
-          : { foregroundPackage: read.foregroundPackage }),
+        ...(verification.state === 'other-foreground'
+          ? { foregroundPackage: verification.foregroundPackage }
+          : {}),
       },
     );
   }
-  return { ...outcome, timing: { ...outcome.timing, foregroundVerification: read } };
+  return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
 }
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {
