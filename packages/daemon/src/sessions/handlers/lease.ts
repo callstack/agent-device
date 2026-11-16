@@ -437,7 +437,9 @@ function assertProviderRuntimeRegistered(
   if (provider === undefined || registeredProviders.includes(provider)) return;
   // A plugin that failed before its provider id was known could have been this provider.
   const failures = failedPlugins.flatMap((plugin) =>
-    plugin.state === 'failed' && (plugin.provider === provider || plugin.provider === undefined)
+    plugin.state === 'failed' &&
+    plugin.backend === undefined &&
+    (plugin.provider === provider || plugin.provider === undefined)
       ? [
           {
             ...(plugin.provider === undefined ? {} : { provider: plugin.provider }),

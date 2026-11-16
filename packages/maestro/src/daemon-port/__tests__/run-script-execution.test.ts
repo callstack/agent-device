@@ -1,9 +1,11 @@
+import { makeRuntimeEnvelope } from './daemon-runtime-port-fixtures.ts';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { executeRunScriptFile } from '../run-script-execution.ts';
+import { executeRunScriptFile as runScriptFile } from '../run-script-execution.ts';
 import { MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES } from '../run-script-http.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import {
@@ -11,6 +13,10 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from './loopback.fixtures.ts';
+
+function executeRunScriptFile(request: Parameters<typeof runScriptFile>[0]) {
+  return runScriptFile(request, createTestHostEnvironment(), makeRuntimeEnvelope().runCommand);
+}
 
 async function withLoopbackServer(
   handler: http.RequestListener,
@@ -236,4 +242,14 @@ test('executeRunScriptFile refuses remote scripts before reading or running host
     read.mockRestore();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('script children resolve paths against the supplied embedded host working directory', async () => {
+  const { root } = writeScript('output.location = "embedded-host";');
+  const output = await runScriptFile(
+    { scriptPath: 'setup.js', env: {}, publicNetworkOnly: false },
+    createTestHostEnvironment({ cwd: root, env: {} }),
+    makeRuntimeEnvelope().runCommand,
+  );
+  expect(output).toEqual({ 'output.location': 'embedded-host' });
 });

@@ -16,6 +16,7 @@ export async function maestroScriptSourceBundleFor(
   filePath: string,
 ): Promise<ReplayScriptSourceBundle> {
   return await loadReplayScriptSourceBundle({
+    hostEnv: process.env,
     inputPath: filePath,
     cwd: process.cwd(),
     replayBackend: 'maestro',
@@ -48,6 +49,7 @@ export async function withClientReplayScriptSources(
       if (req.flags?.replayScriptSource) return req;
       return withFlags(req, {
         replayScriptSource: await loadReplayScriptSourceBundle({
+          hostEnv: process.env,
           inputPath: entryPath,
           cwd,
           replayBackend,
@@ -59,7 +61,12 @@ export async function withClientReplayScriptSources(
       replayScriptSources: await Promise.all(
         discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
           async (inputPath) =>
-            await loadReplayScriptSourceBundle({ inputPath, cwd, replayBackend }),
+            await loadReplayScriptSourceBundle({
+              hostEnv: process.env,
+              inputPath,
+              cwd,
+              replayBackend,
+            }),
         ),
       ),
     });

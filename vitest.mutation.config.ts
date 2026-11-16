@@ -27,6 +27,7 @@ export default defineConfig({
     alias: workspaceAliases,
   },
   test: {
+    globalSetup: [path.join(repoRoot, 'scripts/vitest-tmpdir-global-setup.ts')],
     include: scope,
     exclude: [
       ...MUTATION_EXCLUDED_TESTS,
