@@ -255,7 +255,9 @@ export function verbatimScripts(
   command: string,
   scripts: Readonly<Record<string, string>>,
 ): string[] {
-  const wanted = commandSegments(command).map((segment) => segment.replaceAll(/\s+/g, ' '));
+  const wanted = [command, ...commandSegments(command)].map((segment) =>
+    segment.replaceAll(/\s+/g, ' '),
+  );
   return Object.entries(scripts)
     .filter(([, body]) => wanted.includes(body.replaceAll(/\s+/g, ' ')))
     .map(([name]) => name);
