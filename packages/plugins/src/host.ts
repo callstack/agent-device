@@ -1,6 +1,5 @@
 import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
-import { runCmd } from '@agent-device/host-kit/command';
 
 export type HostCommandResult = Readonly<{ stdout: string }>;
 
@@ -27,6 +26,7 @@ export function createPluginHost(
     clientVersion: readVersion(),
     createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async (command, args) => {
+      const { runCmd } = await import('@agent-device/host-kit/command');
       const { stdout } = await runCmd(command, [...args], {
         maxBuffer: 10 * 1024 * 1024,
         timeoutMs: 30_000,
