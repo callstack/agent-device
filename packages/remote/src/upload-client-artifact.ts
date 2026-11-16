@@ -1,12 +1,11 @@
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import type { PackedGzipTar } from '@agent-device/host-kit/gzip-tar';
 
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
@@ -34,11 +33,14 @@ export async function prepareUploadArtifact(
   const isDirectory = stat.isDirectory();
   const platform =
     normalizeUploadPlatform(requestedPlatform) ?? inferArtifactPlatform(localPath, stat);
-  const cleanupPaths: string[] = [];
+  let packed: PackedGzipTar | undefined;
   try {
-    const payloadPath = isDirectory
-      ? await createGzipTarArchive(localPath, cleanupPaths, env, signal)
-      : localPath;
+    if (isDirectory) {
+      // Loaded on demand: only a directory upload packs, and the CLI's eager closure stays small.
+      const { packGzipTar } = await import('@agent-device/host-kit/gzip-tar');
+      packed = await packGzipTar(localPath, signal ? { env, signal } : { env });
+    }
+    const payloadPath = packed?.archivePath ?? localPath;
     signal?.throwIfAborted();
     const payloadStat = fs.statSync(payloadPath);
 
@@ -50,35 +52,12 @@ export async function prepareUploadArtifact(
       contentType: isDirectory ? 'application/gzip' : DEFAULT_CONTENT_TYPE,
       sha256: await computeFileHash(payloadPath, signal),
       sizeBytes: payloadStat.size,
-      cleanup: () => cleanupUploadPaths(cleanupPaths),
+      cleanup: () => packed?.cleanup(),
     };
   } catch (error) {
-    cleanupUploadPaths(cleanupPaths);
+    packed?.cleanup();
     throw error;
   }
-}
-
-async function createGzipTarArchive(
-  localPath: string,
-  cleanupPaths: string[],
-  env: Readonly<EnvMap>,
-  signal?: AbortSignal,
-): Promise<string> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-upload-${randomUUID()}-`));
-  cleanupPaths.push(tempDir);
-  const archivePath = path.join(tempDir, `${path.basename(localPath)}.tar.gz`);
-  await runCmd(
-    'tar',
-    ['czf', archivePath, '-C', path.dirname(localPath), path.basename(localPath)],
-    {
-      signal,
-      env: {
-        ...env,
-        COPYFILE_DISABLE: '1',
-      },
-    },
-  );
-  return archivePath;
 }
 
 function inferArtifactPlatform(
@@ -94,12 +73,6 @@ function inferArtifactPlatform(
 
 function normalizeUploadPlatform(value: string | undefined): 'ios' | 'android' | undefined {
   return value === 'ios' || value === 'android' ? value : undefined;
-}
-
-function cleanupUploadPaths(cleanupPaths: string[]): void {
-  for (const cleanupPath of cleanupPaths) {
-    fs.rmSync(cleanupPath, { recursive: true, force: true });
-  }
 }
 
 async function computeFileHash(localPath: string, signal?: AbortSignal): Promise<string> {

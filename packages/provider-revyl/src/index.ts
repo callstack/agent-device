@@ -43,8 +43,9 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
         requiresAppAttachment: false,
         requiresRemoteDaemon: false,
         supportsArtifacts: false,
-        // Revyl installs the app as part of starting the device, so the app has to be known before the
-        // lease exists and cannot be attached to a device that is already up.
+        // Deferred app selection means `open <uploaded-asset-name>` creates the device from an asset
+        // already uploaded to the provider. Revyl starts a device with or without an app and puts a
+        // build on a running one with `install`, so the first device command allocates as usual.
         supportsDeferredAppSelection: false,
         supportsDirectPortReverse: false,
         usesCloudWebDriverLease: false,

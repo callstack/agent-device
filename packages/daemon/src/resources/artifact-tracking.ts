@@ -1,14 +1,13 @@
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
-import { runCmd } from '@agent-device/host-kit/command';
+import type { PackedGzipTar } from '@agent-device/host-kit/gzip-tar';
 import {
   expiredTenantOwnedEntryError,
   requireTenantOwnedEntry,
@@ -29,7 +28,7 @@ const DIRECTORY_ARCHIVE_MIME_TYPE = 'application/gzip';
 
 type DirectoryArchive = {
   archivePath: string;
-  tempDir: string;
+  cleanup(): void;
   fileName: string;
   sizeBytes: number;
 };
@@ -389,7 +388,7 @@ async function createDirectoryArchive(
   hostEnv: NodeJS.ProcessEnv,
   controller: AbortController,
 ): Promise<DirectoryArchive> {
-  let tempDir: string | undefined;
+  let packed: PackedGzipTar | undefined;
   try {
     cleanupDirectoryArchive(entry);
 
@@ -398,35 +397,19 @@ async function createDirectoryArchive(
       path.basename(entry.artifactPath) || artifactId,
     );
     const fileName = archiveFilename(sourceName);
-    tempDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
-    );
-    const archivePath = path.join(tempDir, fileName);
-    await runCmd(
-      'tar',
-      [
-        'czf',
-        archivePath,
-        '-C',
-        path.dirname(entry.artifactPath),
-        '--',
-        path.basename(entry.artifactPath),
-      ],
-      {
-        signal: controller.signal,
-        timeoutMs: ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
-        env: {
-          ...hostEnv,
-          COPYFILE_DISABLE: '1',
-        },
-      },
-    );
-    controller.signal.throwIfAborted();
-    const archive = {
-      archivePath,
-      tempDir,
+    // Loaded on demand: only a directory artifact packs, and the daemon's eager closure stays small.
+    const { packGzipTar } = await import('@agent-device/host-kit/gzip-tar');
+    packed = await packGzipTar(entry.artifactPath, {
+      env: hostEnv,
+      signal: controller.signal,
+      timeoutMs: ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
       fileName,
-      sizeBytes: fs.statSync(archivePath).size,
+    });
+    const archive = {
+      archivePath: packed.archivePath,
+      cleanup: packed.cleanup,
+      fileName,
+      sizeBytes: fs.statSync(packed.archivePath).size,
     };
     entry.directoryArchive = archive;
     return archive;
@@ -441,7 +424,7 @@ async function createDirectoryArchive(
             { artifactPath: entry.artifactPath },
             error instanceof Error ? error : undefined,
           );
-    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    packed?.cleanup();
     throw failure;
   }
 }
@@ -510,7 +493,7 @@ function removeBestEffort(targetPath: string): void {
 
 function cleanupDirectoryArchive(entry: ArtifactEntry): void {
   if (!entry.directoryArchive) return;
-  removeBestEffort(entry.directoryArchive.tempDir);
+  entry.directoryArchive.cleanup();
   entry.directoryArchive = undefined;
 }
 

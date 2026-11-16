@@ -9,7 +9,8 @@ npm install -g agent-device
 agent-device plugins add @agent-device/revyl
 export REVYL_API_KEY=your-api-key
 export AGENT_DEVICE_SESSION=checkout-ios
-agent-device connect revyl --platform ios --provider-app https://apps.example.com/MyApp-simulator.zip
+agent-device connect revyl --platform ios
+agent-device install com.example.app ./build/MyApp.app
 agent-device open com.example.app
 agent-device snapshot -i
 agent-device close

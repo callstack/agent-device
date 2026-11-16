@@ -155,6 +155,29 @@ test('connect revyl verifies credentials and stores a profile without renting a 
   }
 });
 
+test('connect revyl without an app URL points the next steps at install before open', async () => {
+  await startRevylVerificationStub();
+  const tempRoot = mkdtempForTestSync('agent-device-connect-revyl-no-app-');
+
+  try {
+    const { providerApp: _app, ...flags } = connectFlags;
+    const printed = await connectWithGeneratedProviderProfile({
+      stateDir: path.join(tempRoot, '.state'),
+      positionals: ['revyl'],
+      flags,
+    });
+    const output = (JSON.parse(printed) as { data: Record<string, any> }).data;
+    assert.equal(output.app.status, 'missing');
+    assert.equal(output.device.status, 'deferred');
+    assert.deepEqual(output.nextSteps, [
+      `agent-device install <bundle-id> <app-path-or-url> --session ${output.session}`,
+      `agent-device open <bundle-id> --relaunch --session ${output.session}`,
+    ]);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect revyl refuses a missing API key before calling the backend', async () => {
   const backend = await startRevylVerificationStub();
   const tempRoot = mkdtempForTestSync('agent-device-connect-revyl-no-key-');

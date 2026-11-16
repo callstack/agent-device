@@ -43,6 +43,7 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 import type { RevylStartRequest } from './session-allocation.ts';
+import type { RevylDeploymentSession } from './deployment.ts';
 
 /** What one lease's start asks Revyl for, with the platform the lease was admitted for. */
 type RevylLeaseRequest = RevylStartRequest & Readonly<{ platform: RevylPlatform }>;
@@ -69,6 +70,7 @@ export type RevylRuntimeRegistration = Readonly<{
 export type RevylRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
   hasLiveSession(device: DeviceInfo): boolean;
+  getDeploymentSession(device: DeviceInfo): RevylDeploymentSession | undefined;
 };
 
 /**
@@ -147,6 +149,18 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // The runner carries the command's signal, so paced work (a delayed fill) stops when the caller
     // hangs up.
     return session ? createRevylInteractor(session, runner?.signal) : undefined;
+  }
+
+  getDeploymentSession(device: DeviceInfo): RevylDeploymentSession | undefined {
+    const session = this.sessionForDevice(device);
+    return session
+      ? {
+          runId: session.runId,
+          sessionId: session.sessionId,
+          platform: session.platform,
+          client: session.client,
+        }
+      : undefined;
   }
 
   async shutdown(): Promise<void> {
@@ -339,6 +353,7 @@ async function loadRevylPlatformRuntime(
     ownsDevice: (device) => runtime.ownsDevice(device),
     hasLiveSession: (device) => runtime.hasLiveSession(device),
     getInteractor: (device, runner) => runtime.getInteractor(device, runner),
+    getDeploymentSession: (device) => runtime.getDeploymentSession(device),
   });
 }
 

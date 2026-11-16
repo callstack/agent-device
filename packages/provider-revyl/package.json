@@ -24,9 +24,10 @@
   "devDependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/provision-kit": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
     "agent-device": "workspace:*"
   },

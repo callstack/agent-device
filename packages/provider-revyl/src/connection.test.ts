@@ -47,7 +47,7 @@ test('verify authenticates with the cheap call and reports the profile without r
   // The literals are asserted so a reworded report fails the test instead of being compared with
   // itself.
   assert.deepEqual(result.device, {
-    status: 'configured',
+    status: 'deferred',
     name: 'iPhone 16',
     platform: 'ios',
     osVersion: '18.0',
@@ -70,10 +70,24 @@ test('verify reports a profile that names no device or OS version', async () => 
     { appUrl: 'https://apps.test/app.apk' },
   );
   assert.deepEqual(result.device, {
-    status: 'configured',
+    status: 'deferred',
     platform: 'android',
     message:
       'Revyl assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.',
+  });
+});
+
+test('verify reports a profile without an app as one the device starts without', async () => {
+  const fixture = await backend();
+  const result = await verifyRevylProfile(
+    { apiKey: 'test-key', apiUrl: fixture.backendUrl },
+    '0.0.0-test',
+    'ios',
+    {},
+  );
+  assert.deepEqual(result.app, {
+    status: 'missing',
+    message: 'No app URL; the device starts without one. Install a build, then open it.',
   });
 });
 
@@ -201,10 +215,19 @@ test('resolve keeps the device, OS version and app URL and refuses a non-mobile 
   );
 });
 
+test('resolve keeps a profile without an app, so the device starts with none', () => {
+  const connection = createRevylConnection(HOST);
+  const resolved = connection.resolve({
+    flags: { platform: 'android' } as CliFlags,
+    cwd: '/tmp',
+  } as never);
+  assert.equal('providerApp' in resolved.profile, false);
+  assert.equal('extraFlags' in resolved, false);
+});
+
 test('resolve refuses an app that is not an https URL', () => {
   const connection = createRevylConnection(HOST);
   for (const providerApp of [
-    undefined,
     './build/app.ipa',
     'https://user@apps.test/app.zip',
     'http://apps.test/app.zip',

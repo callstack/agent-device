@@ -1,9 +1,14 @@
 import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import fs from 'node:fs';
 import net from 'node:net';
+import { Readable } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   RevylDeviceSessionStopResponse,
+  RevylInstallAccepted,
+  RevylInstallStatus,
+  RevylSessionArtifactUpload,
   RevylStartDeviceRequest,
   RevylStartDeviceResponse,
   RevylWorkerActionResponse,
@@ -88,6 +93,33 @@ export type RevylClient = Readonly<{
     signal?: AbortSignal,
   ): Promise<RevylWorkerActionResponse>;
   stopDeviceSession(sessionId: string): Promise<RevylDeviceSessionStopResponse>;
+  /** Presigned URLs for one build the session installs. */
+  createSessionArtifactUpload(
+    sessionId: string,
+    fileSize: number,
+    contentType: string,
+    signal?: AbortSignal,
+  ): Promise<RevylSessionArtifactUpload>;
+  /**
+   * Streams the build file to the presigned URL; the URL carries its own authorization. The caller's
+   * signal bounds the upload.
+   */
+  uploadSessionArtifact(
+    uploadUrl: string,
+    file: Readonly<{ filePath: string; size: number }>,
+    contentType: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  startInstall(
+    workflowRunId: string,
+    body: unknown,
+    signal?: AbortSignal,
+  ): Promise<RevylInstallAccepted>;
+  getInstallStatus(
+    workflowRunId: string,
+    installId: string,
+    signal?: AbortSignal,
+  ): Promise<RevylInstallStatus>;
   /** Cheap enough to run on every `connect`: it authenticates without starting a device. */
   verifyCredentials(signal?: AbortSignal): Promise<void>;
 }>;
@@ -208,6 +240,57 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       });
       assertLifecycleAccepted('stop', response);
       return response;
+    },
+    createSessionArtifactUpload(sessionId, fileSize, contentType, signal) {
+      return json<RevylSessionArtifactUpload>({
+        method: 'POST',
+        path: `/api/v1/execution/device-sessions/${encodeURIComponent(sessionId)}/artifacts/upload-url`,
+        body: { file_size: fileSize, content_type: contentType },
+        route: 'session',
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async uploadSessionArtifact(uploadUrl, file, contentType, signal) {
+      // Node streams a request body only in half-duplex mode, which the DOM `RequestInit` type omits.
+      const init: RequestInit & { duplex: 'half' } = {
+        method: 'PUT',
+        // A presigned PUT needs the length up front; a streamed body would otherwise go chunked.
+        headers: { 'Content-Type': contentType, 'Content-Length': String(file.size) },
+        body: Readable.toWeb(fs.createReadStream(file.filePath)) as ReadableStream<Uint8Array>,
+        duplex: 'half',
+        redirect: 'error',
+        ...(signal === undefined ? {} : { signal }),
+      };
+      let response: Response;
+      try {
+        response = await fetchImpl(uploadUrl, init);
+      } catch (error) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Revyl storage did not accept the app upload.',
+          { reason: 'provider-unreachable' },
+          error,
+        );
+      }
+      if (!response.ok) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `Revyl storage refused the app upload with HTTP ${response.status}.`,
+          { reason: 'provider-refused', status: response.status },
+        );
+      }
+    },
+    startInstall(workflowRunId, body, signal) {
+      return json<RevylInstallAccepted>({
+        ...workerRequest(workflowRunId, 'install_async', signal),
+        body,
+      });
+    },
+    getInstallStatus(workflowRunId, installId, signal) {
+      return json<RevylInstallStatus>({
+        ...workerRequest(workflowRunId, `install_status/${encodeURIComponent(installId)}`, signal),
+        method: 'GET',
+      });
     },
     async verifyCredentials(signal) {
       await json<unknown>({
