@@ -1,3 +1,4 @@
+import { getReplayPluginInstallation } from '@agent-device/ad-script';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -7,7 +8,12 @@ import { getReplayBackend, openReplayBackend } from '../replay-backend-registry.
 import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
 
 test('help declares the exact optional package without requiring a working plugin', () => {
-  expect(getReplayBackendDeclaration('maestro')).toMatchObject({
+  expect(
+    getReplayBackendDeclaration(
+      getReplayPluginInstallation('maestro'),
+      getReplayPluginInstallation('ad'),
+    ),
+  ).toMatchObject({
     id: 'maestro',
     package: '@agent-device/maestro',
   });

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
@@ -496,3 +496,32 @@ test('#1398: a read-only wait recorded after a parameterized fill never re-seria
     },
   );
 }, 20_000);
+
+test('ordinary open/close recording works with no replay plugin and replay refuses before another device call', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'core-recording-no-plugin-'));
+  vi.stubEnv('AGENT_DEVICE_HOME', path.join(root, 'empty-plugin-home'));
+  try {
+    await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+      const scriptPath = path.join(root, 'recorded.ad');
+      const client = world.daemon.client();
+      await client.apps.open({ app: 'settings', saveScript: scriptPath, ...world.selection });
+      await client.command.wait({ selector: 'label="Search"', ...world.selection });
+      await client.sessions.close();
+      assert.match(fs.readFileSync(scriptPath, 'utf8'), /agent-device:target-v1/);
+      const deviceCalls = world.adbCalls.length;
+      await assert.rejects(
+        client.replay.run({ path: scriptPath, ...world.selection }),
+        (error: unknown) => {
+          assert.equal(
+            (error as { details?: { reason?: string } }).details?.reason,
+            'plugin-not-installed',
+          );
+          return true;
+        },
+      );
+      assert.equal(world.adbCalls.length, deviceCalls);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
