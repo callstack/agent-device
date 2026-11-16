@@ -73,6 +73,13 @@ final class AutomationCommandHandler {
     }
   }
 
+  /** Refuses text entry the deadline cannot fit, after a focus tap that may have used the budget. */
+  static void requireTextEntryTime(long deadline, long now) {
+    if (deadline - now < TEXT_ENTRY_RESERVE_MS) {
+      throw new InputBudgetExhausted("Fill text was not entered: too little time left after focus");
+    }
+  }
+
   private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
     // The host's remaining time for this command bounds every retry decision.
     long deadline =
@@ -234,9 +241,7 @@ final class AutomationCommandHandler {
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
       tap(automation, x, y, dispatch, deadline);
-      if (deadline - SystemClock.uptimeMillis() < TEXT_ENTRY_RESERVE_MS) {
-        throw new InputBudgetExhausted("Fill text was not entered: too little time left after focus");
-      }
+      requireTextEntryTime(deadline, SystemClock.uptimeMillis());
       if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");
