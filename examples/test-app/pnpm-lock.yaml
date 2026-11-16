@@ -20,7 +20,7 @@ overrides:
   nanoid@3: ^3.3.18
   glob@13: 14.0.2
   minimatch@10: 11.0.1
-  node-forge@1: ^1.4.1
+  node-forge@1: ^1.4.3
   '@babel/core@7': ^7.29.6
   zod@3: ^4.6.6
   zod@4: ^4.6.6
@@ -2197,8 +2197,8 @@ packages:
       encoding:
         optional: true
 
-  node-forge@1.4.2:
-    resolution: {integrity: sha512-rRtAR5XLJ8gCKd9du4qrKAsgCG1ObGP4gLeNJMa4vYSeq4bmBMOJk5IHkrviBV0q7uoAJlVd8HEQYQSVUb4FGQ==}
+  node-forge@1.4.3:
+    resolution: {integrity: sha512-P6wzfh6t70avmV8FrVEAd/36sOPJQ+hkaJVX1Laap9J/77m7M0eyozDvc8SwnDf4P7MP94gwbAAo0rg3YVXT+g==}
     engines: {node: '>= 6.13.0'}
 
   node-int64@0.4.0:
@@ -3388,7 +3388,7 @@ snapshots:
       glob: 14.0.2
       lan-network: 0.2.1
       multitars: 1.0.2
-      node-forge: 1.4.2
+      node-forge: 1.4.3
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 4.0.4
@@ -3425,7 +3425,7 @@ snapshots:
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
-      node-forge: 1.4.2
+      node-forge: 1.4.3
 
   '@expo/config-plugins@58.0.2(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:
@@ -5438,7 +5438,7 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  node-forge@1.4.2: {}
+  node-forge@1.4.3: {}
 
   node-int64@0.4.0: {}
 
