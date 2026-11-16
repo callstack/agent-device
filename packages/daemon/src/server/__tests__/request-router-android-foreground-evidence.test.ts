@@ -4,24 +4,20 @@ import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { getResolveTargetDeviceMock } from '../../../packages/daemon/src/__tests__/support/request-router-dispatch-mocks.ts';
-import { fakeCreateCommandSurface } from '../../../packages/daemon/src/__tests__/support/command-surface-fake.ts';
-import { dispatchApplicationLifecycleEffect } from '../../../packages/daemon/src/__tests__/support/application-lifecycle-runtime-fixture.ts';
+import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { dispatchApplicationLifecycleEffect } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
-} from '../../../packages/daemon/src/__tests__/support/test-device-runtime-gateway.ts';
-import { makeSessionStore } from '../../../packages/daemon/src/__tests__/support/store-factory.ts';
-import { LeaseRegistry } from '../../../packages/daemon/src/resources/lease-registry.ts';
-import {
-  makeAndroidDevice,
-  openRequest,
-} from '../../../packages/daemon/src/server/__tests__/request-router-open-harness.ts';
-import { openAndroidApp } from '../../../packages/platform-android/src/app-lifecycle.ts';
-import { withAndroidAdbProvider } from '../../../packages/platform-android/src/adb-executor.ts';
-import '../../../packages/platform-android/src/__tests__/test-utils/android-host-test-setup.ts';
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { makeAndroidDevice, openRequest } from './request-router-open-harness.ts';
+import { openAndroidApp, withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
+import { bindAndroidAdbHost, type AndroidAdbHost } from '@agent-device/platform-android/adb-host';
 
-vi.mock('../../../packages/daemon/src/core/device/device-ready.ts', () => ({
+vi.mock('../../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
@@ -40,6 +36,12 @@ function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
 }
 
 test('open relaunch retains Android foreground probe failure in the serialized response and request artifact', async () => {
+  bindAndroidAdbHost({
+    environment: {},
+    withAdbCommandExecutorOverride: async (_override, fn) => await fn(),
+    withoutAdbCommandExecutorOverride: async (fn) => await fn(),
+    coerceAdbResult: (result) => result,
+  } as AndroidAdbHost);
   const device = makeAndroidDevice('emulator-fence');
   const failure = new AppError(
     'COMMAND_FAILED',
