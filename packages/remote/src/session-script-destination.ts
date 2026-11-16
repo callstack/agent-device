@@ -7,7 +7,6 @@ import type {
   DaemonResponse,
   ScriptDeliveryFailure,
 } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -31,6 +30,11 @@ const RECORD_LOCK_TIMEOUT_MS = 30_000;
  * staging directory allocated and not yet removed, so retiring or sweeping the record reclaims the
  * ones a crashed download left behind.
  */
+/** A published destination, `undefined` when no record matches, or a typed delivery failure. */
+type PublishOutcome =
+  | Readonly<{ published: string | undefined }>
+  | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
+
 type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
@@ -105,29 +109,20 @@ export function sessionScriptDelivery(
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
       delete data[artifact.field];
-      let published: string | undefined;
-      try {
-        published = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
-      } catch (error) {
+      const outcome = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
+      if ('failure' in outcome) {
         // A delivery failure never changes the outcome of the action that recorded the version.
-        const saved = error as AppError;
-        // Only a validated script artifact reaches the save, so its publication ID is a string.
-        const failure: ScriptDeliveryFailure = {
-          reason: 'script_delivery_failed',
-          cause: String(saved.details?.reason),
-          publicationId: String(artifact.scriptPublicationId),
-          message: saved.message,
-          hint: String(saved.details?.hint),
-        };
+        const { failure, error } = outcome;
         data.scriptDeliveryFailure = failure;
         data.warnings = [...readResponseWarnings(data), `${failure.message} ${failure.hint}`];
         emitDiagnostic({
           level: 'warn',
           phase: 'session_script_delivery_failed',
-          data: { session: req.session, error: String(saved.cause ?? saved) },
+          data: { session: req.session, error: String(error) },
         });
         return;
       }
+      const { published } = outcome;
       if (published === undefined) return;
       data.savedScript = published;
       kept.push({ ...artifact, localPath: published });
@@ -157,8 +152,9 @@ export function sessionScriptDelivery(
 }
 
 /**
- * Publishes one version and returns the destination, or `undefined` when no record of this client
- * matches the artifact. A version no newer than the one published is skipped.
+ * Publishes one version and returns the destination, `undefined` when no record of this client
+ * matches the artifact, or a typed delivery failure. A version no newer than the one published is
+ * skipped.
  *
  * The download streams, capped at `MAX_SCRIPT_BYTES`, into a new private file in a private staging
  * directory beside the destination, so it moves into place by one rename or link. The compare and
@@ -173,7 +169,7 @@ async function publishScriptVersion(
     download: typeof downloadRemoteArtifact;
   }>,
   artifact: DaemonArtifact,
-): Promise<string | undefined> {
+): Promise<PublishOutcome> {
   const { endpoint, req, stateDir } = context;
   const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
   const file =
@@ -192,16 +188,16 @@ async function publishScriptVersion(
       phase: 'session_script_artifact_dropped',
       data: { session: req.session, artifactId },
     });
-    return undefined;
+    return { published: undefined };
   }
-  if ((revision as number) <= record.revision) return record.destination;
+  if ((revision as number) <= record.revision) return { published: record.destination };
   const directory = path.dirname(record.destination);
   const pending = { named: false };
   let staging: string | undefined;
   try {
     await fs.promises.mkdir(directory, { recursive: true });
     staging = await withRecordLock(file, async () => allocateStaging(file, directory));
-    if (!staging) return undefined;
+    if (!staging) return { published: undefined };
     const staged = path.join(staging, 'script.ad');
     await context.download({
       ...endpoint,
@@ -211,9 +207,13 @@ async function publishScriptVersion(
       privateFile: { maxBytes: MAX_SCRIPT_BYTES },
     });
     const version = { revision: revision as number, staging, staged, pending };
-    return await withRecordLock(file, async () => publishStaged(file, version));
+    return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
   } catch (error) {
-    throw scriptSaveError(record.destination, artifactId, error, req.command === 'close');
+    const closing = req.command === 'close';
+    return {
+      failure: scriptDeliveryFailure(record.destination, id as string, error, closing),
+      error,
+    };
   } finally {
     const removed = staging;
     if (removed && !pending.named) {
@@ -321,33 +321,32 @@ function fileIdentity(file: string): string | undefined {
   return stat ? `${stat.dev}:${stat.ino}` : undefined;
 }
 
-function scriptSaveError(
+function scriptDeliveryFailure(
   destination: string,
-  artifactId: string | undefined,
+  publicationId: string,
   error: unknown,
   closing: boolean,
-) {
-  const cause = error instanceof Error ? error : undefined;
+): ScriptDeliveryFailure {
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
   const recovery = closing
     ? 'The session is closed, so no later version follows.'
     : 'The next recorded action or close delivers the full recording again.';
-  return new AppError(
-    'COMMAND_FAILED',
-    exists
-      ? `A file already exists at ${destination}.`
-      : `The remote script could not be saved to ${destination}.`,
-    {
-      reason: exists ? 'script_target_exists' : 'script_download_failed',
-      path: destination,
-      artifactId,
-      hint: exists
-        ? 'Remove the existing file, or start a new recording with open --save-script --force.'
-        : `The file may still hold the previous version. ${recovery}`,
-    },
-    cause,
-  );
+  return exists
+    ? {
+        reason: 'script_delivery_failed',
+        cause: 'script_target_exists',
+        publicationId,
+        message: `A file already exists at ${destination}.`,
+        hint: 'Remove the existing file, or start a new recording with open --save-script --force.',
+      }
+    : {
+        reason: 'script_delivery_failed',
+        cause: 'script_download_failed',
+        publicationId,
+        message: `The remote script could not be saved to ${destination}.`,
+        hint: `The file may still hold the previous version. ${recovery}`,
+      };
 }
 
 function recordPath(

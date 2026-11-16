@@ -47,7 +47,7 @@ test.each([
   expect(invoke).toHaveBeenCalledTimes(commands.length);
 });
 
-test('malformed steps get the batch refusal', async () => {
+test('malformed steps fail batch validation before the close check', async () => {
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
   const req = { ...batch('wait'), flags: { batchSteps: 'close' } } as unknown as DaemonRequest;
 
