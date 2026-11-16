@@ -483,6 +483,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/audio-probe-recovery',
     '@agent-device/capture-kit/audio-probe-resource-store',
     '@agent-device/capture-kit/audio-probe-session-resource',
+    '@agent-device/capture-kit/capture-fact-grace',
     '@agent-device/capture-kit/durable-capture',
     '@agent-device/capture-kit/durable-capture-admission-ledger',
     '@agent-device/capture-kit/durable-capture-resource',
