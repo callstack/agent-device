@@ -1,4 +1,8 @@
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import {
+  emitDiagnostic,
+  registerDiagnosticSensitiveValue,
+} from '@agent-device/host-kit/diagnostics';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import {
   assertSnapshotScreenOrigin,
@@ -24,6 +28,11 @@ export function createReplayBackendHost(): ReplayBackendHost {
     emitDiagnostic,
     readSnapshotClickabilityEvidence,
     assertSnapshotScreenOrigin,
+    runCommand: ({ executable, args, host, ...options }, signal) =>
+      withCommandHost({ host, requestEnv: undefined }, () =>
+        runCmd(executable, args, { ...options, ...host, signal }),
+      ),
+    registerSensitiveValue: registerDiagnosticSensitiveValue,
     appendTraceEvent: appendReplayTraceEvent,
     buildBuiltinVars: (params) => buildReplayBuiltinVars({ ...params, metadata: {} }),
     readScriptSourceFile: readReplayScriptSourceFile,

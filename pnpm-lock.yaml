@@ -71,9 +71,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:packages/maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -535,9 +532,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:../maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:../platform-android
@@ -563,6 +557,9 @@ importers:
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:../apple-runner
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
@@ -707,6 +704,9 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       agent-device:
         specifier: workspace:*
         version: link:../..
@@ -1096,9 +1096,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
+      '@agent-device/plugins':
         specifier: workspace:*
-        version: link:../maestro
+        version: link:../plugins
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:../replay-test

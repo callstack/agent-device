@@ -825,6 +825,7 @@ async function startDaemonRuntimeOnHost(
     for (const failure of plugins.failed) {
       await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {
         provider: failure.provider,
+        backend: failure.backend,
         source: failure.source,
         [failure.step]: failure.error,
       });
