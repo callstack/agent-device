@@ -25,3 +25,6 @@ export type AgentDevicePluginFactory<Options = Record<string, unknown>> = Contra
   Options,
   CloudWebDriverProviderOptions
 >;
+
+export type { ReplayEnginePlugin, ReplayEngineSetup } from '@agent-device/plugins/replay-backend';
+export type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
