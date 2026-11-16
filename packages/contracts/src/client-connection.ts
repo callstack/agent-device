@@ -19,9 +19,10 @@ import type {
 
 /**
  * The one daemon lifecycle a client config selects: `attach`. The transport connects to its registered
- * daemon without starting, replacing, retiring or timeout-killing it. Private one-shot replay/test
- * operations own a separate daemon lifecycle. A missing daemon fails with
- * `details.reason: 'daemon-not-running'`; an incompatible one uses `'daemon-incompatible'`.
+ * daemon without starting, replacing, retiring or timeout-killing it, including replay/test calls.
+ * CLI/MCP can own a private daemon for one-shot replay/test; library client calls cannot.
+ * A missing daemon fails with `details.reason: 'daemon-not-running'`; an incompatible one uses
+ * `'daemon-incompatible'`.
  *
  * `ensureDaemon()` is the explicit way to start or replace a detached daemon. `startAgentDevice()`
  * imported from `agent-device` owns one in your process and refuses an already registered state
@@ -192,10 +193,9 @@ export type AgentDeviceRequestOverrides = Pick<
    * daemon reset.
    *
    * The guarantee covers the daemon request, and the built-in transports enforce it; a custom
-   * transport receives the signal on its context and may implement cancellation differently. Two
-   * phases run outside it: a response-artifact download started after the response begins is not
-   * canceled, and a canceled one-shot replay still runs the existing cleanup that may tear down a
-   * daemon this client started.
+   * transport receives the signal on its context and may implement cancellation differently. One
+   * phase runs outside it: a response-artifact download started after the response begins is not
+   * canceled.
    */
   signal?: AbortSignal;
 };
