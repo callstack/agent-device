@@ -117,12 +117,13 @@ function isVersionSelector(value: unknown): value is string {
 }
 
 function isExactVersion(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(
+  if (typeof value !== 'string') return false;
+  const match =
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
       value,
-    )
-  );
+    );
+  if (!match) return false;
+  return match[4]?.split('.').every((identifier) => !/^0\d+$/.test(identifier)) ?? true;
 }
 
 type StoreInstallation = {
@@ -396,14 +397,6 @@ export async function addPluginArtifact(
 ): Promise<{ name: string; version: string; installation: string; integrity: string }> {
   if (!input.endsWith('.tgz') || !path.isAbsolute(host.cwd))
     throw new AppError('INVALID_ARGS', 'Expected a local .tgz path and an absolute host cwd');
-  if (
-    !host.env.HOME?.trim() &&
-    (!host.env.AGENT_DEVICE_HOME?.trim() || host.env.AGENT_DEVICE_HOME.trim().startsWith('~'))
-  )
-    throw new AppError(
-      'INVALID_ARGS',
-      'Provide HOME or an absolute AGENT_DEVICE_HOME in the host environment',
-    );
   const bytes = fs.readFileSync(path.resolve(host.cwd, input));
   const integrity = `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`;
   const configPath = resolveUserConfigPath(host.env);

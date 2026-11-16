@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { test, vi } from 'vitest';
 import * as command from '@agent-device/host-kit/command';
 import { mkdtempForTestSync, pluginHome, v2RegistrationSource } from '@agent-device/test-kit';
@@ -55,12 +54,13 @@ function packFixture(
     };`;
   }
   fs.writeFileSync(path.join(source, 'plugin.mjs'), pluginSource);
-  const output = execFileSync(
+  const packed = command.runCmdSync(
     'npm',
     ['pack', '--ignore-scripts', '--json', '--pack-destination', root],
-    { cwd: source, encoding: 'utf8' },
+    { cwd: source },
   );
-  return { archive: path.join(root, JSON.parse(output)[0].filename), sentinel };
+  assert.equal(packed.exitCode, 0, packed.stderr);
+  return { archive: path.join(root, JSON.parse(packed.stdout)[0].filename), sentinel };
 }
 
 test('artifact installation preserves immutable identity, isolation, collision and stale guard', async () => {
@@ -247,3 +247,17 @@ test('inventory retains one selection snapshot while a factory awaits', async ()
     delete gates[Symbol.for(key)];
   }
 });
+
+test.each([undefined, '~/plugin-store'])(
+  'missing HOME does not preempt archive validation (%s)',
+  async (override) => {
+    const root = mkdtempForTestSync('plugin-artifact-home-');
+    await assert.rejects(
+      addPluginArtifact(path.join(root, 'missing.tgz'), {
+        cwd: root,
+        env: { HOME: undefined, AGENT_DEVICE_HOME: override },
+      }),
+      { code: 'ENOENT' },
+    );
+  },
+);

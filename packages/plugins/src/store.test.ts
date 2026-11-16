@@ -317,3 +317,26 @@ test('equivalent nested option key order keeps the daemon selection current', as
     },
   );
 });
+
+test.each([
+  ['1.2.3-01', false],
+  ['1.2.3-rc.01', false],
+  ['1.2.3-00', false],
+  ['1.2.3-0', true],
+  ['1.2.3-01a', true],
+  ['1.2.3-1a.0+001', true],
+  ['1.2.3+01', true],
+] as const)('artifact selection validates exact SemVer %s', async (version, valid) => {
+  const { home, env } = pluginHome();
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'), { manifest: { version } });
+  const config = readPluginConfig(env);
+  config.plugins.example.artifact = {
+    version,
+    integrity: `sha512-${Buffer.alloc(64).toString('base64')}`,
+  };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  const [entry] = await listPlugins(env, []);
+  assert.equal(entry?.compatible, valid);
+  if (valid) assert.equal(entry?.version, version);
+  assert.equal(vi.mocked(runCmd).mock.calls.length, 0);
+});

@@ -10,7 +10,7 @@ import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, flags }) => {
   const [action = 'list', name, extra] = positionals;
   if (
     extra ||
@@ -23,28 +23,16 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
     );
   }
   const artifact =
-    action === 'add-artifact' && name
-      ? await addPluginArtifact(name, { env: process.env, cwd: process.cwd() })
-      : undefined;
+    action === 'add-artifact' && name ? await addPluginArtifact(name, host) : undefined;
   if (action !== 'list' && action !== 'add-artifact' && name) {
-    await changePlugin(action as 'add' | 'update' | 'remove', name, process.env);
+    await changePlugin(action as 'add' | 'update' | 'remove', name, host.env);
   }
-  const plugins = artifact
-    ? [
-        {
-          ...artifact,
-          compatible: undefined,
-          provider: undefined,
-          backend: undefined,
-          error: undefined,
-        },
-      ]
-    : await listPlugins(process.env, BUILTIN_PROVIDER_IDS);
-  const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir));
+  const plugins = artifact ? [] : await listPlugins(host.env, BUILTIN_PROVIDER_IDS);
+  const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir, host));
   const daemonPlugins = readPluginInventory(daemon.plugins);
   const failedInDaemon = daemonPlugins.filter(({ state }) => state === 'failed');
   const data = {
-    plugins,
+    ...(artifact ? { artifact: { ...artifact, compatibility: 'unchecked' } } : { plugins }),
     ...(daemon.state === 'running'
       ? { daemon: { pid: daemon.pid, stateDir: daemon.stateDir, plugins: daemonPlugins } }
       : {}),
@@ -53,17 +41,21 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
   };
   await writeCommandOutput(flags, data, () =>
     [
-      ...plugins.map((plugin) =>
-        plugin.compatible || artifact
-          ? `${plugin.name}@${plugin.version}${plugin.provider || plugin.backend ? ` (${plugin.provider ?? plugin.backend})` : ''}`
-          : plugin.name === undefined
-            ? `Plugin config unavailable: ${plugin.error?.message}`
-            : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,
-      ),
+      ...(artifact
+        ? [
+            `${artifact.name}@${artifact.version}: installed; compatibility unchecked. Run agent-device plugins list.`,
+          ]
+        : plugins.map((plugin) =>
+            plugin.compatible
+              ? `${plugin.name}@${plugin.version} (${plugin.provider ?? plugin.backend})`
+              : plugin.name === undefined
+                ? `Plugin config unavailable: ${plugin.error?.message}`
+                : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,
+          )),
       ...(action !== 'list'
         ? ['Restart the local daemon after closing active sessions to use the changed plugin set.']
         : []),
-      ...(plugins.length === 0 ? ['No provider plugins installed.'] : []),
+      ...(!artifact && plugins.length === 0 ? ['No provider plugins installed.'] : []),
       ...(isUnusableRecord(daemon)
         ? [
             `The daemon record for ${daemon.stateDir} is ${daemon.state}, so its providers are unknown.`,

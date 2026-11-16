@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
+import * as pluginStore from '@agent-device/plugins/store';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import {
   pluginHome,
@@ -111,7 +112,7 @@ test('plugins list reports the running daemon inventory next to the store select
     });
     const { data } = JSON.parse(stdoutCapture.read());
     assert.deepEqual(data.daemon, { pid: owner.pid, stateDir, plugins: [failed] });
-    assert.equal(data.plugins[0].name, 'example');
+    assert.equal(data.artifact.name, 'example');
   } finally {
     stdoutCapture.restore();
   }
@@ -217,22 +218,75 @@ test('plugins add-artifact installs without loading the factory', async () => {
     path.join(source, 'plugin.mjs'),
     `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'factory'); export default () => ({});`,
   );
-  const packed = JSON.parse(
-    execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', home], {
-      cwd: source,
-      encoding: 'utf8',
-    }),
+  const packedResult = runCmdSync(
+    'npm',
+    ['pack', '--ignore-scripts', '--json', '--pack-destination', home],
+    { cwd: source },
   );
+  assert.equal(packedResult.exitCode, 0, packedResult.stderr);
+  const packed = JSON.parse(packedResult.stdout);
   const archive = path.join(home, packed[0].filename);
   const capture = beginStdoutCapture();
   try {
     await runCli(['plugins', 'add-artifact', archive, '--json'], { sendToDaemon: vi.fn() });
     const { data } = JSON.parse(capture.read());
-    assert.equal(data.plugins[0].name, 'cli-artifact');
-    assert.equal(data.plugins[0].version, '1.0.0');
-    assert.match(data.plugins[0].integrity, /^sha512-/);
+    assert.equal(data.artifact.name, 'cli-artifact');
+    assert.equal(data.artifact.version, '1.0.0');
+    assert.match(data.artifact.integrity, /^sha512-/);
+    assert.equal(data.artifact.compatibility, 'unchecked');
+    assert.equal('plugins' in data, false);
     assert.equal(data.restartRequired, true);
     assert.equal(fs.existsSync(marker), false);
+  } finally {
+    capture.restore();
+  }
+});
+
+test.each([false, true])('artifact receipt uses the executing CLI host (json=%s)', async (json) => {
+  const { home, env } = pluginHome();
+  const cwd = path.join(home, 'workspace');
+  const stateDir = path.join(home, 'state');
+  fs.mkdirSync(cwd);
+  fs.mkdirSync(stateDir);
+  fs.writeFileSync(path.join(stateDir, 'daemon.json'), '{invalid');
+  const host = {
+    cwd,
+    env: {
+      ...process.env,
+      ...env,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
+    },
+  };
+  const artifact = {
+    name: 'cli-artifact',
+    version: '1.0.0',
+    installation: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    integrity: `sha512-${Buffer.alloc(64).toString('base64')}`,
+  };
+  const install = vi.spyOn(pluginStore, 'addPluginArtifact').mockResolvedValue(artifact);
+  const sendToDaemon = vi.fn(async () => {
+    throw new Error('unexpected daemon access');
+  });
+  const capture = beginStdoutCapture();
+  try {
+    await runCli(
+      ['plugins', 'add-artifact', './fixture.tgz', ...(json ? ['--json'] : [])],
+      { sendToDaemon },
+      host,
+    );
+    assert.deepEqual(install.mock.calls, [['./fixture.tgz', host]]);
+    assert.equal(sendToDaemon.mock.calls.length, 0);
+    const output = capture.read();
+    if (json) {
+      const { data } = JSON.parse(output);
+      assert.deepEqual(data.artifact, { ...artifact, compatibility: 'unchecked' });
+      assert.equal('plugins' in data, false);
+      assert.equal(data.daemonRecord, 'invalid');
+    } else {
+      assert.match(output, /compatibility unchecked/i);
+      assert.match(output, /plugins list/);
+    }
   } finally {
     capture.restore();
   }

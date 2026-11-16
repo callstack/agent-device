@@ -20,7 +20,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     usageOverride:
       'plugins list [--state-dir <path>]|add <package[@version]>|add-artifact <path.tgz>|update <package>|remove <package>',
     listUsageOverride: 'plugins',
-    positionalArgs: ['list|add|add-artifact|update|remove', 'package?'],
+    positionalArgs: ['list|add|add-artifact|update|remove', 'package-or-path?'],
     flagsByAction: { list: ['stateDir'], add: [], 'add-artifact': [], update: [], remove: [] },
     supportedFlags: ['stateDir'],
   },

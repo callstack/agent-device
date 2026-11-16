@@ -207,7 +207,7 @@ agent-device plugins add-artifact ./provider-plugin.tgz --json
 agent-device plugins list --json
 ```
 
-The archive must contain an npm package with a name, an exact version, and an `./agent-device` export. Installation does not run package lifecycle scripts or load the plugin factory. The list command loads the factory to check compatibility. The JSON inventory includes the artifact's installation ID and SHA-512 integrity. If the package is already selected, remove it before adding the artifact. `plugins update` does not update artifacts from the registry; remove the selection and add the replacement artifact. Finish active sessions and restart the daemon after changing the selection.
+The archive must contain an npm package with a name, an exact version, and an `./agent-device` export. Installation does not run package lifecycle scripts or load the plugin factory. The list command loads the factory to check compatibility. The installation returns an `artifact` receipt with compatibility marked `unchecked`. Run `plugins list --json` for the checked `plugins` inventory, including the artifact's installation ID and SHA-512 integrity. If the package is already selected, remove it before adding the artifact. `plugins update` does not update artifacts from the registry; remove the selection and add the replacement artifact. Finish active sessions and restart the daemon after changing the selection.
 
 A Node.js host can call the same manager with an explicit environment and working directory:
 
