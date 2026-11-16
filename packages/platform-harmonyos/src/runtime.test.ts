@@ -496,4 +496,5 @@ test('openApplication fails when --foreground demands the foreground and the lau
     code: 'COMMAND_FAILED',
     details: { reason: 'open-not-foreground' },
   });
+  vi.useRealTimers();
 });

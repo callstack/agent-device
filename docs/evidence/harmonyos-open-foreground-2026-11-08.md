@@ -5,57 +5,98 @@ launch line): the post-check reads the mission list live after the dispatch
 and only then reports the open. On this device `aa dump -l` names the
 foreground bundle per mission, which is exactly what the poll consumes.
 
+All runs below are at the head that reports the poll as one state:
+`other-foreground` names a holder, `no-foreground` is a read that answered
+with no foreground mission, and `probe-failed` is a budget whose every read
+failed to run.
+
 ## Device
 
 - HUAWEI 畅享 90 Plus, model `JDY-AL50`, HarmonyOS 7.0.0.111 (SP10C00E111R4P3), API 26
 - Serial `77TYD26826028730`, USB, `hdc shell` as uid 2000 (shell)
 
-## The poll's data source, live
+## The confirmed path, live at the head
 
-After `open com.stringzhao.moonwell --activity EntryAbility` through the
-branch CLI, the mission list names the launched bundle as the foreground
-mission — the same read the poll performs:
+A plain open of an idle app confirms within the first poll read and rides
+with no verification fact and no warning:
+
+```json
+{"success": true, "data": {"appName": "com.stringzhao.moonwell",
+  "warnings": null}}
+```
+
+The mission list read the same seconds after the dispatch:
 
 ```sh
 $ hdc -t 77TYD26826028730 shell "aa dump -l"
-    Mission ID #45  mission name #[#com.stringzhao.moonwell:entry:EntryAbility] ...
-        app name [com.stringzhao.moonwell]
         bundle name [com.stringzhao.moonwell]
-        state #FOREGROUND  start time [391219654]
+        state #FOREGROUND  start time [914348158]
 ```
 
-The CLI run itself (branch build):
+## The keyguard shape of the mission list, observed live
+
+With the screen suspended, `aa dump -l` answers with missions and no
+`state #FOREGROUND` line anywhere (12 missions, all `#BACKGROUND`) — the
+read that the poll classifies as `no-foreground`:
 
 ```sh
-$ node bin/agent-device.mjs open com.stringzhao.moonwell --platform harmonyos \
-    --serial 77TYD26826028730 --activity EntryAbility
-Opened: com.stringzhao.moonwell
+$ hdc -t 77TYD26826028730 shell "power-shell suspend"
+SuspendDevice is called
+$ hdc -t 77TYD26826028730 shell "aa dump -l" | grep -c "state #FOREGROUND"
+0
 ```
 
-A second run of a slow-starting app (`com.stringzhao.flashcards`, cold start
-with its stored data) also reached `state #FOREGROUND` and opened clean.
+This unit could not carry that shape through a full open: a shell-launched
+`aa start` wakes the screen and takes the foreground even from the
+suspended state (the poll confirmed on its first read, twice, with a fresh
+`start time` on the relaunch). Crossing a secure keyguard needs the unlock
+PIN, which this evidence session does not handle, so the end-to-end
+`no-foreground` open remains maintainer-runnable.
 
-## The unconfirmed paths, and why they are not reproduced live here
+## The failed-probe path, live at the head
 
-The unconfirmed shape — the launch dispatch accepted while the launched bundle
-never holds the foreground — happens under the keyguard (`aa dump -l` keeps
-listing missions with none foreground) or when another app keeps stealing the
-front. Reproducing the keyguard shape live requires locking this device, whose
-unlock PIN this evidence session must not handle; stealing the front raced
-against an app that confirmed in ~500 ms. The decision paths are pinned by the
-branch's own unit tests instead, all passing:
+The second unconfirmed classification uses the maintainer's offered stub:
+a shim `hdc` on the daemon's PATH returns exit 1 with stderr
+`shim: poll read refused` for every `aa dump -l`, and passes every other
+invocation to the real binary. The launch dispatch is the real dispatch
+against the real device; only the poll's reads fail, the way a flaky
+connection fails them.
 
-- `pollHarmonyOpenForeground keeps polling until the launched bundle holds the foreground`
-- `pollHarmonyOpenForeground names the app that kept the foreground when the launch never surfaces` — the warning carries `foregroundPackage`
-- `pollHarmonyOpenForeground reports an unreadable foreground when no mission is foreground` — the lock-screen shape
-- plus the abort and failed-read shapes
+Plain open stays green and carries the unreadable-probe warning:
 
-`open --foreground` escalates an unconfirmed read to a hard
-`open-not-foreground` failure with the same `foregroundPackage` detail; a
-plain open attaches the read at `timing.foregroundVerification` beside its
-warning.
+```json
+{"success": true, "data": {"warnings": ["The launch dispatch succeeded,
+  but the foreground probe could not read the device within 5s
+  (open-foreground-probe-unreadable). This claims nothing about whether
+  the app reached the foreground; check the device connection, then run
+  the open again."]}}
+```
+
+`--foreground` fails hard with the same classification:
+
+```json
+{"success": false, "error": {"code": "COMMAND_FAILED",
+  "message": "The launch dispatch for com.stringzhao.moonwell succeeded,
+  but the foreground probe could not read the device within 5s",
+  "hint": "Check the device connection, then run the open again.",
+  "details": {"reason": "open-foreground-probe-unreadable",
+    "dispatched": "unknown"}}}
+```
+
+The `dispatched: "unknown"` disclosure comes from the request dispatch
+ledger.
+
+## Decision paths pinned by the suite
+
+- `pollHarmonyOpenForeground classifies a mission list with no foreground mission as no-foreground` — the lock-screen shape
+- `pollHarmonyOpenForeground reports probe-failed when every read fails`
+- `pollHarmonyOpenForeground names the app that kept the foreground when the launch never surfaces` — `other-foreground`
+- `verifyHarmonyOpenForeground attaches no-foreground when a read answered with no foreground mission`
+- `verifyHarmonyOpenForeground fails --foreground with the unreadable reason when every read fails`
+- plus the confirmed, keep-polling, and abort shapes
 
 ## Suite
 
-`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 89 tests
-pass on this branch's build (typecheck and lint clean).
+`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 26 tests
+pass on this branch's build; the full `check:unit` suite is green (20109
+tests, lint clean) with `origin/main` pointed at the upstream base.
