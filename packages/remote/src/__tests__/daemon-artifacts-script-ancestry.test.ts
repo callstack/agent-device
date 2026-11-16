@@ -40,6 +40,36 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination with a missing parent and creates no directories',
+  async () => {
+    // The same shape as the case above, with the parent ABSENT: this route creates the missing parent
+    // itself, so a `mkdir` that runs ahead of the rule leaves `recordings` standing in the open directory
+    // after the publication refuses — a directory this user made in ground another local user can name
+    // things in. What exists is asked about before anything is created, so a refused destination publishes
+    // nothing at all, directories included.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-stray-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const destination = path.join(shared, 'recordings', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
   'a remote recording refuses the ground a link target crosses on the way in',
   async () => {
     // `rec -> <root>/shared/relay/sub`, `shared` at 0777 and not sticky, `shared/relay -> <root>/chosen`.

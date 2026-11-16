@@ -18,6 +18,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
   assertPrivateScriptDestination,
+  assertPrivateScriptDestinationPrefix,
   publishDirectoryIdentity,
   publishFileSync,
   withProcessLock,
@@ -408,9 +409,11 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    // The missing parent is created first, so this route judges the chain at the same point the local
-    // writer does: the rule needs the directory the entry is really created in, which does not exist
-    // until this line has run (#4565).
+    // The chain that already exists is refused before anything is created, then the missing parent is
+    // created, then the full rule is asked again in `allocateStaging`: the rule needs the directory the
+    // entry is really created in, which does not exist until the `mkdir` has run, and a destination this
+    // route is going to refuse must leave no directories behind in the shared ground it names (#4565).
+    assertPrivateScriptDestinationPrefix(record.destination);
     await fs.promises.mkdir(path.dirname(record.destination), { recursive: true });
     const allocated = await withRecordLock(file, async () =>
       allocateStaging(file, record.destination),

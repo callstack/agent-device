@@ -72,10 +72,15 @@ export function publishScriptFileSync(options: {
     if (stillJudged !== judged) {
       throw scriptAncestryFailure(options.destination, stillJudged, 'parent_replaced');
     }
+    // The entry is created in the directory the walk ANSWERED, spelled from it, and never through the
+    // destination's own spelling: the kernel resolves a relative destination against the process's
+    // working directory and a spelled `..` against the directories on the way there, so a spelling that
+    // has drifted from the judged one would land the entry in ground the rule never reached.
+    const entry = path.join(judged, path.basename(options.destination));
     if (options.publish === 'link-exclusive') {
-      fs.linkSync(temporaryPath, options.destination);
+      fs.linkSync(temporaryPath, entry);
     } else {
-      fs.renameSync(temporaryPath, options.destination);
+      fs.renameSync(temporaryPath, entry);
     }
   } finally {
     removeTempBestEffort(options.destination, temporaryPath);
@@ -312,6 +317,26 @@ export function assertPrivateScriptDestination(
 }
 
 /**
+ * Refuses a script destination whose ALREADY-EXISTING directories another local user can steer, before
+ * anything is created on the way to it. Callers that create a missing parent run this first, then create,
+ * then run {@link assertPrivateScriptDestination} once the directory the entry lands in exists.
+ *
+ * It is the same walk, not a second rule: the walk stops at the first component that does not exist, so
+ * asking it before the `mkdir` judges exactly the prefix that is already there. What is NOT asked here is
+ * the creation question — whether other local users could add a name inside the directory the walk ends in
+ * — because the directories below are the caller's own to create, at its own mode. Deferring it is what
+ * keeps `mkdir -p <sticky shared>/recordings` acceptable on both routes.
+ *
+ * The refusal is the same typed error the full rule raises, so a caller sees one reason for one shape of
+ * path whichever of the two asked it.
+ */
+export function assertPrivateScriptDestinationPrefix(destination: string): void {
+  if (process.platform === 'win32') return;
+  const walk = walkParent(destination, readScriptTrust());
+  if (walk.reject !== undefined) throw walk.reject;
+}
+
+/**
  * The parent of `destination` as a chain of components from the root, never normalized.
  *
  * `path.resolve` folds a `..` away, which is the one simplification this may not make: the kernel does
@@ -322,14 +347,45 @@ export function assertPrivateScriptDestination(
  * joining the two: the working directory's OWN components are queued first and the destination's follow
  * them raw. Standing the walk in the cwd instead would judge the cwd and nothing above it, and a caller
  * who cannot write `/shared` can still swap the `/shared/mine` the cwd names, which is the entry this
- * rule exists to refuse. `path.resolve('')` answers the cwd the way the kernel sees it.
+ * rule exists to refuse. The working directory's name is first confirmed to be where the process really
+ * stands ({@link standsIn}), because that name is what the walk queues.
  */
-function absoluteParent(destination: string): string {
+function absoluteParent(destination: string): WalkStart {
   const parent = path.dirname(destination);
-  if (path.isAbsolute(parent)) return parent;
-  // `path.resolve('')` is the cwd; `path.dirname` of it is its parent, and the components of both, in
+  if (path.isAbsolute(parent)) return { pathname: parent };
+  // `path.resolve('')` is the working directory; its components and the destination's own parent, in
   // order, are what the walk has to walk. `path.resolve(destination)` must NOT be used: it folds.
-  return `${path.resolve('')}/${parent === '.' ? '' : parent}`;
+  const cwd = path.resolve('');
+  if (!standsIn(cwd)) return { reject: { path: cwd, exposure: 'parent_replaced' } };
+  return { pathname: `${cwd}/${parent === '.' ? '' : parent}` };
+}
+
+/** The spelling to start a walk from, or the refusal that stops it before the first component. */
+type WalkStart =
+  | Readonly<{ pathname: string; reject?: undefined }>
+  | Readonly<{
+      reject: Readonly<{ path: string; exposure: ScriptAncestryExposure }>;
+      pathname?: undefined;
+    }>;
+
+/**
+ * Whether the process really stands in the directory `pathname` names as its working directory.
+ *
+ * Node answers the working directory from the last `chdir` it made, so its NAME can be stale while the
+ * process is unbothered: move the directory the name points at and put another one at that path, and a
+ * walk of the name judges the replacement while the kernel resolves every relative name in the moved one.
+ * The two are therefore asked of the filesystem and compared as device and inode, the one answer that
+ * makes both names mean the same directory.
+ */
+function standsIn(pathname: string): boolean {
+  const remembered = statOrNull(pathname);
+  const standing = statOrNull('.');
+  return (
+    remembered !== undefined &&
+    standing !== undefined &&
+    remembered.dev === standing.dev &&
+    remembered.ino === standing.ino
+  );
 }
 
 /**
@@ -348,14 +404,12 @@ type WalkState = Readonly<{
 }>;
 
 /**
- * One walk's memory of the ground it has stood on: the modes it has read, keyed by path, and the
- * directories whose judgment it already has, keyed by device and inode. A path that comes back around,
- * through a `..` or through an alias of a directory already entered, is therefore asked of the host once,
- * and one walk sees the host the same way throughout.
+ * One walk's memory of the ground it has stood on: the `stat` of every path it has read, keyed by that
+ * path. A path that comes back around, through a `..` or through an alias of a directory already entered,
+ * is therefore asked of the host once, and one walk sees the host the same way throughout.
  */
 type WalkGround = Readonly<{
   stats: Map<string, fs.Stats>;
-  judged: Set<string>;
 }>;
 
 type WalkStep =
@@ -387,8 +441,8 @@ type WalkOutcome = Readonly<{
  *   any other directory. Neither one is a name that has to exist.
  * - Any other component is lstat'ed in that directory. An absent component ends the walk, because the
  *   publish creates what is missing below here.
- * - A directory is judged and entered. Each physical directory is judged once and each path is read from
- *   the host once per walk, so a `..` back over ground already crossed, or an alias of it, costs nothing.
+ * - A directory is judged and entered. Each path is read from the host once per walk, so a `..` back over
+ *   ground already crossed, or an alias of it, does not ask the host again.
  * - A symbolic link is judged itself, against the directory that physically holds it, and its target's
  *   RAW components go in front of the queue — restarting from `/` for an absolute target, continuing from
  *   the link's own directory for a relative one. Hops are counted against
@@ -400,7 +454,11 @@ type WalkOutcome = Readonly<{
  * and the parent is judged like any other.
  */
 function walkParent(destination: string, trust: ScriptDestinationTrust): WalkOutcome {
-  let step = startWalk(absoluteParent(destination), trust);
+  const start = absoluteParent(destination);
+  if (start.reject !== undefined) {
+    return { reject: refusalAt(destination, start.reject), deepest: '/', authority: undefined };
+  }
+  let step = startWalk(start.pathname, trust);
   // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
   for (;;) {
     if (step.kind === 'reject') {
@@ -427,7 +485,7 @@ function refusalAt(
 /** The first state: the root, with every component of the parent still to resolve. */
 function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
   const queue = pathComponents(parent);
-  const ground: WalkGround = { stats: new Map(), judged: new Set() };
+  const ground: WalkGround = { stats: new Map() };
   return standIn('/', queue, trust, 0, ground);
 }
 
@@ -442,14 +500,8 @@ function standIn(
   const stats = readGround(ground, directory);
   if (stats === undefined) return { kind: 'reject', path: directory, exposure: 'not_a_directory' };
   const authority: DirectoryAuthority = { uid: stats.uid, gid: stats.gid, mode: stats.mode };
-  // Ground this walk has already judged is safe to stand on again, however it was reached: a `..` back to
-  // a directory it passed, or an alias of one. A directory's judgment does not depend on the route.
-  const identity = `${stats.dev}:${stats.ino}`;
-  if (!ground.judged.has(identity)) {
-    const exposure = untrustedAncestryExposure(authority, trust);
-    if (exposure) return { kind: 'reject', path: directory, exposure };
-    ground.judged.add(identity);
-  }
+  const exposure = untrustedAncestryExposure(authority, trust);
+  if (exposure) return { kind: 'reject', path: directory, exposure };
   return { kind: 'stand', state: { deepest: directory, authority, queue, hops, ground } };
 }
 

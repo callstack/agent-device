@@ -138,6 +138,26 @@ skipOnWindows('a recording refuses a destination under a world-writable director
   expect(fs.existsSync(destination)).toBe(false);
 });
 
+skipOnWindows('a refused destination with a missing parent leaves no directories behind', () => {
+  // `close --save-script /shared/recordings/journey.ad` where `recordings` is absent. Creating the missing
+  // parent is what the caller asked for, so it cannot be judged only once it exists: a `mkdir -p` that runs
+  // first leaves `recordings` standing in the open directory after the publish refuses, which is a
+  // directory this user made in ground another local user owns the naming of. The chain that exists is
+  // therefore asked about BEFORE anything is created, and again afterwards.
+  const directory = root();
+  const shared = sharedDirectory(path.join(directory, 'shared'), 0o777);
+  const destination = path.join(shared, 'recordings', 'journey.ad');
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: shared,
+  });
+  expect(fs.readdirSync(shared)).toEqual([]);
+});
+
 skipOnWindows('a recording refuses a destination inside a directory another user owns', () => {
   // The fixture says WHOSE directory it is, so this is the real question — a second local user's
   // directory, mode 0755 and readable, judged by a rule that runs as THIS user. Moving the caller's uid

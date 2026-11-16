@@ -19,7 +19,10 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishScriptFileSync } from '@agent-device/host-kit/file';
+import {
+  assertPrivateScriptDestinationPrefix,
+  publishScriptFileSync,
+} from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -134,6 +137,10 @@ export class SessionScriptWriter {
         session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
       scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
       const scriptDir = path.dirname(scriptPath);
+      // Asked BEFORE the parent is created, and again by the publisher once it exists: a `mkdir -p` into
+      // ground another local user can write would otherwise leave the directories it made behind them,
+      // even though the publish that follows is refused (#4565).
+      assertPrivateScriptDestinationPrefix(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       // #1258: `options.force` is the caller's already-merged decision
       // (`effectiveWriteForce` — a live flag or the per-target grant), not

@@ -1,82 +1,35 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import {
+  FOREIGN_UID,
+  ancestryRoot as root,
+  currentGid,
+  directoryWith,
+  expectUntrusted,
+  expectUntrustedReplaced,
+  hostDatabase,
+  modeOf,
+  publish,
+  serveGroupDatabase,
+  unreadableDatabases,
+} from './atomic-file-host.fixtures.ts';
 import {
   assertPrivateScriptDestination,
   publishDirectoryIdentity,
-  publishScriptFileSync,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
-
-/** The group database a test stands in for `/etc/group` and `/etc/passwd`. */
-type Database = Readonly<{
-  groups: readonly string[] | undefined;
-  passwd: readonly string[] | undefined;
-  /** `undefined` means "only files"; an empty array means "the file cannot be read". */
-  nsswitch?: readonly string[] | undefined;
-}>;
-
-const realReadFileSync = fs.readFileSync;
-/**
- * The account the fixture's databases name for this process. `readCurrentUser()` reads it from
- * `passwdFile` below, so the fixture and the rule agree without a second host lookup.
- */
-const currentUser = process.env.USER ?? '';
-/** The unmocked `stat` calls, so a second fixture here never wraps the first one's mock. */
-const realLstatSync = fs.lstatSync.bind(fs);
-const realStatSync = fs.statSync.bind(fs);
-
-/** This process's ids. Windows has neither, and every test that uses them is skipped there. */
-const currentUid = process.getuid?.() ?? -1;
-const currentGid = process.getgid?.() ?? -1;
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * Serves `database` for the two group files and the real host for everything else, so the
- * private-group decision is the fixture's and not the CI image's user list.
- */
-function serveGroupDatabase(database: Database): void {
-  vi.spyOn(fs, 'readFileSync').mockImplementation(((file: unknown, options?: unknown) => {
-    if (file === '/etc/group') {
-      if (!database.groups) throw new Error('simulated unreadable group file');
-      return `${database.groups.join('\n')}\n`;
-    }
-    if (file === '/etc/passwd') {
-      if (!database.passwd) throw new Error('simulated unreadable passwd file');
-      return `${database.passwd.join('\n')}\n`;
-    }
-    if (file === '/etc/nsswitch.conf') return nsswitchContents(database.nsswitch);
-    return realReadFileSync(file as never, options as never) as never;
-  }) as typeof fs.readFileSync);
-}
-
-/** The name-service lines of the fixture host: `files` only, unless the test asks for more. */
-function nsswitchContents(sources: readonly string[] | undefined): string {
-  if (sources === undefined) return 'passwd: files\ngroup: files\n';
-  if (sources.length === 0) throw new Error('simulated unreadable nsswitch.conf');
-  return `${sources.join('\n')}\n`;
-}
-
-/** This host's user with a group of their own, and a team group that holds someone else. */
-function hostDatabase(privateGid: number, sharedGid: number): Database {
-  return {
-    groups: ['root:x:0:root', `${currentUser}:x:${privateGid}:`, `team:x:${sharedGid}:ada`],
-    passwd: [`root:x:0:0`, `${currentUser}:x:${currentUid}:${privateGid}:`],
-    nsswitch: undefined,
-  };
-}
-
-/** The database of a host whose group files cannot be read at all. */
-function unreadableDatabases(): Database {
-  return { groups: undefined, passwd: undefined };
-}
+/** The unmocked lookups, so serving an owner never wraps a previously served one. */
+const realLstatSync = fs.lstatSync.bind(fs);
+const realStatSync = fs.statSync.bind(fs);
 
 /**
  * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
@@ -93,51 +46,6 @@ function serveOwnership(owners: Readonly<Record<string, number>>): void {
     withUid(realLstatSync(pathname, ...rest), String(pathname))) as typeof fs.lstatSync);
   vi.spyOn(fs, 'statSync').mockImplementation(((pathname: never, ...rest: never[]) =>
     withUid(realStatSync(pathname, ...rest), String(pathname))) as typeof fs.statSync);
-}
-
-/** Some other local user, not this one and not root. */
-const FOREIGN_UID = 65534;
-
-function root(): string {
-  return fs.realpathSync(mkdtempForTestSync('host-kit-ancestry-'));
-}
-
-/**
- * A directory carrying `mode` and `gid`, so the rule reads the group the test chose. The group is set
- * explicitly because a scratch directory inherits one from its parent, not necessarily this user's.
- */
-function directoryWith(directory: string, mode: number, gid = currentGid): string {
-  fs.mkdirSync(directory);
-  fs.chownSync(directory, currentUid, gid);
-  fs.chmodSync(directory, mode);
-  return directory;
-}
-
-function publish(destination: string): void {
-  publishScriptFileSync({ destination, contents: 'context\n' });
-}
-
-function expectUntrusted(run: () => void, exposure: string, ancestor: string): void {
-  expectRefusal(run, 'script_ancestor_untrusted', exposure, ancestor);
-}
-
-function expectUntrustedReplaced(run: () => void, ancestor: string): void {
-  expectRefusal(run, 'script_ancestry_replaced', 'parent_replaced', ancestor);
-}
-
-function expectRefusal(run: () => void, reason: string, exposure: string, ancestor: string): void {
-  let details: Record<string, unknown> | undefined;
-  try {
-    run();
-  } catch (error) {
-    expect(error).toBeInstanceOf(AppError);
-    details = (error as AppError).details as Record<string, unknown>;
-  }
-  expect(details).toMatchObject({ reason, exposure, ancestor });
-}
-
-function modeOf(pathname: string): number {
-  return fs.lstatSync(pathname).mode & 0o777;
 }
 
 // --- a directory another user owns, or that others can write, is refused ---
@@ -422,9 +330,8 @@ skipOnWindows('reads each directory it stands in once, however many routes lead 
   // `a` and `b` are two names for ONE directory, and the spelling enters through `a`, steps back with `..`
   // and enters again through `b`, so the walk crosses `sub` twice and finishes below it. Where it ends is
   // the assertion that both routes were really taken: a walk that gave up on the second name would answer
-  // `home` here instead, and the reads would not include `sub` twice as a path. A directory's judgment
-  // does not depend on the route taken to it, so each path is read once per walk and each physical
-  // directory is judged once.
+  // `home` here instead. Each path is read from the host once per walk, so ground come back to by a `..`
+  // or by an alias of it is not asked for a second time.
   const directory = root();
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const sub = directoryWith(path.join(home, 'sub'), 0o700);
@@ -441,8 +348,8 @@ skipOnWindows('reads each directory it stands in once, however many routes lead 
 
   expect(assertPrivateScriptDestination(`${home}/a/../b/below/journey.ad`)).toBe(below);
 
-  // The shared prefix, `home`, `sub` and `below`: no path is read a second time, so neither is the ground
-  // the two aliases share judged a second time.
+  // The shared prefix, `home`, `sub` and `below`: no path is read a second time, including the one the
+  // two aliases both name.
   expect(new Set(reads).size).toBe(reads.length);
   expect(reads.filter((read) => read === sub)).toHaveLength(1);
   expect(reads.filter((read) => read === home)).toHaveLength(1);
@@ -477,7 +384,7 @@ skipOnWindows(
     try {
       process.chdir(mine);
 
-      expectUntrusted(() => assertPrivateScriptDestination('journey.ad'), 'world_writable', shared);
+      expectUntrusted(() => publish('journey.ad'), 'world_writable', shared);
       expect(fs.readdirSync(mine)).toEqual([]);
     } finally {
       process.chdir(previous);
@@ -501,6 +408,70 @@ skipOnWindows('answers the working directory for a relative destination over a s
   } finally {
     process.chdir(previous);
   }
+});
+
+skipOnWindows(
+  'refuses a relative destination whose working directory has been moved out from under it',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // Node answers the working directory with the path getcwd handed it the first time anything asked, so
+    // that spelling goes stale the moment the directory it names is moved — the process keeps working, and
+    // only the two answers disagree. `cd <mine>`, ASK the working directory (which is what settling the
+    // cache means, and what any caller that resolves a path does), then move `<mine>` and plant another
+    // private directory at its old path. A walk of the remembered spelling judges the planted directory,
+    // finds it publishable, and stages in it; the kernel then resolves `journey.ad` in the MOVED one, so
+    // the entry is created in ground the rule never reached. Comparing the remembered spelling with `.` is
+    // what refuses this, and publishing through the judged directory is what would stop the entry moving
+    // even if the comparison were skipped.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const mine = directoryWith(path.join(home, 'mine'), 0o700);
+    const previous = process.cwd();
+    try {
+      process.chdir(mine);
+      const remembered = path.resolve('');
+      const moved = path.join(home, 'moved');
+      fs.renameSync(mine, moved);
+      directoryWith(mine, 0o700);
+      // The attacker's directory is the one the process is really in: open to everyone, and owned by this
+      // user, so nothing about it looks untrusted from the inside.
+      fs.chmodSync(moved, 0o777);
+
+      expectUntrustedReplaced(() => publish('journey.ad'), remembered);
+      expect(fs.readdirSync(mine)).toEqual([]);
+      expect(fs.readdirSync(moved)).toEqual([]);
+    } finally {
+      process.chdir(previous);
+    }
+  },
+);
+
+skipOnWindows('publishes a relative destination into the working directory it judged', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // Nothing is refused here: the working directory is where the process stands, so the spelling the walk
+  // judged and the directory the kernel resolves are one directory. The entry is still created IN THAT
+  // DIRECTORY, spelled from it, and not by handing the kernel the relative destination back: the answer
+  // the walk gave is the one thing this call knows about where the bytes belong, and a relative name asks
+  // the kernel to answer the question a second time, from whatever the working directory is by then.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const mine = directoryWith(path.join(home, 'mine'), 0o700);
+  const published: string[] = [];
+  const realRenameSync = fs.renameSync;
+  vi.spyOn(fs, 'renameSync').mockImplementation(((existing: unknown, newPath: unknown) => {
+    published.push(String(newPath));
+    return (realRenameSync as (...args: unknown[]) => unknown)(existing, newPath);
+  }) as typeof fs.renameSync);
+  const previous = process.cwd();
+  try {
+    process.chdir(mine);
+    publish('journey.ad');
+  } finally {
+    process.chdir(previous);
+  }
+
+  expect(published).toEqual([path.join(mine, 'journey.ad')]);
+  expect(fs.readdirSync(mine)).toEqual(['journey.ad']);
 });
 
 skipOnWindows('refuses a relative target that lands in ground others can write', () => {
@@ -657,12 +628,17 @@ skipOnWindows('refuses a link loop instead of trusting where the walk ran out', 
   expect(fs.readdirSync(work)).toEqual(['loop']);
 });
 
-skipOnWindows('follows exactly as many link hops as the walk allows, and refuses one more', () => {
+skipOnWindows('follows thirty link hops, and refuses the thirty-first', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // Both counts are written out rather than derived from MAX_SCRIPT_PATH_LINK_HOPS, and the reason is
+  // that a derived test cannot fail: a constant lowered from 30 to 29 rebuilds its own inputs and stays
+  // green while every chain of 30 links that used to publish now refuses. The limit sits below what the
+  // kernels apply themselves (macOS 32, Linux 40), so 30 is a number this rule owns — and the last line
+  // is what ties the number written above to the one the walk enforces.
   const directory = root();
   const work = directoryWith(path.join(directory, 'work'), 0o700);
   const real = directoryWith(path.join(directory, 'real'), 0o700);
-  // `link0 -> link1 -> ... -> <real>`, so the walk expands `count` links to reach the destination.
+  // `link0 -> link1 -> ... -> <real>`: the walk expands `count` links to reach the destination.
   const chain = (count: number): string => {
     let next = real;
     for (let hop = count - 1; hop >= 0; hop -= 1) {
@@ -674,17 +650,17 @@ skipOnWindows('follows exactly as many link hops as the walk allows, and refuses
     return next;
   };
 
-  publish(path.join(chain(MAX_SCRIPT_PATH_LINK_HOPS), 'journey.ad'));
+  publish(path.join(chain(30), 'journey.ad'));
   expect(fs.existsSync(path.join(real, 'journey.ad'))).toBe(true);
   fs.rmSync(path.join(real, 'journey.ad'), { force: true });
 
   expectUntrusted(
-    () =>
-      assertPrivateScriptDestination(path.join(chain(MAX_SCRIPT_PATH_LINK_HOPS + 1), 'journey.ad')),
+    () => assertPrivateScriptDestination(path.join(chain(31), 'journey.ad')),
     'link_loop_exceeded',
-    path.join(work, `link${MAX_SCRIPT_PATH_LINK_HOPS}`),
+    path.join(work, 'link30'),
   );
   expect(fs.readdirSync(real)).toEqual([]);
+  expect(MAX_SCRIPT_PATH_LINK_HOPS).toBe(30);
 });
 
 skipOnWindows('refuses a path component that cannot carry a publish', () => {

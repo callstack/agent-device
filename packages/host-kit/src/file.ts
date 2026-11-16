@@ -1,5 +1,6 @@
 export {
   assertPrivateScriptDestination,
+  assertPrivateScriptDestinationPrefix,
   isAtomicPublishTemporaryPath,
   lstatIfPresent,
   publishDirectoryIdentity,
