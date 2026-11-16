@@ -255,20 +255,28 @@ export function markPostOpenStabilization(
 }
 
 /**
- * Whether a launched app's tree shows its first screen: some node besides the Application and Window
- * roots carries a label or value that is not a busy indicator's. Launch surfaces carry none. Measured
- * on Bluesky, the storyboard splash is one unlabeled full-screen Image and the empty React Native
- * root is one unlabeled view, and each can hold unchanged for longer than a second. A busy indicator
- * is labeled ("In progress") but says only that the screen is not ready. No node count or quiet
- * window is needed: a one-button screen is ready at once, and a two-image splash never is.
+ * Whether a launched app's tree shows its first screen: besides the Application and Window roots, it
+ * reads something other than a busy indicator or a lone status line. Measured on Bluesky, the
+ * storyboard splash is one unlabeled full-screen Image and the empty React Native root is one
+ * unlabeled view, and each can hold unchanged for longer than a second. A busy indicator is labeled
+ * ("In progress") but says only that the screen is not ready. A lone text is a status line: a cold
+ * Expo bundle shows only "Bundling 91%…", and two reads 200 ms apart agree on it. So the screen is
+ * ready once a readable element is not text, such as a button, or two different texts show. No node
+ * count or quiet window is needed: a one-button screen is ready at once, and a splash never is.
  */
 function showsFirstScreen(nodes: readonly SnapshotNode[]): boolean {
-  return nodes.some(
-    (node) =>
-      !isViewportRootNode(node) &&
-      Boolean(node.label?.trim() || node.value?.trim()) &&
-      !BUSY_INDICATOR_ROLES.has(formatRole(node.type ?? '')),
-  );
+  const texts = new Set<string>();
+  for (const node of nodes) {
+    if (isViewportRootNode(node)) continue;
+    const reading = node.label?.trim() || node.value?.trim();
+    if (!reading) continue;
+    const role = formatRole(node.type ?? '');
+    if (BUSY_INDICATOR_ROLES.has(role)) continue;
+    if (role !== 'text') return true;
+    texts.add(reading);
+    if (texts.size > 1) return true;
+  }
+  return false;
 }
 
 const BUSY_INDICATOR_ROLES: ReadonlySet<string> = new Set([

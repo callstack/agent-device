@@ -250,6 +250,63 @@ test('the first capture after an open does not take a busy indicator for the fir
   assert.equal(result?.snapshot.postGestureOutcome?.kind, 'loading');
 });
 
+test('the first capture after an open does not take a lone status line for the first screen', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  // A cold Expo bundle: one progress line, mirrored by React Native's accessibility element.
+  const statusLine = (label: string) => ({
+    type: 'StaticText',
+    label,
+    rect: { x: 10, y: 70, width: 382, height: 14 },
+  });
+  const banner = makeSnapshotState([
+    APP_ROOT,
+    { index: 1, parentIndex: 0, ...statusLine('Bundling 91%…') },
+    { index: 2, parentIndex: 1, ...statusLine('Bundling 91%…') },
+  ]);
+  const home = homeScreenSnapshot();
+  const { capture } = scriptedCapture([banner, banner, banner, home, home]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(2_000);
+  const result = await pendingResult;
+
+  assert.equal(result?.snapshot, home);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
+test('the first capture after an open settles a screen of two texts on its first quiet pair', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'observable');
+  const twoTexts = makeSnapshotState([
+    APP_ROOT,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Welcome',
+      rect: { x: 20, y: 100, width: 350, height: 30 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'StaticText',
+      label: 'Sign in to continue',
+      rect: { x: 20, y: 140, width: 350, height: 20 },
+    },
+  ]);
+  const { capture, calls } = scriptedCapture([twoTexts, twoTexts]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  await vi.advanceTimersByTimeAsync(1_000);
+  const result = await pendingResult;
+
+  assert.equal(calls(), 2);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+});
+
 test('the first capture after an open settles a one-button first screen on its first quiet pair', async () => {
   vi.useFakeTimers();
   const session = makeSession('ios');
