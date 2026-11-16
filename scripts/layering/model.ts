@@ -55,6 +55,7 @@ export type BackEdgeMap = Record<string, string[]>;
 // ranked here or listed as unranked — `unclassifiedZones` and `model.test.ts` guard
 // that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
+  ['build-config', 1],
   ['ad-replay', 1],
   ['ad-script', 1],
   ['command-registry', 1],
