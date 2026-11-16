@@ -20,6 +20,9 @@ test('Maestro flag routes to the versioned compatibility help topic', () => {
 test('Maestro help covers the supported subset and operational boundaries', async () => {
   const help = await usageForCommand('maestro');
   expect(help).not.toBeNull();
+  expect(help).toContain('agent-device plugins add @agent-device/maestro');
+  expect(help).toContain('agent-device plugins add @agent-device/replay');
+  expect(help).toContain('on the daemon host for native .ad replay and all test suites');
   for (const statement of [
     ...MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
     ...MAESTRO_COMPAT_LIMITATIONS,

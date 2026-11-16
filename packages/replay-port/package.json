@@ -6,7 +6,6 @@
   "type": "module",
   "description": "Daemon-side replay port: the adapter over the ad-replay, ad-script and replay-test engines.",
   "dependencies": {
-    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
@@ -14,7 +13,6 @@
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/plugins": "workspace:*"
@@ -139,6 +137,10 @@
     "./source-discovery": {
       "types": "./src/source-discovery.ts",
       "default": "./src/source-discovery.ts"
+    },
+    "./replay-plugin-admission": {
+      "types": "./src/daemon-port/replay-plugin-admission.ts",
+      "default": "./src/daemon-port/replay-plugin-admission.ts"
     }
   },
   "devDependencies": {

@@ -220,6 +220,7 @@ export default defineConfig({
             'scripts/__tests__/release-version.test.ts',
             'scripts/__tests__/release-plan.test.ts',
             'scripts/__tests__/release-publish.test.ts',
+            'scripts/__tests__/install-workspace-replay-plugins.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
             // The perf suite's pure logic, without a device.
             'scripts/perf/*.test.ts',
