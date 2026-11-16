@@ -15,6 +15,15 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Install first-party replay plugins for execution gates
+      if: contains(fromJSON('["unit", "unit-ci", "provider-integration", "integration-node", "macos-coverage", "web-smoke", "mutation", "fuzz-parsers", "maestro-differential", "replay-ios", "replay-ios-device", "replay-macos", "replay-linux", "replay-android", "linux-command-evidence", "concurrency-torture"]'), inputs.gate)
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm --filter @agent-device/maestro --filter @agent-device/replay build
+        export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-replay-plugins}"
+        node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
+        echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
     - id: run
       shell: bash
       env:

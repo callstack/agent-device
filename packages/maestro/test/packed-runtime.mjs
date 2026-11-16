@@ -99,6 +99,21 @@ async function embedded(label) {
         entry,
         'appId: com.example.app\n---\n- evalScript: ${output.value = "ok"}\n',
       );
+      assert.deepEqual(await runtime.client.sessions.list(), []);
+      await assert.rejects(
+        runtime.client.replay.test({ paths: [entry], backend: 'maestro', platform: 'ios' }),
+        (error) => {
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.equal(error.details.reason, 'plugin-not-installed');
+          assert.equal(error.details.package, '@agent-device/replay');
+          assert.equal(
+            error.details.installCommand,
+            'agent-device plugins add @agent-device/replay',
+          );
+          return true;
+        },
+      );
+      assert.deepEqual(await runtime.client.sessions.list(), []);
       const response = await runtime.client.replay.run({
         path: entry,
         backend: 'maestro',
