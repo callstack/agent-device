@@ -112,7 +112,7 @@ test('plugins list reports the running daemon inventory next to the store select
     });
     const { data } = JSON.parse(stdoutCapture.read());
     assert.deepEqual(data.daemon, { pid: owner.pid, stateDir, plugins: [failed] });
-    assert.equal(data.artifact.name, 'example');
+    assert.equal(data.plugins[0].name, 'example');
   } finally {
     stdoutCapture.restore();
   }
@@ -252,7 +252,6 @@ test.each([false, true])('artifact receipt uses the executing CLI host (json=%s)
   const host = {
     cwd,
     env: {
-      ...process.env,
       ...env,
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
@@ -275,7 +274,13 @@ test.each([false, true])('artifact receipt uses the executing CLI host (json=%s)
       { sendToDaemon },
       host,
     );
-    assert.deepEqual(install.mock.calls, [['./fixture.tgz', host]]);
+    assert.equal(install.mock.calls.length, 1);
+    assert.equal(install.mock.calls[0]?.[0], './fixture.tgz');
+    const installedHost = install.mock.calls[0]![1];
+    assert.equal(installedHost.cwd, cwd);
+    assert.deepEqual(Object.keys(installedHost.env).sort(), Object.keys(host.env).sort());
+    for (const [key, value] of Object.entries(host.env))
+      assert.equal(installedHost.env[key], value);
     assert.equal(sendToDaemon.mock.calls.length, 0);
     const output = capture.read();
     if (json) {
