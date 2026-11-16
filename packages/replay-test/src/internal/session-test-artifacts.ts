@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
-import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
+import type { ReplayTestAttemptOutcome } from '@agent-device/contracts/replay-test-execution';
 
 /**
  * `test`'s default artifacts root when `--artifacts-dir` is not given. `packages/remote/src/daemon-artifacts.ts`

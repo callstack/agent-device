@@ -4,12 +4,12 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
-import type { buildReplayVarScope, LocalIdentity } from '@agent-device/ad-script';
 import type {
-  AdReplayGuardMismatchEvidence,
-  AdReplayLandmarkMismatchEvidence,
-  AdReplayTargetStructuralDenotation,
-} from './target-verification.ts';
+  LocalIdentity,
+  NodeStructuralDenotation,
+  TargetAncestryEntry,
+} from './target-annotation.ts';
+import type { ReplayVarSources, ReplayScriptMetadata } from './replay-script-data.ts';
 
 /**
  * #1478 P5 stage C2b (split out of `step-loop.ts` by the #1555 structural-
@@ -23,14 +23,8 @@ import type {
  * full boundary rationale.
  */
 
-/**
- * `${VAR}` scope inputs — plain data (builtins/file/shell/cli env) the
- * daemon reads from the request/process and passes in; `runAdReplay` builds
- * the scope from this. Derived structurally off `buildReplayVarScope`
- * (`@agent-device/ad-script` does not export its own `ReplayVarSources` type
- * by name) rather than duplicating the shape.
- */
-export type AdReplayVarSources = Parameters<typeof buildReplayVarScope>[0];
+/** Host-provided variable sources; the engine resolves each action once. */
+export type AdReplayVarSources = ReplayVarSources;
 
 /**
  * A `${VAR}` value eligible for divergence-report redaction — the engine's
@@ -373,3 +367,60 @@ export type AdReplayRunOutcome =
       readonly stepIndex: number;
       readonly failure: AdReplayStepFailure;
     }>;
+
+/** The verified member's shared structural position, read-only across the execution boundary. */
+export type AdReplayTargetStructuralDenotation = Readonly<NodeStructuralDenotation>;
+
+/**
+ * The guard-mismatch refusal's typed evidence, already narrowed by the
+ * daemon adapter from the wire response's `details` bag — the engine never
+ * sees the untyped bag itself.
+ */
+export type AdReplayGuardMismatchEvidence = Readonly<{
+  targetRole?: 'source' | 'destination';
+  observed: LocalIdentity | undefined;
+  expectedStructural: AdReplayTargetStructuralDenotation | undefined;
+  observedStructural: AdReplayTargetStructuralDenotation | undefined;
+}>;
+
+/** The wait-landmark-mismatch refusal's typed evidence — same translate-before-crossing rule. */
+export type AdReplayLandmarkMismatchEvidence = Readonly<{
+  matchCount: number | undefined;
+  observed: LocalIdentity | undefined;
+  observedAncestry: readonly TargetAncestryEntry[];
+}>;
+
+export type AdReplayManifest = Readonly<{
+  actions: SessionAction[];
+  actionLines: number[];
+  metadata: ReplayScriptMetadata;
+  /** SHA-256 digest of the canonical plan (`digestFlags` binds the same platform/target the replay invokes with). */
+  planDigest: string;
+  /** The `--from`/`--plan-digest` resume-point math, closed over this manifest's own `actions`/`planDigest`. */
+  resolveEntryIndex(params: AdReplayEntryIndexParams): AdReplayEntryIndexResult;
+}>;
+
+/** The request-level `--platform`/`--target` override the plan digest binds (raw flags, before any metadata merge). */
+export type AdReplayDigestFlags = Readonly<{ platform?: string; target?: string }>;
+
+/**
+ * The session-side state that gates an EMPTY-TAIL resume (`--from actionCount
+ * + 1`). Stamped for `record-and-heal`, and per #1262 also for
+ * `caution`/`manual`'s record-and-heal-shaped alternate repair (their own
+ * unshifted `resume.from` is unaffected by this watermark).
+ */
+export type PendingRecordAndHeal = Readonly<{
+  expectedFrom: number;
+  actionsCountAtDivergence: number;
+}>;
+
+export type AdReplayEntryIndexParams = Readonly<{
+  from: number | undefined;
+  digest: string | undefined;
+  pendingRecordAndHeal: PendingRecordAndHeal | undefined;
+  sessionActionsLength: number;
+}>;
+
+export type AdReplayEntryIndexResult =
+  | Readonly<{ readonly ok: true; readonly value: number }>
+  | Readonly<{ readonly ok: false; readonly message: string }>;
