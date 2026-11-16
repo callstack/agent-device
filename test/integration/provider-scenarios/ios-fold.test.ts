@@ -610,7 +610,6 @@ test.each([
         // Exercise the real client envelope and HTTP transport, including timeout classification.
         const pending: Promise<DaemonResponse> = createDaemonTransport(createTestHostEnvironment())(
           request,
-          { daemonLifecycle: 'attach' },
         ).catch((error) => ({ ok: false, error: normalizeError(error) }));
         let settled = false;
         void pending.then(

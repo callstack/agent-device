@@ -21,7 +21,7 @@ import {
 } from '@agent-device/test-kit';
 import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { createDaemonTransport, sendToDaemon } from '../index.ts';
+import { createDaemonTransport, sendToDaemon, ensureProxyUpstreamDaemon } from '../index.ts';
 
 // ADR 0029: a caller that names a daemon policy must not use a daemon that enforces another one.
 
@@ -114,7 +114,11 @@ test('a caller naming a policy refuses a daemon another caller started without i
   const fixture = await startReusableDaemon({ policyDigest: undefined, publish: 'on-spawn' });
   try {
     await assert.rejects(
-      () => sendSmoke(fixture.stateDir),
+      () =>
+        ensureProxyUpstreamDaemon({
+          stateDir: fixture.stateDir,
+          host: { env: process.env, cwd: process.cwd() },
+        }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'DAEMON_POLICY_MISMATCH');

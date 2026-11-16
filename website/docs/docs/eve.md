@@ -15,7 +15,7 @@ pnpm add agent-device
 Add `agent/tools/agent_device.ts`:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
 
@@ -44,6 +44,7 @@ export default defineTool({
     }),
   ]),
   async execute(input) {
+    await ensureDaemon();
     switch (input.action) {
       case 'open':
         return await client.apps.open({ app: input.app, platform: input.platform });

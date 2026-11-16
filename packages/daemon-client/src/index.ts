@@ -72,6 +72,7 @@ async function sendToDaemonOnHost(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions,
   host: HostEnvironment,
+  ownOneShot = false,
 ): Promise<DaemonResponse> {
   const { resolveClientSettings, resolveTimeoutRecovery, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
@@ -90,8 +91,8 @@ async function sendToDaemonOnHost(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
     host,
-    options.daemonLifecycle,
     options.daemonBinding,
+    ownOneShot,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -196,7 +197,16 @@ export function createEnsuredDaemonTransport(
   let ensured: Promise<typeof sendToDaemon> | undefined;
   return async (req, context) => {
     ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
-      withEnsuredDaemon(options.host ? createDaemonTransport(options.host) : sendToDaemon, options),
+      withEnsuredDaemon(
+        async (request, context) =>
+          await sendToDaemonOnHost(
+            request,
+            context ?? {},
+            options.host ?? captureHostEnvironment(process),
+            true,
+          ),
+        options,
+      ),
     );
     return await (
       await ensured
@@ -459,7 +469,7 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
   return await resolve();
 }
 
-/** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */
+/** The local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */
 export async function ensureProxyUpstreamDaemon(
   options: ProxyUpstreamDaemonOptions,
 ): Promise<ProxyUpstreamDaemon> {

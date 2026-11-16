@@ -33,12 +33,24 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { sendToDaemon as attach, createEnsuredDaemonTransport } from '../index.ts';
+import { ensureStartedDaemon, resolveClientSettings } from '../daemon-client-lifecycle.ts';
+import { captureHostEnvironment, readProcessStartTime } from '@agent-device/host-kit/process';
+
+const ensuredTransport = createEnsuredDaemonTransport();
+async function ensureAndSend(req: Parameters<typeof attach>[0]) {
+  if (req.command === 'replay' || req.command === 'test') return await ensuredTransport(req);
+  const host = captureHostEnvironment(process);
+  await ensureStartedDaemon({
+    ...resolveClientSettings(req, undefined, host),
+    retireIncompatibleContender: true,
+  });
+  return await attach(req);
+}
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { tryAcquireProcessLock, inspectProcessLock } from '@agent-device/host-kit/file';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
-import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { readVersion } from '@agent-device/host-kit/version';
 
@@ -282,7 +294,7 @@ function mockSocketErrorAfterWrite(failingPort: number): {
   };
 }
 
-test('sendToDaemon retains unknown metadata after a spawn failure', async () => {
+test('ensureAndSend retains unknown metadata after a spawn failure', async () => {
   const stateDir = makeTempStateDir('agent-device-daemon-spawn-retry-');
   const paths = resolveDaemonPaths(stateDir);
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
@@ -304,7 +316,7 @@ test('sendToDaemon retains unknown metadata after a spawn failure', async () => 
   try {
     let thrown: unknown;
     try {
-      await sendToDaemon({
+      await ensureAndSend({
         session: 'default',
         command: 'spawn-retry-smoke',
         positionals: [],
@@ -333,7 +345,7 @@ test('sendToDaemon retains unknown metadata after a spawn failure', async () => 
   }
 });
 
-test('sendToDaemon reports early daemon exit with log tail and startup paths', async () => {
+test('ensureAndSend reports early daemon exit with log tail and startup paths', async () => {
   const stateDir = makeTempStateDir('agent-device-daemon-early-exit-');
   const paths = resolveDaemonPaths(stateDir);
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
@@ -352,7 +364,7 @@ test('sendToDaemon reports early daemon exit with log tail and startup paths', a
   try {
     let thrown: unknown;
     try {
-      await sendToDaemon({
+      await ensureAndSend({
         session: 'default',
         command: 'early-exit-smoke',
         positionals: [],
@@ -395,7 +407,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
   installSpawnedHttpDaemon(paths, daemon.port);
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'stale-lock-smoke',
       positionals: [],
@@ -408,7 +420,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
     assert.equal(mockRunCmdDetached.mock.calls.length, 1);
     assert.equal(freshLock.state, 'held');
     if (freshLock.state === 'held') assert.notEqual(freshLock.owner.startTime, staleStartTime);
-    assert.deepEqual(daemon.seenPaths, ['GET /health', 'POST /rpc']);
+    assert.deepEqual(daemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
   } finally {
     if (stale.status === 'acquired') await stale.acquisition.release();
     await closeLoopbackServer(daemon.server);
@@ -416,7 +428,7 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
   }
 });
 
-test('sendToDaemon does not reuse reachable daemon metadata with mismatched version or signature', async (t) => {
+test('ensureAndSend does not reuse reachable daemon metadata with mismatched version or signature', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const cases: Array<{
@@ -455,7 +467,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
     const stderrCapture = beginStderrCapture();
 
     try {
-      const response = await sendToDaemon({
+      const response = await ensureAndSend({
         session: 'default',
         command: `mismatch-${fixture.name}-smoke`,
         positionals: [],
@@ -466,7 +478,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
       assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
       assert.equal(mockRunCmdDetached.mock.calls.length, 1);
       assert.deepEqual(staleDaemon.seenPaths, []);
-      assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
+      assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
       const staleVersion = fixture.version ?? readVersion();
       assert.equal(
         stderrCapture.read(),
@@ -483,7 +495,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
   }
 });
 
-test('sendToDaemon prints a takeover notice before replacing an unreachable daemon', async (t) => {
+test('ensureAndSend prints a takeover notice before replacing an unreachable daemon', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-unreachable-takeover-');
@@ -501,7 +513,7 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
   const stderrCapture = beginStderrCapture();
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'unreachable-takeover-smoke',
       positionals: [],
@@ -521,7 +533,7 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
   }
 });
 
-test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is requested', async (t) => {
+test('ensureAndSend replaces socket-only daemon metadata when HTTP transport is requested', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const stateDir = makeTempStateDir('agent-device-daemon-http-takeover-');
@@ -537,7 +549,7 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
   const stderrCapture = beginStderrCapture();
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'http-takeover-smoke',
       positionals: [],
@@ -547,7 +559,7 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
 
     assert.deepEqual(response, { ok: true, data: { via: 'fresh-http-daemon' } });
     assert.equal(mockRunCmdDetached.mock.calls.length, 1);
-    assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
+    assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'GET /health', 'POST /rpc']);
     assert.equal(
       stderrCapture.read(),
       `Replacing daemon (pid 999999, v${readVersion()}) in ${paths.baseDir}: unreachable\n`,
@@ -574,7 +586,7 @@ test('sendToDaemon falls back from failed socket transport to HTTP using daemon 
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await attach({
       session: 'default',
       command: 'transport-fallback-smoke',
       positionals: [],
@@ -610,7 +622,7 @@ test('sendToDaemon does not replay over HTTP after the socket request is written
   try {
     let thrown: unknown;
     try {
-      await sendToDaemon({
+      await attach({
         session: 'default',
         command: 'open',
         positionals: ['Demo'],
@@ -667,7 +679,7 @@ function unheldDivergenceError(): Record<string, unknown> {
   };
 }
 
-test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir on a resumable repair divergence', async (t) => {
+test('ensureAndSend keeps an owned ephemeral daemon alive and hints its --state-dir on a resumable repair divergence', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonErrorFixture(heldDivergenceError());
@@ -677,7 +689,7 @@ test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-d
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['drifted.ad'],
@@ -719,7 +731,7 @@ test('C1: keep-alive keys on repairSessionHeld, NOT resume.allowed — a HELD di
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['drifted.ad'],
@@ -738,7 +750,7 @@ test('C1: keep-alive keys on repairSessionHeld, NOT resume.allowed — a HELD di
   }
 });
 
-test('sendToDaemon tears down an owned ephemeral daemon on an UNHELD divergence (no repairSessionHeld signal)', async (t) => {
+test('ensureAndSend tears down an owned ephemeral daemon on an UNHELD divergence (no repairSessionHeld signal)', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonErrorFixture(unheldDivergenceError());
@@ -748,7 +760,7 @@ test('sendToDaemon tears down an owned ephemeral daemon on an UNHELD divergence 
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['drifted.ad'],
@@ -797,7 +809,7 @@ test('BLOCKER 2 (third follow-up): a shutdown-time repair commit failure is surf
       return originalRmdir(target, options);
     });
     try {
-      const response = await sendToDaemon({
+      const response = await ensureAndSend({
         session: 'default',
         command: 'replay',
         positionals: ['flow.ad'],
@@ -830,7 +842,7 @@ test('BLOCKER 2 (third follow-up): a shutdown-time repair commit failure is surf
   }
 });
 
-test('continuation: sendToDaemon keeps the daemon alive on a held divergence even WITHOUT --save-script on the request', async (t) => {
+test('continuation: ensureAndSend keeps the daemon alive on a held divergence even WITHOUT --save-script on the request', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   // The `replay --from` continuation of a repair does NOT repeat --save-script
@@ -844,7 +856,7 @@ test('continuation: sendToDaemon keeps the daemon alive on a held divergence eve
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['drifted.ad'],
@@ -890,12 +902,12 @@ function activeReplaySuccessData(overrides: Record<string, unknown> = {}): Recor
 async function replayLeavingSessionActive(
   daemonPort: number,
   requestId: string,
-): Promise<{ response: Awaited<ReturnType<typeof sendToDaemon>>; ownedStateDir: string }> {
+): Promise<{ response: Awaited<ReturnType<typeof ensureAndSend>>; ownedStateDir: string }> {
   let ownedStateDir = '';
   installSpawnedHttpDaemonAtOwnedStateDir(daemonPort, (dir) => {
     ownedStateDir = dir;
   });
-  const response = await sendToDaemon({
+  const response = await ensureAndSend({
     session: 'default',
     command: 'replay',
     positionals: ['open-only.ad'],
@@ -912,7 +924,7 @@ function parseAddressHint(hint: string): { stateDir: string; session: string } {
   return { stateDir: match[1] ?? '', session: match[2] ?? '' };
 }
 
-test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-dir when a close-less replay leaves the session active', async (t) => {
+test('ensureAndSend keeps an owned ephemeral daemon alive and hints its --state-dir when a close-less replay leaves the session active', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
@@ -948,7 +960,7 @@ test('sendToDaemon keeps an owned ephemeral daemon alive and hints its --state-d
   }
 });
 
-test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--session reaches the SAME kept-alive daemon, without spawning a new one', async (t) => {
+test('closes the loop: a follow-up ensureAndSend using the hinted --state-dir/--session reaches the SAME kept-alive daemon, without spawning a new one', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData());
@@ -962,7 +974,7 @@ test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--s
     assert.equal(hinted.stateDir, ownedStateDir);
 
     const spawnCallsBeforeFollowUp = mockRunCmdDetached.mock.calls.length;
-    const followUp = await sendToDaemon({
+    const followUp = await ensureAndSend({
       session: hinted.session,
       command: 'press',
       positionals: [],
@@ -984,7 +996,7 @@ test('closes the loop: a follow-up sendToDaemon using the hinted --state-dir/--s
   }
 });
 
-test('sendToDaemon tears down an owned ephemeral daemon when replay reports the session was closed (sessionActive: false)', async (t) => {
+test('ensureAndSend tears down an owned ephemeral daemon when replay reports the session was closed (sessionActive: false)', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   const daemon = await startHttpDaemonFixture(activeReplaySuccessData({ sessionActive: false }));
@@ -994,7 +1006,7 @@ test('sendToDaemon tears down an owned ephemeral daemon when replay reports the 
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['closed.ad'],
@@ -1032,7 +1044,7 @@ test('ADR 0012 R7 x ADR 0016: a completed --save-script repair also keeps its ow
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['flow.ad'],
@@ -1056,7 +1068,7 @@ test('ADR 0012 R7 x ADR 0016: a completed --save-script repair also keeps its ow
   }
 });
 
-test('issue #1384: sendToDaemon does not stop a client-started daemon at an explicit --state-dir when replay leaves the session active', async (t) => {
+test('issue #1384: ensureAndSend does not stop a client-started daemon at an explicit --state-dir when replay leaves the session active', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   // The literal #1384 repro: an explicit AGENT_DEVICE_STATE_DIR/--state-dir
@@ -1070,7 +1082,7 @@ test('issue #1384: sendToDaemon does not stop a client-started daemon at an expl
   installSpawnedHttpDaemon(paths, daemon.port);
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'replay',
       positionals: ['open-only.ad'],
@@ -1099,7 +1111,7 @@ test('issue #1384: sendToDaemon does not stop a client-started daemon at an expl
   }
 });
 
-test('sendToDaemon still tears down a `test` command owned ephemeral daemon even if its response data carried sessionActive:true', async (t) => {
+test('ensureAndSend still tears down a `test` command owned ephemeral daemon even if its response data carried sessionActive:true', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
   // `test` never actually sets this field in practice (its own per-file
@@ -1113,7 +1125,7 @@ test('sendToDaemon still tears down a `test` command owned ephemeral daemon even
   });
 
   try {
-    const response = await sendToDaemon({
+    const response = await ensureAndSend({
       session: 'default',
       command: 'test',
       positionals: ['suite.ad'],

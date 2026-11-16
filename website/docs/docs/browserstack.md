@@ -90,8 +90,9 @@ To drive BrowserStack only through MCP, see [Use a provider only through MCP](/d
 Configure the client directly when your Node.js process manages the BrowserStack credentials and selectors instead of a saved CLI connection profile:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
+await ensureDaemon();
 const client = createAgentDeviceClient({
   session: 'checkout-android',
   leaseProvider: 'browserstack',
