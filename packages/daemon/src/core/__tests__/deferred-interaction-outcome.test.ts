@@ -201,7 +201,7 @@ const APP_ROOT = {
   rect: { x: 0, y: 0, width: 390, height: 844 },
 };
 
-test('the first capture after an open waits through a splash image however long it holds', async () => {
+test('the first capture after an open keeps waiting through a splash image that holds unchanged', async () => {
   vi.useFakeTimers();
   const session = makeSession('ios');
   markPostOpenStabilization(session, 'observable');
