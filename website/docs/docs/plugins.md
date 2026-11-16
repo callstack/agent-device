@@ -169,6 +169,10 @@ A package that still ships the old manifest loads when it also exports `./agent-
 
 ## Create a replay backend plugin
 
-A replay engine uses the same managed `./agent-device` factory entry and `apiVersion: 2`. Return a `ReplayEnginePlugin` from the type-only `agent-device/plugins` contract with `kind: 'replay-backend'`, a `backend` id, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }`. Keep setup engine-free; `create` may asynchronously import the engine when a replay capability is selected.
+A replay engine uses the same managed `./agent-device` factory entry and `apiVersion: 2`. Return a `ReplayEnginePlugin` from the type-only `agent-device/plugins` contract with `kind: 'replay-backend'`, a `backend` id, and `setup(host)`. Keep setup engine-free; `create` may asynchronously import the engine when a replay capability is selected.
 
-The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`. The daemon owns sessions, policy, selector/ref authority, and device cleanup. `dispose` runs once after requests drain. Client-side source collection and export dispose their scoped plugin registry when the operation ends.
+For a format backend such as `maestro`, setup returns `{ replayBackend: { create(host) }, dispose? }`. The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`.
+
+For the native `ad` backend, setup returns `{ execution: { create() }, dispose? }`. The object returned by `create()` implements `inspectAdReplay`, `runAdReplay`, and `runReplayTestSuite`. Return only the factory for your backend: the host rejects a native setup that provides `replayBackend`, or a format setup that provides `execution`.
+
+The daemon owns sessions, policy, selector/ref authority, and device cleanup. `dispose` runs once after requests drain. Client-side source collection and export dispose their scoped plugin registry when the operation ends.
