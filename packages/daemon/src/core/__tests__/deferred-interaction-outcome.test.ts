@@ -131,6 +131,17 @@ test('a press whose settle never converged keeps the freshness window over a fre
   assert.equal(session.androidSnapshotFreshness?.action, 'press');
 });
 
+// #4105: the generic route marks a bare `back` with no settle observation. A proved-fresh tree
+// stored before the back is no proof about the screen the back navigated to.
+test('a bare back keeps the freshness window over a fresh stored tree', () => {
+  const session = makeSession('android');
+  session.snapshot = { ...pickupSnapshot(), freshTraversal: true };
+
+  markDeferredInteractionOutcome({ session, command: 'back', positionals: [], flags: undefined });
+
+  assert.equal(session.androidSnapshotFreshness?.action, 'back');
+});
+
 test('a scroll marks stabilization but not freshness', () => {
   const session = makeSession('android');
   session.snapshot = pickupSnapshot();
