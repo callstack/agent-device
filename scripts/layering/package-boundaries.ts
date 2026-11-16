@@ -582,18 +582,23 @@ export function checkPackageBoundaries(repoRoot: string): PackageBoundaryViolati
   }
   for (const root of ['src', 'test', 'scripts']) {
     for (const file of walkTsFiles(repoRoot, root)) {
-      // Gate tests under scripts/ carry import syntax inside fixture strings
-      // (which is why this reads module records instead of scanning lines);
-      // src/ and test/ suites stay covered — they import packages for real.
-      if (root === 'scripts' && file.endsWith('.test.ts')) continue;
       const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+      const sites = specifierSites(file, source);
+      if (root === 'scripts' && file.endsWith('.test.ts')) {
+        // Script harnesses retain their relative source access. Their actual package imports
+        // still need root declarations; fixture strings are not module records.
+        violations.push(
+          ...checkRootSites(
+            sites.filter((site) => !site.specifier.startsWith('.')),
+            packages,
+            rootDependencies,
+            true,
+          ),
+        );
+        continue;
+      }
       violations.push(
-        ...checkRootSites(
-          specifierSites(file, source),
-          packages,
-          rootDependencies,
-          insideCompiledSources(file),
-        ),
+        ...checkRootSites(sites, packages, rootDependencies, insideCompiledSources(file)),
       );
     }
   }
