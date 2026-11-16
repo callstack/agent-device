@@ -157,22 +157,22 @@ export type OpenApplicationTiming = Readonly<{
 }>;
 
 /**
- * What an owner learned when it verified after its dispatch which app holds the foreground. A
- * launch dispatch can report success while a system surface (a lock screen is the typical one)
- * keeps the launched app behind it, so the verification is a bounded poll of the platform's own
- * foreground read.
+ * What an owner learned when it verified after its dispatch which app holds the foreground, and
+ * the launched app never held it. A launch dispatch can report success while a system surface (a
+ * lock screen is the typical one) keeps the launched app behind it, so the verification is a
+ * bounded poll of the platform's own foreground read. It is present only when unconfirmed, and
+ * its state names what the probe actually saw:
+ *
+ * - `other-foreground`: a read succeeded and named another app in the foreground.
+ * - `no-foreground`: a read succeeded and no mission is foreground. A lock screen is the typical
+ *   cause; unlock the device and retry.
+ * - `probe-failed`: no read in the budget produced a parsed mission list. Check the device
+ *   connection; this claims nothing about the launched app.
  */
-export type OpenForegroundVerification = Readonly<{
-  /** True when the launched app held the foreground within the owner's poll budget. */
-  confirmed: boolean;
-  /**
-   * `unreadable` when the poll never parsed one foreground mission in its whole budget — the
-   * probe answered nothing, which is not evidence that the app stayed backgrounded.
-   */
-  probeState?: 'unreadable';
-  /** The app that held the foreground instead, when the platform could name one. */
-  foregroundPackage?: string;
-}>;
+export type OpenForegroundVerification =
+  | Readonly<{ state: 'other-foreground'; foregroundPackage: string }>
+  | Readonly<{ state: 'no-foreground' }>
+  | Readonly<{ state: 'probe-failed' }>;
 
 /**
  * What an app open learned about the launched app before it returned. A local iOS Simulator asks

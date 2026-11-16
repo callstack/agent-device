@@ -333,7 +333,7 @@ test('pollHarmonyOpenForeground confirms the launched bundle on the first foregr
 
   const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application');
 
-  assert.deepEqual(read, { confirmed: true });
+  assert.equal(read, undefined);
   assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], ['-t', 'harmony-1', 'shell', 'aa', 'dump', '-l']);
 });
 
@@ -355,7 +355,7 @@ test('pollHarmonyOpenForeground keeps polling until the launched bundle holds th
     pollIntervalMs: 1,
   });
 
-  assert.deepEqual(read, { confirmed: true });
+  assert.equal(read, undefined);
   assert.equal(mockRunCmd.mock.calls.length, 3);
 });
 
@@ -371,10 +371,10 @@ test('pollHarmonyOpenForeground names the app that kept the foreground when the 
     pollIntervalMs: 10,
   });
 
-  assert.deepEqual(read, { confirmed: false, foregroundPackage: 'com.ohos.launcher' });
+  assert.deepEqual(read, { state: 'other-foreground', foregroundPackage: 'com.ohos.launcher' });
 });
 
-test('pollHarmonyOpenForeground reports an unreadable foreground when no mission is foreground', async () => {
+test('pollHarmonyOpenForeground classifies a mission list with no foreground mission as no-foreground', async () => {
   mockRunCmd.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'BACKGROUND'),
@@ -386,9 +386,21 @@ test('pollHarmonyOpenForeground reports an unreadable foreground when no mission
     pollIntervalMs: 10,
   });
 
-  // A budget with zero parseable foreground reads is an unreadable probe, not
-  // evidence that the app stayed backgrounded.
-  assert.deepEqual(read, { confirmed: false, probeState: 'unreadable' });
+  // The read answered — a mission list with no FOREGROUND mission is the
+  // lock-screen shape, not a probe that failed to run.
+  assert.deepEqual(read, { state: 'no-foreground' });
+});
+
+test('pollHarmonyOpenForeground reports probe-failed when every read fails', async () => {
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+
+  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+    pollBudgetMs: 40,
+    pollIntervalMs: 10,
+  });
+
+  // A budget whose every read failed is a probe that never ran to an answer.
+  assert.deepEqual(read, { state: 'probe-failed' });
 });
 
 test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps polling', async () => {
@@ -402,7 +414,7 @@ test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps po
     pollIntervalMs: 1,
   });
 
-  assert.deepEqual(read, { confirmed: true });
+  assert.equal(read, undefined);
 });
 
 test('pollHarmonyOpenForeground rejects when the request signal aborts mid-poll', async () => {
@@ -473,12 +485,12 @@ test('verifyHarmonyOpenForeground attaches the foreground read when the launch n
 
   const verified = await pending;
   assert.deepEqual(verified.timing.foregroundVerification, {
-    confirmed: false,
+    state: 'other-foreground',
     foregroundPackage: 'com.ohos.launcher',
   });
 });
 
-test('verifyHarmonyOpenForeground reports an unreadable foreground when no mission is foreground', async () => {
+test('verifyHarmonyOpenForeground attaches no-foreground when a read answered with no foreground mission', async () => {
   vi.useFakeTimers();
   mockRunCmd.mockResolvedValue({
     exitCode: 0,
@@ -494,10 +506,30 @@ test('verifyHarmonyOpenForeground reports an unreadable foreground when no missi
   await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
 
   const verified = await pending;
-  assert.deepEqual(verified.timing.foregroundVerification, {
-    confirmed: false,
-    probeState: 'unreadable',
-  });
+  assert.deepEqual(verified.timing.foregroundVerification, { state: 'no-foreground' });
+});
+
+test('verifyHarmonyOpenForeground fails --foreground with the unreadable reason when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(error.details?.hint ?? '', /check the device connection/i);
+      return true;
+    },
+  );
 });
 
 test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {

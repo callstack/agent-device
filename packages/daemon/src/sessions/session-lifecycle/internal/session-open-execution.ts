@@ -195,9 +195,9 @@ function openProbeUnreadableWarning(): string {
 /** What the caller's `open` output says when the launched app never held the foreground. */
 function openNotForegroundWarning(verification: OpenForegroundVerification): string {
   const read =
-    verification.foregroundPackage === undefined
-      ? 'HarmonyOS could not read any foreground app'
-      : `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`;
+    verification.state === 'other-foreground'
+      ? `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`
+      : 'HarmonyOS read no mission in the foreground';
   return (
     `The launch dispatch succeeded, but ${read} within 5s of the launch ` +
     '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
@@ -417,10 +417,10 @@ export async function completeOpenCommand(params: {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
   }
   const foregroundVerification = outcome.timing.foregroundVerification;
-  if (foregroundVerification?.confirmed === false) {
+  if (foregroundVerification) {
     appendResponseWarning(
       openResult,
-      foregroundVerification.probeState === 'unreadable'
+      foregroundVerification.state === 'probe-failed'
         ? openProbeUnreadableWarning()
         : openNotForegroundWarning(foregroundVerification),
     );

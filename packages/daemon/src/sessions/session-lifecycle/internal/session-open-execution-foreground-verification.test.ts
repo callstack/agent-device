@@ -113,7 +113,10 @@ test('open warns and carries the typed read when the launched app never held the
       openOutcome: {
         appBundleId: 'com.example.application',
         timing: {
-          foregroundVerification: { confirmed: false, foregroundPackage: 'com.ohos.launcher' },
+          foregroundVerification: {
+            state: 'other-foreground',
+            foregroundPackage: 'com.ohos.launcher',
+          },
         },
       },
     }),
@@ -125,12 +128,12 @@ test('open warns and carries the typed read when the launched app never held the
   expect(warnings.some((warning) => warning.toLowerCase().includes('unlock'))).toBe(true);
   const timing = data.timing as Record<string, unknown> | undefined;
   expect(timing?.foregroundVerification).toEqual({
-    confirmed: false,
+    state: 'other-foreground',
     foregroundPackage: 'com.ohos.launcher',
   });
 });
 
-test('open names the unreadable foreground instead of a holder package when no mission is foreground', async () => {
+test('open tells the user to unlock when a read answered with no foreground mission', async () => {
   const sessionStore = makeSessionStore();
   publishSession(sessionStore, 'harmony-session', HARMONY_DEVICE);
 
@@ -140,15 +143,15 @@ test('open names the unreadable foreground instead of a holder package when no m
       sessionName: 'harmony-session',
       openOutcome: {
         appBundleId: 'com.example.application',
-        timing: { foregroundVerification: { confirmed: false } },
+        timing: { foregroundVerification: { state: 'no-foreground' } },
       },
     }),
   );
 
   const warnings = (data.warnings as string[] | undefined) ?? [];
-  expect(warnings.some((warning) => warning.includes('could not read any foreground app'))).toBe(
-    true,
-  );
+  expect(warnings.some((warning) => warning.includes('open-not-foreground'))).toBe(true);
+  expect(warnings.some((warning) => warning.includes('no mission in the foreground'))).toBe(true);
+  expect(warnings.some((warning) => warning.toLowerCase().includes('unlock'))).toBe(true);
 });
 
 test('open adds no foreground warning when the lifecycle outcome carries no unconfirmed read', async () => {
@@ -182,7 +185,10 @@ test('open --foreground fails the command when the foreground verification is un
       openOutcome: {
         appBundleId: 'com.example.application',
         timing: {
-          foregroundVerification: { confirmed: false, foregroundPackage: 'com.ohos.launcher' },
+          foregroundVerification: {
+            state: 'other-foreground',
+            foregroundPackage: 'com.ohos.launcher',
+          },
         },
       },
       onOpenApplication: async (input) => {
@@ -209,7 +215,7 @@ test('open names the unreadable probe instead of claiming the app stayed backgro
       sessionName: 'harmony-session',
       openOutcome: {
         appBundleId: 'com.example.application',
-        timing: { foregroundVerification: { confirmed: false, probeState: 'unreadable' } },
+        timing: { foregroundVerification: { state: 'probe-failed' } },
       },
     }),
   );
@@ -220,4 +226,34 @@ test('open names the unreadable probe instead of claiming the app stayed backgro
   );
   expect(warnings.some((warning) => warning.includes('claims nothing'))).toBe(true);
   expect(warnings.some((warning) => warning.includes('open-not-foreground'))).toBe(false);
+});
+
+test('open --foreground propagates the unreadable-probe failure when no read succeeded', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'harmony-session', HARMONY_DEVICE);
+
+  await expect(
+    openApp({
+      sessionStore,
+      sessionName: 'harmony-session',
+      flags: { foreground: true },
+      openOutcome: {
+        appBundleId: 'com.example.application',
+        timing: { foregroundVerification: { state: 'probe-failed' } },
+      },
+      onOpenApplication: async (input) => {
+        if (input.execution.foreground === true) {
+          throw Object.assign(
+            new Error(
+              'The launch dispatch for com.example.application succeeded, but the foreground probe could not read the device within 5s',
+            ),
+            { code: 'COMMAND_FAILED', details: { reason: 'open-foreground-probe-unreadable' } },
+          );
+        }
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'open-foreground-probe-unreadable' },
+  });
 });
