@@ -1,3 +1,4 @@
+import { inspectAdReplay } from '@agent-device/ad-replay';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
@@ -9,11 +10,10 @@ import type {
   ReplaySessionStore,
 } from '@agent-device/contracts/replay-backend';
 import { buildReplayScriptPlatformFlags } from '@agent-device/replay-port/replay-script-selection';
-import {
-  inspectAdReplay,
-  type AdReplayManifest,
-  type AdReplayVarSources,
-} from '@agent-device/ad-replay';
+import type {
+  AdReplayManifest,
+  AdReplayVarSources,
+} from '@agent-device/contracts/ad-replay-execution';
 import {
   collectReplayShellEnv,
   isReplayBackendId,
