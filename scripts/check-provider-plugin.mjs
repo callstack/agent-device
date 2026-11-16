@@ -78,8 +78,8 @@ try {
   );
   assert.deepEqual(installed.exports, {
     ...fixture.additionalExports,
-    '.': { import: './dist/agent-device.mjs' },
-    './agent-device': { import: './dist/agent-device.mjs' },
+    '.': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
+    './agent-device': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
   });
   assert.equal(installed.dependencies, undefined);
   assert.equal(installed.peerDependencies, undefined);
@@ -99,6 +99,15 @@ try {
       ],
       project,
     );
+  }
+  if (fixture.verifyTypes) {
+    await run(
+      'npm',
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', pluginTarball],
+      consumer,
+    );
+    await fixture.verifyTypes({ consumer, run, root });
+    console.log(`Packed ${manifest.name}: TypeScript consumer passed.`);
   }
   await fs.writeFile(
     path.join(home, 'config.json'),

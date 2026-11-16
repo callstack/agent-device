@@ -4,8 +4,15 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 
 export const provider = 'aws-device-farm';
+export const primaryExport = {
+  types: './dist/agent-device.d.mts',
+  import: './dist/agent-device.mjs',
+};
 export const additionalExports = {
-  './connection-verification': { import: './dist/connection-verification.mjs' },
+  './connection-verification': {
+    types: './dist/connection-verification.d.mts',
+    import: './dist/connection-verification.mjs',
+  },
   './package.json': './package.json',
 };
 export const args = [
@@ -144,4 +151,36 @@ export async function verifyPacked({ core, contracts, plugin }) {
     'get-remote-access-session',
     'stop-remote-access-session',
   ]);
+}
+
+export async function verifyTypes({ consumer, run, root }) {
+  fs.writeFileSync(
+    path.join(consumer, 'consumer.mts'),
+    `
+import { startAgentDevice } from 'agent-device';
+import awsDeviceFarm from '@agent-device/aws-device-farm/agent-device';
+import { verifyAwsDeviceFarmConnection } from '@agent-device/aws-device-farm/connection-verification';
+const runtime = await startAgentDevice({ stateDir: './state', plugins: [awsDeviceFarm()] });
+await runtime.close();
+await verifyAwsDeviceFarmConnection({ platform: 'android', projectArn: 'project', deviceArn: 'device' }, async () => ({ stdout: '{}' }));
+`,
+  );
+  await run(
+    process.execPath,
+    [
+      path.join(root, 'node_modules/typescript/bin/tsc'),
+      '--noEmit',
+      '--strict',
+      '--module',
+      'NodeNext',
+      '--moduleResolution',
+      'NodeNext',
+      '--target',
+      'ES2022',
+      '--typeRoots',
+      path.join(root, 'node_modules/@types'),
+      'consumer.mts',
+    ],
+    consumer,
+  );
 }

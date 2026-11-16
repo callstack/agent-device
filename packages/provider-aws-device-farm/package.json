@@ -36,12 +36,15 @@
   "publishConfig": {
     "exports": {
       ".": {
+        "types": "./dist/agent-device.d.mts",
         "import": "./dist/agent-device.mjs"
       },
       "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
         "import": "./dist/agent-device.mjs"
       },
       "./connection-verification": {
+        "types": "./dist/connection-verification.d.mts",
         "import": "./dist/connection-verification.mjs"
       },
       "./package.json": "./package.json"
