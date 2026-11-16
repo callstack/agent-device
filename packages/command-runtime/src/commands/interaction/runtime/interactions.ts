@@ -54,6 +54,8 @@ export type PressCommandOptions = CommandContext &
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
     preresolvedTarget?: PreresolvedInteractionTarget;
+    /** Internal Maestro replay policy: replay taps resolved bounds, so admission skips the hittability read. */
+    allowNonHittableCoordinateFallback?: boolean;
   } & PostActionObservationOptions;
 
 export type ClickCommandOptions = PressCommandOptions;

@@ -49,7 +49,49 @@ test('forwards the selector, app scope, and the full runner-execution projection
       verbose: true,
       iosXctestrunFile: '/tmp/run.xctestrun',
     }),
+    undefined,
   );
+});
+
+test('the hittability probe forwards its mode and projects the runner reading', async () => {
+  queryAppleRunnerSelector.mockResolvedValue({
+    found: true,
+    matchCount: 1,
+    hittable: false,
+    rect: { x: 294, y: 425, width: 88, height: 82 },
+  });
+
+  const result = await bind().querySelector({
+    selector: { key: 'label', value: 'Delete Avocado' },
+    probe: 'hittability',
+  });
+
+  expect(queryAppleRunnerSelector).toHaveBeenCalledWith(
+    IOS_SIMULATOR,
+    { key: 'label', value: 'Delete Avocado' },
+    undefined,
+    expect.anything(),
+    'hittability',
+  );
+  expect(result).toEqual({
+    found: true,
+    hittability: {
+      matchCount: 1,
+      hittable: false,
+      rect: { x: 294, y: 425, width: 88, height: 82 },
+    },
+  });
+});
+
+test('a probe reading with several matches carries a count and no frame', async () => {
+  queryAppleRunnerSelector.mockResolvedValue({ found: true, matchCount: 2 });
+
+  const result = await bind().querySelector({
+    selector: { key: 'label', value: 'Delete' },
+    probe: 'hittability',
+  });
+
+  expect(result).toEqual({ found: true, hittability: { matchCount: 2 } });
 });
 
 test('refuses an already-aborted binding signal without querying the runner', async () => {

@@ -11,6 +11,7 @@ export async function queryAppleRunnerSelector(
   selector: Readonly<{ key: ElementSelectorKey; value: string }>,
   appBundleId: string | undefined,
   options: AppleRunnerCommandOptions,
+  probe?: 'hittability',
 ): Promise<Record<string, unknown>> {
   const result = await runAppleRunnerCommand(
     device,
@@ -19,6 +20,7 @@ export async function queryAppleRunnerSelector(
       selectorKey: selector.key,
       selectorValue: selector.value,
       appBundleId,
+      ...(probe === 'hittability' ? { hittabilityProbe: true } : {}),
     },
     options,
   );

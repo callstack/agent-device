@@ -14,6 +14,7 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { DaemonCommandContext } from '../../../core/context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
 import { recordCaptureProof } from '../../../core/capture-disclosure.ts';
+import { probeIosTargetHittability } from '../../hittable-target-probe.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import { createDaemonRuntimeSessionStore } from '../../../core/runtime-session.ts';
@@ -102,6 +103,7 @@ export async function createInteractionRuntimeForRoute(
     // the verdict it may overturn come from one admission (ADR 0019 §2). A session whose owner did
     // not advertise the read keeps the bulk-tree verdict unchanged.
     confirmOffscreenTargetVisible: readOffscreenTargetRescue(params, session),
+    probeTargetHittability: readTargetHittabilityProbe(params, session),
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
     gestures: params.gestures,
@@ -132,6 +134,32 @@ function readOffscreenTargetRescue(
       session,
       node,
       rootViewport,
+      querySelector,
+      execution: runtimeExecutionFromContext(
+        params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
+      ),
+    });
+}
+
+/**
+ * The pre-dispatch hittability probe over the same conditional live selector read as the rescue
+ * above, installed under the same admission. Only the local Apple owner on iOS-family leaves
+ * declares the read, so no other platform or provider-owned device holds the hook.
+ */
+function readTargetHittabilityProbe(
+  params: InteractionRouteInput & {
+    touchExecutor?: BoundTouchExecutor;
+    gestures?: BoundGestureExecutor;
+  },
+  session: Parameters<typeof probeIosTargetHittability>[0]['session'],
+): InteractionRuntimeInput['probeTargetHittability'] {
+  const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
+  if (!querySelector) return undefined;
+  return async (node, signal) =>
+    await probeIosTargetHittability({
+      session,
+      node,
+      signal,
       querySelector,
       execution: runtimeExecutionFromContext(
         params.contextFromFlags(params.req.flags, session.appBundleId, session.trace?.outPath),
@@ -211,6 +239,12 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
       ? {
           confirmOffscreenTargetVisible: async (_context, node, rootViewport) =>
             await params.confirmOffscreenTargetVisible!(node, rootViewport),
+        }
+      : {}),
+    ...(params.probeTargetHittability
+      ? {
+          probeTargetHittability: async (context, node) =>
+            await params.probeTargetHittability!(node, context.signal),
         }
       : {}),
     ...touchBackendMembers(

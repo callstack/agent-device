@@ -7,6 +7,10 @@
  * A raw point has no resolved element to re-observe. A replay step's identity guard (ADR 0012
  * step 4) and a mutating `find`'s carried node (#1654) own what they resolved, and a second look
  * would replace their evidence with another observation, so those targets bypass admission.
+ *
+ * A target nested in a larger touch control gets one native hittability read first
+ * (`refuseUnhittableTarget` below): a control the platform reports as not hittable refuses here, since
+ * a tap at its centre would land on another element.
  */
 import type {
   InteractionTarget,
@@ -20,7 +24,9 @@ import {
   discloseDispatch,
 } from '@agent-device/kernel/errors';
 import { observeUntil, type ObservationClock } from '@agent-device/capture-kit/observe-until';
-import { now, sleep } from '../../runtime-common.ts';
+import { now, sleep, toBackendContext } from '../../runtime-common.ts';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
+import { isNestedTouchControl } from '@agent-device/selectors/interaction-targeting';
 import {
   judgeMotionLook,
   motionRefusal,
@@ -32,9 +38,18 @@ import {
 } from './moving-target-gate.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
+/**
+ * `allowNonHittableCoordinateFallback` is the Maestro replay policy: replay taps resolved bounds even
+ * when the platform says the element is not hittable, so it keeps the hittability read out.
+ */
+type AdmissionOptions = CommandContext & {
+  target: InteractionTarget;
+  allowNonHittableCoordinateFallback?: boolean;
+};
+
 export async function admitResolvedTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
+  options: AdmissionOptions,
   params: ResolveInteractionTargetParams,
   resolved: ResolvedInteractionTarget,
 ): Promise<ResolvedInteractionTarget> {
@@ -43,6 +58,7 @@ export async function admitResolvedTarget(
   if (!node?.rect) return resolved;
   if (params.expectedResolvedTarget || params.preresolvedTarget) return resolved;
   const budget = requestBudget(runtime, options);
+  await refuseUnhittableTarget(runtime, options, resolved, budget.read);
   const screening = await budget.read(() =>
     screenMotion(runtime, options, node, resolved.preAction),
   );
@@ -201,4 +217,65 @@ async function awaitRest(
       if (observed.result.kind === 'pass') return observed.result.admitted;
       throw motionRefusal(resolved, undefined, waitedMs);
   }
+}
+
+type ResolvedElementTarget = Exclude<ResolvedInteractionTarget, { kind: 'point' }>;
+
+/**
+ * Whether the resolved target is worth a native hittability read: a touch control nested inside a
+ * larger touch control of the tree that measured it, the shape of a swipe action beside its row.
+ * Every other press pays nothing.
+ */
+function needsHittabilityRead(resolved: ResolvedElementTarget): boolean {
+  const nodes = resolved.preAction?.nodes;
+  return Boolean(resolved.node && nodes && isNestedTouchControl(nodes, resolved.node));
+}
+
+/**
+ * Asks the backend whether the gated target is hittable, and refuses before any dispatch when the
+ * platform says it is not. Every other verdict, and a backend without the probe, admits the target
+ * unchanged. `read` carries the admission budget, so cancellation and the request deadline end the
+ * look the way they end every other admission wait.
+ */
+async function refuseUnhittableTarget(
+  runtime: AgentDeviceRuntime,
+  options: AdmissionOptions,
+  resolved: ResolvedElementTarget,
+  read: <T>(
+    read: (signal: AbortSignal | undefined) => Promise<T>,
+    until?: 'deadline',
+  ) => Promise<T>,
+): Promise<void> {
+  const node = resolved.node;
+  const probe = runtime.backend.probeTargetHittability;
+  if (options.allowNonHittableCoordinateFallback === true) return;
+  if (!node || !probe || !needsHittabilityRead(resolved)) return;
+  const verdict = await read(
+    (signal) =>
+      probe.call(runtime.backend, toBackendContext(runtime, { ...options, signal }), node),
+    'deadline',
+  );
+  if (verdict === 'notHittable') throw notHittableRefusal(resolved, node);
+}
+
+function notHittableRefusal(
+  resolved: ResolvedElementTarget,
+  node: NonNullable<ResolvedElementTarget['node']>,
+): AppError {
+  const selector = resolved.target.kind === 'selector' ? resolved.target.selector : undefined;
+  const ref = resolved.target.kind === 'ref' ? resolved.target.ref : undefined;
+  const name = node.label?.trim() || node.identifier?.trim() || selector || ref;
+  return discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `"${name}" is not hittable: a tap would land on another element.`,
+      {
+        reason: INTERACTION_ERROR_REASONS.targetNotHittable,
+        ...(selector !== undefined ? { selector } : { ref }),
+        ...(node.rect ? { rect: node.rect } : {}),
+        hint: 'Reveal the control (for example swipe its row), then take a fresh snapshot -i.',
+      },
+    ),
+    'no',
+  );
 }

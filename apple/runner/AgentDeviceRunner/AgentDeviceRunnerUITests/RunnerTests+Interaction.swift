@@ -334,17 +334,7 @@ extension RunnerTests {
     guard !value.isEmpty else {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
     }
-    let predicate: NSPredicate
-    switch selectorKey {
-    case "id":
-      predicate = NSPredicate(format: "identifier ==[c] %@", value)
-    case "label":
-      predicate = NSPredicate(format: "label ==[c] %@", value)
-    case "value":
-      predicate = NSPredicate(format: "value ==[c] %@", value)
-    case "text":
-      predicate = NSPredicate(format: "label ==[c] %@ OR identifier ==[c] %@ OR value ==[c] %@", value, value, value)
-    default:
+    guard let predicate = Self.selectorPredicate(key: selectorKey, value: value) else {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
     }
 
@@ -491,6 +481,47 @@ extension RunnerTests {
 
   func onScreenWindowFrame(app: XCUIApplication) throws -> CGRect {
     try resolveRunnerWindow(app: app).frame
+  }
+
+  static func selectorPredicate(key: String, value: String) -> NSPredicate? {
+    switch key {
+    case "id":
+      return NSPredicate(format: "identifier ==[c] %@", value)
+    case "label":
+      return NSPredicate(format: "label ==[c] %@", value)
+    case "value":
+      return NSPredicate(format: "value ==[c] %@", value)
+    case "text":
+      return NSPredicate(format: "label ==[c] %@ OR identifier ==[c] %@ OR value ==[c] %@", value, value, value)
+    default:
+      return nil
+    }
+  }
+
+  /// The pre-dispatch hittability read: every raw match is counted (hittable or not, unlike
+  /// `queryElement`'s hittable preference), and only a single match is read, for `isHittable` and
+  /// its frame, with none of `queryElement`'s other properties. The daemon treats any other count
+  /// as unknown, so a duplicate label can never describe a different element.
+  func probeElementHittability(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
+    let value = selectorValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty, let predicate = Self.selectorPredicate(key: selectorKey, value: value) else {
+      return Response(ok: true, data: DataPayload(found: false, matchCount: 0))
+    }
+    let matches = try elementQueries(app: app, matching: .any)
+      .flatMap { $0.matching(predicate).allElementsBoundByIndex }
+      .filter(\.exists)
+    guard matches.count == 1, let element = matches.first else {
+      return Response(ok: true, data: DataPayload(found: !matches.isEmpty, matchCount: matches.count))
+    }
+    return Response(
+      ok: true,
+      data: DataPayload(
+        found: true,
+        matchCount: 1,
+        hittable: element.isHittable,
+        rect: SnapshotRect(element.frame)
+      )
+    )
   }
 
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {

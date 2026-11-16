@@ -465,6 +465,9 @@ extension RunnerTests {
       guard let selectorKey = command.selectorKey, let selectorValue = command.selectorValue else {
         return Response(ok: false, error: ErrorPayload(message: "querySelector requires selectorKey and selectorValue"))
       }
+      if command.hittabilityProbe == true {
+        return try probeElementHittability(app: activeApp, selectorKey: selectorKey, selectorValue: selectorValue)
+      }
       return try queryElement(app: activeApp, selectorKey: selectorKey, selectorValue: selectorValue)
     case .readText:
       guard let x = command.x, let y = command.y else {

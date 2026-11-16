@@ -124,6 +124,13 @@ export type InteractionRuntimeInput = {
     node: Pick<import('@agent-device/kernel/snapshot').SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,
   ) => Promise<Rect | null>;
+  probeTargetHittability?: (
+    node: Pick<
+      import('@agent-device/kernel/snapshot').SnapshotNode,
+      'identifier' | 'label' | 'rect'
+    >,
+    signal: AbortSignal | undefined,
+  ) => Promise<import('@agent-device/contracts/backend').TargetHittability>;
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
   gestures?: BoundGestureExecutor;
