@@ -10,6 +10,7 @@ import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
 import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
+  resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
   /** Every plugin the registry saw, built-in or not, active or failed. */
@@ -53,6 +54,7 @@ export async function createEmbeddedProviderRuntimeComposition(
       })),
     ),
     inventory: registry.inventory,
+    resolveReplayBackend: registry.resolveReplayBackend,
     shutdown: registry.close,
   });
 }

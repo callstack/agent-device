@@ -161,7 +161,7 @@ describe('replay command interface', () => {
 
   test('validates -e keys with the grammar of the resolved replay format', async () => {
     fs.writeFileSync(path.join(SCRIPT_ROOT, 'flow.yaml'), 'appId: demo.app\n---\n- back\n');
-    const host = { env: {}, cwd: SCRIPT_ROOT };
+    const host = { env: { AGENT_DEVICE_HOME: process.env.AGENT_DEVICE_HOME }, cwd: SCRIPT_ROOT };
     await expect(
       replayDaemonWriter({ path: './checkout.ad', backend: 'maestro', env: ['user=x'] }, host),
     ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
