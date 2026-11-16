@@ -229,7 +229,13 @@ test('alert wait refuses a window the request envelope cannot be armed for, nami
   // accepts a window it cannot honour and shortens it on the way down.
   await expect(
     handleSnapshotCommands(sessionName, sessionStore, ['wait', String(MAX_ALERT_WINDOW_MS)]),
-  ).rejects.toThrow(/exceeds the maximum/);
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: {
+      reason: ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+      maxWaitWindowMs: MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
+    },
+  });
   expect(mockRunnerCommand).not.toHaveBeenCalled();
 
   // The largest window the command does honour reaches the leg as the caller's own window, and an
