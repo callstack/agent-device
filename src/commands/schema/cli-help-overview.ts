@@ -49,7 +49,7 @@ Rules:
 More commands (exact shapes: agent-device help <command>):
   open install devices apps boot close       app and device lifecycle
   screenshot record logs network perf trace  evidence and diagnostics
-  replay test batch session                   scripted flows
+  replay test batch session                   scripted flows (replay/test plugins, install separately)
   alert keyboard clipboard settings gesture  system and input
 
 Guides (agent-device help <topic>):

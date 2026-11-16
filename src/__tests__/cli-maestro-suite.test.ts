@@ -1,5 +1,5 @@
 import { test } from 'vitest';
-import { installedMaestroCliTestEnv } from './cli-test-env.ts';
+import { installedReplayCliTestEnv } from './cli-test-env.ts';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -30,7 +30,7 @@ test('test --maestro forwards Maestro backend and platform for directory suites'
           tests: [],
         },
       }),
-      { cwd: tmpDir, env: installedMaestroCliTestEnv() },
+      { cwd: tmpDir, env: installedReplayCliTestEnv() },
     );
 
     assert.equal(result.code, null);
