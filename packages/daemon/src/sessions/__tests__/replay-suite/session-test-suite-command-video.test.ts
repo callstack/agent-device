@@ -1,3 +1,4 @@
+import { getReplayExecution } from '@agent-device/replay-port/replay-backend-registry';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 /** Per-attempt recording is finalized exactly once after cancellation. */
@@ -217,6 +218,7 @@ function expectRecordRuntimeCall(
 }
 
 test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
+  await getReplayExecution();
   vi.useFakeTimers({ now: 1_000 });
   const { root, replayPath, sessionStore, nestedRequests, events } = createRecordVideoFixture();
   const finish = vi.fn(async () => ({
