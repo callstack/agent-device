@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../platform-services.ts';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
@@ -16,16 +17,18 @@ const readyCache = createTtlMemo<string, true>({ ttlMs: DEVICE_READY_CACHE_TTL_M
 export async function ensureDeviceReady(
   device: DeviceInfo,
   platformServices: DaemonPlatformServices,
-  signal: AbortSignal,
+  scope: PlatformRequestScope,
 ): Promise<void> {
-  signal.throwIfAborted();
+  scope.signal.throwIfAborted();
+  scope.checkDeadline?.();
   if (isActiveProviderDevice(device)) return;
 
   const cacheKey = deviceReadyCacheKey(device);
   if (readyCache.get(cacheKey) === true) return;
 
-  const handled = await platformServices.ensureLocalDeviceReady(device, signal);
-  signal.throwIfAborted();
+  const handled = await platformServices.ensureLocalDeviceReady(device, scope.signal);
+  scope.signal.throwIfAborted();
+  scope.checkDeadline?.();
   if (handled) {
     markDeviceReady(cacheKey);
   }

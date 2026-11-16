@@ -277,7 +277,7 @@ async function bindSnapshotCaptureRuntime(
   const bindReady: BindDeviceRuntime = async (device, use) => {
     const runtime = await bind(device, use);
     if (readinessScope) {
-      await ensureBoundDeviceReady(runtime, platformServices, readinessScope.signal);
+      await ensureBoundDeviceReady(runtime, platformServices, readinessScope);
     }
     return runtime;
   };

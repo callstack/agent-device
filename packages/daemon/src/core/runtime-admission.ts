@@ -121,7 +121,7 @@ export async function admitRuntimeUse<
   if (admitted.type === 'response') return admitted;
   const runtime = await admitted.bind(request.device, request.use);
   if (request.readinessScope) {
-    await ensureBoundDeviceReady(runtime, request.platformServices, request.readinessScope.signal);
+    await ensureBoundDeviceReady(runtime, request.platformServices, request.readinessScope);
   }
   return { type: 'runtime', runtime };
 }

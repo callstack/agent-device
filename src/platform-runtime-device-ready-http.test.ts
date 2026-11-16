@@ -149,7 +149,7 @@ for (const command of ['snapshot', 'clipboard'] as const) {
           expect.fail(`request ended before Android readiness: ${JSON.stringify(response)}`);
         }),
       ]);
-      await vi.advanceTimersByTimeAsync(59_999);
+      vi.setSystemTime(Date.now() + 59_999);
       release.resolve(BOOTED);
       expect(await call.answer).toMatchObject({ ok: true });
       expect(await send(command).answer).toMatchObject({ ok: true });
@@ -165,18 +165,92 @@ for (const command of ['snapshot', 'clipboard'] as const) {
     }
   });
 
-  test(`${command}: a booted result delivered after expiry cannot dispatch or populate readiness`, async () => {
+  test.each([false, true])(
+    `${command}: delayed deadline delivery blocks late readiness and preserves earlier caller abort=%s`,
+    async (canceled) => {
+      const { server, send, runtime, readClipboard } = await route();
+      const polling = deferred<void>();
+      const release = deferred<typeof BOOTED>();
+      let readinessSignal: AbortSignal | undefined;
+      mockRunCmd
+        .mockImplementationOnce(async (_command, _args, options) => {
+          readinessSignal = options?.signal;
+          polling.resolve();
+          return await release.promise;
+        })
+        .mockResolvedValue(BOOTED);
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      const call = send(command, true);
+      try {
+        await Promise.race([
+          polling.promise,
+          call.answer.then((response) => {
+            expect.fail(`request ended before Android readiness: ${JSON.stringify(response)}`);
+          }),
+        ]);
+        if (canceled) await call.cancel(false);
+        vi.setSystemTime(Date.now() + 60_001);
+        expect(readinessSignal?.aborted).toBe(canceled);
+        release.resolve(BOOTED);
+        const answer = await call.answer;
+        expect(answer).toMatchObject({
+          ok: false,
+          error: {
+            details: canceled
+              ? { reason: 'request_canceled' }
+              : {
+                  reason: 'daemon_request_timeout',
+                  causeReason: 'request_canceled',
+                  timeoutMs: 60_000,
+                  dispatched: 'no',
+                },
+          },
+        });
+        if (canceled && !answer.ok) {
+          expect(answer.error.details).not.toHaveProperty('causeReason');
+          expect(answer.error.details).not.toHaveProperty('timeoutMs');
+        }
+        expect(runtime.captureSnapshot).not.toHaveBeenCalled();
+        expect(readClipboard).not.toHaveBeenCalled();
+        expect(await send(command).answer).toMatchObject({ ok: true });
+        expect(mockRunCmd).toHaveBeenCalledTimes(2);
+      } finally {
+        release.resolve(BOOTED);
+        await call.answer;
+        vi.useRealTimers();
+        await server.close();
+      }
+    },
+  );
+
+  test(`${command}: an unexpired readiness cache cannot admit the next HTTP clipboard step past its cutoff`, async () => {
     const { server, send, runtime, readClipboard } = await route();
     const polling = deferred<void>();
     const release = deferred<typeof BOOTED>();
-    mockRunCmd
-      .mockImplementationOnce(async () => {
-        polling.resolve();
-        return await release.promise;
-      })
-      .mockResolvedValue(BOOTED);
+    let readinessSignal: AbortSignal | undefined;
+    mockRunCmd.mockImplementationOnce(async (_command, _args, options) => {
+      readinessSignal = options?.signal;
+      polling.resolve();
+      return await release.promise;
+    });
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-    const call = send(command, true);
+    const cutoffMs = Date.now() + 60_000;
+    if (command === 'snapshot') {
+      runtime.captureSnapshot.mockImplementationOnce(async () => {
+        expect(readinessSignal?.aborted).toBe(false);
+        vi.setSystemTime(cutoffMs + 1);
+        expect(readinessSignal?.aborted).toBe(false);
+        return { nodes: [], backend: 'android', producer: 'android-uiautomator' };
+      });
+    } else {
+      readClipboard.mockImplementationOnce(async () => {
+        expect(readinessSignal?.aborted).toBe(false);
+        vi.setSystemTime(cutoffMs + 1);
+        expect(readinessSignal?.aborted).toBe(false);
+        return 'ready clipboard';
+      });
+    }
+    const call = send(command, true, ['clipboard']);
     try {
       await Promise.race([
         polling.promise,
@@ -184,7 +258,7 @@ for (const command of ['snapshot', 'clipboard'] as const) {
           expect.fail(`request ended before Android readiness: ${JSON.stringify(response)}`);
         }),
       ]);
-      await vi.advanceTimersByTimeAsync(60_000);
+      vi.setSystemTime(cutoffMs - 1);
       release.resolve(BOOTED);
       expect(await call.answer).toMatchObject({
         ok: false,
@@ -192,14 +266,18 @@ for (const command of ['snapshot', 'clipboard'] as const) {
           details: {
             reason: 'daemon_request_timeout',
             causeReason: 'request_canceled',
+            timeoutMs: 60_000,
             dispatched: 'no',
           },
         },
       });
-      expect(runtime.captureSnapshot).not.toHaveBeenCalled();
-      expect(readClipboard).not.toHaveBeenCalled();
-      expect(await send(command).answer).toMatchObject({ ok: true });
-      expect(mockRunCmd).toHaveBeenCalledTimes(2);
+      expect(readinessSignal?.aborted).toBe(true);
+      expect(runtime.captureSnapshot).toHaveBeenCalledTimes(command === 'snapshot' ? 1 : 0);
+      expect(readClipboard).toHaveBeenCalledTimes(command === 'clipboard' ? 1 : 0);
+      expect(await send('clipboard').answer).toMatchObject({ ok: true });
+      expect(mockRunCmd).toHaveBeenCalledTimes(1);
+      expect(runtime.captureSnapshot).toHaveBeenCalledTimes(command === 'snapshot' ? 1 : 0);
+      expect(readClipboard).toHaveBeenCalledTimes(command === 'clipboard' ? 2 : 1);
     } finally {
       release.resolve(BOOTED);
       await call.answer;

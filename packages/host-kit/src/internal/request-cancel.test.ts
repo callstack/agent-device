@@ -13,9 +13,11 @@ import {
   registerRequestAbort,
   resolveRequestTrackingId,
   getRequestDeadlineMs,
+  getRequestExecutionDeadlineMs,
   getRequestReadOnlyDeadlineMs,
   getRequestSignal,
   throwIfRequestCanceled,
+  throwIfRequestExecutionDeadlineExceeded,
   withRequestDeadline,
 } from './request-cancel.ts';
 
@@ -450,3 +452,313 @@ test('a resend loop gets the request deadline only for a read-only request, and 
     for (const registration of [step, action, read]) clearRequestAbortRegistration(registration);
   }
 });
+
+test.each([false, true])(
+  'synchronous execution expiry preserves an earlier caller abort=%s without delivering timers',
+  async (canceled) => {
+    vi.useFakeTimers();
+    const requestId = `execution-cutoff-${canceled}`;
+    const registration = registerRequestAbort(requestId);
+    try {
+      const signal = getRequestSignal(requestId)!;
+      await assert.rejects(
+        withRequestDeadline(requestId, 100, async () => {
+          vi.setSystemTime(Date.now() + 99);
+          throwIfRequestExecutionDeadlineExceeded(requestId);
+          assert.equal(signal.aborted, false);
+          if (canceled) markRequestCanceled(requestId);
+          const earlierReason: unknown = signal.reason;
+          vi.setSystemTime(Date.now() + 1);
+          assert.equal(signal.aborted, canceled);
+          try {
+            throwIfRequestExecutionDeadlineExceeded(requestId);
+          } catch (error) {
+            if (canceled) assert.equal(error, earlierReason);
+            throw error;
+          }
+          assert.fail('elapsed execution cutoff admitted work');
+        }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.details?.reason === (canceled ? 'request_canceled' : 'daemon_request_timeout') &&
+          (canceled
+            ? error === signal.reason && error.details.timeoutMs === undefined
+            : error.details.timeoutMs === 100 && error.details.causeReason === 'request_canceled'),
+      );
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      clearRequestAbortRegistration(registration);
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('an attempt observes a shorter parent execution cutoff installed after registration', async () => {
+  vi.useFakeTimers();
+  const parent = registerRequestAbort('live-parent-cutoff');
+  const child = registerRequestAbort('live-child-cutoff', 'live-parent-cutoff');
+  try {
+    await assert.rejects(
+      withRequestDeadline('live-parent-cutoff', 100, async () => {
+        assert.equal(getRequestExecutionDeadlineMs('live-child-cutoff'), Date.now() + 100);
+        vi.setSystemTime(Date.now() + 100);
+        assert.equal(child!.controller.signal.aborted, false);
+        assert.equal(parent!.controller.signal.aborted, false);
+        throwIfRequestExecutionDeadlineExceeded('live-child-cutoff');
+        assert.fail('attempt lost the parent execution cutoff');
+      }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_request_timeout' &&
+        error.details.timeoutMs === 100,
+    );
+  } finally {
+    clearRequestAbortRegistration(child);
+    clearRequestAbortRegistration(parent);
+    vi.useRealTimers();
+  }
+});
+
+test('synchronous execution admission does not adopt a transport result deadline', () => {
+  vi.useFakeTimers();
+  const requestId = 'unarmed-result-cutoff';
+  const registration = registerRequestAbort(requestId, undefined, { resultDeadlineMs: Date.now() });
+  try {
+    throwIfRequestExecutionDeadlineExceeded(requestId);
+    assert.equal(getRequestSignal(requestId)?.aborted, false);
+    assert.equal(getRequestExecutionDeadlineMs(requestId), undefined);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('an existing execution owner keeps its cutoff when a transport result cutoff passes first', async () => {
+  vi.useFakeTimers();
+  const requestId = 'execution-before-result-adoption';
+  const startedAt = Date.now();
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: startedAt + 25,
+  });
+  try {
+    const result = await withRequestDeadline(requestId, 100, async () => {
+      vi.setSystemTime(startedAt + 25);
+      throwIfRequestExecutionDeadlineExceeded(requestId);
+      assert.equal(getRequestSignal(requestId)?.aborted, false);
+      assert.equal(getRequestExecutionDeadlineMs(requestId), startedAt + 100);
+      return { ok: true };
+    });
+    assert.equal(result.ok, true);
+    assert.equal(getRequestSignal(requestId)?.aborted, false);
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('a longer same-request inner deadline preserves the earlier outer owner without timer delivery', async () => {
+  vi.useFakeTimers();
+  const requestId = 'outer-before-longer-inner';
+  const registration = registerRequestAbort(requestId);
+  try {
+    await assert.rejects(
+      withRequestDeadline(
+        requestId,
+        100,
+        async () =>
+          await withRequestDeadline(requestId, 1_000, async () => {
+            vi.setSystemTime(Date.now() + 100);
+            assert.equal(getRequestSignal(requestId)?.aborted, false);
+            throwIfRequestExecutionDeadlineExceeded(requestId);
+            assert.fail('the earlier outer cutoff admitted work');
+          }),
+      ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_request_timeout' &&
+        error.details.timeoutMs === 100 &&
+        error.details.requestId === requestId,
+    );
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('a completed shorter inner owner cannot expire its still-live outer request', async () => {
+  vi.useFakeTimers();
+  const requestId = 'completed-inner-owner';
+  const registration = registerRequestAbort(requestId);
+  const startedAt = Date.now();
+  try {
+    const result = await withRequestDeadline(requestId, 1_000, async () => {
+      await withRequestDeadline(requestId, 100, async () => {
+        vi.setSystemTime(startedAt + 50);
+        return { ok: true };
+      });
+      vi.setSystemTime(startedAt + 101);
+      throwIfRequestExecutionDeadlineExceeded(requestId);
+      assert.equal(getRequestSignal(requestId)?.aborted, false);
+      assert.equal(getRequestExecutionDeadlineMs(requestId), startedAt + 1_000);
+      return { ok: true };
+    });
+    assert.equal(result.ok, true);
+    assert.equal(getRequestExecutionDeadlineMs(requestId), undefined);
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test.each([
+  { childTimeoutMs: 1_000, childStartsAfterMs: 0 },
+  { childTimeoutMs: 50, childStartsAfterMs: 50 },
+])(
+  'an earlier or equal inherited cutoff retains its parent owner (%s)',
+  async ({ childTimeoutMs, childStartsAfterMs }) => {
+    vi.useFakeTimers();
+    const parentId = 'winning-parent-owner';
+    const childId = 'longer-child-owner';
+    const parent = registerRequestAbort(parentId);
+    const child = registerRequestAbort(childId, parentId);
+    const startedAt = Date.now();
+    try {
+      await assert.rejects(
+        withRequestDeadline(parentId, 100, async () => {
+          vi.setSystemTime(startedAt + childStartsAfterMs);
+          return await withRequestDeadline(childId, childTimeoutMs, async () => {
+            vi.setSystemTime(startedAt + 100);
+            assert.equal(parent!.controller.signal.aborted, false);
+            assert.equal(child!.controller.signal.aborted, false);
+            throwIfRequestExecutionDeadlineExceeded(childId);
+            assert.fail('the child replaced its parent deadline owner');
+          });
+        }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.details?.reason === 'daemon_request_timeout' &&
+          error.details.timeoutMs === 100 &&
+          error.details.requestId === parentId,
+      );
+      assert.equal(parent!.controller.signal.aborted, true);
+      assert.equal(child!.controller.signal.reason, parent!.controller.signal.reason);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      clearRequestAbortRegistration(child);
+      clearRequestAbortRegistration(parent);
+      vi.useRealTimers();
+    }
+  },
+);
+
+test.each([false, true])(
+  'earlier overlapping completion preserves the later owner with an external registration=%s',
+  async (external) => {
+    vi.useFakeTimers();
+    const requestId = 'overlapping-deadline-owners';
+    const registration = external ? registerRequestAbort(requestId) : undefined;
+    const startedAt = Date.now();
+    let finishEarlier!: () => void;
+    let finishLater!: () => void;
+    const earlier = withRequestDeadline(requestId, 100, async () => {
+      await new Promise<void>((resolve) => {
+        finishEarlier = resolve;
+      });
+      return { ok: true };
+    });
+    const later = withRequestDeadline(requestId, 1_000, async () => {
+      await new Promise<void>((resolve) => {
+        finishLater = resolve;
+      });
+      getRequestSignal(requestId)!.throwIfAborted();
+      return { ok: true };
+    });
+    const signal = getRequestSignal(requestId)!;
+    const laterRejected = assert.rejects(
+      later,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_request_timeout' &&
+        error.details.timeoutMs === 1_000,
+    );
+    try {
+      finishEarlier();
+      assert.equal((await earlier).ok, true);
+      assert.equal(getRequestSignal(requestId), signal);
+      await vi.advanceTimersByTimeAsync(100);
+      throwIfRequestExecutionDeadlineExceeded(requestId);
+      assert.equal(getRequestSignal(requestId)?.aborted, false);
+      assert.equal(getRequestExecutionDeadlineMs(requestId), startedAt + 1_000);
+      await vi.advanceTimersByTimeAsync(900);
+      assert.equal(getRequestSignal(requestId)?.aborted, true);
+      finishLater();
+      await laterRejected;
+      assert.equal(getRequestSignal(requestId), external ? signal : undefined);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      finishEarlier();
+      finishLater();
+      await Promise.allSettled([earlier, laterRejected]);
+      clearRequestAbortRegistration(registration);
+      vi.useRealTimers();
+    }
+  },
+);
+
+test.each([false, true])(
+  'an implicit surviving owner retains synchronous expiry and caller cancellation=%s',
+  async (canceled) => {
+    vi.useFakeTimers();
+    const requestId = 'implicit-surviving-deadline';
+    const startedAt = Date.now();
+    let finishEarlier!: () => void;
+    let finishLater!: () => void;
+    const earlier = withRequestDeadline(requestId, 100, async () => {
+      await new Promise<void>((resolve) => {
+        finishEarlier = resolve;
+      });
+      return { ok: true };
+    });
+    const later = withRequestDeadline(requestId, 1_000, async () => {
+      await new Promise<void>((resolve) => {
+        finishLater = resolve;
+      });
+      getRequestSignal(requestId)!.throwIfAborted();
+      return { ok: true };
+    });
+    const signal = getRequestSignal(requestId)!;
+    const rejected = assert.rejects(
+      later,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === (canceled ? 'request_canceled' : 'daemon_request_timeout') &&
+        (canceled ? error === signal.reason : error.details.timeoutMs === 1_000),
+    );
+    try {
+      finishEarlier();
+      assert.equal((await earlier).ok, true);
+      assert.equal(getRequestSignal(requestId), signal);
+      if (canceled) markRequestCanceled(requestId);
+      vi.setSystemTime(startedAt + 1_000);
+      assert.equal(signal.aborted, canceled);
+      assert.throws(
+        () => throwIfRequestExecutionDeadlineExceeded(requestId),
+        isRequestCanceledError,
+      );
+      assert.equal(signal.aborted, true);
+      finishLater();
+      await rejected;
+      assert.equal(getRequestSignal(requestId), undefined);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      finishEarlier();
+      finishLater();
+      await Promise.allSettled([earlier, rejected]);
+      clearRequestCanceled(requestId);
+      vi.useRealTimers();
+    }
+  },
+);

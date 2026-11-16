@@ -137,7 +137,11 @@ export async function route() {
   });
   if (!daemon.httpPort) throw new Error('readiness fixture did not start its HTTP runtime');
   let requestIndex = 0;
-  function send(command: 'snapshot' | 'clipboard', bounded = false) {
+  function send(
+    command: 'snapshot' | 'clipboard',
+    bounded = false,
+    followingCommands: readonly ('snapshot' | 'clipboard')[] = [],
+  ) {
     const requestId = `readiness-${deviceIndex}-${++requestIndex}`;
     const step = {
       command,
@@ -177,7 +181,21 @@ export async function route() {
         id: requestId,
         method: 'agent_device.command',
         params: {
-          ...(bounded ? { command: 'batch', flags: { batchSteps: [step] } } : step),
+          ...(bounded
+            ? {
+                command: 'batch',
+                flags: {
+                  batchSteps: [
+                    step,
+                    ...followingCommands.map((next) => ({
+                      ...step,
+                      command: next,
+                      positionals: next === 'clipboard' ? ['read'] : [],
+                    })),
+                  ],
+                },
+              }
+            : step),
           meta: { requestId },
         },
       }),

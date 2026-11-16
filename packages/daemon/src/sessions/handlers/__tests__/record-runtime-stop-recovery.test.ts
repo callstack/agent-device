@@ -7,6 +7,13 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { webSessionDevice, type WebSessionIdentity } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { ensureDeviceReady } from '../../../core/device/device-ready.ts';
+import {
+  clearRequestAbortRegistration,
+  registerRequestAbort,
+  throwIfRequestExecutionDeadlineExceeded,
+  withRequestDeadline,
+} from '@agent-device/host-kit/request';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
   expectDecodedCompletedRecording,
@@ -584,78 +591,114 @@ test('a sessionless web record start resolves the session device of its request,
   });
 });
 
-test('recovery readiness stops at its own deadline while the original request remains live', async () => {
-  const harness = makeRecordRuntimeHarness('record-runtime-readiness-deadline-', {
-    device: { ...RESTART_RECORDED_DEVICE, id: 'record-recovery-readiness' },
-    runtime: { reattachActive: true },
-  });
-  const outPath = path.join(mkdtempForTestSync('record-recovery-readiness-output-'), 'capture.mp4');
-  await harness.run(['start', outPath]);
-  harness.sessionStore.retire(harness.sessionStore.lookup(harness.sessionName)!);
-  resolveTargetDeviceMock.mockResolvedValueOnce(harness.session.device);
-  const caller = new AbortController();
-  let beginReadiness!: () => void;
-  const started = new Promise<void>((resolve) => {
-    beginReadiness = resolve;
-  });
-  let releaseReadiness!: (value: boolean) => void;
-  let readinessAborted = false;
-  const ensureLocalDeviceReady = vi.fn(
-    async (_device: typeof harness.session.device, signal: AbortSignal) =>
-      await new Promise<boolean>((resolve, reject) => {
-        releaseReadiness = resolve;
-        signal.addEventListener(
-          'abort',
-          () => {
-            readinessAborted = true;
-            reject(signal.reason);
+test.each([false, true])(
+  'recovery readiness enforces its own cutoff while the caller stays live (deliver timer=%s)',
+  async (deliverTimer) => {
+    const harness = makeRecordRuntimeHarness('record-runtime-readiness-deadline-', {
+      device: { ...RESTART_RECORDED_DEVICE, id: `record-recovery-readiness-${deliverTimer}` },
+      runtime: { reattachActive: true },
+    });
+    const outPath = path.join(
+      mkdtempForTestSync('record-recovery-readiness-output-'),
+      'capture.mp4',
+    );
+    await harness.run(['start', outPath]);
+    harness.sessionStore.retire(harness.sessionStore.lookup(harness.sessionName)!);
+    resolveTargetDeviceMock.mockResolvedValueOnce(harness.session.device);
+    const requestId = `record-recovery-request-${deliverTimer}`;
+    const registration = registerRequestAbort(requestId)!;
+    const caller = registration.controller;
+    let beginReadiness!: () => void;
+    const started = new Promise<void>((resolve) => {
+      beginReadiness = resolve;
+    });
+    let releaseReadiness!: (value: boolean) => void;
+    let readinessAborted = false;
+    let readinessSignal: AbortSignal | undefined;
+    const ensureLocalDeviceReady = vi.fn(
+      async (_device: typeof harness.session.device, signal: AbortSignal) =>
+        await new Promise<boolean>((resolve, reject) => {
+          readinessSignal = signal;
+          releaseReadiness = resolve;
+          signal.addEventListener(
+            'abort',
+            () => {
+              readinessAborted = true;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+          beginReadiness();
+        }),
+    );
+    vi.useFakeTimers();
+    const result = withRequestDeadline(
+      requestId,
+      60_000,
+      async () =>
+        await handleRecordCommand({
+          req: {
+            token: 'token',
+            command: 'record',
+            session: harness.sessionName,
+            positionals: ['stop'],
+            meta: { sessionExplicit: true },
           },
-          { once: true },
-        );
-        beginReadiness();
-      }),
-  );
-  vi.useFakeTimers();
-  const result = handleRecordCommand({
-    req: {
-      token: 'token',
-      command: 'record',
-      session: harness.sessionName,
-      positionals: ['stop'],
-      meta: { sessionExplicit: true },
-    },
-    sessionName: harness.sessionName,
-    sessionStore: harness.sessionStore,
-    bindDevice: harness.runtime.bindDevice,
-    bindExactDevice: harness.runtime.bindExactDevice,
-    admissionLedger: createScreenRecordingAdmissionLedger(),
-    requestScope: {
-      signal: caller.signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-    platformServices: daemonPlatformServicesFixture({ ensureLocalDeviceReady }),
-    retainDeviceExecutionLock: async () => {},
-    throwIfCanceled: () => {},
-  }).then(
-    (response) => ({ response }),
-    (error: unknown) => ({ error }),
-  );
-  try {
-    await Promise.race([
-      started,
-      result.then((value) => {
-        expect.fail(`recovery ended before readiness: ${JSON.stringify(value)}`);
-      }),
-    ]);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(readinessAborted, 'the recovery cutoff must stop its in-flight readiness').toBe(true);
-    expect(caller.signal.aborted).toBe(false);
-    expect(await result).toMatchObject({ response: { ok: false } });
-    expect(harness.runtime.reattach).not.toHaveBeenCalled();
-  } finally {
-    releaseReadiness?.(true);
-    await result;
-    vi.useRealTimers();
-  }
-});
+          sessionName: harness.sessionName,
+          sessionStore: harness.sessionStore,
+          bindDevice: harness.runtime.bindDevice,
+          bindExactDevice: harness.runtime.bindExactDevice,
+          admissionLedger: createScreenRecordingAdmissionLedger(),
+          requestScope: {
+            signal: caller.signal,
+            checkDeadline: () => throwIfRequestExecutionDeadlineExceeded(requestId),
+            diagnostics: { emit: () => {} },
+            progress: { report: () => {} },
+          },
+          platformServices: daemonPlatformServicesFixture({ ensureLocalDeviceReady }),
+          retainDeviceExecutionLock: async () => {},
+          throwIfCanceled: () => {},
+        }),
+    ).then(
+      (response) => ({ response }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await Promise.race([
+        started,
+        result.then((value) => {
+          expect.fail(`recovery ended before readiness: ${JSON.stringify(value)}`);
+        }),
+      ]);
+      if (deliverTimer) {
+        await vi.advanceTimersByTimeAsync(5_000);
+      } else {
+        vi.setSystemTime(Date.now() + 5_001);
+        expect(readinessSignal?.aborted).toBe(false);
+        releaseReadiness(true);
+      }
+      expect(await result).toMatchObject({ response: { ok: false } });
+      expect(readinessAborted, 'the recovery cutoff must stop its in-flight readiness').toBe(true);
+      expect(readinessSignal?.reason).toBeInstanceOf(Error);
+      expect(readinessSignal?.reason).toMatchObject({
+        name: 'DurableCaptureRecoveryDeadlineError',
+      });
+      expect(readinessSignal?.reason.deadlineMs).toBe(5_000);
+      expect(caller.signal.aborted).toBe(false);
+      expect(harness.runtime.reattach).not.toHaveBeenCalled();
+      expect(harness.runtime.finish).not.toHaveBeenCalled();
+      ensureLocalDeviceReady.mockResolvedValue(true);
+      await ensureDeviceReady(
+        harness.session.device,
+        daemonPlatformServicesFixture({ ensureLocalDeviceReady }),
+        { signal: caller.signal, diagnostics: { emit: () => {} }, progress: { report: () => {} } },
+      );
+      expect(ensureLocalDeviceReady).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseReadiness?.(true);
+      await result;
+      clearRequestAbortRegistration(registration);
+      vi.useRealTimers();
+    }
+  },
+);

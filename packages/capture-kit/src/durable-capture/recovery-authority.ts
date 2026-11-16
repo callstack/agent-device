@@ -50,11 +50,9 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
   params: DurableCaptureRecoveryAuthorityParams<K, H, C>,
 ): Promise<DurableCaptureRecoveryAuthority<K, H, C>> {
   params.scope.signal.throwIfAborted();
+  params.scope.checkDeadline?.();
+  const cutoffMs = Date.now() + params.deadlineMs;
   const controller = new AbortController();
-  const scope = {
-    ...params.scope,
-    signal: AbortSignal.any([params.scope.signal, controller.signal]),
-  };
   let rejectDeadline: (error: DurableCaptureRecoveryDeadlineError) => void = () => {};
   const deadline = new Promise<never>((_resolve, reject) => {
     rejectDeadline = reject;
@@ -76,11 +74,23 @@ export async function acquireDurableCaptureRecoveryAuthorityBeforeDeadline<
     stopListeningForCancellation = () =>
       params.scope.signal.removeEventListener('abort', rejectCancellation);
   });
-  const timer = setTimeout(() => {
+  const expire = () => {
+    if (scope.signal.aborted) return;
     const error = new DurableCaptureRecoveryDeadlineError(params.displayName, params.deadlineMs);
     controller.abort(error);
     rejectDeadline(error);
-  }, params.deadlineMs);
+  };
+  const scope: PlatformRequestScope = {
+    ...params.scope,
+    signal: AbortSignal.any([params.scope.signal, controller.signal]),
+    checkDeadline: () => {
+      scope.signal.throwIfAborted();
+      params.scope.checkDeadline?.();
+      if (Date.now() >= cutoffMs) expire();
+      scope.signal.throwIfAborted();
+    },
+  };
+  const timer = setTimeout(expire, Math.max(0, cutoffMs - Date.now()));
   timer.unref?.();
   const acquisition = acquireRecoveryAuthority(params, scope);
   type RaceWinner =
@@ -159,8 +169,10 @@ async function acquireRecoveryAuthority<K extends string, H extends LiveResource
   try {
     control = await params.acquireControl(params.envelope, scope);
     scope.signal.throwIfAborted();
+    scope.checkDeadline?.();
     reattached = await control.reattach(params.envelope);
     scope.signal.throwIfAborted();
+    scope.checkDeadline?.();
     return { control, reattached };
   } catch (error) {
     try {
