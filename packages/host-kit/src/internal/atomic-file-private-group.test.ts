@@ -118,6 +118,29 @@ test('refuses it when nsswitch.conf adds a name service to either database', () 
   expect(withNameService(['# no database lines here'])).toBeUndefined();
 });
 
+test('refuses it when initgroups names a service, the database supplementary membership comes from', () => {
+  // glibc reads SUPPLEMENTARY group membership from `initgroups:`. `passwd: files` and `group: files`
+  // say nothing about it, so a service there can hold a member of this gid that neither file shows.
+  const withInitgroups = (line: string) =>
+    privateGroupId(
+      {
+        groups: PRIVATE,
+        passwd: PRIVATE_PASSWD,
+        nsswitch: ['passwd: files', 'group: files', line],
+      },
+      ADA,
+    );
+
+  expect(withInitgroups('initgroups: sss')).toBeUndefined();
+  expect(withInitgroups('initgroups: ldap files')).toBeUndefined();
+  expect(withInitgroups('initgroups: systemd')).toBeUndefined();
+  // An absent line inherits the `group` setting, which is what the kernel does and what was verified.
+  expect(privateGroupId({ groups: PRIVATE, passwd: PRIVATE_PASSWD, nsswitch: FILES }, ADA)).toBe(
+    1000,
+  );
+  expect(withInitgroups('initgroups: files')).toBe(1000);
+});
+
 test('admits a name service line that names only files, actions and comments aside', () => {
   expect(
     nameServiceListsOnlyFiles(['passwd: [NOTFOUND=return] files # local only', 'group:  files']),

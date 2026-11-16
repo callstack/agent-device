@@ -19,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishDirectoryIdentity, publishScriptFileSync } from '@agent-device/host-kit/file';
+import { publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -139,12 +139,9 @@ export class SessionScriptWriter {
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
       // formatting+publish step.
-      publishHealedScriptAtomically({
-        scriptPath,
-        script: prepared.script,
-        force: options?.force,
-        parentIdentity: publishDirectoryIdentity(scriptDir),
-      });
+      // No parent identity travels with this call: the publisher judges the directory the entry is
+      // created in, and that is the one its identity is worth comparing.
+      publishHealedScriptAtomically({ scriptPath, script: prepared.script, force: options?.force });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) {
         session.scriptPublication = commitRepair(
@@ -317,15 +314,13 @@ function publishHealedScriptAtomically(params: {
   scriptPath: string;
   script: string;
   force?: boolean;
-  parentIdentity?: string;
 }): void {
-  const { scriptPath, script, force, parentIdentity } = params;
+  const { scriptPath, script, force } = params;
   try {
     publishScriptFileSync({
       destination: scriptPath,
       contents: script,
       publish: force ? 'replace' : 'link-exclusive',
-      ...(parentIdentity === undefined ? {} : { parentIdentity }),
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;

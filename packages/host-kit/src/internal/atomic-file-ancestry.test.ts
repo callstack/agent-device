@@ -5,13 +5,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import {
   assertPrivateScriptDestination,
-  othersCreateEntriesIn,
   publishDirectoryIdentity,
   publishScriptFileSync,
-  untrustedAncestryExposure,
-  untrustedLinkExposure,
   MAX_SCRIPT_PATH_LINK_HOPS,
-  type DirectoryAuthority,
 } from './atomic-file.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
@@ -363,6 +359,153 @@ skipOnWindows('refuses the ground under a link that leads into a shared director
     shared,
   );
   expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
+skipOnWindows(
+  'refuses a link whose target is spelled relative to the directory that holds it',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // `ln -s ../team/rec rec` in a private home is the ordinary way a link gets written. The target is
+    // resolved from the directory that HOLDS the link, so the walk leaves the home, crosses `shared` at
+    // 0777, and arrives at the destination. Every directory of the answer is private-looking; the ground
+    // crossed on the way is not.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+    const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
+    fs.symlinkSync(chosen, path.join(mine, 'relay'));
+    const sub = path.join(chosen, 'sub');
+    fs.mkdirSync(sub);
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    fs.symlinkSync(path.join('..', 'shared', 'mine', 'relay', 'sub'), path.join(home, 'rec'));
+
+    expectUntrusted(
+      () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+      'world_writable',
+      shared,
+    );
+    expect(fs.readdirSync(sub)).toEqual([]);
+  },
+);
+
+skipOnWindows(
+  'stages the temp file inside the directory the walk judged, not the spelled parent',
+  () => {
+    serveGroupDatabase(hostDatabase(currentGid, 4321));
+    // `work -> priv/x`, `priv/y` is private and `home/y` is open to others. The kernel walks `work` into its
+    // target and steps back from THERE, so the entry is created in `priv/y`. `path.dirname` of the same
+    // spelling answers `home/y`, so a publisher that stages beside the spelled parent writes its temp file
+    // into ground the rule never judged — where anyone can list it and put their own bytes behind that name
+    // before the rename. The staging directory has to be the walk's answer.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const sharedY = directoryWith(path.join(home, 'y'), 0o777);
+    const priv = directoryWith(path.join(directory, 'priv'), 0o700);
+    const privX = path.join(priv, 'x');
+    fs.mkdirSync(privX);
+    const privY = directoryWith(path.join(priv, 'y'), 0o700);
+    fs.symlinkSync(privX, path.join(home, 'work'));
+    const destination = `${home}/work/../y/journey.ad`;
+
+    const staged: string[] = [];
+    const realWriteFileSync = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+      if (typeof file === 'string') staged.push(path.dirname(file));
+      return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.writeFileSync);
+    publish(destination);
+
+    expect(staged).toEqual([privY]);
+    expect(fs.readFileSync(path.join(privY, 'journey.ad'), 'utf8')).toBe('context\n');
+    expect(fs.readdirSync(sharedY)).toEqual([]);
+  },
+);
+
+skipOnWindows('reads each directory it stands in once, however many routes lead back to it', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `a` and `b` are two aliases of the same directory, and the spelling passes through both with a `..`
+  // between them, so the walk returns over ground it already crossed — the scratch root three times here,
+  // and the alias's target once for each route. A directory's judgment does not depend on the route taken
+  // to it, so each path is read once and each physical directory is judged once.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const target = directoryWith(path.join(directory, 'target'), 0o700);
+  const sub = path.join(target, 'sub');
+  fs.mkdirSync(sub);
+  fs.symlinkSync(target, path.join(home, 'a'));
+  fs.symlinkSync(target, path.join(home, 'b'));
+  const reads: string[] = [];
+  const realStatSync = fs.statSync;
+  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    reads.push(String(pathname));
+    return (realStatSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.statSync);
+
+  assertPrivateScriptDestination(`${home}/a/../b/sub/journey.ad`);
+
+  expect(new Set(reads).size).toBe(reads.length);
+});
+
+skipOnWindows('starts a destination with no directory in it at the working directory', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `journey.ad` names the working directory as its parent, which is where the entry is created. Treated
+  // as having NO parent, the walk starts at `/` instead, and a caller that reported the identity of `.`
+  // is told its parent was replaced.
+  const cwd = path.resolve('');
+  const identity = publishDirectoryIdentity('.');
+
+  expect(identity).toBeDefined();
+  expect(assertPrivateScriptDestination('journey.ad', identity)).toBe(cwd);
+});
+
+skipOnWindows('refuses a relative target that lands in ground others can write', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The target names a plain name, and the directory it names is open to others. Spelling that directory
+  // out is refused, so arriving at it through a link has to answer the same way.
+  const home = directoryWith(path.join(root(), 'home'), 0o700);
+  const open = directoryWith(path.join(home, 'open'), 0o777);
+  fs.symlinkSync('open', path.join(home, 'rel'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rel', 'journey.ad')),
+    'world_writable',
+    open,
+  );
+  expect(fs.readdirSync(open)).toEqual([]);
+});
+
+skipOnWindows('applies a .. inside a target to the directory the walk reached', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `rel -> priv/../x`. Folded as text, that is `home/x`, which is private and would be accepted. The
+  // kernel steps into `priv`, which is itself a link into `shared/inside`, and applies `..` THERE: the
+  // walk is standing in `shared`, and `x` is created in it.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const inside = path.join(shared, 'inside');
+  fs.mkdirSync(inside);
+  fs.symlinkSync(inside, path.join(home, 'priv'));
+  // Spelled by hand: `path.join` would fold the `..` away before the link ever existed.
+  fs.symlinkSync('priv/../x', path.join(home, 'rel'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rel', 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+  expect(fs.readdirSync(shared)).toEqual(['inside']);
+});
+
+skipOnWindows('follows a relative target that stays inside ground only this user can write', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const real = directoryWith(path.join(directory, 'outside'), 0o700);
+  fs.symlinkSync(path.join('..', 'outside'), path.join(home, 'rel'));
+
+  publish(path.join(home, 'rel', 'journey.ad'));
+
+  expect(fs.readFileSync(path.join(real, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
 skipOnWindows('refuses the spelled spelling of a link the walk also follows', () => {
@@ -737,7 +880,9 @@ skipOnWindows('refuses a parent replaced by name while the file was staged', () 
   fs.rmSync(staged, { recursive: true });
   fs.symlinkSync(elsewhere, staged);
 
-  expectUntrustedReplaced(() => publish(destination, parentIdentity), staged);
+  // The refusal names the directory the entry would really have been created in, which is where the link
+  // leads. The spelled name is a pointer, not a place.
+  expectUntrustedReplaced(() => publish(destination, parentIdentity), elsewhere);
   expect(fs.readdirSync(elsewhere)).toEqual([]);
 });
 
@@ -759,7 +904,7 @@ skipOnWindows('re-checks the chain after staging the file, before the entry is c
     return result;
   }) as typeof fs.writeFileSync);
 
-  expectUntrustedReplaced(() => publish(destination), staged);
+  expectUntrustedReplaced(() => publish(destination), attacker);
   expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
@@ -771,102 +916,4 @@ skipOnWindows('publishes into the parent the captured identity still names', () 
   publish(path.join(staged, 'journey.ad'), publishDirectoryIdentity(staged));
 
   expect(fs.existsSync(path.join(staged, 'journey.ad'))).toBe(true);
-});
-
-// --- untrustedAncestryExposure: what makes one directory unsafe to publish inside ---
-
-const OWN = { uid: currentUid, gid: currentGid, mode: 0o755 };
-const TRUST = { uid: currentUid, privateGid: currentGid };
-
-function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
-  return { ...OWN, ...overrides };
-}
-
-test('refuses a directory another user owns, whatever its mode', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o700 }), TRUST)).toBe(
-    'foreign_owned',
-  );
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(
-    'foreign_owned',
-  );
-});
-
-test('refuses a directory that is world-writable', () => {
-  expect(untrustedAncestryExposure(directoryOf({ mode: 0o777 }), TRUST)).toBe('world_writable');
-});
-
-test('refuses a directory that is group-writable by a group that is not this user', () => {
-  expect(untrustedAncestryExposure(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(
-    'shared_group_writable',
-  );
-});
-
-test('accepts a directory group-writable by this user', () => {
-  expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
-});
-
-test('accepts a root-owned directory and a directory this user owns', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 0 }), TRUST)).toBeUndefined();
-  expect(untrustedAncestryExposure(directoryOf({}), TRUST)).toBeUndefined();
-});
-
-test('accepts a sticky directory this user or root owns for passing through', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 0, mode: 0o1777 }), TRUST)).toBeUndefined();
-  expect(untrustedAncestryExposure(directoryOf({ mode: 0o1777 }), TRUST)).toBeUndefined();
-});
-
-test('refuses a sticky directory another user owns, since both bits shield others FROM that owner', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(
-    'foreign_owned',
-  );
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o2775 }), TRUST)).toBe(
-    'foreign_owned',
-  );
-});
-
-// --- untrustedLinkExposure: which link on the path belongs to somebody else ---
-
-test('accepts a link in a directory only this user or root can add entries to', () => {
-  const link = { uid: currentUid };
-  expect(untrustedLinkExposure(link, directoryOf({ mode: 0o755 }), TRUST)).toBeUndefined();
-  expect(untrustedLinkExposure(link, directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
-});
-
-test('refuses a link in a shared directory unless the sticky bit and its owner hold it in place', () => {
-  expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
-    'planted_link',
-  );
-  expect(untrustedLinkExposure({ uid: 65534 }, directoryOf({ mode: 0o1777 }), TRUST)).toBe(
-    'planted_link',
-  );
-});
-
-test('accepts a link this user or root owns in a sticky shared directory', () => {
-  const sticky = directoryOf({ mode: 0o1777 });
-  expect(untrustedLinkExposure({ uid: currentUid }, sticky, TRUST)).toBeUndefined();
-  expect(untrustedLinkExposure({ uid: 0 }, sticky, TRUST)).toBeUndefined();
-});
-
-// --- othersCreateEntriesIn: where another local user could claim the entry ---
-
-test('names a directory others can add entries in, sticky bit or no sticky bit', () => {
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o777 }), TRUST)).toBe(true);
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1777 }), TRUST)).toBe(true);
-  expect(othersCreateEntriesIn(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(true);
-});
-
-test('names no directory whose group is this user', () => {
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(false);
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o1775 }), TRUST)).toBe(false);
-  expect(othersCreateEntriesIn(directoryOf({ mode: 0o755 }), TRUST)).toBe(false);
-});
-
-test('names a directory another user owns, whatever its mode', () => {
-  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(true);
-  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(true);
-});
-
-test('names no directory this user or root owns that others cannot write', () => {
-  expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o755 }), TRUST)).toBe(false);
-  expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o1777 }), TRUST)).toBe(true);
 });

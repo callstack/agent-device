@@ -296,6 +296,41 @@ skipOnWindows('a recording refuses a chain that leaves a shared directory throug
   expect(fs.readdirSync(chosen)).toEqual([]);
 });
 
+skipOnWindows('a recording stages inside the directory the entry is created in', () => {
+  // `home/work -> priv/x`, `priv/y` is private and `home/y` is open to others. The entry lands in
+  // `priv/y`. `path.dirname` + `path.join` of the SAME spelling answers `home/y`, because `path.join`
+  // folds `work/..` away, so a writer that stages beside the spelled parent puts a file it is about to
+  // publish into ground no rule judged — where anyone who can list it can put their own bytes behind that
+  // name before the rename. The staging directory has to be the directory the walk judged.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  fs.chmodSync(home, 0o700);
+  const sharedY = path.join(home, 'y');
+  fs.mkdirSync(sharedY);
+  fs.chmodSync(sharedY, 0o777);
+  const priv = path.join(directory, 'priv');
+  const privX = path.join(priv, 'x');
+  fs.mkdirSync(privX, { recursive: true });
+  const privY = path.join(priv, 'y');
+  fs.mkdirSync(privY);
+  fs.chmodSync(privY, 0o700);
+  fs.symlinkSync(privX, path.join(home, 'work'));
+  const destination = `${home}/work/../y/journey.ad`;
+  const staged: string[] = [];
+  const realWriteFileSync = fs.writeFileSync;
+  vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+    if (typeof file === 'string' && file.endsWith('.tmp')) staged.push(path.dirname(file));
+    return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+  }) as typeof fs.writeFileSync);
+
+  expect(writerFor(directory).write(recordingTo(destination)).written).toBe(true);
+
+  expect(staged).toEqual([privY]);
+  expect(fs.readFileSync(path.join(privY, 'journey.ad'), 'utf8')).toContain('Demo');
+  expect(fs.readdirSync(sharedY)).toEqual([]);
+});
+
 skipOnWindows('a recording refuses the directory a .. steps back into', () => {
   // `home/work -> priv/x`, and `priv/y` at 0777 while `home/y` is private. Normalizing the spelling first
   // answers `home/y`, so it accepts a write that the kernel lands in `priv/y`, where any local user can

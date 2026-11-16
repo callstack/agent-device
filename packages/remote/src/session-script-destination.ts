@@ -452,6 +452,11 @@ async function publishScriptVersion(
  * bytes reach it, and reports the destination directory's identity so the publish can confirm it is
  * still the same one. Refuses an ancestor another local user can write (#4565), so nothing is
  * downloaded into a directory they control.
+ *
+ * Staging sits in the directory the ancestry walk JUDGED, which is the destination's parent as the
+ * kernel resolves it — not `path.dirname` of the spelled destination. Where a `..` or a link in the
+ * destination leads elsewhere, the spelled parent is a directory nobody judged, and a staging directory
+ * in it is a directory another local user can populate before the rename does.
  */
 function allocateStaging(
   file: string,
@@ -459,8 +464,7 @@ function allocateStaging(
 ): { staging: string; parentIdentity: string | undefined } | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
-  assertPrivateScriptDestination(destination);
-  const directory = path.dirname(destination);
+  const directory = assertPrivateScriptDestination(destination);
   const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
   const parentIdentity = publishDirectoryIdentity(directory);
   try {
@@ -565,8 +569,11 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
-  // Re-asked here, under the record lock and right before the entry is created: whoever could write
-  // an ancestor while the version was downloaded cannot move it now (#4565).
+  // Re-asked here, under the record lock and right before the entry is created: whoever could write an
+  // ancestor while the version was downloaded cannot move it now (#4565). The identity handed in was taken
+  // from the directory the walk judged when staging was created, so a walk that now answers a DIFFERENT
+  // directory — an ancestor swapped for a link meanwhile — fails the comparison instead of renaming bytes
+  // into ground nobody judged.
   assertPrivateScriptDestination(current.destination, parentIdentity);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.

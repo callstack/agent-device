@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
+import { lstatIfPresent } from './verified-file.ts';
 
 export type AtomicPublishMode = 'replace' | 'link-exclusive';
 
@@ -59,18 +60,57 @@ export function publishScriptFileSync(options: {
   publish?: AtomicPublishMode;
   parentIdentity?: string;
 }): void {
-  const expected =
-    options.parentIdentity ?? publishDirectoryIdentity(path.dirname(options.destination));
-  withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
-    assertPrivateScriptDestination(options.destination, expected);
+  // The directory the entry is created in is the walk's ANSWER, asked for inside this call and twice:
+  // never `path.dirname` of the spelled destination, because a `..` or a link in the destination sends the
+  // entry somewhere else, and a temp file staged there is one another local user can reach, list, and
+  // put their own bytes behind before the publish does.
+  let temporaryPath: string | undefined;
+  try {
+    const judged = assertPrivateScriptDestination(options.destination);
+    const expected = options.parentIdentity ?? publishDirectoryIdentity(judged);
+    temporaryPath = createAtomicPublishTempPath(judged, options.destination);
     fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode: SCRIPT_FILE_MODE });
-    assertPrivateScriptDestination(options.destination, expected);
+    const stillJudged = assertPrivateScriptDestination(options.destination, expected);
+    if (stillJudged !== judged) {
+      throw scriptAncestryFailure(options.destination, stillJudged, 'parent_replaced');
+    }
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
     } else {
       fs.renameSync(temporaryPath, options.destination);
     }
-  });
+  } finally {
+    removeTempBestEffort(options.destination, temporaryPath);
+  }
+}
+
+/**
+ * The canonical temp path for a destination: a private sibling of the name, inside the directory the
+ * publish will create the entry in. That directory is the walk's answer for a script destination, and
+ * `path.dirname` for every other publisher.
+ */
+function createAtomicPublishTempPath(directory: string, destination: string): string {
+  return path.join(
+    directory,
+    `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
+  );
+}
+
+function removeTempBestEffort(destination: string, temporaryPath: string | undefined): void {
+  if (temporaryPath === undefined) return;
+  try {
+    fs.rmSync(temporaryPath, { force: true });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'atomic_file_cleanup_failed',
+      data: {
+        destination,
+        temporaryPath,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
 }
 
 /** A recording holds literals a `fill` did not parameterize (ADR 0017), so it is written private. */
@@ -130,23 +170,11 @@ export function withAtomicPublishTempPathSync<T>(
   destination: string,
   publish: (temporaryPath: string) => T,
 ): T {
-  const temporaryPath = createAtomicPublishTempPath(destination);
+  const temporaryPath = createAtomicPublishTempPath(path.dirname(destination), destination);
   try {
     return publish(temporaryPath);
   } finally {
-    try {
-      fs.rmSync(temporaryPath, { force: true });
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'atomic_file_cleanup_failed',
-        data: {
-          destination,
-          temporaryPath,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
+    removeTempBestEffort(destination, temporaryPath);
   }
 }
 
@@ -166,14 +194,6 @@ function syncDirectoryBestEffort(directory: string): void {
   }
 }
 
-/** Returns the canonical same-directory temp path used by atomic publishers. */
-function createAtomicPublishTempPath(destination: string): string {
-  return path.join(
-    path.dirname(destination),
-    `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
-  );
-}
-
 /** Identifies a temp path produced for a particular destination. */
 export function isAtomicPublishTemporaryPath(value: unknown, destination: string): boolean {
   if (typeof value !== 'string') return false;
@@ -183,19 +203,21 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
 }
 
 /**
- * Refuses a script destination unless every directory on its fully resolved chain is one no other
- * non-root local user can change (#4565).
+ * Refuses a script destination unless every directory the kernel looks a name up in is one no other
+ * non-root local user can change (#4565), and reports the PHYSICAL directory the entry is created in.
  *
  * Node exposes no `openat` or `renameat`, so a publisher cannot resolve a destination relative to a
  * directory handle. The window is closed by PERMISSIONS instead of by timing: once no other non-root
- * user can add or remove an entry in any directory on the chain, nobody can swap a component out or
- * plant one, so the path this rule judged is the path the publish reaches. Nothing here depends on when
- * the directory was judged, and no re-check is what makes the write safe.
+ * user can add or remove an entry in any directory on the walk, nobody can swap a component out or plant
+ * one, so the path this rule judged is the path the publish reaches. Nothing here depends on when a
+ * directory was judged, and no re-check is what makes the write safe.
  *
- * The existing prefix of the destination is resolved once, and every directory of that resolved chain
- * is judged, so a symbolic link's target is judged too: `/home/me/link` standing for a shared directory
- * is refused for the same reason that directory would be if the caller had spelled it out. Each
- * directory then has to satisfy:
+ * The return value is part of the rule, not a convenience. The caller stages the temp file IN THAT
+ * DIRECTORY: a `..` or a symbolic link in the spelled destination means the directory the entry really
+ * lands in is not `path.dirname` of the spelling, and staging outside the judged directory would hand
+ * another local user the temp file they then get published.
+ *
+ * What the walk asks of every directory it enters ({@link walkParent} for the resolution itself):
  *
  * - It is owned by this user or by root. A directory another user owns is theirs to chmod, to empty, and
  *   to repopulate, whatever its mode says today, and both the sticky bit and the group bits shield other
@@ -203,53 +225,60 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
  * - Its mode opens its contents to nobody else. The sticky bit is the one exception, and only for
  *   passing THROUGH a directory: it stops anyone but an entry's owner or root from removing or replacing
  *   that entry, which is how macOS `/tmp` and `/var` stay usable. It cannot refuse a NEW entry by name,
- *   so nothing may be created inside a directory others can add entries to; that is asked separately.
- * - A symbolic link the path passes through is one others could not have planted or swapped: in a
- *   directory where they can add entries, it stands there only because the sticky bit and its owner
- *   hold it in place.
+ *   so nothing may be created inside a directory others can add entries to; that is asked separately, of
+ *   the directory the walk ended in.
+ * - Every symbolic link the walk follows is judged itself, against the directory that physically holds
+ *   it, at any depth: in a directory where others can add entries, it stands there only because the
+ *   sticky bit and its owner hold it in place. A link's own mode is never consulted, because on Linux
+ *   every link reports the same one.
  *
  * A group-writable directory this user owns stays acceptable when its group is this user's own private
  * group, the shape Ubuntu and Debian give every home directory. {@link privateGroupId} says what that
  * takes to establish, and what it cannot.
  *
- * A component that exists and is neither a directory nor a link is left alone: the filesystem refuses a
- * publish through it. On Windows, access is an ACL rather than a mode, so this is a no-op there.
+ * A component that is neither a directory nor a link is refused as `not_a_directory`: the kernel cannot
+ * travel through it either. On Windows, access is an ACL rather than a mode, so this rule is a no-op
+ * there and answers the parent it was given.
  *
  * `parentIdentity` is what {@link publishDirectoryIdentity} returned for the parent the caller created
  * or checked before it staged this file. The rule above already excludes anyone who could swap that
  * parent, so the comparison is defense in depth against a host whose ownership or modes moved meanwhile;
  * it is not what closes the window.
  */
-export function assertPrivateScriptDestination(destination: string, parentIdentity?: string): void {
-  if (process.platform === 'win32') return;
-  const parent = spelledParent(destination);
-  if (parentIdentity !== undefined && publishDirectoryIdentity(parent) !== parentIdentity) {
-    throw scriptAncestryFailure(destination, parent, 'parent_replaced');
-  }
+export function assertPrivateScriptDestination(
+  destination: string,
+  parentIdentity?: string,
+): string {
+  if (process.platform === 'win32') return path.dirname(path.resolve(destination));
   const trust = readScriptTrust();
   const walk = walkParent(destination, trust);
   if (walk.reject !== undefined) throw walk.reject;
+  // The identity is asked of the directory the entry is created in, which is the walk's answer and NOT
+  // `path.dirname` of the spelling: where a `..` or a link leads elsewhere, the spelled parent is a
+  // different directory and comparing against it reports a replacement that never happened.
+  if (parentIdentity !== undefined && publishDirectoryIdentity(walk.deepest) !== parentIdentity) {
+    throw scriptAncestryFailure(destination, walk.deepest, 'parent_replaced');
+  }
   // The script entry is created inside the deepest directory the walk reached, or below it through
   // directories that do not exist yet. Where other local users can add entries, one of them can add
-  // this entry first and the recording is theirs, so the creation has to be refused.
-  const deepest = statDirectoryChain(walk.deepest);
-  if (deepest && othersCreateEntriesIn(deepest, trust)) {
+  // this entry first and the recording is theirs, so the creation has to be refused. The authority the
+  // walk read there is reused rather than read again.
+  if (walk.authority !== undefined && othersCreateEntriesIn(walk.authority, trust)) {
     throw scriptAncestryFailure(destination, walk.deepest, 'shared_parent');
   }
+  return walk.deepest;
 }
 
 /**
- * The parent of `destination`, made absolute but never normalized.
+ * The parent of `destination`, cut at its last separator and never normalized.
  *
  * `path.resolve` folds a `..` away, which is the one simplification this may not make: the kernel does
  * not make it either, so `.../work/../x` lands its entry beside the target of the link named `work`. The
- * spelled components are what the walk resolves; a relative destination keeps its relative spelling and
- * starts from the working directory, which is how it reaches the filesystem.
+ * spelled components are what the walk resolves. A destination with no directory in it, `journey.ad`,
+ * has the working directory as its parent, which `path.dirname` already answers as `.`.
  */
 function spelledParent(destination: string): string {
-  if (path.isAbsolute(destination)) return path.dirname(destination);
-  const parent = path.dirname(destination);
-  return parent === '.' ? '' : parent;
+  return path.dirname(destination);
 }
 
 /**
@@ -263,19 +292,40 @@ type WalkState = Readonly<{
   queue: readonly string[];
   /** Link targets expanded so far. */
   hops: number;
+  /** What this walk already learned about the ground it stands on. */
+  ground: WalkGround;
+}>;
+
+/**
+ * One walk's memory of the ground it has stood on: the modes it has read, keyed by path, and the
+ * directories whose judgment it already has, keyed by device and inode. A path that comes back around,
+ * through a `..` or through an alias of a directory already entered, is therefore asked of the host once,
+ * and one walk sees the host the same way throughout.
+ */
+type WalkGround = Readonly<{
+  stats: Map<string, fs.Stats>;
+  judged: Set<string>;
 }>;
 
 type WalkStep =
   | Readonly<{ kind: 'reject'; path: string; exposure: ScriptAncestryExposure }>
-  | Readonly<{ kind: 'stop'; deepest: string }>
+  | Readonly<{ kind: 'stop'; deepest: string; authority: DirectoryAuthority }>
   | Readonly<{ kind: 'stand'; state: WalkState }>;
 
-/** A walk that ended: the deepest directory reached, or the typed refusal. */
-type WalkOutcome = Readonly<{ reject: AppError | undefined; deepest: string }>;
+/**
+ * A walk that ended: the typed refusal, or the directory the entry is created in together with the
+ * authority it was judged with. The authority travels with the answer, so the caller never asks the host
+ * about ground the walk has already read.
+ */
+type WalkOutcome = Readonly<{
+  reject: AppError | undefined;
+  deepest: string;
+  authority: DirectoryAuthority | undefined;
+}>;
 
 /**
  * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the
- * first step another local user could steer.
+ * first step another local user could steer. The directory it reports is where the entry gets created.
  *
  * No `realpath` is involved anywhere. `realpathSync` answers only with the FINAL directory, so any
  * directory the resolution stepped through can vanish from the answer, and from the judgment, whenever a
@@ -286,10 +336,12 @@ type WalkOutcome = Readonly<{ reject: AppError | undefined; deepest: string }>;
  *   any other directory. Neither one is a name that has to exist.
  * - Any other component is lstat'ed in that directory. An absent component ends the walk, because the
  *   publish creates what is missing below here.
- * - A directory is judged and entered.
+ * - A directory is judged and entered. Each physical directory is judged once and each path is read from
+ *   the host once per walk, so a `..` back over ground already crossed, or an alias of it, costs nothing.
  * - A symbolic link is judged itself, against the directory that physically holds it, and its target's
- *   components go in front of the queue — restarting from `/` for an absolute target. Hops are counted
- *   against {@link MAX_SCRIPT_PATH_LINK_HOPS}, and crossing it is refused rather than trusted.
+ *   RAW components go in front of the queue — restarting from `/` for an absolute target, continuing from
+ *   the link's own directory for a relative one. Hops are counted against
+ *   {@link MAX_SCRIPT_PATH_LINK_HOPS}, and crossing it is refused rather than trusted.
  * - A component that is neither a directory nor a link cannot carry a publish, and is refused.
  *
  * A relative destination starts from the process's resolved working directory: the caller already stands
@@ -299,10 +351,16 @@ function walkParent(destination: string, trust: ScriptDestinationTrust): WalkOut
   let step = startWalk(spelledParent(destination), trust);
   // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
   for (;;) {
-    if (step.kind === 'reject') return { reject: refusalAt(destination, step), deepest: '/' };
-    if (step.kind === 'stop') return { reject: undefined, deepest: step.deepest };
+    if (step.kind === 'reject') {
+      return { reject: refusalAt(destination, step), deepest: '/', authority: undefined };
+    }
+    if (step.kind === 'stop') {
+      return { reject: undefined, deepest: step.deepest, authority: step.authority };
+    }
     const { state } = step;
-    if (state.queue.length === 0) return { reject: undefined, deepest: state.deepest };
+    if (state.queue.length === 0) {
+      return { reject: undefined, deepest: state.deepest, authority: state.authority };
+    }
     step = stepWalk(state, trust);
   }
 }
@@ -314,13 +372,14 @@ function refusalAt(
   return scriptAncestryFailure(destination, step.path, step.exposure);
 }
 
-/** The first state: `/` for an absolute spelling, the resolved working directory otherwise. */
+/** The first state: `/` for an absolute spelling, the resolved working directory for a relative one. */
 function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
   const queue = pathComponents(parent);
-  // A relative destination starts from the working directory as the kernel sees it, symlink-free: the
-  // caller already stands there, so it is where the walk starts rather than a step it has to earn.
-  if (parent !== '' && !path.isAbsolute(parent)) return standIn(path.resolve(''), queue, trust, 0);
-  return standIn('/', queue, trust, 0);
+  // The caller already stands in the working directory, so it is where a relative walk starts rather
+  // than a step it has to earn. `path.resolve('')` answers it the way the kernel sees it.
+  const ground: WalkGround = { stats: new Map(), judged: new Set() };
+  if (!path.isAbsolute(parent)) return standIn(path.resolve(''), queue, trust, 0, ground);
+  return standIn('/', queue, trust, 0, ground);
 }
 
 /** Judges `directory` and stands the walk there, or refuses it. */
@@ -329,13 +388,29 @@ function standIn(
   queue: readonly string[],
   trust: ScriptDestinationTrust,
   hops: number,
+  ground: WalkGround,
 ): WalkStep {
-  const stats = statDirectoryChain(directory);
+  const stats = readGround(ground, directory);
   if (stats === undefined) return { kind: 'reject', path: directory, exposure: 'not_a_directory' };
   const authority: DirectoryAuthority = { uid: stats.uid, gid: stats.gid, mode: stats.mode };
-  const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) return { kind: 'reject', path: directory, exposure };
-  return { kind: 'stand', state: { deepest: directory, authority, queue, hops } };
+  // Ground this walk has already judged is safe to stand on again, however it was reached: a `..` back to
+  // a directory it passed, or an alias of one. A directory's judgment does not depend on the route.
+  const identity = `${stats.dev}:${stats.ino}`;
+  if (!ground.judged.has(identity)) {
+    const exposure = untrustedAncestryExposure(authority, trust);
+    if (exposure) return { kind: 'reject', path: directory, exposure };
+    ground.judged.add(identity);
+  }
+  return { kind: 'stand', state: { deepest: directory, authority, queue, hops, ground } };
+}
+
+/** The `stat` of a directory this walk stands in, read from the host at most once per path. */
+function readGround(ground: WalkGround, directory: string): fs.Stats | undefined {
+  const known = ground.stats.get(directory);
+  if (known !== undefined) return known;
+  const stats = statDirectoryChain(directory);
+  if (stats !== undefined) ground.stats.set(directory, stats);
+  return stats;
 }
 
 /** The names of `directory`, with every `.` resolved away the way the kernel resolves it. */
@@ -346,10 +421,14 @@ function pathComponents(directory: string): string[] {
 /** Advances one component of the queue. */
 function stepWalk(state: WalkState, trust: ScriptDestinationTrust): WalkStep {
   const [component, ...rest] = state.queue;
-  if (component === undefined) return { kind: 'stop', deepest: state.deepest };
+  if (component === undefined) {
+    return { kind: 'stop', deepest: state.deepest, authority: state.authority };
+  }
   // `..` is the parent of the directory PHYSICALLY stood in, not of the spelling: where `work` is a link,
   // `.../work/../x` steps back from the link's target and lands beside it.
-  if (component === '..') return standIn(path.dirname(state.deepest), rest, trust, state.hops);
+  if (component === '..') {
+    return standIn(path.dirname(state.deepest), rest, trust, state.hops, state.ground);
+  }
   return stepIntoEntry(state, component, rest, trust);
 }
 
@@ -361,11 +440,13 @@ function stepIntoEntry(
   trust: ScriptDestinationTrust,
 ): WalkStep {
   const entry = path.join(state.deepest, component);
-  const stats = lstatIfPresentSync(entry);
+  const stats = lstatIfPresent(entry);
   // Nothing below here exists yet, so the publish creates it inside the directory the walk reached.
-  if (stats === undefined) return { kind: 'stop', deepest: state.deepest };
+  if (stats === undefined) {
+    return { kind: 'stop', deepest: state.deepest, authority: state.authority };
+  }
   if (stats.isSymbolicLink()) return stepThroughLink(state, entry, stats, rest, trust);
-  return standIn(entry, rest, trust, state.hops);
+  return standIn(entry, rest, trust, state.hops, state.ground);
 }
 
 /**
@@ -386,13 +467,12 @@ function stepThroughLink(
     return { kind: 'reject', path: link, exposure: 'link_loop_exceeded' };
   }
   const target = fs.readlinkSync(link);
-  const queue = [
-    ...pathComponents(path.isAbsolute(target) ? target : path.join(state.deepest, target)),
-    ...rest,
-  ];
-  // An absolute target restarts the walk at the root; a relative one continues from where the walk is.
-  const home = path.isAbsolute(target) ? '/' : state.deepest;
-  return standIn(home, queue, trust, state.hops + 1);
+  // A relative target continues from the directory that HOLDS the link, not from where the walk happens
+  // to stand, and its components are queued RAW. `path.join` would fold a `..` inside the target away,
+  // which is the one simplification this walk may not make: the kernel applies that `..` to the physical
+  // directory it reaches after the components before it.
+  const home = path.isAbsolute(target) ? '/' : path.dirname(link);
+  return standIn(home, [...pathComponents(target), ...rest], trust, state.hops + 1, state.ground);
 }
 
 /**
@@ -438,13 +518,18 @@ type NsswitchLine = Readonly<{ database: string; sources: readonly string[] }>;
  */
 export function nameServiceListsOnlyFiles(nsswitch: readonly string[] | undefined): boolean {
   if (nsswitch === undefined) return false;
-  for (const database of ['passwd', 'group']) {
-    const line = nsswitchLine(nsswitch, database);
-    if (line === undefined) return false;
-    if (!line.sources.every((source) => source === 'files')) return false;
-    if (line.sources.length === 0) return false;
-  }
-  return true;
+  const databases = ['passwd', 'group', 'initgroups'].map((database) =>
+    database === 'initgroups'
+      ? // glibc reads SUPPLEMENTARY membership from `initgroups:`. A line that is absent inherits the
+        // `group` setting, which is what the kernel does, so the verified `group` line covers it.
+        (nsswitchLine(nsswitch, 'initgroups') ?? nsswitchLine(nsswitch, 'group'))
+      : nsswitchLine(nsswitch, database),
+  );
+  return databases.every((line) => line !== undefined && listsOnlyFiles(line));
+}
+
+function listsOnlyFiles(line: NsswitchLine): boolean {
+  return line.sources.length > 0 && line.sources.every((source) => source === 'files');
 }
 
 function nsswitchLine(lines: readonly string[], database: string): NsswitchLine | undefined {
@@ -704,17 +789,31 @@ export function untrustedLinkExposure(
   return 'planted_link';
 }
 
+/** Why each exposure makes that ground unsafe, in the caller's terms. */
+const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
+  foreign_owned: 'another local user owns that part of the path.',
+  world_writable: 'any local user can write that part of the path.',
+  shared_group_writable: 'another local user can write that part of the path.',
+  shared_parent: 'another local user could create the script file there first.',
+  planted_link: 'another local user could have put that symbolic link there, or could replace it.',
+  link_loop_exceeded:
+    'that part of the path follows more symbolic links than the system allows, so where the script would land is not established.',
+  not_a_directory: 'a directory was expected there, and something else stands in the way.',
+  parent_replaced: '',
+};
+
 function scriptAncestryFailure(
   destination: string,
   ancestor: string,
   exposure: ScriptAncestryExposure,
 ): AppError {
   const replaced = exposure === 'parent_replaced';
+  const wording = untrustedGroundWording[exposure];
   return new AppError(
     'COMMAND_FAILED',
     replaced
       ? `The directory for ${destination} changed while the script was staged, so the script was not saved.`
-      : `Refusing to save the script under ${ancestor}: another local user owns or can write that part of the path.`,
+      : `Refusing to save the script under ${ancestor}: ${wording}`,
     {
       reason: replaced ? 'script_ancestry_replaced' : 'script_ancestor_untrusted',
       exposure,
@@ -732,16 +831,6 @@ function readSystemFile(file: string): string[] | undefined {
     return fs.readFileSync(file, 'utf8').split('\n');
   } catch {
     return undefined;
-  }
-}
-
-/** `lstat` where absence is `undefined`; any other failure propagates. */
-function lstatIfPresentSync(pathname: string): fs.Stats | undefined {
-  try {
-    return fs.lstatSync(pathname);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
   }
 }
 
@@ -765,14 +854,5 @@ function assertSafeDestination(destination: string): void {
     throw new Error(
       `Refusing to replace a durable path that is not a regular file: ${destination}`,
     );
-  }
-}
-
-function lstatIfPresent(pathname: string): fs.Stats | undefined {
-  try {
-    return fs.lstatSync(pathname);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
   }
 }
