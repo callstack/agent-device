@@ -33,7 +33,11 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 }));
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { createDaemonTransport, type sendToDaemon } from '../index.ts';
-import { resolveClientSettings, resolveTimeoutRecovery } from '../daemon-client-lifecycle.ts';
+import {
+  resolveClientSettings,
+  resolveTimeoutRecovery,
+  ensureStartedDaemon,
+} from '../daemon-client-lifecycle.ts';
 
 const spawn = vi.mocked(runCmdDetachedMonitored);
 
@@ -50,6 +54,16 @@ function request(stateDir: string) {
     positionals: [],
     flags: { stateDir, daemonTransport: 'http' },
   } as Parameters<typeof sendToDaemon>[0];
+}
+
+async function ownerRequest(stateDir: string) {
+  const host = createTestHostEnvironment();
+  const settings = {
+    ...resolveClientSettings(request(stateDir), undefined, host),
+    retireIncompatibleContender: true,
+  };
+  await ensureStartedDaemon(settings);
+  return await createDaemonTransport(host)(request(stateDir));
 }
 
 function pinTo(info: { token: string; pid: number; processStartTime?: string }): DaemonBinding {
@@ -161,9 +175,7 @@ for (const [ownership, reason, message, hint] of [
     }
     const killSpy = vi.spyOn(process, 'kill');
     try {
-      const refusal = await refusalFrom(
-        createDaemonTransport(createTestHostEnvironment())(request(stateDir)),
-      );
+      const refusal = await refusalFrom(ownerRequest(stateDir));
       assert.equal(refusal.details?.reason, reason);
       assert.equal(refusal.message, message);
       assert.match(String(refusal.details?.hint), hint);
@@ -216,7 +228,7 @@ test('the same record with no host owner is still the takeover this client perfo
 
   try {
     assert.equal(metadata.readDaemonInfo(paths.infoPath)?.ownership, 'detached');
-    const response = await createDaemonTransport(createTestHostEnvironment())(request(stateDir));
+    const response = await ownerRequest(stateDir);
 
     assert.equal(response.ok, true);
     assert.equal(spawn.mock.calls.length, 1, 'the detached contender was replaced');
@@ -243,7 +255,7 @@ for (const ownership of ['embedded', 'unrecognized', 'detached'] as const)
     const killSpy = vi.spyOn(process, 'kill');
 
     try {
-      const response = await createDaemonTransport(createTestHostEnvironment())(request(stateDir));
+      const response = await ownerRequest(stateDir);
 
       assert.equal(response.ok, true, JSON.stringify(response));
       assert.equal(spawn.mock.calls.length, 1, 'the state directory was taken over, not wedged');
@@ -259,26 +271,28 @@ for (const ownership of ['embedded', 'unrecognized', 'detached'] as const)
     }
   });
 
-test('timeout recovery asks only whether this client may, and attach never may', () => {
-  const { stateDir } = stateDirAndPaths();
-  const managed = resolveClientSettings(
-    request(stateDir),
+test('ordinary requests never authorize timeout retirement', () => {
+  const settings = resolveClientSettings(
+    request(stateDirAndPaths().stateDir),
     undefined,
     createTestHostEnvironment(),
-    'managed',
   );
-  const attach = resolveClientSettings(
-    request(stateDir),
-    undefined,
-    createTestHostEnvironment(),
-    'attach',
-  );
-  // Recovery is the retirement's judgement, so the client decides only whether it may ask at all: an
-  // attach client never does, and every other lifecycle asks. The retirement answers for the record's
-  // owner — a live embedded or unrecognized one is refused without a signal, which
-  // daemon-registration-embedded-owner.test.ts pins at that seam for both modes.
-  assert.equal(resolveTimeoutRecovery(managed), 'retire-unresponsive');
-  assert.equal(resolveTimeoutRecovery(attach), 'none');
+  assert.equal(resolveTimeoutRecovery(settings), 'none');
+});
+
+test('a library replay without a state directory attaches instead of owning a private daemon', () => {
+  const host = createTestHostEnvironment();
+  const replay = { session: 'default', command: 'replay', positionals: [], flags: {} };
+  const attached = resolveClientSettings(replay, undefined, host);
+  const owned = resolveClientSettings(replay, undefined, host, undefined, true);
+  try {
+    assert.equal(attached.ownedStateDir, undefined);
+    assert.equal(resolveTimeoutRecovery(attached), 'none');
+    assert.ok(owned.ownedStateDir);
+    assert.equal(resolveTimeoutRecovery(owned), 'retire-unresponsive');
+  } finally {
+    if (owned.ownedStateDir) fs.rmSync(owned.paths.baseDir, { recursive: true, force: true });
+  }
 });
 
 test('a matching pin does not bypass attach compatibility checks', async (t) => {
@@ -403,7 +417,6 @@ test('a client that pins a local daemon and names a base URL is refused where se
           { ...request(stateDirAndPaths().stateDir), flags: { daemonBaseUrl: remote } },
           undefined,
           createTestHostEnvironment(),
-          'managed',
           pin,
         ),
     ],
@@ -415,7 +428,6 @@ test('a client that pins a local daemon and names a base URL is refused where se
           request(stateDirAndPaths().stateDir),
           undefined,
           createTestHostEnvironment({ env: { AGENT_DEVICE_DAEMON_BASE_URL: remote } }),
-          'managed',
           pin,
         ),
     ],
@@ -458,12 +470,10 @@ test('a pinned client keeps its hands off the state directory it was given', asy
     request(stateDir),
     undefined,
     createTestHostEnvironment(),
-    'managed',
     pin,
   );
 
   // A private state directory would hold a daemon nobody started, and a pinned client starts none.
-  assert.equal(settings.daemonLifecycle, 'attach');
   assert.equal(settings.ownedStateDir, undefined);
   assert.deepEqual(settings.daemonBinding, pin);
   assert.equal(settings.paths.baseDir, paths.baseDir);

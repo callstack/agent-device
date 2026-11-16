@@ -21,7 +21,7 @@ import {
   startHttpDaemonFixture,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { isProcessAlive } from '@agent-device/host-kit/process';
+import { captureHostEnvironment, isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   spawnRegisteredDaemonFixture,
@@ -50,7 +50,17 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 });
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
-import { sendToDaemon } from '../index.ts';
+import { sendToDaemon as attach } from '../index.ts';
+import { ensureStartedDaemon, resolveClientSettings } from '../daemon-client-lifecycle.ts';
+
+async function sendToDaemon(req: Parameters<typeof attach>[0]) {
+  const host = captureHostEnvironment(process);
+  await ensureStartedDaemon({
+    ...resolveClientSettings(req, undefined, host),
+    retireIncompatibleContender: true,
+  });
+  return await attach(req);
+}
 
 const actualRetry = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
   '@agent-device/host-kit/retry',

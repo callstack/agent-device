@@ -13,7 +13,7 @@ import {
 } from '@agent-device/host-kit/process';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { sendToDaemon, createEnsuredDaemonTransport } from '../index.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -214,7 +214,8 @@ test('sendToDaemon refuses a live newer daemon whose first probe missed', async 
       () => sendSmoke(stateDir),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
-        assert.equal(error.details?.daemonVersion, NEWER_DAEMON_VERSION);
+        assert.equal(error.details?.reason, 'daemon-incompatible');
+        assert.equal(error.details?.mismatch, 'newer');
         return true;
       },
     );
@@ -283,7 +284,12 @@ async function expectDeadDaemonReplaced(
       return;
     }
 
-    const response = await sendSmoke(stateDir);
+    const response = await createEnsuredDaemonTransport()({
+      session: 'default',
+      command: 'stalled-probe-smoke',
+      positionals: [],
+      flags: { stateDir, daemonTransport: 'socket' },
+    });
 
     assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
     assert.equal(mockSpawnDaemon.mock.calls.length, 1, 'the dead daemon was replaced');
@@ -300,10 +306,10 @@ async function expectDeadDaemonReplaced(
   }
 }
 
-test('sendToDaemon replaces a daemon whose process is gone after a single probe', async (t) => {
+test('createEnsuredDaemonTransport replaces a daemon whose process is gone after a single probe', async (t) => {
   await expectDeadDaemonReplaced(t, readVersion());
 });
 
-test('sendToDaemon replaces a newer daemon whose process is gone after a single probe', async (t) => {
+test('createEnsuredDaemonTransport replaces a newer daemon whose process is gone after a single probe', async (t) => {
   await expectDeadDaemonReplaced(t, NEWER_DAEMON_VERSION);
 });
