@@ -187,11 +187,11 @@ export async function createCaseRunner(
   caseTimeoutMs: number,
 ): Promise<CaseRunner> {
   let session = await startSession(target.name);
-  let closed = false;
+  let closePromise: Promise<void> | undefined;
 
   return {
     run: async (input) => {
-      if (closed) throw new Error('fuzz case runner is closed');
+      if (closePromise) throw new Error('fuzz case runner is closed');
       const { failure, usable } = await runCase(session, target, input, caseTimeoutMs);
       if (!usable) {
         await endSession(session);
@@ -199,9 +199,21 @@ export async function createCaseRunner(
       }
       return failure;
     },
-    close: async () => {
-      closed = true;
-      await endSession(session);
+    close: () => {
+      closePromise ??= (async () => {
+        try {
+          if (session.death() === null && session.child.connected) {
+            const answer = awaitWorker(session.child, caseTimeoutMs);
+            session.child.send({ kind: 'close' });
+            const outcome = await answer;
+            if (outcome.kind !== 'message' || outcome.message.kind !== 'closed')
+              throw new Error(`fuzz target cleanup did not finish within ${caseTimeoutMs}ms`);
+          }
+        } finally {
+          await endSession(session);
+        }
+      })();
+      return closePromise;
     },
   };
 }

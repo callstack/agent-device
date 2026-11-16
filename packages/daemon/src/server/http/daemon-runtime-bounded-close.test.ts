@@ -24,6 +24,7 @@ import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-
 import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 import {
+  createPluginClose,
   describeUnfinishedShutdownWork,
   reportDaemonClose,
   type ShutdownReport,
@@ -746,5 +747,48 @@ test('daemon close reports pending when root gateway rejects while a recovery di
   } finally {
     finishRecoveryShutdown();
     await closing;
+  }
+});
+
+test('only registered cleanup owners stay pending after a lazy backend failure', async () => {
+  vi.useFakeTimers();
+  try {
+    const inventory: import('@agent-device/contracts/plugin-inventory').PluginInventoryEntry[] = [
+      {
+        backend: 'maestro',
+        source: 'store',
+        state: 'active',
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        backend: 'maestro',
+        source: 'embedder',
+        state: 'failed',
+        error: { code: 'INVALID_ARGS', message: 'duplicate', reason: 'duplicate_replay_backend' },
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        backend: 'rejected',
+        source: 'store',
+        state: 'failed',
+        error: { code: 'COMMAND_FAILED', message: 'setup failed', reason: 'plugin_setup_failed' },
+        credentials: { variables: [], byBackend: {} },
+      },
+    ];
+    const owner = createPluginClose({
+      close: () => new Promise(() => {}),
+      timeoutMs: 50,
+      inventory,
+    });
+    inventory[0] = {
+      ...inventory[0]!,
+      state: 'failed',
+      error: { code: 'COMMAND_FAILED', message: 'load failed', reason: 'plugin_load_failed' },
+    };
+    const close = owner.close();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(await close).toEqual({ disposed: [], failed: [], pending: ['replay-backend:maestro'] });
+  } finally {
+    vi.useRealTimers();
   }
 });

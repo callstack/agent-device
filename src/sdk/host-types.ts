@@ -2,6 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import type { ReplayEnginePlugin } from '@agent-device/plugins/replay-backend';
 import type { ShutdownReport } from '@agent-device/daemon';
 
 export type StartAgentDeviceOptions = Readonly<{
@@ -10,7 +11,7 @@ export type StartAgentDeviceOptions = Readonly<{
   /** The environment and working directory to run with. Defaults to one captured copy of this process's. */
   host?: HostEnvironment;
   /** Imported plugins to register after the built-ins. The plugin store is not read. */
-  plugins?: readonly AgentDevicePlugin[];
+  plugins?: readonly (AgentDevicePlugin | ReplayEnginePlugin)[];
 }>;
 
 export type AgentDeviceHost = Readonly<{
