@@ -372,9 +372,6 @@ importers:
 
   packages/command-output:
     dependencies:
-      '@agent-device/ad-replay':
-        specifier: workspace:*
-        version: link:../ad-replay
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -503,9 +500,6 @@ importers:
 
   packages/daemon:
     dependencies:
-      '@agent-device/ad-replay':
-        specifier: workspace:*
-        version: link:../ad-replay
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -558,6 +552,9 @@ importers:
         specifier: workspace:*
         version: link:../session-journal
     devDependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:../apple-runner
@@ -585,9 +582,6 @@ importers:
 
   packages/daemon-client:
     dependencies:
-      '@agent-device/ad-replay':
-        specifier: workspace:*
-        version: link:../ad-replay
       '@agent-device/command-registry':
         specifier: workspace:*
         version: link:../command-registry
@@ -5789,22 +5783,16 @@ packages:
     resolution: {integrity: sha512-9K2k72s4n7rV9s4bX0MyjbX9iBribvKZbBJKuEmTCZfeWJXs6Yh7bGpY4eoc7UufAjvpheBqwyZCOIPBvxCv0A==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
-      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
-        optional: true
-      typescript:
         optional: true
 
   volar-service-typescript@0.0.71:
     resolution: {integrity: sha512-yTtM/BVT6hoyEYnDtaCyAtNhdNeS/mhTTABlBOdw3NNiRBUin3IznFJpgfjer4c6RYopiPjjQjc9VFhxVl1mLw==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
-      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
-        optional: true
-      typescript:
         optional: true
 
   volar-service-yaml@0.0.71:
@@ -6119,8 +6107,8 @@ snapshots:
       volar-service-emmet: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-html: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-prettier: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(prettier@3.9.10)
-      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
-      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
+      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
+      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-yaml: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       vscode-html-languageservice: 5.6.2
       vscode-uri: 3.2.0
@@ -10410,14 +10398,13 @@ snapshots:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
       prettier: 3.9.10
 
-  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
+  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
-      typescript: 5.9.3
 
-  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
+  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
       path-browserify: 1.0.1
       semver: 7.8.5
@@ -10427,7 +10414,6 @@ snapshots:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
-      typescript: 5.9.3
 
   volar-service-yaml@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:

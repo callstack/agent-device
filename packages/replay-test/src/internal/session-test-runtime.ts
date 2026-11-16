@@ -1,9 +1,9 @@
+import { replayTestAttemptFailure } from './session-test-attempt-failure.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
-  replayTestAttemptFailure,
   type ReplayTestAttemptFailed,
   type ReplayTestAttemptOutcome,
   type ReplayTestAttemptStepSink,
@@ -12,7 +12,7 @@ import {
   type ReplayTestRunReplayParams,
   type ReplayTestTarget,
   type ReplayTestRuntimeDependencies,
-} from './session-test-types.ts';
+} from '@agent-device/contracts/replay-test-execution';
 
 const REPLAY_TIMEOUT_CLEANUP_GRACE_MS = 2_000;
 const REPLAY_TEST_TIMEOUT_HINT =

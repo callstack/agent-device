@@ -13,12 +13,7 @@ export type ReplayVarScope = {
   expandedBuiltinNames?: Set<string>;
 };
 
-export type ReplayVarSources = {
-  builtins?: Record<string, string>;
-  fileEnv?: Record<string, string>;
-  shellEnv?: Record<string, string>;
-  cliEnv?: Record<string, string>;
-};
+import type { ReplayVarSources } from '@agent-device/contracts/replay-script-data';
 
 const SHELL_PREFIX = 'AD_VAR_';
 
