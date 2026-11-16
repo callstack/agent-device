@@ -114,6 +114,7 @@ test('setup failures stay permanent while failed lazy loads can retry without fa
     details: { reason: 'plugin_setup_failed' },
   });
   await expect(registry.resolveReplayBackend('load', host)).rejects.toMatchObject({
+    message: 'engine failed',
     details: { reason: 'plugin_load_failed' },
   });
   expect(registry.inventory[1]).toMatchObject({
@@ -347,6 +348,33 @@ test('a package name cannot select an active foreign backend for native executio
     });
     expect(maestro.create).not.toHaveBeenCalled();
     expect(await registry.resolveReplayBackend('maestro', host, packageName)).toBe(maestro.runtime);
+  } finally {
+    await registry.close();
+  }
+});
+
+test('a selected native package load failure cannot masquerade as absence by its message', async () => {
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([
+      {
+        source: 'store',
+        package: '@agent-device/replay',
+        load: () => {
+          throw new Error('Replay backend is not installed: ad');
+        },
+      },
+    ]),
+    {},
+    policy,
+  );
+  try {
+    await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
+      details: {
+        reason: 'plugin_load_failed',
+        package: '@agent-device/replay',
+        updateCommand: 'agent-device plugins update @agent-device/replay',
+      },
+    });
   } finally {
     await registry.close();
   }

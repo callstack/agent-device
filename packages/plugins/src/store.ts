@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isRecord } from '@agent-device/kernel/record';
+import { canonicalJson } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
@@ -46,6 +47,49 @@ function validatePluginSelection(name: string, selection: PluginSelection): void
   ) {
     throw new AppError('INVALID_ARGS', `Invalid plugin selection: ${name}`);
   }
+}
+
+function selectionStamp(selection: PluginSelection | undefined): string {
+  return crypto
+    .createHash('sha256')
+    .update(canonicalJson(selection ?? null))
+    .digest('hex');
+}
+
+/** Checks a daemon's fixed store selection without importing or replacing executable code. */
+export function createPluginSelectionGuard(
+  candidates: readonly PluginCandidate[],
+  env: NodeJS.ProcessEnv,
+): (packageName: string) => void {
+  const selected = new Map(
+    candidates.flatMap((candidate) =>
+      candidate.package ? [[candidate.package, candidate.selectionStamp] as const] : [],
+    ),
+  );
+  return (packageName) => {
+    let current: PluginSelection | undefined;
+    try {
+      current = readPluginConfig(env).plugins?.[packageName];
+      if (current !== undefined) validatePluginSelection(packageName, current);
+    } catch (error) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'Cannot read the selected replay plugin configuration',
+        {
+          reason: 'invalid_plugin',
+          package: packageName,
+          hint: 'Repair the plugin configuration on the daemon host, then restart it after finishing your sessions.',
+        },
+        error,
+      );
+    }
+    if ((selected.get(packageName) ?? selectionStamp(undefined)) !== selectionStamp(current))
+      throw new AppError('INVALID_ARGS', 'The running daemon retains an older plugin set.', {
+        reason: 'daemon-plugin-set-stale',
+        package: packageName,
+        hint: 'Finish your sessions and restart the daemon on its host, then retry the original invocation with all its arguments.',
+      });
+  };
 }
 
 function storeHome(env: NodeJS.ProcessEnv): string {
@@ -132,6 +176,7 @@ export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<Plu
         return {
           source: 'store',
           package: name,
+          selectionStamp: selectionStamp(selection),
           version: installation.version,
           ...(selection.options ? { hostOptions: selection.options } : {}),
           load: () => loadInstallation(installation),
@@ -140,6 +185,7 @@ export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<Plu
         return {
           source: 'store',
           package: name,
+          selectionStamp: selectionStamp(selection),
           ...(await readSelectionVersion(home, name, selection)),
           load: () => Promise.reject(error),
         };

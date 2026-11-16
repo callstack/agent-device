@@ -163,7 +163,7 @@ jobs:
       # outcome: a member that failed would otherwise leave the phase skipped, and the phase
       # guard would report an unexplained skip instead of the member that caused it.
       - if: steps.build.outcome == 'success'
-        run: node --experimental-strip-types scripts/install-workspace-maestro.ts
+        run: node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run
