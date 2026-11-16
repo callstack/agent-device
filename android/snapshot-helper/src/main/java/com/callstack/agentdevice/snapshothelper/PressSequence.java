@@ -6,8 +6,7 @@ package com.callstack.agentdevice.snapshothelper;
  * <p>A refused start reached no window, as while a transition leaves nothing able to receive it.
  * The injection verifier still records it as landed, so the start is discarded before it is retried
  * once after the framework's animation sync, with a fresh down time so the receiver does not measure
- * the wait as a held press. A refused end is not cancelled: the verifier has recorded it too, so the
- * press is already closed there and a cancel would itself be inconsistent.
+ * the wait as a held press.
  */
 final class PressSequence {
   /** Builds and injects the platform events of one press. */
@@ -60,6 +59,11 @@ final class PressSequence {
           break;
       }
     }
+    // A refused end gets no cancel. The verifier records an event before the dispatcher drops it,
+    // so the press is closed there and a cancel would be inconsistent. The dispatcher drops an end
+    // only when no pointer or focus is still down, after it cancelled the receiving window itself
+    // ("touched window was removed", "focus left window"). A timed-out end was already enqueued,
+    // so the live window still receives it.
     return injections.end(downTime) ? Outcome.DISPATCHED : Outcome.END_REFUSED;
   }
 }
