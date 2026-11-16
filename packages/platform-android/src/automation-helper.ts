@@ -39,8 +39,8 @@ type AndroidHelperAppResult =
   | { kind: 'launched'; output: string };
 
 const ACTION_POLICY = {
-  // A press can block on the framework's 30 s injection deadline, and its one retry needs 35 s of
-  // room (PressSequence.RETRY_WORST_CASE_MS), so input may wait longer than the other actions.
+  // Less the 5 s answer margin, a 40 s helper budget lets a start refused at once still afford its
+  // one retry (PressSequence.RETRY_WORST_CASE_MS, 35 s); a later refusal is not retried.
   input: { mutation: true, timeoutMs: 45_000 },
   app: { mutation: true, timeoutMs: 30_000 },
   screenshot: { mutation: false, timeoutMs: 30_000 },
@@ -146,7 +146,9 @@ function decodeHelperIndex(value: string | undefined): number | undefined {
 
 /**
  * The host waits for input up to its cap, or until the request's own deadline when that is sooner.
- * A request too close to its deadline for one injection is refused before anything is sent.
+ * A request too close to its deadline for one injection is refused before anything is sent. The
+ * refusal is thrown before the helper call's fallback on purpose: that path stops the shared session
+ * and runs `adb shell input`, which can block on the same injection deadline.
  */
 function admitInputTimeoutMs(): number {
   const capMs = ACTION_POLICY.input.timeoutMs;
