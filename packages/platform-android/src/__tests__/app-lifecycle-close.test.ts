@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import './test-utils/android-host-test-setup.ts';
 
@@ -217,6 +217,17 @@ test.each([
                 phase,
                 packageName: 'com.example.app',
                 timeoutMs,
+                ...(phase === 'foreground'
+                  ? {
+                      initialProcessCount: 1,
+                      foregroundObservations: [1750, 1800, 1850, 1900, 1950].map((ms) => ({
+                        startMs: ms,
+                        endMs: ms,
+                        remainingMs: 2000 - ms,
+                        result: 'target',
+                      })),
+                    }
+                  : {}),
               });
               return true;
             },
@@ -278,12 +289,14 @@ test.each([
             : assert.rejects(close, (error: unknown) => {
                 assert.ok(error instanceof AppError);
                 assert.equal(error.code, 'COMMAND_FAILED');
-                assert.deepEqual(error.details, {
-                  reason: 'android-app-close-timeout',
-                  phase,
-                  packageName: 'com.example.app',
-                  timeoutMs: 2_000,
-                });
+                assert.equal(error.details?.reason, 'android-app-close-timeout');
+                assert.equal(error.details?.phase, phase);
+                assert.equal(error.details?.timeoutMs, 2_000);
+                if (phase === 'foreground') {
+                  assert.deepEqual(normalizeError(error).details?.foregroundObservations, [
+                    { startMs: 0, endMs: completionMs, remainingMs: 0, result: 'other' },
+                  ]);
+                }
                 return true;
               });
           await Promise.all([result, vi.runAllTimersAsync()]);

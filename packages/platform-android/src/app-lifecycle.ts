@@ -664,8 +664,9 @@ async function stopAndroidPackage(device: DeviceInfo, packageName: string): Prom
     throw androidPidofUnavailableError(packageName);
   }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
-  const expired = await waitForAndroidPackageStopped(device, packageName, killed);
-  if (expired) throw androidCloseTimeoutError(packageName, expired);
+  const observations: ForegroundObservation[] = [];
+  const expired = await waitForAndroidPackageStopped(device, packageName, killed, observations);
+  if (expired) throw androidCloseTimeoutError(packageName, expired, observations, killed.size);
 }
 
 /**
@@ -729,8 +730,10 @@ async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
   killed: ReadonlySet<string>,
+  observations: ForegroundObservation[],
 ): Promise<AndroidStopFencePhase | undefined> {
-  if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
+  if (!(await waitForAndroidPackageNotForeground(device, packageName, observations)))
+    return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
   if (!(await waitForAndroidPackageProcessGone(device, packageName))) return 'process';
   return undefined;
@@ -754,25 +757,43 @@ const ANDROID_CLOSE_TIMEOUTS: Record<
   },
 };
 
-function androidCloseTimeoutError(packageName: string, phase: AndroidStopFencePhase): AppError {
+function androidCloseTimeoutError(
+  packageName: string,
+  phase: AndroidStopFencePhase,
+  observations: ForegroundObservation[],
+  initialProcessCount: number,
+): AppError {
   const { message, timeoutMs } = ANDROID_CLOSE_TIMEOUTS[phase];
   return new AppError('COMMAND_FAILED', `Android app ${packageName} ${message}`, {
     reason: 'android-app-close-timeout',
     phase,
     packageName,
     timeoutMs,
+    ...(phase === 'foreground'
+      ? { foregroundObservations: observations, initialProcessCount }
+      : {}),
   });
 }
+
+type ForegroundObservation = {
+  startMs: number;
+  endMs: number;
+  remainingMs: number;
+  result: 'target' | 'other' | 'unknown';
+};
 
 function waitForAndroidPackageNotForeground(
   device: DeviceInfo,
   packageName: string,
+  observations?: ForegroundObservation[],
 ): Promise<boolean> {
   return waitForAndroidForegroundPackage(
     device,
     Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS),
     ANDROID_CLOSE_FOCUS_POLL_MS,
     (foregroundPackage) => foregroundPackage !== packageName,
+    observations,
+    packageName,
   );
 }
 
@@ -782,9 +803,25 @@ async function waitForAndroidForegroundPackage(
   deadline: Deadline,
   pollMs: number,
   matches: (foregroundPackage: string | undefined) => boolean,
+  observations?: ForegroundObservation[],
+  targetPackage?: string,
 ): Promise<boolean> {
   while (!deadline.isExpired()) {
-    const foreground = await probeBeforeDeadline(deadline, () => readAndroidForegroundApp(device));
+    const foreground = await probeBeforeDeadline(deadline, async () => {
+      const startMs = deadline.elapsedMs();
+      const value = await readAndroidForegroundApp(device);
+      const endMs = deadline.elapsedMs();
+      if (observations) {
+        observations.push({
+          startMs,
+          endMs,
+          remainingMs: deadline.remainingMs(),
+          result: !value ? 'unknown' : value.package === targetPackage ? 'target' : 'other',
+        });
+        if (observations.length > 5) observations.shift();
+      }
+      return value;
+    });
     if (!foreground) break;
     if (matches(foreground.value?.package)) return true;
     await sleep(pollMs);
