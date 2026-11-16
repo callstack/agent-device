@@ -413,6 +413,8 @@ async function publishScriptVersion(
     // created, then the full rule is asked again in `allocateStaging`: the rule needs the directory the
     // entry is really created in, which does not exist until the `mkdir` has run, and a destination this
     // route is going to refuse must leave no directories behind in the shared ground it names (#4565).
+    // The walk covers that same spelled parent, which is where a `..` step would otherwise build a
+    // directory nobody judged.
     assertPrivateScriptDestinationPrefix(record.destination);
     await fs.promises.mkdir(path.dirname(record.destination), { recursive: true });
     const allocated = await withRecordLock(file, async () =>

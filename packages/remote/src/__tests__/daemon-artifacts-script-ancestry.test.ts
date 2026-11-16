@@ -129,6 +129,40 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination that steps back out of a missing directory',
+  async () => {
+    // The walk ends at `missing`, so the world-writable `shared` below it is never judged, and this
+    // route's `mkdir -p` resolves the two steps up as text and builds `<root>/shared/recordings`. The
+    // version would then be written into a directory the rule saw nothing of, beside directories left in
+    // ground another local user owns the naming of. The chain that exists is asked about first, so the
+    // refusal arrives before the first `mkdir` and nothing is created.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-upward-'));
+    const stateDir = path.join(root, 'state');
+    const privateDir = path.join(root, 'private');
+    fs.mkdirSync(privateDir);
+    fs.chmodSync(privateDir, 0o700);
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const destination = `${privateDir}/missing/../../shared/recordings/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(privateDir)).toEqual([]);
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
   'a remote recording refuses the ground a link target crosses on the way in',
   async () => {
     // `rec -> <root>/shared/relay/sub`, `shared` at 0777 and not sticky, `shared/relay -> <root>/chosen`.

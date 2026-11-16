@@ -141,12 +141,36 @@ test('refuses it when initgroups names a service, the database supplementary mem
   expect(withInitgroups('initgroups: files')).toBe(1000);
 });
 
+test('refuses it when a database is named twice, whichever order the lines come in', () => {
+  // glibc CONCATENATES the sources of every line naming a database and consults them in order, so
+  // `group: files` above `group: files sss` really does consult `sss`. No single line here therefore says
+  // what the lookup consults, and the exception is refused rather than settled by the first line, the last
+  // line, or the shorter list. `initgroups:` inherits the `group` setting only when it is ABSENT; a second
+  // `initgroups:` line is the same concatenation problem.
+  const withLines = (lines: string[]) =>
+    privateGroupId({ groups: PRIVATE, passwd: PRIVATE_PASSWD, nsswitch: lines }, ADA);
+
+  expect(withLines(['passwd: files', 'group: files', 'group: files sss'])).toBeUndefined();
+  // The order that looks harmless from the other end: the refused source comes FIRST, so keeping the last
+  // line would also admit it.
+  expect(withLines(['passwd: files', 'group: files sss', 'group: files'])).toBeUndefined();
+  expect(withLines(['passwd: files', 'group: files', 'passwd: files ldap'])).toBeUndefined();
+  expect(
+    withLines(['passwd: files', 'group: files', 'initgroups: files', 'initgroups: files sss']),
+  ).toBeUndefined();
+  // Repeating a database with the SAME sources establishes nothing more either: glibc would consult
+  // `files` twice, and this rule cannot tell that pair apart from the pair above.
+  expect(withLines(['passwd: files', 'group: files', 'group: files'])).toBeUndefined();
+});
+
 test('admits a name service line that names only files, actions and comments aside', () => {
   expect(
     nameServiceListsOnlyFiles(['passwd: [NOTFOUND=return] files # local only', 'group:  files']),
   ).toBe(true);
   expect(nameServiceListsOnlyFiles(['passwd: files', 'group: files db'])).toBe(false);
   expect(nameServiceListsOnlyFiles(undefined)).toBe(false);
+  // One database, two lines: see the refusal above. A repeated database is refused whoever owns the line.
+  expect(nameServiceListsOnlyFiles(['passwd: files', 'passwd: files', 'group: files'])).toBe(false);
 });
 
 test('gives a caller without a full identity no private group', () => {

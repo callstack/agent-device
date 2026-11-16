@@ -34,7 +34,8 @@ const realStatSync = fs.statSync.bind(fs);
 /**
  * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
  * the fixture's and not the CI image's directory tree. Only the ids move: modes and inode numbers stay
- * what they are on disk. A real foreign owner would need privileges this test does not have.
+ * what they are on disk. Both lookups are served, because the walk `lstat`s an entry to learn whether it
+ * is a link and `stat`s the directory it stands in.
  */
 function serveOwnership(owners: Readonly<Record<string, number>>): void {
   const withUid = (stats: fs.Stats, pathname: string): fs.Stats => {
@@ -825,19 +826,25 @@ skipOnWindows(
 
 skipOnWindows('keeps working through a root-owned alias whose target is sticky', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The `/tmp` shape with every ownership the real one has: the alias stands in a sticky directory ANY
+  // local user may add names in, and both that directory and the link belong to root. An alias owned by
+  // whoever runs the suite would still pass a rule that refused EVERY root-owned link, which is the
+  // macOS `/tmp` to `/private/tmp` shape this case exists to keep working.
   const directory = root();
-  const alias = path.join(directory, 'alias');
-  const target = path.join(directory, 'target');
+  const shared = directoryWith(path.join(directory, 'tmp'), 0o1777);
+  const target = path.join(directory, 'private-tmp');
   fs.mkdirSync(target);
   fs.chmodSync(target, 0o1777);
+  const alias = path.join(shared, 'alias');
   fs.symlinkSync(target, alias);
   const work = path.join(alias, 'work');
   fs.mkdirSync(work);
   fs.chmodSync(work, 0o700);
+  serveOwnership({ [shared]: 0, [alias]: 0, [target]: 0, [work]: 0 });
 
   publish(path.join(work, 'journey.ad'));
 
-  expect(fs.existsSync(path.join(target, 'work', 'journey.ad'))).toBe(true);
+  expect(fs.readFileSync(path.join(target, 'work', 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
 skipOnWindows('publishes under the host root-owned system temporary directory', () => {

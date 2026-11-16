@@ -139,7 +139,8 @@ export class SessionScriptWriter {
       const scriptDir = path.dirname(scriptPath);
       // Asked BEFORE the parent is created, and again by the publisher once it exists: a `mkdir -p` into
       // ground another local user can write would otherwise leave the directories it made behind them,
-      // even though the publish that follows is refused (#4565).
+      // even though the publish that follows is refused (#4565). The walk covers `scriptDir`'s own
+      // components, which is where `mkdir -p` would build a directory on the far side of a `..`.
       assertPrivateScriptDestinationPrefix(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       // #1258: `options.force` is the caller's already-merged decision

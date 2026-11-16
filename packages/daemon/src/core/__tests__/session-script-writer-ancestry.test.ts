@@ -158,6 +158,33 @@ skipOnWindows('a refused destination with a missing parent leaves no directories
   expect(fs.readdirSync(shared)).toEqual([]);
 });
 
+skipOnWindows(
+  'a recording that steps back out of a missing directory leaves no directories behind',
+  () => {
+    // `<private>/missing/../../shared/recordings/journey.ad`. The walk ends at `missing`, so `shared` is
+    // never judged, and the `mkdir -p` this route runs resolves the two steps up as TEXT and builds
+    // `<root>/shared/recordings` — the entry would be created in a world-writable directory the rule saw
+    // nothing of. The kernel is no better here: it applies those steps only once `missing` exists, which
+    // is a directory this call would have to create first. Refusing before the first `mkdir` is what keeps
+    // the promise that a refused destination leaves no directories behind.
+    const directory = root();
+    const privateDir = path.join(directory, 'private');
+    fs.mkdirSync(privateDir);
+    fs.chmodSync(privateDir, 0o700);
+    const shared = sharedDirectory(path.join(directory, 'shared'), 0o777);
+    const destination = `${privateDir}/missing/../../shared/recordings/journey.ad`;
+
+    const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+    expect(details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'unresolvable_parent',
+    });
+    expect(fs.readdirSync(privateDir)).toEqual([]);
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
 skipOnWindows('a recording refuses a destination inside a directory another user owns', () => {
   // The fixture says WHOSE directory it is, so this is the real question — a second local user's
   // directory, mode 0755 and readable, judged by a rule that runs as THIS user. Moving the caller's uid
