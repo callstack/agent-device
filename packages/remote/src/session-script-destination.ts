@@ -12,9 +12,16 @@ import type {
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
+import {
+  acquireProcessLock,
+  assertPrivateScriptDestination,
+  publishDirectoryIdentity,
+  publishFileSync,
+  withProcessLock,
+} from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
 
@@ -398,13 +405,18 @@ async function publishScriptVersion(
     return { published: undefined };
   }
   if ((revision as number) <= record.revision) return { published: record.destination };
-  const directory = path.dirname(record.destination);
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    await fs.promises.mkdir(directory, { recursive: true });
-    staging = await withRecordLock(file, async () => allocateStaging(file, directory));
-    if (!staging) return { published: undefined };
+    // Asked before anything is created, so a destination another local user can steer leaves no
+    // directory behind (#4565).
+    assertPrivateScriptDestination(record.destination);
+    await fs.promises.mkdir(path.dirname(record.destination), { recursive: true });
+    const allocated = await withRecordLock(file, async () =>
+      allocateStaging(file, record.destination),
+    );
+    staging = allocated?.staging;
+    if (!staging || !allocated) return { published: undefined };
     const staged = path.join(staging, 'script.ad');
     await context.download({
       ...endpoint,
@@ -413,7 +425,13 @@ async function publishScriptVersion(
       requestScope: req.meta,
       privateFile: { maxBytes: MAX_SCRIPT_BYTES },
     });
-    const version = { revision: revision as number, staging, staged, pending };
+    const version = {
+      revision: revision as number,
+      staging,
+      staged,
+      parentIdentity: allocated.parentIdentity,
+      pending,
+    };
     return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
   } catch (error) {
     return {
@@ -429,18 +447,29 @@ async function publishScriptVersion(
   }
 }
 
-/** Creates a staging directory and lists it in the record before any script bytes reach it. */
-function allocateStaging(file: string, directory: string): string | undefined {
+/**
+ * Creates a staging directory beside the destination and lists it in the record before any script
+ * bytes reach it, and reports the destination directory's identity so the publish can confirm it is
+ * still the same one. Refuses an ancestor another local user can write (#4565), so nothing is
+ * downloaded into a directory they control.
+ */
+function allocateStaging(
+  file: string,
+  destination: string,
+): { staging: string; parentIdentity: string | undefined } | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
+  assertPrivateScriptDestination(destination);
+  const directory = path.dirname(destination);
   const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
+  const parentIdentity = publishDirectoryIdentity(directory);
   try {
     writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  return staging;
+  return { staging, parentIdentity };
 }
 
 /**
@@ -521,10 +550,11 @@ function publishStaged(
     revision: number;
     staging: string;
     staged: string;
+    parentIdentity: string | undefined;
     pending: { named: boolean };
   }>,
 ): string | undefined {
-  const { revision, staging, staged, pending } = version;
+  const { revision, staging, staged, parentIdentity, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
   let current = settlePublishing(record);
@@ -535,6 +565,9 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
+  // Re-asked here, under the record lock and right before the entry is created: whoever could write
+  // an ancestor while the version was downloaded cannot move it now (#4565).
+  assertPrivateScriptDestination(current.destination, parentIdentity);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
@@ -575,6 +608,19 @@ function scriptDeliveryFailure(
 ): ScriptDeliveryFailure {
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
+  const refusal = scriptAncestryRefusal(error);
+  if (refusal) {
+    return {
+      reason: 'script_delivery_failed',
+      cause: refusal,
+      publicationId,
+      message:
+        error instanceof AppError
+          ? error.message
+          : `The remote script could not be saved to ${destination}.`,
+      hint: error instanceof AppError ? (error.details?.hint ?? '') : '',
+    };
+  }
   const recovery = closing
     ? 'The session is closed, so no later version follows.'
     : 'The next recorded action or close delivers the full recording again.';
@@ -593,6 +639,18 @@ function scriptDeliveryFailure(
         message: `The remote script could not be saved to ${destination}.`,
         hint: `The file may still hold the previous version. ${recovery}`,
       };
+}
+
+/**
+ * The typed reason a destination-ancestry refusal reported (#4565), so a caller can tell an unsafe
+ * destination from a download that failed. Anything else is `undefined`.
+ */
+function scriptAncestryRefusal(error: unknown): string | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const reason = error.details?.reason;
+  return reason === 'script_ancestor_untrusted' || reason === 'script_ancestry_replaced'
+    ? reason
+    : undefined;
 }
 
 function recordPath(

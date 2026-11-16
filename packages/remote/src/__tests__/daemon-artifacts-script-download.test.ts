@@ -465,6 +465,91 @@ test.skipIf(process.platform === 'win32' || process.getuid?.() === 0).each([
   },
 );
 
+test.skipIf(process.platform === 'win32').each([
+  {
+    name: 'a symbolic link planted where the script should land',
+    plant: (root: string) => {
+      const shared = path.join(root, 'shared');
+      fs.mkdirSync(shared);
+      fs.chmodSync(shared, 0o1777);
+      const attacker = path.join(root, 'attacker');
+      fs.mkdirSync(attacker);
+      fs.symlinkSync(attacker, path.join(shared, 'work'));
+      return {
+        destination: path.join(shared, 'work', 'journey.ad'),
+        untouched: attacker,
+      };
+    },
+  },
+  {
+    name: 'a world-writable directory',
+    plant: (root: string) => {
+      const shared = path.join(root, 'shared');
+      fs.mkdirSync(shared);
+      fs.chmodSync(shared, 0o777);
+      return { destination: path.join(shared, 'journey.ad'), untouched: shared };
+    },
+  },
+])('a remote recording refuses a destination under $name', async ({ plant }) => {
+  const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-'));
+  const stateDir = path.join(root, 'state');
+  const { destination, untouched } = plant(root);
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+  const { response } = await open(baseUrl, stateDir, destination);
+
+  expect(response).toEqual(
+    expect.objectContaining({
+      ok: true,
+      data: expect.objectContaining({
+        scriptDeliveryFailure: expect.objectContaining({
+          cause: 'script_ancestor_untrusted',
+        }),
+      }),
+    }),
+  );
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(fs.readdirSync(untouched)).toEqual([]);
+});
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination whose directory was swapped while the version downloaded',
+  async () => {
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-'));
+    const stateDir = path.join(root, 'state');
+    const work = path.join(root, 'work');
+    fs.mkdirSync(work);
+    const destination = path.join(work, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    const realOpen = fs.promises.open.bind(fs.promises);
+    // The replacement is a private directory, so only the parent's identity can catch it. The swap
+    // happens once the staged file is open: after the parent's identity was captured.
+    const spyOpen = vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
+      const handle = await realOpen(file as never, ...(rest as unknown as never[]));
+      fs.rmSync(work, { recursive: true, force: true });
+      fs.mkdirSync(work);
+      return handle;
+    });
+
+    let response: DaemonResponse;
+    try {
+      response = (await open(baseUrl, stateDir, destination)).response;
+    } finally {
+      spyOpen.mockRestore();
+    }
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestry_replaced' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(work)).toEqual([]);
+  },
+);
+
 test('retiring a record removes the staging a crashed download left behind', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
