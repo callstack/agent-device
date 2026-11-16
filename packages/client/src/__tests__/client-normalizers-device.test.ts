@@ -167,3 +167,57 @@ test('normalizeOpenDevice preserves Vega identifier shaping', () => {
   assert.equal('ios' in (vega ?? {}), false);
   assert.equal('android' in (vega ?? {}), false);
 });
+
+// #4525: the SDK reads the OS a session or an open ran on off the same payload the CLI prints.
+test('normalizeOpenDevice carries the device kind, model and OS version a daemon reports', () => {
+  const ios = normalizeOpenDevice({
+    platform: 'ios',
+    id: 'SIM-001',
+    device: 'iPhone 17',
+    kind: 'simulator',
+    model: 'iPhone 17',
+    osVersion: '27.0',
+    device_udid: 'SIM-001',
+  });
+  assert.equal(ios?.kind, 'simulator');
+  assert.equal(ios?.model, 'iPhone 17');
+  assert.equal(ios?.osVersion, '27.0');
+
+  // A daemon that reports nothing states nothing: no field is invented for it.
+  const unreported = normalizeOpenDevice({
+    platform: 'android',
+    id: 'emulator-5554',
+    device: 'pixel-9',
+  });
+  assert.equal('kind' in (unreported ?? {}), false);
+  assert.equal('model' in (unreported ?? {}), false);
+  assert.equal('osVersion' in (unreported ?? {}), false);
+
+  // An empty string is not an OS version, and an unknown kind is not a kind.
+  const malformed = normalizeOpenDevice({
+    platform: 'android',
+    id: 'emulator-5554',
+    device: 'pixel-9',
+    kind: 'phone',
+    osVersion: '',
+  });
+  assert.equal('kind' in (malformed ?? {}), false);
+  assert.equal('osVersion' in (malformed ?? {}), false);
+});
+
+test('normalizeSession carries the session device kind, model and OS version', () => {
+  const session = normalizeSession({
+    name: 'qa',
+    createdAt: 1,
+    platform: 'android',
+    target: 'mobile',
+    id: 'emulator-5554',
+    device: 'pixel-9',
+    kind: 'emulator',
+    model: 'sdk_gphone64_arm64',
+    osVersion: '16',
+  });
+  assert.equal(session.device.kind, 'emulator');
+  assert.equal(session.device.model, 'sdk_gphone64_arm64');
+  assert.equal(session.device.osVersion, '16');
+});

@@ -273,17 +273,33 @@ extension RunnerTests {
     !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: bundleId)
   }
 
-  /// The app's reported viewport when XCTest can read it, else the bridge's own root frame declared
-  /// `.derived`, which cannot establish a screen origin or anchor a rotation. The wire retains this
-  /// uncertainty, so local coordinates cannot authorize input (#4399).
+  /// The app's reported viewport when XCTest can read it, else the bridge's own root frame. That root
+  /// is `.derived`, which cannot establish a screen origin or anchor a rotation, so its local
+  /// coordinates cannot authorize input (#4399), unless AXRuntime proves the app fills the screen.
   private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,
     rootFrame: CGRect
   ) -> SnapshotViewport {
-    let fallback = SnapshotViewport.derived(box: rootFrame)
+    let fallback = {
+      let fullScreenFrame = Self.fullScreenFrame(of: app)
+      let viewport = Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: fullScreenFrame)
+      let kind: String
+      switch viewport {
+      case .reported: kind = "reported"
+      case .derived: kind = "derived"
+      case .missing: kind = "missing"
+      }
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PRIVATE_AX_ROOT_VIEWPORT kind=%@ root=%@ fullScreen=%@",
+        kind,
+        String(describing: rootFrame),
+        fullScreenFrame.isNull ? "none" : String(describing: fullScreenFrame)
+      )
+      return viewport
+    }
     guard shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId) else {
-      return fallback
+      return fallback()
     }
     do {
       let reported = try runMainThreadWork(
@@ -294,13 +310,35 @@ extension RunnerTests {
         try self.safeSnapshotViewport(app: app, readingOrientation: true)
       }
       if case .missing = reported {
-        return fallback
+        return fallback()
       }
       return reported
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_VIEWPORT_FALLBACK=%@", String(describing: error))
-      return fallback
+      return fallback()
     }
+  }
+
+  /// The screen's frame when AXRuntime reports `app` as the primary app filling it, else `.null`.
+  private static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
+    #if os(iOS)
+      return RunnerFullScreenApplicationFrame(app)
+    #else
+      return .null
+    #endif
+  }
+
+  /// The viewport a private AX root establishes without XCTest. A root that is exactly the screen
+  /// AXRuntime reports the app filling, at the origin, is `.reported`: two independent reads agree
+  /// that window space is screen space, as on every iPhone app. Any other root stays `.derived`,
+  /// including a placed iPad window's local root (#4399) and a root that is the screen rotated.
+  static func privateAXRootViewport(rootFrame: CGRect, fullScreenFrame: CGRect) -> SnapshotViewport {
+    // CONSERVATIVE: orientation is unknown here, so a landscape root (the portrait screen with width
+    // and height swapped) stays `.derived` rather than guess which way to rotate it.
+    guard !fullScreenFrame.isNull, rootFrame.origin == .zero, rootFrame == fullScreenFrame else {
+      return .derived(box: rootFrame)
+    }
+    return .reported(box: rootFrame, interfaceOrientation: RunnerInterfaceOrientation.unknown)
   }
 
   func privateAXRect(_ value: Any?) -> CGRect {

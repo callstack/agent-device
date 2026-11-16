@@ -6,9 +6,15 @@ import {
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
+import {
+  ALERT_RUNNER_MAX_BUDGET_MS,
+  MAX_ALERT_WINDOW_MS,
+} from '@agent-device/contracts/alert-contract';
 import { OVERLAY_BUDGET_MS } from '@agent-device/capture-kit/recording-overlay';
 import {
   DEFAULT_TIMEOUT_POLICY,
+  MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
+  resolveCommandDaemonBudgetMs,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
 
@@ -123,8 +129,9 @@ test('budget sources deviating from the default are bounded, reviewed sets', () 
   // --timeout bounds the --settle wait on these commands (#1101); like wait's
   // positional budget it only ever widens the envelope, never shrinks it.
   assert.deepEqual(flagWidenBudget.sort(), settleObservationCommandNames());
-  // wait's budget travels as a positional and must widen the envelope.
-  assert.deepEqual(positionalBudget, ['wait']);
+  // wait's budget travels as a positional and must widen the envelope. So does
+  // alert's, but only for its `wait` subaction (#4566).
+  assert.deepEqual(positionalBudget.sort(), ['alert', 'wait']);
 });
 
 test('request envelopes deviating from the default are bounded, reviewed sets', () => {
@@ -409,4 +416,62 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
     }),
     90_000,
   );
+});
+
+test('the fixed alert request envelope stays above the largest runner alert budget', () => {
+  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('alert'), {});
+  assert.ok(envelopeMs !== undefined && envelopeMs > ALERT_RUNNER_MAX_BUDGET_MS);
+});
+
+// #4566: `alert wait` polls the window its caller passed, so the request envelope has to sit above
+// that window. The parser is action-aware: the same trailing number on `alert get` is the runner's
+// read budget (#4540) and on `accept`/`dismiss` it is the retry window, and those keep the fixed
+// envelope. A window the runtime cannot arm as a timer is classified as unhonorable, so no
+// envelope is derived from it and the command refuses it before it polls anything.
+test('alert wait widens the request envelope past its window while every other alert leg keeps the fixed one', () => {
+  const request = (positionals: string[]) =>
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('alert'), {
+      positionals,
+      flags: {},
+    });
+
+  // A window past the fixed envelope extends it by the window plus the daemon-result margin.
+  assert.equal(request(['wait', '120000']), 150_000);
+  // The documented accepted ceiling keeps a plain timer: the envelope it derives is the Node
+  // timer ceiling exactly, never a value past it that would fire after 1 ms instead.
+  assert.equal(request(['wait', String(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS)]), 2_147_483_647);
+  // A window inside the fixed envelope never shrinks it.
+  assert.equal(request(['wait', '5000']), 90_000);
+  // `alert wait` without a window takes the command's default, which sits inside the envelope.
+  assert.equal(request(['wait']), 90_000);
+  // A window the client cannot honour widens nothing: the daemon refuses it up front.
+  assert.equal(request(['wait', String(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS + 1)]), 90_000);
+  assert.equal(request(['wait', String(MAX_ALERT_WINDOW_MS)]), 90_000);
+  // Only the wait leg widens. `alert get`'s number is the runner's read budget, capped at 25 s by
+  // the owner, and accept/dismiss run their own retry window; both keep the fixed envelope.
+  assert.equal(request(['get', '120000']), 90_000);
+  assert.equal(request(['accept', '120000']), 90_000);
+  assert.equal(request(['dismiss', '120000']), 90_000);
+  // The bare command and an absent action read as `get`, so its number never widens the envelope.
+  assert.equal(request([]), 90_000);
+  assert.equal(request(['get']), 90_000);
+  // The subaction is read the way the daemon reads it: case-insensitively.
+  assert.equal(request(['WAIT', '120000']), 150_000);
+  // A missing or malformed window is not a budget: the legs' own default answers for it.
+  assert.equal(request(['wait', 'abc']), 90_000);
+  assert.equal(request(['wait', '0']), 90_000);
+  assert.equal(request(['wait', '-1000']), 90_000);
+});
+
+test('the alert wait result deadline the daemon admits tracks the accepted window', () => {
+  // The daemon keeps the envelope's result margin, so a wait's own deadline must stay inside the
+  // window it polls — otherwise the request is cut off mid-wait, which is the bug.
+  const resultDeadline = (positionals: string[]) =>
+    resolveCommandDaemonBudgetMs(resolveCommandTimeoutPolicy('alert'), {
+      positionals,
+      flags: {},
+    });
+  assert.equal(resultDeadline(['wait', '120000']), 120_000);
+  assert.equal(resultDeadline(['get', '120000']), 60_000);
+  assert.equal(resultDeadline([]), 60_000);
 });

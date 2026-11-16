@@ -564,3 +564,55 @@ test('ref-pin store leaves pins untouched for a scroll with no settle payload', 
     ref: '@e2~s7',
   });
 });
+
+test('ref-pin store pins every member of a comma-separated ref plan from one snapshot', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    {
+      nodes: [{ ref: 'e13' }, { ref: 'e14' }, { ref: 'e15' }, { ref: 'e16' }],
+      truncated: false,
+      refsGeneration: 500020,
+    },
+    undefined,
+    'demo',
+  );
+
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13,@e14,@e15,@e16' }, undefined);
+  assert.deepEqual(pinned, {
+    session: 'demo',
+    ref: '@e13~s500020,@e14~s500020,@e15~s500020,@e16~s500020',
+  });
+});
+
+test('ref-pin store pins a repeated plan member twice and leaves unknown members bare', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e1' }, { ref: 'e2' }], truncated: false, refsGeneration: 6 },
+    undefined,
+    'demo',
+  );
+
+  const repeated = pins.pinInput('press', { session: 'demo', ref: '@e1,@e2,@e1' }, undefined);
+  assert.deepEqual(repeated, { session: 'demo', ref: '@e1~s6,@e2~s6,@e1~s6' });
+
+  const unknownMember = pins.pinInput('press', { session: 'demo', ref: '@e1,@e99' }, undefined);
+  assert.deepEqual(unknownMember, { session: 'demo', ref: '@e1~s6,@e99' });
+});
+
+test('ref-pin store pins the unpinned members of a partly pinned plan', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e13' }, { ref: 'e14' }], truncated: false, refsGeneration: 500021 },
+    undefined,
+    'demo',
+  );
+
+  const pinned = pins.pinInput('press', { session: 'demo', ref: '@e13~s4,@e14' }, undefined);
+  assert.deepEqual(pinned, { session: 'demo', ref: '@e13~s4,@e14~s500021' });
+});

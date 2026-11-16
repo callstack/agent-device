@@ -23,6 +23,11 @@ type RequestAbortController = AbortController & {
    * registered under a parent inherits the parent's, because it runs inside the parent's envelope.
    */
   resultDeadlineMs?: number;
+  /**
+   * Whether the admitted request only reads: no step of it dispatches an action, so a resend loop
+   * inside it may spend its deadline. An attempt registered under a parent inherits the parent's.
+   */
+  readOnly?: boolean;
 };
 
 const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
@@ -81,7 +86,7 @@ function evictOldestSetEntries<V>(set: Set<V>): void {
 export function registerRequestAbort(
   requestId: string | undefined,
   parentRequestId?: string,
-  admission?: Readonly<{ resultDeadlineMs?: number }>,
+  admission?: Readonly<{ resultDeadlineMs?: number; readOnly?: boolean }>,
 ): RequestAbortRegistration | undefined {
   if (!requestId) return undefined;
   if (requestAbortControllers().has(requestId)) {
@@ -96,6 +101,7 @@ export function registerRequestAbort(
   controller.resultDeadlineMs = parentRequestId
     ? parent?.resultDeadlineMs
     : admission?.resultDeadlineMs;
+  controller.readOnly = parentRequestId ? parent?.readOnly : admission?.readOnly;
   requestAbortControllers().set(requestId, controller);
   if (canceledRequestIds().has(requestId)) {
     controller.abort(createRequestCanceledError());
@@ -169,6 +175,15 @@ export function getRequestDeadlineMs(requestId: string | undefined): number | un
     getRequestResultDeadlineMs(requestId),
   ].filter((deadlineMs) => deadlineMs !== undefined);
   return deadlines.length > 0 ? Math.min(...deadlines) : undefined;
+}
+
+/**
+ * The deadline a resend loop may spend, which is the request's deadline only when the request is
+ * read-only. A read inside an action leaves that budget to the action dispatched after it.
+ */
+export function getRequestReadOnlyDeadlineMs(requestId: string | undefined): number | undefined {
+  if (!requestId || requestAbortControllers().get(requestId)?.readOnly !== true) return undefined;
+  return getRequestDeadlineMs(requestId);
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {

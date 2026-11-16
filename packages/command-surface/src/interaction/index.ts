@@ -215,12 +215,33 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
     evidence: interactionEvidenceSchema,
     button: enumSchema(['secondary', 'middle']),
     count: numberSchema('Number of press/click repetitions.'),
-    intervalMs: numberSchema('Delay between repeated press/click actions.'),
+    intervalMs: numberSchema(
+      'Delay between repeated press/click actions, or between the keys of a comma-separated ref sequence.',
+    ),
     holdMs: numberSchema('Hold duration for each action.'),
     jitterPx: numberSchema(
       'Deterministic per-axis coordinate jitter in pixels (each press offsets x and y by up to this amount).',
     ),
     doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
+    sequence: objectSchema(
+      {
+        pressed: numberSchema('How many keys of the plan were dispatched.'),
+        refs: stringArraySchema('The planned refs in dispatch order, each with its @ prefix.'),
+        points: {
+          type: 'array',
+          description: 'Where each dispatched key landed, in plan order.',
+          items: objectSchema(
+            {
+              x: numberSchema(),
+              y: numberSchema(),
+            },
+            ['x', 'y'],
+          ),
+        },
+      },
+      ['pressed', 'refs', 'points'],
+      'Present when the command ran a multi-ref plan (press @e13,@e14,...): one action per key, in order.',
+    ),
   },
 });
 
@@ -362,7 +383,7 @@ const interactionCliSchemas = {
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   click: {
-    usageOverride: 'click <x y|@ref|selector>',
+    usageOverride: 'click <x y|@ref|@ref,...|selector>',
     usageFlags: [],
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
@@ -374,7 +395,7 @@ const interactionCliSchemas = {
     ],
   },
   press: {
-    usageOverride: 'press <x y|@ref|selector>',
+    usageOverride: 'press <x y|@ref|@ref,...|selector>',
     usageFlags: [],
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
@@ -460,6 +481,8 @@ const clickCommandFacet = defineCommandFacet({
   text: {
     summary: 'Click or tap a UI target',
     searchHint: 'press button link web mouse',
+    cliDetail:
+      "A comma-separated ref sequence follows the press form: click @e13,@e14 clicks each key in order as one command, with press's plan contract. See press for the plan semantics and recovery fields. Script recording refuses the sequence form: record one click per key.",
   },
   metadata: metadata('click'),
   run: (client, input) => client.interactions.click(toClickOptions(input)),
@@ -473,8 +496,9 @@ const pressCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Short-press a UI target',
-    searchHint: 'tap click touch button',
-    cliDetail: 'The hold duration is positional on longpress, not press --hold-ms.',
+    searchHint: 'click touch button',
+    cliDetail:
+      'The hold duration is positional on longpress, not press --hold-ms. A comma-separated ref plan (press @e13,@e14,@e15,@e16; 2 to 16 refs, repeats allowed) resolves and admits every key against the current frame, then dispatches the admitted points: key 1 expires the frame, later keys dispatch where the snapshot showed them; a later refusal carries details.dispatchedSteps, details.refPlanKey, and details.refPlanPending, and sequence.points holds the dispatched points. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key; the response ref is the first key. Recording refuses the plan.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),

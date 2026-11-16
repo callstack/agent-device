@@ -19,6 +19,7 @@ import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/ho
 import {
   classifyDeviceClaimEntry,
   deviceClaimOwnerCannotRelease,
+  deviceClaimRefusalReason,
   inspectDeviceClaimFile,
   inspectDeviceClaimsAsync,
   readDeviceClaimEntry,
@@ -52,12 +53,14 @@ import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 export {
   deviceClaimOwnerCannotRelease,
+  deviceClaimRefusalReason,
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   inspectDeviceClaimsAsync,
 } from './device-claim-inspection.ts';
 export type {
   DeviceClaimClassification,
+  DeviceClaimRefusalReason,
   DeviceClaimSelectors,
   InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
@@ -86,7 +89,7 @@ export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
 
-type ClaimAcquisitionInspectionParams = {
+export type ClaimAcquisitionInspectionParams = {
   device: DeviceInfo;
   command: string;
   session: string;
@@ -589,7 +592,7 @@ async function releaseInspectedStaleClaim(
       : {}),
   };
   if (!claim || !deviceClaimOwnerCannotRelease(entry.classification)) {
-    return { ...base, status: 'refused', reason: staleReleaseRefusalReason(entry.classification) };
+    return { ...base, status: 'refused', reason: deviceClaimRefusalReason(entry.classification) };
   }
   // A file whose name is not the hash of its own device key is not the file
   // the claim lock protects; releasing through it could unlink something else.
@@ -620,27 +623,6 @@ async function releaseInspectedStaleClaim(
     });
     return { ...base, status: 'released' as const };
   });
-}
-
-/**
- * A lookup rather than a switch: the branch count a switch this size carries reads as complexity
- * fallow's health gate flags, while a `Record` stays a flat table TypeScript still checks for
- * exhaustiveness (a classification dropped from `DeviceClaimClassification` fails to compile here
- * exactly as it would a missing `case`).
- */
-const STALE_RELEASE_REFUSAL_REASONS: Readonly<Record<DeviceClaimClassification, string>> =
-  Object.freeze({
-    live: 'live-owner',
-    'owner-process-reused': 'owner-pid-reused',
-    'owner-state-dir-gone': 'owner-process-still-running',
-    unknown: 'owner-liveness-unknown',
-    inconsistent: 'claim-record-inconsistent',
-    'owner-process-dead': 'claim-record-unreadable',
-    'owner-daemon-superseded': 'claim-record-unreadable',
-  });
-
-function staleReleaseRefusalReason(classification: DeviceClaimClassification): string {
-  return STALE_RELEASE_REFUSAL_REASONS[classification];
 }
 
 /**

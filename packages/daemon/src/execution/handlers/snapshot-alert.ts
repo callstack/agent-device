@@ -5,7 +5,7 @@ import {
   parseAlertAction,
   type AlertAction,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
-  MAX_ALERT_WINDOW_MS,
+  ALERT_WAIT_WINDOW_TOO_LONG_REASON,
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -21,6 +21,7 @@ import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
+import { MAX_ARMABLE_ALERT_WAIT_WINDOW_MS } from '@agent-device/command-registry/timeout-policy';
 import { resolveRefFrameEffect } from '../../core/daemon-command-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import type {
@@ -99,7 +100,7 @@ export async function handleAlertCommand(
     params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const action = readAlertAction(req.positionals?.[0]);
-  const timeoutMs = alertWaitTimeoutMs(action, req.positionals?.[1]);
+  const timeoutMs = alertTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
     device,
     action,
@@ -163,18 +164,23 @@ function readAlertAction(raw: string | undefined): AlertAction {
 }
 
 /**
- * The `alert wait` budget before it reaches any leg. Past the contract's window ceiling the
- * budget cannot be armed as a timer at all, so the command refuses the argument instead of
- * starting a wait that would misfire; the driver's own default remains the last line for
+ * The `alert` timeout before it reaches any leg: the window `alert wait` polls in, and the budget
+ * one `alert get` read spends. Past the window the request envelope can be armed for, a wait cannot
+ * be armed as a timer at all, so the command refuses the argument instead of starting a wait that
+ * would misfire or be cut off mid-window; the driver's own default remains the last line for
  * budgets that arrive by other routes.
  */
-function alertWaitTimeoutMs(action: AlertAction, rawTimeout: string | undefined): number {
+function alertTimeoutMs(action: AlertAction, rawTimeout: string | undefined): number {
   const timeoutMs = parseTimeout(rawTimeout) ?? DEFAULT_TIMEOUT_MS;
-  if (action === 'wait' && timeoutMs > MAX_ALERT_WINDOW_MS) {
+  if (action === 'wait' && timeoutMs > MAX_ARMABLE_ALERT_WAIT_WINDOW_MS) {
     throw new AppError(
       'INVALID_ARGS',
-      `alert wait timeoutMs exceeds the maximum of ${MAX_ALERT_WINDOW_MS} ms`,
-      { hint: 'Pass a shorter timeout, or run repeated alert waits.' },
+      `alert wait timeoutMs exceeds the maximum of ${MAX_ARMABLE_ALERT_WAIT_WINDOW_MS} ms`,
+      {
+        hint: 'Pass a shorter timeout, or run repeated alert waits.',
+        reason: ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+        maxWaitWindowMs: MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
+      },
     );
   }
   return timeoutMs;

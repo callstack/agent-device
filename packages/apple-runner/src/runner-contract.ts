@@ -301,6 +301,35 @@ export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCC
 export const KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_DISMISS_UNAVAILABLE';
 
 /**
+ * The runner's own code refusing a `keyboard enter` whose keyboard exposes no return-like key and for
+ * which no text field could be found to submit through. Unlike the dismiss refusal it cannot prove
+ * nothing ran: typing the return can fail after XCTest sent it, so the disclosure stays `unknown`. A
+ * sole field that was found and tapped but would not take the return is not this refusal. It is the
+ * runner's vocabulary, declared here beside the set that keeps it off the wire, and consumers read
+ * `details.reason`.
+ */
+export const KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_RETURN_UNAVAILABLE';
+
+/**
+ * The runner's own code refusing a press of a hardware or Siri Remote control its target cannot
+ * perform. Today that is the Action Button on an iPhone or iPad model without one: the daemon admits
+ * `action-button` for every iPhone and iPad and lets the runner answer whether the hardware is there.
+ * A volume key on a simulator and a remote button off tvOS are refused by runtime admission before the
+ * runner is reached, so those refusals carry `unsupported-device-kind` and `unsupported-platform-leaf`.
+ * Each refusal comes from the press helper answering false, which it does before pressing anything, so
+ * the reply proves nothing was sent. One code covers the family because the recovery is one question —
+ * does this target have that control — and the message names the control.
+ */
+export const HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE = 'HARDWARE_CONTROL_UNAVAILABLE';
+
+/**
+ * The runner's own code refusing macOS `back` when the app's tree exposes no in-app back control. The
+ * refusal answered with no code at all before, which left the caller reading prose; it keeps the
+ * `COMMAND_FAILED` code such a code-less reply always produced.
+ */
+export const IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE = 'IN_APP_BACK_CONTROL_UNAVAILABLE';
+
+/**
  * The codes the XCTest runner answers with when a resolved-display capture it was asked to make did
  * not happen (#2728): no window resolved so no display could be named, the resolved window named no
  * display, or the resolved display handed back an image it could not encode upright. The runner emits
@@ -381,6 +410,9 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
   [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, {}],
+  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, {}],
+  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, {}],
+  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, {}],
   [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, {}],
   [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, {}],
   [BACK_SWIPE_NO_CHANGE_RUNNER_CODE, {}],
@@ -391,11 +423,15 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
 
 /**
  * Diagnostic-only codes that keep the wire code their command already refuses with instead of
- * `COMMAND_FAILED`: the keyboard-dismiss refusal stays `UNSUPPORTED_OPERATION`, the code
- * `keyboard dismiss` already refuses with.
+ * `COMMAND_FAILED`: the keyboard-dismiss, keyboard-return and hardware-control refusals stay
+ * `UNSUPPORTED_OPERATION`, the code each of those commands already refuses with. A macOS in-app back
+ * that found no control is absent here on purpose: that refusal carried no code at all, which the host
+ * read as `COMMAND_FAILED`, and adding a row must not move the command to a new code.
  */
 const DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES: ReadonlyMap<string, AppErrorCode> = new Map([
   [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
+  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
+  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
 ]);
 
 /**
@@ -414,6 +450,9 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
   [BACK_SWIPE_UNVERIFIED_RUNNER_CODE, 'back_swipe_unverified'],
   [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, 'back_swipe_not_dispatched'],
   [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'keyboard_dismiss_unavailable'],
+  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'keyboard_return_unavailable'],
+  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'hardware_control_unavailable'],
+  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'in_app_back_control_unavailable'],
 ]);
 
 /**
@@ -441,6 +480,8 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
   [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
   [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'no'],
+  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'no'],
+  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 
@@ -458,7 +499,10 @@ type RunnerReportedErrorReason =
   | 'back_swipe_no_change'
   | 'back_swipe_unverified'
   | 'back_swipe_not_dispatched'
-  | 'keyboard_dismiss_unavailable';
+  | 'keyboard_dismiss_unavailable'
+  | 'keyboard_return_unavailable'
+  | 'hardware_control_unavailable'
+  | 'in_app_back_control_unavailable';
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{

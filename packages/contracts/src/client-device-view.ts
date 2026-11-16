@@ -65,6 +65,12 @@ export type AgentDeviceSessionDevice = {
    * Apple devices; `platform` still carries the leaf (`ios`/`macos`).
    */
   appleOs?: AppleOS;
+  /** Simulator/emulator/physical split. Absent only from a daemon older than the field. */
+  kind?: DeviceKind;
+  /** Hardware model, for example `iPhone 17 Pro` or `Pixel 9`, when the host or provider reports it. */
+  model?: string;
+  /** OS version, for example `26.1` or `16`, when the host or provider reports it. Never inferred. */
+  osVersion?: string;
   identifiers: AgentDeviceIdentifiers;
   ios?: {
     udid: string;

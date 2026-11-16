@@ -6,10 +6,20 @@ import {
   buildDaemonHttpLeaseHeaders,
 } from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
-import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
+import {
+  isRetryableUploadStreamError,
+  streamFileToHttpRequest,
+  withUploadPreparationDeadline,
+} from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
+import {
+  createTransferPhaseWatchdog,
+  isTransferPhaseTimeoutError,
+} from '@agent-device/host-kit/transport';
 
-const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
+/** Ceiling for the small JSON `preflight` and `finalize` calls that bracket an upload. */
+const UPLOAD_CONTROL_PLANE_TIMEOUT_MS = 30_000;
+
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 
 type UploadArtifactOptions = {
@@ -57,7 +67,21 @@ type UploadPreflightResult =
     };
 
 export async function uploadArtifact(options: UploadArtifactOptions): Promise<string> {
-  const prepared = await prepareUploadArtifact(options.localPath, options.platform, options.env);
+  return await withUploadPreparationDeadline(
+    options.signal,
+    async (signal) => await uploadArtifactWithinBudget({ ...options, signal }),
+  );
+}
+
+async function uploadArtifactWithinBudget(
+  options: UploadArtifactOptions & { signal: AbortSignal },
+): Promise<string> {
+  const prepared = await prepareUploadArtifact(
+    options.localPath,
+    options.platform,
+    options.env,
+    options.signal,
+  );
   const normalizedBase = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
   const uploadAttemptId = randomUUID();
 
@@ -123,7 +147,7 @@ async function tryDirectUploadWithResume(options: {
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
   uploadAttemptId: string;
   onProgress?: UploadProgressSink;
-  signal?: AbortSignal;
+  signal: AbortSignal;
 }): Promise<string | undefined> {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -143,7 +167,9 @@ async function tryDirectUploadWithResume(options: {
   } catch (error) {
     // A canceled upload resumes for no reason: the thing it was uploaded for is already gone, and
     // re-preflighting would ask the daemon for a fresh ticket to send bytes nobody is waiting on.
-    if (options.signal?.aborted) throw error;
+    if (options.signal.aborted) throw error;
+    // An expired phase is this client's own deadline, never a transport break to retry.
+    if (isTransferPhaseTimeoutError(error)) throw error;
     if (!shouldRetryDirectUpload(error)) return undefined;
     return await retryDirectUpload(options, uploadOnce);
   }
@@ -164,7 +190,7 @@ async function retryDirectUpload(
     artifact: PreparedUploadArtifact;
     uploadAttemptId: string;
     onProgress?: UploadProgressSink;
-    signal?: AbortSignal;
+    signal: AbortSignal;
   },
   uploadOnce: (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
@@ -184,7 +210,9 @@ async function retryDirectUpload(
   if (retryPreflight?.kind === 'direct-upload') {
     try {
       return await uploadOnce(retryPreflight);
-    } catch {
+    } catch (error) {
+      options.signal.throwIfAborted();
+      if (isTransferPhaseTimeoutError(error)) throw error;
       return undefined;
     }
   }
@@ -202,7 +230,7 @@ async function uploadLegacyArtifact(options: {
   leaseId?: string;
   artifact: PreparedUploadArtifact;
   onProgress?: UploadProgressSink;
-  signal?: AbortSignal;
+  signal: AbortSignal;
 }): Promise<string> {
   const { normalizedBase, token, leaseId, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
@@ -222,8 +250,6 @@ async function uploadLegacyArtifact(options: {
     method: 'POST',
     headers,
     payloadPath: artifact.payloadPath,
-    timeoutMessage: 'Artifact upload timed out',
-    timeoutHint: 'The upload to the remote daemon exceeded the 5-minute timeout.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
     signal: options.signal,
@@ -264,43 +290,62 @@ async function requestUploadPreflight(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await fetch(preflightUrl, {
-    method: 'POST',
-    // The daemon never redirects this route. A redirect would carry x-agent-device-token, which
-    // fetch keeps on a cross-origin hop, so any redirect fails the preflight instead.
-    redirect: 'error',
-    headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
-    body: JSON.stringify({
-      uploadAttemptId: options.uploadAttemptId,
-      sha256: options.artifact.sha256,
-      fileName: options.artifact.fileName,
-      sizeBytes: options.artifact.sizeBytes,
-      artifactType: options.artifact.artifactType,
-      ...(options.artifact.platform ? { platform: options.artifact.platform } : {}),
-      contentType: options.artifact.contentType,
-    }),
-  }).catch((error: unknown) => {
+  const result = await requestUploadControl(
+    preflightUrl,
+    {
+      headers,
+      body: JSON.stringify({
+        uploadAttemptId: options.uploadAttemptId,
+        sha256: options.artifact.sha256,
+        fileName: options.artifact.fileName,
+        sizeBytes: options.artifact.sizeBytes,
+        artifactType: options.artifact.artifactType,
+        ...(options.artifact.platform ? { platform: options.artifact.platform } : {}),
+        contentType: options.artifact.contentType,
+      }),
+    },
+    'preflight',
+    options.signal,
+  ).catch((error: unknown) => {
     // A failed preflight is ordinary here — the caller falls back to the legacy upload. A canceled
     // one is not: there is nothing to fall back to when the lease that paid for this upload is gone.
-    if (options.signal?.aborted) throw error;
+    if (options.signal?.aborted || isTransferPhaseTimeoutError(error)) throw error;
     return undefined;
   });
 
-  if (!response?.ok) {
+  if (!result?.response.ok) {
     return undefined;
   }
 
-  return parseUploadPreflightResult(await response.json().catch(() => undefined));
+  return parseUploadPreflightResult(result.body);
 }
 
-/**
- * The signal one upload request runs under: the caller's cancellation and the request's own
- * timeout, whichever fires first.
- */
-function combineUploadSignals(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+async function requestUploadControl(
+  url: URL,
+  init: { headers: Record<string, string>; body: string },
+  phase: 'preflight' | 'finalize',
+  callerSignal?: AbortSignal,
+): Promise<{ response: Response; body: unknown }> {
+  const watchdog = createTransferPhaseWatchdog(callerSignal);
+  watchdog.signal.throwIfAborted();
+  watchdog.arm(phase, UPLOAD_CONTROL_PLANE_TIMEOUT_MS);
+  try {
+    // Redirects could forward the daemon token, so these control requests never follow them.
+    const response = await fetch(url, {
+      ...init,
+      method: 'POST',
+      redirect: 'error',
+      signal: watchdog.signal,
+    });
+    const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
+    watchdog.signal.throwIfAborted();
+    return { response, body };
+  } catch (error) {
+    watchdog.signal.throwIfAborted();
+    throw error;
+  } finally {
+    watchdog.dispose();
+  }
 }
 
 function parseUploadPreflightResult(value: unknown): UploadPreflightResult | undefined {
@@ -347,7 +392,7 @@ async function uploadDirectArtifact(
     leaseId?: string;
     artifact: PreparedUploadArtifact;
     onProgress?: UploadProgressSink;
-    signal?: AbortSignal;
+    signal: AbortSignal;
   },
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
 ): Promise<void> {
@@ -363,8 +408,6 @@ async function uploadDirectArtifact(
         ? { ...ticket.headers, ...buildDaemonHttpLeaseHeaders(options.leaseId) }
         : ticket.headers,
     payloadPath: artifact.payloadPath,
-    timeoutMessage: 'Direct artifact upload timed out',
-    timeoutHint: 'The direct upload ticket did not accept the artifact within the timeout.',
     errorMessage: 'Failed to upload artifact with direct upload ticket',
     retryable: true,
     signal,
@@ -400,28 +443,29 @@ async function finalizeDirectUpload(options: {
     buildDaemonHttpLeaseHeaders(options.leaseId),
   );
 
-  const response = await fetch(finalizeUrl, {
-    method: 'POST',
-    // As with preflight: the route never redirects, and a redirect must not carry the token.
-    redirect: 'error',
-    headers,
-    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
-    body: JSON.stringify({ uploadId: options.uploadId }),
-  }).catch((error) => {
+  const result = await requestUploadControl(
+    finalizeUrl,
+    {
+      headers,
+      body: JSON.stringify({ uploadId: options.uploadId }),
+    },
+    'finalize',
+    options.signal,
+  ).catch((error: unknown) => {
     // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
     // saying this upload is no longer worth finishing.
-    if (options.signal?.aborted) throw error;
+    if (options.signal?.aborted || isTransferPhaseTimeoutError(error)) throw error;
     throw new AppError('COMMAND_FAILED', 'Failed to finalize direct artifact upload', {}, error);
   });
 
-  if (!response.ok) {
+  if (!result.response.ok) {
     throw new AppError('COMMAND_FAILED', 'Direct artifact upload finalize failed', {
-      status: response.status,
-      statusText: response.statusText,
+      status: result.response.status,
+      statusText: result.response.statusText,
     });
   }
 
-  const parsed = (await response.json().catch(() => undefined)) as UploadResponse | undefined;
+  const parsed = result.body as UploadResponse | undefined;
   if (!parsed?.ok || !parsed.uploadId) {
     throw new AppError('COMMAND_FAILED', 'Invalid upload finalize response');
   }

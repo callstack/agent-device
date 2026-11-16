@@ -18,6 +18,18 @@ export const INSTALL_SOURCE_REQUEST_TIMEOUT_MS = 600_000;
 // envelope below the command's declared base.
 const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
 
+/**
+ * The longest `alert wait` window the request envelope can be armed for.
+ *
+ * The client arms its envelope with a timer whose delay ceiling is 2^31-1 ms; past it Node does not
+ * reject the value, it fires the timer after 1 ms. The envelope a wait window derives is that window
+ * plus the daemon-result margin, so the window has to leave room for the margin. A longer window is
+ * refused by the alert handler as `alert-wait-window-too-long` rather than accepted and then cut off
+ * or misfired. The contract's larger `MAX_ALERT_WINDOW_MS` is the ceiling one leg's own window signal
+ * stops accepting, which is not the same as what this command can honour end to end.
+ */
+export const MAX_ARMABLE_ALERT_WAIT_WINDOW_MS = 2_147_483_647 - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+
 /** Daemon-side runner budget for `prepare` without `--timeout` (`readPrepareIosRunnerTimeoutMs`). */
 export const PREPARE_STARTUP_BUDGET_MS = 240_000;
 

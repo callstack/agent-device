@@ -64,7 +64,11 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import {
+  resolveAppleToolProvider,
+  withAppleToolProvider,
+  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+} from '../tool-provider.ts';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
@@ -88,13 +92,26 @@ assert(MEASURED_CAPTURE, 'the golden table must record at least one measured cap
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockRunCmd.mockImplementation(execActual.runCmd);
+  mockRunCmd.mockImplementation(async (cmd, args, options) => {
+    if (args.includes('list') && args.includes('devices') && args.includes('-j')) {
+      return simulatorListing('Booted');
+    }
+    return await execActual.runCmd(cmd, args, options);
+  });
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);
   mockRunAppleRunnerCommand.mockImplementation(runnerActual.runAppleRunnerCommand);
   mockEnsureBootedSimulator.mockImplementation(simulatorActual.ensureBootedSimulator);
   mockOpenIosSimulatorApp.mockImplementation(simulatorActual.openIosSimulatorApp);
   mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => await capture());
 });
+
+function simulatorListing(state: 'Booted' | 'Shutdown') {
+  return {
+    exitCode: 0,
+    stderr: '',
+    stdout: JSON.stringify({ devices: { runtime: [{ udid: IOS_TEST_SIMULATOR.id, state }] } }),
+  };
+}
 
 async function waitForFileText(filePath: string, attempts = 20): Promise<string> {
   let lastError: unknown;
@@ -109,30 +126,6 @@ async function waitForFileText(filePath: string, attempts = 20): Promise<string>
   throw lastError;
 }
 
-test('shouldRetryIosSimulatorScreenshot detects simulator screen-surface timeout', () => {
-  const error = new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
-    stderr: 'Timeout waiting for screen surfaces',
-    exitCode: 60,
-  });
-  assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
-});
-
-test('shouldRetryIosSimulatorScreenshot detects timed out simctl screenshot command', () => {
-  const error = new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
-    args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
-    timeoutMs: 20_000,
-  });
-  assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
-});
-
-test('shouldRetryIosSimulatorScreenshot ignores unrelated screenshot failures', () => {
-  const error = new AppError('COMMAND_FAILED', 'Failed to capture iOS screenshot', {
-    stderr: 'No such file or directory',
-    exitCode: 2,
-  });
-  assert.equal(shouldRetryIosSimulatorScreenshot(error), false);
-});
-
 test('captureSimulatorScreenshotWithFallback falls back to runner after retry exhaustion', async () => {
   const tmpDir = await mkdtempForTest('agent-device-ios-runner-fallback-');
   let ensureBootedCalls = 0;
@@ -145,9 +138,10 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
   });
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+    new AppError('COMMAND_FAILED', 'xcrun exited with code 60', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
+      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
     }),
   );
   mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/fallback.png' });
@@ -269,14 +263,18 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
-test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after shutdown screenshot failure', async () => {
+test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after an observed shutdown', async () => {
+  mockRunCmd.mockResolvedValue(simulatorListing('Shutdown'));
+  // The boot authorization is the observed state, not the capture's wording; see
+  // screenshot-boot-state-recovery.test.ts for the state seam itself. This case pins the flow:
+  // one boot, one re-capture, no runner leg.
   const ensureBooted = vi.fn(async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
     captureAttempts += 1;
     if (captureAttempts === 1) {
       throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
-        stderr: 'Unable to boot device in current state: Shutdown',
+        stderr: 'Unable to capture screenshot',
         args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
       });
     }
@@ -304,13 +302,14 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
 });
 
 test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped-check boot recovery', async () => {
+  mockRunCmd.mockResolvedValue(simulatorListing('Shutdown'));
   const ensureBooted = vi.fn(async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
     captureAttempts += 1;
     if (captureAttempts === 1) {
       throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
-        stderr: 'Unable to boot device in current state: Shutdown',
+        stderr: 'Unable to capture screenshot',
         args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
       });
     }
@@ -635,6 +634,7 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
     new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
+      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
     }),
   );
   mockRunAppleRunnerCommand.mockImplementation(async () => {
@@ -644,6 +644,9 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
   });
   mockRunCmd.mockImplementation(async (cmd, args) => {
     const argv = [cmd, ...(args ?? [])].join(' ');
+    if (args.includes('list') && args.includes('devices') && args.includes('-j')) {
+      return simulatorListing('Booted');
+    }
     if (argv.includes('status_bar')) {
       timeline.push(`status_bar:${/status_bar\s+\S+\s+(\S+)/.exec(argv)?.[1]}`);
       return {

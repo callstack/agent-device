@@ -1,16 +1,54 @@
 import fs from 'node:fs';
-import type { IncomingHttpHeaders } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { addAbortSignal } from 'node:stream';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
+import {
+  createTransferPhaseWatchdog,
+  loadNodeHttpRequester,
+  observeClientRequestPhases,
+  observeCompletedRequestWrites,
+  readNodeHttpResponseBody,
+  TRANSFER_CONNECT_TIMEOUT_MS,
+} from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
   type UploadProgressStage,
 } from './upload-progress.ts';
 
-const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const UPLOAD_PREPARATION_TIMEOUT_MS = 600_000;
+
+export async function withUploadPreparationDeadline<T>(
+  callerSignal: AbortSignal | undefined,
+  prepare: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const deadline = new AbortController();
+  const signal = callerSignal ? AbortSignal.any([callerSignal, deadline.signal]) : deadline.signal;
+  signal.throwIfAborted();
+  const timer = setTimeout(() => {
+    deadline.abort(
+      new AppError('COMMAND_FAILED', 'Artifact preparation deadline exceeded', {
+        reason: 'artifact_preparation_deadline_exceeded',
+        transferPhase: 'preparation',
+        timeoutMs: UPLOAD_PREPARATION_TIMEOUT_MS,
+      }),
+    );
+  }, UPLOAD_PREPARATION_TIMEOUT_MS);
+  timer.unref();
+  try {
+    const result = await prepare(signal);
+    signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    signal.throwIfAborted();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const MAX_UPLOAD_REDIRECTS = 5;
 const UPLOAD_STREAM_RETRYABLE_DETAIL = 'uploadStreamRetryable';
 
@@ -31,21 +69,14 @@ export async function streamFileToHttpRequest(options: {
   method: 'POST' | 'PUT';
   headers: Record<string, string>;
   payloadPath: string;
-  timeoutMessage: string;
-  timeoutHint?: string;
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  /** Ends this request when the work the upload serves is over; see `uploadArtifact`. */
-  signal?: AbortSignal;
+  /** All hops share the enclosing aggregate/caller signal. */
+  signal: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
-  return await streamFileToHttpRequestAttempt({
-    ...options,
-    url: options.url,
-    redirectCount: 0,
-    startOffset: 0,
-  });
+  return await streamFileToHttpRequestAttempt({ ...options, redirectCount: 0, startOffset: 0 });
 }
 
 export function isRetryableUploadStreamError(error: unknown): boolean {
@@ -57,16 +88,15 @@ async function streamFileToHttpRequestAttempt(options: {
   method: 'POST' | 'PUT';
   headers: Record<string, string>;
   payloadPath: string;
-  timeoutMessage: string;
-  timeoutHint?: string;
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
-  signal?: AbortSignal;
+  signal: AbortSignal;
   redirectCount: number;
   startOffset: number;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
+  options.signal.throwIfAborted();
   // This module sits in the CLI's eager import closure via the remote-artifact
   // upload client, but only a remote daemon ever uploads, so the HTTP stack
   // loads here rather than at import time.
@@ -75,8 +105,19 @@ async function streamFileToHttpRequestAttempt(options: {
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
   emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
-  return await new Promise((resolve, reject) => {
-    let responseReceived = false;
+  const watchdog = createTransferPhaseWatchdog(options.signal);
+  watchdog.arm('connect', TRANSFER_CONNECT_TIMEOUT_MS);
+
+  let upload: Promise<void> | undefined;
+  let uploadSettled = false;
+  return await new Promise<UploadStreamResponse>((resolve, reject) => {
+    const fail = (error: unknown) => {
+      phases.dispose();
+      stopObservingWrites();
+      watchdog.dispose();
+      req.destroy();
+      reject(watchdog.signal.aborted ? watchdog.signal.reason : error);
+    };
     const req = transport.request(
       {
         protocol: options.url.protocol,
@@ -87,110 +128,22 @@ async function streamFileToHttpRequestAttempt(options: {
         headers,
         // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
         // already piped at a device this client no longer holds the lease on.
-        ...(options.signal ? { signal: options.signal } : {}),
+        signal: watchdog.signal,
       },
       (res) => {
-        responseReceived = true;
-        void readNodeHttpResponseBody(res)
-          .then((body) => {
-            clearTimeout(timeout);
-            const statusCode = res.statusCode ?? 500;
-            const location = res.headers.location;
-            if (location && isUploadRedirectStatus(statusCode)) {
-              if (options.redirectCount >= MAX_UPLOAD_REDIRECTS) {
-                reject(
-                  new AppError('COMMAND_FAILED', 'Artifact upload exceeded redirect limit', {
-                    maxRedirects: MAX_UPLOAD_REDIRECTS,
-                    url: options.url.toString(),
-                  }),
-                );
-                return;
-              }
-              const redirectedUrl = new URL(location, options.url);
-              // The request headers carry the daemon token or a signed ticket, and the body is the
-              // artifact: neither may follow a hop to an origin the caller did not choose.
-              if (redirectedUrl.origin !== options.url.origin) {
-                reject(
-                  new AppError(
-                    'COMMAND_FAILED',
-                    'Artifact upload refused a cross-origin redirect',
-                    {
-                      reason: 'cross-origin-redirect',
-                      url: options.url.toString(),
-                      redirectOrigin: redirectedUrl.origin,
-                    },
-                  ),
-                );
-                return;
-              }
-              void streamFileToHttpRequestAttempt({
-                ...options,
-                url: redirectedUrl,
-                redirectCount: options.redirectCount + 1,
-              }).then(resolve, reject);
-              return;
-            }
-
-            const resumeOffset = isUploadResumeStatus(statusCode)
-              ? parseUploadResumeOffset(res.headers, payloadSize)
-              : undefined;
-            if (resumeOffset !== undefined) {
-              if (resumeOffset >= payloadSize) {
-                resolve({
-                  statusCode: 200,
-                  statusMessage: 'Upload already complete',
-                  body: '',
-                });
-                return;
-              }
-              if (resumeOffset <= options.startOffset) {
-                reject(
-                  new AppError('COMMAND_FAILED', 'Artifact upload resume did not advance', {
-                    offset: resumeOffset,
-                    previousOffset: options.startOffset,
-                    url: options.url.toString(),
-                  }),
-                );
-                return;
-              }
-              void streamFileToHttpRequestAttempt({
-                ...options,
-                startOffset: resumeOffset,
-              }).then(resolve, reject);
-              return;
-            }
-
-            resolve({
-              statusCode,
-              statusMessage: res.statusMessage,
-              body,
-            });
-          })
-          .catch(reject);
+        addAbortSignal(watchdog.signal, res);
+        void handleUploadResponse(res).then(resolve).catch(fail);
       },
     );
 
-    const timeout = setTimeout(() => {
-      req.destroy();
-      reject(
-        new AppError('COMMAND_FAILED', options.timeoutMessage, {
-          timeoutMs: UPLOAD_TIMEOUT_MS,
-          ...(options.timeoutHint ? { hint: options.timeoutHint } : {}),
-          ...retryableUploadStreamDetail(options),
-        }),
-      );
-    }, UPLOAD_TIMEOUT_MS);
+    const phases = observeClientRequestPhases(req, watchdog);
+    const stopObservingWrites = observeCompletedRequestWrites(req, watchdog.signal, () =>
+      watchdog.touchBody(),
+    );
 
     req.on('error', (err) => {
-      if (responseReceived) return;
-      clearTimeout(timeout);
-      // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
-      // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
-      if (options.signal?.aborted) {
-        reject(options.signal.reason);
-        return;
-      }
-      reject(
+      if (phases.responseStarted) return;
+      fail(
         new AppError(
           'COMMAND_FAILED',
           options.errorMessage,
@@ -202,24 +155,87 @@ async function streamFileToHttpRequestAttempt(options: {
         ),
       );
     });
-    req.on('close', () => clearTimeout(timeout));
 
-    void pipeline(
-      fs.createReadStream(options.payloadPath, { start: options.startOffset }),
-      createUploadProgressTransform({
-        stage: options.progress?.stage ?? 'legacy',
-        fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
-        startOffset: options.startOffset,
-        totalBytes: payloadSize,
-        onProgress: options.progress?.onProgress,
-      }),
-      req,
-    ).catch((err: unknown) => {
-      if (responseReceived) return;
-      req.destroy();
-      const error = err instanceof Error ? err : new Error(String(err));
-      reject(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
+    const fileStream = fs.createReadStream(options.payloadPath, { start: options.startOffset });
+    const progressTransform = createUploadProgressTransform({
+      stage: options.progress?.stage ?? 'legacy',
+      fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
+      startOffset: options.startOffset,
+      totalBytes: payloadSize,
+      onProgress: options.progress?.onProgress,
     });
+    upload = (async () => {
+      await pipeline(fileStream, progressTransform, req, { signal: watchdog.signal });
+      uploadSettled = true;
+    })().catch((err: unknown) => {
+      // After a response, only this attempt's own teardown ends the pipeline, and the server's
+      // verdict stays the outcome: a 413 read completely is a 413, not a transport break.
+      if (phases.responseStarted) return;
+      const error = err instanceof Error ? err : new Error(String(err));
+      fail(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
+    });
+
+    async function handleUploadResponse(res: IncomingMessage): Promise<UploadStreamResponse> {
+      const body = await readNodeHttpResponseBody(res, () => watchdog.touchBody());
+      // The response is consumed, so a destroy cannot cut it short; it settles a pipeline blocked
+      // on a peer that stopped reading. A flushed pipeline keeps its pooled socket.
+      if (!uploadSettled) req.destroy();
+      await upload!.catch(() => undefined);
+      phases.dispose();
+      stopObservingWrites();
+      watchdog.dispose();
+
+      const statusCode = res.statusCode ?? 500;
+      const location = res.headers.location;
+      if (location && isUploadRedirectStatus(statusCode)) {
+        if (options.redirectCount >= MAX_UPLOAD_REDIRECTS) {
+          throw new AppError('COMMAND_FAILED', 'Artifact upload exceeded redirect limit', {
+            maxRedirects: MAX_UPLOAD_REDIRECTS,
+            url: options.url.toString(),
+          });
+        }
+        const redirectedUrl = new URL(location, options.url);
+        // The request headers carry the daemon token or a signed ticket, and the body is the
+        // artifact: neither may follow a hop to an origin the caller did not choose.
+        if (redirectedUrl.origin !== options.url.origin) {
+          throw new AppError('COMMAND_FAILED', 'Artifact upload refused a cross-origin redirect', {
+            reason: 'cross-origin-redirect',
+            url: options.url.toString(),
+            redirectOrigin: redirectedUrl.origin,
+          });
+        }
+        return await streamFileToHttpRequestAttempt({
+          ...options,
+          url: redirectedUrl,
+          redirectCount: options.redirectCount + 1,
+        });
+      }
+
+      const resumeOffset = isUploadResumeStatus(statusCode)
+        ? parseUploadResumeOffset(res.headers, payloadSize)
+        : undefined;
+      if (resumeOffset !== undefined) {
+        if (resumeOffset >= payloadSize) {
+          return { statusCode: 200, statusMessage: 'Upload already complete', body: '' };
+        }
+        if (resumeOffset <= options.startOffset) {
+          throw new AppError('COMMAND_FAILED', 'Artifact upload resume did not advance', {
+            offset: resumeOffset,
+            previousOffset: options.startOffset,
+            url: options.url.toString(),
+          });
+        }
+        return await streamFileToHttpRequestAttempt({
+          ...options,
+          startOffset: resumeOffset,
+        });
+      }
+
+      return { statusCode, statusMessage: res.statusMessage, body };
+    }
+  }).finally(async () => {
+    watchdog.dispose();
+    await upload;
   });
 }
 

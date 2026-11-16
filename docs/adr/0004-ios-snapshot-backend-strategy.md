@@ -56,6 +56,7 @@ A placed iPad window publishes screen space in points, because its viewport, its
 The acquisition's `reported`, `derived`, or `missing` viewport evidence survives the runner boundary and capture transformations.
 Only `reported` establishes the screen origin for capture-derived input.
 A root-derived validation box preserves readable fallback trees but cannot upgrade unknown origin evidence.
+A private-AX root is `reported` only when it is exactly the screen frame at the origin and AXRuntime reports the target as the primary app that fills that screen.
 Element mutations, mutating find, Maestro selector geometry, and snapshot-derived gesture bounds refuse an unknown origin with `window-origin-unknown` and `dispatched: no` before input.
 Independent native queries and authored screen coordinates retain their own authorities.
 

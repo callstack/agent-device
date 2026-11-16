@@ -180,13 +180,24 @@ export async function ensureBootedSimulator(
   await openIosSimulatorApp({ signal: options.signal });
 }
 
-async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+/**
+ * Reads fresh simctl state within the caller's budget.
+ * Unknown state returns null; process timeouts and cancellation throw.
+ */
+export async function readSimulatorBootState(
+  device: DeviceInfo,
+  options: { signal?: AbortSignal; timeoutMs: number },
+): Promise<string | null> {
   const simctlArgs = buildSimctlArgsForDevice(device, ['list', 'devices', '-j']);
   const result = await runXcrun(simctlArgs, {
     allowFailure: true,
-    signal,
-    timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
   });
   if (result.exitCode !== 0) return null;
   return readSimctlDeviceState(result.stdout, device.id);
+}
+
+async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+  return await readSimulatorBootState(device, { signal, timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS });
 }

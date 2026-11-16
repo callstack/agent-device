@@ -7,9 +7,8 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { copySimulatorFileToHost } from './simulator-files.ts';
-import { resolveAppleToolProvider } from './tool-provider.ts';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   readRunnerScreenCaptureMetadata,
   type RunnerScreenCaptureMetadata,
@@ -25,6 +24,7 @@ import {
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_DELAY_MS,
   IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
+  IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
 } from './config.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
@@ -42,9 +42,12 @@ import {
   type AppleCaptureTarget,
   type AppleDeviceDisplay,
 } from './display-inventory.ts';
-import { ensureBootedSimulator } from './simulator.ts';
+import { ensureBootedSimulator, readSimulatorBootState } from './simulator.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
-import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
+import { SIMCTL_SHUTDOWN_STATE } from './simctl.ts';
+import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
+import { resolveAppleToolProvider, SIMCTL_SCREENSHOT_TIMEOUT_REASON } from './tool-provider.ts';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
 type SimulatorScreenshotFlowDeps = {
@@ -181,6 +184,16 @@ export async function captureSimulatorScreenshotWithFallback(
     await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
+  const mayRecoverSkippedBootCheck = async (error: unknown): Promise<boolean> => {
+    if (!options.skipIosSimulatorBootCheck) return false;
+    // A canceled request is terminal: it must not boot a simulator or start another capture.
+    if (isRequestCanceledError(error)) return false;
+    // The probe answers from the tool's state listing, so a probe that itself got canceled stays
+    // terminal rather than becoming an unknown state; anything else it cannot read keeps the
+    // capture's own failure, unchanged, as the answer the caller sees.
+    return await observesSimulatorShutdown(device, error, options.runnerOptions?.signal);
+  };
+
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
     if (resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner') {
       try {
@@ -188,10 +201,7 @@ export async function captureSimulatorScreenshotWithFallback(
         return captureFacts;
       } catch (error) {
         let screenshotError = error;
-        if (
-          options.skipIosSimulatorBootCheck &&
-          shouldEnsureBootedAfterSimulatorScreenshotFailure(error)
-        ) {
+        if (await mayRecoverSkippedBootCheck(error)) {
           await deps.ensureBooted(device);
           try {
             await captureAndNormalize();
@@ -258,7 +268,11 @@ export async function captureSimulatorScreenshotWithRetry(
       jitter: 0.2,
       shouldRetry: (error) => shouldRetryIosSimulatorScreenshot(error),
     },
-    { deadline, phase: 'ios_simulator_screenshot' },
+    {
+      deadline,
+      phase: 'ios_simulator_screenshot',
+      classifyReason: readSimulatorScreenshotFailureReason,
+    },
   );
 }
 
@@ -451,31 +465,75 @@ function emitScreenshotFallbackDiagnostic(
   });
 }
 
+/**
+ * Whether a failed simulator capture may be retried, and, once its retries are spent, whether the
+ * runner may take it over. Both answers come from typed evidence only: host-kit's own record that it
+ * killed the command at its deadline, or the reason this module's simctl adapter stamped from the
+ * tool's error protocol. The capture's wording and its argv spellings select nothing.
+ */
 export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  if (error.code !== 'COMMAND_FAILED') return false;
-  const combined = appleToolFailureText(error);
   return (
-    combined.includes('timeout waiting for screen surfaces') ||
-    (combined.includes('nsposixerrordomain') &&
-      combined.includes('code=60') &&
-      combined.includes('screenshot')) ||
-    (combined.includes('timed out') && combined.includes('screenshot'))
+    isCommandTimeoutError(error) ||
+    (error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.reason === SIMCTL_SCREENSHOT_TIMEOUT_REASON)
   );
 }
 
-function shouldEnsureBootedAfterSimulatorScreenshotFailure(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  if (error.code !== 'COMMAND_FAILED') return false;
-  const combined = appleToolFailureText(error);
-  return (
-    combined.includes('not booted') ||
-    combined.includes('current state: shutdown') ||
-    combined.includes('current state is shutdown') ||
-    combined.includes('current state=shutdown') ||
-    combined.includes('state: shutdown') ||
-    combined.includes('state=shutdown')
-  );
+function readSimulatorScreenshotFailureReason(error: unknown): string | undefined {
+  const reason = error instanceof AppError ? error.details?.reason : undefined;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
+/**
+ * Whether this simulator is turned off right now, read from the tool's own state listing under the
+ * screenshot's own probe ceiling. Only the literal {@link SIMCTL_SHUTDOWN_STATE} authorizes a boot:
+ * `Booted`, `Booting`, `Creating` and `Shutting Down` describe a simulator that is on its way, and a
+ * listing that failed, omits the device, or reports no state proves nothing about it.
+ *
+ * A probe canceled with the request travels on: a request the caller gave up on stays terminal.
+ * Every other probe failure answers `false`, so the capture's own error stays the reported failure.
+ */
+async function observesSimulatorShutdown(
+  device: DeviceInfo,
+  captureError: unknown,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  signal?.throwIfAborted();
+  let state: string | null;
+  try {
+    state = await readSimulatorBootState(device, {
+      signal,
+      timeoutMs: IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
+    });
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_screenshot_boot_state_probe_failed',
+      data: {
+        deviceId: device.id,
+        recoveryAuthorized: false,
+        ...extractAppleToolErrorMeta(error),
+        probeFailureReason: readSimulatorScreenshotFailureReason(error),
+      },
+    });
+    return false;
+  }
+  signal?.throwIfAborted();
+  const recoveryAuthorized = state === SIMCTL_SHUTDOWN_STATE;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'ios_screenshot_skipped_boot_recovery',
+    data: {
+      deviceId: device.id,
+      observedState: state,
+      recoveryAuthorized,
+      ...extractAppleToolErrorMeta(captureError),
+      captureFailureReason: readSimulatorScreenshotFailureReason(captureError),
+    },
+  });
+  return recoveryAuthorized;
 }
 
 async function normalizeIosSimulatorScreenshotDensity(

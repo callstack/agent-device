@@ -133,7 +133,10 @@ Thus, if a viewport read takes too long, the plan skips the sweep instead of que
 
 Private-AX fallback keeps the viewport authority it acquired.
 When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
-The payload carries that uncertainty without a new probe or a changed channel budget.
+Exception: AXRuntime can report the target as the primary app that fills the screen. If the root is that screen frame at the origin, the box is `reported`.
+This probe reads two frames. It adds no XCTest tree read and does not change the channel budget.
+The payload carries any remaining uncertainty.
+In landscape, the root is in interface space and the screen frame is in native portrait space, so the root stays `derived`.
 
 A failure that XCTest records ends `testCommand` when the main-thread block that recorded it returns, whatever `continueAfterFailure` says.
 Mute XCTest's AX-server rejection in both fetch wordings, so XCTest does not record it.

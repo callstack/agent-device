@@ -48,7 +48,7 @@ test('an upload refuses a redirect to another origin and never sends it the toke
         method: 'POST',
         headers: { authorization: 'Bearer daemon-token', 'transfer-encoding': 'chunked' },
         payloadPath,
-        timeoutMessage: 'timed out',
+        signal: new AbortController().signal,
         errorMessage: 'failed',
       }),
       (error: unknown) =>
