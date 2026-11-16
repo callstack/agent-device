@@ -1,5 +1,6 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { CommandFlags } from '@agent-device/contracts/command';
 import path from 'node:path';
 import type {
   MaestroObservation,
@@ -27,6 +28,10 @@ export type CreateDaemonMaestroRuntimeOperationsOptions = Pick<
   ReplayBackendHost,
   'readSnapshotClickabilityEvidence' | 'assertSnapshotScreenOrigin'
 > & {
+  readonly host: HostEnvironment;
+  readonly runCommand: ReplayBackendHost['runCommand'];
+  readonly emitDiagnostic: ReplayBackendHost['emitDiagnostic'];
+  readonly registerSensitiveValue: (value: string) => void;
   readonly invoke: MaestroDaemonOperationInvoke;
   /** The runtime envelope every operation carries: platform, target, device, and recording flags. */
   readonly flags?: CommandFlags;

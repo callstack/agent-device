@@ -11,14 +11,18 @@ import { beginStderrCapture } from '@agent-device/test-kit';
 import { checkCase, type FuzzFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 
-export type FuzzWorkerRequest = { kind: 'case'; input: string };
+export type FuzzWorkerRequest = { kind: 'case'; input: string } | { kind: 'close' };
 
-export type FuzzWorkerMessage = { kind: 'ready' } | { kind: 'result'; failure: FuzzFailure | null };
+export type FuzzWorkerMessage =
+  | { kind: 'ready' }
+  | { kind: 'closed' }
+  | { kind: 'result'; failure: FuzzFailure | null };
 
 const send = process.send?.bind(process);
 if (!send) throw new Error('scripts/fuzz/worker.ts must be run as a forked child process.');
 
 const target = getFuzzTarget(process.argv[2] ?? '');
+const dispose = await target.prepare?.();
 
 // The batch-steps parser warns on deprecated step shapes; a fuzz run would emit thousands of
 // those lines and bury the failure report. Only JavaScript writes go through here: a fatal
@@ -26,7 +30,12 @@ const target = getFuzzTarget(process.argv[2] ?? '');
 // piped rather than discarded.
 beginStderrCapture({ discard: true });
 
-process.on('message', (request: FuzzWorkerRequest) => {
+process.on('message', async (request: FuzzWorkerRequest) => {
+  if (request.kind === 'close') {
+    await dispose?.();
+    send({ kind: 'closed' } satisfies FuzzWorkerMessage);
+    return;
+  }
   const failure = checkCase(target, request.input);
   send({ kind: 'result', failure } satisfies FuzzWorkerMessage);
 });
