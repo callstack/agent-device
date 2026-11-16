@@ -3,6 +3,7 @@ package com.callstack.agentdevice.snapshothelper;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 public final class PressSequenceTest {
   private static final long TIMEOUT = PressSequence.INJECTION_TIMEOUT_MS;
@@ -17,84 +18,97 @@ public final class PressSequenceTest {
     discardsAStartDroppedAgainAfterTheSync();
     cancelsARetriedStartThatTimesOut();
     doesNotCancelARefusedEnd();
-    doesNotRetryWhenInjectionAlreadyWaited();
+    failsADroppedStartAtOnceWhenInjectionWaitsForAnimations();
     reportsAnUnavailableAnimationSyncApartFromARefusal();
+    keepsTheTimeoutWhenItsCancelThrows();
+    retriesADroppedStartWhenItsDiscardThrows();
     failsATimedOutKeyStartWithATimeoutAndInjectsNoEnd();
     failsARefusedEndAsARefusal();
   }
 
   private static void endsWithTheStartDownTime() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
+    FakeInjections injections = FakeInjections.skippingTheWait(accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
     expect(injections.calls, "start 1", "end 1");
   }
 
   private static void retriesADroppedStartAfterTheAnimationSyncWithAFreshDownTime() {
-    FakeInjections injections =
-        new FakeInjections(PressSequence.AnimationSync.WAITED, refusedAfter(0), accepted());
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(0), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
     expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "end 3");
   }
 
   private static void retriesAStartRefusedJustBeforeTheInjectionDeadline() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT - 2), accepted());
+    FakeInjections injections =
+        FakeInjections.skippingTheWait(refusedAfter(TIMEOUT - 2), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
     expect(injections.calls, "start 1", "discard 1", "sync", "start 30001", "end 30001");
   }
 
   private static void cancelsAndDoesNotRetryAStartRefusedAtTheInjectionDeadline() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT - 1), accepted());
+    FakeInjections injections =
+        FakeInjections.skippingTheWait(refusedAfter(TIMEOUT - 1), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.START_TIMED_OUT);
     expect(injections.calls, "start 1", "cancel 1");
   }
 
   private static void discardsAStartDroppedAgainAfterTheSync() {
-    FakeInjections injections =
-        new FakeInjections(PressSequence.AnimationSync.WAITED, refusedAfter(0), refusedAfter(0));
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(0), refusedAfter(0));
     expect(PressSequence.run(injections), PressSequence.Outcome.START_REFUSED);
     expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "discard 3");
   }
 
   private static void cancelsARetriedStartThatTimesOut() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.WAITED, refusedAfter(0), refusedAfter(TIMEOUT));
+    FakeInjections injections =
+        FakeInjections.skippingTheWait(refusedAfter(0), refusedAfter(TIMEOUT));
     expect(PressSequence.run(injections), PressSequence.Outcome.START_TIMED_OUT);
     expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "cancel 3");
   }
 
   private static void doesNotCancelARefusedEnd() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
+    FakeInjections injections = FakeInjections.skippingTheWait(accepted());
     injections.endAccepted = false;
     expect(PressSequence.run(injections), PressSequence.Outcome.END_REFUSED);
     expect(injections.calls, "start 1", "end 1");
   }
 
-  private static void doesNotRetryWhenInjectionAlreadyWaited() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.ALREADY_WAITED, refusedAfter(0), accepted());
+  private static void failsADroppedStartAtOnceWhenInjectionWaitsForAnimations() {
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(0), accepted());
+    injections.skipsAnimationWait = false;
     expect(PressSequence.run(injections), PressSequence.Outcome.START_REFUSED);
-    expect(injections.calls, "start 1", "discard 1", "sync");
+    expect(injections.calls, "start 1");
   }
 
   private static void reportsAnUnavailableAnimationSyncApartFromARefusal() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.UNAVAILABLE, refusedAfter(0), accepted());
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(0), accepted());
+    injections.syncAvailable = false;
     expect(PressSequence.run(injections), PressSequence.Outcome.ANIMATION_SYNC_UNAVAILABLE);
     expect(injections.calls, "start 1", "discard 1", "sync");
   }
 
+  private static void keepsTheTimeoutWhenItsCancelThrows() {
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(TIMEOUT), accepted());
+    injections.releaseThrows = true;
+    expect(PressSequence.run(injections), PressSequence.Outcome.START_TIMED_OUT);
+    expect(injections.calls, "start 1", "cancel 1");
+  }
+
+  private static void retriesADroppedStartWhenItsDiscardThrows() {
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(0), accepted());
+    injections.releaseThrows = true;
+    expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
+    expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "end 3");
+  }
+
   private static void failsATimedOutKeyStartWithATimeoutAndInjectsNoEnd() {
-    FakeInjections injections = new FakeInjections(
-        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT), accepted());
-    expectFailure(injections, java.util.concurrent.TimeoutException.class,
+    FakeInjections injections = FakeInjections.skippingTheWait(refusedAfter(TIMEOUT), accepted());
+    expectFailure(injections, TimeoutException.class,
         "Key injection timed out before the app finished handling it; it was cancelled");
     expect(injections.calls, "start 1", "cancel 1");
   }
 
   private static void failsARefusedEndAsARefusal() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
+    FakeInjections injections = FakeInjections.skippingTheWait(accepted());
     injections.endAccepted = false;
     expectFailure(injections, IllegalStateException.class, "Key injection was refused");
     expect(injections.calls, "start 1", "end 1");
@@ -136,20 +150,30 @@ public final class PressSequenceTest {
   /** Each {@code now()} advances the clock by 1 ms; a refused start also advances it by its delay. */
   private static final class FakeInjections implements PressSequence.Injections {
     final List<String> calls = new ArrayList<>();
-    private final PressSequence.AnimationSync sync;
     private final long[] starts;
     private int startIndex;
     private long clock;
+    boolean skipsAnimationWait = true;
+    boolean syncAvailable = true;
     boolean endAccepted = true;
+    boolean releaseThrows;
 
-    FakeInjections(PressSequence.AnimationSync sync, long... starts) {
-      this.sync = sync;
+    private FakeInjections(long[] starts) {
       this.starts = starts;
+    }
+
+    static FakeInjections skippingTheWait(long... starts) {
+      return new FakeInjections(starts);
     }
 
     @Override
     public long now() {
       return ++clock;
+    }
+
+    @Override
+    public boolean skipsAnimationWait() {
+      return skipsAnimationWait;
     }
 
     @Override
@@ -170,17 +194,19 @@ public final class PressSequenceTest {
     @Override
     public void discardDroppedStart(long downTime) {
       calls.add("discard " + downTime);
+      if (releaseThrows) throw new IllegalStateException("discard failed");
     }
 
     @Override
     public void cancelStart(long downTime) {
       calls.add("cancel " + downTime);
+      if (releaseThrows) throw new IllegalStateException("cancel failed");
     }
 
     @Override
-    public PressSequence.AnimationSync awaitAnimations() {
+    public boolean awaitAnimations() {
       calls.add("sync");
-      return sync;
+      return syncAvailable;
     }
   }
 }

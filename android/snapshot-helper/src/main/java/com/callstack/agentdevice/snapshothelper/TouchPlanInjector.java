@@ -104,37 +104,7 @@ final class TouchPlanInjector {
 
   private static MotionEvent motionEvent(
       long downTime, long eventTime, int action, PointerState pointers) {
-    MotionEvent.PointerProperties[] properties =
-        new MotionEvent.PointerProperties[pointers.count];
-    MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[pointers.count];
-    for (int index = 0; index < pointers.count; index += 1) {
-      properties[index] = new MotionEvent.PointerProperties();
-      properties[index].id = index;
-      properties[index].toolType = MotionEvent.TOOL_TYPE_FINGER;
-      coords[index] = new MotionEvent.PointerCoords();
-      coords[index].x = pointers.x[index];
-      coords[index].y = pointers.y[index];
-      coords[index].pressure = 1.0f;
-      coords[index].size = 1.0f;
-    }
-    MotionEvent event =
-        MotionEvent.obtain(
-            downTime,
-            eventTime,
-            action,
-            pointers.count,
-            properties,
-            coords,
-            0,
-            0,
-            1.0f,
-            1.0f,
-            0,
-            0,
-            InputDevice.SOURCE_TOUCHSCREEN,
-            0);
-    event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-    return event;
+    return TouchEvents.obtain(downTime, eventTime, action, pointers.x, pointers.y, 0);
   }
 
   private static final class PointerState {

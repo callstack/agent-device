@@ -104,7 +104,12 @@ final class AutomationCommandHandler {
     }
 
     @Override
-    public PressSequence.AnimationSync awaitAnimations() {
+    public boolean skipsAnimationWait() {
+      return UiAutomationInputDispatcher.skipsAnimationWait();
+    }
+
+    @Override
+    public boolean awaitAnimations() {
       return UiAutomationInputDispatcher.awaitAnimations(automation);
     }
   }
@@ -129,21 +134,30 @@ final class AutomationCommandHandler {
       return inject(MotionEvent.ACTION_UP, downTime);
     }
 
+    /** The verifier records a dropped DOWN as a pointer that is still down; no window receives it. */
     @Override
     public void discardDroppedStart(long downTime) {
-      UiAutomationInputDispatcher.cancelDown(automation, downTime, x, y);
+      cancel(downTime);
     }
 
     @Override
     public void cancelStart(long downTime) {
-      UiAutomationInputDispatcher.cancelDown(automation, downTime, x, y);
+      cancel(downTime);
+    }
+
+    private void cancel(long downTime) {
+      inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
     }
 
     private boolean inject(int action, long downTime) {
-      MotionEvent event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0);
-      event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+      return inject(action, downTime, 0, true);
+    }
+
+    private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
+      MotionEvent event = TouchEvents.obtain(
+          downTime, SystemClock.uptimeMillis(), action, new float[] {x}, new float[] {y}, flags);
       try {
-        return UiAutomationInputDispatcher.inject(automation, event, true);
+        return UiAutomationInputDispatcher.inject(automation, event, waitForDispatch);
       } finally {
         event.recycle();
       }
