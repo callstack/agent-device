@@ -114,6 +114,13 @@ function fixture() {
   return { root, entry, host, stateDir: path.join(root, 'state') };
 }
 
+async function nativePlugin() {
+  const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
+  const plugin = resolved.slots.find((slot) => slot.backend === 'ad')?.replayPlugin;
+  if (!plugin) throw new Error('Native replay test installation is missing');
+  return plugin;
+}
+
 async function trackedPlugin() {
   const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
   const maestro = resolved.slots.find((slot) => slot.backend === 'maestro')?.replayPlugin;
@@ -162,7 +169,7 @@ test.each(['replay', 'test', 'batch-test'] as const)(
       await state.run(async () => {
         const f = fixture();
         const { plugin, calls } = await trackedPlugin();
-        const host = await startAgentDevice({ ...f, plugins: [plugin] });
+        const host = await startAgentDevice({ ...f, plugins: [plugin, await nativePlugin()] });
         const input = { path: f.entry, platform: 'ios' as const, backend: 'maestro' };
         const testInput = { paths: [f.entry], platform: 'ios' as const, backend: 'maestro' };
         try {

@@ -18,7 +18,6 @@
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/platform-web": "workspace:*",
     "@agent-device/replay-port": "workspace:*",
-    "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*"
   },
@@ -32,7 +31,9 @@
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
     "@agent-device/maestro": "workspace:*",
-    "@agent-device/ad-replay": "workspace:*"
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/plugins": "workspace:*",
+    "@agent-device/replay": "workspace:*"
   },
   "exports": {
     ".": {

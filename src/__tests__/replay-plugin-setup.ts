@@ -27,7 +27,7 @@ beforeEach(async () => {
     },
     'replay-backends',
   );
-  await bindReplayBackendResolver(registry.resolveReplayBackend);
+  await bindReplayBackendResolver(registry.resolveReplayBackend, registry.resolveReplayExecution);
 });
 afterEach(async () => {
   await registry?.close();
