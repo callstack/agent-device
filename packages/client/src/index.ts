@@ -166,7 +166,6 @@ export function createAgentDeviceClient(
         await transport(request, {
           authToken: merged.daemonAuthToken,
           signal: merged.signal,
-          daemonLifecycle: merged.daemonLifecycle,
           ...(daemonBinding ? { daemonBinding } : {}),
         }),
     );
@@ -634,10 +633,17 @@ function optionalSnapshotResponseFields(
 }
 
 function readDaemonLifecycle(value: unknown): DaemonLifecycle | undefined {
-  if (value === undefined || value === 'attach' || value === 'managed') return value;
-  throw new AppError('INVALID_ARGS', "daemonLifecycle must be 'attach' or 'managed'.", {
-    daemonLifecycle: value,
-  });
+  if (value === undefined || value === 'attach') return value;
+  throw new AppError(
+    'INVALID_ARGS',
+    value === 'managed'
+      ? "daemonLifecycle must be 'attach'. The 'managed' lifecycle was removed in 0.22."
+      : "daemonLifecycle must be 'attach'.",
+    {
+      daemonLifecycle: value,
+      hint: "Drop daemonLifecycle, or set it to 'attach'. To start or replace a detached daemon, call ensureDaemon({ stateDir }). To own one in this process, call startAgentDevice({ stateDir }) from 'agent-device'.",
+    },
+  );
 }
 
 /**
