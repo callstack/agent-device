@@ -6,10 +6,12 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import * as file from '@agent-device/host-kit/file';
 import {
+  FOREIGN_UID,
   closeLoopbackServer,
   createTestHostEnvironment,
   listenOnLoopback,
   mkdtempForTestSync,
+  serveHostOwnership,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
@@ -488,6 +490,108 @@ test.skipIf(process.platform === 'win32')(
       }),
     );
     expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses the ground a link target crosses on the way in',
+  async () => {
+    // `rec -> <root>/shared/relay/sub`, `shared` at 0777 and not sticky, `shared/relay -> <root>/chosen`.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-target-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    fs.chmodSync(chosen, 0o700);
+    fs.symlinkSync(chosen, path.join(shared, 'relay'));
+    const sub = path.join(chosen, 'sub');
+    fs.mkdirSync(sub);
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.symlinkSync(path.join(shared, 'relay', 'sub'), path.join(home, 'rec'));
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(sub)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a link another local user owns on the way in',
+  async () => {
+    // `~/rec -> <root>/tmp/relay -> ~/chosen`, `relay` another user's file in a sticky shared directory.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-hopowner-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    const tmp = path.join(root, 'tmp');
+    fs.mkdirSync(tmp);
+    fs.chmodSync(tmp, 0o1777);
+    const relay = path.join(tmp, 'relay');
+    fs.symlinkSync(chosen, relay);
+    fs.symlinkSync(relay, path.join(home, 'rec'));
+    serveHostOwnership({ [relay]: FOREIGN_UID });
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(chosen)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses the directory a .. steps back into',
+  async () => {
+    // `home/work -> priv/x`, `priv/y` at 0777: the write lands in `priv/y`, not in the `home/y` the
+    // normalized spelling names.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-dotdot-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    const priv = path.join(root, 'priv');
+    const privX = path.join(priv, 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    const privY = path.join(priv, 'y');
+    fs.mkdirSync(privY);
+    fs.chmodSync(privY, 0o777);
+    fs.symlinkSync(privX, path.join(home, 'work'));
+    const destination = `${home}/work/../y/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(privY)).toEqual([]);
   },
 );
 

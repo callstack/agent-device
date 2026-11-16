@@ -232,19 +232,38 @@ function handleSessionScriptWriteFailure(params: {
   return { written: false, error: toOrdinaryWriteFailure(error, scriptPath) };
 }
 
-function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
+/**
+ * A filesystem failure that has to reach the caller as its own typed error: an ordinary recording
+ * carries `script_write_failed` with the path it could not be written to, and both name what was being
+ * written, because the same writer publishes a recording and a healed repair.
+ */
+function toScriptWriteFailure(
+  error: unknown,
+  scriptPath: string | undefined,
+  subject: Readonly<{ noun: string; hint: string; reportsPath?: boolean }>,
+): AppError {
   const detail = error instanceof Error ? error.message : String(error);
+  const where = scriptPath === undefined ? '' : ` to ${scriptPath}`;
   return new AppError(
     'COMMAND_FAILED',
-    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+    `Failed to write the ${subject.noun}${where}: ${detail}`,
     {
-      reason: 'script_write_failed',
-      ...(scriptPath ? { path: scriptPath } : {}),
-      hint: 'Check the target path and its permissions, then re-record with open --save-script.',
+      ...(subject.reportsPath === true && scriptPath !== undefined
+        ? { reason: 'script_write_failed' as const, path: scriptPath }
+        : {}),
+      hint: subject.hint,
     },
     error,
   );
+}
+
+function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
+  if (error instanceof AppError) return error;
+  return toScriptWriteFailure(error, scriptPath, {
+    noun: 'session script',
+    reportsPath: true,
+    hint: 'Check the target path and its permissions, then re-record with open --save-script.',
+  });
 }
 
 /**
@@ -256,14 +275,10 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
  */
 function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): AppError {
   if (error instanceof AppError) return error;
-  const detail = error instanceof Error ? error.message : String(error);
-  return new AppError(
-    'COMMAND_FAILED',
-    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
-    {
-      hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
-    },
-  );
+  return toScriptWriteFailure(error, scriptPath, {
+    noun: 'healed script',
+    hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
+  });
 }
 
 /**

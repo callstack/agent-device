@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
@@ -57,16 +56,14 @@ export function publishFileSync(options: {
 export function publishScriptFileSync(options: {
   destination: string;
   contents: string;
-  mode?: number;
   publish?: AtomicPublishMode;
   parentIdentity?: string;
 }): void {
-  const mode = options.mode ?? 0o600;
   const expected =
     options.parentIdentity ?? publishDirectoryIdentity(path.dirname(options.destination));
   withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
     assertPrivateScriptDestination(options.destination, expected);
-    fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode });
+    fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode: SCRIPT_FILE_MODE });
     assertPrivateScriptDestination(options.destination, expected);
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
@@ -75,6 +72,9 @@ export function publishScriptFileSync(options: {
     }
   });
 }
+
+/** A recording holds literals a `fill` did not parameterize (ADR 0017), so it is written private. */
+const SCRIPT_FILE_MODE = 0o600;
 
 export type DurableFilePublishMode = 'replace' | 'link-exclusive';
 
@@ -227,148 +227,183 @@ export function assertPrivateScriptDestination(destination: string, parentIdenti
     throw scriptAncestryFailure(destination, parent, 'parent_replaced');
   }
   const trust = readScriptTrust();
-  assertNoPlantedLink(destination, parent, trust);
-  const traversed = traversedDirectories(parent);
-  if (traversed.paths.length === 0) return;
-  for (const directory of traversed.paths) {
-    const stats = statDirectoryChain(directory);
-    if (!stats) continue;
-    const exposure = untrustedAncestryExposure(stats, trust);
-    if (exposure) throw scriptAncestryFailure(destination, directory, exposure);
-  }
-  // The script entry is created inside the deepest directory that exists, or below it through
+  const walk = walkParent(destination, trust);
+  if (walk.reject !== undefined) throw walk.reject;
+  // The script entry is created inside the deepest directory the walk reached, or below it through
   // directories that do not exist yet. Where other local users can add entries, one of them can add
   // this entry first and the recording is theirs, so the creation has to be refused.
-  const deepest = statDirectoryChain(traversed.deepest);
+  const deepest = statDirectoryChain(walk.deepest);
   if (deepest && othersCreateEntriesIn(deepest, trust)) {
-    throw scriptAncestryFailure(destination, traversed.deepest, 'shared_parent');
-  }
-}
-
-/** Link hops one destination walk expands before it stops, in step with the kernel's own limit. */
-const MAX_SYMLINK_HOPS = 40;
-
-/**
- * Every directory the kernel traverses to reach `parent`, judged nearest-first, without duplicates, and
- * the deepest one that exists.
- *
- * Resolving only the deepest existing ancestor is not enough, and neither is one `realpath` of a path
- * that runs through links:
- *
- * - A component that is a plain directory is traversed as it stands, so a link inside it can lead
- *   anywhere, and the directories above that plain component are reached by the publish even though the
- *   final chain looks entirely private: `<root>/shared` at 0777 with `<root>/shared/mine` at 0700 and
- *   `mine/rec` a link to a private directory names only trusted directories at its destination, while
- *   another local user owns the ground `mine` and `rec` stand on and can rename `mine` aside. So EVERY
- *   existing prefix of the spelled path is resolved, and the chain under each resolution is judged.
- * - Where one link leads into another, `realpathSync` answers with the LAST target and names none of the
- *   directories stepped through on the way: `~/rec -> /srv/team/relay -> ~/chosen` reaches a private
- *   directory, and the team ground `relay` stands on never appears in the answer, though any teammate
- *   can swap that link for a target of their own. So a link hop also judges the directory holding its
- *   target, and the walk continues into the target.
- */
-function traversedDirectories(
-  parent: string,
-): Readonly<{ paths: readonly string[]; deepest: string }> {
-  const seen = new Set<string>();
-  const paths: string[] = [];
-  let deepest: string | undefined;
-  for (const prefix of directoryChain(parent)) {
-    let current = prefix;
-    // Each hop replaces one link with its target, so a link cycle cannot run the walk forever. The
-    // operating system applies a limit of the same order and refuses the publish when it is exceeded.
-    for (let hop = 0; hop <= MAX_SYMLINK_HOPS; hop += 1) {
-      const stats = lstatIfPresentSync(current);
-      if (stats === undefined) break;
-      if (!stats.isSymbolicLink()) {
-        const real = resolvedDirectory(current);
-        if (real === undefined) break;
-        deepest ??= real;
-        for (const ancestor of directoryChain(real)) {
-          if (seen.has(ancestor)) continue;
-          seen.add(ancestor);
-          paths.push(ancestor);
-        }
-        break;
-      }
-      const target = linkTarget(current);
-      // The kernel steps INTO the directory the target names, so that directory and everything above it
-      // are traversed whatever this link eventually resolves to.
-      const home = resolvedDirectory(parentDirectory(target));
-      if (home !== undefined) {
-        for (const ancestor of directoryChain(home)) {
-          if (seen.has(ancestor)) continue;
-          seen.add(ancestor);
-          paths.push(ancestor);
-        }
-      }
-      current = target;
-    }
-  }
-  return { paths, deepest: deepest ?? parent };
-}
-
-/** Where a symbolic link points, made absolute the way the kernel reads it. */
-function linkTarget(link: string): string {
-  const target = fs.readlinkSync(link);
-  return path.isAbsolute(target) ? target : `${parentDirectory(link)}/${target}`;
-}
-
-/** The directory `path` names once every link in it is expanded, or `undefined` when it is absent. */
-function resolvedDirectory(pathname: string): string | undefined {
-  if (lstatIfPresentSync(pathname) === undefined) return undefined;
-  try {
-    const real = fs.realpathSync(pathname);
-    return statDirectoryChain(real) ? real : undefined;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
+    throw scriptAncestryFailure(destination, walk.deepest, 'shared_parent');
   }
 }
 
 /**
- * The parent of `destination` as it was spelled, made absolute but never normalized.
+ * The parent of `destination`, made absolute but never normalized.
  *
- * `path.resolve` folds a `..` away, which is the one simplification this rule may not make: the kernel
- * does not make it either, so `.../work/../x` lands an entry beside the target of a link named `work`.
- * The chain that walk produces is what gets judged.
+ * `path.resolve` folds a `..` away, which is the one simplification this may not make: the kernel does
+ * not make it either, so `.../work/../x` lands its entry beside the target of the link named `work`. The
+ * spelled components are what the walk resolves; a relative destination keeps its relative spelling and
+ * starts from the working directory, which is how it reaches the filesystem.
  */
 function spelledParent(destination: string): string {
-  if (path.isAbsolute(destination)) return parentDirectory(destination);
-  // A relative destination reaches the filesystem through the working directory, the same way
-  // `path.resolve` names it, and the walk above is what the kernel performs from there.
-  return parentDirectory(path.resolve(destination));
+  if (path.isAbsolute(destination)) return path.dirname(destination);
+  const parent = path.dirname(destination);
+  return parent === '.' ? '' : parent;
 }
 
 /**
- * Refuses a symbolic link on the spelled path that another local user could have put there, or could
- * replace. The link's target is judged through the resolved chain, so this only asks whether the link
- * itself is stable:
- *
- * - In a directory others cannot add entries in, a link nobody but this user or root can write is not
- *   something they can plant or swap.
- * - In a directory others CAN add entries in, the sticky bit is what protects an entry that already
- *   exists: it stops anyone but the entry's owner or root from removing or replacing it. Without the
- *   sticky bit, any of them can unlink this link and plant one pointing wherever they choose.
+ * Where the walk stands: a directory it has already judged and physically reached, plus the names still
+ * to resolve. `deepest` is the directory the entry is created in when the walk stops here.
  */
-function assertNoPlantedLink(
-  destination: string,
-  parent: string,
-  trust: ScriptDestinationTrust,
-): void {
-  for (const ancestor of directoryChain(parent)) {
-    const link = lstatIfPresentSync(ancestor);
-    if (!link?.isSymbolicLink()) continue;
-    const home = lstatIfPresentSync(parentDirectory(ancestor));
-    if (!home) continue;
-    const exposure = untrustedLinkExposure(
-      { uid: link.uid },
-      { uid: home.uid, gid: home.gid, mode: home.mode },
-      trust,
-    );
-    if (exposure) throw scriptAncestryFailure(destination, ancestor, exposure);
+type WalkState = Readonly<{
+  deepest: string;
+  authority: DirectoryAuthority;
+  /** Path components left to resolve, nearest first. */
+  queue: readonly string[];
+  /** Link targets expanded so far. */
+  hops: number;
+}>;
+
+type WalkStep =
+  | Readonly<{ kind: 'reject'; path: string; exposure: ScriptAncestryExposure }>
+  | Readonly<{ kind: 'stop'; deepest: string }>
+  | Readonly<{ kind: 'stand'; state: WalkState }>;
+
+/** A walk that ended: the deepest directory reached, or the typed refusal. */
+type WalkOutcome = Readonly<{ reject: AppError | undefined; deepest: string }>;
+
+/**
+ * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the
+ * first step another local user could steer.
+ *
+ * No `realpath` is involved anywhere. `realpathSync` answers only with the FINAL directory, so any
+ * directory the resolution stepped through can vanish from the answer, and from the judgment, whenever a
+ * link leads on to another link, or a spelled prefix names a plain directory whose ground is shared.
+ * Instead each component is resolved against the directory physically reached:
+ *
+ * - `.` is skipped; `..` moves to the parent of the directory physically stood in, which is judged like
+ *   any other directory. Neither one is a name that has to exist.
+ * - Any other component is lstat'ed in that directory. An absent component ends the walk, because the
+ *   publish creates what is missing below here.
+ * - A directory is judged and entered.
+ * - A symbolic link is judged itself, against the directory that physically holds it, and its target's
+ *   components go in front of the queue — restarting from `/` for an absolute target. Hops are counted
+ *   against {@link MAX_SCRIPT_PATH_LINK_HOPS}, and crossing it is refused rather than trusted.
+ * - A component that is neither a directory nor a link cannot carry a publish, and is refused.
+ *
+ * A relative destination starts from the process's resolved working directory: the caller already stands
+ * there, and the walk cannot step above it.
+ */
+function walkParent(destination: string, trust: ScriptDestinationTrust): WalkOutcome {
+  let step = startWalk(spelledParent(destination), trust);
+  // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
+  for (;;) {
+    if (step.kind === 'reject') return { reject: refusalAt(destination, step), deepest: '/' };
+    if (step.kind === 'stop') return { reject: undefined, deepest: step.deepest };
+    const { state } = step;
+    if (state.queue.length === 0) return { reject: undefined, deepest: state.deepest };
+    step = stepWalk(state, trust);
   }
 }
+
+function refusalAt(
+  destination: string,
+  step: Readonly<{ path: string; exposure: ScriptAncestryExposure }>,
+): AppError {
+  return scriptAncestryFailure(destination, step.path, step.exposure);
+}
+
+/** The first state: `/` for an absolute spelling, the resolved working directory otherwise. */
+function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
+  const queue = pathComponents(parent);
+  // A relative destination starts from the working directory as the kernel sees it, symlink-free: the
+  // caller already stands there, so it is where the walk starts rather than a step it has to earn.
+  if (parent !== '' && !path.isAbsolute(parent)) return standIn(path.resolve(''), queue, trust, 0);
+  return standIn('/', queue, trust, 0);
+}
+
+/** Judges `directory` and stands the walk there, or refuses it. */
+function standIn(
+  directory: string,
+  queue: readonly string[],
+  trust: ScriptDestinationTrust,
+  hops: number,
+): WalkStep {
+  const stats = statDirectoryChain(directory);
+  if (stats === undefined) return { kind: 'reject', path: directory, exposure: 'not_a_directory' };
+  const authority: DirectoryAuthority = { uid: stats.uid, gid: stats.gid, mode: stats.mode };
+  const exposure = untrustedAncestryExposure(authority, trust);
+  if (exposure) return { kind: 'reject', path: directory, exposure };
+  return { kind: 'stand', state: { deepest: directory, authority, queue, hops } };
+}
+
+/** The names of `directory`, with every `.` resolved away the way the kernel resolves it. */
+function pathComponents(directory: string): string[] {
+  return directory.split('/').filter((component) => component.length > 0 && component !== '.');
+}
+
+/** Advances one component of the queue. */
+function stepWalk(state: WalkState, trust: ScriptDestinationTrust): WalkStep {
+  const [component, ...rest] = state.queue;
+  if (component === undefined) return { kind: 'stop', deepest: state.deepest };
+  // `..` is the parent of the directory PHYSICALLY stood in, not of the spelling: where `work` is a link,
+  // `.../work/../x` steps back from the link's target and lands beside it.
+  if (component === '..') return standIn(path.dirname(state.deepest), rest, trust, state.hops);
+  return stepIntoEntry(state, component, rest, trust);
+}
+
+/** Resolves one named entry inside the directory the walk stands in. */
+function stepIntoEntry(
+  state: WalkState,
+  component: string,
+  rest: readonly string[],
+  trust: ScriptDestinationTrust,
+): WalkStep {
+  const entry = path.join(state.deepest, component);
+  const stats = lstatIfPresentSync(entry);
+  // Nothing below here exists yet, so the publish creates it inside the directory the walk reached.
+  if (stats === undefined) return { kind: 'stop', deepest: state.deepest };
+  if (stats.isSymbolicLink()) return stepThroughLink(state, entry, stats, rest, trust);
+  return standIn(entry, rest, trust, state.hops);
+}
+
+/**
+ * One hop. The link is judged where it physically stands: inside a directory others may add entries to,
+ * only a link this user or root owns, held by the sticky bit, is theirs to keep. Its target's components
+ * then enter the queue, because the kernel steps into them next.
+ */
+function stepThroughLink(
+  state: WalkState,
+  link: string,
+  stats: fs.Stats,
+  rest: readonly string[],
+  trust: ScriptDestinationTrust,
+): WalkStep {
+  const exposure = untrustedLinkExposure({ uid: stats.uid }, state.authority, trust);
+  if (exposure) return { kind: 'reject', path: link, exposure };
+  if (state.hops >= MAX_SCRIPT_PATH_LINK_HOPS) {
+    return { kind: 'reject', path: link, exposure: 'link_loop_exceeded' };
+  }
+  const target = fs.readlinkSync(link);
+  const queue = [
+    ...pathComponents(path.isAbsolute(target) ? target : path.join(state.deepest, target)),
+    ...rest,
+  ];
+  // An absolute target restarts the walk at the root; a relative one continues from where the walk is.
+  const home = path.isAbsolute(target) ? '/' : state.deepest;
+  return standIn(home, queue, trust, state.hops + 1);
+}
+
+/**
+ * How many link targets one destination walk expands before it refuses.
+ *
+ * Kept BELOW the smallest limit the supported kernels apply to a path of their own (macOS 32, Linux 40),
+ * so this rule always reaches its own limit first and answers with its own typed reason. The walk counts
+ * hops rather than letting the kernel answer `ELOOP`, because a walk that ran out of hops has NOT
+ * established where the entry lands, and that is a refusal, not a pass.
+ */
+export const MAX_SCRIPT_PATH_LINK_HOPS = 30;
 
 /**
  * One directory's identity on its filesystem, for a caller that must publish into the same one it
@@ -380,11 +415,75 @@ export function publishDirectoryIdentity(directory: string): string | undefined 
   return stats ? `${stats.dev}:${stats.ino}` : undefined;
 }
 
-/** The group and passwd records the private-group exception reads, in `/etc/group` field order. */
+/** The host files the private-group exception reads, in `/etc/group` field order. */
 type HostGroupDatabase = Readonly<{
   /** `undefined` when the file could not be read, which is not the same as a file with no records. */
   groups: readonly string[] | undefined;
   passwd: readonly string[] | undefined;
+  /** `/etc/nsswitch.conf`, which says whether the two files above are the whole story. */
+  nsswitch: readonly string[] | undefined;
+}>;
+
+/** One `group:` or `passwd:` line of `/etc/nsswitch.conf`, or `undefined` when none was found. */
+type NsswitchLine = Readonly<{ database: string; sources: readonly string[] }>;
+
+/**
+ * Whether `/etc/nsswitch.conf` establishes that the group and passwd files are the whole story.
+ *
+ * `files` is the only source admitted. `systemd` is deliberately NOT admitted, even though it is the
+ * default on some distributions: `systemd-userdbd` answers group membership from user records the two
+ * files never see, which is exactly the member this rule could not read. Bracketed actions such as
+ * `[NOTFOUND=return]` steer a lookup and add no source, so they are ignored. A missing line, an
+ * unparseable line, or an unreadable file establishes nothing, and the exception is refused.
+ */
+export function nameServiceListsOnlyFiles(nsswitch: readonly string[] | undefined): boolean {
+  if (nsswitch === undefined) return false;
+  for (const database of ['passwd', 'group']) {
+    const line = nsswitchLine(nsswitch, database);
+    if (line === undefined) return false;
+    if (!line.sources.every((source) => source === 'files')) return false;
+    if (line.sources.length === 0) return false;
+  }
+  return true;
+}
+
+function nsswitchLine(lines: readonly string[], database: string): NsswitchLine | undefined {
+  for (const raw of lines) {
+    const source = (raw.split('#')[0] ?? '').trimStart();
+    const [name, ...rest] = source.split(/[\s:]+/);
+    if (name !== database) continue;
+    // A bracketed action steers a lookup and lists no source.
+    const sources = rest.filter((token) => token.length > 0 && !token.startsWith('['));
+    return { database, sources };
+  }
+  return undefined;
+}
+
+/** One `/etc/group` record. A line without a numeric gid cannot be used to judge membership. */
+type GroupRecord = Readonly<{ name: string; gid: number; members: readonly string[] }>;
+
+/** One `/etc/passwd` record. */
+type PasswdRecord = Readonly<{ name: string; uid: number; gid: number }>;
+
+function parseGroupRecord(line: string): GroupRecord | undefined {
+  const [name, , rawGid, rawMembers = ''] = line.split(':');
+  const gid = Number(rawGid);
+  if (name === undefined || name === '' || rawGid === '' || !Number.isInteger(gid))
+    return undefined;
+  return { name, gid, members: rawMembers.split(',').filter((member) => member.length > 0) };
+}
+
+function parsePasswdRecord(line: string): PasswdRecord | undefined {
+  const [name, , rawUid, rawGid] = line.split(':');
+  if (name === undefined || name === '') return undefined;
+  return { name, uid: Number(rawUid), gid: Number(rawGid) };
+}
+
+/** This process's own account: the uid and primary gid the kernel reports, and the name it maps to. */
+type CurrentAccount = Readonly<{
+  uid: number | undefined;
+  gid: number | undefined;
+  name: string | undefined;
 }>;
 
 /**
@@ -395,6 +494,9 @@ type HostGroupDatabase = Readonly<{
  * so it stays a valid script destination. Every other group stays outside the exception, and the rule
  * fails closed wherever completeness cannot be established:
  *
+ * - `/etc/nsswitch.conf` must exist, be readable, and name `files` as the ONLY source for both `passwd`
+ *   and `group`. Otherwise a name service could hold a member no file shows, and nothing here could see
+ *   it. {@link nameServiceListsOnlyFiles} says what a name service may say.
  * - Both database files must have been READ. An unreadable file is not an empty one, and an empty
  *   member list proves nothing.
  * - The gid must be the one this process holds as its PRIMARY group, which `getgid` answers from the
@@ -406,106 +508,113 @@ type HostGroupDatabase = Readonly<{
  *   while every local user holds it.
  * - No other passwd record may hold this gid as its primary group, and the caller's own record must
  *   exist there with this uid and this gid.
- *
- * What this cannot establish, stated plainly because it cuts BOTH ways: the two files are only this
- * machine's own view. A name service (LDAP, an NSS module) can hold a member of this gid, or a second
- * group with the number, that never appears in `/etc/passwd` or `/etc/group`. Such a host can be
- * refused a group-writable directory it genuinely owns, and it can also be ACCEPTED for one the name
- * service has opened to someone else — this rule cannot see that member and so cannot refuse it. The
- * caller's answer on a name-service host is a directory only they can write, at any mode.
  */
 export function privateGroupId(
   database: HostGroupDatabase,
-  current: Readonly<{ uid: number | undefined; gid: number | undefined; name: string | undefined }>,
+  current: CurrentAccount,
 ): number | undefined {
+  if (!nameServiceListsOnlyFiles(database.nsswitch)) return undefined;
+  const records = parseHostGroupDatabase(database);
+  if (records === undefined) return undefined;
+  return admittedPrivateGid(records, current);
+}
+
+/** The host's two databases, parsed, or `undefined` when either file could not be read. */
+type HostAccounts = Readonly<{
+  groups: readonly GroupRecord[];
+  passwd: readonly PasswdRecord[];
+}>;
+
+function parseHostGroupDatabase(database: HostGroupDatabase): HostAccounts | undefined {
+  if (!database.groups || !database.passwd) return undefined;
+  return {
+    groups: database.groups.flatMap((line) => {
+      const record = parseGroupRecord(line);
+      return record === undefined ? [] : [record];
+    }),
+    passwd: database.passwd.flatMap((line) => {
+      const record = parsePasswdRecord(line);
+      return record === undefined ? [] : [record];
+    }),
+  };
+}
+
+/** The decision the parsed databases allow: this gid, when it is the caller's own private group. */
+function admittedPrivateGid(accounts: HostAccounts, current: CurrentAccount): number | undefined {
   const { uid, gid, name } = current;
   if (uid === undefined || gid === undefined || name === undefined) return undefined;
-  if (!database.groups || !database.passwd) return undefined;
-  const own = database.passwd.find((line) => line.split(':')[0] === name);
-  if (!own) return undefined;
-  const [, , ownUid, ownGid] = own.split(':');
-  if (Number(ownUid) !== uid || Number(ownGid) !== gid) return undefined;
+  const own = accounts.passwd.find((record) => record.name === name);
+  if (own === undefined || own.uid !== uid || own.gid !== gid) return undefined;
+  const carrying = accounts.groups.filter((record) => record.gid === gid);
+  if (!carrying.some((record) => record.name === name)) return undefined;
   // EVERY record carrying this gid decides together: a directory group-writable by gid 1000 is writable
-  // by the members of each of them, however they are named. A group named after the user buys the
-  // exception only while no other record sharing the number reaches another user.
-  let namedForUser = false;
-  for (const line of database.groups) {
-    const [groupName, , rawGid, rawMembers = ''] = line.split(':');
-    const recordGid = Number(rawGid);
-    if (rawGid === '' || !Number.isInteger(recordGid) || recordGid !== gid) continue;
-    if (groupName === name) namedForUser = true;
-    const members = rawMembers.split(',').filter((member) => member.length > 0);
-    if (members.some((member) => !memberIsTrusted(member, database, name))) return undefined;
-  }
-  if (!namedForUser) return undefined;
-  const sharesPrimary = database.passwd.some((line) => {
-    const [other, , rawOtherUid, rawOtherGid] = line.split(':');
-    return other !== name && Number(rawOtherGid) === gid && Number(rawOtherUid) !== 0;
-  });
+  // by the members of each of them, however they are named.
+  const reachesAnybodyElse = carrying.some((record) =>
+    record.members.some((member) => !memberIsTrusted(member, accounts, name)),
+  );
+  if (reachesAnybodyElse) return undefined;
+  const sharesPrimary = accounts.passwd.some(
+    (record) => record.name !== name && record.gid === gid && record.uid !== 0,
+  );
   return sharesPrimary ? undefined : gid;
 }
 
 /** Whether a member of a candidate private group is the user or root, the two accounts the rule trusts. */
-function memberIsTrusted(member: string, database: HostGroupDatabase, name: string): boolean {
+function memberIsTrusted(member: string, accounts: HostAccounts, name: string): boolean {
   if (member === name) return true;
-  const record = database.passwd?.find((line) => line.split(':')[0] === member);
-  return record !== undefined && Number(record.split(':')[2]) === 0;
+  const record = accounts.passwd.find((other) => other.name === member);
+  return record !== undefined && record.uid === 0;
+}
+
+/**
+ * The account name this process's uid maps to, read from the host account database. The name comes from
+ * the same file the group records come from, so a caller standing in for that file and this name stays in
+ * agreement. No `os.userInfo()`: that answers from a different source than the records being judged.
+ */
+function readCurrentUser(
+  passwd: readonly string[] | undefined,
+  uid: number | undefined,
+): string | undefined {
+  if (passwd === undefined || uid === undefined) return undefined;
+  for (const line of passwd) {
+    const record = parsePasswdRecord(line);
+    if (record?.uid === uid) return record.name;
+  }
+  return undefined;
 }
 
 /** This process's identity and the private group its host databases establish, if any. */
 function readScriptTrust(): ScriptDestinationTrust {
+  const passwd = readSystemFile('/etc/passwd');
+  const uid = process.getuid?.();
   return {
-    uid: process.getuid?.() ?? -1,
+    uid: uid ?? -1,
     privateGid: privateGroupId(
-      { groups: readSystemFile('/etc/group'), passwd: readSystemFile('/etc/passwd') },
-      { uid: process.getuid?.(), gid: process.getgid?.(), name: readCurrentUser() },
+      {
+        groups: readSystemFile('/etc/group'),
+        passwd,
+        nsswitch: readSystemFile(NSSWITCH_FILE),
+      },
+      { uid, gid: process.getgid?.(), name: readCurrentUser(passwd, uid) },
     ),
   };
 }
 
-function readCurrentUser(): string | undefined {
-  try {
-    return os.userInfo().username;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Every directory from `directory` up to the filesystem root, nearest first. */
-function directoryChain(directory: string): string[] {
-  const chain: string[] = [];
-  let current = directory;
-  for (;;) {
-    chain.push(current);
-    const parent = parentDirectory(current);
-    if (parent === current) return chain;
-    current = parent;
-  }
-}
+/** The file that says which sources the host looks in for accounts and groups. */
+const NSSWITCH_FILE = '/etc/nsswitch.conf';
 
 /**
- * The parent of `directory`, as the kernel sees it, or the same path when there is no parent.
- *
- * `path.dirname` is not usable here: it normalizes, so it folds a `..` segment away. That is the one
- * simplification this rule may not make. Where `work` is a symbolic link, `.../work/../x` is a real
- * path that lands beside the link's TARGET, so the rule has to see `.../work` in the chain and judge
- * the link that stands there. Only a trailing separator is dropped, in linear time.
- */
-function parentDirectory(directory: string): string {
-  const trimmed = directory.endsWith('/') ? directory.slice(0, -1) : directory;
-  const separator = trimmed.lastIndexOf('/');
-  if (separator < 0) return trimmed;
-  return separator === 0 ? '/' : trimmed.slice(0, separator);
-}
-
-/**
- * The two ways a directory can be unsafe for a destination: someone else can change what is in it, or
- * someone else can create the entry the destination names.
+ * The ways a step of the walk can be unsafe: somebody else can change what is in that directory, they
+ * can create the entry the destination names, they can put the link there, or the step cannot be trusted
+ * at all.
  *
  * `foreign_owned` — some other user owns it and can chmod, empty, or repopulate it whatever its mode.
  * `world_writable` / `shared_group_writable` — its mode opens its contents to others.
  * `shared_parent` — nobody else can change what is in it today, but they can add the missing entry.
- * `planted_link` — a symbolic link someone else could have put in place of a directory.
+ * `planted_link` — a symbolic link another user could have put in place of a directory, or could replace.
+ * `link_loop_exceeded` — the walk expanded as many links as the kernel allows, so where it lands is not
+ * established. A loop is refused, never trusted.
+ * `not_a_directory` — a step of the path is something a publish cannot travel through.
  * `parent_replaced` — the directory the caller staged against is not the one it was.
  */
 export type ScriptAncestryExposure =
@@ -514,6 +623,8 @@ export type ScriptAncestryExposure =
   | 'shared_group_writable'
   | 'shared_parent'
   | 'planted_link'
+  | 'link_loop_exceeded'
+  | 'not_a_directory'
   | 'parent_replaced';
 
 /** What this process can rely on when it judges a directory: its identity and its private group. */

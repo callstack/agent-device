@@ -1,18 +1,16 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-// oxlint-disable-next-line no-restricted-imports -- the fixture's private group is named after os.userInfo()'s user, not a scratch path
-import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import {
   assertPrivateScriptDestination,
   othersCreateEntriesIn,
-  privateGroupId,
   publishDirectoryIdentity,
   publishScriptFileSync,
   untrustedAncestryExposure,
   untrustedLinkExposure,
+  MAX_SCRIPT_PATH_LINK_HOPS,
   type DirectoryAuthority,
 } from './atomic-file.ts';
 
@@ -22,10 +20,16 @@ const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 type Database = Readonly<{
   groups: readonly string[] | undefined;
   passwd: readonly string[] | undefined;
+  /** `undefined` means "only files"; an empty array means "the file cannot be read". */
+  nsswitch?: readonly string[] | undefined;
 }>;
 
 const realReadFileSync = fs.readFileSync;
-const currentUser = os.userInfo().username;
+/**
+ * The account the fixture's databases name for this process. `readCurrentUser()` reads it from
+ * `passwdFile` below, so the fixture and the rule agree without a second host lookup.
+ */
+const currentUser = process.env.USER ?? '';
 /** The unmocked `stat` calls, so a second fixture here never wraps the first one's mock. */
 const realLstatSync = fs.lstatSync.bind(fs);
 const realStatSync = fs.statSync.bind(fs);
@@ -52,8 +56,16 @@ function serveGroupDatabase(database: Database): void {
       if (!database.passwd) throw new Error('simulated unreadable passwd file');
       return `${database.passwd.join('\n')}\n`;
     }
+    if (file === '/etc/nsswitch.conf') return nsswitchContents(database.nsswitch);
     return realReadFileSync(file as never, options as never) as never;
   }) as typeof fs.readFileSync);
+}
+
+/** The name-service lines of the fixture host: `files` only, unless the test asks for more. */
+function nsswitchContents(sources: readonly string[] | undefined): string {
+  if (sources === undefined) return 'passwd: files\ngroup: files\n';
+  if (sources.length === 0) throw new Error('simulated unreadable nsswitch.conf');
+  return `${sources.join('\n')}\n`;
 }
 
 /** This host's user with a group of their own, and a team group that holds someone else. */
@@ -61,6 +73,7 @@ function hostDatabase(privateGid: number, sharedGid: number): Database {
   return {
     groups: ['root:x:0:root', `${currentUser}:x:${privateGid}:`, `team:x:${sharedGid}:ada`],
     passwd: [`root:x:0:0`, `${currentUser}:x:${currentUid}:${privateGid}:`],
+    nsswitch: undefined,
   };
 }
 
@@ -102,15 +115,6 @@ function directoryWith(directory: string, mode: number, gid = currentGid): strin
   fs.chownSync(directory, currentUid, gid);
   fs.chmodSync(directory, mode);
   return directory;
-}
-
-/**
- * Runs the rule as a different local user, so the ownership checks are exercised against real
- * directories owned by this test's actual user. Nothing else about the process moves: the modes stay
- * what they are on disk.
- */
-function asAnotherLocalUser(): void {
-  vi.spyOn(process, 'getuid').mockReturnValue(currentUid === 65534 ? 65535 : 65534);
 }
 
 function publish(destination: string, parentIdentity?: string): void {
@@ -266,8 +270,8 @@ skipOnWindows('refuses a link standing in a private-mode directory another user 
 
   expectUntrusted(
     () => assertPrivateScriptDestination(path.join(teammate, 'link', 'journey.ad')),
-    'planted_link',
-    path.join(teammate, 'link'),
+    'foreign_owned',
+    teammate,
   );
   expect(fs.readdirSync(mine)).toEqual([]);
 });
@@ -317,25 +321,196 @@ skipOnWindows('refuses a chain that leaves a shared directory through an interme
   expect(fs.readdirSync(chosen)).toEqual([]);
 });
 
-skipOnWindows('judges the directories a .. in the path walks through', () => {
+skipOnWindows('judges the directory a .. steps back into', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
-  // `<root>/shared/work/../x/journey.ad` is a path a caller can pass. Resolving it first answers
-  // `<root>/shared/x/journey.ad`, which is a DIFFERENT directory from the one that receives the file:
-  // the kernel walks `work` into the link's target and steps back from THERE, so the entry is created
-  // beside that target. The rule has to judge the components it walked, so the link is refused here.
+  // `<root>/private/link` points at `<root>/elsewhere/dir`, and the caller spells `<private>/link/../x`.
+  // The kernel walks `link` into its target and steps back from THERE, so the entry is created in
+  // `<root>/elsewhere`, not in `<root>/private`. Normalizing the spelling first would answer
+  // `<root>/private/x` and judge the wrong directory: `<elsewhere>` is open to others, `<private>` is not.
   const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
-  const published = directoryWith(path.join(directory, 'published'), 0o700);
-  const attacker = path.join(published, 'attacker');
-  fs.mkdirSync(attacker);
-  fs.symlinkSync(attacker, path.join(shared, 'work'));
+  const privateHome = directoryWith(path.join(directory, 'private'), 0o700);
+  const elsewhere = directoryWith(path.join(directory, 'elsewhere'), 0o777);
+  const dir = path.join(elsewhere, 'dir');
+  fs.mkdirSync(dir);
+  fs.symlinkSync(dir, path.join(privateHome, 'link'));
 
   expectUntrusted(
-    () => assertPrivateScriptDestination(`${shared}/work/../x/journey.ad`),
-    'planted_link',
-    path.join(shared, 'work'),
+    () => assertPrivateScriptDestination(`${privateHome}/link/../x/journey.ad`),
+    'world_writable',
+    elsewhere,
   );
-  expect(fs.readdirSync(attacker)).toEqual([]);
+  expect(fs.readdirSync(dir)).toEqual([]);
+});
+
+skipOnWindows('refuses the ground under a link that leads into a shared directory', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `<root>/shared` is 0777 and not sticky, `<root>/home/rec` is a link spelled `shared/mine/relay/subdir`
+  // whose `relay` is a link back into a private directory. Nothing at the destination looks wrong: the
+  // final chain is `<root>/shared/mine/chosen/subdir`, and every one of those is private-looking. What
+  // the walk sees is that getting there crossed `<root>/shared`, where any other local user can rename
+  // `mine` aside and put their own `relay` under it.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+  const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
+  fs.symlinkSync(chosen, path.join(mine, 'relay'));
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  fs.symlinkSync(path.join(shared, 'mine', 'relay', 'subdir'), path.join(home, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+  expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
+skipOnWindows('refuses the spelled spelling of a link the walk also follows', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The same target reached two ways has to answer the same way: spelling the shared directory out is
+  // refused, so arriving at it through a link cannot be accepted.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const work = path.join(home, 'work');
+  fs.mkdirSync(work);
+  fs.symlinkSync(shared, path.join(home, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(shared, 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+});
+
+skipOnWindows('applies .. to the directory the walk is in, not to the spelling', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `home/work -> priv/x`, `priv/y` is open to others, `home/y` is private. A lexical simplification of
+  // the spelling answers `home/y`, which is safe, so it accepts a write that lands in `priv/y`, where any
+  // local user can take the file. The kernel steps into the link and steps back from its TARGET.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const priv = directoryWith(path.join(directory, 'priv'), 0o700);
+  const privX = path.join(priv, 'x');
+  fs.mkdirSync(privX);
+  const privY = directoryWith(path.join(priv, 'y'), 0o777);
+  fs.mkdirSync(path.join(home, 'y'));
+  fs.symlinkSync(privX, path.join(home, 'work'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(`${home}/work/../y/journey.ad`),
+    'world_writable',
+    privY,
+  );
+  expect(fs.readdirSync(privY)).toEqual([]);
+});
+
+skipOnWindows('refuses a link whose target stands in ground another local user owns', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `~/rec -> <root>/tmp/relay -> ~/chosen`, and `relay` is another user's file in a sticky shared
+  // directory. Sticky or not, they can unlink it and put one of their own there, so the second hop is
+  // theirs to choose. The judgment the expanded hop used to skip is the one on the link itself.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
+  const tmp = directoryWith(path.join(directory, 'tmp'), 0o1777);
+  const relay = path.join(tmp, 'relay');
+  fs.symlinkSync(chosen, relay);
+  serveOwnership({ [tmp]: 0, [relay]: FOREIGN_UID });
+  fs.symlinkSync(relay, path.join(home, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    'planted_link',
+    relay,
+  );
+  expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
+skipOnWindows('follows a link whatever mode it carries, judging the directory it lands in', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // A link's own mode means nothing for access: the kernel reads its target. An alias at 0777 leading to
+  // a directory only this user can write is therefore safe, and the refusal has to come from the
+  // directory, not from the link's bits.
+  const directory = root();
+  const real = directoryWith(path.join(directory, 'real'), 0o700);
+  const alias = path.join(directory, 'current');
+  fs.symlinkSync(real, alias);
+  // `lchmod` on a link is what a mode-carrying alias looks like; where the host reports one mode for all
+  // links, as Linux does, the walk has to be moved by the directory it lands in either way.
+  try {
+    fs.lchmodSync(alias, 0o777);
+  } catch {
+    /* this host gives every link the same mode */
+  }
+
+  publish(path.join(alias, 'journey.ad'));
+
+  expect(fs.readFileSync(path.join(real, 'journey.ad'), 'utf8')).toBe('context\n');
+});
+
+skipOnWindows('refuses a link loop instead of trusting where the walk ran out', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const work = directoryWith(path.join(directory, 'work'), 0o700);
+  const loop = path.join(work, 'loop');
+  fs.symlinkSync(loop, loop);
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(loop, 'journey.ad')),
+    'link_loop_exceeded',
+    loop,
+  );
+  expect(fs.readdirSync(work)).toEqual(['loop']);
+});
+
+skipOnWindows('follows exactly as many link hops as the walk allows, and refuses one more', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const work = directoryWith(path.join(directory, 'work'), 0o700);
+  const real = directoryWith(path.join(directory, 'real'), 0o700);
+  // `link0 -> link1 -> ... -> <real>`, so the walk expands `count` links to reach the destination.
+  const chain = (count: number): string => {
+    let next = real;
+    for (let hop = count - 1; hop >= 0; hop -= 1) {
+      const link = path.join(work, `link${hop}`);
+      fs.rmSync(link, { force: true });
+      fs.symlinkSync(next, link);
+      next = link;
+    }
+    return next;
+  };
+
+  publish(path.join(chain(MAX_SCRIPT_PATH_LINK_HOPS), 'journey.ad'));
+  expect(fs.existsSync(path.join(real, 'journey.ad'))).toBe(true);
+  fs.rmSync(path.join(real, 'journey.ad'), { force: true });
+
+  expectUntrusted(
+    () =>
+      assertPrivateScriptDestination(path.join(chain(MAX_SCRIPT_PATH_LINK_HOPS + 1), 'journey.ad')),
+    'link_loop_exceeded',
+    path.join(work, `link${MAX_SCRIPT_PATH_LINK_HOPS}`),
+  );
+  expect(fs.readdirSync(real)).toEqual([]);
+});
+
+skipOnWindows('refuses a path component that cannot carry a publish', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  const directory = root();
+  const work = directoryWith(path.join(directory, 'work'), 0o700);
+  const blocker = path.join(work, 'blocker');
+  fs.writeFileSync(blocker, 'not a directory\n');
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(blocker, 'journey.ad')),
+    'not_a_directory',
+    blocker,
+  );
 });
 
 skipOnWindows('refuses a directory its owner opened up while the file was staged', () => {
@@ -404,8 +579,10 @@ skipOnWindows('follows a symbolic link inside a directory only this user can wri
   expect(fs.existsSync(path.join(real, 'journey.ad'))).toBe(true);
 });
 
-skipOnWindows('refuses a symbolic link planted in a directory others can add entries to', () => {
+skipOnWindows('refuses a link planted in a directory others can add entries to', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // The shared ground is refused where the walk enters it, one step before the link inside it: that
+  // directory is itself the exposure, since anyone can rename `work` aside as well as plant it.
   const directory = root();
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const attacker = path.join(directory, 'attacker');
@@ -414,8 +591,8 @@ skipOnWindows('refuses a symbolic link planted in a directory others can add ent
 
   expectUntrusted(
     () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
-    'planted_link',
-    path.join(shared, 'work'),
+    'world_writable',
+    shared,
   );
   expect(fs.readdirSync(attacker)).toEqual([]);
 });
@@ -462,17 +639,23 @@ skipOnWindows(
   'refuses a symbolic link another local user owns in a sticky shared directory',
   () => {
     serveGroupDatabase(hostDatabase(currentGid, 4321));
-    const shared = directoryWith(path.join(root(), 'shared'), 0o1777);
-    const attacker = path.join(root(), 'attacker');
+    // The link's OWNER is the whole question, so it is the fixture's: root holds the sticky directory and
+    // somebody else owns the link. Moving only the caller's uid would decide the test by the accident of
+    // who runs the suite, and would say nothing when the suite runs as root.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
+    const attacker = path.join(directory, 'attacker');
     fs.mkdirSync(attacker);
-    fs.symlinkSync(attacker, path.join(shared, 'work'));
-    asAnotherLocalUser();
+    const link = path.join(shared, 'work');
+    fs.symlinkSync(attacker, link);
+    serveOwnership({ [shared]: 0, [link]: FOREIGN_UID });
 
     expectUntrusted(
       () => assertPrivateScriptDestination(path.join(shared, 'work', 'journey.ad')),
       'planted_link',
-      path.join(shared, 'work'),
+      link,
     );
+    expect(fs.readdirSync(attacker)).toEqual([]);
   },
 );
 
@@ -686,105 +869,4 @@ test('names a directory another user owns, whatever its mode', () => {
 test('names no directory this user or root owns that others cannot write', () => {
   expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o755 }), TRUST)).toBe(false);
   expect(othersCreateEntriesIn(directoryOf({ uid: 0, mode: 0o1777 }), TRUST)).toBe(true);
-});
-
-// --- privateGroupId: the one group shape the exception admits ---
-
-const ADA = { uid: 1000, gid: 1000, name: 'ada' };
-
-function database(groups: readonly string[] | undefined, passwd: readonly string[] | undefined) {
-  return { groups, passwd };
-}
-
-const PRIVATE = ['ada:x:1000:', 'staff:x:20:root'];
-const PRIVATE_PASSWD = ['ada:x:1000:1000:', 'root:x:0:0'];
-
-test('admits the group named after the user, holding only them, as their primary group', () => {
-  expect(privateGroupId(database(PRIVATE, PRIVATE_PASSWD), ADA)).toBe(1000);
-});
-
-test('admits root named among the members, the account the whole rule trusts', () => {
-  expect(
-    privateGroupId(database(['ada:x:1000:root'], ['ada:x:1000:1000:', 'root:x:0:0']), ADA),
-  ).toBe(1000);
-});
-
-test('refuses a second group carrying the same gid when it lists another user', () => {
-  // `ada:x:1000:` looks private on its own, and the group named after the user is the only one the
-  // exception used to read. A directory group-writable by gid 1000 is writable by grace too, because
-  // `team` carries the same number.
-  expect(
-    privateGroupId(
-      database(
-        ['ada:x:1000:', 'team:x:1000:grace'],
-        ['ada:x:1000:1000:', 'grace:x:1001:1001:', 'root:x:0:0'],
-      ),
-      ADA,
-    ),
-  ).toBeUndefined();
-});
-
-test('admits a second group carrying the same gid when it reaches nobody else', () => {
-  expect(
-    privateGroupId(
-      database(['ada:x:1000:', 'ada-alias:x:1000:'], ['ada:x:1000:1000:', 'root:x:0:0']),
-      ADA,
-    ),
-  ).toBe(1000);
-});
-
-test('refuses it once a second group sharing the gid has another user as its primary group', () => {
-  expect(
-    privateGroupId(
-      database(['ada:x:1000:', 'team:x:1000:'], ['ada:x:1000:1000:', 'grace:x:1001:1000:']),
-      ADA,
-    ),
-  ).toBeUndefined();
-});
-
-test('refuses it once another user is a member', () => {
-  expect(
-    privateGroupId(
-      database(['ada:x:1000:grace'], ['ada:x:1000:1000:', 'grace:x:1001:1001:', 'root:x:0:0']),
-      ADA,
-    ),
-  ).toBeUndefined();
-});
-
-test('refuses it once another user has it as their primary group', () => {
-  expect(
-    privateGroupId(database(['ada:x:1000:'], ['ada:x:1000:1000:', 'grace:x:1001:1000:']), ADA),
-  ).toBeUndefined();
-});
-
-test('refuses a group that is not the primary group of the user, however few members it lists', () => {
-  expect(privateGroupId(database(['ada:x:4321:'], ['ada:x:1000:1000:']), ADA)).toBeUndefined();
-});
-
-test('refuses a group that does not carry the name of the user', () => {
-  expect(privateGroupId(database(['team:x:1000:'], ['ada:x:1000:1000:']), ADA)).toBeUndefined();
-});
-
-test('refuses it when the group file cannot be read', () => {
-  expect(privateGroupId(database(undefined, PRIVATE_PASSWD), ADA)).toBeUndefined();
-});
-
-test('refuses it when the passwd file cannot be read', () => {
-  expect(privateGroupId(database(PRIVATE, undefined), ADA)).toBeUndefined();
-});
-
-test('refuses it when the user has no passwd record', () => {
-  expect(privateGroupId(database(PRIVATE, ['root:x:0:0']), ADA)).toBeUndefined();
-});
-
-test('refuses it when the passwd record names another uid or gid', () => {
-  const other = { uid: 1002, gid: 1000, name: 'ada' };
-  expect(privateGroupId(database(PRIVATE, PRIVATE_PASSWD), other)).toBeUndefined();
-});
-
-test('gives a caller without a full identity no private group', () => {
-  const groups = database(PRIVATE, PRIVATE_PASSWD);
-  expect(privateGroupId(groups, { uid: undefined, gid: 1000, name: 'ada' })).toBeUndefined();
-  expect(privateGroupId(groups, { uid: 1000, gid: undefined, name: 'ada' })).toBeUndefined();
-  expect(privateGroupId(groups, { uid: 1000, gid: 1000, name: undefined })).toBeUndefined();
 });

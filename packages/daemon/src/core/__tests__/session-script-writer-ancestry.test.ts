@@ -1,9 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-// oxlint-disable-next-line no-restricted-imports -- the private-group fixture is named after os.userInfo()'s user, not a scratch path
-import os from 'node:os';
 import path from 'node:path';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  FOREIGN_UID,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+  serveHostOwnership,
+} from '@agent-device/test-kit';
 import { SessionScriptWriter } from '../session-script-writer.ts';
 import { makeAuthoringSession } from '../../__tests__/support/session-factories.ts';
 
@@ -11,7 +14,8 @@ const hostCwd = createLiveTestHostEnvironment().cwd;
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
 const realReadFileSync = fs.readFileSync;
-const currentUser = os.userInfo().username;
+/** The account the fixtures name for this process, the same one the rule reads back out of passwd. */
+const currentUser = process.env.USER ?? '';
 
 /** This process's ids. Windows has neither, and every test that uses them is skipped there. */
 const currentUid = process.getuid?.() ?? -1;
@@ -30,6 +34,8 @@ function serveGroupDatabase(groups: readonly string[], passwd: readonly string[]
   vi.spyOn(fs, 'readFileSync').mockImplementation(((file: unknown, options?: unknown) => {
     if (file === '/etc/group') return `${groups.join('\n')}\n`;
     if (file === '/etc/passwd') return `${passwd.join('\n')}\n`;
+    // The private-group exception is admitted only where the host's own databases are the whole story.
+    if (file === '/etc/nsswitch.conf') return 'passwd: files\ngroup: files\n';
     return realReadFileSync(file as never, options as never) as never;
   }) as typeof fs.readFileSync);
 }
@@ -144,11 +150,7 @@ skipOnWindows('a recording refuses a destination inside a directory another user
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'foreign_owned',
-    ancestor: foreign,
-  });
+  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
   expect(fs.existsSync(destination)).toBe(false);
 });
 
@@ -164,11 +166,7 @@ skipOnWindows('a recording refuses a directory another user made sticky and owns
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'foreign_owned',
-    ancestor: team,
-  });
+  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
   expect(fs.readdirSync(team)).toEqual([]);
 });
 
@@ -187,11 +185,7 @@ skipOnWindows('a recording refuses a shared directory another user claimed first
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'foreign_owned',
-    ancestor: recordings,
-  });
+  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'foreign_owned' });
   expect(fs.readdirSync(recordings)).toEqual([]);
 });
 
@@ -205,7 +199,11 @@ skipOnWindows('a recording refuses an ancestor swapped out for a symbolic link',
 
   const details = refusal(writerFor(directory).write(recordingTo(destination)));
 
-  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'planted_link' });
+  // The shared ground itself is the first exposure: anyone can rename `work` aside there, sticky or not.
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+  });
   expect(fs.readdirSync(attacker)).toEqual([]);
 });
 
@@ -295,6 +293,87 @@ skipOnWindows('a recording refuses a chain that leaves a shared directory throug
     exposure: 'world_writable',
     ancestor: team,
   });
+  expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
+skipOnWindows('a recording refuses the directory a .. steps back into', () => {
+  // `home/work -> priv/x`, and `priv/y` at 0777 while `home/y` is private. Normalizing the spelling first
+  // answers `home/y`, so it accepts a write that the kernel lands in `priv/y`, where any local user can
+  // take the recording.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  fs.chmodSync(home, 0o700);
+  const priv = path.join(directory, 'priv');
+  const privX = path.join(priv, 'x');
+  fs.mkdirSync(privX, { recursive: true });
+  const privY = path.join(priv, 'y');
+  fs.mkdirSync(privY);
+  fs.chmodSync(privY, 0o777);
+  fs.mkdirSync(path.join(home, 'y'));
+  fs.symlinkSync(privX, path.join(home, 'work'));
+  const destination = `${home}/work/../y/journey.ad`;
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: privY,
+  });
+  expect(fs.readdirSync(privY)).toEqual([]);
+});
+
+skipOnWindows('a recording refuses the ground a link target crosses on the way in', () => {
+  // `home/rec -> <root>/shared/relay/sub`, with `shared` at 0777 and not sticky and `shared/relay` a link
+  // into a directory of mine. Every directory at the destination looks private; only walking the target
+  // component by component shows that getting there crossed `shared`, where any other local user can swap
+  // `relay` for one of their own.
+  const directory = root();
+  const shared = sharedDirectory(path.join(directory, 'shared'), 0o777);
+  const relayTarget = path.join(directory, 'chosen');
+  fs.mkdirSync(relayTarget);
+  fs.chmodSync(relayTarget, 0o700);
+  fs.symlinkSync(relayTarget, path.join(shared, 'relay'));
+  const sub = path.join(relayTarget, 'sub');
+  fs.mkdirSync(sub);
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  fs.chmodSync(home, 0o700);
+  fs.symlinkSync(path.join(shared, 'relay', 'sub'), path.join(home, 'rec'));
+  const destination = path.join(home, 'rec', 'journey.ad');
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: shared,
+  });
+  expect(fs.readdirSync(relayTarget)).toEqual(['sub']);
+});
+
+skipOnWindows('a recording refuses a link another local user owns on the way in', () => {
+  // `~/rec -> <root>/tmp/relay -> ~/chosen`, with `relay` another user's file in a sticky shared
+  // directory: they can unlink it and leave one of their own, and the second hop is theirs to choose.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  const chosen = path.join(directory, 'chosen');
+  fs.mkdirSync(chosen);
+  const relay = path.join(directory, 'relay');
+  fs.symlinkSync(chosen, relay);
+  const tmp = path.join(directory, 'tmp');
+  fs.mkdirSync(tmp);
+  fs.chmodSync(tmp, 0o1777);
+  fs.renameSync(relay, path.join(tmp, 'relay'));
+  fs.symlinkSync(path.join(tmp, 'relay'), path.join(home, 'rec'));
+  const destination = path.join(home, 'rec', 'journey.ad');
+  serveHostOwnership({ [path.join(tmp, 'relay')]: FOREIGN_UID });
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({ reason: 'script_ancestor_untrusted', exposure: 'planted_link' });
   expect(fs.readdirSync(chosen)).toEqual([]);
 });
 

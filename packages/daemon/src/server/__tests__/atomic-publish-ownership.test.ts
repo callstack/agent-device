@@ -28,11 +28,6 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
   }
 });
 
-// Which entry point the session script publisher dispatches through is proven by behaviour, not by its
-// source text: `packages/daemon/src/core/__tests__/session-script-writer-ancestry.test.ts` drives a real
-// write and expects the typed ancestry refusals and the 0600 file, which only the destination-ancestry
-// owner (`publishScriptFileSync`, #4565) produces.
-
 // The process lock publishes a file and reclaims a directory, which are two different
 // claims of ownership: only the first belongs to the publication owners above.
 test('the process lock publishes its owner record without publishing files by hand', () => {

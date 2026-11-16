@@ -195,9 +195,11 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
 test('ordinary close reports a filesystem failure of its script write instead of a quiet success', () => {
   const root = mkdtempForTestSync('agent-device-session-close-script-fs-');
   roots.push(root);
-  // A regular file where the target directory must be: publishing into it fails with ENOTDIR.
+  // A directory this user owns but cannot write: publishing into it fails with EACCES, and the ancestry
+  // rule has nothing to refuse there, so the caller sees the filesystem's own failure.
   const blocker = path.join(root, 'blocker');
-  fs.writeFileSync(blocker, '');
+  fs.mkdirSync(blocker);
+  fs.chmodSync(blocker, 0o500);
   const targetPath = path.join(blocker, 'flow.ad');
   const { req, ref, sessionStore } = setup(
     'fs-failure',

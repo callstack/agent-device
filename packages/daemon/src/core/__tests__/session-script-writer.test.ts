@@ -696,8 +696,11 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
 test('an ordinary recording returns a filesystem write failure as a typed error, never a quiet skip', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-fs-failure-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+  // A directory this user owns but cannot write: the ancestry rule has nothing to refuse there, so the
+  // failure the caller sees is the filesystem's own, not an ancestry verdict.
   const blocker = path.join(root, 'blocker');
-  fs.writeFileSync(blocker, '');
+  fs.mkdirSync(blocker);
+  fs.chmodSync(blocker, 0o500);
   const outPath = path.join(blocker, 'flow.ad');
   const session = makeAuthoringSession('default', {
     scriptPublication: authoringPublication('armed', { path: outPath }),
