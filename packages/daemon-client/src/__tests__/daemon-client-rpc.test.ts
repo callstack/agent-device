@@ -365,6 +365,77 @@ test('a failed remote batch delivers nothing for a step the caller never submitt
   }
 });
 
+/**
+ * A failed batch reports the step that failed and how many steps ran. The runner puts an entry in
+ * `partialResults` ONLY for a step it finished before the failure, so successful entries for steps at
+ * or after the reported failure describe work that never happened. Neither a download nor the end of
+ * the caller's recording may follow from them: `[wait, close, snapshot]` that reports step 3 after 0
+ * executed steps still owes the caller its file and its record.
+ */
+test('a failed remote batch whose step report disagrees with its entries delivers nothing', async () => {
+  const server = scriptServer({ v1: 'open Demo\n', final: 'open Demo\nwait 100\nclose\n' });
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const root = fs.realpathSync(mkdtempForTestSync('rpc-batch-forged-'));
+  const stateDir = path.join(root, 'state');
+  const destination = path.join(root, 'journey.ad');
+  const host = createTestHostEnvironment();
+  try {
+    const publicationId = await openRemoteRecording(baseUrl, stateDir, destination);
+
+    let rejected: unknown;
+    await new Promise<void>((resolve) => {
+      handleDaemonHttpResponseBody(
+        JSON.stringify({
+          error: {
+            data: {
+              code: 'COMMAND_FAILED',
+              message: 'Batch failed at step 3 (snapshot): snapshot failed',
+              details: {
+                // Says nothing finished, and attaches a finished close of this client's publication.
+                step: 3,
+                command: 'snapshot',
+                executed: 0,
+                total: 3,
+                partialResults: [
+                  { step: 1, command: 'wait', ok: true, durationMs: 1, data: { waited: true } },
+                  {
+                    step: 2,
+                    command: 'close',
+                    ok: true,
+                    durationMs: 1,
+                    data: {
+                      scriptPublicationId: publicationId,
+                      artifacts: [scriptArtifact('final', 2, publicationId)],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        {
+          info: { token: 'daemon-token', pid: 1, baseUrl },
+          req: batchRequest('wait', 'close', 'snapshot'),
+          stateDir,
+          host,
+          resolve: () => resolve(),
+          reject: (error) => {
+            rejected = error;
+            resolve();
+          },
+        },
+      );
+    });
+
+    assert.ok(rejected instanceof AppError, `Expected the batch error, got ${String(rejected)}`);
+    // A close the caller never ran writes nothing and retires nothing.
+    assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
+    assert.equal(activeScriptRecords(stateDir).length, 1);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 function batchRequest(...commands: string[]): DaemonWireRequest {
   return {
     token: 'daemon-token',

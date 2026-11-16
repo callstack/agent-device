@@ -8,7 +8,6 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '@agent-device/kernel/record';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
@@ -16,6 +15,7 @@ import {
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
+import type { DeliveryContext as BatchDeliveryContext } from './remote-batch-script-delivery.ts';
 import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { withUploadPreparationDeadline } from './upload-stream.ts';
@@ -483,14 +483,7 @@ export async function materializeRemoteArtifacts(
   // response untouched when no step carries a script.
   if (req.command === BATCH_COMMAND) {
     const { deliverRemoteBatchScripts } = await import('./remote-batch-script-delivery.ts');
-    return await deliverRemoteBatchScripts(
-      endpoint,
-      req,
-      response,
-      stateDir,
-      downloadRemoteArtifact,
-      isSessionScriptArtifact,
-    );
+    return await deliverRemoteBatchScripts(batchDeliveryContext(endpoint, req, stateDir), response);
   }
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
@@ -506,17 +499,17 @@ export async function materializeRemoteArtifacts(
 }
 
 /**
- * Delivers the session scripts of the steps a FAILED remote `batch` completed.
+ * Delivers the session script of the steps a FAILED remote `batch` had completed.
  *
- * The runner reports the steps that finished in the error's `details.partialResults`, so a
- * recording that an earlier step closed would otherwise be lost just because a later step failed —
- * `[wait, close, snapshot]` that fails on `snapshot` would keep neither the final script nor the
- * retirement of the caller's record. The steps are delivered under the plan THIS client submitted,
- * exactly as in a successful batch, and the caller keeps its own error either way.
+ * The runner reports the finished steps in the error's `details.partialResults`, so a recording that an
+ * earlier step closed would be lost just because a later step failed. The completed prefix is derived
+ * from the plan THIS client submitted and cross-checked against the step the error names, so entries
+ * for steps at or after the failure authorize neither a download nor the retirement of the caller's
+ * record. The caller keeps its own error either way.
  *
- * Answers the fields the error should disclose about that delivery — the steps' warnings and the
- * first typed delivery failure — which a batch error's reader prints alongside the failure. Never
- * throws: a request that the daemon answered still has to settle with its own error.
+ * Answers the fields the error should disclose about that delivery — the file it wrote, or a typed
+ * failure and its warning — which a batch error's reader prints alongside the failure. Never throws: a
+ * request the daemon answered still has to settle with its own error.
  */
 export async function materializeRemoteBatchPartialArtifacts(
   info: DaemonArtifactEndpoint,
@@ -524,42 +517,43 @@ export async function materializeRemoteBatchPartialArtifacts(
   details: Record<string, unknown> | undefined,
   stateDir: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const results = readSubmittedStepResults(details);
-  if (!info.baseUrl || req.command !== BATCH_COMMAND || results.length === 0) return undefined;
+  if (!info.baseUrl || req.command !== BATCH_COMMAND || !Array.isArray(details?.partialResults))
+    return undefined;
   try {
     const { deliverSubmittedStepScripts, readBatchPlan, withBatchDisclosure } =
       await import('./remote-batch-script-delivery.ts');
-    const delivered = await deliverSubmittedStepScripts(
-      { baseUrl: info.baseUrl, token: info.token },
-      req,
-      stateDir,
-      downloadRemoteArtifact,
-      isSessionScriptArtifact,
+    const disclosure = await deliverSubmittedStepScripts(
+      batchDeliveryContext({ baseUrl: info.baseUrl, token: info.token }, req, stateDir),
       readBatchPlan(req),
-      results,
+      details,
     );
-    return delivered.disclosure || delivered.results
-      ? {
-          ...details,
-          ...(delivered.results ? { partialResults: delivered.results } : {}),
-          ...withBatchDisclosure(details, delivered.disclosure),
-        }
-      : undefined;
+    return disclosure ? { ...details, ...withBatchDisclosure(details, disclosure) } : undefined;
   } catch {
     return undefined;
   }
 }
 
-function readSubmittedStepResults(
-  details: Record<string, unknown> | undefined,
-): Array<Record<string, unknown>> {
-  const partialResults = details?.partialResults;
-  if (!Array.isArray(partialResults)) return [];
-  return partialResults.filter((result): result is Record<string, unknown> => isRecord(result));
-}
-
 /** Command name of the request that runs several steps under one response. */
 const BATCH_COMMAND = 'batch';
+
+/**
+ * What the batch owner needs to deliver one payload: this client's endpoint and request, the file
+ * owner it writes under, and the two artifact helpers it may use. The owner never learns where a
+ * destination comes from; it is handed this client's own record of it.
+ */
+function batchDeliveryContext(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  stateDir: string,
+): BatchDeliveryContext {
+  return {
+    endpoint,
+    req,
+    stateDir,
+    download: downloadRemoteArtifact,
+    isScriptArtifact: isSessionScriptArtifact,
+  };
+}
 
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,

@@ -2,140 +2,69 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { downloadRemoteArtifact } from './daemon-artifacts.ts';
-import type { SessionScriptDelivery } from './session-script-destination.ts';
 
 /**
- * Delivers the session scripts a successful `batch` answer carries, in step order, and reports what
- * did not arrive on the batch's own payload.
+ * Delivers the session script a remote `batch` answer carries: AT MOST ONE version, the newest one
+ * this client's plan authorizes, wherever the answer names it — in a finished step's result or on the
+ * batch payload itself.
  *
- * A step's `data` is what that command would have answered alone, so the session-script owner runs
- * it under its own command name: a `close` step retires this client's record, and a step that only
- * records a version leaves the record open for the next one. The batch's own payload carries the
- * version the daemon stamped after the last step, so it is delivered last — after a closing step
- * retired the record, which drops it instead of writing a stale one. The plan bound, the download
- * bound and the destination rule are `deliverSubmittedStepScripts`' and `deliverPayloadScripts`'
- * own, and the batch's answer is built from what they report.
+ * Every version is the whole recording from the `open`, so an older one is worth nothing and one batch
+ * never owes more than a single download. The batch's outcome is not changed here: a successful batch
+ * stays successful, a failed one keeps its own error, and a version that cannot be saved is reported
+ * the same way a single response reports it.
+ *
+ * The plan THIS client submitted is the only authority, never the answer. A step the caller never ran,
+ * or never finished, authorizes no download and no retirement, and a batch request that submitted no
+ * plan authorizes nothing at all.
  */
 export async function deliverRemoteBatchScripts(
-  endpoint: Readonly<{ baseUrl: string; token: string }>,
-  req: DaemonWireRequest,
+  context: DeliveryContext,
   response: Extract<DaemonResponse, { ok: true }>,
-  stateDir: string,
-  download: typeof downloadRemoteArtifact,
-  isScriptArtifact: (artifact: DaemonArtifact | undefined) => boolean,
 ): Promise<DaemonResponse> {
-  const plan = readBatchPlan(req);
-  const steps = await deliverSubmittedStepScripts(
-    endpoint,
-    req,
-    stateDir,
-    download,
-    isScriptArtifact,
-    plan,
-    readBatchResults(response.data),
-  );
-  if (steps.results === undefined && steps.disclosure === undefined) return response;
-  const data = {
-    ...response.data,
-    ...(steps.results ? { results: steps.results } : {}),
-    ...withBatchDisclosure(response.data, steps.disclosure),
-  };
-  // The batch's own payload last: it names the newest revision, and a closing step has already
-  // retired the record, so a script that arrived after the close is dropped rather than rewritten.
-  const deliveredPayload = await deliverPayloadScripts(
-    endpoint,
-    req,
-    stateDir,
-    download,
-    isScriptArtifact,
-    { command: req.command, data, revisions: steps.revisions },
-  );
-  return { ok: true, data: deliveredPayload ?? data };
+  const data = isRecord(response.data) ? response.data : {};
+  const plan = readBatchPlan(context.req);
+  const disclosure = await deliverBatchScript(context, plan, data, plan.length);
+  return disclosure === undefined
+    ? response
+    : { ok: true, data: { ...data, ...withBatchDisclosure(data, disclosure) } };
 }
 
 /**
- * Delivers the session scripts of one batch's successful steps, in order, and answers the delivered
- * entries plus what the batch payload must disclose.
+ * Delivers the session script of the steps a FAILED remote `batch` had completed, and answers the
+ * fields its error should disclose about that delivery.
  *
- * The plan THIS client submitted is the only authority here, never the answer: an entry must be the
- * plan's own command at the plan's own position and a step that finished. An entry that is anything
- * else is reported exactly as the daemon answered it — no download, no destination, and no
- * retirement — so a daemon cannot retire the caller record or spend the caller's downloads by naming
- * a step the caller never ran. A batch request that submitted no plan authorizes nothing at all.
- *
- * The successful steps of a FAILED batch reach this too: the runner reports them in
- * `error.details.partialResults`, and a recording a completed step closed must still reach the caller
- * file even though a later step failed. The caller keeps its own error either way.
+ * The runner reports the finished steps in the error's `details.partialResults`, so a recording that an
+ * earlier step closed would be lost just because a later step failed. The completed prefix is derived
+ * from the plan and cross-checked against the step the error names, so entries for steps at or after
+ * the failure — which the runner never produces — authorize neither a download nor the retirement of
+ * the caller's record.
  */
 export async function deliverSubmittedStepScripts(
-  endpoint: Readonly<{ baseUrl: string; token: string }>,
-  req: DaemonWireRequest,
-  stateDir: string,
-  download: typeof downloadRemoteArtifact,
-  isScriptArtifact: (artifact: DaemonArtifact | undefined) => boolean,
+  context: DeliveryContext,
   plan: readonly string[],
-  results: ReadonlyArray<Record<string, unknown>>,
-): Promise<{
-  results?: Array<Record<string, unknown>>;
-  disclosure?: BatchDisclosure;
-  revisions: ScriptRevisions;
-}> {
-  const nextResults: Array<Record<string, unknown>> = [];
-  const disclosure: BatchDisclosure = { warnings: [] };
-  const revisions: ScriptRevisions = new Set();
-  let touched = false;
-  for (const [index, result] of results.entries()) {
-    const plannedCommand = plan[index] ?? '';
-    // An entry the plan does not authorize is reported exactly as the daemon answered it: no
-    // download, no destination, and no retirement.
-    if (plannedCommand === '' || !isSubmittedStep(result, plannedCommand, index)) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'session_script_batch_step_unauthorized',
-        data: { session: req.session, step: index + 1 },
-      });
-      nextResults.push(result);
-      continue;
-    }
-    const delivered = await deliverPayloadScripts(
-      endpoint,
-      req,
-      stateDir,
-      download,
-      isScriptArtifact,
-      {
-        command: plannedCommand,
-        // A copy: the session-script owner narrows the payload it is handed, and the daemon's own
-        // response object stays as it arrived.
-        data: isRecord(result.data) ? { ...result.data } : undefined,
-        revisions,
-      },
-    );
-    // A step's own disclosure rides the batch payload whether the daemon wrote it or this client did,
-    // and whether or not the step's payload itself changed.
-    collectBatchDisclosure(
-      disclosure,
-      isRecord(delivered) ? delivered : isRecord(result.data) ? result.data : {},
-    );
-    if (delivered === undefined) {
-      nextResults.push(result);
-      continue;
-    }
-    touched = true;
-    nextResults.push({ ...result, data: delivered });
-  }
-  return {
-    ...(touched ? { results: nextResults } : {}),
-    ...(disclosure.warnings.length > 0 || disclosure.failure !== undefined ? { disclosure } : {}),
-    revisions,
-  };
+  details: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  return await deliverBatchScript(
+    context,
+    plan,
+    { results: details?.partialResults },
+    readCompletedStepCount(plan, details),
+  );
 }
+
+/** What it takes to deliver one batch's script: this client's own endpoint, request and file owner. */
+export type DeliveryContext = Readonly<{
+  endpoint: Readonly<{ baseUrl: string; token: string }>;
+  req: DaemonWireRequest;
+  stateDir: string;
+  download: typeof downloadRemoteArtifact;
+  isScriptArtifact: (artifact: DaemonArtifact | undefined) => boolean;
+}>;
 
 /**
  * The commands the caller submitted, in step order. A batch request with no plan authorizes nothing:
- * with no way to tell a real step from a planted one, the answer's step entries are left alone.
+ * with no way to tell a real step from a planted one, the answer is left alone.
  */
 export function readBatchPlan(req: DaemonWireRequest): string[] {
   const steps = req.flags?.batchSteps;
@@ -143,180 +72,262 @@ export function readBatchPlan(req: DaemonWireRequest): string[] {
   return steps.map((step) => normalizeStepCommand(isRecord(step) ? step.command : undefined));
 }
 
-/** The versions of this response already taken past the owner, keyed publication and revision. */
-type ScriptRevisions = Set<string>;
+/**
+ * How many of the caller's steps had finished before a failure. The runner reports both the failing
+ * step's number and the number of steps it executed; the two must agree on one boundary before any
+ * step entry counts as finished, so a report that does not describe a step this client ran authorizes
+ * nothing.
+ */
+function readCompletedStepCount(
+  plan: readonly string[],
+  failure: Record<string, unknown> | undefined,
+): number {
+  if (failure === undefined) return plan.length;
+  const step = failure.step;
+  const executed = failure.executed;
+  if (
+    typeof step !== 'number' ||
+    typeof executed !== 'number' ||
+    !Number.isSafeInteger(step) ||
+    !Number.isSafeInteger(executed) ||
+    step < 1 ||
+    executed < 0 ||
+    step !== executed + 1
+  )
+    return 0;
+  return Math.min(executed, plan.length);
+}
 
-/** What a batch's steps disclose: every step's warning text, and the first typed failure. */
-type BatchDisclosure = {
-  warnings: string[];
-  failure?: Record<string, unknown>;
-};
+/** One plan step this client ran and finished, with the payload the daemon answered for it. */
+type FinishedStep = Readonly<{ command: string; data: Record<string, unknown> | undefined }>;
 
 /**
- * Whether one answer entry is the plan's own step at the plan's own position. The runner records the
- * step's number and command on its result, so an entry must name the plan's command at that position
- * and must be a step that finished successfully.
+ * The plan's own finished steps within the completed prefix, in plan order. Only the prefix is read, so
+ * the work is bounded by the plan the caller submitted rather than by what the answer carries. An entry
+ * that is not the plan's own command at the plan's own position, or that did not finish, is not
+ * authorized and is never read for a script.
  */
-function isSubmittedStep(
-  result: Record<string, unknown>,
+function readFinishedSteps(
+  data: Record<string, unknown>,
+  plan: readonly string[],
+  completed: number,
+): FinishedStep[] {
+  const results = Array.isArray(data.results) ? data.results : [];
+  const finished: FinishedStep[] = [];
+  for (let index = 0; index < completed; index += 1) {
+    const command = plan[index] ?? '';
+    const result = results[index];
+    if (isFinishedStep(result, command, index))
+      finished.push({ command, data: isRecord(result.data) ? result.data : undefined });
+  }
+  return finished;
+}
+
+function isFinishedStep(
+  result: unknown,
   plannedCommand: string,
   index: number,
-): boolean {
+): result is Record<string, unknown> {
   return (
+    plannedCommand !== '' &&
+    isRecord(result) &&
     result.step === index + 1 &&
-    normalizeStepCommand(result.command) === plannedCommand &&
-    result.ok === true
+    result.ok === true &&
+    normalizeStepCommand(result.command) === plannedCommand
   );
+}
+
+/**
+ * Delivers the newest version this batch is owed, or answers `undefined` when it is owed none.
+ *
+ * The session-script owner stays the only owner of `savedScript`, of the destination rule and of the
+ * retirement, and it is handed a payload of its own rather than the caller's response: the batch's
+ * payload is the daemon's answer, and what the delivery produced is merged onto it afterwards. The
+ * owner is asked under `close` when the plan ran a close, which is what lets it publish the final
+ * version and then retire this client's record exactly as a single `close` response does — including
+ * when the close carried no version, because the daemon may have failed to write it and the caller
+ * still has to stop tracking a recording it no longer has.
+ */
+async function deliverBatchScript(
+  context: DeliveryContext,
+  plan: readonly string[],
+  data: Record<string, unknown>,
+  completed: number,
+): Promise<Record<string, unknown> | undefined> {
+  if (plan.length === 0 || completed < 1) return undefined;
+  const steps = readFinishedSteps(data, plan, completed);
+  const closing = steps.some((step) => step.command === CLOSE_COMMAND);
+  const versions = readScriptVersions(context, steps, data);
+  const publicationId = openPublicationId(steps, data, versions);
+  // Retirement follows the PLAN alone: a close this client ran and finished, and no field an answer
+  // carries. The owner finds this client's record by hashing the ID with its own endpoint, tenant and
+  // session, so an ID the daemon invents matches no record and retires nothing.
+  const retires = closing && typeof publicationId === 'string';
+  const newest = newestScriptVersion(versions, publicationId);
+  if (newest === undefined && !retires) return undefined;
+  const { sessionScriptDelivery } = await import('./session-script-destination.ts');
+  const payload: Record<string, unknown> = {};
+  if (typeof publicationId === 'string') payload.scriptPublicationId = publicationId;
+  const scripts = sessionScriptDelivery(
+    context.endpoint,
+    { ...context.req, command: closing ? CLOSE_COMMAND : context.req.command },
+    { ok: true, data: payload },
+    context.stateDir,
+    context.download,
+  );
+  await scripts.settleAfter(async () => {
+    if (newest !== undefined) await scripts.publish(newest, payload, []);
+    return { ok: true, data: payload };
+  });
+  return disclosedDelivery(payload, steps);
+}
+
+/**
+ * Every session-script version this batch's answer carries, from the plan's finished steps AND the
+ * batch's own payload: a step may publish as it goes, and the daemon may stamp its newest version on
+ * the batch payload after the last step, so both are read whatever the other one holds.
+ *
+ * One linear scan, bounded by MAX_SCRIPT_ARTIFACTS_PER_ENTRY artifacts per payload and
+ * MAX_SCRIPT_ARTIFACTS_PER_BATCH in total, so the cost stays bounded whatever an answer names. Each
+ * candidate must satisfy the same guards the publisher uses, so nothing this module cannot name is ever
+ * interpolated into a record lookup, a path, or a download request.
+ */
+function readScriptVersions(
+  context: DeliveryContext,
+  steps: readonly FinishedStep[],
+  data: Record<string, unknown>,
+): DaemonArtifact[] {
+  const versions: DaemonArtifact[] = [];
+  let scanned = 0;
+  // The batch's own payload is read first: the daemon stamps its newest version there after the last
+  // step, so the bound below keeps the version the caller is owed even by a crowded answer.
+  for (const payload of [data, ...steps.map((step) => step.data)]) {
+    const artifacts = Array.isArray(payload?.artifacts)
+      ? (payload.artifacts as DaemonArtifact[])
+      : [];
+    for (const artifact of artifacts.slice(0, MAX_SCRIPT_ARTIFACTS_PER_ENTRY)) {
+      if (scanned >= MAX_SCRIPT_ARTIFACTS_PER_BATCH) return versions;
+      scanned += 1;
+      if (context.isScriptArtifact(artifact) && isUsableVersion(artifact)) versions.push(artifact);
+    }
+  }
+  return versions;
+}
+
+/**
+ * The publication this batch records, taken in order of authority: the ID the plan's own finished
+ * `close` step names, then the ID the first finished step names, then the ID the batch payload echoes,
+ * then the ID of the newest version the answer carries. Only versions of that one publication are
+ * delivered, and only a publication THIS client recorded can ever be published, so an ID the daemon
+ * invents costs no download and retires nothing.
+ */
+function openPublicationId(
+  steps: readonly FinishedStep[],
+  data: Record<string, unknown>,
+  versions: readonly DaemonArtifact[],
+): string | undefined {
+  return [
+    steps.find((step) => step.command === CLOSE_COMMAND)?.data?.scriptPublicationId,
+    steps.find((step) => typeof step.data?.scriptPublicationId === 'string')?.data
+      ?.scriptPublicationId,
+    data.scriptPublicationId,
+    newestScriptVersion(versions, undefined)?.scriptPublicationId,
+  ].find((id): id is string => typeof id === 'string');
+}
+
+/**
+ * The newest version of the open publication, or `undefined` when `publicationId` is not given and the
+ * newest version of any publication is wanted. Every version is the whole recording, so an older one is
+ * the same file with less of it: keeping only the newest is what makes one answer that names a thousand
+ * versions of one step, or of several steps, cost ONE download instead of a thousand.
+ */
+function newestScriptVersion(
+  versions: readonly DaemonArtifact[],
+  publicationId: string | undefined,
+): DaemonArtifact | undefined {
+  let newest: DaemonArtifact | undefined;
+  for (const version of versions) {
+    if (publicationId !== undefined && version.scriptPublicationId !== publicationId) continue;
+    if (
+      newest === undefined ||
+      (version.scriptRevision as number) > (newest.scriptRevision as number)
+    )
+      newest = version;
+  }
+  return newest;
+}
+
+/**
+ * Whether one artifact names a version the publisher can act on: the guards `publishScriptVersion`
+ * uses. A malformed ID, revision or artifact ID is dropped here rather than reaching a record lookup, a
+ * download request, or an error message, and the response's own bytes never become a path component.
+ */
+function isUsableVersion(artifact: DaemonArtifact): boolean {
+  const revision = artifact.scriptRevision;
+  return (
+    artifact.field === 'savedScript' &&
+    typeof artifact.scriptPublicationId === 'string' &&
+    typeof artifact.artifactId === 'string' &&
+    Number.isSafeInteger(revision) &&
+    (revision as number) > 0
+  );
+}
+
+/**
+ * What one delivery and the plan's finished steps disclose on the caller's payload: the file that was
+ * written, and every script warning — the typed failure and its warning from this client's own
+ * delivery, and what the daemon disclosed on a step. A step's nested data reaches neither the CLI's
+ * `Warning:` lines nor the MCP tool text, so anything the caller has to see is lifted here. The
+ * daemon's answer itself is left intact.
+ */
+function disclosedDelivery(
+  payload: Record<string, unknown>,
+  steps: readonly FinishedStep[],
+): Record<string, unknown> | undefined {
+  const failure = payload.scriptDeliveryFailure;
+  const disclosure: Record<string, unknown> = {};
+  if (payload.savedScript !== undefined) disclosure.savedScript = payload.savedScript;
+  if (isRecord(failure)) disclosure.scriptDeliveryFailure = failure;
+  const warnings = [
+    ...new Set([
+      ...readResponseWarnings(payload),
+      ...steps.flatMap((step) => readResponseWarnings(step.data)),
+    ]),
+  ].filter((warning) => warning !== '');
+  if (warnings.length > 0) disclosure.warnings = warnings;
+  return Object.keys(disclosure).length > 0 ? disclosure : undefined;
+}
+
+/**
+ * Lifts a batch's script disclosure onto the payload every caller surface reads: the CLI's `Warning:`
+ * lines, the MCP tool text, and `--json` and structured content all take the batch's own `warnings` and
+ * `scriptDeliveryFailure`, which a step's nested data cannot reach.
+ */
+export function withBatchDisclosure(
+  data: Record<string, unknown> | undefined,
+  disclosure: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!disclosure) return {};
+  const warnings = [
+    ...new Set([...readResponseWarnings(data), ...readResponseWarnings(disclosure)]),
+  ].filter((warning) => warning !== '');
+  return {
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(disclosure.scriptDeliveryFailure !== undefined
+      ? { scriptDeliveryFailure: disclosure.scriptDeliveryFailure }
+      : {}),
+    ...(disclosure.savedScript !== undefined ? { savedScript: disclosure.savedScript } : {}),
+  };
 }
 
 function normalizeStepCommand(command: unknown): string {
   return typeof command === 'string' ? command.trim().toLowerCase() : '';
 }
 
-/**
- * Delivers one payload's session-script artifacts — a step's result or the batch's own data — or
- * answers `undefined` when there is nothing here for this client to deliver.
- *
- * The payload keeps the batch request's own endpoint, tenant and session, which is what lets it
- * reach the record that armed the recording, and takes the command name the plan gives that step,
- * which is what makes a terminal `close` retire that record. A `close` that names this client's
- * publication goes through the owner even when it carries no artifact: the daemon may have failed to
- * write the final version, and the caller still has to stop tracking a recording it no longer has.
- */
-async function deliverPayloadScripts(
-  endpoint: Readonly<{ baseUrl: string; token: string }>,
-  req: DaemonWireRequest,
-  stateDir: string,
-  download: typeof downloadRemoteArtifact,
-  isScriptArtifact: (artifact: DaemonArtifact | undefined) => boolean,
-  payload: Readonly<{
-    command: string;
-    data: Record<string, unknown> | undefined;
-    revisions: ScriptRevisions;
-  }>,
-): Promise<Record<string, unknown> | undefined> {
-  const data = payload.data;
-  if (!data) return undefined;
-  const artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
-  const closing = payload.command === CLOSE_COMMAND;
-  const scriptCount = artifacts.filter((artifact) =>
-    isScriptArtifact(artifact as DaemonArtifact),
-  ).length;
-  // A step's `data` is what that command would have answered on its own, so the session-script owner
-  // is the only owner of `savedScript` and of the retirement a close names.
-  const retires = closing && typeof data.scriptPublicationId === 'string';
-  if (scriptCount === 0 && !retires) return undefined;
-  const { sessionScriptDelivery } = await import('./session-script-destination.ts');
-  const scripts = sessionScriptDelivery(
-    endpoint,
-    { ...req, command: payload.command },
-    { ok: true, data },
-    stateDir,
-    download,
-  );
-  let published = data;
-  await scripts.settleAfter(async () => {
-    published = await publishOwnedScripts(scripts, data, isScriptArtifact, payload.revisions);
-    return { ok: true, data: published };
-  });
-  return published === data ? undefined : published;
-}
-
-/**
- * Publishes the session-script artifacts of one payload and keeps every other artifact as the daemon
- * answered it. Only the session-script owner owns `savedScript`; a payload's other artifacts are the
- * daemon's own outputs, which the daemon already wrote on its side.
- *
- * Of several script artifacts in one payload, only the newest is delivered, and a version no newer
- * than one already taken in this response is dropped before any request. Without that, one answer
- * naming a thousand duplicate versions of one step would ask for a thousand downloads, and a version
- * older than one already published would only be refused by the owner after its bytes arrived.
- *
- * Together with the plan bound, that caps one answer at one download per submitted step whatever it
- * names, which is the budget a caller pays for one batch.
- */
-async function publishOwnedScripts(
-  scripts: SessionScriptDelivery,
-  data: Record<string, unknown>,
-  isScriptArtifact: (artifact: DaemonArtifact | undefined) => boolean,
-  revisions: ScriptRevisions,
-): Promise<Record<string, unknown>> {
-  const nextData = { ...data };
-  const kept: DaemonArtifact[] = [];
-  const candidates: DaemonArtifact[] = [];
-  const listed = Array.isArray(data.artifacts) ? (data.artifacts as DaemonArtifact[]) : [];
-  for (const artifact of listed) {
-    if (!isScriptArtifact(artifact)) {
-      kept.push(artifact);
-      continue;
-    }
-    if (isNewerVersion(artifact, revisions)) candidates.push(artifact);
-  }
-  const newest = newestScriptVersion(candidates);
-  if (newest !== undefined) await scripts.publish(newest, nextData, kept);
-  if (Array.isArray(data.artifacts)) nextData.artifacts = kept;
-  return nextData;
-}
-
-/**
- * Whether one script artifact names a revision newer than every accepted revision of its
- * publication, claiming it for this response so a duplicate of it earns no download either.
- */
-function isNewerVersion(artifact: DaemonArtifact, revisions: ScriptRevisions): boolean {
-  const revision = artifact.scriptRevision;
-  if (!Number.isSafeInteger(revision) || (revision as number) <= 0) return false;
-  const publicationId = artifact.scriptPublicationId ?? '';
-  for (const accepted of revisions) {
-    if (!accepted.startsWith(`${publicationId}:`)) continue;
-    if ((revision as number) <= Number(accepted.slice(publicationId.length + 1))) return false;
-  }
-  revisions.add(`${publicationId}:${revision}`);
-  return true;
-}
-
-function newestScriptVersion(candidates: readonly DaemonArtifact[]): DaemonArtifact | undefined {
-  let newest: DaemonArtifact | undefined;
-  for (const candidate of candidates) {
-    if (
-      newest === undefined ||
-      (candidate.scriptRevision as number) > (newest.scriptRevision as number)
-    ) {
-      newest = candidate;
-    }
-  }
-  return newest;
-}
-
-/**
- * Lifts the steps' disclosure onto the batch payload, the channel every caller surface reads: the
- * CLI's `Warning:` lines, the MCP tool text, and `--json` and structured content all take the batch's
- * own `warnings` and `scriptDeliveryFailure`, which a step's nested data cannot reach.
- */
-export function withBatchDisclosure(
-  data: Record<string, unknown> | undefined,
-  disclosure: BatchDisclosure | undefined,
-): Record<string, unknown> {
-  if (!disclosure) return {};
-  const warnings = [
-    ...new Set([...readResponseWarnings(data), ...disclosure.warnings].filter((w) => w !== '')),
-  ];
-  return {
-    ...(warnings.length > 0 ? { warnings } : {}),
-    ...(disclosure.failure !== undefined ? { scriptDeliveryFailure: disclosure.failure } : {}),
-  };
-}
-
-function collectBatchDisclosure(disclosure: BatchDisclosure, data: Record<string, unknown>): void {
-  for (const warning of readResponseWarnings(data)) {
-    if (!disclosure.warnings.includes(warning)) disclosure.warnings.push(warning);
-  }
-  const failure = data.scriptDeliveryFailure;
-  if (disclosure.failure === undefined && isRecord(failure)) disclosure.failure = failure;
-}
-
 const CLOSE_COMMAND = 'close';
 
-function readBatchResults(data: unknown): ReadonlyArray<Record<string, unknown>> {
-  if (!isRecord(data) || !Array.isArray(data.results)) return [];
-  return data.results.filter((result): result is Record<string, unknown> => isRecord(result));
-}
+/** One payload is read for at most this many of its own script artifacts. */
+const MAX_SCRIPT_ARTIFACTS_PER_ENTRY = 32;
+
+/** One batch answer is read for at most this many script artifacts in total, across every payload. */
+const MAX_SCRIPT_ARTIFACTS_PER_BATCH = 64;

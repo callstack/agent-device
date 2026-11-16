@@ -122,11 +122,12 @@ recorded a version discloses it: the CLI prints a `Warning:` line and carries a 
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
-batch steps are refused. A `batch` delivers the script versions its steps record, in step order, and
-a `close` step retires the recording the same way a standalone `close` does. When a later step fails,
-the steps that already ran still deliver their scripts, and the batch error stands. A step whose
-script did not arrive is reported once more on the batch result itself, so the `Warning:` line and
-the `scriptDeliveryFailure` field reach the batch output rather than only the step's own entry.
+batch steps are refused. A `batch` delivers the newest version its answer names, whether a step
+carried it or the batch result itself did, and a batch that closes the recording retires it the same
+way a standalone `close` does. Every version is the full recording, so one batch costs at most one
+download. When a later step fails, the script the steps that already ran recorded is still delivered,
+and the batch error stands. A script that did not arrive is reported on the batch result itself, so
+the `Warning:` line and the `scriptDeliveryFailure` field reach the batch output.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a

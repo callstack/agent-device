@@ -144,7 +144,7 @@ function expectDeliveredNothing(response: DaemonResponse): void {
   expect(text).not.toContain('"scriptDeliveryFailure":');
 }
 
-test('a batch delivers each step script in step order and a close step retires the record', async () => {
+test('a batch delivers its newest script once and a close step retires the record', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({
     v1: 'open Demo\n',
@@ -169,33 +169,22 @@ test('a batch delivers each step script in step order and a close step retires t
     },
   );
 
+  // Every version is the whole recording, so ONE download is owed: the newest of the batch.
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nclose\n');
   // The terminal step retired the record, so no later version of that publication writes anything.
   expect(records(stateDir)).toEqual([]);
-  // Each step reports its own version the way the same command alone would: its `savedScript` names
-  // the caller file, and its artifact carries the local path the client published.
-  const steps = batchSteps(response);
-  expect(steps.map((result) => result.command)).toEqual(['wait', 'close']);
-  expect(steps.map((result) => result.data.savedScript)).toEqual([destination, destination]);
-  expect(steps.map((result) => result.data.artifacts)).toEqual([
-    [
-      expect.objectContaining({
-        artifactId: 'v2',
-        scriptRevision: 2,
-        localPath: destination,
-      }),
-    ],
-    [
-      expect.objectContaining({
-        artifactId: 'v3',
-        scriptRevision: 3,
-        localPath: destination,
-      }),
-    ],
+  // The batch's own payload says where the recording landed, the way a single response does.
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+  // The steps are reported exactly as the daemon answered them: this client writes its own fields, not
+  // the daemon's entries.
+  expect(batchSteps(response).map((result) => result.command)).toEqual(['wait', 'close']);
+  expect(batchSteps(response).map((result) => result.data.artifacts)).toEqual([
+    [expect.objectContaining({ artifactId: 'v2', scriptRevision: 2 })],
+    [expect.objectContaining({ artifactId: 'v3', scriptRevision: 3 })],
   ]);
 });
 
-test('a batch step whose download fails discloses the failure on that step and keeps the batch', async () => {
+test('a batch script whose download fails discloses the failure and keeps the batch', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: 'open Demo\n' });
   const id = await open(baseUrl, stateDir, destination);
@@ -207,25 +196,24 @@ test('a batch step whose download fails discloses the failure on that step and k
     results: [step(1, 'wait', { waited: true, artifacts: [script('gone', 2, id)] })],
   });
 
-  // The step ran on the device, so the batch stands and the step says the caller file is stale.
+  // The step ran on the device, so the batch stands and the batch payload says the file is stale.
   expect(response.ok).toBe(true);
+  expect(response.ok && response.data?.scriptDeliveryFailure).toEqual(
+    expect.objectContaining({
+      reason: 'script_delivery_failed',
+      cause: 'script_download_failed',
+      publicationId: id,
+    }),
+  );
+  expect(response.ok && response.data?.warnings).toEqual([expect.stringContaining('script')]);
+  // The step's own entry is the daemon's answer, and a daemon-host path or status never rides along.
   expect(batchSteps(response)[0]).toEqual({
     step: 1,
     command: 'wait',
     ok: true,
     durationMs: 1,
-    data: expect.objectContaining({
-      waited: true,
-      artifacts: [],
-      scriptDeliveryFailure: expect.objectContaining({
-        reason: 'script_delivery_failed',
-        cause: 'script_download_failed',
-        publicationId: id,
-      }),
-      warnings: [expect.stringContaining('script')],
-    }),
+    data: { waited: true, artifacts: [expect.objectContaining({ artifactId: 'gone' })] },
   });
-  // A daemon-host path or status never rides along in the disclosure.
   expect(JSON.stringify(response)).not.toContain('unavailable');
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   // The recording is not closed, so the record stays and a later version still lands.
@@ -252,12 +240,10 @@ test('a batch that closes keeps its success and retires the record when the fina
   });
 
   // The session closed, so the record is gone even though the final script did not arrive.
-  expect(batchSteps(response)[0]?.data).toEqual(
+  expect(response.ok && response.data?.scriptDeliveryFailure).toEqual(
     expect.objectContaining({
-      scriptDeliveryFailure: expect.objectContaining({
-        cause: 'script_download_failed',
-        publicationId: id,
-      }),
+      cause: 'script_download_failed',
+      publicationId: id,
     }),
   );
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
@@ -293,10 +279,8 @@ test('a batch step script of another publication or of another field writes noth
     },
   );
 
-  expect(batchSteps(response).map((result) => result.data)).toEqual([
-    { artifacts: [] },
-    { artifacts: [] },
-  ]);
+  expectDeliveredNothing(response);
+  expect(batchSteps(response).map((result) => result.step)).toEqual([1, 2]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(fs.existsSync(victim)).toBe(false);
 });
@@ -432,17 +416,22 @@ test('a batch request that submitted no plan delivers nothing from its step entr
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });
 
-test('one batch answer asks for one download per step, whatever versions it names', async () => {
+test('one batch answer asks for ONE download, whatever versions it names', async () => {
   const { stateDir, destination } = journey();
   const requested: string[] = [];
+  const bodies: Record<string, string> = {
+    v1: 'open Demo\n',
+    v3: 'open Demo\nwait 100\n',
+    v5: 'open Demo\nwait 100\nsnapshot\n',
+  };
   const server = http.createServer((req, res) => {
     const id = decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '');
     requested.push(id);
-    if (id !== 'v3' && id !== 'v5') {
+    const body = bodies[id];
+    if (body === undefined) {
       res.writeHead(503).end('unavailable');
       return;
     }
-    const body = id === 'v3' ? 'open Demo\nwait 100\n' : 'open Demo\nwait 100\nsnapshot\n';
     res.writeHead(200, { 'content-length': Buffer.byteLength(body) });
     res.end(body);
   });
@@ -451,26 +440,188 @@ test('one batch answer asks for one download per step, whatever versions it name
   const id = await open(baseUrl, stateDir, destination);
   requested.length = 0;
 
-  // One answer names every version of every step at once, including duplicates and versions older
-  // than one it already named. None of that may turn into one request each.
+  // One answer names the same versions over and over, including ones older than the newest it names.
+  // Every version is the whole recording, so exactly one of them is owed: the newest.
   const repeats = (artifactId: string, revision: number, times: number) =>
     Array.from({ length: times }, () => script(artifactId, revision, id));
-  await answer(baseUrl, stateDir, request('batch', {}, batchPlan('wait', 'snapshot')), {
-    total: 2,
-    executed: 2,
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'snapshot')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        step(1, 'wait', { artifacts: [...repeats('v3', 3, 3), ...repeats('v1', 1, 2)] }),
+        step(2, 'snapshot', { artifacts: [script('v3', 3, id), script('v5', 5, id)] }),
+      ],
+    },
+  );
+
+  expect(requested).toEqual(['v5']);
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nsnapshot\n');
+});
+
+test('a batch reads at most its bound of script artifacts, whatever an answer names', async () => {
+  const { stateDir, destination } = journey();
+  const requested: string[] = [];
+  const server = http.createServer((req, res) => {
+    const id = decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '');
+    requested.push(id);
+    res.writeHead(200, { 'content-length': Buffer.byteLength('open Demo\n') });
+    res.end('open Demo\n');
+  });
+  servers.push(server);
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const id = await open(baseUrl, stateDir, destination);
+  requested.length = 0;
+
+  // Ten step entries name a hundred script artifacts each, and the batch payload names a hundred more:
+  // 1,100 artifacts in one answer. The scan is bounded, and the caller is owed ONE download — the newest
+  // version, which the batch payload stamps after the last step and is always read first.
+  const many = (from: number) =>
+    Array.from({ length: 100 }, (_, i) => script(`v-${from + i}`, from + i + 1, id));
+  const results = Array.from({ length: 10 }, (_, stepIndex) =>
+    step(stepIndex + 1, 'wait', { artifacts: many(stepIndex * 100) }),
+  );
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan(...Array(10).fill('wait'))),
+    {
+      total: 10,
+      executed: 10,
+      totalDurationMs: 1,
+      scriptPublicationId: id,
+      artifacts: many(1000),
+      results,
+    },
+  );
+
+  // Exactly one download, and it is the newest version the scan was allowed to keep.
+  expect(requested).toHaveLength(1);
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+});
+
+test('a batch that names twenty thousand script versions still costs one bounded scan', async () => {
+  const { stateDir, destination } = journey();
+  const requested: string[] = [];
+  const server = http.createServer((req, res) => {
+    const id = decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '');
+    requested.push(id);
+    res.writeHead(200, { 'content-length': Buffer.byteLength('open Demo\n') });
+    res.end('open Demo\n');
+  });
+  servers.push(server);
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const id = await open(baseUrl, stateDir, destination);
+  requested.length = 0;
+
+  // One answer names 20,000 versions of this publication, about 3 MB of JSON, in ascending order.
+  // Reading it costs this client a bounded scan, not one comparison per version it already saw.
+  const versions = Array.from({ length: 20_000 }, (_, i) => script(`v-${i}`, i + 1, id));
+  const startedAt = Date.now();
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('wait')), {
+    total: 1,
+    executed: 1,
     totalDurationMs: 1,
-    results: [
-      step(1, 'wait', {
-        artifacts: [...repeats('gone', 2, 500), ...repeats('v3', 3, 2), ...repeats('gone', 1, 2)],
-      }),
-      step(2, 'snapshot', {
-        artifacts: [...repeats('gone', 4, 497), script('v5', 5, id), ...repeats('v3', 3, 2)],
-      }),
-    ],
+    results: [step(1, 'wait', { artifacts: versions })],
   });
 
-  expect(requested).toEqual(['v3', 'v5']);
-  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nsnapshot\n');
+  expect(Date.now() - startedAt).toBeLessThan(1000);
+  expect(requested).toHaveLength(1);
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+});
+
+test('a successful batch delivers the newest version its own payload names', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: 'open Demo\n',
+    v9: 'open Demo\nsnapshot\n',
+  });
+  const id = await open(baseUrl, stateDir, destination);
+
+  // The caller ran plain steps whose answers carry nothing, and the daemon stamped its newest version
+  // on the batch payload itself, as it does after the last step of a recording.
+  const data = {
+    total: 1,
+    executed: 1,
+    totalDurationMs: 1,
+    scriptPublicationId: id,
+    artifacts: [script('v9', 9, id)],
+    results: [step(1, 'snapshot', { name: 'shot' })],
+  };
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('snapshot')),
+    data,
+  );
+
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nsnapshot\n');
+  expect(records(stateDir)).toHaveLength(1);
+});
+
+test('a successful batch retires the record for a close its own payload names', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: 'open Demo\n',
+    v7: 'open Demo\nclose\n',
+  });
+  const id = await open(baseUrl, stateDir, destination);
+
+  // The plan ran `close`, and the answer names the publication on its own payload. A stale version the
+  // caller's file already holds may not be re-delivered, but the record still has to be retired.
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('close')), {
+    total: 1,
+    executed: 1,
+    totalDurationMs: 1,
+    scriptPublicationId: id,
+    artifacts: [script('v7', 7, id)],
+    results: [step(1, 'close', { closed: true })],
+  });
+
+  expect(response.ok && response.data?.savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nclose\n');
+  expect(records(stateDir)).toEqual([]);
+});
+
+test('a malformed script publication ID is dropped and the batch still succeeds', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: 'open Demo\n' });
+  const id = await open(baseUrl, stateDir, destination);
+
+  // Every ID and revision an answer carries is untrusted: an object that cannot become a string, a
+  // revision that is not a positive integer, and a missing artifact ID must all be dropped rather than
+  // reach a record lookup, a path, or a download request.
+  const malformed = (over: Record<string, unknown>) => ({
+    ...script('v2', 2, id),
+    ...over,
+  });
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'wait', 'wait', 'wait')),
+    {
+      total: 4,
+      executed: 4,
+      totalDurationMs: 1,
+      results: [
+        step(1, 'wait', { artifacts: [malformed({ scriptPublicationId: { toString: null } })] }),
+        step(2, 'wait', { artifacts: [malformed({ scriptRevision: '2' })] }),
+        step(3, 'wait', { artifacts: [malformed({ scriptRevision: 1.5 })] }),
+        step(4, 'wait', { artifacts: [malformed({ artifactId: { toString: null } })] }),
+      ],
+    },
+  );
+
+  expect(response.ok).toBe(true);
+  expectDeliveredNothing(response);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  expect(records(stateDir)).toHaveLength(1);
 });
 
 test('a batch step that cannot save its version discloses it on the batch payload', async () => {
