@@ -17,12 +17,15 @@ import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
+import { settledWithin } from '@agent-device/capture-kit/capture-fact-grace';
 import { computeDensityScaledScreenshotSize } from '@agent-device/capture-kit/screenshot-density';
 import {
   IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_BASE_DELAY_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_DELAY_MS,
+  IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
+  IOS_SIMULATOR_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
@@ -38,6 +41,7 @@ import {
 } from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
+  knownAppleMultiScreen,
   resolveAppleCaptureTarget,
   type AppleCaptureTarget,
   type AppleDeviceDisplay,
@@ -70,7 +74,15 @@ type SimulatorScreenshotFlowDeps = {
     capture: () => Promise<T>,
     signal?: AbortSignal,
   ) => Promise<T>;
-  resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
+  /**
+   * Whether a resolved panel table for this device listed one integrated panel. Such a capture
+   * never names a display, so its panel table read only supplies the rotation and runs beside it.
+   */
+  isKnownSinglePanel: (device: DeviceInfo) => boolean;
+  resolveCaptureTarget: (
+    device: DeviceInfo,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
@@ -118,6 +130,7 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
   withStatusBarHeld: withSimulatorStatusBarHeld,
+  isKnownSinglePanel: (device) => knownAppleMultiScreen(device) === false,
   resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
@@ -176,10 +189,11 @@ export async function captureSimulatorScreenshotWithFallback(
   if (!options.skipIosSimulatorBootCheck) {
     await deps.ensureBooted(device);
   }
-  // A foldable lights one panel at a time, so the capture must name the panel the
-  // system is currently showing rather than accept simctl's implicit default.
-  const { display, displayRotation } = await deps.resolveCaptureTarget(device);
-  const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
+  const { display, readCaptureFacts, cancelRotationRead } = await planCaptureTarget(
+    device,
+    deps,
+    options.runnerOptions?.signal,
+  );
   const captureAndNormalize = async () => {
     await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
@@ -198,14 +212,14 @@ export async function captureSimulatorScreenshotWithFallback(
     if (resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner') {
       try {
         await captureAndNormalize();
-        return captureFacts;
+        return await readCaptureFacts();
       } catch (error) {
         let screenshotError = error;
         if (await mayRecoverSkippedBootCheck(error)) {
           await deps.ensureBooted(device);
           try {
             await captureAndNormalize();
-            return captureFacts;
+            return await readCaptureFacts();
           } catch (retryError) {
             screenshotError = retryError;
           }
@@ -229,12 +243,69 @@ export async function captureSimulatorScreenshotWithFallback(
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
-    return captureFacts;
+    return await readCaptureFacts();
   };
 
   const holdStatusBar =
     options.normalizeStatusBar === true ? deps.withNormalizedStatusBar : deps.withStatusBarHeld;
-  return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+  try {
+    return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+  } finally {
+    cancelRotationRead();
+  }
+}
+
+type CaptureTargetPlan = {
+  display: AppleDeviceDisplay | undefined;
+  /** The facts to report once the image is written. */
+  readCaptureFacts: () => Promise<ScreenshotCaptureFacts>;
+  /** Stops a rotation read that runs beside the capture. */
+  cancelRotationRead: () => void;
+};
+
+/**
+ * Decides which display the capture names and how its rotation is read.
+ *
+ * A foldable lights one panel at a time, so a multi-panel capture must name the panel the system
+ * is currently showing rather than accept simctl's implicit default. That panel changes when the
+ * device folds, so a device not known to be single-panel reads its panel table before every
+ * capture. A known single-panel capture never names a display: its read only supplies the
+ * rotation, so it runs beside the capture, and a read still running
+ * `IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS` after the image is written is aborted and the
+ * capture reports no rotation.
+ */
+async function planCaptureTarget(
+  device: DeviceInfo,
+  deps: SimulatorScreenshotFlowDeps,
+  signal: AbortSignal | undefined,
+): Promise<CaptureTargetPlan> {
+  if (!deps.isKnownSinglePanel(device)) {
+    const { display, displayRotation } = await deps.resolveCaptureTarget(device);
+    const facts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
+    return { display, readCaptureFacts: async () => facts, cancelRotationRead: () => {} };
+  }
+  const probeController = new AbortController();
+  const rotation = deps
+    .resolveCaptureTarget(device, {
+      timeoutMs: IOS_SIMULATOR_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
+      signal: signal ? AbortSignal.any([signal, probeController.signal]) : probeController.signal,
+    })
+    .then(
+      (target) => target.displayRotation,
+      () => undefined,
+    );
+  return {
+    display: undefined,
+    readCaptureFacts: async () => {
+      const displayRotation = await settledWithin(
+        rotation,
+        IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
+      );
+      probeController.abort();
+      return displayRotation ? { displayRotation } : {};
+    },
+    cancelRotationRead: () => probeController.abort(),
+  };
 }
 
 export async function captureSimulatorScreenshotWithRetry(

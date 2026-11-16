@@ -38,6 +38,7 @@ import {
   establishedLitPanel,
   buildInventory,
   parseCoreDeviceDisplays,
+  knownAppleMultiScreen,
   readPanelPower,
   resolveAppleCaptureDisplay,
   queryAppleDisplayInventory,
@@ -564,6 +565,54 @@ describe('resolveAppleCaptureTarget', () => {
       stderr: 'The specified device was not found',
     } as Awaited<ReturnType<typeof runXcrun>>);
     assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), {});
+  });
+});
+
+describe('knownAppleMultiScreen', () => {
+  beforeEach(() => {
+    mockRunXcrun.mockClear();
+    mockEmitDiagnostic.mockClear();
+    mockReadHostTextFile.mockReset();
+    mockReadHostTextFile.mockResolvedValue('');
+  });
+
+  test('keeps the panel count of the latest resolved table, not of an unresolved one', async () => {
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-panel-count` };
+    assert.equal(knownAppleMultiScreen(device), undefined);
+
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_17_SINGLE_PANEL));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockRunXcrun.mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'The specified device was not found',
+    } as Awaited<ReturnType<typeof runXcrun>>);
+    assert.equal((await queryAppleDisplayInventory(device, {})).unresolved, true);
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_DUO_CLOSED));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), true);
+  });
+
+  test('a read its caller aborted reports no unresolved-table diagnostic', async () => {
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-aborted-read` };
+    const controller = new AbortController();
+    mockRunXcrun.mockImplementationOnce(async () => {
+      controller.abort();
+      throw new Error('aborted');
+    });
+    const inventory = await queryAppleDisplayInventory(device, { signal: controller.signal });
+    assert.equal(inventory.unresolved, true);
+    assert.equal(
+      mockEmitDiagnostic.mock.calls.some(
+        ([event]) => event.phase === 'apple_display_inventory_unresolved',
+      ),
+      false,
+    );
+    assert.equal(knownAppleMultiScreen(device), undefined);
   });
 });
 

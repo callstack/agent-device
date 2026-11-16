@@ -100,12 +100,27 @@ const DISPLAYS_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not report 'devicectl device info displays'. Update Xcode to a version that ships the display-information feature before targeting multi-display Apple devices.";
 
 /**
+ * Each device's integrated panel count, from its latest resolved panel table. The count is a
+ * hardware fact, so it is kept for the daemon's lifetime; the table itself is not (see
+ * {@link queryAppleDisplayInventory}).
+ */
+const multiScreenByDevice = new Map<string, boolean>();
+
+/**
+ * Whether a resolved panel table for this device listed more than one integrated panel, or
+ * `undefined` when no table for it has resolved in this daemon.
+ */
+export function knownAppleMultiScreen(device: DeviceInfo): boolean | undefined {
+  return multiScreenByDevice.get(device.id);
+}
+
+/**
  * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
  * simulator in a scoped device set or a caller that explicitly requests the guest table.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
- * the dark panel. The probe costs ~0.2s against a ~5s simulator screenshot.
+ * the dark panel. Only the panel count it resolves is kept ({@link knownAppleMultiScreen}).
  *
  * A failure to ask is reported as an unresolved inventory instead of an error:
  * every caller has a correct pre-inventory path, and a missing host feature must
@@ -120,10 +135,13 @@ export async function queryAppleDisplayInventory(
       ? await readGuestPanelTable(device, options)
       : await readCoreDevicePanelTable(device, options);
   if (!table.ok) {
-    emitUnresolvedDiagnostic(device, table.reason, table.detail);
+    // A caller that aborted the read already knows it did not answer.
+    if (!options.signal?.aborted) emitUnresolvedDiagnostic(device, table.reason, table.detail);
     return unresolvedInventory();
   }
-  return inventoryFromPanelTable(device, table.payload);
+  const inventory = inventoryFromPanelTable(device, table.payload);
+  if (!inventory.unresolved) multiScreenByDevice.set(device.id, inventory.multiScreen);
+  return inventory;
 }
 
 type PanelTableRead =

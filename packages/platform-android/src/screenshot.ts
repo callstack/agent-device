@@ -11,6 +11,7 @@ import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
 import type { AndroidHelperScreenshot } from './automation-helper.ts';
+import { settledWithin } from '@agent-device/capture-kit/capture-fact-grace';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -167,20 +168,6 @@ async function captureAndroidScreencapWithRotation(
     return rotationFacts(await settledWithin(probe, ANDROID_SCREENSHOT_ROTATION_GRACE_MS));
   } finally {
     probeController.abort();
-  }
-}
-
-async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T | undefined> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      pending,
-      new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), graceMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
   }
 }
 
