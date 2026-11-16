@@ -6,7 +6,7 @@
  * Demonstrates: `centerOfRect` from `agent-device/contracts`, consumed
  * against the `CaptureSnapshotResult` shape returned by the root client.
  *
- * Prerequisites: a running `agent-device` daemon with an app already open
+ * Prerequisites: call `ensureDaemon()` to start the daemon, then open an app
  * in the `sdk-example` session.
  * This file typechecks without one.
  *

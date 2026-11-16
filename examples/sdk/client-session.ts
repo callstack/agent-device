@@ -3,7 +3,7 @@
  * a node, then close the session — with typed error handling via the
  * exported error helpers.
  *
- * Demonstrates: `createAgentDeviceClient`, `AppError`, `isAgentDeviceError`,
+ * Demonstrates: `ensureDaemon`, `createAgentDeviceClient`, `AppError`, `isAgentDeviceError`,
  * and `normalizeAgentDeviceError` from the `agent-device` root export.
  *
  * Prerequisites: an `agent-device` daemon target (a booted iOS simulator).
@@ -48,7 +48,13 @@ function reportAgentDeviceError(error: unknown): void {
 }
 
 async function main(): Promise<void> {
-  await ensureDaemon();
+  try {
+    await ensureDaemon();
+  } catch (error) {
+    if (!isAgentDeviceError(error)) throw error;
+    reportAgentDeviceError(error);
+    return;
+  }
   const client = createAgentDeviceClient({
     session: 'sdk-example',
     lockPolicy: 'reject',

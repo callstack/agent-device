@@ -19,7 +19,6 @@ import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
 
-await ensureDaemon();
 const client = createAgentDeviceClient({
   session: 'eve-agent',
   lockPolicy: 'reject',
@@ -45,6 +44,7 @@ export default defineTool({
     }),
   ]),
   async execute(input) {
+    await ensureDaemon();
     switch (input.action) {
       case 'open':
         return await client.apps.open({ app: input.app, platform: input.platform });

@@ -332,11 +332,9 @@ test('a request canceled before it starts does not start a daemon', async (t) =>
     await ensuring(request('devices', { stateDir, daemonTransport: 'http' }), signal);
 
     assert.equal(spawn.mock.calls.length, 0, 'a caller that has given up starts nothing');
-    assert.deepEqual(
-      sent,
-      [{ command: 'devices', context: signal }],
-      'the canceled request goes through with its own context, and ensuring adds nothing',
-    );
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.command, 'devices');
+    assert.strictEqual(sent[0]?.context, signal);
   } finally {
     await closeLoopbackServer(fresh.server);
   }

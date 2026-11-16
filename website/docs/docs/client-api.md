@@ -90,9 +90,9 @@ if ('cloudArtifacts' in result) {
 
 ## Daemon lifecycle
 
-A client attaches to the local daemon for its state directory. It never starts, replaces or stops that daemon, including after a timeout. A missing daemon reports `daemon-not-running`; an incompatible daemon reports `daemon-incompatible`.
+Client calls attach to the local daemon for their state directory without starting, replacing or stopping it, including after a timeout. Private one-shot replay/test operations own their daemon startup and cleanup. A missing daemon reports `daemon-not-running`; an incompatible daemon reports `daemon-incompatible`.
 
-To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon()` before creating the client. To own the daemon in your process instead, use `startAgentDevice()` as shown below. CLI and MCP commands continue to ensure the local daemon when needed.
+To migrate from `daemonLifecycle: 'managed'`, remove that option and call `ensureDaemon({ stateDir })` with the same `stateDir` as the client before creating it. To own the daemon in your process instead, use `startAgentDevice()` as shown below. CLI and MCP commands continue to ensure the local daemon when needed.
 
 Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live embedded runtime with `daemon-owner-embedded`. If the recorded host lifetime has provably exited, it retires the abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`.
 
@@ -114,8 +114,8 @@ These failures carry a typed `error.details.reason`:
 
 | Reason | Meaning |
 | --- | --- |
-| `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
-| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-not-running` | A client found no daemon to connect to. Call `ensureDaemon({ stateDir })` for the client's state directory. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon({ stateDir })` for that directory. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
 | `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
 | `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a detached daemon. It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
 | `daemon-owner-embedded` | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Close the runtime in its host process with its `close()` handle. |

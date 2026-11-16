@@ -306,10 +306,10 @@ async function expectDeadDaemonReplaced(
   }
 }
 
-test('sendToDaemon replaces a daemon whose process is gone after a single probe', async (t) => {
+test('createEnsuredDaemonTransport replaces a daemon whose process is gone after a single probe', async (t) => {
   await expectDeadDaemonReplaced(t, readVersion());
 });
 
-test('sendToDaemon replaces a newer daemon whose process is gone after a single probe', async (t) => {
+test('createEnsuredDaemonTransport replaces a newer daemon whose process is gone after a single probe', async (t) => {
   await expectDeadDaemonReplaced(t, NEWER_DAEMON_VERSION);
 });

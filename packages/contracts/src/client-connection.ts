@@ -18,13 +18,14 @@ import type {
 } from './remote-config-fields.ts';
 
 /**
- * The one daemon lifecycle a client has: `attach`. A client connects to the daemon registered in its
- * state directory, and never starts, replaces, retires or timeout-kills one. A missing daemon fails
- * with `details.reason: 'daemon-not-running'` and an incompatible one with `'daemon-incompatible'`.
+ * The one daemon lifecycle a client config selects: `attach`. The transport connects to its registered
+ * daemon without starting, replacing, retiring or timeout-killing it. Private one-shot replay/test
+ * operations own a separate daemon lifecycle. A missing daemon fails with
+ * `details.reason: 'daemon-not-running'`; an incompatible one uses `'daemon-incompatible'`.
  *
  * `ensureDaemon()` is the explicit way to start or replace a detached daemon. `startAgentDevice()`
- * imported from `agent-device` is the way to own one in your own process. Both refuse a daemon that
- * holds another client's work.
+ * imported from `agent-device` owns one in your process and refuses an already registered state
+ * directory. `ensureDaemon()` refuses to replace a daemon that holds another client's work.
  *
  * Independent of `daemonTransport`, `daemonServerMode` and `daemonBaseUrl`: a remote connection never
  * starts or retires a local daemon.
