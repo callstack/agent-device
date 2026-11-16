@@ -1,5 +1,12 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  ALERT_RUNNER_MAX_BUDGET_MS,
+  ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+  DEFAULT_ALERT_TIMEOUT_MS,
+  MAX_ALERT_WINDOW_MS,
+} from '@agent-device/contracts/alert-contract';
+import { MAX_ARMABLE_ALERT_WAIT_WINDOW_MS } from '@agent-device/command-registry/timeout-policy';
 import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../../../sessions/handlers/snapshot.ts';
@@ -200,4 +207,79 @@ test('alert wait refuses a budget past the window ceiling instead of arming a mi
     handleSnapshotCommands(sessionName, sessionStore, ['wait', '2147483648']),
   ).rejects.toThrow(/exceeds the maximum/);
   expect(mockRunnerCommand).not.toHaveBeenCalled();
+});
+
+// #4566: the envelope the client arms for a wait is a timer as well, armed above the window with
+// the daemon-result margin. So the wait ceiling the command honours is the armable window, and a
+// window above it is refused up front with the typed reason rather than polled and then cut off.
+test('alert wait refuses a window the request envelope cannot be armed for, naming what it accepts', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  const refusal = await handleSnapshotCommands(sessionName, sessionStore, [
+    'wait',
+    String(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS + 1),
+  ]).catch((error: unknown) => error);
+  expect(refusal).toBeInstanceOf(AppError);
+  expect((refusal as AppError).code).toBe('INVALID_ARGS');
+  expect((refusal as AppError).details?.reason).toBe(ALERT_WAIT_WINDOW_TOO_LONG_REASON);
+  expect((refusal as AppError).details?.maxWaitWindowMs).toBe(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS);
+  // The contract's own larger ceiling is refused for the same typed reason: the command never
+  // accepts a window it cannot honour and shortens it on the way down.
+  await expect(
+    handleSnapshotCommands(sessionName, sessionStore, ['wait', String(MAX_ALERT_WINDOW_MS)]),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: {
+      reason: ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+      maxWaitWindowMs: MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
+    },
+  });
+  expect(mockRunnerCommand).not.toHaveBeenCalled();
+
+  // The largest window the command does honour reaches the leg as the caller's own window, and an
+  // `alert get` keeps spending its own bounded read budget whatever the number says (#4540).
+  mockRunnerCommand.mockResolvedValueOnce({ status: 'visible' });
+  const waited = await handleSnapshotCommands(sessionName, sessionStore, [
+    'wait',
+    String(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS),
+  ]);
+  expect(waited?.ok).toBe(true);
+  expect(mockRunnerCommand.mock.calls.at(-1)?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'get',
+    // One runner attempt is capped at the runner's own alert budget, whatever the window says.
+    timeoutMs: ALERT_RUNNER_MAX_BUDGET_MS,
+  });
+});
+
+test('an alert wait window inside the ceiling reaches the polling leg while the other legs keep their own budgets', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+  mockRunnerCommand.mockResolvedValue({ accepted: true, dismissed: true, status: 'visible' });
+
+  // `wait` enters the polling leg, whose first attempt takes the runner's capped budget — the
+  // window is the poll's extent, not one attempt's budget (#4540).
+  await handleSnapshotCommands(sessionName, sessionStore, ['wait', '120000']);
+  expect(mockRunnerCommand.mock.calls.at(-1)?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'get',
+    timeoutMs: ALERT_RUNNER_MAX_BUDGET_MS,
+  });
+  // `get` still spends its own clamped read budget, unchanged by the envelope it now travels under.
+  await handleSnapshotCommands(sessionName, sessionStore, ['get', '120000']);
+  expect(mockRunnerCommand.mock.calls.at(-1)?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'get',
+    timeoutMs: ALERT_RUNNER_MAX_BUDGET_MS,
+  });
+  // `accept` ignores the number and runs its own action budget, as `dismiss` does.
+  await handleSnapshotCommands(sessionName, sessionStore, ['accept', '120000']);
+  expect(mockRunnerCommand.mock.calls.at(-1)?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'accept',
+    timeoutMs: DEFAULT_ALERT_TIMEOUT_MS,
+  });
 });

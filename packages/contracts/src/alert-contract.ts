@@ -23,11 +23,22 @@ export const ALERT_ACTION_RETRY_MS = 2_000;
 /**
  * The largest alert budget the legs accept. The window signal rides `AbortSignal.timeout`, whose
  * Node ceiling is 2^31-1 ms: larger values are rejected outright there, and its underlying timer
- * overflows to a 1 ms firing when merely exceeded. The daemon refuses a larger `alert wait`
- * budget as `INVALID_ARGS`, and a tree driver reads one as the bounded default — never a
- * silently shortened window.
+ * overflows to a 1 ms firing when merely exceeded. A tree driver reads one as the bounded default —
+ * never a silently shortened window. The `alert` command admits a shorter maximum: what it can
+ * honour end to end is bounded by the request envelope its caller arms for the wait, so
+ * `MAX_ARMABLE_ALERT_WAIT_WINDOW_MS` is the value a caller can rely on and this is the leg's own
+ * last line for budgets that arrive by other routes.
  */
 export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
+
+/**
+ * `alert wait` was given a window longer than the command can honour. The request envelope is a
+ * timer too, and it is armed above the window with the daemon-result margin, so past that ceiling
+ * the wait would be cut off mid-window or misfire at 1 ms. The command refuses the window before
+ * anything runs, with `details.maxWaitWindowMs` naming what it will accept; it never shortens the
+ * window the caller asked for.
+ */
+export const ALERT_WAIT_WINDOW_TOO_LONG_REASON = 'alert-wait-window-too-long';
 
 /**
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
