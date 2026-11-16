@@ -541,3 +541,70 @@ test('closeAndroidApp reports an unanswered pidof after force-stop instead of an
   );
   assert.equal(pidofCalls, 2);
 });
+
+test('foreground probe failure retains bounded history in request diagnostics and rethrows the original error', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const { withDiagnosticsScope, flushDiagnosticsToSessionFile } =
+    await import('@agent-device/host-kit/diagnostics');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { mkdtempForTestSync } = await import('@agent-device/test-kit');
+  const logPath = path.join(mkdtempForTestSync('foreground-fence'), 'request.ndjson');
+  const cause = new Error('underlying failure');
+  const failure = new AppError('COMMAND_FAILED', 'probe failed', { reason: 'probe-failed' }, cause);
+  let probes = 0;
+  try {
+    await withDiagnosticsScope({ logPath }, async () => {
+      await withAndroidAdbProvider(
+        {
+          exec: async (args) => {
+            if (args[1] === 'dumpsys' && ++probes === 7) throw failure;
+            return {
+              stdout:
+                args[1] === 'dumpsys'
+                  ? 'mCurrentFocus=Window{42 u0 com.example.app/.Main}\n'
+                  : '123\n',
+              stderr: '',
+              exitCode: 0,
+            };
+          },
+        },
+        { serial: ANDROID_EMULATOR.id },
+        async () => {
+          const rejected = assert.rejects(
+            closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+            (error: unknown) => {
+              assert.equal(error, failure);
+              assert.equal(failure.cause, cause);
+              assert.equal(failure.details?.reason, 'probe-failed');
+              return true;
+            },
+          );
+          await Promise.all([rejected, vi.runAllTimersAsync()]);
+        },
+      );
+      flushDiagnosticsToSessionFile({ force: true });
+    });
+    const events = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const event = events.find((item) => item.phase === 'android_close_foreground_fence');
+    assert.deepEqual(event.data, {
+      initialProcessCount: 1,
+      observations: [
+        ...[100, 150, 200, 250].map((ms) => ({
+          startMs: ms,
+          endMs: ms,
+          remainingMs: 2000 - ms,
+          result: 'target',
+        })),
+        { startMs: 300, endMs: 300, remainingMs: 1700, result: 'error' },
+      ],
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
