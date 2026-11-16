@@ -25,9 +25,14 @@ import {
 } from './install-source-admission.ts';
 
 /**
- * Carries one request to the upstream daemon and resolves with its response. The default is the
- * global `fetch`; supply your own to reach the daemon over another transport, such as a
- * WebSocket tunnel. Abort the exchange when `request.signal` aborts.
+ * Carries one request to the upstream daemon and resolves with its response. Without `upstreamFetch`
+ * the proxy reaches the daemon over `node:http(s)` on artifact transfer routes and over the global
+ * `fetch` on `/rpc`, health and diagnostics. Supply your own to reach the daemon over another
+ * transport, such as a WebSocket tunnel. Abort the exchange when `request.signal` aborts.
+ *
+ * A custom transport owns its phase guarantees and must observe `request.signal` on every route.
+ * On transfer routes, the proxy bounds its own response and body waits, even if the transport
+ * ignores cancellation. It cannot forcibly join work started by that transport.
  */
 export type DaemonProxyUpstreamFetch = (request: Request) => Promise<Response>;
 
@@ -60,10 +65,12 @@ export type DaemonProxyOptions = {
   publicOrigin?: string;
   maxRpcBodyBytes?: number;
   /**
-   * Longest time one daemon request may take, including its body. Unset, an exchange lasts as long
-   * as its client request: the client's command envelope bounds it.
+   * Independent cap on one upstream request, including its response body. Transfers also observe
+   * their phase limits and 600-second aggregate. When unset, other requests use the client's
+   * command envelope. The health probe keeps its separate five-second limit.
    */
   upstreamTimeoutMs?: number;
+  /** Overrides the transport for every upstream route. See `DaemonProxyUpstreamFetch`. */
   upstreamFetch?: DaemonProxyUpstreamFetch;
 } & (
   | {
@@ -102,6 +109,7 @@ type NormalizedProxyOptions = {
   maxRpcBodyBytes: number;
   upstreamTimeoutMs: number | undefined;
   upstreamFetch: DaemonProxyUpstreamFetch;
+  upstreamTransport: (route: string, request: Request) => Promise<Response>;
 };
 
 /** The client a request was authenticated as; `tenantId` is set only by `authenticate`. */
@@ -141,7 +149,7 @@ export function createDaemonProxy(options: DaemonProxyOptions): DaemonProxy {
       try {
         return await handleProxyRequest(request, normalized, instanceId);
       } catch (error) {
-        return proxyErrorResponse(error);
+        return proxyErrorResponse(error, request);
       }
     },
   };
@@ -349,7 +357,8 @@ async function forwardProxyRequest(params: {
 }): Promise<Response> {
   const { request, route, options, rpcBody, caller } = params;
   const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken, caller.tenantId);
-  const upstreamResponse = await options.upstreamFetch(
+  const upstreamResponse = await options.upstreamTransport(
+    route,
     new Request(buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
       method: request.method,
       headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route, caller.tenantId),
@@ -371,10 +380,6 @@ async function forwardProxyRequest(params: {
   return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
 }
 
-/**
- * An upstream exchange lives exactly as long as the client keeps waiting for it: the daemon
- * turns a dropped upstream request into cancellation of in-flight runner work.
- */
 function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
   if (options.upstreamTimeoutMs === undefined) return request.signal;
   return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
@@ -409,6 +414,13 @@ async function rewrittenUploadPreflightResponse(params: {
   publicOrigin: string | undefined;
 }): Promise<Response> {
   const { request, upstreamResponse, headers, uploadHeaders, publicOrigin } = params;
+  if (
+    upstreamResponse.status === 204 ||
+    upstreamResponse.status === 205 ||
+    upstreamResponse.status === 304
+  ) {
+    return new Response(null, { status: upstreamResponse.status, headers });
+  }
   const text = await upstreamResponse.text();
   headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
   return new Response(
@@ -516,6 +528,8 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
   const clientToken = options.authenticate
     ? undefined
     : normalizeToken(options.clientToken ?? '', 'clientToken');
+  const upstreamFetch = options.upstreamFetch ?? ((request) => fetch(request));
+  const customUpstreamFetch = options.upstreamFetch;
   return {
     upstreamBaseUrl,
     publicOrigin:
@@ -527,7 +541,15 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     authenticate: options.authenticate,
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
     upstreamTimeoutMs: options.upstreamTimeoutMs,
-    upstreamFetch: options.upstreamFetch ?? ((request) => fetch(request)),
+    upstreamFetch,
+    upstreamTransport: async (route, request) => {
+      const { isTransferRoute, createNodeTransferFetch, settleUpstreamFetch } =
+        await import('./transfer-transport.ts');
+      if (!isTransferRoute(route, request.method)) return upstreamFetch(request);
+      return customUpstreamFetch
+        ? settleUpstreamFetch(customUpstreamFetch, request)
+        : createNodeTransferFetch()(request);
+    },
   };
 }
 
@@ -864,10 +886,17 @@ function rpcErrorResponse(rpcId: unknown, error: unknown): Response {
   );
 }
 
-function proxyErrorResponse(error: unknown): Response {
+async function proxyErrorResponse(error: unknown, request: Request): Promise<Response> {
+  const { isTransferRoute, transferWireDetails } = await import('./transfer-transport.ts');
+  const transfer = isTransferRoute(resolveProxyRoute(request.url), request.method);
   const normalized = normalizeError(error);
   return Response.json(
-    { ok: false, error: normalized.message, code: normalized.code },
+    {
+      ok: false,
+      error: normalized.message,
+      code: normalized.code,
+      ...(transfer ? transferWireDetails(error) : {}),
+    },
     { status: normalized.code === 'INVALID_ARGS' ? 400 : 500 },
   );
 }

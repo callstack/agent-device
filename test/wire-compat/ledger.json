@@ -208,7 +208,7 @@
     "packages/contracts/src/device-inventory.ts#readDevicePin": "sha256:bb15ca2a086a881c6cf945c25d432c092be165e58165d229c25df69c4c9fafbd",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadDirectUrl": "sha256:b121db3ffb5a520b4b31810a2e28ff01c1a15d959514c9fbe2a61cd960d2af93",
     "packages/proxy/src/daemon-proxy.ts#rewriteUploadPreflightResponse": "sha256:332820b6f10e079632330c2c4996c4faa6f339e921f12f287bd83c9296df5ccd",
-    "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:21d633d947cd72f5008bcc886a8f3ecd4f778b594d0654b8d0741db8594003db",
+    "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse": "sha256:cff01256a85981e8e581fcd1c11f9da70ed9811d3aae15eba0bec1eec489579c",
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
@@ -220,6 +220,11 @@
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
   },
   "compatibleChanges": [
+    {
+      "declaration": "packages/proxy/src/daemon-proxy.ts#rewrittenUploadPreflightResponse",
+      "digest": "sha256:cff01256a85981e8e581fcd1c11f9da70ed9811d3aae15eba0bec1eec489579c",
+      "rationale": "Preserves upstream 204, 205 and 304 as null-body preflight responses instead of failing ticket parsing or Response construction. Other successful statuses retain upload-ticket parsing and validation, and allowed headers are unchanged. Released protocol-2 upload clients treat 204/205 empty JSON as no preflight result and 304 as non-OK/redirect rejection, so they follow their existing fallback rather than misinterpreting an empty ticket. This is an observable repair of previously failing responses under the adopted finite forwarding policy, not an added optional field or a claim that all status outcomes are unchanged. Authentication, tenant confinement, upload credentials and ticket framing are unchanged."
+    },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
       "digest": "sha256:c2b14225388041f3a6e708c898c512f91b9b20e51a2656a1fa0d5bfa5989fa30",

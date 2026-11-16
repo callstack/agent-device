@@ -207,6 +207,38 @@ test('disposing the phase observer removes only its own listeners', () => {
   assert.equal(fake.listenerCount('response'), 0);
 });
 
+test('suspend resumes counting when the same phase is armed again', async () => {
+  const watchdog = watchPhases();
+  watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS - 10_000);
+  watchdog.suspend();
+  await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS * 3);
+  assert.equal(watchdog.signal.aborted, false);
+  watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 1);
+  assertPhaseDetails(watchdog.signal.reason, 'response-body', 120_000);
+});
+
+test('body progress during a suspend cannot restart the stopped ceiling', async () => {
+  const watchdog = watchPhases();
+  watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  watchdog.suspend();
+  watchdog.touchBody();
+  await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS * 2);
+  assert.equal(watchdog.signal.aborted, false);
+});
+
+test('caller cancellation still binds an exchange whose idle ceiling is suspended', async () => {
+  const caller = new AbortController();
+  const watchdog = watchPhases(caller.signal);
+  watchdog.arm('response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  watchdog.suspend();
+  const cancellation = new Error('caller went away');
+  caller.abort(cancellation);
+  assert.equal(watchdog.signal.aborted, true);
+  assert.equal(watchdog.signal.reason, cancellation);
+});
+
 function assertPhaseDetails(reason: unknown, phase: string, timeoutMs: number): void {
   assert.ok(reason instanceof AppError, `phase expiry must be an AppError, got ${String(reason)}`);
   assert.equal(isTransferPhaseTimeoutError(reason), true);

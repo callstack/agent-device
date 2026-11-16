@@ -94,10 +94,46 @@ Your Node HTTP client must send exactly one valid `Host` header on every request
 configured. Configure raw-socket and HTTP/1.0 health probes to send `Host: localhost` (or your
 deployment's host and port).
 
+### How the proxy reaches the daemon
+
+On artifact transfer routes — `POST /upload`, `/upload/preflight` and `/upload/finalize`,
+`PUT /upload/direct/*` and `GET /artifacts*` — the proxy forwards with `node:http` / `node:https`.
+Each transfer has a connect limit of 30 seconds, a response-header wait of 30 seconds that
+starts only once its own outgoing body has finished and the connection is established, and a
+120-second limit on body inactivity. For downloads, that limit counts time spent waiting for
+upstream bytes while you read the response; it pauses when you stop reading. Every forwarded
+exchange also ends at 600 seconds regardless of how steadily its bytes move. Your `upstreamTimeoutMs`
+is an additional cap. The earliest caller cancellation, operator cap, phase limit or aggregate expiry
+ends the exchange. A transfer does not retry or restart its aggregate.
+
+Transfer phase and aggregate timeout error responses use HTTP 500 and include `reason`,
+`transferPhase` and `timeoutMs`. These fields appear only for `COMMAND_FAILED` with
+`reason: transfer_phase_timeout` and the matching connect/header (30000ms) or body (120000ms)
+phase budget, or `reason: transfer_forwarding_deadline_exceeded` with
+`transferPhase: forwarding` and `timeoutMs: 600000`. Other errors omit these fields.
+A timeout while you consume an accepted response fails the body read instead of replacing its status.
+
+On these routes:
+
+- Redirects are returned without being followed. The daemon's `308` resume response keeps its
+  `Range` and `x-upload-offset` headers.
+- Default request headers added by `fetch`, such as `accept` and `user-agent`, are not sent.
+- A patched global `fetch` or an `undici` global dispatcher no longer intercepts the request.
+
+Supply `upstreamFetch` if you need those Fetch behaviors or your own routing.
+
+Environment-proxy routing depends on your runtime. In loopback checks, Node 22.12 ignores
+`HTTP_PROXY` and `HTTPS_PROXY` for both transports. Node 26.11.1 uses them when
+`NODE_USE_ENV_PROXY=1`. Bun 1.4.2 Fetch uses them without that opt-in, while the default transfer
+transport requires it. On Node 26.11.1 and Bun 1.4.2, `NO_PROXY=127.0.0.1` bypasses the proxy.
+If you use Bun and rely on Fetch's proxy routing, set `NODE_USE_ENV_PROXY=1` or supply `upstreamFetch`.
+
+By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
+
 ### Reach the daemon over your own transport
 
-By default the proxy calls the daemon with the global `fetch`. Pass `upstreamFetch` when the daemon
-is only reachable some other way, such as a tunnel the device host opened to your gateway:
+Pass `upstreamFetch` when the daemon is only reachable some other way, such as a tunnel the device
+host opened to your gateway:
 
 ```ts
 const proxy = createDaemonProxy({
@@ -110,6 +146,16 @@ const proxy = createDaemonProxy({
 
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts.
+
+On transfer routes, the proxy bounds its wait for your transport and response body. It settles on
+your abort, your `upstreamTimeoutMs`, its 600-second aggregate and its demand-aware response-body
+inactivity limit. Work your transport starts can keep running if it ignores `request.signal`. The
+proxy does not wait for that work or for a cancellation callback that never settles. It cannot
+measure a connect or a header wait it does not own, so on transfer routes your transport keeps those
+obligations. Bound connection establishment to 30 seconds and the response-header wait to 30 seconds
+once the connection is established and the outgoing body has finished. Stream `request.body` with
+120-second body inactivity limits. Stop your request and response sources on cancellation. A body
+pull alone does not confirm that an outgoing byte was sent.
 
 ### Authenticate each client yourself
 
@@ -158,9 +204,9 @@ authenticate: async (request) => {
 | `upstreamToken` | required | The daemon's auth token. |
 | `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
-| `upstreamFetch` | global `fetch` | Sends one request to the daemon. |
+| `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)` and every other route uses the global `fetch`. |
 | `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
-| `upstreamTimeoutMs` | none | Longest time one daemon request may take, including its body. Without it, a request lasts as long as the client waits, and the client's command timeout bounds it. |
+| `upstreamTimeoutMs` | none | Independent cap on one daemon request, including its body. Without it, a request lasts as long as the client waits, bounded by the client's command timeout and, on transfer routes, the 600-second forwarding aggregate. |
 
 `maxRpcBodyBytes` limits the bytes of one `/rpc` body. The proxy reads the whole body before it
 authenticates the client, then decodes and parses it. One unauthenticated request can therefore
