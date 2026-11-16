@@ -2,7 +2,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCliCapture } from './cli-capture.ts';
+import { runCliCapture } from '../../__tests__/cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
@@ -11,7 +11,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { verifyAwsDeviceFarmConnection } from '@agent-device/aws-device-farm/connection-verification';
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
-import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
+import { resolveConnectProviderProfile } from './connect-provider-adapters.ts';
 import {
   mkdtempForTestSync,
   pluginHome,
@@ -21,7 +21,7 @@ import {
 } from '@agent-device/test-kit';
 import manifest from '@agent-device/aws-device-farm/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
-import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
 
 bindTestCommandHost();
 
