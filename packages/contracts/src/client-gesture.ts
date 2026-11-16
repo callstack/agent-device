@@ -45,9 +45,9 @@ export type SettleCommandOptions = {
 export type PostGestureStabilizationOptions = {
   /**
    * Set false to skip the movement check on a directional scroll and the stabilization wait
-   * before the next read, or the first-screen wait after an app launch. Set it only when your own
-   * polling verifies the screen: the next read can return a tree that the gesture is still moving
-   * or the launch screen.
+   * before the next read, or, on a local iOS simulator, the first-screen wait after an app launch.
+   * Set it only when your own polling verifies the screen: the next read can return a tree that the
+   * gesture is still moving or the launch screen.
    */
   postGestureStabilization?: boolean;
 };
