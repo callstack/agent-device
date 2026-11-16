@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -500,3 +500,24 @@ test.skipIf(process.platform === 'win32')(
     assert.equal('signal' in exited, false);
   },
 );
+
+test('async captured output enforces a per-stream byte limit', async () => {
+  for (const stream of ['stdout', 'stderr'] as const) {
+    const emit = `process.${stream}.write('x'.repeat(Number(process.argv[1])))`;
+    const within = await runCmd(process.execPath, ['-e', emit, '128'], { maxBuffer: 128 });
+    expect(within[stream]).toHaveLength(128);
+    await expect(
+      runCmd(process.execPath, ['-e', emit, '129'], { maxBuffer: 128 }),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'command_output_limit', stream, maxBuffer: 128 },
+    });
+  }
+  const separate = await runCmd(
+    process.execPath,
+    ['-e', "process.stdout.write('x'.repeat(128)); process.stderr.write('y'.repeat(128));"],
+    { maxBuffer: 128 },
+  );
+  expect(separate.stdout).toHaveLength(128);
+  expect(separate.stderr).toHaveLength(128);
+});

@@ -16,6 +16,7 @@ export type ExecSettlementReason =
   | 'success'
   | 'exit_failure'
   | 'timeout'
+  | 'output_limit'
   | 'abort'
   | 'spawn_error'
   | 'stdin_error';
