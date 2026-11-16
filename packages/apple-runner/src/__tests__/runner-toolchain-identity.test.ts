@@ -118,7 +118,7 @@ test('a bundle swapped behind a stable selection path is read from the bundle no
   });
   assert.deepEqual(readFingerprint(), FINGERPRINT_A);
 
-  fs.rmSync(stable);
+  fs.unlinkSync(stable);
   fs.symlinkSync(path.resolve(xcodeB, '../..'), stable);
   assert.deepEqual(readFingerprint(), FINGERPRINT_B);
 });
