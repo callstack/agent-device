@@ -19,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { publishDirectoryIdentity, publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -143,6 +143,7 @@ export class SessionScriptWriter {
         scriptPath,
         script: prepared.script,
         force: options?.force,
+        parentIdentity: publishDirectoryIdentity(scriptDir),
         ...(remote ? { mode: 0o600 } : {}),
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
@@ -302,13 +303,15 @@ function publishHealedScriptAtomically(params: {
   script: string;
   force?: boolean;
   mode?: number;
+  parentIdentity?: string;
 }): void {
-  const { scriptPath, script, force, mode } = params;
+  const { scriptPath, script, force, mode, parentIdentity } = params;
   try {
-    publishFileSync({
+    publishScriptFileSync({
       destination: scriptPath,
       contents: script,
       publish: force ? 'replace' : 'link-exclusive',
+      ...(parentIdentity === undefined ? {} : { parentIdentity }),
       ...(mode === undefined ? {} : { mode }),
     });
   } catch (error) {
