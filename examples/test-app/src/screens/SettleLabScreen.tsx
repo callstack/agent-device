@@ -4,8 +4,9 @@ import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from '
 
 /**
  * Timed UI effects for measuring `--settle`: each button starts one effect whose final screen is
- * known, so a settled tree can be checked against it. `settle-status` names the final state of the
- * last effect with its run number.
+ * known, so a settled tree can be checked against it. `settle-run` acknowledges each effect at once,
+ * the way an app shows a pending state, and `settle-status` names the final state of the last effect
+ * with its run number.
  */
 const DELAYS_MS = [500, 800] as const;
 const FADE_MS = 750;
@@ -25,7 +26,11 @@ export function SettleLabScreen() {
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const later = (ms: number, effect: () => void) => {
-    timers.current.push(setTimeout(effect, ms));
+    const handle = setTimeout(() => {
+      timers.current = timers.current.filter((pending) => pending !== handle);
+      effect();
+    }, ms);
+    timers.current.push(handle);
   };
   const nextRun = () => {
     const next = run + 1;
@@ -41,6 +46,9 @@ export function SettleLabScreen() {
       </Text>
       <Text style={styles.status} testID="settle-count">
         {`Count ${count}`}
+      </Text>
+      <Text style={styles.status} testID="settle-run">
+        {`Run ${run}`}
       </Text>
       <LabButton id="settle-increment" label="Increment" onPress={() => setCount((c) => c + 1)} />
       {DELAYS_MS.map((delayMs) => (
