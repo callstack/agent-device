@@ -1,3 +1,4 @@
+import type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   CliFlags,
@@ -91,6 +92,10 @@ export type CliReader = (positionals: string[], flags: CliFlags) => CliInput;
 /** Builds the daemon request for one command. Most writers are pure projections of their input. */
 export type DaemonWriter = (input: CommandInput) => DaemonCommandRequest;
 
+export type DaemonWriterDependencies = Readonly<{
+  resolveReplayBackend?: ReplayBackendResolver;
+}>;
+
 /**
  * A writer that has caller-side work to do before the request exists: reading the replay script
  * files the request carries (#1802), which for a Maestro flow also loads the engine that walks its
@@ -100,6 +105,7 @@ export type DaemonWriter = (input: CommandInput) => DaemonCommandRequest;
 export type AsyncDaemonWriter = (
   input: CommandInput,
   host: HostEnvironment,
+  deps?: DaemonWriterDependencies,
 ) => Promise<DaemonCommandRequest>;
 
 export type AnyDaemonWriter = DaemonWriter | AsyncDaemonWriter;

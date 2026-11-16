@@ -19,11 +19,6 @@ export { exportReplayActionsToMaestro } from './internal/export-flow.ts';
 export { MAESTRO_SELECTOR_PROJECTION } from './internal/selector-vocabulary.ts';
 
 export {
-  MAESTRO_COMPAT_LIMITATIONS,
-  MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
-} from './internal/facade-support.ts';
-
-export {
   createMaestroRuntimePort,
   literalFromMaestroRegex,
   maestroObservationMatches,

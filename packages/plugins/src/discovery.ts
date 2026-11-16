@@ -53,7 +53,7 @@ function resolvePluginEntry(directory: string, target: string): string {
     }
   } catch {}
   throw new AppError('INVALID_ARGS', 'Plugin entry must be a readable file inside its package', {
-    reason: 'plugin_load_failed',
+    reason: PLUGIN_REASONS.loadFailed.reason,
     directory,
     entry: target,
   });

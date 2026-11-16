@@ -26,6 +26,7 @@ export async function withClientReplayScriptSources(
     if (req.command === 'replay') {
       if (req.flags?.replayScriptSource) return req;
       const replayScriptSource = await loadReplayScriptSourceBundle({
+        hostEnv: process.env,
         inputPath: inputs[0],
         cwd,
         replayBackend,
@@ -35,7 +36,13 @@ export async function withClientReplayScriptSources(
     if (req.flags?.replayScriptSources) return req;
     const replayScriptSources = await Promise.all(
       discoverReplaySourcePaths({ inputs, cwd, replayBackend }).map(
-        async (inputPath) => await loadReplayScriptSourceBundle({ inputPath, cwd, replayBackend }),
+        async (inputPath) =>
+          await loadReplayScriptSourceBundle({
+            hostEnv: process.env,
+            inputPath,
+            cwd,
+            replayBackend,
+          }),
       ),
     );
     return withFlags({ replayScriptSources });
