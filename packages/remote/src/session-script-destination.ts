@@ -577,16 +577,21 @@ function publishStaged(
   // from the directory the walk judged when staging was created, so a walk that now answers a DIFFERENT
   // directory — an ancestor swapped for a link meanwhile — fails the comparison instead of renaming bytes
   // into ground nobody judged.
-  assertPrivateScriptDestination(current.destination, parentIdentity);
+  const judged = assertPrivateScriptDestination(current.destination, parentIdentity);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
   pending.named = true;
   const exclusive = current.revision === 0 && !current.force;
+  // The entry is created in the directory THAT ANSWER came back with, spelled from it, and never through
+  // the destination's own spelling: handing the kernel the spelled destination makes it resolve the chain
+  // a second time, after the judgment, and `home/work/../y` names a different directory the moment `work`
+  // is pointed elsewhere. Same rule the local publisher applies.
+  const entry = path.join(judged, path.basename(current.destination));
   try {
-    if (exclusive) fs.linkSync(staged, current.destination);
-    else fs.renameSync(staged, current.destination);
+    if (exclusive) fs.linkSync(staged, entry);
+    else fs.renameSync(staged, entry);
   } catch (error) {
     writeRecord(file, settlePublishing({ ...current, publishing }));
     pending.named = false;

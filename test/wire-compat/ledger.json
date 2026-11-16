@@ -215,12 +215,17 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:42d78f01311e3e0c5f9099ef72e3c6258241e66204747aa176a55cd5191a2145",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:cc3b263e1a19cb76256217395f81f54e4fffa6a5755693e1efef1e5e931d50f6",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:357bb449fd03596841cede2fcad1589e41b55a806a0c297f10a2320a9b8fb2a7",
     "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
   },
   "compatibleChanges": [
+    {
+      "declaration": "packages/remote/src/session-script-destination.ts#publishScriptVersion",
+      "digest": "sha256:357bb449fd03596841cede2fcad1589e41b55a806a0c297f10a2320a9b8fb2a7",
+      "rationale": "#4565 adds one call ahead of the `mkdir` that creates a missing parent: the destination-ancestry rule is asked over the directories that already exist, so a destination it is going to refuse leaves no directories behind. Nothing on the wire changes: no request field is added, removed or renamed, no response field, route, status or artifact framing moves, and the download contract this declaration consumes is untouched. A released daemon receives exactly the same request and answers the same way; a released caller resolves the same paths on its own disk. A skewed peer parses every payload as before."
+    },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
       "digest": "sha256:c2b14225388041f3a6e708c898c512f91b9b20e51a2656a1fa0d5bfa5989fa30",

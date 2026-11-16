@@ -40,6 +40,65 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
+  'a remote recording creates the entry in the directory the walk judged, not the spelled one',
+  async () => {
+    // `home/work -> priv/x`, `priv/y` and `home/elsewhere/y` both private. The version is judged, staged,
+    // and judged again, and only then does the entry get created: in between, another process may put a
+    // different directory where `work` stood. Handing the kernel the SPELLD destination for that last
+    // step asks it to resolve the chain a second time, and it resolves through the new link, so the
+    // recording lands beside a directory the rule never judged. Creating the entry in the directory the
+    // walk answered is what keeps it where the judgment said.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-entry-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.chmodSync(home, 0o700);
+    const privX = path.join(root, 'priv', 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    fs.chmodSync(path.join(root, 'priv'), 0o700);
+    const privY = path.join(root, 'priv', 'y');
+    fs.mkdirSync(privY);
+    fs.chmodSync(privY, 0o700);
+    // `elsewhere/stash` exists so that the SWAPPED link sends `home/work/../y` to `elsewhere/y`: `..`
+    // applies to the link's target, which is what makes the spelled path answer a different directory
+    // once `work` points there.
+    const elsewhere = path.join(home, 'elsewhere');
+    fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.join(elsewhere, 'stash'));
+    const elsewhereY = path.join(elsewhere, 'y');
+    fs.mkdirSync(elsewhereY);
+    fs.chmodSync(elsewhere, 0o700);
+    const link = path.join(home, 'work');
+    fs.symlinkSync(privX, link);
+    const destination = `${home}/work/../y/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    // The move happens after the last judgment and before the entry is created: exactly the moment the
+    // spelled destination would be re-resolved.
+    const realLinkSync = fs.linkSync;
+    let moved = false;
+    vi.spyOn(fs, 'linkSync').mockImplementation(((existing: unknown, newPath: unknown) => {
+      if (!moved && String(newPath).endsWith('journey.ad')) {
+        moved = true;
+        fs.rmSync(link, { force: true });
+        fs.symlinkSync(path.join(elsewhere, 'stash'), link);
+      }
+      return (realLinkSync as (...args: unknown[]) => unknown)(existing, newPath);
+    }) as typeof fs.linkSync);
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.not.objectContaining({ scriptDeliveryFailure: expect.anything() }),
+      }),
+    );
+    expect(fs.readdirSync(privY)).toEqual(['journey.ad']);
+    expect(fs.readdirSync(elsewhereY)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
   'a remote recording refuses a destination with a missing parent and creates no directories',
   async () => {
     // The same shape as the case above, with the parent ABSENT: this route creates the missing parent
