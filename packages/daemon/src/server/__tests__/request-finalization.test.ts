@@ -4,6 +4,7 @@ import { finalizeDaemonResponse } from '../request-finalization.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { DaemonArtifactType, DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DownloadableArtifactRegistration } from '../../resources/artifact-tracking.ts';
+import { asDaemonDeliveredArtifact } from '../../core/capture-output-ownership.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -384,3 +385,31 @@ test('finalizeDaemonResponse registers no display rotation outside the vocabular
   expect(tracked).toHaveLength(1);
   expect(tracked[0]).not.toHaveProperty('displayRotation');
 });
+
+test.each([
+  { name: 'no tenant', requestTenant: undefined },
+  { name: 'another tenant', requestTenant: 'tenant-b' },
+])(
+  'a daemon-delivered artifact registers for its recording tenant on a request with $name',
+  ({ requestTenant }) => {
+    const registrations: DownloadableArtifactRegistration[] = [];
+    const req: DaemonRequest = {
+      token: 'token',
+      session: 'journey',
+      command: 'wait',
+      positionals: [],
+      meta: requestTenant ? { tenantId: requestTenant } : {},
+    };
+    const script = asDaemonDeliveredArtifact(
+      { field: 'savedScript', artifactType: 'session-script', path: '/tmp/script.ad' },
+      'tenant-a',
+    );
+
+    finalizeDaemonResponse(req, { ok: true, data: { artifacts: [script] } }, (registration) => {
+      registrations.push(registration);
+      return 'artifact-id';
+    });
+
+    expect(registrations.map(({ tenantId }) => tenantId)).toEqual(['tenant-a']);
+  },
+);

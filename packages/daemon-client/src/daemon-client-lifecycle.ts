@@ -285,6 +285,7 @@ async function ensureRemoteDaemon(
       hint: 'Fix or unset --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL so the client targets a reachable daemon or the local one. If this CLI was connected with connect proxy, run agent-device disconnect to clear the saved connection and return to the local daemon.',
     });
   }
+  remoteInfo.capabilities = (health.upstream ?? health).capabilities;
   remoteInfo.remoteInstanceId = health.instanceId;
   remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
   return { info: remoteInfo, startedByClient: false };
@@ -551,19 +552,6 @@ export function attachSessionAddressHints(
   settings: DaemonClientSettings,
 ): DaemonResponse {
   if (!response.ok) {
-    if (
-      settings.remoteBaseUrl &&
-      response.error.details?.reason === 'fill_record_as_requires_armed_recording'
-    ) {
-      return {
-        ...response,
-        error: {
-          ...response.error,
-          message:
-            'fill --record-as requires an armed script recording, but remote clients cannot start one. Connect to a local daemon, start a fresh session with open --save-script, then retry the fill, or omit --record-as.',
-        },
-      };
-    }
     return settings.ownedStateDir && isHeldRepairDivergence(response)
       ? attachRepairSessionAddressHint(response, settings.paths.baseDir)
       : response;

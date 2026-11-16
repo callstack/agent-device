@@ -61,6 +61,7 @@ import {
 } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
+import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
@@ -739,8 +740,10 @@ export async function prepareLockedRequestScope(params: {
   // recovery producer below must name — `existingRef.session.name` is only the public name.
   const existingRef = binding.existingRef;
   const existingSession = existingRef?.session;
+  const deliverRemoteScript = remoteScriptVersionDelivery(sessionStore, scope.sessionName);
   updateDiagnosticsScope({ traceLogPath: existingSession?.trace?.outPath });
-  const finalize = (response: DaemonResponse): DaemonResponse => {
+  const finalize = (handled: DaemonResponse): DaemonResponse => {
+    const response = deliverRemoteScript(handled);
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
     if (shouldRecordEventForRequest(lockedReq)) {
       sessionStore.recordEvent(

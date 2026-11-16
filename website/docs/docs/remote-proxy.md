@@ -104,12 +104,38 @@ while the artifact remains in inventory.
 Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it
 and cleans up after its pipeline stops.
 
-Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
-publication with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
+Outside a macOS app lease, a fresh `open --save-script=<path>` records the session to a file on
+your machine. Each response that records an action returns a `session-script` artifact, and the
+client replaces the file with it. `close` returns the final script. The client writes only to the
+path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
+The daemon must report the `script-artifacts` capability in its `/health` response; through a
+proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` is
+refused before the session starts.
+A session that another process closes keeps the version from the last recorded action.
+
+A script version that is not delivered never fails the command that recorded it. The daemon may
+fail to write it, or this machine may fail to download or save it, for example when it is larger
+than 8 MiB. The command still succeeds, and the file may keep the previous version; the next recorded
+action or `close` delivers the full recording again. If `close` cannot deliver the final script,
+the session still closes and the file keeps the version from the last action. The daemon RPC
+response carries a typed `scriptDeliveryFailure` and a warning. The CLI, SDK, and MCP results do
+not carry `scriptDeliveryFailure` yet, and `close` shows no warning; see
+[#4564](https://github.com/callstack/agent-device/issues/4564).
+
+Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
+batch steps are refused. A `batch` whose steps would close the recording is refused before any step
+runs; run `close` on its own after the batch.
+
+Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
+letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
+`scriptRevision` that grows with each version. Download the artifacts by ID and keep the newest.
+
+Remote requests ignore `meta.cwd`. They refuse host tooling paths and `--launch-console`
+with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
 and `reinstall` binaries, `push` payload files, and xctrace template files. `open` targets and launch
 URLs cannot use the `file:` scheme. Serve local web content over HTTP(S) instead. Upload binaries with the
 client, send `push` payloads as inline JSON, and name xctrace templates. Omit these inputs, or use a local daemon for
-host tooling and script publication. Test suite artifacts also use a daemon-chosen output root.
+host tooling. Test suite artifacts also use a daemon-chosen output root.
 
 ## Human takeover
 

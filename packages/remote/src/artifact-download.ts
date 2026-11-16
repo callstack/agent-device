@@ -3,6 +3,7 @@ import fs from 'node:fs';
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
 import path from 'node:path';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
@@ -24,7 +25,18 @@ export type RemoteArtifactDownload = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  /**
+   * Writes a new private file: created exclusively at 0600, never through a symbolic link, and
+   * stopped once it crosses `maxBytes`, whatever `Content-Length` announced.
+   */
+  privateFile?: Readonly<{ maxBytes: number }>;
 };
+
+const PRIVATE_FILE_FLAGS =
+  fs.constants.O_WRONLY |
+  fs.constants.O_CREAT |
+  fs.constants.O_EXCL |
+  (fs.constants.O_NOFOLLOW ?? 0);
 
 type DownloadDestination = {
   prepare(): Promise<void>;
@@ -46,15 +58,50 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
     };
   }
   return {
+    // A private file goes into a directory its caller allocated, which is never recreated here.
     prepare: async () => {
-      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      if (!params.privateFile)
+        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     },
     cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
     materialize: async (res, signal) => {
-      await pipeline(res, fs.createWriteStream(destinationPath), { signal });
+      const { privateFile } = params;
+      if (!privateFile) {
+        await pipeline(res, fs.createWriteStream(destinationPath), { signal });
+        return destinationPath;
+      }
+      // A file that cannot be opened never consumes the response, so release its socket here.
+      const file = await fs.promises
+        .open(destinationPath, PRIVATE_FILE_FLAGS, 0o600)
+        .catch((error) => {
+          res.destroy();
+          throw error;
+        });
+      const limit = limitBytes(privateFile.maxBytes, params.artifactId);
+      await pipeline(res, limit, file.createWriteStream(), { signal });
       return destinationPath;
     },
   };
+}
+
+function limitBytes(maxBytes: number, artifactId: string): Transform {
+  let received = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      received += chunk.length;
+      if (received <= maxBytes) {
+        callback(null, chunk);
+        return;
+      }
+      callback(
+        new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
+          reason: 'artifact_too_large',
+          artifactId,
+          maxBytes,
+        }),
+      );
+    },
+  });
 }
 
 /** Downloads an artifact and returns the exact file or directory published on the client. */

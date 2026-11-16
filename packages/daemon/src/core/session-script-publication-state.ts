@@ -26,6 +26,20 @@ export type SessionScriptTarget =
   | Readonly<{ kind: 'explicit'; path: string; force: boolean }>;
 
 /**
+ * A remote caller cannot read the daemon target, so each script version is returned as a
+ * `session-script` artifact. `publicationId` is the ID the caller minted for its open, so the caller
+ * writes a version only to the destination it recorded under that ID. `revision` numbers the
+ * versions, so the caller keeps the newest when downloads finish out of order. Only `tenantId`, the
+ * tenant that opened the recording, can download a version; an open without a tenant registers its
+ * versions like every other tenant-less artifact.
+ */
+export type RemoteScriptDelivery = Readonly<{
+  publicationId: string;
+  revision: number;
+  tenantId: string | undefined;
+}>;
+
+/**
  * ADR 0012 decision 6 repair status.
  *
  * The success path is armed -> complete -> close-succeeded -> committed, and `aborted` is
@@ -47,6 +61,7 @@ export type SessionScriptPublicationState =
       kind: 'authoring';
       status: 'armed' | 'aborted' | 'published';
       target: SessionScriptTarget;
+      remoteDelivery?: RemoteScriptDelivery;
     }>
   | Readonly<{
       kind: 'repair';
@@ -190,8 +205,14 @@ export function isScriptPublished(state: SessionScriptPublicationState): boolean
 /** ADR 0016: `open --save-script` on a fresh session arms ordinary authoring. */
 export function armAuthoring(
   requested: Readonly<{ path?: string | undefined; force: boolean }>,
+  remoteDelivery?: RemoteScriptDelivery,
 ): SessionScriptPublicationState {
-  return { kind: 'authoring', status: 'armed', target: resolveScriptTarget(undefined, requested) };
+  return {
+    kind: 'authoring',
+    status: 'armed',
+    target: resolveScriptTarget(undefined, requested),
+    ...(remoteDelivery ? { remoteDelivery } : {}),
+  };
 }
 
 /**
@@ -212,7 +233,7 @@ export function markAuthoringPublished(
 ): SessionScriptPublicationState {
   if (state.kind !== 'authoring') return state;
   return {
-    kind: 'authoring',
+    ...state,
     status: 'published',
     target: { kind: 'explicit', path: writtenPath, force: state.target.force },
   };

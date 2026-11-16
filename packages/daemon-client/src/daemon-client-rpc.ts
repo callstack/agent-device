@@ -43,7 +43,7 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, host, resolve, reject);
+    void resolveDaemonHttpResult(info, req, parsed.result, { host, stateDir }, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -155,14 +155,14 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  host: HostEnvironment,
+  client: { host: HostEnvironment; stateDir: string },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
     resolve(
       info.baseUrl && result.ok
-        ? await materializeRemoteArtifacts(info, req, result, host)
+        ? await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir)
         : result,
     );
   } catch (error) {

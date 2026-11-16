@@ -348,3 +348,26 @@ test('refuses mutating find steps that cannot enforce target identity on replay'
   });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
+
+test('a remote recording refuses active publication and stays armed for close', () => {
+  const outputPath = path.join(root, 'remote', 'screen-x.ad');
+  const session = armedSession({
+    scriptPublication: authoringPublication('armed', {
+      path: outputPath,
+      remote: true,
+    }),
+  });
+  store.publish('authoring', session);
+  expect(
+    handleSessionScriptPublication({
+      req: request(),
+      sessionName: 'authoring',
+      sessionStore: store,
+    }),
+  ).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'remote_script_publication_unsupported' } },
+  });
+  expect(session.scriptPublication).toMatchObject({ status: 'armed' });
+  expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
+});

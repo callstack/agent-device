@@ -234,3 +234,50 @@ test('rejects redirect bodies and interrupted error bodies, and downloads succes
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('a private file that cannot be opened releases the response', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact download response release')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-private-open-');
+  const destinationPath = path.join(tempRoot, 'script.ad');
+  fs.symlinkSync(path.join(tempRoot, 'elsewhere.ad'), destinationPath);
+  let released: () => void = () => {};
+  const responseReleased = new Promise<void>((resolve) => {
+    released = resolve;
+  });
+  const server = http.createServer((_req, res) => {
+    res.on('close', released);
+    res.writeHead(200);
+    const write = () => {
+      if (!res.destroyed) res.write('x'.repeat(1024), () => setTimeout(write, 5));
+    };
+    write();
+  });
+  const port = await listenOnLoopback(server);
+
+  try {
+    await assert.rejects(() =>
+      downloadTo(tempRoot, port, { destinationPath, privateFile: { maxBytes: 1024 * 1024 } }),
+    );
+    await responseReleased;
+    assert.equal(fs.existsSync(path.join(tempRoot, 'elsewhere.ad')), false);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a private file download never recreates a removed staging directory', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'private artifact download parent')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-private-parent-');
+  const destinationPath = path.join(tempRoot, 'retired-staging', 'script.ad');
+  const server = http.createServer((_req, res) => res.end('open Demo\n'));
+  const port = await listenOnLoopback(server);
+
+  try {
+    await assert.rejects(() =>
+      downloadTo(tempRoot, port, { destinationPath, privateFile: { maxBytes: 1024 } }),
+    );
+    assert.equal(fs.existsSync(path.dirname(destinationPath)), false);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

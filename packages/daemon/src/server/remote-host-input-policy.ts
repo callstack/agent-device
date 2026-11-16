@@ -3,9 +3,9 @@ import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
 import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import { remoteScriptOpen } from '../core/session-script-publication-capability.ts';
 
 const HOST_PATH_FIELDS = [
-  'saveScript',
   'sessionSaveScript',
   'launchConsole',
   'baseline',
@@ -56,9 +56,21 @@ function assertRemoteHostToolingInputs(
   const hostPath = HOST_PATH_FIELDS.find((field) =>
     fields.some((record) => record && Object.hasOwn(record, field)),
   );
-  if (hostPath || request.command === INTERNAL_COMMANDS.sessionSaveScript) {
-    throw remoteHostInputDenied(hostPath ?? 'command');
+  // A remote recording names no host path: the client keeps its destination and sends the
+  // publication ID it minted (ADR 0016).
+  const remoteScript =
+    request.command === 'open' &&
+    request.flags?.saveScript === true &&
+    remoteScriptOpen(request.meta) !== undefined;
+  const invalidScript = fields.some(
+    (record) =>
+      record && Object.hasOwn(record, 'saveScript') && (record !== request.flags || !remoteScript),
+  );
+  if (invalidScript) throw remoteHostInputDenied('saveScript', REMOTE_SCRIPT_PUBLICATION_HINT);
+  if (hostPath === 'sessionSaveScript' || request.command === INTERNAL_COMMANDS.sessionSaveScript) {
+    throw remoteHostInputDenied(hostPath ?? 'command', REMOTE_SCRIPT_PUBLICATION_HINT);
   }
+  if (hostPath) throw remoteHostInputDenied(hostPath);
   const hostArgument = findRemoteFileUrlInput(request) ?? findRemoteHostArgument(request);
   if (hostArgument) throw remoteHostInputDenied(hostArgument);
 }
@@ -146,6 +158,9 @@ function restrictRemoteBatchSteps(request: DaemonRequest): DaemonRequest {
     flags.batchMaxSteps ?? DEFAULT_BATCH_MAX_STEPS,
   );
   flags.batchSteps = steps.map((step) => {
+    if (step.flags?.saveScript !== undefined) {
+      throw remoteHostInputDenied('saveScript', REMOTE_SCRIPT_PUBLICATION_HINT);
+    }
     const restricted = restrictRemoteHostInputs({ ...request, ...step });
     return {
       ...step,
@@ -181,11 +196,16 @@ function remoteCapturePositionals(request: DaemonRequest): string[] {
   return positionals;
 }
 
-function remoteHostInputDenied(field: string): AppError {
+const REMOTE_HOST_INPUT_HINT =
+  'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling.';
+const REMOTE_SCRIPT_PUBLICATION_HINT =
+  'Record with open --save-script=<path>: each recorded action and close refresh that file. Use a local daemon for session save-script.';
+
+function remoteHostInputDenied(field: string, hint = REMOTE_HOST_INPUT_HINT): AppError {
   return new AppError('INVALID_ARGS', `Remote requests cannot supply the host input ${field}.`, {
     reason: 'REMOTE_HOST_INPUT_DENIED',
     field,
     retriable: false,
-    hint: 'Omit host paths and download generated output artifacts by ID. Use a local daemon for host tooling or script publication.',
+    hint,
   });
 }

@@ -106,6 +106,13 @@ test.for<MaterializationCase>([
     expected: 'client/clip.mp4',
   },
   {
+    name: 'a close does not authorize an unrelated response artifact destination',
+    command: 'close',
+    localPath: 'outside/shot.png',
+    fileName: 'shot.png',
+    expected: 'cwd/shot.png',
+  },
+  {
     name: 'a record start refuses a response localPath',
     command: 'record',
     positionals: ['start'],
@@ -156,6 +163,7 @@ test.for<MaterializationCase>([
         },
       },
       createTestHostEnvironment(),
+      inRoot('state'),
     );
     expect(response.ok && response.data?.path).toBe(inRoot(c.expected));
     expect(fs.readFileSync(inRoot(c.expected), 'utf8')).toBe('artifact-bytes');

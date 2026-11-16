@@ -1,4 +1,13 @@
+import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type {
+  DaemonRequestMeta,
+  DaemonResponse,
+  ScriptDeliveryFailure,
+} from '@agent-device/kernel/contracts';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import type { SessionStore } from './session-store.ts';
+import { asDaemonDeliveredArtifact } from './capture-output-ownership.ts';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -11,6 +20,8 @@ import {
   markAuthoringPublished,
   resolveScriptTarget,
   scriptTargetForce,
+  scriptTargetPath,
+  type RemoteScriptDelivery,
 } from './session-script-publication-state.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 
@@ -37,16 +48,37 @@ export function isAuthoringArmedSession(session: SessionState | undefined): bool
   return state.kind === 'authoring' && state.status === 'armed';
 }
 
-/** ADR 0016: `open <app> --save-script[=<path>]` on a fresh session arms ordinary authoring. */
+/**
+ * ADR 0016: `open <app> --save-script[=<path>]` on a fresh session arms ordinary authoring. A
+ * remote recording is delivered under the publication ID its caller minted.
+ */
 export function armAuthoringOnOpen(
   session: SessionState,
   requested: { path?: string; force?: boolean },
   hostCwd: string,
+  remote?: Omit<RemoteScriptDelivery, 'revision'>,
 ): void {
-  session.scriptPublication = armAuthoring({
-    path: requested.path !== undefined ? expandSessionPath(requested.path, hostCwd) : undefined,
-    force: requested.force === true,
-  });
+  session.scriptPublication = armAuthoring(
+    {
+      path: requested.path !== undefined ? expandSessionPath(requested.path, hostCwd) : undefined,
+      force: requested.force === true,
+    },
+    remote ? { ...remote, revision: 0 } : undefined,
+  );
+}
+
+/**
+ * The remote delivery an `open --save-script` asks for: the publication ID its client minted, when
+ * well formed, and the tenant that opens it.
+ */
+export function remoteScriptOpen(
+  meta: DaemonRequestMeta | undefined,
+): Omit<RemoteScriptDelivery, 'revision'> | undefined {
+  const publicationId = meta?.scriptPublicationId;
+  if (typeof publicationId !== 'string' || !/^[A-Za-z0-9-]{16,64}$/.test(publicationId)) {
+    return undefined;
+  }
+  return { publicationId, tenantId: meta?.tenantId };
 }
 
 /**
@@ -144,6 +176,19 @@ export function retargetActivePublication(
   };
 }
 
+/** Whether this session records into an armed remote recording that delivers to its caller. */
+export function isArmedRemoteRecording(session: SessionState | undefined): boolean {
+  return isAuthoringArmedSession(session) && remoteScriptDelivery(session) !== undefined;
+}
+
+/** How a remote caller receives this session's script, if the recording was armed remotely. */
+export function remoteScriptDelivery(
+  session: SessionState | undefined,
+): RemoteScriptDelivery | undefined {
+  const state = publicationState(session);
+  return state.kind === 'authoring' ? state.remoteDelivery : undefined;
+}
+
 /** Active publication succeeded: PUBLISHED is terminal, which is what stops recording. */
 export function markActivePublicationDone(session: SessionState, writtenPath: string): void {
   session.scriptPublication = markAuthoringPublished(publicationState(session), writtenPath);
@@ -173,4 +218,143 @@ export function effectiveWriteForce(
 /** A committed/published session's second write must no-op rather than republish. */
 export function isSessionScriptPublished(session: SessionState): boolean {
   return isScriptPublished(publicationState(session));
+}
+
+/**
+ * The outcome of one script version of a remote recording: the daemon file the caller downloads,
+ * or why the version could not be written.
+ */
+type RemoteScriptVersion =
+  | Readonly<{ path: string }>
+  | Readonly<{ failure: Readonly<{ message: string; hint: string }> }>;
+
+/** What a close delivers for a remote recording: the recording it ended and its final version. */
+export type RemoteCloseScript = Readonly<{
+  delivery: RemoteScriptDelivery;
+  version?: RemoteScriptVersion;
+}>;
+
+/** Numbers the next version of a remote recording, so the caller keeps the newest one. */
+function stampNextRevision(session: SessionState): RemoteScriptDelivery | undefined {
+  const state = session.scriptPublication;
+  if (state?.kind !== 'authoring' || !state.remoteDelivery) return undefined;
+  const remoteDelivery = { ...state.remoteDelivery, revision: state.remoteDelivery.revision + 1 };
+  session.scriptPublication = { ...state, remoteDelivery };
+  return remoteDelivery;
+}
+
+/**
+ * Adds one script version of a remote recording to a successful response. The artifact carries the
+ * publication ID and its revision, so the caller writes it only to the destination it recorded and
+ * keeps the newest version. It registers for the tenant that opened the recording, whoever sent
+ * this request. A failed version keeps the response successful and carries a typed
+ * `scriptDeliveryFailure` with the same publication ID and a warning.
+ */
+function withRemoteScriptVersion(
+  response: DaemonResponse,
+  delivery: RemoteScriptDelivery,
+  version: RemoteScriptVersion,
+): DaemonResponse {
+  if (!response.ok) return response;
+  const { publicationId } = delivery;
+  const data = response.data ?? {};
+  if ('failure' in version) {
+    const failure: ScriptDeliveryFailure = {
+      reason: 'script_delivery_failed',
+      publicationId,
+      ...version.failure,
+    };
+    return {
+      ok: true,
+      data: {
+        ...data,
+        scriptDeliveryFailure: failure,
+        warnings: [...readResponseWarnings(data), `${failure.message} ${failure.hint}`],
+      },
+    };
+  }
+  const artifact = asDaemonDeliveredArtifact(
+    {
+      field: 'savedScript',
+      artifactType: 'session-script',
+      path: version.path,
+      fileName: path.basename(version.path),
+      scriptPublicationId: publicationId,
+      scriptRevision: delivery.revision,
+    },
+    delivery.tenantId,
+  );
+  const artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
+  return { ok: true, data: { ...data, artifacts: [...artifacts, artifact] } };
+}
+
+/**
+ * Captures the session's action count before a request. A successful request that then recorded
+ * into a remote armed session returns the new script version. When that version cannot be written,
+ * the action keeps its success and the response discloses the failed delivery.
+ */
+export function remoteScriptVersionDelivery(
+  sessionStore: SessionStore,
+  sessionName: string,
+): (response: DaemonResponse) => DaemonResponse {
+  const before = sessionStore.lookup(sessionName)?.session;
+  const actionCountBefore = before && remoteScriptDelivery(before) ? before.actions.length : 0;
+  return (response) => {
+    if (!response.ok) return response;
+    const ref = sessionStore.lookup(sessionName);
+    const delivery = remoteScriptDelivery(ref?.session);
+    if (!ref || !delivery || ref.session.actions.length === actionCountBefore) return response;
+    const result = sessionStore.writeRemoteScriptVersion(ref);
+    if (result.written) {
+      const stamped = stampNextRevision(ref.session) ?? delivery;
+      return withRemoteScriptVersion(response, stamped, { path: result.path });
+    }
+    if (!result.error) return response;
+    // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response.
+    return withRemoteScriptVersion(response, delivery, {
+      failure: {
+        message: 'The action succeeded, but the daemon could not write the remote recording.',
+        hint: 'The --save-script file keeps the previous version. The next recorded action or close delivers the full recording again.',
+      },
+    });
+  };
+}
+
+/**
+ * Reads what a close of a remote recording delivers from the session that the close-time write
+ * just marked, because teardown may have replaced the session object before that write. A
+ * published final version is stamped after every earlier version, so it replaces the last one.
+ */
+export function remoteCloseScript(
+  session: SessionState,
+  writeFailed: boolean,
+): RemoteCloseScript | undefined {
+  const state = session.scriptPublication;
+  if (state?.kind !== 'authoring' || !state.remoteDelivery) return undefined;
+  const delivery = state.remoteDelivery;
+  if (writeFailed) {
+    const message = 'The session was closed, but the daemon could not write its final script.';
+    const hint = 'The --save-script file keeps the version from the last recorded action.';
+    return { delivery, version: { failure: { message, hint } } };
+  }
+  const writtenPath = state.status === 'published' ? scriptTargetPath(state) : undefined;
+  if (!writtenPath) return { delivery };
+  return { delivery: stampNextRevision(session) ?? delivery, version: { path: writtenPath } };
+}
+
+/**
+ * A close of a remote recording names the recording it ended, so the caller retires its
+ * destination even when close publishes nothing, as for an aborted recording. When close could
+ * not write the final version, the close keeps its success and discloses the failed delivery.
+ */
+export function remoteCloseScriptDelivery(
+  response: DaemonResponse,
+  close: RemoteCloseScript | undefined,
+): DaemonResponse {
+  if (!close || !response.ok) return response;
+  const named: DaemonResponse = {
+    ok: true,
+    data: { ...response.data, scriptPublicationId: close.delivery.publicationId },
+  };
+  return close.version ? withRemoteScriptVersion(named, close.delivery, close.version) : named;
 }

@@ -142,6 +142,12 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // URL builder below is its counterpart.
       ...from(REQUEST_DIAGNOSTICS_HTTP, 'resolveRequestDiagnosticsHttpRoute'),
       ...from(REMOTE_REQUEST_DIAGNOSTICS, 'buildRemoteRequestDiagnosticsUrl'),
+      ...from(
+        'packages/daemon-contracts/src/daemon-resolution.ts',
+        'DAEMON_CAPABILITIES',
+        'DaemonCapability',
+        'readDaemonCapabilities',
+      ),
       // Consumer side of /health: the client reads this payload and refuses a
       // mismatched peer from it, so a narrowed reader defeats the very check
       // ADR 0006 built. `readRemoteDaemonHealth` is where the comparison lives.
@@ -287,6 +293,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonArtifact',
         'DaemonArtifactType',
         'DaemonArtifactKnownType',
+        'ScriptDeliveryFailure',
       ),
       ...from(
         KERNEL_ERRORS,
@@ -439,7 +446,18 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DownloadRemoteArtifactParams',
         'downloadRemoteArtifact',
         'materializeRemoteArtifacts',
+        'downloadResponseArtifacts',
         'resolveMaterializedArtifactPath',
+      ),
+      // The client functions and types that write the remote open --save-script request field and
+      // read the session-script artifact fields (ADR 0016).
+      ...from(
+        'packages/remote/src/session-script-destination.ts',
+        'SessionScriptDelivery',
+        'publishScriptVersion',
+        'PublishOutcome',
+        'sendRemoteScriptOpen',
+        'RemoteEndpoint',
       ),
       ...from(ARTIFACT_DOWNLOAD, 'RemoteArtifactDownload', 'downloadRemoteArtifactFromUrl'),
     ],

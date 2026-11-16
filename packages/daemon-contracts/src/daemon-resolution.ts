@@ -148,7 +148,7 @@ export function resolveDaemonTransportPreference(
 }
 
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
-export const DAEMON_CAPABILITIES = ['quiesce'] as const;
+export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**
@@ -268,6 +268,19 @@ export function readDaemonLifecycleFence(input: unknown): DaemonLifecycleFence |
   if (!Number.isInteger(pid)) return undefined;
   if (processStartTime !== null && typeof processStartTime !== 'string') return undefined;
   return { pid: pid as number, processStartTime };
+}
+
+/**
+ * Refuses a remote `--save-script` before it is sent to a daemon that cannot deliver session
+ * scripts (ADR 0016), because such a daemon records to its own disk and never delivers.
+ */
+export function assertScriptArtifactsCapability(capabilities: readonly string[] | undefined): void {
+  if (capabilities?.includes('script-artifacts')) return;
+  throw new AppError('INVALID_ARGS', 'The remote daemon cannot deliver session scripts.', {
+    reason: 'remote_script_artifacts_unsupported',
+    daemonRequestSent: false,
+    hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
+  });
 }
 
 export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {

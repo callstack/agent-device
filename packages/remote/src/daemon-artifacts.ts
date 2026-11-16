@@ -8,12 +8,14 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
+import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { withUploadPreparationDeadline } from './upload-stream.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
@@ -76,7 +78,7 @@ async function prepareRemoteRequestArtifactsWithinBudget(
     });
   }
 
-  assertRemoteDaemonSupportsSaveScript(req);
+  flags = prepareRemoteScriptOutput(req, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
@@ -113,24 +115,36 @@ async function prepareRemoteRequestArtifactsWithinBudget(
 }
 
 /**
- * #1802 (the other half of the caller/daemon file split): `--save-script` WRITES a `.ad` file,
- * and the writer is the daemon's `SessionScriptWriter` — on the daemon's own disk, next to a
- * source path that does not exist there. Reading was fixed by sending script sources with the
- * request; writing has no such symmetric path yet (the healed script commits at session teardown,
- * not in the replay response), so a remote request that would produce a file the caller can never
- * see is refused here instead of appearing to succeed. Tracked for the return-the-healed-script
- * response plumbing.
+ * A remote `open --save-script` names a caller file. The daemon allocates its own output and
+ * returns each script version as an artifact, which the client downloads to that file.
  */
-function assertRemoteDaemonSupportsSaveScript(req: Omit<DaemonWireRequest, 'token'>): void {
-  if (req.flags?.saveScript === undefined) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    '--save-script is not supported against a remote daemon: the healed script would be written on the daemon host, not on this machine.',
-    {
-      hint: 'Run the script against a local daemon to capture a healed .ad, or re-run without --save-script.',
-      command: req.command,
-    },
+function prepareRemoteScriptOutput(
+  req: Omit<DaemonWireRequest, 'token'>,
+  flags: DaemonWireRequest['flags'],
+  clientPaths: Record<string, string>,
+  host: HostEnvironment,
+): DaemonWireRequest['flags'] {
+  const requested = flags?.saveScript;
+  if (!requested) return flags;
+  if (req.command !== 'open') {
+    throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
+      reason: 'remote_script_lifecycle_unsupported',
+      hint: 'Use open --save-script. A remote close writes the recording to that path. Remote repaired-script output is not supported.',
+    });
+  }
+  const localPath = resolveUserPath(
+    typeof requested === 'string' ? requested : `recording-${Date.now()}.ad`,
+    { cwd: req.meta?.cwd ?? host.cwd, env: host.env },
   );
+  if (requested !== true && !req.flags?.force && fs.existsSync(localPath)) {
+    throw new AppError('COMMAND_FAILED', `A file already exists at ${localPath}.`, {
+      reason: 'script_target_exists',
+      path: localPath,
+      hint: 'Choose another output path or pass --force/--overwrite.',
+    });
+  }
+  clientPaths.savedScript = localPath;
+  return { ...flags, saveScript: true };
 }
 
 async function prepareRemoteInstallPackage(
@@ -437,14 +451,54 @@ function hasNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+/**
+ * A remote `open --save-script` mints its publication ID and records its caller destination before
+ * it leaves (ADR 0016). The destination owner loads only for this request.
+ */
+export async function sendRemoteScriptOpen(
+  ...args: Parameters<typeof import('./session-script-destination.ts').sendRemoteScriptOpen>
+): Promise<DaemonResponse> {
+  const scripts = await import('./session-script-destination.ts');
+  return await scripts.sendRemoteScriptOpen(...args);
+}
+
+/**
+ * Downloads the artifacts of a successful remote response. A session script goes only where this
+ * client's own `open --save-script` recorded under `stateDir`, never where a response says; that
+ * owner loads only for a response that names a publication or carries a script artifact.
+ */
 export async function materializeRemoteArtifacts(
   info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
+  stateDir: string,
+): Promise<DaemonResponse> {
+  if (!info.baseUrl) return response;
+  const endpoint = { baseUrl: info.baseUrl, token: info.token };
+  const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
+  const download = (scripts?: SessionScriptDelivery) =>
+    downloadResponseArtifacts(endpoint, req, response, host, scripts);
+  if (
+    response.data?.scriptPublicationId === undefined &&
+    !artifacts.some(isSessionScriptArtifact)
+  ) {
+    return await download();
+  }
+  const { sessionScriptDelivery } = await import('./session-script-destination.ts');
+  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
+  return await scripts.settleAfter(download);
+}
+
+async function downloadResponseArtifacts(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  host: HostEnvironment,
+  scripts: SessionScriptDelivery | undefined,
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  if (artifacts.length === 0 || !info.baseUrl) return response;
+  if (artifacts.length === 0) return response;
   const nextData = response.data ? { ...response.data } : {};
   const nextArtifacts: DaemonArtifact[] = [];
   for (const artifact of artifacts) {
@@ -452,10 +506,15 @@ export async function materializeRemoteArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
+    // `savedScript` and the session-script type are reserved for the session-script owner, which
+    // drops a script artifact under another field or of another type.
+    if (scripts && isSessionScriptArtifact(artifact)) {
+      await scripts.publish(artifact, nextData, nextArtifacts);
+      continue;
+    }
     const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
     const materializedPath = await downloadRemoteArtifact({
-      baseUrl: info.baseUrl,
-      token: info.token,
+      ...endpoint,
       artifactId: artifact.artifactId,
       destinationPath: downloadPath,
       requestScope: req.meta,
@@ -476,6 +535,10 @@ export async function materializeRemoteArtifacts(
   }
   nextData.artifacts = nextArtifacts;
   return { ok: true, data: nextData };
+}
+
+function isSessionScriptArtifact(artifact: DaemonArtifact | undefined): boolean {
+  return artifact?.field === 'savedScript' || artifact?.artifactType === 'session-script';
 }
 
 /**
@@ -529,6 +592,8 @@ type DownloadRemoteArtifactParams = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  /** A capped download into a new private file (`artifact-download.ts`). */
+  privateFile?: Readonly<{ maxBytes: number }>;
 };
 
 export async function downloadRemoteArtifact(
@@ -537,14 +602,10 @@ export async function downloadRemoteArtifact(
   // Remote artifact transfer is not part of routine CLI startup. Keep the HTTP/archive owner out
   // of the eager command graph and load it only after a remote response names an artifact.
   const { downloadRemoteArtifactFromUrl } = await import('./artifact-download.ts');
+  const { baseUrl, ...download } = params;
   return await downloadRemoteArtifactFromUrl({
-    artifactUrl: new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId)),
-    token: params.token,
-    artifactId: params.artifactId,
-    destinationPath: params.destinationPath,
-    requestScope: params.requestScope,
-    ...(params.timeoutMs === undefined ? {} : { timeoutMs: params.timeoutMs }),
-    ...(params.isDirectory === undefined ? {} : { isDirectory: params.isDirectory }),
+    ...download,
+    artifactUrl: new URL(buildDaemonArtifactUrl(baseUrl, params.artifactId)),
   });
 }
 
