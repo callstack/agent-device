@@ -44,8 +44,27 @@ function journey() {
   return { root, stateDir: path.join(root, 'state'), destination: path.join(root, 'journey.ad') };
 }
 
-function request(command: string, meta: DaemonWireRequest['meta'] = {}): DaemonWireRequest {
-  return { token: 't', session: 'journey', command, positionals: [], meta };
+function request(
+  command: string,
+  meta: DaemonWireRequest['meta'] = {},
+  flags?: DaemonWireRequest['flags'],
+): DaemonWireRequest {
+  return {
+    token: 't',
+    session: 'journey',
+    command,
+    positionals: [],
+    ...(flags ? { flags } : {}),
+    meta,
+  };
+}
+
+/**
+ * The plan a `batch` request carries: the daemon answers one entry per submitted step, and the
+ * client authorizes delivery only for the steps IT submitted (#4564 review).
+ */
+function batchPlan(...commands: string[]): DaemonWireRequest['flags'] {
+  return { batchSteps: commands.map((command) => ({ command })) };
 }
 
 function script(artifactId: string, revision: number, publicationId: string): DaemonArtifact {
@@ -113,6 +132,18 @@ function batchSteps(response: DaemonResponse): Array<Record<string, any>> {
   return (response.data?.results ?? []) as Array<Record<string, any>>;
 }
 
+/**
+ * Nothing was delivered: no step names a caller file, and no artifact reports a published local
+ * path. The daemon's own artifact entries stay in the answer, field names and all, so the answer is
+ * checked for what this client would have added.
+ */
+function expectDeliveredNothing(response: DaemonResponse): void {
+  const text = JSON.stringify(response);
+  expect(text).not.toContain('"savedScript":');
+  expect(text).not.toContain('"localPath":');
+  expect(text).not.toContain('"scriptDeliveryFailure":');
+}
+
 test('a batch delivers each step script in step order and a close step retires the record', async () => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({
@@ -123,15 +154,20 @@ test('a batch delivers each step script in step order and a close step retires t
   const id = await open(baseUrl, stateDir, destination);
   expect(records(stateDir)).toHaveLength(1);
 
-  const response = await answer(baseUrl, stateDir, request('batch'), {
-    total: 2,
-    executed: 2,
-    totalDurationMs: 5,
-    results: [
-      step(1, 'wait', { waited: true, artifacts: [script('v2', 2, id)] }),
-      step(2, 'close', { scriptPublicationId: id, artifacts: [script('v3', 3, id)] }),
-    ],
-  });
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'close')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 5,
+      results: [
+        step(1, 'wait', { waited: true, artifacts: [script('v2', 2, id)] }),
+        step(2, 'close', { scriptPublicationId: id, artifacts: [script('v3', 3, id)] }),
+      ],
+    },
+  );
 
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nclose\n');
   // The terminal step retired the record, so no later version of that publication writes anything.
@@ -164,7 +200,7 @@ test('a batch step whose download fails discloses the failure on that step and k
   const baseUrl = await artifactServer({ v1: 'open Demo\n' });
   const id = await open(baseUrl, stateDir, destination);
 
-  const response = await answer(baseUrl, stateDir, request('batch'), {
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('wait')), {
     total: 1,
     executed: 1,
     totalDurationMs: 1,
@@ -208,7 +244,7 @@ test('a batch that closes keeps its success and retires the record when the fina
   const baseUrl = await artifactServer({ v1: 'open Demo\n' });
   const id = await open(baseUrl, stateDir, destination);
 
-  const response = await answer(baseUrl, stateDir, request('batch'), {
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('close')), {
     total: 1,
     executed: 1,
     totalDurationMs: 1,
@@ -237,20 +273,25 @@ test('a batch step script of another publication or of another field writes noth
   const id = await open(baseUrl, stateDir, destination);
   const victim = path.join(root, 'victim.ad');
 
-  const response = await answer(baseUrl, stateDir, request('batch'), {
-    total: 2,
-    executed: 2,
-    totalDurationMs: 1,
-    results: [
-      // Another publication's version, and one under a field this owner does not claim.
-      step(1, 'wait', {
-        artifacts: [script('foreign', 9, '00000000-0000-4000-8000-000000000000')],
-      }),
-      step(2, 'wait', {
-        artifacts: [{ ...script('foreign', 8, id), field: 'path', fileName: 'victim.ad' }],
-      }),
-    ],
-  });
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'wait')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        // Another publication's version, and one under a field this owner does not claim.
+        step(1, 'wait', {
+          artifacts: [script('foreign', 9, '00000000-0000-4000-8000-000000000000')],
+        }),
+        step(2, 'wait', {
+          artifacts: [{ ...script('foreign', 8, id), field: 'path', fileName: 'victim.ad' }],
+        }),
+      ],
+    },
+  );
 
   expect(batchSteps(response).map((result) => result.data)).toEqual([
     { artifacts: [] },
@@ -271,7 +312,198 @@ test('a batch answer with no step scripts is returned untouched', async () => {
     results: [step(1, 'wait', { waited: true })],
   };
 
-  const response = await answer(baseUrl, stateDir, request('batch'), data);
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('wait')), data);
 
   expect(response).toEqual({ ok: true, data });
+});
+
+test('a close step that names the publication retires the record with no artifact to deliver', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: 'open Demo\n' });
+  const id = await open(baseUrl, stateDir, destination);
+
+  // The daemon could not write the final version, so it answers this close with its own typed
+  // failure and nothing to download. The caller still has to stop tracking a recording it lost.
+  const response = await answer(baseUrl, stateDir, request('batch', {}, batchPlan('close')), {
+    total: 1,
+    executed: 1,
+    totalDurationMs: 1,
+    results: [
+      step(1, 'close', {
+        scriptPublicationId: id,
+        scriptDeliveryFailure: { reason: 'script_delivery_failed', publicationId: id },
+        warnings: ['The daemon could not write the final script.'],
+      }),
+    ],
+  });
+
+  expect(records(stateDir)).toEqual([]);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  // The daemon's own warning stands on its step, and reaches the batch's top level as well.
+  expect(batchSteps(response)[0]?.data).toEqual(
+    expect.objectContaining({ scriptPublicationId: id }),
+  );
+  expect(response.ok && response.data?.warnings).toEqual([
+    'The daemon could not write the final script.',
+  ]);
+});
+
+test('a batch step entry the plan does not authorize delivers nothing and retires nothing', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: 'open Demo\n',
+    v2: 'open Demo\nwait 100\n',
+  });
+  const id = await open(baseUrl, stateDir, destination);
+
+  // The caller submitted two `wait` steps. This answer plants a closing step in the second position,
+  // names this client's publication, and offers the artifact it claims the caller wrote.
+  const planted = step(2, 'close', {
+    scriptPublicationId: id,
+    artifacts: [script('v2', 2, id)],
+  });
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'wait')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [step(1, 'wait', { waited: true }), planted],
+    },
+  );
+
+  // The planted entry is reported exactly as the daemon answered it, with its artifact still remote.
+  expect(batchSteps(response)[1]).toEqual(planted);
+  // The caller's recording was never closed, so its record and its file stand untouched.
+  expect(records(stateDir)).toHaveLength(1);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  expectDeliveredNothing(response);
+});
+
+test('a batch step entry out of position or not successful authorizes no delivery', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: 'open Demo\n',
+    v2: 'open Demo\nwait 100\n',
+  });
+  const id = await open(baseUrl, stateDir, destination);
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'wait')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        // The runner numbers its entries 1 and 2. These name other positions, and one reports a step
+        // the caller cannot see as done.
+        { step: 7, command: 'wait', ok: true, data: { artifacts: [script('v2', 2, id)] } },
+        { step: 2, command: 'wait', ok: false, data: { artifacts: [] } },
+      ],
+    },
+  );
+
+  expectDeliveredNothing(response);
+  expect(records(stateDir)).toHaveLength(1);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+});
+
+test('a batch request that submitted no plan delivers nothing from its step entries', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: 'open Demo\n',
+    v2: 'open Demo\nwait 100\n',
+  });
+  const id = await open(baseUrl, stateDir, destination);
+
+  const response = await answer(baseUrl, stateDir, request('batch'), {
+    total: 1,
+    executed: 1,
+    totalDurationMs: 1,
+    results: [step(1, 'close', { scriptPublicationId: id, artifacts: [script('v2', 2, id)] })],
+  });
+
+  expectDeliveredNothing(response);
+  expect(records(stateDir)).toHaveLength(1);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+});
+
+test('one batch answer asks for one download per step, whatever versions it names', async () => {
+  const { stateDir, destination } = journey();
+  const requested: string[] = [];
+  const server = http.createServer((req, res) => {
+    const id = decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '');
+    requested.push(id);
+    if (id !== 'v3' && id !== 'v5') {
+      res.writeHead(503).end('unavailable');
+      return;
+    }
+    const body = id === 'v3' ? 'open Demo\nwait 100\n' : 'open Demo\nwait 100\nsnapshot\n';
+    res.writeHead(200, { 'content-length': Buffer.byteLength(body) });
+    res.end(body);
+  });
+  servers.push(server);
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const id = await open(baseUrl, stateDir, destination);
+  requested.length = 0;
+
+  // One answer names every version of every step at once, including duplicates and versions older
+  // than one it already named. None of that may turn into one request each.
+  const repeats = (artifactId: string, revision: number, times: number) =>
+    Array.from({ length: times }, () => script(artifactId, revision, id));
+  await answer(baseUrl, stateDir, request('batch', {}, batchPlan('wait', 'snapshot')), {
+    total: 2,
+    executed: 2,
+    totalDurationMs: 1,
+    results: [
+      step(1, 'wait', {
+        artifacts: [...repeats('gone', 2, 500), ...repeats('v3', 3, 2), ...repeats('gone', 1, 2)],
+      }),
+      step(2, 'snapshot', {
+        artifacts: [...repeats('gone', 4, 497), script('v5', 5, id), ...repeats('v3', 3, 2)],
+      }),
+    ],
+  });
+
+  expect(requested).toEqual(['v3', 'v5']);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nsnapshot\n');
+});
+
+test('a batch step that cannot save its version discloses it on the batch payload', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: 'open Demo\n' });
+  const id = await open(baseUrl, stateDir, destination);
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'wait')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        step(1, 'wait', { artifacts: [script('gone', 2, id)] }),
+        step(2, 'wait', { artifacts: [script('gone', 3, id)] }),
+      ],
+    },
+  );
+
+  // A batch's human and machine output reads the batch's own payload, so the failure and its
+  // warning have to be lifted there — a step's nested data never reaches the CLI or the MCP text.
+  expect(response.ok && response.data?.scriptDeliveryFailure).toEqual(
+    expect.objectContaining({
+      reason: 'script_delivery_failed',
+      cause: 'script_download_failed',
+      publicationId: id,
+    }),
+  );
+  const warnings = (response.ok ? response.data?.warnings : undefined) as string[] | undefined;
+  expect(warnings).toHaveLength(1);
+  expect(warnings?.[0]).toContain('script');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });

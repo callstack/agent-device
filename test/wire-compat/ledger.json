@@ -63,7 +63,7 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
     "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:5d111b5cb758578d810f2540086d2730459a80ee56f2fb9c14555bd6fe4e1792",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:a5cf6fd4a9abea34ec051f03d6e45e5aa248f480371fdf22f93de06622a57b47",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:8d3d5a0e8a69c38b1087fddef15247e2b7101b5b5dfe45dac950bdc910459224",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:75226219f3d2475b59b297593346879c5211f56530a45494ff696b435e002bce",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
@@ -443,8 +443,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
-      "digest": "sha256:a5cf6fd4a9abea34ec051f03d6e45e5aa248f480371fdf22f93de06622a57b47",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The signature also names the client request as DaemonWireRequest and the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "digest": "sha256:8d3d5a0e8a69c38b1087fddef15247e2b7101b5b5dfe45dac950bdc910459224",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). The signature also names the client request as DaemonWireRequest and the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. #4564 (client-side only): before a failed remote batch's error is rehydrated, the client delivers the session scripts of the steps that finished, which the daemon already reported in the error's existing `partialResults`, and adds its own `warnings` and `scriptDeliveryFailure` to that record. Nothing new is required of a peer and nothing it sends is read differently; the delivery is one more artifact download on the route clients already use."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadDirectArtifact",

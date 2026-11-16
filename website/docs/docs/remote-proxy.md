@@ -123,7 +123,10 @@ recorded a version discloses it: the CLI prints a `Warning:` line and carries a 
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
 batch steps are refused. A `batch` delivers the script versions its steps record, in step order, and
-a `close` step retires the recording the same way a standalone `close` does.
+a `close` step retires the recording the same way a standalone `close` does. When a later step fails,
+the steps that already ran still deliver their scripts, and the batch error stands. A step whose
+script did not arrive is reported once more on the batch result itself, so the `Warning:` line and
+the `scriptDeliveryFailure` field reach the batch output rather than only the step's own entry.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a

@@ -10,7 +10,10 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
+import {
+  materializeRemoteArtifacts,
+  materializeRemoteBatchPartialArtifacts,
+} from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
@@ -92,16 +95,28 @@ async function rejectDaemonHttpRpcError(
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  const localized = await localizeRemoteDaemonError(payload, {
-    endpoint: {
-      baseUrl: info.baseUrl,
-      token: info.token,
-      tenantId: req.meta?.tenantId,
-      leaseId: leaseScopeFromRequest(req).leaseId,
-    },
+  // A failed batch still reports the steps it finished, and one of them may have closed this
+  // client's recording, so its script is delivered before the error reaches the caller. The batch
+  // error itself stands either way.
+  const delivered = await materializeRemoteBatchPartialArtifacts(
+    info,
+    req,
+    payload.details,
     stateDir,
-    requestId,
-  });
+  );
+  const localized = await localizeRemoteDaemonError(
+    delivered ? { ...payload, details: delivered } : payload,
+    {
+      endpoint: {
+        baseUrl: info.baseUrl,
+        token: info.token,
+        tenantId: req.meta?.tenantId,
+        leaseId: leaseScopeFromRequest(req).leaseId,
+      },
+      stateDir,
+      requestId,
+    },
+  );
   reject(appErrorFromDaemonError(localized, requestId));
 }
 

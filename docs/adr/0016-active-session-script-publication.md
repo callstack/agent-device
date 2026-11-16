@@ -205,6 +205,9 @@ It adds no state name, command, or flag:
 - At the public HTTP boundary, `saveScript` is accepted only as `true` on `open` with a well-formed publication ID.
   `session save-script` refuses a remote recording (`remote_script_publication_unsupported`), and remote `close --save-script`, `replay --save-script`, and `--save-script` in batch steps stay refused.
   A batch delivers the script versions its steps record, in step order, and a batch step that closes the recording retires the caller record like a standalone close does.
+  The submitted plan is the only authority for that delivery: an answer entry that is not the plan's own step at its own position, or that is not a step that finished, gets no download and no retirement, and one answer earns at most one download per submitted step.
+  The steps that finished of a FAILED batch are delivered too, from the error's `partialResults`, and the batch error stands.
+  A step's delivery warning and typed failure also ride the batch payload itself, because a batch's human and machine output read only that payload.
 - The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
 
 The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike (#4565).

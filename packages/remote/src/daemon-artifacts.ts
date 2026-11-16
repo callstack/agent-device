@@ -8,6 +8,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRecord } from '@agent-device/kernel/record';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
@@ -502,6 +503,59 @@ export async function materializeRemoteArtifacts(
   const { sessionScriptDelivery } = await import('./session-script-destination.ts');
   const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
   return await scripts.settleAfter(download);
+}
+
+/**
+ * Delivers the session scripts of the steps a FAILED remote `batch` completed.
+ *
+ * The runner reports the steps that finished in the error's `details.partialResults`, so a
+ * recording that an earlier step closed would otherwise be lost just because a later step failed —
+ * `[wait, close, snapshot]` that fails on `snapshot` would keep neither the final script nor the
+ * retirement of the caller's record. The steps are delivered under the plan THIS client submitted,
+ * exactly as in a successful batch, and the caller keeps its own error either way.
+ *
+ * Answers the fields the error should disclose about that delivery — the steps' warnings and the
+ * first typed delivery failure — which a batch error's reader prints alongside the failure. Never
+ * throws: a request that the daemon answered still has to settle with its own error.
+ */
+export async function materializeRemoteBatchPartialArtifacts(
+  info: DaemonArtifactEndpoint,
+  req: DaemonWireRequest,
+  details: Record<string, unknown> | undefined,
+  stateDir: string,
+): Promise<Record<string, unknown> | undefined> {
+  const results = readSubmittedStepResults(details);
+  if (!info.baseUrl || req.command !== BATCH_COMMAND || results.length === 0) return undefined;
+  try {
+    const { deliverSubmittedStepScripts, readBatchPlan, withBatchDisclosure } =
+      await import('./remote-batch-script-delivery.ts');
+    const delivered = await deliverSubmittedStepScripts(
+      { baseUrl: info.baseUrl, token: info.token },
+      req,
+      stateDir,
+      downloadRemoteArtifact,
+      isSessionScriptArtifact,
+      readBatchPlan(req),
+      results,
+    );
+    return delivered.disclosure || delivered.results
+      ? {
+          ...details,
+          ...(delivered.results ? { partialResults: delivered.results } : {}),
+          ...withBatchDisclosure(details, delivered.disclosure),
+        }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readSubmittedStepResults(
+  details: Record<string, unknown> | undefined,
+): Array<Record<string, unknown>> {
+  const partialResults = details?.partialResults;
+  if (!Array.isArray(partialResults)) return [];
+  return partialResults.filter((result): result is Record<string, unknown> => isRecord(result));
 }
 
 /** Command name of the request that runs several steps under one response. */
