@@ -293,6 +293,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonArtifact',
         'DaemonArtifactType',
         'DaemonArtifactKnownType',
+        'ScriptDeliveryFailure',
       ),
       ...from(
         KERNEL_ERRORS,
@@ -454,6 +455,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'packages/remote/src/session-script-destination.ts',
         'SessionScriptDelivery',
         'publishScriptVersion',
+        'PublishOutcome',
         'sendRemoteScriptOpen',
         'RemoteEndpoint',
       ),
