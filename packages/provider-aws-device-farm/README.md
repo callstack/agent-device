@@ -1,6 +1,6 @@
 # AWS Device Farm for agent-device
 
-Install the plugin on the daemon host:
+This plugin is private and not yet published. After publication, install it on the daemon host:
 
 ```sh
 agent-device plugins add @agent-device/aws-device-farm

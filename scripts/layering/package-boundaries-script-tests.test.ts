@@ -37,3 +37,36 @@ test('R11 discovers real workspace imports in script tests without parsing fixtu
   );
   assert.deepEqual(checkPackageBoundaries(repo), []);
 });
+
+test('R11 scans script test relative tunnels, unknown packages and unexported subpaths', () => {
+  const repo = mkdtempForTestSync('package-boundaries-script-routes-');
+  fs.mkdirSync(path.join(repo, 'packages/helper/src'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'scripts/nested'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repo, 'packages/helper/package.json'),
+    JSON.stringify({ name: '@agent-device/helper', exports: './src/index.ts' }),
+  );
+  fs.writeFileSync(path.join(repo, 'packages/helper/src/index.ts'), 'export const value = 1;');
+  fs.writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ devDependencies: { '@agent-device/helper': 'workspace:*' } }),
+  );
+  fs.writeFileSync(
+    path.join(repo, 'scripts/nested/probe.test.ts'),
+    `import './ordinary.ts';
+import '../../packages/helper/src/index.ts';
+import '@agent-device/absent';
+import '@agent-device/helper/private';
+import '@agent-device/helper';`,
+  );
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  const violations = checkPackageBoundaries(repo);
+  assert.deepEqual(
+    violations.map((item) => item.line),
+    [2, 3, 4],
+  );
+  assert.match(violations[0]!.message, /bypasses the package boundary/);
+  assert.match(violations[1]!.message, /unknown workspace package/);
+  assert.match(violations[2]!.message, /not named by .*exports/);
+});

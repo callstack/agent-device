@@ -584,19 +584,6 @@ export function checkPackageBoundaries(repoRoot: string): PackageBoundaryViolati
     for (const file of walkTsFiles(repoRoot, root)) {
       const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
       const sites = specifierSites(file, source);
-      if (root === 'scripts' && file.endsWith('.test.ts')) {
-        // Script harnesses retain their relative source access. Their actual package imports
-        // still need root declarations; fixture strings are not module records.
-        violations.push(
-          ...checkRootSites(
-            sites.filter((site) => !site.specifier.startsWith('.')),
-            packages,
-            rootDependencies,
-            true,
-          ),
-        );
-        continue;
-      }
       violations.push(
         ...checkRootSites(sites, packages, rootDependencies, insideCompiledSources(file)),
       );

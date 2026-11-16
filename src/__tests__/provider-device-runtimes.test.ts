@@ -21,7 +21,7 @@ test('daemon composition registers installed provider runtimes and their lazy pl
   await composition.shutdown();
 });
 
-test('built-in providers register ahead of the store and an unconfigured Limrun still claims its id', async () => {
+test('an unconfigured Limrun stays dormant while the store provider registers', async () => {
   const { home, env } = pluginHome();
   selectV2Plugin(home, 'example', v2RegistrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({

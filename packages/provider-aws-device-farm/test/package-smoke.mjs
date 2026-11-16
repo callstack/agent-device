@@ -4,15 +4,19 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 
 export const provider = 'aws-device-farm';
+export const additionalExports = {
+  './connection-verification': { import: './dist/connection-verification.mjs' },
+  './package.json': './package.json',
+};
 export const args = [
   '--platform',
   'android',
   '--aws-project-arn',
-  'arn:aws:devicefarm:us-west-2:123456789012:project/example-project',
+  'arn:aws:devicefarm:us-west-2:123456789012:project:12345678-1111-2222-3333-456789abcdef',
   '--aws-device-arn',
-  'arn:aws:devicefarm:us-west-2::device/example-device',
+  'arn:aws:devicefarm:us-west-2::device:12345678-1111-2222-3333-456789abcdef',
   '--aws-app-arn',
-  'arn:aws:devicefarm:us-west-2:123456789012:upload/example-upload',
+  'arn:aws:devicefarm:us-west-2:123456789012:upload:12345678-1111-2222-3333-456789abcdef/12345678-1111-2222-3333-456789abcdef',
 ];
 
 const RESOURCES = {

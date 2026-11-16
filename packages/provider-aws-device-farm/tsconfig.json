@@ -15,6 +15,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../build-config" },
     {
       "path": "../contracts"
     },

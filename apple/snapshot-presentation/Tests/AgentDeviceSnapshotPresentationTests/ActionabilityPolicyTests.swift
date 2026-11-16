@@ -5,7 +5,7 @@ import Foundation
 import XCTest
 
 /// Replays `contracts/fixtures/snapshot-actionability-policy.json` against the Swift predicate. The
-/// TypeScript twin replays the same rows in `scripts/ios-snapshot-differential.test.ts`.
+/// TypeScript twin replays the same rows in `packages/capture-kit/test/ios-snapshot-differential.test.ts`.
 final class ActionabilityPolicyTests: XCTestCase {
   private struct Table: Decodable {
     let cases: [PolicyCase]

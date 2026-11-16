@@ -875,6 +875,9 @@ importers:
 
   packages/provider-aws-device-farm:
     devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

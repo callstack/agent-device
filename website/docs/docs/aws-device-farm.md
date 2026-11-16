@@ -7,13 +7,24 @@ Use AWS Device Farm to run agent-device on hosted Android and iOS devices throug
 
 ## Install the plugin
 
-Install the plugin on the host that runs the daemon:
+The AWS Device Farm plugin is private and not yet published. After publication, install it on the host that runs the daemon:
 
 ```bash
 agent-device plugins add @agent-device/aws-device-farm
 ```
 
-If you used AWS Device Farm before upgrading, close its sessions and stop your daemon with `agent-device daemon stop --state-dir <path>`, then reconnect. If the plugin is missing, install it and retry the command.
+After installing or changing a plugin, finish sessions and run `agent-device daemon stop --state-dir <path>` for the matching detached daemon, then retry the command.
+
+For an embedded runtime, import the factory and pass it to `startAgentDevice`. The embedded runtime does not read the CLI plugin store. After changing plugins, close and recreate the runtime.
+
+```ts
+import { startAgentDevice } from "agent-device";
+import awsDeviceFarm from "@agent-device/aws-device-farm/agent-device";
+
+const runtime = await startAgentDevice({ stateDir: "./.agent-device-state", plugins: [awsDeviceFarm()] });
+// Close the runtime when its owner is finished.
+await runtime.close();
+```
 
 ## Set credentials and connect
 
