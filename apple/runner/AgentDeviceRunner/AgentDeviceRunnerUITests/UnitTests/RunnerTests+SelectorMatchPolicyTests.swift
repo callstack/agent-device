@@ -84,9 +84,9 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// Launches the duplicate-selector fixture, runs one runner command against it, and closes it.
   @MainActor
-  func testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate() throws {
-    let duplicateIdentifier = "agent-device-selector-read-duplicate"
+  private func runAgainstDuplicateSelectorFixture(_ commandJson: String) throws -> Response? {
     app.launchArguments = ["--agent-device-selector-read-regression"]
     app.launch()
     defer {
@@ -96,28 +96,47 @@ extension RunnerTests {
     XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let matches = app.descendants(matching: .any)
-      .matching(identifier: duplicateIdentifier)
+      .matching(identifier: "agent-device-selector-read-duplicate")
       .allElementsBoundByIndex
       .filter(\.exists)
     XCTAssertEqual(matches.count, 2, "fixture must expose two raw identifier matches")
     XCTAssertEqual(matches.filter(\.isHittable).count, 1, "fixture must expose exactly one hittable match")
 
-    let command = try JSONDecoder().decode(
-      Command.self,
-      from: Data(
-        #"{"command":"querySelector","commandId":"query-selector-duplicate","selectorKey":"id","selectorValue":"agent-device-selector-read-duplicate"}"#.utf8
-      )
-    )
+    let command = try JSONDecoder().decode(Command.self, from: Data(commandJson.utf8))
     let response = try executeOnMainPrepared(command: command, activeApp: app)
-
     guard response.ok else {
       XCTFail(String(describing: response.error))
-      return
+      return nil
     }
+    return response
+  }
+
+  @MainActor
+  func testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate() throws {
+    let duplicateIdentifier = "agent-device-selector-read-duplicate"
+    guard let response = try runAgainstDuplicateSelectorFixture(
+      #"{"command":"querySelector","commandId":"query-selector-duplicate","selectorKey":"id","selectorValue":"agent-device-selector-read-duplicate"}"#
+    ) else { return }
+
     XCTAssertEqual(response.data?.found, true)
     XCTAssertEqual(response.data?.nodes?.count, 1)
     XCTAssertEqual(response.data?.nodes?.first?.identifier, duplicateIdentifier)
     XCTAssertEqual(response.data?.nodes?.first?.hittable, true)
+  }
+
+  /// The hittability probe counts every raw match and reads none of them for a duplicate selector:
+  /// the daemon must never let a duplicate label describe a different element.
+  @MainActor
+  func testHittabilityProbeCountsEveryMatchAndReadsNoneForADuplicate() throws {
+    guard let response = try runAgainstDuplicateSelectorFixture(
+      #"{"command":"querySelector","commandId":"hittability-probe-duplicate","selectorKey":"id","selectorValue":"agent-device-selector-read-duplicate","hittabilityProbe":true}"#
+    ) else { return }
+
+    XCTAssertEqual(response.data?.found, true)
+    XCTAssertEqual(response.data?.matchCount, 2)
+    XCTAssertNil(response.data?.hittable)
+    XCTAssertNil(response.data?.rect)
+    XCTAssertNil(response.data?.nodes)
   }
 #endif
 #endif

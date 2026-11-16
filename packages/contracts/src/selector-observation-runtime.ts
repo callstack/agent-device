@@ -13,7 +13,14 @@ type ObservationInput = Readonly<{
 export type FindTextInput = ObservationInput & Readonly<{ text: string }>;
 
 export type QuerySelectorInput = ObservationInput &
-  Readonly<{ selector: Readonly<{ key: ElementSelectorKey; value: string }> }>;
+  Readonly<{
+    selector: Readonly<{ key: ElementSelectorKey; value: string }>;
+    /**
+     * `hittability` swaps the read for the lean one-element probe: no property enumeration, no
+     * hittable preference among matches. The answer is `QuerySelectorResult.hittability`.
+     */
+    probe?: 'hittability';
+  }>;
 
 /**
  * Positive native observations are authoritative and preserve matches that an advertising owner's
@@ -34,9 +41,20 @@ export type QuerySelectorNodeReading = Readonly<{
   hittable: boolean;
 }>;
 
+/**
+ * What the lean probe read: how many elements the selector matched (every match, hittable or not)
+ * and, when exactly one matched, its live frame and `isHittable`.
+ */
+export type HittabilityProbeReading = Readonly<{
+  matchCount: number;
+  hittable?: boolean;
+  rect?: Rect;
+}>;
+
 export type QuerySelectorResult = SelectorObservationResult &
   Readonly<{
     node?: QuerySelectorNodeReading;
+    hittability?: HittabilityProbeReading;
   }>;
 
 export type SelectorObservationRuntimeOperations = Readonly<{

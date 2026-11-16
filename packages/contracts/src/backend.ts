@@ -27,6 +27,8 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 // The backend's public leaf platform (approach b): backends distinguish iOS from
 // macOS (e.g. snapshot backend routing, the macOS surface guard), so this carries the
 // leaf string, not the internal collapsed `apple`.
+export type TargetHittability = 'hittable' | 'notHittable' | 'unknown';
+
 export type AgentDeviceBackendPlatform = PublicPlatform;
 
 export type BackendCommandContext = {
@@ -438,6 +440,18 @@ export type AgentDeviceBackend = {
     node: Pick<SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,
   ): Promise<Rect | null>;
+  /**
+   * Pre-dispatch hittability probe of ONE resolved target. `notHittable` means the platform
+   * reports the element and says a tap would not reach it; `hittable` means it reports it
+   * reachable; `unknown` is every other outcome (no selector, no match, an ambiguous match, a
+   * frame that is not the target's own, or a transport failure) and the caller proceeds as if
+   * the probe did not exist. Never throws on a failed read. Backends without a live per-element
+   * read omit this method.
+   */
+  probeTargetHittability?(
+    context: BackendCommandContext,
+    node: Pick<SnapshotNode, 'identifier' | 'label' | 'rect'>,
+  ): Promise<TargetHittability>;
   tap?(
     context: BackendCommandContext,
     point: Point,

@@ -418,3 +418,35 @@ function isRectViewportSized(rect: Rect, viewportRect: Rect): boolean {
   const rectCoverage = overlapArea / rectArea;
   return viewportCoverage >= 0.9 && rectCoverage >= 0.8;
 }
+
+/** Rect edges the platform reports a nested control and its row with can differ by this much. */
+const NESTED_CONTROL_SLACK = 1;
+
+/**
+ * Whether `node` is a touch control that lies inside the area of a larger touch control of the same
+ * snapshot: the shape of a swipe action beside its row. Only such a control can be reported
+ * geometrically hittable while a tap at its centre reaches the row instead, so only such a control
+ * is worth a native hittability read before a press. A top-level control, and a control inside a
+ * container that is not itself a touch target (a tab bar, a scroll area), never match.
+ *
+ * Document order is not paint order, so this decides nothing about cover. It only selects which
+ * presses pay for the native read.
+ */
+export function isNestedTouchControl(nodes: readonly SnapshotNode[], node: SnapshotNode): boolean {
+  const rect = normalizeRect(node.rect);
+  if (!rect || !isSemanticTouchTarget(node)) return false;
+  return nodes.some((other) => {
+    if (other.index === node.index || !isSemanticTouchTarget(other)) return false;
+    const outer = normalizeRect(other.rect);
+    if (!outer) return false;
+    const encloses =
+      outer.x <= rect.x + NESTED_CONTROL_SLACK &&
+      outer.y <= rect.y + NESTED_CONTROL_SLACK &&
+      outer.x + outer.width >= rect.x + rect.width - NESTED_CONTROL_SLACK &&
+      outer.y + outer.height >= rect.y + rect.height - NESTED_CONTROL_SLACK;
+    const larger =
+      outer.width > rect.width + NESTED_CONTROL_SLACK ||
+      outer.height > rect.height + NESTED_CONTROL_SLACK;
+    return encloses && larger;
+  });
+}

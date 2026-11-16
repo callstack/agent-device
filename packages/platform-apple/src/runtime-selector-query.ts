@@ -1,4 +1,5 @@
 import type {
+  HittabilityProbeReading,
   QuerySelectorInput,
   QuerySelectorNodeReading,
   QuerySelectorResult,
@@ -43,13 +44,32 @@ export function bindAppleQuerySelectorRuntime(
         input.selector,
         input.options?.appBundleId,
         options,
+        input.probe,
       );
+      if (input.probe === 'hittability') {
+        const hittability = readHittabilityProbe(data);
+        return Object.freeze({
+          found: data.found === true,
+          ...(hittability ? { hittability } : {}),
+        });
+      }
       const node = readQuerySelectorNode(data);
       return Object.freeze({
         found: data.found === true,
         ...(node ? { node } : {}),
       });
     },
+  });
+}
+
+function readHittabilityProbe(data: Record<string, unknown>): HittabilityProbeReading | undefined {
+  const { matchCount, hittable, rect } = data;
+  if (typeof matchCount !== 'number') return undefined;
+  const frame = parseRect(rect);
+  return Object.freeze({
+    matchCount,
+    ...(typeof hittable === 'boolean' ? { hittable } : {}),
+    ...(frame ? { rect: frame } : {}),
   });
 }
 

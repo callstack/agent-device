@@ -27,6 +27,15 @@ export const INTERACTION_ERROR_REASONS = {
   targetBoundsInvalid: 'target_bounds_invalid',
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
+  /**
+   * A press or click refused before dispatch because the platform reports the resolved control as
+   * not hittable: a tap at its centre would land on another element. Distinct from
+   * `target_covered`, which needs occlusion evidence; this reason carries none, so it names no
+   * `coveredBy`. `details.selector` or `details.ref` names the target and `details.rect` is where
+   * the command resolved it. The owner is
+   * `packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts`.
+   */
+  targetNotHittable: 'target_not_hittable',
   /** `find focus` or `find type` resolved to a disabled text field, which `details.ref` names. */
   targetDisabled: 'target_disabled',
   /**

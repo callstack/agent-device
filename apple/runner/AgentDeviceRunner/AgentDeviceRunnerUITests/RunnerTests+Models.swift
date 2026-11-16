@@ -246,6 +246,8 @@ struct Command: Codable {
   let text: String?
   let selectorKey: String?
   let selectorValue: String?
+  /// `querySelector` only: answer the lean per-element hittability read instead of a node.
+  let hittabilityProbe: Bool?
   let allowNonHittableCoordinateFallback: Bool?
   let delayMs: Int?
   let textEntryMode: String?
@@ -572,6 +574,11 @@ struct DataPayload: Codable {
   /// Present on a screenshot the runner captured from a display it resolved, alongside the
   /// `message` path or `imageBase64` payload that carries the image itself (#2728).
   var screenshotMetadata: ScreenshotMetadataPayload?
+  /// The `querySelector` hittability probe: how many elements the selector matched, and, when
+  /// exactly one did, its `isHittable` and frame.
+  var matchCount: Int?
+  var hittable: Bool?
+  var rect: SnapshotRect?
 }
 
 /// Mirrors the TS `FillVerificationTarget`; its nullable identity fields encode as explicit nulls.

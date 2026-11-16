@@ -127,6 +127,8 @@ export type RunnerCommand = {
   text?: string;
   selectorKey?: ElementSelectorKey;
   selectorValue?: string;
+  /** `querySelector` only: answer the lean per-element hittability read instead of a node. */
+  hittabilityProbe?: boolean;
   allowNonHittableCoordinateFallback?: boolean;
   delayMs?: number;
   textEntryMode?: 'append' | 'replace';
