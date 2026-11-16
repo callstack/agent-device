@@ -15,10 +15,11 @@ pnpm add agent-device
 Add `agent/tools/agent_device.ts`:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 import { defineTool } from 'eve/tools';
 import { z } from 'zod';
 
+await ensureDaemon();
 const client = createAgentDeviceClient({
   session: 'eve-agent',
   lockPolicy: 'reject',

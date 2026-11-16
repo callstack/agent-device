@@ -101,8 +101,9 @@ See [AI agent setup](https://agent-device.dev/docs/agent-setup) for per-client s
 `createAgentDeviceClient()` gives Node.js code typed access to the same commands, as model tools in your own agent or from orchestration code:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, ensureDaemon, isAgentDeviceError } from 'agent-device';
 
+await ensureDaemon();
 const client = createAgentDeviceClient({ session: 'qa-run' });
 try {
   await client.apps.open({ app: 'com.apple.Preferences', platform: 'ios' });
@@ -110,7 +111,11 @@ try {
   const button = snapshot.nodes.find((node) => node.role === 'button');
   if (button) await client.interactions.press({ ref: button.ref });
 } finally {
-  await client.sessions.close();
+  await client.sessions.close().catch((error) => {
+    if (isAgentDeviceError(error) && error.code === 'SESSION_NOT_FOUND') return;
+    console.error('Session cleanup failed:', error);
+    process.exitCode = 1;
+  });
 }
 ```
 

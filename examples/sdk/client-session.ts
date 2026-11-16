@@ -15,6 +15,7 @@
 import {
   AppError,
   createAgentDeviceClient,
+  ensureDaemon,
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from 'agent-device';
@@ -47,6 +48,7 @@ function reportAgentDeviceError(error: unknown): void {
 }
 
 async function main(): Promise<void> {
+  await ensureDaemon();
   const client = createAgentDeviceClient({
     session: 'sdk-example',
     lockPolicy: 'reject',
@@ -72,7 +74,13 @@ async function main(): Promise<void> {
     if (!isAgentDeviceError(error)) throw error;
     reportAgentDeviceError(error);
   } finally {
-    await client.sessions.close();
+    try {
+      await client.sessions.close();
+    } catch (error) {
+      if (!isAgentDeviceError(error) || error.code !== 'SESSION_NOT_FOUND') {
+        reportAgentDeviceError(error);
+      }
+    }
   }
 }
 
