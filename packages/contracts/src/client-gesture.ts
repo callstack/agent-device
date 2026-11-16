@@ -41,12 +41,13 @@ export type SettleCommandOptions = {
   timeoutMs?: number;
 };
 
-/** For a caller that verifies the screen by polling it: opts out of the checks after a gesture. */
+/** For a caller that verifies the screen by polling it: opts out of the checks after a gesture or an app launch. */
 export type PostGestureStabilizationOptions = {
   /**
    * Set false to skip the movement check on a directional scroll and the stabilization wait
-   * before the next read. Set it only when your own polling verifies the screen: the next read can
-   * return a tree that the gesture is still moving.
+   * before the next read, or the first-screen wait after an app launch. Set it only when your own
+   * polling verifies the screen: the next read can return a tree that the gesture is still moving
+   * or the launch screen.
    */
   postGestureStabilization?: boolean;
 };

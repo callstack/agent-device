@@ -403,7 +403,7 @@ export async function completeOpenCommand(params: {
   });
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
   const nextSession = sessionStore.requireCurrent(nextRef);
-  markPostOpenStabilization(nextSession, timing.postOpenObservation);
+  markPostOpenStabilization(nextSession, timing.postOpenObservation, req.flags);
   if (req.runtime !== undefined)
     setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints);
   applyOrdinaryScriptRecordingOpenOutcome({
