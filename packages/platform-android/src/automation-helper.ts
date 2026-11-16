@@ -38,13 +38,16 @@ type AndroidHelperAppResult =
   | { kind: 'launched'; output: string };
 
 const ACTION_POLICY = {
-  // Above the helper's press budget (PressSequence.PRESS_BUDGET_MS), so the helper's typed answer
-  // for a press that waited out the framework's injection deadline arrives before this timeout.
+  // A press can block on the framework's 30 s injection deadline, and its one retry needs 35 s of
+  // room (PressSequence.RETRY_WORST_CASE_MS), so input gets more than the other actions.
   input: { mutation: true, timeoutMs: 45_000 },
   app: { mutation: true, timeoutMs: 30_000 },
   screenshot: { mutation: false, timeoutMs: 30_000 },
   focus: { mutation: false, timeoutMs: 2_000 },
 } as const;
+
+/** The helper must answer input this long before the host timeout so its typed result arrives. */
+const INPUT_ANSWER_MARGIN_MS = 5_000;
 
 /** Reuses the session's automation context without starting instrumentation for sessionless input. */
 export function runAndroidAutomationHelper(
@@ -79,10 +82,7 @@ export async function runAndroidAutomationHelper(
       deviceKey,
       action,
       helper: androidAutomationHelperIdentity(prepared.artifact),
-      payloadBase64:
-        'input' in request
-          ? Buffer.from(JSON.stringify(request.input)).toString('base64')
-          : undefined,
+      payloadBase64: encodeHelperPayload(request),
       timeoutMs: ACTION_POLICY[action].timeoutMs,
     });
     if (!headers) return undefined;
@@ -134,6 +134,15 @@ function decodeHelperDisplays(
 
 function decodeHelperIndex(value: string | undefined): number | undefined {
   return value !== undefined && /^\d+$/.test(value) ? Number(value) : undefined;
+}
+
+function encodeHelperPayload(request: AndroidAutomationRequest): string | undefined {
+  if (!('input' in request)) return undefined;
+  const payload =
+    request.action === 'input'
+      ? { ...request.input, budgetMs: ACTION_POLICY.input.timeoutMs - INPUT_ANSWER_MARGIN_MS }
+      : request.input;
+  return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
 
 function decodeHelperPayload(

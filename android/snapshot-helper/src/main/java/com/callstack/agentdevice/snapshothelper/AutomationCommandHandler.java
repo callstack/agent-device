@@ -18,7 +18,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeoutException;
 import org.json.JSONObject;
 
 /** Executes session input and image capture inside the instrumentation's automation context. */
@@ -59,36 +58,38 @@ final class AutomationCommandHandler {
   }
 
   private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
+    // The host's remaining time for this command; every press inside it answers by this deadline.
+    long deadline = SystemClock.uptimeMillis() + input.getLong("budgetMs");
     switch (input.getString("kind")) {
       case "tap":
-        tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch);
+        tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch, deadline);
         return;
       case "key":
-        key(automation, input.getInt("keyCode"), dispatch);
+        key(automation, input.getInt("keyCode"), dispatch, deadline);
         return;
       case "fill":
-        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"), dispatch);
+        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"), dispatch,
+            deadline);
         return;
       default:
         throw new IllegalArgumentException("Unknown input kind");
     }
   }
 
-  private static void tap(UiAutomation automation, double x, double y, InputDispatch dispatch)
-      throws TimeoutException {
+  private static void tap(
+      UiAutomation automation, double x, double y, InputDispatch dispatch, long deadline) {
     if (Double.isNaN(x) || Double.isInfinite(x) || Double.isNaN(y) || Double.isInfinite(y)
         || x < 0 || y < 0) {
       throw new IllegalArgumentException("Invalid tap coordinates");
     }
     dispatch.attempted = true;
-    PressSequence.requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y)), "Touch");
+    PressSequence.requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y), deadline), "Touch");
   }
 
-  private static void key(UiAutomation automation, int code, InputDispatch dispatch)
-      throws TimeoutException {
+  private static void key(UiAutomation automation, int code, InputDispatch dispatch, long deadline) {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
     dispatch.attempted = true;
-    PressSequence.requireDispatched(PressSequence.run(new KeyPress(automation, code)), "Key");
+    PressSequence.requireDispatched(PressSequence.run(new KeyPress(automation, code), deadline), "Key");
   }
 
   private abstract static class Press implements PressSequence.Injections {
@@ -130,19 +131,14 @@ final class AutomationCommandHandler {
     }
 
     @Override
-    public boolean end(long downTime, boolean waitForDispatch) {
-      return inject(MotionEvent.ACTION_UP, downTime, 0, waitForDispatch);
+    public boolean end(long downTime) {
+      return inject(MotionEvent.ACTION_UP, downTime, 0, true);
     }
 
-    /** The verifier records a dropped DOWN as a pointer that is still down; no window receives it. */
+    /** Not awaited: a window that received a timed-out DOWN may not finish handling the cancel. */
     @Override
-    public void discardDroppedStart(long downTime) {
-      cancelStart(downTime);
-    }
-
-    @Override
-    public boolean cancelStart(long downTime) {
-      return inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
+    public void releaseRefusedStart(long downTime) {
+      inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
     }
 
     private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
@@ -170,18 +166,17 @@ final class AutomationCommandHandler {
     }
 
     @Override
-    public boolean end(long downTime, boolean waitForDispatch) {
-      return inject(KeyEvent.ACTION_UP, downTime, 0, waitForDispatch);
+    public boolean end(long downTime) {
+      return inject(KeyEvent.ACTION_UP, downTime, 0, true);
     }
 
-    /** The injection verifier checks motion events only, so a dropped key DOWN leaves no state. */
+    /**
+     * Android releases an interrupted key with an ACTION_UP that carries FLAG_CANCELED; receivers
+     * take no action on a canceled up. Not awaited, like the touch cancel.
+     */
     @Override
-    public void discardDroppedStart(long downTime) {}
-
-    /** Android releases an interrupted key with an ACTION_UP that carries FLAG_CANCELED. */
-    @Override
-    public boolean cancelStart(long downTime) {
-      return inject(KeyEvent.ACTION_UP, downTime, KeyEvent.FLAG_CANCELED, false);
+    public void releaseRefusedStart(long downTime) {
+      inject(KeyEvent.ACTION_UP, downTime, KeyEvent.FLAG_CANCELED, false);
     }
 
     private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
@@ -195,8 +190,8 @@ final class AutomationCommandHandler {
     }
   }
 
-  private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch)
-      throws TimeoutException {
+  private static void fill(
+      UiAutomation automation, int x, int y, String text, InputDispatch dispatch, long deadline) {
     AccessibilityNodeInfo target = null;
     try {
       for (AccessibilityWindowInfo window : automation.getWindows()) {
@@ -221,7 +216,7 @@ final class AutomationCommandHandler {
         }
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
-      tap(automation, x, y, dispatch);
+      tap(automation, x, y, dispatch, deadline);
       if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");
