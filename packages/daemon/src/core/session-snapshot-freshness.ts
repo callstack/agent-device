@@ -7,6 +7,7 @@ import {
   androidFreshnessReason,
   buildSnapshotSignatures,
   captureFreshnessRecoveredAttempt,
+  provesFreshAndroidTraversal,
   type SnapshotFreshnessAttemptShape,
   type SnapshotFreshnessMode,
   type SnapshotFreshnessWindow,
@@ -96,11 +97,7 @@ export async function captureAndroidFreshnessRecoveredAttempt<
         {
           snapshot: attempt.snapshot,
           rawNodeCount: attempt.annotations.analysis?.rawNodeCount,
-          cacheInvalidated:
-            attempt.annotations.androidSnapshot?.cacheInvalidated === true &&
-            attempt.annotations.androidSnapshot.rootPresent === true &&
-            attempt.annotations.androidSnapshot.helperTruncated === false &&
-            attempt.annotations.androidSnapshot.missingRootWindowTypes?.length === 0,
+          cacheInvalidated: provesFreshAndroidTraversal(attempt.annotations.androidSnapshot),
         },
         freshness,
         { interactiveOnly: params.interactiveOnly, mode: params.androidFreshnessMode },

@@ -8,6 +8,7 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,
+  clearAndroidSnapshotFreshness,
   getActiveAndroidSnapshotFreshness,
   markAndroidSnapshotFreshness,
 } from './session-snapshot-freshness.ts';
@@ -88,7 +89,15 @@ export function markDeferredInteractionOutcome(
     settle,
   } = params;
   if (isNavigationSensitiveAction(action)) {
-    markAndroidSnapshotFreshness(session, action, androidFreshnessBaseline ?? session.snapshot);
+    // A converged settle stored its final capture as the session snapshot (`diff` is attached only
+    // then). When the helper also proved that capture a complete read after a cache reset, it is
+    // already the fresh post-action tree the window would wait for. Convergence alone is no proof:
+    // two stale dumps can agree.
+    if (settle?.diff !== undefined && session.snapshot?.freshTraversal === true) {
+      clearAndroidSnapshotFreshness(session);
+    } else {
+      markAndroidSnapshotFreshness(session, action, androidFreshnessBaseline ?? session.snapshot);
+    }
   }
   // The two post-action mechanisms are complementary, and this is the seam that keeps them apart.
   // A gesture-shaped mutation hands its unsettled surface to the capture side: every following

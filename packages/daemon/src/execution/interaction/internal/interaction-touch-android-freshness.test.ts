@@ -6,7 +6,10 @@ import {
   installInteractorSnapshotResolution,
   mockInteractorSnapshot,
 } from '../../../__tests__/support/interactor-resolution-fixture.ts';
-import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import {
+  createTouchCommandSurface,
+  touchCreateCommandSurface,
+} from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -119,6 +122,86 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
     routeComparable: true,
   });
 });
+
+// A converged settle: it captures through the daemon, stores that tree, and reports the diff.
+const convergingSurface = createTouchCommandSurface({
+  observeSettle: async ({ settle, capture }) => {
+    await capture();
+    return {
+      settled: true,
+      waitedMs: 0,
+      captures: 2,
+      quietMs: settle.quietMs ?? 0,
+      timeoutMs: settle.timeoutMs ?? 0,
+      diff: { summary: { additions: 0, removals: 0, unchanged: 1 }, lines: [] },
+    };
+  },
+});
+
+function continueCapture(missingRootWindowTypes: number[]) {
+  return {
+    nodes: [
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Continue',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+    backend: 'android' as const,
+    producer: 'android-uiautomator' as const,
+    androidSnapshot: {
+      backend: 'android-helper' as const,
+      cacheInvalidated: true,
+      rootPresent: true,
+      helperTruncated: false,
+      missingRootWindowTypes,
+    },
+  };
+}
+
+// The resolution capture always carries the opposite proof, so only the settled capture decides.
+test.each([
+  { capture: 'proved fresh', outcome: 'retires', resolved: [2], settled: [], window: undefined },
+  {
+    capture: 'missing a window root',
+    outcome: 'keeps',
+    resolved: [],
+    settled: [2],
+    window: expect.objectContaining({ action: 'press' }),
+  },
+])(
+  'press --settle converged on a capture $capture $outcome the freshness window',
+  async ({ resolved, settled, window }) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'android-settle-freshness';
+    sessionStore.publish(sessionName, makeAndroidSession(sessionName));
+    mockInteractorSnapshot
+      .mockResolvedValueOnce(continueCapture(resolved))
+      .mockResolvedValue(continueCapture(settled));
+
+    const response = await handleInteractionCommands({
+      createCommandSurface: convergingSurface,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'press',
+        positionals: ['label=Continue'],
+        flags: { settle: true, settleQuietMs: 25, timeoutMs: 2_000 },
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(mockInteractorSnapshot).toHaveBeenCalledTimes(2);
+    expect(sessionStore.get(sessionName)?.androidSnapshotFreshness).toEqual(window);
+  },
+);
 
 test('ADR 0014: Android freshness cannot retarget an admitted ref by positional coincidence', async () => {
   const sessionStore = makeSessionStore();

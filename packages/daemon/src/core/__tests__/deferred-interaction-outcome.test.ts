@@ -11,6 +11,7 @@ import {
 } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../session-state.ts';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   deliverySnapshot,
@@ -87,6 +88,58 @@ test('marking is one call for both flags, each keeping its own eligibility gate'
   assert.equal(session.androidSnapshotFreshness?.action, 'click');
   // click is not a stabilizing gesture — its gate declines independently.
   assert.equal(isPostGestureStabilizationPending(session), false);
+});
+
+const convergedSettle: SettleObservation = {
+  settled: true,
+  waitedMs: 600,
+  captures: 2,
+  quietMs: 300,
+  timeoutMs: 3000,
+  diff: { summary: { additions: 1, removals: 1, unchanged: 4 }, lines: [] },
+};
+
+test('a press whose settle stored a proved-fresh tree retires an earlier freshness window', () => {
+  const session = makeSession('android');
+  markDeferredInteractionOutcome({ session, command: 'press', positionals: [], flags: undefined });
+  session.snapshot = { ...pickupSnapshot(), freshTraversal: true };
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: [],
+    flags: undefined,
+    settle: convergedSettle,
+  });
+
+  assert.equal(session.androidSnapshotFreshness, undefined);
+});
+
+test('a press whose settle never converged keeps the freshness window over a fresh read', () => {
+  const { diff: _diff, ...unconverged } = convergedSettle;
+  const session = makeSession('android');
+  session.snapshot = { ...pickupSnapshot(), freshTraversal: true };
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: [],
+    flags: undefined,
+    settle: { ...unconverged, settled: false },
+  });
+
+  assert.equal(session.androidSnapshotFreshness?.action, 'press');
+});
+
+// #4105: the generic route marks a bare `back` with no settle observation. A proved-fresh tree
+// stored before the back is no proof about the screen the back navigated to.
+test('a bare back keeps the freshness window over a fresh stored tree', () => {
+  const session = makeSession('android');
+  session.snapshot = { ...pickupSnapshot(), freshTraversal: true };
+
+  markDeferredInteractionOutcome({ session, command: 'back', positionals: [], flags: undefined });
+
+  assert.equal(session.androidSnapshotFreshness?.action, 'back');
 });
 
 test('a scroll marks stabilization but not freshness', () => {

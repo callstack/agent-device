@@ -106,6 +106,11 @@ export type SnapshotState = {
    */
   systemSurfaceOnly?: boolean;
   /**
+   * Android: the producer proved this capture a complete read of the current hierarchy, taken after
+   * it cleared the platform node cache. Absent proves nothing.
+   */
+  freshTraversal?: true;
+  /**
    * iOS: the bundle id of the in-place system surface this capture describes (a web sign-in sheet
    * presented over the app, #2438). Two captures that disagree here describe different surfaces and
    * must never be compared as the same presentation; consumers that surface the tree disclose it.

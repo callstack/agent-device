@@ -1,3 +1,4 @@
+import type { AndroidSnapshotBackendMetadata } from '@agent-device/contracts/capture';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type {
   SnapshotFreshnessAttempt,
@@ -18,6 +19,22 @@ export const ANDROID_COMPARISON_BASELINE_MAX_AGE_MS = 5_000;
 // and may be skipped when slower devices spend the budget inside each capture.
 export const ANDROID_FRESHNESS_RETRY_BUDGET_MS = 1_500;
 export const ANDROID_FRESHNESS_RETRY_DELAYS_MS = [250, 400, 600] as const;
+
+/**
+ * Whether the helper proved this capture a complete read of the current hierarchy: it cleared the
+ * platform node cache first, read a root, truncated nothing, and serialized every listed window
+ * root. Captures without this proof can agree with each other on a stale tree.
+ */
+export function provesFreshAndroidTraversal(
+  metadata: AndroidSnapshotBackendMetadata | undefined,
+): boolean {
+  return (
+    metadata?.cacheInvalidated === true &&
+    metadata.rootPresent === true &&
+    metadata.helperTruncated === false &&
+    metadata.missingRootWindowTypes?.length === 0
+  );
+}
 
 export function isNavigationSensitiveAction(command: string): boolean {
   // Keep this set intentionally narrow. `type`, `fill`, and generic `swipe` happen far more
