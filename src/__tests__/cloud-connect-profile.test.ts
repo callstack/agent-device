@@ -8,7 +8,6 @@ import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
-  readRemoteConnectionState,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';

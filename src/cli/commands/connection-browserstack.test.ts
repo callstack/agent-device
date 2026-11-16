@@ -2,7 +2,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCliCapture } from './cli-capture.ts';
+import { runCliCapture } from '../../__tests__/cli-capture.ts';
 import {
   readActiveConnectionState,
   readRemoteConnectionState,
@@ -10,9 +10,9 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyBrowserStackConnection } from '@agent-device/provider-webdriver/connection-verification';
-import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
+import { resolveConnectProviderProfile } from '../connection/connect-provider-adapters.ts';
 import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
-import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
 
 bindTestCommandHost();
 
