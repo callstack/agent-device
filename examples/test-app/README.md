@@ -19,6 +19,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 - `Perf lab`: seeded JavaScript render problems for `react-devtools profile`, one per scenario (see [Perf lab](#perf-lab))
+- `Settle lab`: timed effects for `--settle` measurements (in-place counter, 500 and 800 ms delayed results, a 750 ms fading overlay, two-stage transitions with and without a spinner, and a toast that precedes navigation), reached by the `agent-device-test-app://settle-lab` deep link
 - `Heavy feed`: a Bluesky-shaped home feed whose accessibility tree is deeper than 65 levels (see [Heavy feed](#heavy-feed))
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
