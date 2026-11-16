@@ -1,6 +1,10 @@
+import { getReplayPluginInstallation } from '@agent-device/ad-script';
 import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
+import {
+  getReplayBackendDeclaration,
+  replayPluginInstallHelp,
+} from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';
 import { getCliCommandSchema, getCommandSchema } from '@agent-device/command-surface';
@@ -70,7 +74,10 @@ const HELP_TOPICS = {
     body: 'agent-device help commands',
   },
   ...manualQaHelpTopics,
-  maestro: getReplayBackendDeclaration('maestro').help,
+  maestro: getReplayBackendDeclaration(
+    getReplayPluginInstallation('maestro'),
+    getReplayPluginInstallation('ad'),
+  ).help,
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
@@ -875,6 +882,16 @@ export function buildCommandUsageText(commandName: string): string | null {
     schema.flagDescriptionOverrides,
   );
   const sections: string[] = [];
+  if (commandName === 'replay' || commandName === 'test') {
+    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('ad')));
+    sections.push(
+      getReplayBackendDeclaration(
+        getReplayPluginInstallation('ad'),
+        getReplayPluginInstallation('ad'),
+      ).help.body,
+    );
+    sections.push(replayPluginInstallHelp(getReplayPluginInstallation('maestro')));
+  }
   if (commandName === 'connect') {
     sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);
   }

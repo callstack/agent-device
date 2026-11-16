@@ -1,4 +1,4 @@
-import { installWorkspaceMaestro } from '../../scripts/install-workspace-maestro.ts';
+import { installWorkspaceReplayPlugins } from '../../scripts/install-workspace-replay-plugins.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -34,6 +34,13 @@ export function installIsolatedCliTestEnv(
     }
   }
 
+  if (!explicitKeys.has('AGENT_DEVICE_HOME') && !explicitKeys.has('HOME')) {
+    if (!previousEnv.has('AGENT_DEVICE_HOME'))
+      previousEnv.set('AGENT_DEVICE_HOME', process.env.AGENT_DEVICE_HOME);
+    process.env.AGENT_DEVICE_HOME = path.join(tempRoot, 'plugins');
+    installWorkspaceReplayPlugins(process.env, true);
+  }
+
   return () => {
     for (const [key, value] of previousEnv.entries()) {
       if (value === undefined) {
@@ -46,8 +53,8 @@ export function installIsolatedCliTestEnv(
   };
 }
 
-export function installedMaestroCliTestEnv(): Record<string, string> {
-  const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-maestro-') };
-  installWorkspaceMaestro(env, true);
+export function installedReplayCliTestEnv(): Record<string, string> {
+  const env = { AGENT_DEVICE_HOME: mkdtempForTestSync('agent-device-cli-replay-') };
+  installWorkspaceReplayPlugins(env, true);
   return env;
 }

@@ -1,4 +1,4 @@
-import { installedMaestroCliTestEnv } from '../../../__tests__/cli-test-env.ts';
+import { installedReplayCliTestEnv } from '../../../__tests__/cli-test-env.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
@@ -19,7 +19,7 @@ describe('exportReplayScriptToMaestro', () => {
     const open = withApp ? `com.example.app ${link} --relaunch` : link;
     fs.writeFileSync(sourcePath, `open ${open}\n`);
 
-    const env = installedMaestroCliTestEnv();
+    const env = installedReplayCliTestEnv();
     const result = await runCliCapture(['replay', 'export', sourcePath, '--json'], { env });
 
     expect(result.code).toBeNull();

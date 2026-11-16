@@ -1,4 +1,4 @@
-import type { ReplayBackendId } from '@agent-device/ad-script';
+import type { getReplayPluginInstallation, ReplayFormat } from '@agent-device/ad-script';
 import type { ReplayBackendDeclaration } from '@agent-device/contracts/replay-backend';
 
 export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
@@ -34,39 +34,39 @@ function formatMaestroCompatibilityReference(): string {
   ].join('\n');
 }
 
-const maestroReplayBackendDeclaration: ReplayBackendDeclaration<'maestro'> = {
-  id: 'maestro',
-  package: '@agent-device/maestro',
-  help: {
-    summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',
-    body: `agent-device help maestro
+/** Full compatibility help is composed only by help consumers, from the vetted installation. */
+export function getReplayBackendDeclaration(
+  installation: ReturnType<typeof getReplayPluginInstallation>,
+  suiteInstallation: ReturnType<typeof getReplayPluginInstallation>,
+): ReplayBackendDeclaration<ReplayFormat> {
+  const body =
+    installation.id === 'ad'
+      ? `Run agent-device plugins add ${installation.package} on the daemon host for native .ad replay and all test suites. Existing scripts and arguments stay the same. Ordinary open/close --save-script recording stays in core. Restart the daemon after changing plugins, then retry the original invocation with all its arguments.`
+      : `agent-device help maestro
 
-Install with agent-device plugins add @agent-device/maestro on the client and daemon host. Restart the daemon after installation.
+Install with agent-device plugins add ${installation.package}. ${installation.installationHint}
+
+For test suites, also run agent-device plugins add ${suiteInstallation.package}. ${suiteInstallation.installationHint}
+
+Restart the daemon after installing the required plugins.
 
 Run Maestro compatibility flows with replay <flow.yaml> --maestro or test <path> --maestro. Bind an iOS or Android target with --platform or an existing session.
 
 ${formatMaestroCompatibilityReference()}
 
 Unsupported syntax fails loudly rather than being skipped. Architecture, performance tradeoffs, and declared conformance divergences: ${MAESTRO_COMPATIBILITY_ADR_URL}
-Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`,
-  },
-};
+Focused compatibility request: ${MAESTRO_COMPATIBILITY_ISSUE_URL}`;
+  return {
+    id: installation.id,
+    package: installation.package,
+    installationHint: installation.installationHint,
+    help: { summary: installation.summary, body },
+  };
+}
 
-/**
- * The engine-free half of every registered replay backend (#3377), as `help` lists it. Kept apart
- * from the registry so reading a declaration adds nothing to the closure of the daemon routes
- * that only load backends. Keys come from the format grammar's vocabulary, and each declaration's
- * `id` is typed to its key, as each plugin's is in the registry, so help cannot describe a backend
- * other than the one its id loads.
- */
-const REPLAY_BACKEND_DECLARATIONS: {
-  readonly [TId in ReplayBackendId]: ReplayBackendDeclaration<TId>;
-} = {
-  maestro: maestroReplayBackendDeclaration,
-};
-
-export function getReplayBackendDeclaration(
-  id: ReplayBackendId,
-): ReplayBackendDeclaration<ReplayBackendId> {
-  return REPLAY_BACKEND_DECLARATIONS[id];
+/** Installation guidance uses the same vetted package declaration as missing-plugin errors. */
+export function replayPluginInstallHelp(
+  installation: ReturnType<typeof getReplayPluginInstallation>,
+): string {
+  return `${installation.summary} (plugin, install separately). Run agent-device plugins add ${installation.package}. ${installation.installationHint}`;
 }

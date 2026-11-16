@@ -1,3 +1,6 @@
+import replayPlugin from '@agent-device/replay/agent-device';
+import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
+import { bindReplayBackendResolver } from '@agent-device/replay-port/replay-backend-registry';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import path from 'node:path';
 import { LeaseRegistry } from '../resources/lease-registry.ts';
@@ -191,14 +194,39 @@ export async function resourceAdmissionWorld(
     stderr: { write: () => {} },
     composeDeps: async (input) => {
       const backend = options.replayBackend;
-      if (backend) {
-        const { bindReplayBackendResolver } =
-          await import('@agent-device/replay-port/replay-backend-registry');
-        await bindReplayBackendResolver(async () => backend);
-      }
+      const registry = await startProviderRegistry(
+        await resolveProviderPlugins([
+          { source: 'embedder', load: replayPlugin },
+          ...(backend
+            ? [
+                {
+                  source: 'embedder' as const,
+                  load: () => ({
+                    apiVersion: 2,
+                    kind: 'replay-backend',
+                    backend: backend.id,
+                    setup: () => ({ replayBackend: { create: () => backend } }),
+                  }),
+                },
+              ]
+            : []),
+        ]),
+        input.host.env,
+        {
+          adaptWebDriver: async () => {
+            throw new Error('Resource fixture cannot create providers');
+          },
+        },
+      );
+      await bindReplayBackendResolver(
+        registry.resolveReplayBackend,
+        registry.resolveReplayExecution,
+      );
       const base = await daemonRuntimeDepsFixture()(input);
       return {
         ...base,
+        pluginInventory: registry.inventory,
+        shutdownProviderRuntimes: registry.close,
         ...((options.withLifecycleProvider ?? options.providerOwned)
           ? { leaseLifecycleProvider: { release: providerRelease } }
           : {}),
