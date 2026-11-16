@@ -207,6 +207,7 @@ export async function runStableCaptureLoop(
       : observeStableCapture({
           pacing,
           adaptive,
+          confirmation,
           snapshot: capture.snapshot,
           signal,
           window,
@@ -268,6 +269,7 @@ async function loadAdaptiveEarlyExit(
 function observeStableCapture(params: {
   pacing: StableCapturePacing;
   adaptive: AdaptiveEarlyExit | undefined;
+  confirmation: StableCaptureConfirmation;
   snapshot: SnapshotState;
   signal: StableCaptureSignal;
   window: ReturnType<typeof stableCaptureWindow>;
@@ -290,7 +292,8 @@ function observeStableCapture(params: {
     snapshot: params.snapshot,
     signal: params.signal,
     nowMs: params.nowMs,
-    floorInForce: window.floorConfirmed,
+    floorInForce:
+      window.floorConfirmed || params.confirmation.unresolvedReplacement(params.snapshot),
   });
   if (early.kind === 'settle') {
     return { settled: true, delayMs: 0, heldQuietMs: early.heldQuietMs };
@@ -503,6 +506,16 @@ function broadTransitionConfirmation(params: {
     get confirmed() {
       return confirmedQuietMs !== undefined;
     },
+    unresolvedReplacement(snapshot) {
+      // The gate has refused every capture so far, so the latch has not ruled; a later capture it
+      // admits could still confirm the floor. Judge this capture against the baseline directly.
+      if (!baseline || transitionBaseline !== undefined) return false;
+      if (!isBoundIosXCTestCapture(snapshot.backend, platform)) return false;
+      return stableCaptureSignalsHaveBroadReplacement(
+        stableCaptureComparisonSignal(snapshot, baseline.nodes, appBundleId),
+        stableCaptureComparisonSignal(snapshot, snapshot.nodes, appBundleId),
+      );
+    },
   };
 }
 
@@ -517,6 +530,12 @@ type StableCaptureConfirmation = {
    * not it raised the window: a requested window above the floor still owes its full span.
    */
   readonly confirmed: boolean;
+  /**
+   * The latch is armed but no capture has passed its gate yet (a rootless read after a
+   * non-presented baseline), and this capture already replaces the baseline broadly. Asked only by
+   * the adaptive early exit, which must not settle before a later capture could confirm the floor.
+   */
+  unresolvedReplacement: (snapshot: Parameters<typeof stableCaptureSignal>[0]) => boolean;
 };
 
 /**

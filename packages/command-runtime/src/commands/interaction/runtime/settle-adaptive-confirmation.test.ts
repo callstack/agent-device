@@ -295,3 +295,20 @@ test('a capture on an iOS system surface the baseline did not show keeps the qui
   assert.equal(adaptive.settled, true);
   assert.ok(adaptive.waitedMs >= DEFAULT_QUIET_MS, `adaptive held ${adaptive.waitedMs}ms`);
 });
+
+test('a rootless broad replacement the latch could not judge yet keeps the quiet window', async () => {
+  // A rootless read after a non-presented baseline fails the latch gate, so the floor stays an open
+  // question; a later rooted capture could still confirm it, so two rootless reads must not settle.
+  const rootless = elementSettingsTabSnapshot();
+  rootless.nodes = rootless.nodes.filter((node) => node.type !== 'Application');
+
+  const adaptive = await press({
+    stored: { ...elementCatalogTabSnapshot(), presentedSurface: 'unknown' },
+    loop: [rootless],
+    adaptive: true,
+    target: ref(`@${elementCatalogTabSnapshot().nodes.find((node) => node.ref)!.ref}`),
+  });
+
+  assert.equal(adaptive.settled, true);
+  assert.ok(adaptive.waitedMs >= DEFAULT_QUIET_MS, `adaptive held ${adaptive.waitedMs}ms`);
+});
