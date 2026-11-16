@@ -24,7 +24,13 @@ import {
   isSerialAddressablePlatform,
   type AppleOS,
 } from '@agent-device/kernel/device';
-import { isSessionRuntimePlatform, type SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import {
+  isSessionRuntimePlatform,
+  readScriptDeliveryFailure,
+  type ScriptDeliveryFailure,
+  type SessionRuntimeHints,
+} from '@agent-device/kernel/contracts';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -485,4 +491,25 @@ export function buildMeta(options: InternalRequestOptions): DaemonWireRequest['m
 
 export function resolveSessionName(session: string | undefined): string {
   return session ?? DEFAULT_SESSION_NAME;
+}
+
+/**
+ * The disclosure fields a successful action carries when a remote recording's script version did not
+ * reach its caller file (ADR 0016, #4564).
+ *
+ * A script delivery failure never changes the outcome of the action that recorded the version, so
+ * the response stays successful and these two fields are the only channel that says the file is
+ * stale. Every SDK result that can carry a script version reads them through this one owner, so no
+ * surface can drop the disclosure while another keeps it.
+ */
+export function readScriptDeliveryDisclosure(data: Record<string, unknown>): {
+  warnings?: string[];
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
+} {
+  const warnings = readResponseWarnings(data);
+  const scriptDeliveryFailure = readScriptDeliveryFailure(data);
+  return {
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(scriptDeliveryFailure === undefined ? {} : { scriptDeliveryFailure }),
+  };
 }

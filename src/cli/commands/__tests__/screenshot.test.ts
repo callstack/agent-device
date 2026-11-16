@@ -77,6 +77,37 @@ test('screenshot --json carries response-level warnings in the data', async () =
   assert.deepEqual(parsed.data.warnings, [CROP_WARNING]);
 });
 
+// ADR 0016 (#4564): a capture whose remote script version did not arrive keeps its success, so the
+// typed failure has to ride the machine view this command prints. `pickScreenshotResultData` narrows
+// the capture payload for its own callers, so this command adds the disclosure itself.
+test('screenshot --json carries a failed script delivery of the capture', async () => {
+  const failure = {
+    reason: 'script_delivery_failed',
+    cause: 'script_write_failed',
+    publicationId: '0f61b0c2-6d1a-4d1f-9b7f-2a4f3a1c7d55',
+    message: 'The session recorded version 2, but the daemon could not save it.',
+    hint: 'The file keeps the version from the last action that arrived.',
+  };
+  const client = clientReturning({
+    path: '/tmp/shot.png',
+    width: 40,
+    height: 20,
+    warnings: [failure.message],
+    scriptDeliveryFailure: failure,
+  });
+  const flags = { json: true } as CliFlags;
+
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
+  );
+  const parsed = JSON.parse(out) as {
+    data: { path: string; warnings?: string[]; scriptDeliveryFailure?: unknown };
+  };
+
+  assert.deepEqual(parsed.data.scriptDeliveryFailure, failure);
+  assert.deepEqual(parsed.data.warnings, [failure.message]);
+});
+
 test('screenshot --json at the default level still emits normalized screenshot metadata', async () => {
   const full = {
     path: '/tmp/shot.png',

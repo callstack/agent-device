@@ -8,7 +8,11 @@ import type {
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
-import type { DaemonInstallSource, SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import type {
+  DaemonInstallSource,
+  ScriptDeliveryFailure,
+  SessionRuntimeHints,
+} from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type {
@@ -113,6 +117,11 @@ export type AppOpenResult = AppOpenResultBase &
 type AppOpenResultBase = {
   session: string;
   warnings?: string[];
+  /**
+   * ADR 0016 (#4564): a remote recording's first script version was not delivered. The open kept
+   * its success, so the caller file may hold no script at all, or an older one.
+   */
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
   sessionStateDir?: string;
   runnerLogPath?: string;
   requestLogPath?: string;
@@ -161,6 +170,13 @@ export type AppCloseResult = {
    * — so a client that requested publication learns where the file landed.
    */
   savedScript?: string;
+  /** ADR 0016 (#4564): the close's response warnings, kept so a lost final script is read, not skipped. */
+  warnings?: string[];
+  /**
+   * ADR 0016 (#4564): the final script of a remote recording was not delivered. The close kept its
+   * success, so this is the only channel that says the caller file still holds an older version.
+   */
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
   identifiers: AgentDeviceIdentifiers;
 };
 
