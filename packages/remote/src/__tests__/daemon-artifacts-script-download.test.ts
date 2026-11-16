@@ -543,3 +543,17 @@ test('a stale record that cannot be swept never blocks a new open', async () => 
   expect(fs.existsSync(stale)).toBe(true);
   expect(records(stateDir)).toHaveLength(2);
 });
+
+test('an endpoint spelled with trailing slashes finds the record its open created', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, v2: { body: 'close\n' } });
+  const { id } = await open(`${baseUrl}//`, stateDir, destination);
+
+  const response = await answer(baseUrl, stateDir, request('close'), {
+    scriptPublicationId: id,
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(response).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('close\n');
+});

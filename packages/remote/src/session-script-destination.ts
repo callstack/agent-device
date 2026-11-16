@@ -359,7 +359,7 @@ function recordPath(
     .createHash('sha256')
     .update(
       JSON.stringify([
-        baseUrl.replace(/\/+$/, ''),
+        withoutTrailingSlashes(baseUrl),
         req.meta?.tenantId ?? '',
         req.session ?? '',
         publicationId,
@@ -367,6 +367,12 @@ function recordPath(
     )
     .digest('hex');
   return path.join(stateDir, 'remote-connections', 'session-scripts', `${key}.json`);
+}
+
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
 }
 
 /** Creates a record and removes the records nobody has touched for `STALE_RECORD_MS`. */
