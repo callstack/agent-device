@@ -272,6 +272,51 @@ skipOnWindows('refuses a link standing in a private-mode directory another user 
   expect(fs.readdirSync(mine)).toEqual([]);
 });
 
+skipOnWindows('refuses a private link standing on shared ground two levels up', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `<root>/shared` is 0777 and not sticky, `<root>/shared/mine` is mine at 0700, and `mine/rec` is a
+  // link to my private directory. The final chain is all mine, and the link stands in ground only I can
+  // write, so neither the link rule nor the resolved-final-chain rule sees anything wrong. What they miss
+  // is that another local user owns the ground `mine` and `rec` stand on: they rename `mine` aside and
+  // put their own there, with a `rec` of their choosing.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+  const privateWork = directoryWith(path.join(directory, 'private'), 0o700);
+  fs.symlinkSync(privateWork, path.join(mine, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(mine, 'rec', 'journey.ad')),
+    'world_writable',
+    shared,
+  );
+  expect(fs.readdirSync(privateWork)).toEqual([]);
+});
+
+skipOnWindows('refuses a chain that leaves a shared directory through an intermediate link', () => {
+  serveGroupDatabase(hostDatabase(currentGid, 4321));
+  // `~/rec -> /srv/team/relay`, and `relay` is a link back into a directory of mine. Every directory the
+  // final chain names is trusted; the walk still passes through `/srv/team`, which the team can write,
+  // and its owner — or any teammate — can swap `relay` for a target of their own.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  const srv = path.join(directory, 'srv');
+  const team = path.join(srv, 'team');
+  fs.mkdirSync(team, { recursive: true });
+  fs.chmodSync(team, 0o777);
+  const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
+  fs.symlinkSync(chosen, path.join(team, 'relay'));
+  fs.symlinkSync(path.join(team, 'relay'), path.join(home, 'rec'));
+
+  expectUntrusted(
+    () => assertPrivateScriptDestination(path.join(home, 'rec', 'journey.ad')),
+    'world_writable',
+    team,
+  );
+  expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
 skipOnWindows('judges the directories a .. in the path walks through', () => {
   serveGroupDatabase(hostDatabase(currentGid, 4321));
   // `<root>/shared/work/../x/journey.ad` is a path a caller can pass. Resolving it first answers
@@ -658,9 +703,42 @@ test('admits the group named after the user, holding only them, as their primary
   expect(privateGroupId(database(PRIVATE, PRIVATE_PASSWD), ADA)).toBe(1000);
 });
 
-test('admits it with root named among its members', () => {
+test('admits root named among the members, the account the whole rule trusts', () => {
   expect(
     privateGroupId(database(['ada:x:1000:root'], ['ada:x:1000:1000:', 'root:x:0:0']), ADA),
+  ).toBe(1000);
+});
+
+test('refuses a second group carrying the same gid when it lists another user', () => {
+  // `ada:x:1000:` looks private on its own, and the group named after the user is the only one the
+  // exception used to read. A directory group-writable by gid 1000 is writable by grace too, because
+  // `team` carries the same number.
+  expect(
+    privateGroupId(
+      database(
+        ['ada:x:1000:', 'team:x:1000:grace'],
+        ['ada:x:1000:1000:', 'grace:x:1001:1001:', 'root:x:0:0'],
+      ),
+      ADA,
+    ),
+  ).toBeUndefined();
+});
+
+test('admits a second group carrying the same gid when it reaches nobody else', () => {
+  expect(
+    privateGroupId(
+      database(['ada:x:1000:', 'ada-alias:x:1000:'], ['ada:x:1000:1000:', 'root:x:0:0']),
+      ADA,
+    ),
+  ).toBe(1000);
+});
+
+test('refuses it once a second group sharing the gid has another user as its primary group', () => {
+  expect(
+    privateGroupId(
+      database(['ada:x:1000:', 'team:x:1000:'], ['ada:x:1000:1000:', 'grace:x:1001:1000:']),
+      ADA,
+    ),
   ).toBeUndefined();
 });
 

@@ -228,20 +228,101 @@ export function assertPrivateScriptDestination(destination: string, parentIdenti
   }
   const trust = readScriptTrust();
   assertNoPlantedLink(destination, parent, trust);
-  const existing = deepestExistingDirectory(parent);
-  if (existing.real === undefined) return;
-  for (const ancestor of directoryChain(existing.real)) {
-    const stats = statDirectoryChain(ancestor);
+  const traversed = traversedDirectories(parent);
+  if (traversed.paths.length === 0) return;
+  for (const directory of traversed.paths) {
+    const stats = statDirectoryChain(directory);
     if (!stats) continue;
     const exposure = untrustedAncestryExposure(stats, trust);
-    if (exposure) throw scriptAncestryFailure(destination, ancestor, exposure);
+    if (exposure) throw scriptAncestryFailure(destination, directory, exposure);
   }
   // The script entry is created inside the deepest directory that exists, or below it through
   // directories that do not exist yet. Where other local users can add entries, one of them can add
   // this entry first and the recording is theirs, so the creation has to be refused.
-  const deepest = statDirectoryChain(existing.real);
+  const deepest = statDirectoryChain(traversed.deepest);
   if (deepest && othersCreateEntriesIn(deepest, trust)) {
-    throw scriptAncestryFailure(destination, existing.real, 'shared_parent');
+    throw scriptAncestryFailure(destination, traversed.deepest, 'shared_parent');
+  }
+}
+
+/** Link hops one destination walk expands before it stops, in step with the kernel's own limit. */
+const MAX_SYMLINK_HOPS = 40;
+
+/**
+ * Every directory the kernel traverses to reach `parent`, judged nearest-first, without duplicates, and
+ * the deepest one that exists.
+ *
+ * Resolving only the deepest existing ancestor is not enough, and neither is one `realpath` of a path
+ * that runs through links:
+ *
+ * - A component that is a plain directory is traversed as it stands, so a link inside it can lead
+ *   anywhere, and the directories above that plain component are reached by the publish even though the
+ *   final chain looks entirely private: `<root>/shared` at 0777 with `<root>/shared/mine` at 0700 and
+ *   `mine/rec` a link to a private directory names only trusted directories at its destination, while
+ *   another local user owns the ground `mine` and `rec` stand on and can rename `mine` aside. So EVERY
+ *   existing prefix of the spelled path is resolved, and the chain under each resolution is judged.
+ * - Where one link leads into another, `realpathSync` answers with the LAST target and names none of the
+ *   directories stepped through on the way: `~/rec -> /srv/team/relay -> ~/chosen` reaches a private
+ *   directory, and the team ground `relay` stands on never appears in the answer, though any teammate
+ *   can swap that link for a target of their own. So a link hop also judges the directory holding its
+ *   target, and the walk continues into the target.
+ */
+function traversedDirectories(
+  parent: string,
+): Readonly<{ paths: readonly string[]; deepest: string }> {
+  const seen = new Set<string>();
+  const paths: string[] = [];
+  let deepest: string | undefined;
+  for (const prefix of directoryChain(parent)) {
+    let current = prefix;
+    // Each hop replaces one link with its target, so a link cycle cannot run the walk forever. The
+    // operating system applies a limit of the same order and refuses the publish when it is exceeded.
+    for (let hop = 0; hop <= MAX_SYMLINK_HOPS; hop += 1) {
+      const stats = lstatIfPresentSync(current);
+      if (stats === undefined) break;
+      if (!stats.isSymbolicLink()) {
+        const real = resolvedDirectory(current);
+        if (real === undefined) break;
+        deepest ??= real;
+        for (const ancestor of directoryChain(real)) {
+          if (seen.has(ancestor)) continue;
+          seen.add(ancestor);
+          paths.push(ancestor);
+        }
+        break;
+      }
+      const target = linkTarget(current);
+      // The kernel steps INTO the directory the target names, so that directory and everything above it
+      // are traversed whatever this link eventually resolves to.
+      const home = resolvedDirectory(parentDirectory(target));
+      if (home !== undefined) {
+        for (const ancestor of directoryChain(home)) {
+          if (seen.has(ancestor)) continue;
+          seen.add(ancestor);
+          paths.push(ancestor);
+        }
+      }
+      current = target;
+    }
+  }
+  return { paths, deepest: deepest ?? parent };
+}
+
+/** Where a symbolic link points, made absolute the way the kernel reads it. */
+function linkTarget(link: string): string {
+  const target = fs.readlinkSync(link);
+  return path.isAbsolute(target) ? target : `${parentDirectory(link)}/${target}`;
+}
+
+/** The directory `path` names once every link in it is expanded, or `undefined` when it is absent. */
+function resolvedDirectory(pathname: string): string | undefined {
+  if (lstatIfPresentSync(pathname) === undefined) return undefined;
+  try {
+    const real = fs.realpathSync(pathname);
+    return statDirectoryChain(real) ? real : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
 }
 
@@ -278,7 +359,7 @@ function assertNoPlantedLink(
   for (const ancestor of directoryChain(parent)) {
     const link = lstatIfPresentSync(ancestor);
     if (!link?.isSymbolicLink()) continue;
-    const home = lstatIfPresentSync(path.dirname(ancestor));
+    const home = lstatIfPresentSync(parentDirectory(ancestor));
     if (!home) continue;
     const exposure = untrustedLinkExposure(
       { uid: link.uid },
@@ -286,28 +367,6 @@ function assertNoPlantedLink(
       trust,
     );
     if (exposure) throw scriptAncestryFailure(destination, ancestor, exposure);
-  }
-}
-
-/**
- * The real path of the deepest directory `directory` names or leads to, or `undefined` when nothing of it
- * exists to judge. A component that exists but resolves to nothing (a dangling link) is stepped over like
- * one that is absent, so the walk never stops with nothing checked.
- */
-function deepestExistingDirectory(directory: string): Readonly<{ real: string | undefined }> {
-  let current = directory;
-  for (;;) {
-    if (lstatIfPresentSync(current) !== undefined) {
-      try {
-        const real = fs.realpathSync(current);
-        if (statDirectoryChain(real)) return { real };
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-    }
-    const parent = parentDirectory(current);
-    if (parent === current) return { real: undefined };
-    current = parent;
   }
 }
 
@@ -338,18 +397,22 @@ type HostGroupDatabase = Readonly<{
  *
  * - Both database files must have been READ. An unreadable file is not an empty one, and an empty
  *   member list proves nothing.
- * - The group must be the one this process holds as its PRIMARY group, which `getgid` answers from the
- *   kernel rather than from a file, and it must carry this user's name.
- * - The group's own member list may name nobody but this user. macOS lists only part of `staff` in
- *   `/etc/group` while every local user holds it, so a name that is not this user's ends the claim
- *   rather than being looked up and forgiven.
- * - No other record in the passwd file may hold this group as its primary group, and the caller's own
- *   record must exist there with this uid and this gid.
+ * - The gid must be the one this process holds as its PRIMARY group, which `getgid` answers from the
+ *   kernel rather than from a file, and at least one record carrying that gid must bear this user's name.
+ * - EVERY record carrying that gid is read, because a directory group-writable by gid 1000 is writable
+ *   by the members of each group holding the number, however they are named: `ada:x:1000:` beside
+ *   `team:x:1000:grace` reaches grace. Any of them naming a member who is neither this user nor root
+ *   ends the claim, without lookup or forgiveness — macOS lists only part of `staff` in `/etc/group`
+ *   while every local user holds it.
+ * - No other passwd record may hold this gid as its primary group, and the caller's own record must
+ *   exist there with this uid and this gid.
  *
- * What this cannot establish: a name service (LDAP, NSS modules) can add a user whose primary group is
- * this gid without that user ever appearing in `/etc/passwd`. A host configured that way can still be
- * refused a group-writable destination it appears to own, which is the residual limitation the
- * documentation names; the caller's fallback is a directory only they can write.
+ * What this cannot establish, stated plainly because it cuts BOTH ways: the two files are only this
+ * machine's own view. A name service (LDAP, an NSS module) can hold a member of this gid, or a second
+ * group with the number, that never appears in `/etc/passwd` or `/etc/group`. Such a host can be
+ * refused a group-writable directory it genuinely owns, and it can also be ACCEPTED for one the name
+ * service has opened to someone else — this rule cannot see that member and so cannot refuse it. The
+ * caller's answer on a name-service host is a directory only they can write, at any mode.
  */
 export function privateGroupId(
   database: HostGroupDatabase,
@@ -358,22 +421,35 @@ export function privateGroupId(
   const { uid, gid, name } = current;
   if (uid === undefined || gid === undefined || name === undefined) return undefined;
   if (!database.groups || !database.passwd) return undefined;
-  const record = database.groups.find((line) => line.split(':')[0] === name);
-  if (!record) return undefined;
-  const [, , rawGid, rawMembers = ''] = record.split(':');
-  const privateGid = Number(rawGid);
-  if (!Number.isInteger(privateGid) || privateGid !== gid) return undefined;
-  const members = rawMembers.split(',').filter((member) => member.length > 0);
-  if (members.some((member) => member !== name)) return undefined;
   const own = database.passwd.find((line) => line.split(':')[0] === name);
   if (!own) return undefined;
   const [, , ownUid, ownGid] = own.split(':');
   if (Number(ownUid) !== uid || Number(ownGid) !== gid) return undefined;
+  // EVERY record carrying this gid decides together: a directory group-writable by gid 1000 is writable
+  // by the members of each of them, however they are named. A group named after the user buys the
+  // exception only while no other record sharing the number reaches another user.
+  let namedForUser = false;
+  for (const line of database.groups) {
+    const [groupName, , rawGid, rawMembers = ''] = line.split(':');
+    const recordGid = Number(rawGid);
+    if (rawGid === '' || !Number.isInteger(recordGid) || recordGid !== gid) continue;
+    if (groupName === name) namedForUser = true;
+    const members = rawMembers.split(',').filter((member) => member.length > 0);
+    if (members.some((member) => !memberIsTrusted(member, database, name))) return undefined;
+  }
+  if (!namedForUser) return undefined;
   const sharesPrimary = database.passwd.some((line) => {
-    const [other, , , otherGid] = line.split(':');
-    return other !== name && Number(otherGid) === gid;
+    const [other, , rawOtherUid, rawOtherGid] = line.split(':');
+    return other !== name && Number(rawOtherGid) === gid && Number(rawOtherUid) !== 0;
   });
   return sharesPrimary ? undefined : gid;
+}
+
+/** Whether a member of a candidate private group is the user or root, the two accounts the rule trusts. */
+function memberIsTrusted(member: string, database: HostGroupDatabase, name: string): boolean {
+  if (member === name) return true;
+  const record = database.passwd?.find((line) => line.split(':')[0] === member);
+  return record !== undefined && Number(record.split(':')[2]) === 0;
 }
 
 /** This process's identity and the private group its host databases establish, if any. */

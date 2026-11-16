@@ -246,6 +246,58 @@ skipOnWindows('a recording refuses an ancestor swapped out for a writable direct
   expect(fs.readdirSync(work)).toEqual([]);
 });
 
+skipOnWindows('a recording refuses a private link standing on shared ground two levels up', () => {
+  // `<root>/shared` is 0777 and not sticky, `<root>/shared/mine` is 0700, and `mine/rec` links to a
+  // private directory. Every directory the destination's real path names is private, so only judging
+  // each prefix the kernel traverses sees that another local user owns the ground under `mine` and `rec`.
+  const directory = root();
+  const shared = path.join(directory, 'shared');
+  fs.mkdirSync(shared);
+  fs.chmodSync(shared, 0o777);
+  const mine = path.join(shared, 'mine');
+  fs.mkdirSync(mine);
+  fs.chmodSync(mine, 0o700);
+  const privateWork = path.join(directory, 'private');
+  fs.mkdirSync(privateWork);
+  fs.symlinkSync(privateWork, path.join(mine, 'rec'));
+  const destination = path.join(mine, 'rec', 'journey.ad');
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: shared,
+  });
+  expect(fs.readdirSync(privateWork)).toEqual([]);
+});
+
+skipOnWindows('a recording refuses a chain that leaves a shared directory through a link', () => {
+  // `~/rec -> <root>/srv/team/relay -> ~/chosen`. The team ground is 0777, and any teammate can swap the
+  // `relay` link for a target of their own, though the destination's real path never names it.
+  const directory = root();
+  const home = path.join(directory, 'home');
+  fs.mkdirSync(home);
+  const team = path.join(directory, 'srv', 'team');
+  fs.mkdirSync(team, { recursive: true });
+  fs.chmodSync(team, 0o777);
+  const chosen = path.join(directory, 'chosen');
+  fs.mkdirSync(chosen);
+  fs.chmodSync(chosen, 0o700);
+  fs.symlinkSync(chosen, path.join(team, 'relay'));
+  fs.symlinkSync(path.join(team, 'relay'), path.join(home, 'rec'));
+  const destination = path.join(home, 'rec', 'journey.ad');
+
+  const details = refusal(writerFor(directory).write(recordingTo(destination)));
+
+  expect(details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: team,
+  });
+  expect(fs.readdirSync(chosen)).toEqual([]);
+});
+
 skipOnWindows('a recording still saves to a group-writable private-group home', () => {
   privateGroupDatabase();
   const directory = root();

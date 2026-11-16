@@ -28,15 +28,10 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
   }
 });
 
-// A session script is published through the ancestry-owning entry point, not the plain one: the plain
-// one writes to a destination another local user could have steered (#4565).
-test('the session script publisher uses the destination-ancestry owner', () => {
-  const source = fs.readFileSync(
-    new URL('../../core/session-script-writer.ts', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /publishScriptFileSync/);
-});
+// Which entry point the session script publisher dispatches through is proven by behaviour, not by its
+// source text: `packages/daemon/src/core/__tests__/session-script-writer-ancestry.test.ts` drives a real
+// write and expects the typed ancestry refusals and the 0600 file, which only the destination-ancestry
+// owner (`publishScriptFileSync`, #4565) produces.
 
 // The process lock publishes a file and reclaims a directory, which are two different
 // claims of ownership: only the first belongs to the publication owners above.

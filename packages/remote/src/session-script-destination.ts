@@ -408,9 +408,9 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    // Asked before anything is created, so a destination another local user can steer leaves no
-    // directory behind (#4565).
-    assertPrivateScriptDestination(record.destination);
+    // The missing parent is created first, so this route judges the chain at the same point the local
+    // writer does: the rule needs the directory the entry is really created in, which does not exist
+    // until this line has run (#4565).
     await fs.promises.mkdir(path.dirname(record.destination), { recursive: true });
     const allocated = await withRecordLock(file, async () =>
       allocateStaging(file, record.destination),
