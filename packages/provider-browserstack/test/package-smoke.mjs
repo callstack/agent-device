@@ -1,4 +1,8 @@
 export const provider = 'browserstack';
+export const additionalExports = {
+  './connection-verification': { import: './dist/connection-verification.mjs' },
+  './package.json': './package.json',
+};
 export const args = [
   '--platform',
   'android',
@@ -13,7 +17,7 @@ export function environment() {
   return { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key' };
 }
 export function respond(url, rejectCredentials) {
-  const pathname = new URL(url).pathname;
+  const pathname = new URL(url, 'http://fixture').pathname;
   if (!['/app-automate/devices.json', '/app-automate/recent_apps'].includes(pathname)) {
     return { status: 404, body: { error: 'not-found' } };
   }
