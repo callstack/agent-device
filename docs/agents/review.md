@@ -31,6 +31,8 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - New tests: each new test must detect a credible production failure.
   Test doubles must fail at the same seam as production.
 - Changed code: flag dead code, redundant guards, casts, narrating comments, and competing owners.
+- Help and user-doc claims: trace each changed sentence stating what a command does to its code path.
+  Treat an unsupported promise as blocking.
 - Bulk prose rewrites (docs, ADRs, help): get a review from another model provider.
   The reviewer compares each changed sentence with the base. A self-review is not evidence.
 

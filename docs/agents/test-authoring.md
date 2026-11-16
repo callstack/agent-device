@@ -44,9 +44,7 @@ When you migrate an ADR 0019 command, move its tests to the runtime seam.
 
 Vitest workers signal only themselves and direct children.
 For fabricated PIDs, mock process-signal helpers.
-Do not disable isolation to hide failures.
-Do not switch the fork pool to hide failures.
-Do not add unit retries to hide failures.
+Do not disable isolation, switch the fork pool, or add unit retries to hide failures.
 Use existing clocks or tool seams instead of production-time waits.
 Slow-test pins only shrink.
 For a new pin, give measured justification.

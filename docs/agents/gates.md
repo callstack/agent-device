@@ -6,7 +6,6 @@ For execution, read [validation](testing.md).
 CI declares ownership through the shared `run-gate` action with a literal gate id.
 For a new check, update the catalog and executable model.
 To verify ownership and reachability, run `pnpm check:gate-manifest`.
-Insert a violation to prove a new gate or selector detects it.
 Use [isolated experiments](test-experiments.md).
 
 For parser and geometry changes, extend shared fast-check arbitraries and properties.
