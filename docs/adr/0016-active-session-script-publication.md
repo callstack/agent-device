@@ -215,7 +215,7 @@ Every result that can carry a script version discloses a failed delivery: the SD
 Rejected: a remote `session save-script` download, because it added a second publication path and a retry protocol.
 Rejected: delivery only at close, because a session that an external owner closes would lose its recording.
 Rejected: daemon-minted recording IDs bound through per-request claims, because the claim, binding, and tombstone protocol cost more than a client-minted ID that only its own client can match.
-Consequence: each recorded action of a remote ARMED recording costs one script write and one artifact download.
+Consequence: each recorded action of a remote ARMED recording costs one script write and one artifact download, except inside a batch, where the client takes only the newest version and one batch costs one download.
 
 This lifecycle is distinct from the ADR 0012 repair transaction.
 `session save-script` rejects a session with `saveScriptBoundary` set.
