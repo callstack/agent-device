@@ -46,7 +46,7 @@ function createPressDevice(verdict: TargetHittability | (() => Promise<TargetHit
   };
   const device = createAgentDevice({
     backend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: TREE }]),
     policy: localCommandPolicy(),
   });
