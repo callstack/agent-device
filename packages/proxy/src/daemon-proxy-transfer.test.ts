@@ -365,6 +365,9 @@ test.each([false, true])(
         return Response.json({ jsonrpc: '2.0', id: 1, result: { ok: true } });
       },
     });
+    const transfer = new Request('http://gateway.test/artifacts/x');
+    transfer.headers.set('authorization', 'Bearer client-secret');
+    await expect(proxy.handle(transfer)).rejects.toThrow();
     for (const path of ['/rpc', '/health', '/sessions/s/requests/r/diagnostics']) {
       const response = await proxy.handle(
         new Request(`http://gateway.test${path}`, {
