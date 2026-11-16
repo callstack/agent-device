@@ -50,6 +50,12 @@ const ACTION_POLICY = {
 /** The helper must answer input this long before the host timeout so its typed result arrives. */
 const INPUT_ANSWER_MARGIN_MS = 5_000;
 
+/**
+ * The least helper budget a press is sent with: one synchronous injection can block until the
+ * framework's 30 s deadline, and a host that stopped waiting first would tear the session down.
+ */
+const MIN_INPUT_BUDGET_MS = 30_000;
+
 /** Reuses the session's automation context without starting instrumentation for sessionless input. */
 export function runAndroidAutomationHelper(
   device: DeviceInfo,
@@ -77,8 +83,8 @@ export async function runAndroidAutomationHelper(
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   if (!(await getLiveAndroidSnapshotHelperSession(deviceKey))?.commands.has(action))
     return undefined;
+  const timeoutMs = action === 'input' ? admitInputTimeoutMs() : ACTION_POLICY[action].timeoutMs;
   const prepared = await prepareAndroidAutomationHelper(device);
-  const timeoutMs = action === 'input' ? inputTimeoutMs() : ACTION_POLICY[action].timeoutMs;
   try {
     const headers = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey,
@@ -138,12 +144,31 @@ function decodeHelperIndex(value: string | undefined): number | undefined {
   return value !== undefined && /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
-/** The host waits for input up to its cap, or until the request's own deadline when that is sooner. */
-function inputTimeoutMs(): number {
+/**
+ * The host waits for input up to its cap, or until the request's own deadline when that is sooner.
+ * A request too close to its deadline for one injection is refused before anything is sent.
+ */
+function admitInputTimeoutMs(): number {
   const capMs = ACTION_POLICY.input.timeoutMs;
   const requestDeadlineMs = getRequestDeadlineMs(getDiagnosticsMeta().requestId);
-  if (requestDeadlineMs === undefined) return capMs;
-  return Math.max(0, Math.min(capMs, requestDeadlineMs - Date.now()));
+  const timeoutMs =
+    requestDeadlineMs === undefined
+      ? capMs
+      : Math.max(0, Math.min(capMs, requestDeadlineMs - Date.now()));
+  const budgetMs = timeoutMs - INPUT_ANSWER_MARGIN_MS;
+  if (budgetMs < MIN_INPUT_BUDGET_MS) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android input was not sent: the request has too little time left for one injection',
+      {
+        reason: 'android-input-budget-exhausted',
+        budgetMs: Math.max(0, budgetMs),
+        minimumBudgetMs: MIN_INPUT_BUDGET_MS,
+        dispatched: 'no',
+      },
+    );
+  }
+  return timeoutMs;
 }
 
 function encodeHelperPayload(
@@ -153,7 +178,7 @@ function encodeHelperPayload(
   if (!('input' in request)) return undefined;
   const payload =
     request.action === 'input'
-      ? { ...request.input, budgetMs: Math.max(0, timeoutMs - INPUT_ANSWER_MARGIN_MS) }
+      ? { ...request.input, budgetMs: timeoutMs - INPUT_ANSWER_MARGIN_MS }
       : request.input;
   return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
