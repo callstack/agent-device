@@ -157,6 +157,21 @@ export function sessionScriptDelivery(
 }
 
 /**
+ * Whether THIS client armed the recording one response names, by reading the record its own `open
+ * --save-script` created. The record is located by hashing this client's own endpoint, tenant and
+ * session with that ID, so an ID a response invents arms nothing. A batch asks this once per ID before
+ * it treats a version, a close or a failure as its own.
+ */
+export function hasScriptRecord(
+  stateDir: string,
+  baseUrl: string,
+  req: DaemonWireRequest,
+  publicationId: string,
+): boolean {
+  return readRecord(recordPath(stateDir, baseUrl, req, publicationId)) !== undefined;
+}
+
+/**
  * Whether one artifact names a version this client can publish: the `savedScript` field, the
  * session-script type, a string publication ID and artifact ID, and a positive integer revision.
  * `publishScriptVersion` refuses anything else, and the batch path reads an untrusted answer through

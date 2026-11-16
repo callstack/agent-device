@@ -512,14 +512,19 @@ export async function materializeRemoteBatchPartialArtifacts(
   if (!info.baseUrl || req.command !== BATCH_COMMAND || !Array.isArray(details?.partialResults))
     return undefined;
   try {
-    const { readBatchPlan, readFinishedStepCount } = await import('./remote-batch-answer.ts');
-    const plan = readBatchPlan(req.flags?.batchSteps);
+    // The runner's own report travels with the step entries, so the one reader that decides what
+    // finished sees exactly what the daemon claimed about the failed run.
+    const data = {
+      results: details.partialResults,
+      step: details.step,
+      command: details.command,
+      executed: details.executed,
+    };
     const disclosure = await deliverBatchScript(
       { baseUrl: info.baseUrl, token: info.token },
       req,
-      { results: details.partialResults },
+      data,
       stateDir,
-      readFinishedStepCount(plan, details),
     );
     return disclosure ? { ...details, ...disclosure } : undefined;
   } catch (error) {
@@ -534,51 +539,43 @@ export async function materializeRemoteBatchPartialArtifacts(
 }
 
 /**
- * Delivers a remote `batch` answer's session script: AT MOST ONE version, the newest this client's own
- * plan is owed. Every version is the whole recording, so an older one is worth nothing, and this never
- * changes the batch's outcome. The plan is the only authority — a step the caller never ran, or never
- * finished, authorizes no download and no retirement.
+ * Delivers a remote `batch` answer's session script: AT MOST ONE version, the newest of this client's
+ * own recording that the answer proves the caller earned. Every version is the whole recording, so an
+ * older one is worth nothing, and this never changes the batch's outcome. ONE validated prefix — the
+ * steps the answer proves ran, of the recording this client armed — decides every part of it: which
+ * recording is in play, which version to download, whether the recording is finished, and what to
+ * disclose. A step the answer did not prove was run authorizes nothing, and disclosure does not wait
+ * on a download or a retirement: a batch that delivers nothing still says why.
  */
 async function deliverBatchScript(
   endpoint: Required<DaemonArtifactEndpoint>,
   req: DaemonWireRequest,
   data: Record<string, unknown>,
   stateDir: string,
-  finished?: number,
 ): Promise<Record<string, unknown> | undefined> {
   // Both owners load on demand: the batch readers pull in the command registry, and the script owner
   // the download path, neither of which the client evaluates for a response that names no script.
-  const [{ isPublishableScriptVersion, sessionScriptDelivery }, answer] = await Promise.all([
-    import('./session-script-destination.ts'),
-    import('./remote-batch-answer.ts'),
-  ]);
-  const plan = answer.readBatchPlan(req.flags?.batchSteps);
-  const finishedCount = finished ?? plan.length;
-  const steps = answer.readFinishedSteps(
-    Array.isArray(data.results) ? data.results : [],
-    plan,
-    finishedCount,
-  );
-  const listed = asArtifacts(data.artifacts);
-  // The batch's own payload is scanned FIRST: after the last step the daemon stamps its newest version
-  // there, and the bound below keeps that version even by an answer that crowds the step entries out.
-  const newest = newestScriptVersion(
-    [listed, ...steps.map((step) => asArtifacts(step.data?.artifacts))],
-    isPublishableScriptVersion,
-  );
-  const version = newest?.artifact;
-  // Where that version came from, in plan order. The batch payload is stamped after the LAST step, so
-  // it sits past every step: a version from there supersedes a failure an earlier step reported.
-  const deliveredFrom =
-    newest === undefined ? undefined : newest.source === 0 ? steps.length : newest.source - 1;
-  const publication = batchPublicationId(steps, data) ?? version?.scriptPublicationId;
-  // A close the PLAN ran and finished ends the recording, and the caller stops tracking it — with or
-  // without a version to deliver. The owner locates the record by hashing this client's own endpoint,
-  // tenant and session with that ID, so an ID the daemon invents retires nothing.
-  const closed = answer.readFinishedClose(plan, finishedCount) ? publication : undefined;
-  if (version === undefined && closed === undefined) return undefined;
+  const [{ hasScriptRecord, isPublishableScriptVersion, sessionScriptDelivery }, answer] =
+    await Promise.all([
+      import('./session-script-destination.ts'),
+      import('./remote-batch-answer.ts'),
+    ]);
+  // Only a recording THIS client armed with `open --save-script` is actionable: the record is found by
+  // hashing this client's own endpoint, tenant and session with the ID, so an ID the daemon invents
+  // owns nothing, delivers nothing and retires nothing. The answer repeats IDs across its steps, so each
+  // distinct one is looked up once.
+  const armed = new Map<string, boolean>();
+  const owns = (publicationId: string): boolean => {
+    const known = armed.get(publicationId);
+    if (known !== undefined) return known;
+    const fresh = hasScriptRecord(stateDir, endpoint.baseUrl, req, publicationId);
+    armed.set(publicationId, fresh);
+    return fresh;
+  };
+  const batch = answer.readBatchAnswer(req, data, isPublishableScriptVersion, owns);
   // The answer's own list is rewritten the way a single response's is: its session-script entries are
   // the owner's to answer for, and the one it delivers comes back with `localPath`.
+  const listed = asArtifacts(data.artifacts);
   const listedScripts = listed.some(isSessionScriptArtifact);
   const kept = listed.filter((artifact) => !isSessionScriptArtifact(artifact));
   const payload: Record<string, unknown> = {};
@@ -588,73 +585,21 @@ async function deliverBatchScript(
     { ok: true, data: payload },
     stateDir,
     downloadRemoteArtifact,
-    closed,
+    batch.closed ? batch.publicationId : undefined,
   );
   await scripts.settleAfter(async () => {
-    if (version !== undefined) await scripts.publish(version, payload, kept);
+    if (batch.version !== undefined) await scripts.publish(batch.version, payload, kept);
     return { ok: true, data: payload };
   });
-  return answer.readBatchDisclosure(
-    payload,
-    steps,
-    deliveredFrom,
-    publication,
-    listedScripts ? kept : undefined,
-  );
-}
-
-/** The recording this batch reports, from what the answer names: only a recorded one can be opened. */
-function batchPublicationId(
-  steps: ReadonlyArray<{ data: Record<string, unknown> | undefined }>,
-  data: Record<string, unknown>,
-): string | undefined {
-  return [...steps.map((step) => step.data?.scriptPublicationId), data.scriptPublicationId].find(
-    (id): id is string => typeof id === 'string',
-  );
+  return answer.readBatchDisclosure(data, payload, batch, listedScripts ? kept : undefined);
 }
 
 function asArtifacts(value: unknown): DaemonArtifact[] {
   return Array.isArray(value) ? (value as DaemonArtifact[]) : [];
 }
 
-/**
- * The newest script version among these payloads' artifact lists, with the index of the list that
- * carried it, or `undefined`. The scan is linear and bounded per list and in all, so one answer cannot
- * make this client read what it is not owed, and a version past a bound is never inspected. Each
- * candidate passes the publisher's own guard, so no response value that cannot name a version reaches
- * a record lookup, a path, or a download request.
- */
-function newestScriptVersion(
-  lists: readonly DaemonArtifact[][],
-  isPublishable: (artifact: DaemonArtifact | undefined) => boolean,
-): { artifact: DaemonArtifact; source: number } | undefined {
-  let newest: { artifact: DaemonArtifact; source: number } | undefined;
-  let scanned = 0;
-  lists.forEach((list, source) => {
-    for (const artifact of list.slice(0, MAX_SCRIPT_ARTIFACTS_PER_ENTRY)) {
-      if (scanned >= MAX_SCRIPT_ARTIFACTS_PER_BATCH) return;
-      scanned += 1;
-      if (!isPublishable(artifact)) continue;
-      if (newest === undefined || (artifact.scriptRevision as number) > revisionOf(newest.artifact))
-        newest = { artifact, source };
-    }
-  });
-  return newest;
-}
-
-/** The revision one publishable artifact names. */
-function revisionOf(artifact: DaemonArtifact): number {
-  return artifact.scriptRevision as number;
-}
-
 /** Command name of the request that runs several steps under one response. */
 const BATCH_COMMAND = 'batch';
-
-/** One payload is read for at most this many of its own script artifacts. */
-const MAX_SCRIPT_ARTIFACTS_PER_ENTRY = 32;
-
-/** One batch answer is read for at most this many script artifacts in all. */
-const MAX_SCRIPT_ARTIFACTS_PER_BATCH = 64;
 
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,

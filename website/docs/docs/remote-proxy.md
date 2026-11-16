@@ -122,14 +122,15 @@ recorded a version discloses it: the CLI prints a `Warning:` line and carries a 
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
-batch steps are refused. A `batch` delivers the newest version its answer names, whether a step
-carried it or the batch result itself did, and a batch that closes the recording retires it the same
-way a standalone `close` does. Every version is the full recording, so one batch costs at most one
-download. When a later step fails, the script the steps that already ran recorded is still delivered,
-and the batch error stands. The batch result carries `scriptDeliveryFailure` when this client's own
-delivery, or a step that finished, reports one for the recording and no newer version was saved after
-that report. Only the warning written beside that failure is reported with it, so a capture warning
-from another step stays on its step.
+batch steps are refused. A `batch` delivers the newest version of your own recording that its answer
+names, whether a step carried it or the batch result itself did, and a batch whose answer proves a
+finished `close` step retires the recording the same way a standalone `close` does. Every version is
+the full recording, so one batch costs at most one download. When a later step fails, the script the
+steps that already ran recorded is still delivered, and the batch error stands. The batch result
+carries `scriptDeliveryFailure` when this client's own delivery, or a step that ran on your
+recording, reports one and no newer version was saved after that report. Its `warnings` keep the
+batch's own warnings and add that failure's line, so a daemon-side write failure and a client-side
+download failure are both reported.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a

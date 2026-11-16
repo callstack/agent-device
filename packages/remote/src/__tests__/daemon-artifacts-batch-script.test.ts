@@ -1,172 +1,25 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import {
-  closeLoopbackServer,
-  createTestHostEnvironment,
-  listenOnLoopback,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
-import {
-  materializeRemoteArtifacts,
-  materializeRemoteBatchPartialArtifacts,
-} from '../daemon-artifacts.ts';
-import { sendRemoteScriptOpen } from '../session-script-destination.ts';
+  answer,
+  artifactServer,
+  batchPlan,
+  batchSteps,
+  closeArtifactServers,
+  daemonFailure,
+  expectDeliveredNothing,
+  journey,
+  open,
+  payload,
+  records,
+  request,
+  script,
+  step,
+} from './support/batch-script-fixtures.ts';
+import { materializeRemoteBatchPartialArtifacts } from '../daemon-artifacts.ts';
 
-const servers: http.Server[] = [];
-
-afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => closeLoopbackServer(server)));
-});
-
-/**
- * Serves the script versions it is given, and records what it was asked for. An artifact ID it does
- * not know answers 503, which is how these tests make a download fail.
- */
-async function artifactServer(
-  bodies: Record<string, string>,
-  requested: string[] = [],
-): Promise<string> {
-  const server = http.createServer((req, res) => {
-    const id = decodeURIComponent(req.url?.replace('/artifacts/', '') ?? '');
-    requested.push(id);
-    const body = bodies[id];
-    if (body === undefined) {
-      res.writeHead(503).end('unavailable');
-      return;
-    }
-    res.writeHead(200, { 'content-length': Buffer.byteLength(body) });
-    res.end(body);
-  });
-  servers.push(server);
-  return `http://127.0.0.1:${await listenOnLoopback(server)}`;
-}
-
-function journey() {
-  // The real path, so a destination names the same file the publication renames into place.
-  const root = fs.realpathSync(mkdtempForTestSync('batch-script-'));
-  return { root, stateDir: path.join(root, 'state'), destination: path.join(root, 'journey.ad') };
-}
-
-function request(
-  command: string,
-  meta: DaemonWireRequest['meta'] = {},
-  flags?: DaemonWireRequest['flags'],
-): DaemonWireRequest {
-  return {
-    token: 't',
-    session: 'journey',
-    command,
-    positionals: [],
-    ...(flags ? { flags } : {}),
-    meta,
-  };
-}
-
-/**
- * The plan a `batch` request carries: the daemon answers one entry per submitted step, and the
- * client authorizes delivery only for the steps IT submitted (#4564 review).
- */
-function batchPlan(...commands: string[]): DaemonWireRequest['flags'] {
-  return { batchSteps: commands.map((command) => ({ command })) };
-}
-
-function script(artifactId: string, revision: number, publicationId: string): DaemonArtifact {
-  return {
-    field: 'savedScript',
-    artifactType: 'session-script',
-    artifactId,
-    scriptPublicationId: publicationId,
-    scriptRevision: revision,
-  };
-}
-
-/** The failure the DAEMON writes when it could not save its own version of the recording. */
-function daemonFailure(publicationId: string, revision: number) {
-  return {
-    reason: 'script_delivery_failed',
-    cause: 'script_write_failed',
-    publicationId,
-    message: `The session recorded version ${revision}, but the daemon could not save it.`,
-    hint: 'The file keeps the version from the last action that arrived.',
-  };
-}
-
-function records(stateDir: string): string[] {
-  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
-  return fs.existsSync(directory)
-    ? fs.readdirSync(directory).filter((n) => n.endsWith('.json'))
-    : [];
-}
-
-/** Answers a request the way the daemon does and materializes the answer like the client. */
-function answer(
-  baseUrl: string,
-  stateDir: string,
-  req: DaemonWireRequest,
-  data: Record<string, unknown>,
-): Promise<DaemonResponse> {
-  return materializeRemoteArtifacts(
-    { baseUrl, token: 't' },
-    req,
-    { ok: true, data },
-    createTestHostEnvironment(),
-    stateDir,
-  );
-}
-
-/** One batch step result, shaped the way the daemon runner answers. */
-function step(step: number, command: string, data: Record<string, unknown>) {
-  return { step, command, ok: true, data, durationMs: 1 };
-}
-
-/** A remote `open --save-script` the daemon answered with version 1. */
-async function open(baseUrl: string, stateDir: string, destination: string) {
-  let publicationId = '';
-  await sendRemoteScriptOpen(
-    { baseUrl, token: 't', capabilities: ['script-artifacts'] },
-    {
-      ...request('open', { clientArtifactPaths: { savedScript: destination } }),
-      flags: { saveScript: true },
-    },
-    stateDir,
-    async (next) => {
-      publicationId = next.meta?.scriptPublicationId as string;
-      return await answer(baseUrl, stateDir, next, {
-        scriptPublicationId: publicationId,
-        artifacts: [script('v1', 1, publicationId)],
-      });
-    },
-  );
-  return publicationId;
-}
-
-/** The step results of a successful batch answer. */
-function batchSteps(response: DaemonResponse): Array<Record<string, any>> {
-  if (!response.ok) throw new Error(`Expected a successful batch, got ${JSON.stringify(response)}`);
-  return (response.data?.results ?? []) as Array<Record<string, any>>;
-}
-
-/** The batch's own payload fields. */
-function payload(response: DaemonResponse): Record<string, any> {
-  if (!response.ok) throw new Error(`Expected a successful batch, got ${JSON.stringify(response)}`);
-  return response.data ?? {};
-}
-
-/**
- * Nothing was delivered: no field names a caller file, no artifact reports a published local path,
- * and no delivery failure is claimed. The daemon's own artifact entries stay in the answer, field
- * names and all, so the answer is checked for what this client would have added.
- */
-function expectDeliveredNothing(response: DaemonResponse): void {
-  const text = JSON.stringify(response);
-  expect(text).not.toContain('"savedScript":');
-  expect(text).not.toContain('"localPath":');
-  expect(text).not.toContain('"scriptDeliveryFailure":');
-}
+afterEach(closeArtifactServers);
 
 test('a batch delivers its newest script once and a close step retires the record', async () => {
   const { stateDir, destination } = journey();
@@ -771,6 +624,137 @@ test('a batch step that cannot save its version discloses it on the batch payloa
   expect(warnings).toHaveLength(1);
   expect(warnings[0]).toContain('script');
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+});
+
+/**
+ * A FAILED batch still discloses. The `wait` step succeeded on the device but the daemon could not save
+ * its own version of the recording, and the step that followed failed the batch. The runner attaches
+ * only the finished steps, and nothing is downloadable, so the one thing this client can still do is
+ * answer with the fact the caller needs: the file is stale, and why. Disclosure does not wait on a
+ * download or a retirement.
+ */
+test('a failed batch whose finished step reports a write failure still discloses it', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: 'open Demo\n' });
+  const id = await open(baseUrl, stateDir, destination);
+
+  const failure = daemonFailure(id, 2);
+  const details = {
+    step: 2,
+    command: 'snapshot',
+    executed: 1,
+    total: 2,
+    partialResults: [
+      {
+        step: 1,
+        command: 'wait',
+        ok: true,
+        durationMs: 1,
+        data: { scriptDeliveryFailure: failure, warnings: [`${failure.message} ${failure.hint}`] },
+      },
+    ],
+  };
+
+  const disclosure = await materializeRemoteBatchPartialArtifacts(
+    { baseUrl, token: 't' },
+    request('batch', {}, batchPlan('wait', 'snapshot')),
+    details,
+    stateDir,
+  );
+
+  // The caller's error keeps its own report and gains the script facts, as the successful path gives them.
+  expect(disclosure).toMatchObject({
+    scriptDeliveryFailure: expect.objectContaining(failure),
+    warnings: [`${failure.message} ${failure.hint}`],
+  });
+  expect(disclosure?.step).toBe(2);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  // A batch that never closed keeps the record, so a later version still lands.
+  expect(records(stateDir)).toHaveLength(1);
+});
+
+/**
+ * A foreign revision must not mask the version this client is owed. The comparison runs across
+ * publication IDs before ownership is checked, so another client's revision 999 wins the answer, this
+ * client's own version 2 is never downloaded, its file goes stale, no failure is reported — and the
+ * record is retired anyway. A version of a recording this client never armed is not a candidate.
+ */
+test('a step script of another recording never outranks the newest version this client is owed', async () => {
+  const { stateDir, destination } = journey();
+  const requested: string[] = [];
+  const baseUrl = await artifactServer(
+    {
+      v1: 'open Demo\n',
+      v2: 'open Demo\nwait 100\n',
+      // Served on purpose: choosing it would publish nothing and report nothing, which is the bug.
+      foreign: 'hostile\n',
+    },
+    requested,
+  );
+  const id = await open(baseUrl, stateDir, destination);
+  requested.length = 0;
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('wait', 'snapshot')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        step(1, 'wait', {
+          artifacts: [script('foreign', 999, '00000000-0000-4000-8000-000000000000')],
+        }),
+        step(2, 'snapshot', { artifacts: [script('v2', 2, id)] }),
+      ],
+    },
+  );
+
+  expect(requested).toEqual(['v2']);
+  expect(payload(response).savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\n');
+  expect(payload(response).scriptDeliveryFailure).toBeUndefined();
+  expect(records(stateDir)).toHaveLength(1);
+});
+
+/**
+ * A step entry's script identity needs BOTH its reserved field and its reserved type. A `screenshot`
+ * entry that borrows the `savedScript` field is not a version of the recording, and letting it into the
+ * candidate list would publish it over this client's own file. Replacing the candidate guard with the
+ * looser "is this a script artifact" test — field OR type — makes this answer red.
+ */
+test('a step entry that borrows the script field under another artifact type is not a candidate', async () => {
+  const { stateDir, destination } = journey();
+  const requested: string[] = [];
+  const baseUrl = await artifactServer(
+    { v1: 'open Demo\n', v4: 'open Demo\nwait 100\nsnapshot\n' },
+    requested,
+  );
+  const id = await open(baseUrl, stateDir, destination);
+  requested.length = 0;
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    request('batch', {}, batchPlan('screenshot', 'snapshot')),
+    {
+      total: 2,
+      executed: 2,
+      totalDurationMs: 1,
+      results: [
+        // A screenshot entry, named by the field this owner reserves, at a revision nothing else reaches.
+        step(1, 'screenshot', {
+          artifacts: [{ ...script('shot', 900, id), artifactType: 'screenshot' }],
+        }),
+        step(2, 'snapshot', { artifacts: [script('v4', 4, id)] }),
+      ],
+    },
+  );
+
+  expect(requested).toEqual(['v4']);
+  expect(payload(response).savedScript).toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait 100\nsnapshot\n');
 });
 
 /**

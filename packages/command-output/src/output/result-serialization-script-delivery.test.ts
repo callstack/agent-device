@@ -27,51 +27,44 @@ const FAILURE: ScriptDeliveryFailure = {
 const DISCLOSURE = { warnings: [WARNING], scriptDeliveryFailure: FAILURE };
 
 /** The machine output of each family whose result can carry a script version. */
-const outputs: Array<{ label: string; serialize: () => Record<string, unknown> }> = [
+const outputs: Array<{
+  label: string;
+  /** Called with the disclosure fields, and with PLAIN input that names none of them. */
+  serialize: (input?: Record<string, unknown>) => Record<string, unknown>;
+}> = [
   {
     label: 'open',
-    serialize: () => serializeOpenResult({ session: 'qa', ...DISCLOSURE } as never),
+    serialize: (input) => serializeOpenResult({ session: 'qa', ...input } as never),
   },
   {
     label: 'session close',
-    serialize: () =>
-      serializeCloseResult({
-        session: 'qa',
-        savedScript: '/tmp/journey.ad',
-        ...DISCLOSURE,
-      } as never),
+    serialize: (input) =>
+      serializeCloseResult({ session: 'qa', savedScript: '/tmp/journey.ad', ...input } as never),
   },
   {
     label: 'snapshot',
-    serialize: () => serializeSnapshotResult({ nodes: [], ...DISCLOSURE } as never),
+    serialize: (input) => serializeSnapshotResult({ nodes: [], ...input } as never),
   },
 ];
 
 for (const output of outputs) {
   test(`the ${output.label} machine output carries a failed script delivery`, () => {
-    const data = output.serialize();
+    const data = output.serialize(DISCLOSURE);
 
     assert.deepEqual(data.scriptDeliveryFailure, FAILURE);
     assert.deepEqual(data.warnings, [WARNING]);
   });
 
   test(`the ${output.label} machine output omits a disclosure it was not given`, () => {
-    const withFields = output.serialize();
-    const withoutFields = { ...withFields };
-    delete withoutFields.scriptDeliveryFailure;
-    delete withoutFields.warnings;
+    // PLAIN input: nothing here names a script, so a serializer that invents either field fails.
+    const data = output.serialize();
 
-    assert.notDeepEqual(withFields, withoutFields);
+    assert.equal('scriptDeliveryFailure' in data, false);
+    assert.equal('warnings' in data, false);
   });
 
   test(`the ${output.label} machine output keeps the failure beside an empty warning list`, () => {
-    const disclosed = { ...DISCLOSURE, warnings: [] };
-    const empty =
-      output.label === 'open'
-        ? serializeOpenResult({ session: 'qa', ...disclosed } as never)
-        : output.label === 'snapshot'
-          ? serializeSnapshotResult({ nodes: [], ...disclosed } as never)
-          : serializeCloseResult({ session: 'qa', ...disclosed } as never);
+    const empty = output.serialize({ ...DISCLOSURE, warnings: [] });
 
     assert.deepEqual(empty.scriptDeliveryFailure, FAILURE);
     assert.equal('warnings' in empty, false);
