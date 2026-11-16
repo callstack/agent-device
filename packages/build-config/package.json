@@ -10,7 +10,7 @@
       "default": "./src/index.ts"
     }
   },
-  "dependencies": {
+  "devDependencies": {
     "rolldown": "1.2.5"
   }
 }

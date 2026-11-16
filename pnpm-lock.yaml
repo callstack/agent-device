@@ -314,7 +314,7 @@ importers:
         version: link:../test-kit
 
   packages/build-config:
-    dependencies:
+    devDependencies:
       rolldown:
         specifier: 1.2.5
         version: 1.2.5
