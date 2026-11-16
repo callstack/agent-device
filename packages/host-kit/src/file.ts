@@ -1,7 +1,10 @@
 export {
+  assertPrivateScriptDestination,
   isAtomicPublishTemporaryPath,
+  publishDirectoryIdentity,
   publishDurableFileSync,
   publishFileSync,
+  publishScriptFileSync,
   type DurableFilePublishMode,
 } from './internal/atomic-file.ts';
 export {
