@@ -1,9 +1,13 @@
 import { buildEntries } from './scripts/build-entries.ts';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
 import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
 
-const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
+const typeScriptPackageJsonUrl = pathToFileURL(
+  createRequire(import.meta.url).resolve('typescript/package.json'),
+);
 const { default: getTypeScript7ExePath } = await import(
   new URL('lib/getExePath.js', typeScriptPackageJsonUrl).href
 );
