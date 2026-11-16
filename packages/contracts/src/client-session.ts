@@ -3,6 +3,7 @@
 import type { CloudProviderSessionResult } from './cloud-artifacts.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { AgentDeviceIdentifiers, AgentDeviceRequestOverrides } from './client-connection.ts';
+import type { ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 
 export type SessionCloseResult = {
   session: string;
@@ -14,6 +15,13 @@ export type SessionCloseResult = {
    * — so a client that requested publication learns where the file landed.
    */
   savedScript?: string;
+  /** ADR 0016 (#4564): the close's response warnings, kept so a lost final script is read, not skipped. */
+  warnings?: string[];
+  /**
+   * ADR 0016 (#4564): the final script of a remote recording was not delivered. The close kept its
+   * success, so this is the only channel that says the caller file still holds an older version.
+   */
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
   identifiers: AgentDeviceIdentifiers;
 };
 

@@ -53,6 +53,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
   'packages/remote/src/upload-progress.ts#UploadProgressSink':
     'A callback for client-local upload progress rendering. Its events never leave the client, unlike the daemon progress stream, whose envelope and events are listed.',
+  'packages/remote/src/session-script-destination.ts#PublishOutcome':
+    "The client-local outcome of one script-version publish attempt: a path this process already wrote, or the error it hit. Only the failure branch crosses the boundary, and that is the listed ScriptDeliveryFailure; the destination is this client's own record, which a response never chooses.",
   'packages/contracts/src/request-progress.ts#RequestProgressSink':
     'A callback type (event) => void. The event it receives is RequestProgressEvent, which is listed; the sink itself never crosses the wire.',
 

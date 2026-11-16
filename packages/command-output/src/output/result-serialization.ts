@@ -10,6 +10,7 @@ import type {
   SessionCloseResult,
 } from '@agent-device/contracts/client';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
+import type { ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 import { publicSnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isSerialAddressablePlatform } from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
@@ -92,6 +93,9 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     }),
     ...(result.unchanged ? { unchanged: result.unchanged } : {}),
     ...(result.snapshotDiagnostics ? { snapshotDiagnostics: result.snapshotDiagnostics } : {}),
+    // ADR 0016 (#4564): a remote recording's script this capture recorded did not reach the caller
+    // file. The capture still succeeded, so this is the only channel that says the file is stale.
+    ...serializeScriptDeliveryDisclosure(result),
     ...(result.fallbackScreenshotPath
       ? { fallbackScreenshotPath: result.fallbackScreenshotPath }
       : {}),
@@ -141,7 +145,7 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
   return withSuccessText(
     {
       session: result.session,
-      ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+      ...serializeScriptDeliveryDisclosure(result),
       ...serializeOpenSessionPaths(result),
       ...(result.appName ? { appName: result.appName } : {}),
       ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
@@ -172,6 +176,23 @@ function serializeOpenSessionPaths(result: AppOpenResult): Record<string, string
   };
 }
 
+/**
+ * ADR 0016 (#4564): a remote recording's script version that did not reach the caller file, beside
+ * the warning that says so. The action kept its success, so machine output has to name the stale
+ * file rather than leave a caller assuming the file was written.
+ */
+function serializeScriptDeliveryDisclosure(result: {
+  warnings?: string[];
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
+}): Record<string, unknown> {
+  return {
+    ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+    ...(result.scriptDeliveryFailure
+      ? { scriptDeliveryFailure: result.scriptDeliveryFailure }
+      : {}),
+  };
+}
+
 export function serializeCloseResult(
   result: SessionCloseResult | AppCloseResult,
 ): Record<string, unknown> {
@@ -179,6 +200,7 @@ export function serializeCloseResult(
     session: result.session,
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
     ...('provider' in result && result.provider ? { provider: result.provider } : {}),
+    ...serializeScriptDeliveryDisclosure(result),
     ...successText(
       [
         result.session ? `Closed: ${result.session}` : 'Closed',

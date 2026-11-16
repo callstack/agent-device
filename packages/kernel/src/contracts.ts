@@ -222,6 +222,29 @@ export type ScriptDeliveryFailure = {
   cause?: string;
 };
 
+/**
+ * Reads a response's `scriptDeliveryFailure` (ADR 0016). A response that carries no such record, or
+ * one the field contract does not describe, answers `undefined`: no surface acts on a half-shaped
+ * failure, and every surface that shows one shows it through this reader.
+ */
+export function readScriptDeliveryFailure(
+  data: Record<string, unknown> | undefined,
+): ScriptDeliveryFailure | undefined {
+  const failure = data?.scriptDeliveryFailure;
+  if (!failure || typeof failure !== 'object' || Array.isArray(failure)) return undefined;
+  const { reason, publicationId, message, hint, cause } = failure as Partial<ScriptDeliveryFailure>;
+  if (
+    reason !== 'script_delivery_failed' ||
+    typeof publicationId !== 'string' ||
+    typeof message !== 'string' ||
+    typeof hint !== 'string' ||
+    (cause !== undefined && typeof cause !== 'string')
+  ) {
+    return undefined;
+  }
+  return { reason, publicationId, message, hint, ...(cause === undefined ? {} : { cause }) };
+}
+
 export type ResponseCost = {
   wallClockMs: number;
   // Number of real iOS-runner round-trips made while serving the request (the

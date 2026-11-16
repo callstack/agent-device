@@ -33,7 +33,14 @@ export const screenshotCommand: ClientCommandHandler = async ({
     await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
-  const data = pickScreenshotResultData(result);
+  // The disclosure fields (ADR 0016, #4564) sit beside the capture fields on the result, and
+  // `pickScreenshotResultData` narrows the capture payload for its own callers, so `--json` adds them.
+  const data = {
+    ...pickScreenshotResultData(result),
+    ...(result.scriptDeliveryFailure
+      ? { scriptDeliveryFailure: result.scriptDeliveryFailure }
+      : {}),
+  };
   await writeCommandOutput(flags, data, () => {
     const summary = result.overlayRefs
       ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`

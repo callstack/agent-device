@@ -49,6 +49,7 @@ import {
   normalizeTargetShutdownResult,
   readOptionalString,
   readRequiredString,
+  readScriptDeliveryDisclosure,
   readSnapshotNodes,
   resolveSessionName,
 } from './client-normalizers.ts';
@@ -70,7 +71,6 @@ import {
   readSnapshotKeyboardBandFact,
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
-import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './lease-client.ts';
@@ -273,6 +273,7 @@ export function createAgentDeviceClient(
             shutdown: normalizeTargetShutdownResult(data.shutdown),
             provider: asOptionalRecord(data.provider),
             savedScript: readOptionalString(data, 'savedScript'),
+            ...readScriptDeliveryDisclosure(data),
             identifiers: { session },
           };
         } finally {
@@ -345,10 +346,9 @@ export function createAgentDeviceClient(
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
-        const warnings = readResponseWarnings(data);
         return {
           session,
-          ...(warnings.length > 0 ? { warnings } : {}),
+          ...readScriptDeliveryDisclosure(data),
           sessionStateDir: readOptionalString(data, 'sessionStateDir'),
           runnerLogPath: readOptionalString(data, 'runnerLogPath'),
           requestLogPath: readOptionalString(data, 'requestLogPath'),
@@ -381,6 +381,7 @@ export function createAgentDeviceClient(
           closedApp: options.app,
           shutdown: normalizeTargetShutdownResult(data.shutdown),
           savedScript: readOptionalString(data, 'savedScript'),
+          ...readScriptDeliveryDisclosure(data),
           identifiers: { session },
         };
       },
@@ -614,6 +615,7 @@ function optionalSnapshotResponseFields(
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
     ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
+    ...readScriptDeliveryDisclosure(data),
     ...(typeof data.fallbackScreenshotPath === 'string'
       ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
       : {}),

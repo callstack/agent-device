@@ -12,6 +12,9 @@ import { assertRpcOk } from './assertions.ts';
 import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 import { createProviderScenarioProxy } from './harness-proxy.ts';
+import { runCliCapture } from '../../../src/__tests__/cli-capture.ts';
+import { installIsolatedCliTestEnv } from '../../../src/__tests__/cli-test-env.ts';
+import { createCommandToolExecutor } from '../../../src/mcp/command-tools.ts';
 
 /** A script version the daemon writes in its private directory. */
 function isDaemonScriptPath(file: fs.PathLike): boolean {
@@ -255,7 +258,7 @@ test('a failed final write keeps the close and the client forgets the recording'
         return realLinkSync(existing, target);
       });
 
-      await client.sessions.close();
+      const closeResult = await client.sessions.close();
 
       const reply = proxy.forwarded.filter((r) => r.route === '/rpc').at(-1);
       assert.ok(reply);
@@ -267,6 +270,15 @@ test('a failed final write keeps the close and the client forgets the recording'
         closed.data.warnings.some((warning: string) =>
           warning.includes(closed.data.scriptDeliveryFailure.hint),
         ),
+      );
+      // The SDK result carries the same typed failure and warning the wire answers, so a caller that
+      // never reads stdout sees the stale file.
+      assert.deepEqual(closeResult.scriptDeliveryFailure, closed.data.scriptDeliveryFailure);
+      assert.ok(
+        closeResult.warnings?.some((warning) =>
+          warning.includes(closed.data.scriptDeliveryFailure.hint),
+        ),
+        JSON.stringify(closeResult.warnings),
       );
       assert.equal(fs.readFileSync(destination, 'utf8'), opened);
       const records = path.join(stateDir, 'remote-connections', 'session-scripts');
@@ -434,6 +446,237 @@ test('close delivers the final script after it stops an app log', async () => {
         [],
       );
     } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);
+
+/**
+ * The caller surfaces a remote recording reads (#4564): an action whose script version did not
+ * arrive stays successful, so the SDK result, the CLI output and the MCP tool result are the only
+ * channels that say the caller file is stale. One gate refuses the artifact downloads of one
+ * surface's close at a time, so each surface answers its own failing delivery.
+ */
+test('the SDK, the CLI and MCP each disclose a failed final script delivery', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = mkdtempForTestSync('remote-script-surfaces-');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'script-client' });
+    const upstream = new URL(proxy.baseUrl);
+    let refuseArtifacts = false;
+    const gate = http.createServer((req, res) => {
+      if (refuseArtifacts && req.url?.includes('/artifacts/')) {
+        res.writeHead(503).end('unavailable');
+        return;
+      }
+      const forwarded = http.request(
+        {
+          host: upstream.hostname,
+          port: upstream.port,
+          method: req.method,
+          path: req.url,
+          headers: req.headers,
+        },
+        (reply) => {
+          res.writeHead(reply.statusCode ?? 502, reply.headers);
+          reply.pipe(res);
+        },
+      );
+      forwarded.on('error', () => res.destroy());
+      req.pipe(forwarded);
+    });
+    const gateUrl = `http://127.0.0.1:${await listenOnLoopback(gate)}${upstream.pathname}`;
+    const remoteEnv = {
+      AGENT_DEVICE_DAEMON_BASE_URL: gateUrl,
+      AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'script-client',
+      AGENT_DEVICE_DAEMON_TRANSPORT: 'http',
+    };
+    const recordFiles = (stateDir: string) =>
+      fs
+        .readdirSync(path.join(stateDir, 'remote-connections', 'session-scripts'), {
+          withFileTypes: true,
+        })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+        .map((entry) => entry.name);
+    try {
+      // The SDK: the typed failure and the warning ride the close result itself.
+      const sdkStateDir = path.join(root, 'sdk-state');
+      const sdkFile = path.join(root, 'sdk.ad');
+      const sdk = createAgentDeviceClient({
+        daemonBaseUrl: gateUrl,
+        daemonAuthToken: 'script-client',
+        session: 'sdk-surfaces',
+        stateDir: sdkStateDir,
+      });
+      await sdk.apps.open({ app: 'settings', saveScript: sdkFile, ...world.selection });
+      refuseArtifacts = true;
+      const sdkClose = await sdk.sessions.close();
+      refuseArtifacts = false;
+      assert.equal(sdkClose.scriptDeliveryFailure?.reason, 'script_delivery_failed');
+      assert.ok(
+        sdkClose.warnings?.some((warning) =>
+          warning.includes(sdkClose.scriptDeliveryFailure!.hint),
+        ),
+        JSON.stringify(sdkClose.warnings),
+      );
+      assert.doesNotMatch(fs.readFileSync(sdkFile, 'utf8'), /^close/m);
+      assert.deepEqual(recordFiles(sdkStateDir), []);
+
+      // The CLI with `--json`: an agent reading machine output gets the typed field.
+      const jsonStateDir = path.join(root, 'cli-json-state');
+      const jsonFile = path.join(root, 'cli-json.ad');
+      const cli = (argv: string[], stateDir: string) =>
+        runCliCapture(argv, {
+          cwd: root,
+          env: { ...remoteEnv, AGENT_DEVICE_STATE_DIR: stateDir },
+          useRealDaemonClient: true,
+        });
+      const jsonOpen = await cli(
+        [
+          'open',
+          'settings',
+          '--json',
+          '--session',
+          'cli-json',
+          '--save-script',
+          jsonFile,
+          '--platform',
+          world.selection.platform,
+          '--serial',
+          world.selection.serial,
+        ],
+        jsonStateDir,
+      );
+      assert.equal(jsonOpen.code, null, jsonOpen.stderr);
+      refuseArtifacts = true;
+      const jsonClose = await cli(['close', '--json', '--session', 'cli-json'], jsonStateDir);
+      refuseArtifacts = false;
+      assert.equal(jsonClose.code, null, jsonClose.stderr);
+      const jsonPayload = JSON.parse(jsonClose.stdout);
+      assert.equal(jsonPayload.success, true, jsonClose.stdout);
+      assert.equal(jsonPayload.data.scriptDeliveryFailure.reason, 'script_delivery_failed');
+      assert.ok(
+        Array.isArray(jsonPayload.data.warnings) &&
+          jsonPayload.data.warnings.some((warning: string) =>
+            warning.includes(jsonPayload.data.scriptDeliveryFailure.hint),
+          ),
+        jsonClose.stdout,
+      );
+      assert.doesNotMatch(fs.readFileSync(jsonFile, 'utf8'), /^close/m);
+
+      // The CLI for a human: the warning is a line the terminal prints.
+      const humanStateDir = path.join(root, 'cli-human-state');
+      const humanFile = path.join(root, 'cli-human.ad');
+      const humanOpen = await cli(
+        [
+          'open',
+          'settings',
+          '--session',
+          'cli-human',
+          '--save-script',
+          humanFile,
+          '--platform',
+          world.selection.platform,
+          '--serial',
+          world.selection.serial,
+        ],
+        humanStateDir,
+      );
+      assert.equal(humanOpen.code, null, humanOpen.stderr);
+      refuseArtifacts = true;
+      const humanClose = await cli(['close', '--session', 'cli-human'], humanStateDir);
+      refuseArtifacts = false;
+      assert.equal(humanClose.code, null, humanClose.stderr);
+      assert.match(
+        `${humanClose.stdout}${humanClose.stderr}`,
+        /Warning: .*remote script could not be saved/i,
+      );
+
+      // MCP: the tool text the model reads carries the warning, and machine output carries the field.
+      const mcpStateDir = path.join(root, 'mcp-state');
+      const mcpFile = path.join(root, 'mcp.ad');
+      const restoreEnv = installIsolatedCliTestEnv({
+        ...remoteEnv,
+        AGENT_DEVICE_STATE_DIR: mcpStateDir,
+      });
+      try {
+        const executor = createCommandToolExecutor({ structuredContent: 'always' });
+        const mcpOpen = await executor.execute('open', {
+          app: 'settings',
+          session: 'mcp-surfaces',
+          saveScript: mcpFile,
+          ...world.selection,
+        });
+        assert.equal(mcpOpen.isError, false, JSON.stringify(mcpOpen));
+        refuseArtifacts = true;
+        const mcpClose = await executor.execute('close', { session: 'mcp-surfaces' });
+        refuseArtifacts = false;
+        assert.equal(mcpClose.isError, false, JSON.stringify(mcpClose));
+        assert.match(
+          mcpClose.content.map((part) => part.text ?? '').join('\n'),
+          /Warning: .*remote script could not be saved/i,
+        );
+        assert.equal(
+          (mcpClose.structuredContent as { scriptDeliveryFailure?: { reason?: string } })
+            ?.scriptDeliveryFailure?.reason,
+          'script_delivery_failed',
+        );
+      } finally {
+        restoreEnv();
+      }
+      assert.doesNotMatch(fs.readFileSync(mcpFile, 'utf8'), /^close/m);
+      world.assertNoHostAdbCalls();
+    } finally {
+      await closeLoopbackServer(gate);
+      await proxy.close();
+    }
+  });
+}, 30_000);
+
+test('a remote batch delivers its step scripts and a close step ends the recording', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = mkdtempForTestSync('remote-script-batch-');
+    const destination = path.join(root, 'journey.ad');
+    const stateDir = path.join(root, 'client-state');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'script-client' });
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'script-client',
+      session: 'batch-author',
+      stateDir,
+    });
+    const records = path.join(stateDir, 'remote-connections', 'session-scripts');
+    try {
+      await client.apps.open({ app: 'settings', saveScript: destination, ...world.selection });
+      assert.match(fs.readFileSync(destination, 'utf8'), /^open /m);
+
+      const batch = await client.batch.run({
+        steps: [
+          { command: 'wait', input: { selector: 'label="Apps"', ...world.selection } },
+          { command: 'close', input: {} },
+        ],
+      });
+
+      assert.equal(batch.executed, 2, JSON.stringify(batch));
+      assert.deepEqual(
+        batch.results.map((result) => result.command),
+        ['wait', 'close'],
+      );
+      // The caller file holds the final script, the terminal close included, and the client stops
+      // tracking a recording it no longer has.
+      const final = fs.readFileSync(destination, 'utf8');
+      assert.match(final, /^wait /m);
+      assert.match(final, /^close/m);
+      assert.deepEqual(
+        fs.readdirSync(records).filter((name) => name.endsWith('.json')),
+        [],
+      );
+      assert.deepEqual(
+        fs.readdirSync(records).filter((name) => name.startsWith('.agent-device-script-')),
+        [],
+      );
+      world.assertNoHostAdbCalls();
+    } finally {
+      await client.sessions.close().catch(() => undefined);
       await proxy.close();
     }
   });

@@ -46,7 +46,9 @@ test('the session router maps boot, shutdown and appstate straight to their hand
   }
 });
 
-test('the session router refuses a batch that would close an armed remote recording', async () => {
+test('the session router runs a batch that closes a remote recording', async () => {
+  // Closing the recording from a batch is supported: the step's own answer carries the final
+  // script, so the router must not stand between the caller and its terminal step.
   const sessionStore = makeSessionStore('agent-device-batch-route-');
   sessionStore.publish(
     'journey',
@@ -54,7 +56,7 @@ test('the session router refuses a batch that would close an armed remote record
       scriptPublication: authoringPublication('armed', { remote: true }),
     }),
   );
-  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const invoke = vi.fn(async (_step: DaemonRequest) => ({ ok: true as const, data: {} }));
 
   const response = await handleSessionCommands({
     host: createTestHostEnvironment(),
@@ -71,9 +73,6 @@ test('the session router refuses a batch that would close an armed remote record
     invoke,
   });
 
-  expect(response).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'remote_script_batch_close_unsupported' } },
-  });
-  expect(invoke).not.toHaveBeenCalled();
+  expect(response).toMatchObject({ ok: true });
+  expect(invoke.mock.calls.map(([step]) => step.command)).toEqual(['wait', 'close']);
 });

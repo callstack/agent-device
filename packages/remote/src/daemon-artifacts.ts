@@ -477,6 +477,20 @@ export async function materializeRemoteArtifacts(
   if (!info.baseUrl) return response;
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
+  // A batch answers with one entry per step, and a step's own script artifacts sit inside its
+  // result, so that response is delivered by the step-aware owner. It loads lazily and returns the
+  // response untouched when no step carries a script.
+  if (req.command === BATCH_COMMAND) {
+    const { deliverRemoteBatchScripts } = await import('./remote-batch-script-delivery.ts');
+    return await deliverRemoteBatchScripts(
+      endpoint,
+      req,
+      response,
+      stateDir,
+      downloadRemoteArtifact,
+      isSessionScriptArtifact,
+    );
+  }
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
   if (
@@ -489,6 +503,9 @@ export async function materializeRemoteArtifacts(
   const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
   return await scripts.settleAfter(download);
 }
+
+/** Command name of the request that runs several steps under one response. */
+const BATCH_COMMAND = 'batch';
 
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,

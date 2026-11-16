@@ -13,6 +13,7 @@ import type {
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import type { ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 import type { ScreenshotResultData } from './snapshot-types.ts';
 import type { PostGestureOutcome } from './snapshot-model.ts';
 import type {
@@ -108,6 +109,11 @@ export type CaptureSnapshotResult = {
    * default-level `nodes` payload is intentionally omitted.
    */
   refs?: Array<{ ref: string; label?: string }>;
+  /**
+   * ADR 0016 (#4564): a remote recording's script version this capture recorded was not delivered.
+   * The capture kept its success, so the caller file may hold an older version.
+   */
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
 } & PublicSnapshotCaptureAnnotations;
 
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
@@ -128,6 +134,11 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
 
 export type CaptureScreenshotResult = ScreenshotResultData & {
   path: string;
+  /**
+   * ADR 0016 (#4564): a remote recording's script version this capture recorded was not delivered.
+   * The capture kept its success, so the caller file may hold an older version.
+   */
+  scriptDeliveryFailure?: ScriptDeliveryFailure;
   identifiers: AgentDeviceIdentifiers;
 };
 

@@ -1,6 +1,7 @@
 import type { ScreenshotResultData } from '@agent-device/contracts/capture';
 import type { CaptureScreenshotResult } from '@agent-device/contracts/client';
 import { isDeviceRotation } from '@agent-device/contracts/device';
+import { readScriptDeliveryDisclosure } from './client-normalizers.ts';
 import { isRecord, parsePoint, parseRect, readRequiredString } from '@agent-device/kernel/record';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
@@ -25,6 +26,7 @@ export function normalizeScreenshotCaptureResult(
   session: string,
 ): CaptureScreenshotResult {
   const screenshot = readScreenshotResultData(data);
+  const { scriptDeliveryFailure } = readScriptDeliveryDisclosure(data);
   return {
     path: readRequiredString(data, 'path'),
     width: screenshot?.width,
@@ -34,7 +36,10 @@ export function normalizeScreenshotCaptureResult(
     pixelDensity: screenshot?.pixelDensity,
     ...(screenshot?.displayRotation ? { displayRotation: screenshot.displayRotation } : {}),
     overlayRefs: screenshot?.overlayRefs,
+    // `screenshot.warnings` is read from this same response, so it already carries the warning a
+    // failed script delivery adds. Only the typed field needs adding here.
     ...(screenshot?.warnings ? { warnings: screenshot.warnings } : {}),
+    ...(scriptDeliveryFailure ? { scriptDeliveryFailure } : {}),
     identifiers: { session },
   };
 }

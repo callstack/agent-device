@@ -7,7 +7,6 @@ import {
 } from '../../execution/handlers/session-selector-dispatch.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
-import { isArmedRemoteRecording } from '../../core/session-script-publication-capability.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
 import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';
 import { handleSessionOpenCommands } from '../session-lifecycle/internal/session-open.ts';
@@ -203,13 +202,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   open: handleSessionOpenCommandGroup,
   replay: handleReplayCommand,
   test: handleReplayTestCommand,
-  batch: async ({ req, sessionName, sessionStore, invoke }) =>
-    await runBatchCommands(
-      req,
-      sessionName,
-      invoke,
-      isArmedRemoteRecording(sessionStore.get(sessionName)),
-    ),
+  batch: async ({ req, sessionName, invoke }) => await runBatchCommands(req, sessionName, invoke),
   close: handleSessionCloseCommandGroup,
 } satisfies Record<DescriptorSessionRouteCommandName, SessionCommandHandler>;
 
