@@ -263,8 +263,8 @@ function removeRecord(file: string): void {
     try {
       writeRecord(file, { ...settlePublishing(record), retired: true });
     } catch (error) {
-      fs.rmSync(file, { force: true });
-      removeStagingQuietly(record);
+      removeQuietly(file);
+      for (const staging of record.staging ?? []) removeQuietly(staging);
       throw error;
     }
   }
@@ -274,14 +274,19 @@ function removeRecord(file: string): void {
   fs.rmSync(file, { force: true });
 }
 
-/** Once its record is gone nothing lists these directories, so each gets one removal attempt. */
-function removeStagingQuietly(record: ScriptRecord): void {
-  for (const staging of record.staging ?? []) {
-    try {
-      fs.rmSync(staging, { recursive: true, force: true });
-    } catch {
-      // Left behind for the user; it holds only a partial script version.
-    }
+/**
+ * One removal attempt for a record that could not be written retired, and for the staging it listed.
+ * A failure here never replaces the error that made the record unwritable.
+ */
+function removeQuietly(target: string): void {
+  try {
+    fs.rmSync(target, { recursive: true, force: true });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'session_script_record_cleanup_failed',
+      data: { target, error: String(error) },
+    });
   }
 }
 
@@ -395,20 +400,24 @@ function withoutTrailingSlashes(value: string): string {
   return value.slice(0, end);
 }
 
-/** Creates a record and removes the records nobody has touched for `STALE_RECORD_MS`. */
+/**
+ * Creates a record, and removes the records a close retired and those nobody has touched for
+ * `STALE_RECORD_MS`.
+ */
 async function createRecord(file: string, record: ScriptRecord): Promise<void> {
   const directory = path.dirname(file);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const isStale = (entry: string) =>
     (fs.lstatSync(entry, { throwIfNoEntry: false })?.mtimeMs ?? Infinity) <
     Date.now() - STALE_RECORD_MS;
+  const sweepable = (entry: string) => isStale(entry) || parseRecord(entry)?.retired === true;
   for (const name of fs.readdirSync(directory)) {
     const entry = path.join(directory, name);
-    if (!name.endsWith('.json') || !isStale(entry)) continue;
+    if (!name.endsWith('.json') || !sweepable(entry)) continue;
     // Rechecked under the lock, so a record that a publish just refreshed stays. A record that
     // cannot be swept now is retried by a later sweep and never blocks this open.
     await withRecordLock(entry, async () => {
-      if (isStale(entry)) removeRecord(entry);
+      if (sweepable(entry)) removeRecord(entry);
     }).catch((error: unknown) =>
       emitDiagnostic({
         level: 'warn',

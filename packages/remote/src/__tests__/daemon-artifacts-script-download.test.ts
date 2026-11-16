@@ -579,6 +579,61 @@ test('a close that cannot mark its record retired removes the record instead', a
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });
 
+test('the next open removes a record a close left retired', async () => {
+  const { stateDir, destination } = journey();
+  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
+  fs.mkdirSync(directory, { recursive: true });
+  const stuck = path.join(path.dirname(destination), '.agent-device-script-stuck');
+  fs.mkdirSync(stuck, { recursive: true });
+  const retired = path.join(directory, 'retired.json');
+  fs.writeFileSync(
+    retired,
+    JSON.stringify({ destination, force: false, revision: 1, staging: [stuck], retired: true }),
+  );
+
+  await open('http://127.0.0.1:9', stateDir, destination, {
+    respond: (id) => ({ ok: true, data: { scriptPublicationId: id } }),
+  });
+
+  expect(fs.existsSync(retired)).toBe(false);
+  expect(fs.existsSync(stuck)).toBe(false);
+});
+
+test('a record that can be neither retired nor removed still has its staging removed', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const [name] = records(stateDir);
+  const recordFile = path.join(stateDir, 'remote-connections', 'session-scripts', name as string);
+  const staging = path.join(path.dirname(destination), '.agent-device-script-listed');
+  fs.mkdirSync(staging);
+  const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, staging: [staging] }));
+  const publish = vi.mocked(file.publishFileSync);
+  const realPublish = publish.getMockImplementation();
+  publish.mockImplementation((options) => {
+    if (String(options.contents).includes('"retired"')) throw new Error('record write failed');
+    return realPublish?.(options);
+  });
+  const realRm = fs.rmSync;
+  const rm = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    if (String(target) === recordFile) throw new Error('record removal failed');
+    realRm(target, options);
+  });
+
+  let closed: DaemonResponse;
+  try {
+    closed = await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
+  } finally {
+    rm.mockRestore();
+    publish.mockImplementation(realPublish as typeof file.publishFileSync);
+  }
+
+  expect(closed).toEqual({ ok: true, data: { scriptPublicationId: id } });
+  expect(fs.existsSync(staging)).toBe(false);
+  expect(records(stateDir)).toHaveLength(1);
+});
+
 test('a stale record that cannot be swept never blocks a new open', async () => {
   const { stateDir, destination } = journey();
   const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
