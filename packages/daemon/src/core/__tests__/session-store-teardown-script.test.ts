@@ -1,7 +1,14 @@
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  FOREIGN_UID,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+  serveHostOwnership,
+} from '@agent-device/test-kit';
+import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import {
   authoringPublication,
@@ -132,7 +139,106 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
+test.skipIf(process.platform === 'win32')(
+  'repairs state directories a legacy version or a shared checkout created at 0775',
+  () => {
+    // The test above starts from fresh 0700 directories, so it would pass even with the repair disabled:
+    // only the creation carries the mode. What a host already has is the other half — an older release, or
+    // a checkout shared under umask 002, leaves `sessions/` and `remote-scripts/` at 0775, and the rule
+    // refuses a recording walked through one. (ADR 0016)
+    const root = mkdtempForTestSync('agent-device-legacy-state-');
+    fs.chmodSync(root, 0o755);
+    const sessions = path.join(root, 'sessions');
+    const remote = path.join(sessions, 'remote-scripts');
+    for (const directory of [sessions, remote]) {
+      fs.mkdirSync(directory);
+      fs.chmodSync(directory, 0o775);
+    }
+    const store = new SessionStore(sessions, createLiveTestHostEnvironment());
+    const session = (name: string, remoteDelivery: boolean) =>
+      store.publish(
+        name,
+        makeAuthoringSession(name, {
+          scriptPublication: authoringPublication('armed', { remote: remoteDelivery }),
+          actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+        }),
+      );
+
+    // How the daemon reaches this state: startup forces `sessions/` private, an `open` then ensures its own
+    // session directory, and the remote route is the one that puts `remote-scripts/` in place.
+    ensurePrivateDaemonStateDir(sessions);
+    store.ensureSessionDir('journey');
+    expect(fs.lstatSync(sessions).mode & 0o777).toBe(0o700);
+    expect(fs.lstatSync(path.join(sessions, 'journey')).mode & 0o777).toBe(0o700);
+
+    const defaultPath = store.writeSessionLog(session('journey', false));
+    const version = store.writeRemoteScriptVersion(session('download', true));
+    if (!defaultPath.written) throw new Error(`default recording refused: ${refusal(defaultPath)}`);
+    if (!version.written) throw new Error(`remote version refused: ${refusal(version)}`);
+    expect(fs.lstatSync(remote).mode & 0o777).toBe(0o700);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'refuses to repair a `sessions` directory another user owns, and changes nothing there',
+  () => {
+    // Repair is what fixes a host the daemon did not create, so the repair is itself the dangerous step: a
+    // `chmod` given the NAME acts on whatever that name answers. Simulated root ownership (state an older
+    // release left owned by another uid) makes this process foreign to `sessions/`, as it is on that host.
+    const root = mkdtempForTestSync('agent-device-foreign-state-');
+    fs.chmodSync(root, 0o755);
+    const sessions = path.join(root, 'sessions');
+    fs.mkdirSync(sessions);
+    fs.chmodSync(sessions, 0o775);
+    serveHostOwnership({ [sessions]: FOREIGN_UID });
+
+    expect(refusalOf(() => ensurePrivateDaemonStateDir(sessions))).toMatchObject({
+      reason: 'state_dir_foreign_owned',
+      path: sessions,
+    });
+
+    // Nothing was touched: the owner's directory keeps the mode they set for it.
+    expect(fs.lstatSync(sessions).mode & 0o777).toBe(0o775);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'refuses a planted `sessions` link under state another user can write, and leaves where it leads alone',
+  () => {
+    // The shape of the blocker: `sessions` is writable by another local user, they leave a link at that
+    // name, and a root daemon forcing its own state private is handed the name. Repairing it by pathname
+    // travels through the link and changes the mode of the attacker's directory — as root, with privileges.
+    // The ENTRY under the name is what gets judged instead, so the link itself is the refusal.
+    const root = mkdtempForTestSync('agent-device-planted-state-');
+    fs.chmodSync(root, 0o777);
+    const planted = path.join(root, 'attacker');
+    fs.mkdirSync(planted);
+    fs.chmodSync(planted, 0o777);
+    const sessions = path.join(root, 'sessions');
+    fs.symlinkSync(planted, sessions);
+
+    expect(refusalOf(() => ensurePrivateDaemonStateDir(sessions))).toMatchObject({
+      reason: 'state_dir_not_a_directory',
+      path: sessions,
+    });
+
+    expect(fs.lstatSync(planted).mode & 0o777).toBe(0o777);
+    expect(fs.readdirSync(planted)).toEqual([]);
+    expect(fs.lstatSync(sessions).isSymbolicLink()).toBe(true);
+  },
+);
+
 /** Why a write that had to succeed did not, from the typed reason the writer returned. */
 function refusal(result: object): string {
   return JSON.stringify(result);
+}
+
+/** The typed details of the refusal a state repair answered with. */
+function refusalOf(run: () => void): Record<string, unknown> | undefined {
+  try {
+    run();
+  } catch (error) {
+    return (error as AppError).details as Record<string, unknown>;
+  }
+  throw new Error('a state directory this process may not repair was repaired');
 }
