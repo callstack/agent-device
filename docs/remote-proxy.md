@@ -114,14 +114,14 @@ A script version that is not delivered never fails the command that recorded it.
 fail to write it, or this machine may fail to download or save it, for example when it is larger
 than 8 MiB. The command still succeeds, and the file may keep the previous version; the next recorded
 action or `close` delivers the full recording again. If `close` cannot deliver the final script,
-the session still closes and the file keeps the version from the last action. The daemon RPC
-response carries a typed `scriptDeliveryFailure` and a warning. The CLI, SDK, and MCP results do
-not carry `scriptDeliveryFailure` yet, and `close` shows no warning; see
-[#4564](https://github.com/callstack/agent-device/issues/4564).
+the session still closes and the file keeps the version from the last action. Every result that
+recorded a version discloses it: the CLI prints a warning and carries a typed
+`scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
 batch steps are refused. A `batch` whose steps would close the recording is refused before any step
-runs; run `close` on its own after the batch.
+runs; run `close` on its own after the batch. A batch delivers no script versions from its steps
+([#4595](https://github.com/callstack/agent-device/issues/4595)).
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
