@@ -170,9 +170,7 @@ function cachedDistTag(cache: UpdateCheckCache): string {
   return cache.distTag ?? 'latest';
 }
 
-/** Each nightly follows its source channel; other builds follow `latest`. */
-function distTagFor(version: string): 'latest' | 'nightly' | 'nightly-0.22' {
-  if (version.includes('-nightly-0-22.')) return 'nightly-0.22';
+function distTagFor(version: string): 'latest' | 'nightly' {
   return version.includes('-nightly.') ? 'nightly' : 'latest';
 }
 
