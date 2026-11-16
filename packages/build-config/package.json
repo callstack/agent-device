@@ -5,9 +5,12 @@
   "type": "module",
   "description": "Shared repository bundler configuration.",
   "exports": {
-    ".": "./tsdown.config.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
   },
-  "devDependencies": {
-    "tsdown": "^0.22.14"
+  "dependencies": {
+    "rolldown": "1.2.5"
   }
 }
