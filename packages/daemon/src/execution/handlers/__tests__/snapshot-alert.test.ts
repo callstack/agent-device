@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -48,6 +49,7 @@ async function handleSnapshotCommands(
 ): Promise<Awaited<ReturnType<typeof handleProductionSnapshotCommands>>> {
   return await withAppleRunnerProvider(mockRunnerCommand, { deviceId: iosSimulatorDevice.id }, () =>
     handleProductionSnapshotCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       req: { token: 't', session: sessionName, command: 'alert', positionals, flags: {} },
       sessionName,

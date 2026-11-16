@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
@@ -106,6 +107,7 @@ test('mutating find on a system-surface capture discloses the occlusion on the f
   sessionStore.publish('default', session);
 
   const response = await handleFindCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -134,6 +136,7 @@ test('read-only find exists on a system-surface capture discloses the occlusion'
   sessionStore.publish('default', session);
 
   const response = await dispatchFindReadOnlyViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -161,6 +164,7 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
   sessionStore.publish('default', session);
 
   const response = await dispatchWaitViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -187,6 +191,7 @@ test('sessionless read-only find still discloses the occluding system surface', 
   const sessionStore = makeSessionStore();
 
   const response = await dispatchFindReadOnlyViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -249,6 +254,7 @@ test('sessionless wait success on shade content still discloses the occluding sy
   const sessionStore = makeSessionStore();
 
   const response = await dispatchWaitViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -277,6 +283,7 @@ test('sessionless wait timeout still discloses the occluding system surface', as
   const sessionStore = makeSessionStore();
 
   const response = await dispatchWaitViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -341,6 +348,7 @@ test('mutating find on an in-place system surface discloses it on the found outc
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
   const response = await handleFindCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -369,6 +377,7 @@ test('mutating find that misses on an in-place system surface still discloses it
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
   const response = await handleFindCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
@@ -432,6 +441,7 @@ test('wait timeout whose polls required a foreground repair discloses the repair
   });
 
   const response = await dispatchWaitViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',

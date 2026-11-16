@@ -22,7 +22,10 @@ import type {
 } from '../core/request-runtime-binding.ts';
 import { dispatchSnapshotDiffViaRuntime } from './snapshot-diff-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../__tests__/support/runtime-binding-conformance.ts';
-import { unavailableDeviceRuntimeGateway } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { commandSurfaceWithMembers } from '../__tests__/support/command-surface-override-fake.ts';
 import { forwardingCreateCommandSurface as testCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
 
@@ -133,6 +136,7 @@ test.each([
     });
 
     const response = await dispatchSnapshotDiffViaRuntime({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -227,6 +231,7 @@ test('preserves initialized, unchanged, and changed diff results through one bou
 
   const run = async () =>
     await dispatchSnapshotDiffViaRuntime({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: resultSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -277,6 +282,7 @@ test('a sparse internal diff capture returns no screenshot fallback artifact', a
   sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
 
   const response = await dispatchSnapshotDiffViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { command: 'diff', positionals: ['snapshot'], token: 't', session: 'diff-runtime' },

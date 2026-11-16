@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import {
@@ -85,6 +86,7 @@ test.each(['rebuild', 'retire'] as const)(
       [Symbol.asyncDispose]: async () => {},
     };
     const running = dispatchGetViaRuntime({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {

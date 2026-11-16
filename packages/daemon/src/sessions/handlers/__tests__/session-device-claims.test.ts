@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -190,6 +191,7 @@ test('failed local open of a stopped AVD rolls back the claim on its booted seri
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        requestScope: platformRequestScopeFixture(),
         host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
@@ -232,6 +234,7 @@ test('open of a stopped AVD under an allowlist that excludes its booted serial c
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        requestScope: platformRequestScopeFixture(),
         host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
@@ -279,6 +282,7 @@ test('open of a stopped AVD boots the resolved AVD whatever --serial names', asy
   };
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -312,6 +316,7 @@ test('failed local open after dispatch retains its device claim for recovery', a
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        requestScope: platformRequestScopeFixture(),
         host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
@@ -345,6 +350,7 @@ test('failed local runtime-hint setup retains its device claim before open dispa
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        requestScope: platformRequestScopeFixture(),
         host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
@@ -374,6 +380,7 @@ test('failed local open response rolls its device claim back', async () => {
   mockResolveTargetDevice.mockResolvedValue(android);
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -402,6 +409,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   markRequestCanceled(requestId);
   try {
     const timedOut = await handleOpenCommand({
+      requestScope: platformRequestScopeFixture(),
       host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
@@ -424,6 +432,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
 
   const retry = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -458,6 +467,7 @@ test('cancellation after local device setup retains the device claim for recover
 
   try {
     const response = await handleOpenCommand({
+      requestScope: platformRequestScopeFixture(),
       host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
@@ -491,6 +501,7 @@ test('provider-owned open creates no host-local device claim from its selected o
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -531,6 +542,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
   if (acquired.status !== 'acquired') return;
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -719,6 +731,7 @@ test('an open under a macos-app lease claims its app device, beside other apps o
   });
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -755,6 +768,7 @@ test('a fresh app device open retains only its own device lock, never its host a
   const retained: string[] = [];
 
   const response = await handleOpenCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),

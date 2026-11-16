@@ -16,13 +16,16 @@ const readyCache = createTtlMemo<string, true>({ ttlMs: DEVICE_READY_CACHE_TTL_M
 export async function ensureDeviceReady(
   device: DeviceInfo,
   platformServices: DaemonPlatformServices,
+  signal: AbortSignal,
 ): Promise<void> {
+  signal.throwIfAborted();
   if (isActiveProviderDevice(device)) return;
 
   const cacheKey = deviceReadyCacheKey(device);
   if (readyCache.get(cacheKey) === true) return;
 
-  const handled = await platformServices.ensureLocalDeviceReady(device);
+  const handled = await platformServices.ensureLocalDeviceReady(device, signal);
+  signal.throwIfAborted();
   if (handled) {
     markDeviceReady(cacheKey);
   }

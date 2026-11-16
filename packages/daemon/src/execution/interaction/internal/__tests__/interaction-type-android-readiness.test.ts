@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeAndroidSession } from '../../../../__tests__/support/session-factories.ts';
@@ -48,6 +49,7 @@ test('type continues and composes the recording readiness warning', async () => 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',

@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -125,6 +126,7 @@ function requireForegroundIosKeyboardSession(
 
 /** The params every migrated session-route handler takes; identical across the leaves. */
 type SessionRouteHandlerParams = Readonly<{
+  requestScope: PlatformRequestScope;
   host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
@@ -140,7 +142,7 @@ type SessionRouteRuntimeResolver = (
     host: HostEnvironment;
     device: DeviceInfo;
     positionals: string[];
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
     inspectFacts?: InspectDeviceRuntimeFacts;
     platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
@@ -189,7 +191,7 @@ async function runBoundSessionRoute(
         host: params.host,
         device,
         positionals,
-        readiness: true,
+        readinessScope: params.requestScope,
         inspectFacts,
         bindDevice,
         platformServices,

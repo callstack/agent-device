@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -113,6 +114,7 @@ test('an ambiguous is issues its printed candidates so press acts on the listed 
 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
@@ -140,6 +142,7 @@ test('an ambiguous is issues its printed candidates so press acts on the listed 
   // (10,20) button the same body named before.
   const pinned = candidates[0]!.replace(/\s.*$/, '') + `~s${refsGeneration}`;
   const press = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: [pinned], flags: {} },
     sessionName,
@@ -160,6 +163,7 @@ test('a plain candidate ref from the ambiguity refusal is refused, not silently 
 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
@@ -175,6 +179,7 @@ test('a plain candidate ref from the ambiguity refusal is refused, not silently 
   // plain (unpinned) ref needs a complete frame and is refused with the
   // suggested pinned form rather than resolving positionally.
   const press = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: ['@e2'], flags: {} },
     sessionName,
@@ -225,6 +230,7 @@ test('an ambiguous is on a sparse capture prints no candidates and issues nothin
   });
   const fixture = selectorCaptureFixture({ snapshot: sparseCapture });
   const response = await dispatchIsViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
@@ -301,6 +307,7 @@ test('an ambiguous press issues its printed candidates from its own capture', as
     },
   });
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: pressAmbiguitySurface,
     req: {
       token: 't',

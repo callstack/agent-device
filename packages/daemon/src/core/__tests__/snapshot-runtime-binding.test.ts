@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
@@ -55,6 +56,7 @@ test('the owning interface binds exactly the session device the facts were admit
 
   const resolved = await resolveBoundSnapshotCaptureRuntime(
     {
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req,
@@ -91,7 +93,7 @@ test('sessionless capture readiness follows runtime binding', async () => {
     plan: resolveSnapshotRuntimePlan({ customActions: false, hasActiveApp: true }),
     inspectFacts: fixture.inspectFacts,
     bindDevice: recordingBind,
-    readiness: true,
+    readinessScope: platformRequestScopeFixture(),
   });
 
   expect(resolved.ok).toBe(true);
@@ -176,6 +178,7 @@ test('snapshot and diff shorten idle only when every observation guard still hol
         );
         const resolved = await resolveBoundSnapshotCaptureRuntime(
           {
+            requestScope: platformRequestScopeFixture(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: fixture.platformServices,
             req: { command, positionals: [], session: 'idle-policy', token: 'test-token' },

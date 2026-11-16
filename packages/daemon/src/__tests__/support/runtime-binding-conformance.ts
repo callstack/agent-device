@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from './unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, vi } from 'vitest';
 import {
@@ -225,6 +226,7 @@ export const conformedRuntimeBindings = {
       const session = makeSession('diff-runtime', { device, appBundleId: 'com.example.app' });
       sessionStore.publish(session.name, session);
       const response = await dispatchSnapshotDiffViaRuntime({
+        requestScope: platformRequestScopeFixture(),
         createCommandSurface: fakeCreateCommandSurface,
         req: {
           command: 'diff',

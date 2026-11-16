@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { handleReactNativeCommands } from '../react-native.ts';
@@ -64,6 +65,7 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
     });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -123,6 +125,7 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -192,6 +195,7 @@ test('react-native dismiss-overlay does not confuse app dismiss buttons with ove
     });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -243,6 +247,7 @@ test('react-native dismiss-overlay rejects unsafe collapsed warning coordinate f
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -306,6 +311,7 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
     });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -373,6 +379,7 @@ test('react-native dismiss-overlay reports unverified dismiss when RedBox contro
     .mockResolvedValueOnce(fullRedBoxSnapshot);
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -426,6 +433,7 @@ test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent',
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -478,6 +486,7 @@ test('react-native dismiss-overlay accepts RedBox control labels with keyboard s
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -538,6 +547,7 @@ test('react-native dismiss-overlay prefers concrete RedBox buttons over labeled 
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -602,6 +612,7 @@ test('react-native dismiss-overlay reports verified success after a clean post-d
     });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -667,6 +678,7 @@ test('react-native dismiss-overlay reports sparse verdict instead of no overlay 
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -740,6 +752,7 @@ test('react-native dismiss-overlay reports unverified dismiss when post-dismiss 
     });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -791,6 +804,7 @@ test('react-native dismiss-overlay reports still-visible overlays with recovery 
   mockCaptureSnapshot.mockResolvedValueOnce(overlaySnapshot).mockResolvedValueOnce(overlaySnapshot);
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
@@ -835,6 +849,7 @@ test('react-native dismiss-overlay ignores app copy that only mentions RN overla
   });
 
   const response = await handleReactNativeCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',

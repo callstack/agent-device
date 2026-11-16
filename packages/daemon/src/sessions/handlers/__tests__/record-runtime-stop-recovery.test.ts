@@ -1,3 +1,6 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { handleRecordCommand } from '../record-runtime.ts';
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -579,4 +582,80 @@ test('a sessionless web record start resolves the session device of its request,
   await expect(resolveTargetDeviceMock.mock.results[0]?.value).resolves.toMatchObject({
     id: webSessionDevice(WEB_HOST, { name: harness.sessionName }).id,
   });
+});
+
+test('recovery readiness stops at its own deadline while the original request remains live', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-readiness-deadline-', {
+    device: { ...RESTART_RECORDED_DEVICE, id: 'record-recovery-readiness' },
+    runtime: { reattachActive: true },
+  });
+  const outPath = path.join(mkdtempForTestSync('record-recovery-readiness-output-'), 'capture.mp4');
+  await harness.run(['start', outPath]);
+  harness.sessionStore.retire(harness.sessionStore.lookup(harness.sessionName)!);
+  resolveTargetDeviceMock.mockResolvedValueOnce(harness.session.device);
+  const caller = new AbortController();
+  let beginReadiness!: () => void;
+  const started = new Promise<void>((resolve) => {
+    beginReadiness = resolve;
+  });
+  let releaseReadiness!: (value: boolean) => void;
+  let readinessAborted = false;
+  const ensureLocalDeviceReady = vi.fn(
+    async (_device: typeof harness.session.device, signal: AbortSignal) =>
+      await new Promise<boolean>((resolve, reject) => {
+        releaseReadiness = resolve;
+        signal.addEventListener(
+          'abort',
+          () => {
+            readinessAborted = true;
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+        beginReadiness();
+      }),
+  );
+  vi.useFakeTimers();
+  const result = handleRecordCommand({
+    req: {
+      token: 'token',
+      command: 'record',
+      session: harness.sessionName,
+      positionals: ['stop'],
+      meta: { sessionExplicit: true },
+    },
+    sessionName: harness.sessionName,
+    sessionStore: harness.sessionStore,
+    bindDevice: harness.runtime.bindDevice,
+    bindExactDevice: harness.runtime.bindExactDevice,
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    requestScope: {
+      signal: caller.signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    platformServices: daemonPlatformServicesFixture({ ensureLocalDeviceReady }),
+    retainDeviceExecutionLock: async () => {},
+    throwIfCanceled: () => {},
+  }).then(
+    (response) => ({ response }),
+    (error: unknown) => ({ error }),
+  );
+  try {
+    await Promise.race([
+      started,
+      result.then((value) => {
+        expect.fail(`recovery ended before readiness: ${JSON.stringify(value)}`);
+      }),
+    ]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(readinessAborted, 'the recovery cutoff must stop its in-flight readiness').toBe(true);
+    expect(caller.signal.aborted).toBe(false);
+    expect(await result).toMatchObject({ response: { ok: false } });
+    expect(harness.runtime.reattach).not.toHaveBeenCalled();
+  } finally {
+    releaseReadiness?.(true);
+    await result;
+    vi.useRealTimers();
+  }
 });

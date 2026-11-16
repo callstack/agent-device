@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -98,6 +99,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
 
   await expect(
     handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
@@ -147,6 +149,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
 
   await expect(
     handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
@@ -202,6 +205,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
     });
 
     const response = await handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
@@ -262,6 +266,7 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: ['@e1'], flags: {} },
     sessionName,

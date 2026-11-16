@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
@@ -68,6 +69,7 @@ export type GenericSettleObserver = () => Promise<SettleObservation | undefined>
 export type GenericSettlePlan = { response: DaemonResponse } | { observe?: GenericSettleObserver };
 
 type GenericSettleContext = {
+  requestScope: PlatformRequestScope;
   createCommandSurface: CreateDaemonCommandSurface;
   sessionRef: SessionRef | undefined;
   req: DaemonRequest;
@@ -164,6 +166,7 @@ async function createGenericSettleRuntime(
       bindDevice: context.bindDevice,
     });
     return await createInteractionRuntime({
+      requestScope: context.requestScope,
       createCommandSurface: context.createCommandSurface,
       req: context.req,
       sessionName: context.sessionName,

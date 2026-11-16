@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach } from 'vitest';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { AppError } from '@agent-device/kernel/errors';
@@ -81,6 +82,7 @@ async function runWaitCommand(params: {
   const sessionStore = makeSessionStore();
   sessionStore.publish(params.sessionName, params.session);
   const response = await handleSnapshotCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: params.createCommandSurface,
     req: snapshotRequest(params.sessionName, 'wait', { positionals: params.positionals }),
     sessionName: params.sessionName,

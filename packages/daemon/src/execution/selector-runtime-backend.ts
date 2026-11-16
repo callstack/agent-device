@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type {
@@ -42,6 +43,7 @@ export type SelectorRuntimeParams = {
   /** Builds the command surface this request's selector runtime executes through. */
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   sessionName: string;
   logPath?: string;
   sessionStore: SessionStore;
@@ -148,6 +150,7 @@ export async function createBoundSelectorRuntime(
   const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
   if (!resolved.ok) return resolved;
   const bound = await resolveBoundSelectorCapture({
+    requestScope: params.requestScope,
     command: options.command,
     device: resolved.device,
     session: resolved.session,

@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi } from 'vitest';
 import { attachRefs, type IosTargetActivation } from '@agent-device/kernel/snapshot';
 import {
@@ -55,6 +56,7 @@ async function pressSelector(params: {
   const sessionStore = makeSessionStore();
   sessionStore.publish(params.sessionName, makeSession(params.sessionName));
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
@@ -108,6 +110,7 @@ test('a press that consumes no capture is not disclosed against an older tree', 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
@@ -168,6 +171,7 @@ async function pressAfterUnsettledScroll(selector: string) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   let done = false;
   const pending = handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: { token: 't', session: 'default', command: 'press', positionals: [selector], flags: {} },
     sessionName: 'default',

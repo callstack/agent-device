@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
@@ -62,6 +63,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -128,6 +130,7 @@ test('open routes only its lifecycle input through its owner', async () => {
       'logPath',
       'platformServices',
       'reconcileOrphanedDeviceClaim',
+      'requestScope',
       'req',
       'sessionName',
       'sessionStore',

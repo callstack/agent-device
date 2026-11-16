@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from './unavailable-device-runtime-gateway.ts';
 import { getRuntimeBindings } from '../../execution/__tests__/interaction-get-runtime-fixture.ts';
 import { handleInteractionCommands } from '../../execution/interaction/index.ts';
 import { contextFromFlags } from '../../execution/interaction/internal/__tests__/interaction-touch-fixtures.ts';
@@ -16,6 +17,7 @@ export async function runInteraction(
   flags: Record<string, unknown> = {},
 ) {
   return await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags },
     sessionName,
@@ -32,6 +34,7 @@ export async function runFindInternalClick(
   internal: Record<string, unknown>,
 ) {
   return await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

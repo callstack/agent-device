@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 async function runReadiness(): Promise<boolean> {
-  const started = ensureLocalDeviceReady(ANDROID_EMULATOR).then(
+  const started = ensureLocalDeviceReady(ANDROID_EMULATOR, new AbortController().signal).then(
     (value) => ({ value }),
     (error: unknown) => ({ error }),
   );

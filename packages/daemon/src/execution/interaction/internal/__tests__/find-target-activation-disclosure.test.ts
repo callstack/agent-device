@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
@@ -92,6 +93,7 @@ async function findClick(captures: Record<string, unknown>[] | CaptureScript, af
   );
 
   const response = await handleFindCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',

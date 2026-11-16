@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach, vi } from 'vitest';
 import type { PressCommandResult } from '@agent-device/contracts/interaction';
 import { attachRefs } from '@agent-device/kernel/snapshot';
@@ -71,6 +72,7 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
   mockTapPoint.mockResolvedValue({ button: 'secondary' });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -189,6 +191,7 @@ test('a read right after a press captures the post-tap screen instead of reusing
     .mockResolvedValue(screen('Step 2'));
   const run = async (command: string, positionals: string[]) =>
     await handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: { token: 't', session: sessionName, command, positionals, flags: {} },
       sessionName,
@@ -232,6 +235,7 @@ test('press and click hand the earliest request deadline to pre-dispatch admissi
 
     const dispatch = async (command: string) =>
       await handleInteractionCommands({
+        requestScope: platformRequestScopeFixture(),
         createCommandSurface,
         req: {
           token: 't',

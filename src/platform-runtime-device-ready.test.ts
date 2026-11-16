@@ -24,6 +24,7 @@ import { ensureBootedSimulator } from '@agent-device/platform-apple/simulator';
 import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR, LINUX_DEVICE } from '@agent-device/test-kit';
 import { ensureLocalPlatformDeviceReady } from './platform-runtime-device-ready.ts';
 
+const signal = new AbortController().signal;
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
@@ -39,7 +40,7 @@ beforeEach(() => {
 test('an iOS simulator is readied by booting it through the Apple simulator leaf', async () => {
   const device = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-a' };
 
-  await expect(ensureLocalPlatformDeviceReady(device)).resolves.toBe(true);
+  await expect(ensureLocalPlatformDeviceReady(device, signal)).resolves.toBe(true);
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledExactlyOnceWith(device);
 });
@@ -54,20 +55,24 @@ test('a physical iOS device is readied by checking its connection tunnel', async
     return { stdout: '', stderr: '', exitCode: 0 };
   });
 
-  await expect(ensureLocalPlatformDeviceReady(IOS_DEVICE)).resolves.toBe(true);
+  await expect(ensureLocalPlatformDeviceReady(IOS_DEVICE, signal)).resolves.toBe(true);
 
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
   expect(mockEnsureBootedSimulator).not.toHaveBeenCalled();
 });
 
 test('an Android device is readied by waiting for boot completion', async () => {
-  await expect(ensureLocalPlatformDeviceReady(ANDROID_EMULATOR)).resolves.toBe(true);
+  await expect(ensureLocalPlatformDeviceReady(ANDROID_EMULATOR, signal)).resolves.toBe(true);
 
-  expect(mockWaitForAndroidBoot).toHaveBeenCalledExactlyOnceWith(ANDROID_EMULATOR.id);
+  expect(mockWaitForAndroidBoot).toHaveBeenCalledExactlyOnceWith(
+    ANDROID_EMULATOR.id,
+    undefined,
+    signal,
+  );
 });
 
 test('a platform without a readiness step reports it did not handle the device', async () => {
-  await expect(ensureLocalPlatformDeviceReady(LINUX_DEVICE)).resolves.toBe(false);
+  await expect(ensureLocalPlatformDeviceReady(LINUX_DEVICE, signal)).resolves.toBe(false);
 
   expect(mockEnsureBootedSimulator).not.toHaveBeenCalled();
   expect(mockWaitForAndroidBoot).not.toHaveBeenCalled();

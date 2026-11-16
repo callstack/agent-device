@@ -73,12 +73,13 @@ export type BoundDeviceIdentity = Readonly<{
 export async function ensureBoundDeviceReady(
   bound: BoundDeviceIdentity,
   platformServices: DaemonPlatformServices,
+  signal: AbortSignal,
 ): Promise<void> {
   switch (bound.owner.kind) {
     case 'provider-runtime':
       return;
     case 'local-family':
-      await ensureDeviceReady(bound.device, platformServices);
+      await ensureDeviceReady(bound.device, platformServices, signal);
   }
 }
 

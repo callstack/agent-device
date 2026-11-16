@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -31,6 +32,7 @@ export type InteractionRouteInput = {
   /** Builds the command surface this request's interaction runtime executes through. */
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   sessionName: string;
   logPath?: string;
   sessionStore: SessionStore;
@@ -65,6 +67,7 @@ export type SettleObservationCaptureInput = {
 export type FindRouteInput = {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;

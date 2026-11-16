@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -167,6 +168,7 @@ const failedOpenResponse: DaemonResponse = {
 
 test('passes a failed open response through untouched', async () => {
   const result = await composeOpenWithInitialSnapshot({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
@@ -184,6 +186,7 @@ test('passes a failed open response through untouched', async () => {
 
 test('leaves a successful open response untouched when --foreground was not requested', async () => {
   const result = await composeOpenWithInitialSnapshot({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest(),
@@ -202,8 +205,10 @@ test('leaves a successful open response untouched when --foreground was not requ
 test('attaches the initial INTERACTIVE snapshot by delegating to the existing snapshot runtime dispatch', async () => {
   dispatchSnapshotViaRuntime.mockResolvedValue({ ok: true, data: { nodes: [], truncated: false } });
 
+  const requestScope = platformRequestScopeFixture();
   const req = baseRequest({ flags: { foreground: true }, positionals: ['xyz.blueskyweb.app'] });
   const result = await composeOpenWithInitialSnapshot({
+    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,
@@ -218,6 +223,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
   // #1670 P1: the composed dispatch must BE the `snapshot -i` path — the CLI
   // maps `-i` to snapshotInteractiveOnly, the key the snapshot runtime reads.
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledWith({
+    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       ...req,
@@ -258,6 +264,7 @@ test('a snapshot-capture failure never masks the successful open', async () => {
   dispatchSnapshotViaRuntime.mockResolvedValue(snapshotFailure);
 
   const result = await composeOpenWithInitialSnapshot({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
@@ -302,6 +309,7 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
   );
 
   const result = await composeOpenWithInitialSnapshot({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
@@ -337,6 +345,7 @@ test.each([undefined, true])(
     sessionStore.update(ref, { scriptPublication: repairPublication('complete') });
 
     const result = await composeOpenWithInitialSnapshot({
+      requestScope: platformRequestScopeFixture(),
       ...snapshotRuntimeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       req: baseRequest({

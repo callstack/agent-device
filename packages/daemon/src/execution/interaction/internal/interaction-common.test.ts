@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
@@ -219,6 +220,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   );
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
@@ -277,6 +279,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
@@ -383,6 +386,7 @@ test('a fill on a @ref acts on the node of the authorized ref frame, not on a ne
   mockFillPoint.mockResolvedValue({ filled: true });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',

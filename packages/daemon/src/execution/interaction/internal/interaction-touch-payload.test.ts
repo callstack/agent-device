@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -85,6 +86,7 @@ test('press coordinates appends touch-visualization events while recording', asy
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -152,6 +154,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -193,6 +196,7 @@ test('press coordinates on Android recording uses physical screen size when no s
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -230,6 +234,7 @@ test('press coordinates on Android recording caches physical screen size across 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -247,6 +252,7 @@ test('press coordinates on Android recording caches physical screen size across 
   mockTapPoint.mockResolvedValue({ x: 320, y: 2200 });
 
   await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -279,6 +285,7 @@ test('press coordinates without recording skips Android screen-size lookup', asy
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -314,6 +321,7 @@ test('press coordinates during recording still dispatches when Android screen-si
   mockGetAndroidScreenSize.mockRejectedValue(new Error('adb unavailable'));
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -379,6 +387,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
     });
 
     const response = await handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',

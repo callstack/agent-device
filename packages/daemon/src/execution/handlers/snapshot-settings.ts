@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { isApplePlatform, isMacOs } from '@agent-device/kernel/device';
 import {
@@ -51,6 +52,7 @@ export type ParsedSettingsRequest =
 
 type HandleSettingsCommandParams = {
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   logPath: string;
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
@@ -149,7 +151,7 @@ async function executeSettingsRead(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: !session,
+    readinessScope: session ? undefined : params.requestScope,
   });
   if (admission.type === 'response') return admission.response;
 
@@ -196,7 +198,7 @@ async function executeSettingsWrite(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: !session,
+    readinessScope: session ? undefined : params.requestScope,
   });
   if (admission.type === 'response') return admission.response;
   session = ref ? sessionStore.requireCurrent(ref) : undefined;

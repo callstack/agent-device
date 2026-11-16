@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -61,6 +62,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 
 export type SessionOpenCommandInput = Readonly<{
+  requestScope: PlatformRequestScope;
   host: HostEnvironment;
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;

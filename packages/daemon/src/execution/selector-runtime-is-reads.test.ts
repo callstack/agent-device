@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
   legacyDispatchCapture,
@@ -90,6 +91,7 @@ test('is visible preserves CLI snapshot flags during runtime snapshot capture', 
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -126,6 +128,7 @@ test('is visible reuses fresh cached iOS snapshots with rects', async () => {
   legacyDispatchCapture.mockRejectedValue(new Error('unexpected fresh snapshot'));
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -166,6 +169,7 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
   );
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -201,6 +205,7 @@ test('a failing is predicate is COMMAND_FAILED, never a zero-exit pass', async (
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -242,6 +247,7 @@ test('is reports Android permission dialog blocker when app content assertion fa
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from './platform-services.ts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
@@ -50,6 +51,7 @@ export type SnapshotRuntimeRouteParams = {
   /** Builds the command surface this request's snapshot runtime executes through. */
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   sessionName: string;
   sessionRef?: SessionRef;
   logPath: string;
@@ -114,7 +116,7 @@ export async function admitAndBindSnapshotCapture(
     inspectFacts?: InspectDeviceRuntimeFacts;
     platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
   }>,
 ): Promise<AdmittedSnapshotCapture> {
   const { command, device, session, plan } = params;
@@ -135,7 +137,7 @@ export async function admitAndBindSnapshotCapture(
   const bound = await bindSnapshotCaptureRuntime(
     params.bindDevice,
     admission,
-    params.readiness,
+    params.readinessScope,
     params.platformServices,
   );
   return Object.freeze({
@@ -196,7 +198,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
-    readiness: !session,
+    readinessScope: session ? undefined : params.requestScope,
   });
   if (!bound.ok) return bound;
 
@@ -256,7 +258,7 @@ export async function bindAdmittedSnapshotCapture(
 async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
   admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>,
-  readiness: boolean | undefined,
+  readinessScope: PlatformRequestScope | undefined,
   platformServices: DaemonPlatformServices,
 ): Promise<
   Readonly<{
@@ -274,7 +276,9 @@ async function bindSnapshotCaptureRuntime(
   const bind = requireRuntimeBinding(bindDevice);
   const bindReady: BindDeviceRuntime = async (device, use) => {
     const runtime = await bind(device, use);
-    if (readiness) await ensureBoundDeviceReady(runtime, platformServices);
+    if (readinessScope) {
+      await ensureBoundDeviceReady(runtime, platformServices, readinessScope.signal);
+    }
     return runtime;
   };
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);

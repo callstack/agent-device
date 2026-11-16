@@ -1,3 +1,4 @@
+import { createPlatformRequestScope } from '../../../server/platform-request-scope.ts';
 import { handleSessionCommands as handleProductionSessionCommands } from '../../../sessions/handlers/session.ts';
 import type { SessionCommandInput } from '../../../sessions/handlers/session-command-input.ts';
 import type {
@@ -113,12 +114,14 @@ beforeEach(() => {
  * factories take theirs; calls without it keep the canned port fixture default.
  */
 export async function handleSessionCommands(
-  params: Omit<SessionCommandInput, 'reconcileOrphanedDeviceClaim'> &
+  params: Omit<SessionCommandInput, 'reconcileOrphanedDeviceClaim' | 'requestScope'> &
+    Partial<Pick<SessionCommandInput, 'requestScope'>> &
     Readonly<{ lifecycleOperationsLoader?: LifecycleOperationsLoader }>,
 ): ReturnType<typeof handleProductionSessionCommands> {
   const { lifecycleOperationsLoader, ...commandParams } = params;
   return await handleProductionSessionCommands({
     ...commandParams,
+    requestScope: params.requestScope ?? createPlatformRequestScope(params.req),
     req: await withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
     bindDevice:

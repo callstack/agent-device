@@ -57,6 +57,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   if (parsed.kind === 'sleep') return await executeDurationWait(params, parsed.durationMs);
   const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
   const bound = await resolveBoundSelectorCapture({
+    requestScope: params.requestScope,
     command: 'wait',
     device,
     session,

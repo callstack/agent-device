@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { AppEventInput } from '@agent-device/contracts/app-event-runtime';
 import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
@@ -61,11 +62,11 @@ export async function resolveBoundAppEventRuntime(
     host: HostEnvironment;
     device: DeviceInfo;
     positionals: readonly string[];
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
-  const { host, device, positionals, inspectFacts, bindDevice, platformServices, readiness } =
+  const { host, device, positionals, inspectFacts, bindDevice, platformServices, readinessScope } =
     params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
@@ -74,7 +75,7 @@ export async function resolveBoundAppEventRuntime(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness,
+    readinessScope,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;

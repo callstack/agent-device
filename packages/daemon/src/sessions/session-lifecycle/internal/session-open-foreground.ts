@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
@@ -105,6 +106,7 @@ export async function resolveForegroundOpenRequest(params: {
 export async function composeOpenWithInitialSnapshot(params: {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
@@ -118,6 +120,7 @@ export async function composeOpenWithInitialSnapshot(params: {
 
   try {
     const snapshotResponse = await dispatchSnapshotViaRuntime({
+      requestScope: params.requestScope,
       createCommandSurface: params.createCommandSurface,
       req: {
         ...req,

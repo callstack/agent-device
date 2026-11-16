@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
@@ -194,6 +195,7 @@ test.each(['rebuild', 'retire'] as const)(
       const address = 'cwd:sleep-wait:default';
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
+        requestScope: platformRequestScopeFixture(),
         createCommandSurface: testCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: waitRequest(['100']),
@@ -250,6 +252,7 @@ async function runWait(
   }
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: waitRequest(positionals, flags),
@@ -300,6 +303,7 @@ test('canceling a duration wait preserves the request reason without constructin
     const reason = createRequestCanceledError();
     const createCommandSurface = vi.fn(testCreateCommandSurface);
     const running = dispatchWaitViaRuntime({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: waitRequest(['10000']),
@@ -327,6 +331,7 @@ test('an observing wait binds through the shared selector entry', async () => {
   const harness = waitRuntimeHarness({ findText: available });
 
   const bound = await resolveBoundSelectorCapture({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     command: 'wait',
     session: undefined,

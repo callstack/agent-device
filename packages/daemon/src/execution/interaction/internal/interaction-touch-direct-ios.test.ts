@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -50,6 +51,7 @@ test.each([
     mockTapElementSelector.mockRejectedValue(new AppError(code, message));
 
     const response = await handleInteractionCommands({
+      requestScope: platformRequestScopeFixture(),
       createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',

@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import {
@@ -34,6 +35,7 @@ import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
+  requestScope: PlatformRequestScope;
   logPath: string;
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
@@ -60,6 +62,7 @@ async function resolveBoundAlertRuntime(
   params: Readonly<{
     device: DeviceInfo;
     action: AlertAction;
+    requestScope: PlatformRequestScope;
     session: SessionState | undefined;
   }> &
     RuntimeAdmissionBindings,
@@ -71,7 +74,7 @@ async function resolveBoundAlertRuntime(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: !params.session,
+    readinessScope: params.session ? undefined : params.requestScope,
   };
   if (action === 'wait') {
     const admission = await admitRuntimeUse({ ...shared, use: alertWaitUse });
@@ -102,6 +105,7 @@ export async function handleAlertCommand(
   const action = readAlertAction(req.positionals?.[0]);
   const timeoutMs = alertTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
+    requestScope: params.requestScope,
     device,
     action,
     session,

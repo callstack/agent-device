@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -93,6 +94,7 @@ function request(positionals: string[]) {
 test('clipboard read admits clipboardReadUse and reports the platform-labelled text', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['read']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -111,6 +113,7 @@ test('clipboard read admits clipboardReadUse and reports the platform-labelled t
 test('clipboard readiness follows runtime binding', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['read']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -130,6 +133,7 @@ test('clipboard readiness follows runtime binding', async () => {
 test('clipboard write joins its positionals and reports the code-point length', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     ...request(['write', 'hello', 'wörld']),
     ...spies,
@@ -153,6 +157,7 @@ test('clipboard write joins its positionals and reports the code-point length', 
 test('clipboard write forwards an explicit empty string as a clear', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['write', '']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -170,6 +175,7 @@ test.each([{ positionals: ['read'] }, { positionals: ['write', 'text'] }])(
   async ({ positionals }) => {
     const spies = harness({ read: available, write: available });
     await handleSessionClipboardCommand({
+      requestScope: platformRequestScopeFixture(),
       ...request(positionals),
       ...spies,
       platformServices: daemonPlatformServicesFixture(),
@@ -183,6 +189,7 @@ test.each([{ positionals: ['read'] }, { positionals: ['write', 'text'] }])(
 test('an unadmitted cell refuses with the retired capability gate wording and its owner hint', async () => {
   const spies = harness({ read: unavailable, write: unavailable });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['read']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -202,6 +209,7 @@ test('a write-only refusal still admits the read', async () => {
   const spies = harness({ read: available, write: unavailable });
 
   const write = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     ...request(['write', 'text']),
     ...spies,
@@ -209,6 +217,7 @@ test('a write-only refusal still admits the read', async () => {
   expect(write.ok).toBe(false);
 
   const read = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['read']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -219,6 +228,7 @@ test('a write-only refusal still admits the read', async () => {
 test('an unknown subcommand fails before any device is resolved', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...request(['paste']),
     ...spies,
     platformServices: daemonPlatformServicesFixture(),
@@ -238,6 +248,7 @@ test('clipboard read rejects extra arguments', async () => {
   const spies = harness({ read: available, write: available });
   await expect(
     handleSessionClipboardCommand({
+      requestScope: platformRequestScopeFixture(),
       ...request(['read', 'extra']),
       ...spies,
       platformServices: daemonPlatformServicesFixture(),
@@ -249,6 +260,7 @@ test('clipboard write with no text argument reports how to clear instead', async
   const spies = harness({ read: available, write: available });
   await expect(
     handleSessionClipboardCommand({
+      requestScope: platformRequestScopeFixture(),
       ...request(['write']),
       ...spies,
       platformServices: daemonPlatformServicesFixture(),
@@ -268,6 +280,7 @@ for (const action of ['read', 'write'] as const) {
     });
     await expect(
       handleSessionClipboardCommand({
+        requestScope: platformRequestScopeFixture(),
         platformServices: daemonPlatformServicesFixture(),
         ...input,
         req: { ...input.req, flags: { platform: 'android', serial: androidDevice.id } },
@@ -293,6 +306,7 @@ test('clipboard read succeeds without journaling after its admitted lifetime end
     return 'copied text';
   });
   const response = await handleSessionClipboardCommand({
+    requestScope: platformRequestScopeFixture(),
     ...input,
     ...spies,
     platformServices: daemonPlatformServicesFixture(),

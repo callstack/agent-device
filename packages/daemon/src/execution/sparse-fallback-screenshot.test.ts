@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -61,6 +62,7 @@ async function dispatch(
   internalObservation = false,
 ) {
   const response = await dispatchSnapshotViaRuntime({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

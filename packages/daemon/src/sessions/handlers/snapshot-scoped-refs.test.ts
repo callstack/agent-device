@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from './snapshot.ts';
@@ -99,6 +100,7 @@ function requestScopedSnapshot(
 ) {
   const runtime = snapshotRuntimeFixture();
   return handleProductionSnapshotCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: forwardingCreateCommandSurface,
     req: {
       token: 't',

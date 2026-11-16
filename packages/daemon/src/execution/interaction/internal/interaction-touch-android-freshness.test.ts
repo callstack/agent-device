@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -93,6 +94,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -168,6 +170,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
   });
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -219,6 +222,7 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
   mockInteractorSnapshot.mockRejectedValueOnce(new Error('uiautomator timeout'));
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -287,6 +291,7 @@ test('coordinate press preserves Android route freshness from last comparable sn
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

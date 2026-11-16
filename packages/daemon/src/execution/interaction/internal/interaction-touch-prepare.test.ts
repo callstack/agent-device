@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { beforeEach, expect, test } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -140,6 +141,7 @@ async function runCommand(
   inspectFacts: InspectDeviceRuntimeFacts = bindings.inspectFacts,
 ) {
   return await handleInteractionCommands({
+    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags: { ...flags } },
     sessionName,

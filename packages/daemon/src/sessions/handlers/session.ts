@@ -38,6 +38,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = (
 
 const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
   handleSessionOpenCommands({
+    requestScope: params.requestScope,
     host: params.host,
     req: params.req,
     createCommandSurface: params.createCommandSurface,
@@ -152,6 +153,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     }),
   clipboard: async ({
     req,
+    requestScope,
     sessionName,
     logPath,
     sessionStore,
@@ -161,6 +163,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   }) =>
     await handleSessionClipboardCommand({
       req,
+      requestScope,
       sessionName,
       logPath,
       sessionStore,
