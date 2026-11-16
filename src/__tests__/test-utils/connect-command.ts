@@ -3,13 +3,16 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { connectCommand } from '../../cli/commands/connection.ts';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 
-/** Runs `connect` the way the CLI does, writing its generated profile under `stateDir`. */
+/**
+ * Runs `connect` the way the CLI does, writing its generated profile under `stateDir`, and returns
+ * what it printed (JSON unless the flags say otherwise).
+ */
 export async function connectWithGeneratedProviderProfile(options: {
   stateDir: string;
   host?: HostEnvironment;
   positionals: string[];
   flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
-}): Promise<void> {
+}): Promise<string> {
   const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
@@ -24,6 +27,7 @@ export async function connectWithGeneratedProviderProfile(options: {
       },
       client: {} as AgentDeviceClient,
     });
+    return stdoutCapture.read();
   } finally {
     stdoutCapture.restore();
   }

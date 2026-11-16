@@ -237,6 +237,12 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         label: 'Install and reinstall an app',
         commands: ['install', 'reinstall'],
         link: docs('commands', 'app-install-in-place'),
+        cells: {
+          'revyl-ios': { text: 'Install only; reinstall refuses because Revyl cannot uninstall' },
+          'revyl-android': {
+            text: 'Install only; reinstall refuses because Revyl cannot uninstall',
+          },
+        },
       },
       {
         id: 'uninstall',

@@ -52,6 +52,10 @@
       "types": "./src/file.ts",
       "default": "./src/file.ts"
     },
+    "./gzip-tar": {
+      "types": "./src/gzip-tar.ts",
+      "default": "./src/gzip-tar.ts"
+    },
     "./host-file": {
       "types": "./src/host-file.ts",
       "default": "./src/host-file.ts"

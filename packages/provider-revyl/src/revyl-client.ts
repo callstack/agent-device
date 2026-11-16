@@ -1,6 +1,8 @@
 import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import fs from 'node:fs';
 import net from 'node:net';
+import { Readable } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   RevylDeviceSessionStopResponse,
@@ -26,8 +28,6 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
 export const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
-/** How long one build upload may take to reach Revyl's storage; the install's whole budget. */
-const ARTIFACT_UPLOAD_TIMEOUT_MS = 420_000;
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
 const DEVICE_PROXY_GET_ACTIONS = new Set(['screenshot', 'health', 'device_info', 'hierarchy']);
@@ -100,10 +100,13 @@ export type RevylClient = Readonly<{
     contentType: string,
     signal?: AbortSignal,
   ): Promise<RevylSessionArtifactUpload>;
-  /** Sends the build to the presigned URL; the URL carries its own authorization. */
+  /**
+   * Streams the build file to the presigned URL; the URL carries its own authorization. The caller's
+   * signal bounds the upload.
+   */
   uploadSessionArtifact(
     uploadUrl: string,
-    body: Uint8Array<ArrayBuffer>,
+    file: Readonly<{ filePath: string; size: number }>,
     contentType: string,
     signal?: AbortSignal,
   ): Promise<void>;
@@ -247,17 +250,20 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
         ...(signal === undefined ? {} : { signal }),
       });
     },
-    async uploadSessionArtifact(uploadUrl, body, contentType, signal) {
-      const timeout = AbortSignal.timeout(ARTIFACT_UPLOAD_TIMEOUT_MS);
+    async uploadSessionArtifact(uploadUrl, file, contentType, signal) {
+      // Node streams a request body only in half-duplex mode, which the DOM `RequestInit` type omits.
+      const init: RequestInit & { duplex: 'half' } = {
+        method: 'PUT',
+        // A presigned PUT needs the length up front; a streamed body would otherwise go chunked.
+        headers: { 'Content-Type': contentType, 'Content-Length': String(file.size) },
+        body: Readable.toWeb(fs.createReadStream(file.filePath)) as ReadableStream<Uint8Array>,
+        duplex: 'half',
+        redirect: 'error',
+        ...(signal === undefined ? {} : { signal }),
+      };
       let response: Response;
       try {
-        response = await fetchImpl(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': contentType },
-          body,
-          redirect: 'error',
-          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-        });
+        response = await fetchImpl(uploadUrl, init);
       } catch (error) {
         throw new AppError(
           'COMMAND_FAILED',

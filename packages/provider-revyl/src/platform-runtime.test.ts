@@ -209,3 +209,23 @@ test('a deployment operation whose session ended refuses rather than installing'
       error instanceof AppError && error.details?.reason === 'provider-session-unavailable',
   );
 });
+
+test('a reinstall refuses before uploading, because Revyl cannot reset the app it would replace', async () => {
+  const installs: string[] = [];
+  const binding = await bind(
+    owner({ hasLiveSession: true, deploymentSession: installingSession(installs) }),
+  );
+  await assert.rejects(
+    () =>
+      binding.operations.deployApp!({
+        app: 'com.example.app',
+        appPath: '/tmp/x.zip',
+        replaceExisting: true,
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'unsupported-provider-mode',
+  );
+  assert.deepEqual(installs, []);
+});

@@ -1,13 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   AppDeploymentResult,
   MaterializedAppSource,
 } from '@agent-device/contracts/app-deployment-runtime';
-import { runCmd } from '@agent-device/host-kit/command';
+import { packGzipTar } from '@agent-device/host-kit/gzip-tar';
+import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RevylClient } from './revyl-client.ts';
@@ -19,8 +16,8 @@ import type { RevylWorkerActionResponse } from './revyl-types.ts';
  * client gives up and resets the daemon that holds the rented device.
  */
 const REVYL_INSTALL_BUDGET_MS = 420_000;
-const POLL_BASE_DELAY_MS = 500;
-const POLL_MAX_DELAY_MS = 5_000;
+/** How often `install_status` is read while Revyl installs; an install takes seconds to minutes. */
+const INSTALL_POLL_INTERVAL_MS = 1_000;
 
 /** What an install reads from the session it targets. */
 export type RevylDeploymentSession = Readonly<{
@@ -33,7 +30,7 @@ export type RevylDeploymentSession = Readonly<{
 type PackagedBuild = Readonly<{
   filePath: string;
   contentType: string;
-  cleanup(): Promise<void>;
+  cleanup(): void;
 }>;
 
 /**
@@ -48,46 +45,54 @@ export async function deployRevylApp(
   signal: AbortSignal,
   budgetMs = REVYL_INSTALL_BUDGET_MS,
 ): Promise<AppDeploymentResult> {
+  const deadline = Deadline.fromTimeoutMs(budgetMs);
   const budget = AbortSignal.timeout(budgetMs);
   const scoped = AbortSignal.any([signal, budget]);
+  const timedOut = (cause?: unknown) =>
+    installStopped(
+      'provider-unconfirmed',
+      `Revyl did not finish the install within ${budgetMs / 1000} s.`,
+      cause,
+    );
   try {
-    return await uploadAndInstall(session, appPath, env, scoped);
+    const installed = await uploadAndInstall(session, appPath, env, scoped, deadline);
+    if (!installed) throw timedOut();
+    return installed;
   } catch (error) {
     if (signal.aborted)
       throw installStopped('request_canceled', 'The install was canceled.', error);
-    if (budget.aborted) {
-      throw installStopped(
-        'provider-unconfirmed',
-        `Revyl did not finish the install within ${budgetMs / 1000} s.`,
-        error,
-      );
-    }
+    if (budget.aborted) throw timedOut(error);
     throw error;
   }
 }
 
+/** The installed app, or `undefined` when Revyl was still installing at the deadline. */
 async function uploadAndInstall(
   session: RevylDeploymentSession,
   appPath: string,
   env: Readonly<EnvMap>,
   signal: AbortSignal,
-): Promise<AppDeploymentResult> {
+  deadline: DeadlineClock,
+): Promise<AppDeploymentResult | undefined> {
   const build = await packageBuild(session.platform, appPath, env, signal);
   try {
-    const body = new Uint8Array(await fs.readFile(build.filePath));
+    const { size } = await fs.stat(build.filePath);
     const upload = await session.client.createSessionArtifactUpload(
       session.sessionId,
-      body.byteLength,
+      size,
       build.contentType,
       signal,
     );
-    await session.client.uploadSessionArtifact(upload.upload_url, body, build.contentType, signal);
-    return deploymentResult(
-      session.platform,
-      await installAndWait(session, upload.download_url, signal),
+    await session.client.uploadSessionArtifact(
+      upload.upload_url,
+      { filePath: build.filePath, size },
+      build.contentType,
+      signal,
     );
+    const installed = await installAndWait(session, upload.download_url, signal, deadline);
+    return installed && deploymentResult(session.platform, installed);
   } finally {
-    await build.cleanup();
+    build.cleanup();
   }
 }
 
@@ -122,7 +127,13 @@ async function packageBuild(
   const stat = await fs.stat(appPath);
   const lower = appPath.toLowerCase().replace(/[\\/]+$/, '');
   if (platform === 'ios' && stat.isDirectory() && lower.endsWith('.app')) {
-    return await packAppBundle(appPath, env, signal);
+    // Revyl accepts a gzip tar of the bundle for iOS the same as a zip.
+    const packed = await packGzipTar(appPath, { env, signal });
+    return {
+      filePath: packed.archivePath,
+      contentType: 'application/gzip',
+      cleanup: packed.cleanup,
+    };
   }
   const match = stat.isFile()
     ? FILE_BUILDS[platform].find(([suffix]) => lower.endsWith(suffix))
@@ -131,33 +142,11 @@ async function packageBuild(
   throw unsupportedBuild(platform, appPath);
 }
 
-/** Packs a simulator `.app` directory as a gzip tar, which Revyl accepts for iOS. */
-async function packAppBundle(
-  appPath: string,
-  env: Readonly<EnvMap>,
-  signal: AbortSignal,
-): Promise<PackagedBuild> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `agent-device-revyl-${randomUUID()}-`));
-  const archive = path.join(tempDir, `${path.basename(appPath)}.tar.gz`);
-  const cleanup = async () => await fs.rm(tempDir, { recursive: true, force: true });
-  try {
-    await runCmd('tar', ['czf', archive, '-C', path.dirname(appPath), path.basename(appPath)], {
-      // Keeps macOS tar from adding AppleDouble `._` entries to the bundle.
-      env: { ...env, COPYFILE_DISABLE: '1' },
-      signal,
-    });
-  } catch (error) {
-    await cleanup();
-    throw error;
-  }
-  return { filePath: archive, contentType: 'application/gzip', cleanup };
-}
-
 function unsupportedBuild(platform: 'ios' | 'android', appPath: string): AppError {
   return platform === 'ios'
     ? new AppError(
         'INVALID_ARGS',
-        'Revyl installs an iOS simulator build: a .app directory, or one zipped or tarred.',
+        'Revyl installs an iOS simulator build: a .app directory, or a .zip, .tar.gz, or .tgz of one.',
         {
           reason: 'unsupported_app_artifact',
           appPath,
@@ -172,14 +161,16 @@ function unsupportedBuild(platform: 'ios' | 'android', appPath: string): AppErro
 }
 
 function fileBuild(filePath: string, contentType: string): PackagedBuild {
-  return { filePath, contentType, cleanup: async () => undefined };
+  return { filePath, contentType, cleanup: () => undefined };
 }
 
+/** Revyl's install result once the install ends, or `undefined` if it is still running at the deadline. */
 async function installAndWait(
   session: RevylDeploymentSession,
   appUrl: string,
   signal: AbortSignal,
-): Promise<RevylWorkerActionResponse> {
+  deadline: DeadlineClock,
+): Promise<RevylWorkerActionResponse | undefined> {
   const accepted = await session.client.startInstall(
     session.runId,
     { app_url: appUrl, platform: session.platform },
@@ -192,25 +183,21 @@ async function installAndWait(
       ...(accepted.status === undefined ? {} : { providerDetail: accepted.status }),
     });
   }
-  let delay = POLL_BASE_DELAY_MS;
-  for (;;) {
-    await sleep(delay, undefined, { signal });
-    const status = await session.client.getInstallStatus(session.runId, installId, signal);
-    if (
-      status.status === 'completed' ||
-      status.status === 'failed' ||
-      status.status === 'cancelled'
-    ) {
-      return requireInstalled(status.status, status.result ?? undefined);
-    }
-    if (status.status !== 'running') {
-      throw new AppError('COMMAND_FAILED', `Revyl reported install status "${status.status}".`, {
-        reason: 'provider-refused',
-        installId,
-      });
-    }
-    delay = Math.min(delay * 2, POLL_MAX_DELAY_MS);
+  const { settled, value } = await pollUntilSettled({
+    probe: async () => await session.client.getInstallStatus(session.runId, installId, signal),
+    settled: (status) => status.status !== 'running',
+    deadline,
+    intervalMs: INSTALL_POLL_INTERVAL_MS,
+    signal,
+  });
+  if (!settled) return undefined;
+  if (value.status === 'completed' || value.status === 'failed' || value.status === 'cancelled') {
+    return requireInstalled(value.status, value.result ?? undefined);
   }
+  throw new AppError('COMMAND_FAILED', `Revyl reported install status "${value.status}".`, {
+    reason: 'provider-refused',
+    installId,
+  });
 }
 
 function requireInstalled(
@@ -219,8 +206,8 @@ function requireInstalled(
 ): RevylWorkerActionResponse {
   const error = typeof result?.error === 'string' && result.error !== '' ? result.error : undefined;
   const succeeded = result?.success ?? result?.Success;
-  if (status === 'completed' && result !== undefined && succeeded !== false && !error)
-    return result;
+  // A completed install without a result is still installed; the build supplies the identity.
+  if (status === 'completed' && succeeded !== false && !error) return result ?? {};
   throw new AppError(
     'COMMAND_FAILED',
     `Revyl could not install the app${error === undefined ? '' : `: ${error}`}`,

@@ -217,11 +217,16 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
     const succeeded = new Promise<void>((resolve) => {
       tarSucceeded = resolve;
     });
+    let tarStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      tarStarted = resolve;
+    });
     let firstArchiveDir = '';
     const runCmd = command.runCmd;
     const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
       firstArchiveDir = path.dirname(String(args[1]?.[1]));
       args[2]?.signal?.addEventListener('abort', aborted, { once: true });
+      tarStarted();
       if (failure === 'late-aborted') {
         const result = await runCmd(...args);
         tarSucceeded();
@@ -242,6 +247,8 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
       void first.catch(() => {});
       const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
       timers.mockRestore();
+      // The packer loads on demand, so tar starts a tick after the open; the deadline fires once it runs.
+      await started;
       if (failure === 'late-aborted') await succeeded;
       expect(deadline).toBeTypeOf('function');
       runtime.run(() => deadline!());

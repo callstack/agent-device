@@ -96,8 +96,9 @@ export async function verifyRevylProfile(
     provider: REVYL_PROVIDER,
     service: REVYL_SERVICE,
     verificationMessage: `Credentials verified; ${REVYL_SERVICE} picks the device when the session starts.`,
+    // Revyl picks the device when the session starts, so connect has none to verify yet.
     device: {
-      status: 'configured',
+      status: 'deferred',
       ...(profile.deviceModel === undefined ? {} : { name: profile.deviceModel }),
       platform,
       ...(profile.osVersion === undefined ? {} : { osVersion: profile.osVersion }),
@@ -106,8 +107,10 @@ export async function verifyRevylProfile(
     app:
       profile.appUrl === undefined
         ? {
-            status: 'deferred',
-            message: `No app URL; the device starts without an app. Run install <app> <path> to add a local build.`,
+            // With the device still to start, a missing app is the state the connect workflow answers
+            // with `install` before `open`.
+            status: 'missing',
+            message: 'No app URL; the device starts without one. Install a build, then open it.',
           }
         : {
             status: 'configured',

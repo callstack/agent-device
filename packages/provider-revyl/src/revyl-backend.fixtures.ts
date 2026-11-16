@@ -9,6 +9,9 @@ export type RevylFixtureRequest = Readonly<{
   method: string;
   path: string;
   body: Record<string, unknown> | undefined;
+  /** The request body's length as received, and the length its header declared. */
+  bytes: number;
+  contentLength: string | undefined;
   authorization: string | undefined;
   clientHeader: string | undefined;
   agentHeader: string | undefined;
@@ -118,7 +121,8 @@ export async function startRevylFixtureBackend(
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
+      const received = Buffer.concat(chunks);
+      const raw = received.toString('utf8');
       const url = request.url ?? '/';
       const method = request.method ?? 'GET';
       // The fixture listens on an ephemeral localhost port that any process on the host can reach. A
@@ -134,6 +138,8 @@ export async function startRevylFixtureBackend(
         method,
         path: url,
         body: recorded,
+        bytes: received.byteLength,
+        contentLength: header(request, 'content-length'),
         authorization: header(request, 'authorization'),
         clientHeader: header(request, 'x-revyl-client'),
         agentHeader: header(request, 'x-revyl-agent'),

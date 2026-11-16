@@ -47,7 +47,7 @@ test('verify authenticates with the cheap call and reports the profile without r
   // The literals are asserted so a reworded report fails the test instead of being compared with
   // itself.
   assert.deepEqual(result.device, {
-    status: 'configured',
+    status: 'deferred',
     name: 'iPhone 16',
     platform: 'ios',
     osVersion: '18.0',
@@ -70,7 +70,7 @@ test('verify reports a profile that names no device or OS version', async () => 
     { appUrl: 'https://apps.test/app.apk' },
   );
   assert.deepEqual(result.device, {
-    status: 'configured',
+    status: 'deferred',
     platform: 'android',
     message:
       'Revyl assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.',
@@ -85,8 +85,10 @@ test('verify reports a profile without an app as one the device starts without',
     'ios',
     {},
   );
-  assert.equal(result.app.status, 'deferred');
-  assert.equal(result.app.reference, undefined);
+  assert.deepEqual(result.app, {
+    status: 'missing',
+    message: 'No app URL; the device starts without one. Install a build, then open it.',
+  });
 });
 
 test('verify reports a rejected key as an unauthorized error before checking the app', async () => {

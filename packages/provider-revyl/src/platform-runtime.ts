@@ -154,7 +154,21 @@ function bindRevylDeployment(
     });
   };
   return {
-    deployApp: async (input) => await deployRevylApp(session(), input.appPath, env(), signal),
+    deployApp: async (input) => {
+      // Revyl cannot uninstall an app, and an install over one keeps its data, so a reinstall would
+      // not reset the app the way `reinstall` promises.
+      if (input.replaceExisting) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'Revyl cannot reinstall an app: it has no uninstall, and installing over an app keeps its data.',
+          {
+            reason: 'unsupported-provider-mode',
+            hint: 'Run install to update the build in place, or start a new session for a clean app.',
+          },
+        );
+      }
+      return await deployRevylApp(session(), input.appPath, env(), signal);
+    },
     materializeAppSource: async (input) =>
       device.platform === 'apple'
         ? await options.host.appleDeployment.prepareArtifact(input, { signal })

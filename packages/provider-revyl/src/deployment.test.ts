@@ -84,6 +84,9 @@ test('an Android install uploads the apk to the session and installs it from the
   });
   const upload = fixture.requests.find((request) => request.path === UPLOAD_PATH);
   assert.equal(upload?.method, 'PUT');
+  // Streamed from disk with its length declared, as a presigned PUT requires.
+  assert.equal(upload?.bytes, 9);
+  assert.equal(upload?.contentLength, '9');
   // The presigned URL carries its own authorization; the API key never goes to storage.
   assert.equal(upload?.authorization, undefined);
   assert.deepEqual(fixture.bodyFor('install_async'), {
@@ -172,4 +175,31 @@ test('a canceled install reports the cancellation', async () => {
     () => install,
     (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
   );
+});
+
+test('an install Revyl reports completed without a result is installed, with no identity of its own', async () => {
+  const sessionId = revylSessionIdForLease('lease-1');
+  let backendUrl = '';
+  const fixture = await startRevylFixtureBackend({
+    respond: {
+      [`POST /api/v1/execution/device-sessions/${sessionId}/artifacts/upload-url`]: () => ({
+        body: { upload_url: `${backendUrl}${UPLOAD_PATH}`, download_url: DOWNLOAD_URL },
+      }),
+      [`PUT ${UPLOAD_PATH}`]: { body: {} },
+      'POST /api/v1/execution/device-proxy/run-1/install_async': {
+        body: { install_id: 'install-1', status: 'accepted' },
+      },
+      'GET /api/v1/execution/device-proxy/run-1/install_status/install-1': {
+        body: { install_id: 'install-1', status: 'completed' },
+      },
+    },
+  });
+  backendUrl = fixture.backendUrl;
+  openBackends.push(fixture);
+  const { session } = await liveSession(fixture.createRuntime(), 'android');
+  const dir = await mkdtempForTest('revyl-deploy-');
+  const apk = path.join(dir, 'app.apk');
+  await fs.writeFile(apk, 'apk');
+
+  assert.deepEqual(await deployRevylApp(session, apk, ENV, new AbortController().signal), {});
 });

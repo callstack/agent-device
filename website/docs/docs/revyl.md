@@ -47,8 +47,19 @@ agent-device install com.example.app ./build/Example.app
 ```
 
 `install` uploads the build to the session's storage, and Revyl installs it from there. For iOS, pass
-a simulator `.app` directory, or the directory zipped or tarred. A device `.ipa` does not run on a
-simulator. For Android, pass the `.apk`.
+a simulator `.app` directory, or a `.zip`, `.tar.gz`, or `.tgz` of one. A device `.ipa` does not run on
+a simulator. For Android, pass the `.apk`.
+
+`install-from-source` takes a build from a URL or a CI artifact instead. agent-device downloads it,
+reads the app's identifier from it, and installs it the same way:
+
+```bash
+agent-device install-from-source https://builds.example.com/app-debug.apk --platform android
+```
+
+`reinstall` refuses. Revyl cannot uninstall an app, and installing over one keeps its data, so it
+cannot give you the clean app `reinstall` promises. Run `install` to update the build in place, or
+start a new session for a clean app.
 
 `--provider-app` installs a hosted build when the device starts instead. It must be a public HTTPS URL
 that Revyl can download: the zipped `.app` for iOS, or the `.apk` for Android.
@@ -80,8 +91,9 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   the drag takes, from 1 to 10000 ms, when Revyl's worker supports it. An older worker picks the
   speed itself, so there the flag refuses rather than running the drag at a speed nobody chose.
   `fill --delay-ms` is paced by typing one character per pause.
-- `install` of a local build, `open` with the app's bundle identifier or package name, `open` with a
-  deep link or URL, and `close` for the app the session opened.
+- `install` of a local build, `install-from-source` from a URL or CI artifact, `open` with the app's
+  bundle identifier or package name, `open` with a deep link or URL, and `close` for the app the
+  session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
@@ -92,6 +104,7 @@ report a refused command as a success:
 - `swipe` and `gesture` refuse. Use `scroll`, which plans the path itself and sends one drag.
 - `keyboard`, `clipboard`, `settings`, `orientation`, `alert`, `fold`, `telephony`, and `tv-remote`
   are not supported.
+- `reinstall` refuses, as described above.
 - `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not
   supported by this version of the plugin.
 - `port reverse` is unavailable. Publish your app server at a public HTTPS URL instead of pointing

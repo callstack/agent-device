@@ -613,6 +613,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/diagnostics',
     '@agent-device/host-kit/doctor-lines',
     '@agent-device/host-kit/file',
+    '@agent-device/host-kit/gzip-tar',
     '@agent-device/host-kit/host-file',
     '@agent-device/host-kit/interaction-outcome',
     '@agent-device/host-kit/local-artifact-adapter',
