@@ -67,9 +67,11 @@ test('a request with room sends the helper only what remains of its deadline', a
 
 test('a request without room for one injection is refused before anything reaches the helper', async () => {
   for (const remainingMs of [34_000, 3_000]) {
-    const error = await withinRequestDeadline(remainingMs, () => tap().catch((e: unknown) => e));
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).details).toMatchObject({
+    const refusal = await withinRequestDeadline(remainingMs, () =>
+      tap().catch((error: unknown) => error),
+    );
+    expect(refusal).toBeInstanceOf(AppError);
+    expect((refusal as AppError).details).toMatchObject({
       reason: 'android-input-budget-exhausted',
       minimumBudgetMs: 30_000,
       dispatched: 'no',
