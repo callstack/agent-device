@@ -1,7 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 
-export const CLOUD_WEBDRIVER_PROVIDERS = { awsDeviceFarm: 'aws-device-farm' } as const;
-
 export const HOSTED_WEBDRIVER_CONNECTION: ConnectionProviderCapabilities = {
   leaseKind: 'direct-device-provider',
   requiresAppAttachment: false,

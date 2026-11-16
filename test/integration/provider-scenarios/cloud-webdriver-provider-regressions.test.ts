@@ -25,7 +25,6 @@ import {
   providerRegressionLease,
   providerRuntimeFor,
 } from './cloud-webdriver-regression-fixtures.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', async () => {
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {
@@ -38,9 +37,9 @@ test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', asy
         clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
         runHostCommand: host.run,
       }),
-      CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+      'aws-device-farm',
     );
-    const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const lease = providerRegressionLease('aws-device-farm');
     try {
       await runtime.leaseLifecycle.allocate?.(lease, awsRegressionContext());
       assert.equal(server.calls[0]?.path, '/wd/hub/session');
@@ -98,9 +97,9 @@ test('AWS Device Farm rejects local artifact install until upload support exists
           clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
           runHostCommand: host.run,
         }),
-        CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+        'aws-device-farm',
       );
-      const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+      const lease = providerRegressionLease('aws-device-farm');
       try {
         await runtime.leaseLifecycle.allocate?.(lease, awsRegressionContext());
         const [device] =
@@ -131,11 +130,9 @@ test('an active AWS Device Farm owner binds no install-family deployment operati
       clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
       runHostCommand: host.run,
     });
-    const runtime = runtimes.find(
-      (candidate) => candidate.provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    );
+    const runtime = runtimes.find((candidate) => candidate.provider === 'aws-device-farm');
     assert.ok(runtime, 'Expected AWS Device Farm runtime');
-    const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const lease = providerRegressionLease('aws-device-farm');
 
     try {
       await runtime.leaseLifecycle.allocate?.(lease, awsRegressionContext());
@@ -205,9 +202,9 @@ test('AWS Device Farm sends the requested platform in WebDriver capabilities', a
         clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
         runHostCommand: host.run,
       }),
-      CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+      'aws-device-farm',
     );
-    const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const lease = providerRegressionLease('aws-device-farm');
     try {
       await runtime.leaseLifecycle.allocate?.(lease, awsRegressionContext('ios'));
       assert.deepEqual(server.calls[0]?.body, {
