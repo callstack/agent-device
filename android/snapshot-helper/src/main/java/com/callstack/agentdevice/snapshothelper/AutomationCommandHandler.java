@@ -1,11 +1,14 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import android.app.UiAutomation;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Base64;
+import android.view.Display;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -23,7 +26,12 @@ final class AutomationCommandHandler {
   private AutomationCommandHandler() {}
 
   static void writeSessionResponse(
-      OutputStream output, String requestId, String action, String payload, UiAutomation automation)
+      OutputStream output,
+      String requestId,
+      String action,
+      String payload,
+      UiAutomation automation,
+      Context context)
       throws IOException {
     Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
     InputDispatch dispatch = new InputDispatch();
@@ -31,7 +39,7 @@ final class AutomationCommandHandler {
       if ("app".equals(action)) {
         ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
       } else if ("screenshot".equals(action)) {
-        screenshot(result, automation);
+        screenshot(result, automation, context);
       } else if ("focus".equals(action)) {
         focus(result, automation);
       } else {
@@ -176,7 +184,15 @@ final class AutomationCommandHandler {
     }
   }
 
-  private static void screenshot(Bundle result, UiAutomation automation) {
+  /**
+   * {@code UiAutomation.takeScreenshot()} captures the default display in its current rotation, so
+   * that display's rotation pairs with the image. It is published only when one read before and one
+   * after the capture agree, so a rotation landing mid-capture reports none. The display count lets
+   * the host keep its rule that a device with more than one display reports no rotation.
+   */
+  private static void screenshot(Bundle result, UiAutomation automation, Context context) {
+    DisplayManager displays = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
+    int rotationBefore = defaultDisplayRotation(displays);
     Bitmap image = automation.takeScreenshot();
     if (image == null) throw new IllegalStateException("Screen capture was unavailable");
     try {
@@ -188,6 +204,19 @@ final class AutomationCommandHandler {
     } finally {
       image.recycle();
     }
+    if (displays == null) return;
+    int rotationAfter = defaultDisplayRotation(displays);
+    result.putString("displayCount", Integer.toString(displays.getDisplays().length));
+    if (rotationBefore >= 0 && rotationBefore == rotationAfter) {
+      result.putString("displayRotation", Integer.toString(rotationAfter));
+    }
+  }
+
+  /** The default display's {@code Surface.ROTATION_*} index, or -1 when it cannot be read. */
+  private static int defaultDisplayRotation(DisplayManager displays) {
+    if (displays == null) return -1;
+    Display display = displays.getDisplay(Display.DEFAULT_DISPLAY);
+    return display == null ? -1 : display.getRotation();
   }
 
   private static void focus(Bundle result, UiAutomation automation) throws Exception {

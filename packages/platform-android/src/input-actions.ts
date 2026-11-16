@@ -238,7 +238,7 @@ async function readAndroidDisplayRotationIndices(
  */
 export async function probeAndroidDisplayRotation(
   device: DeviceInfo,
-  options: { timeoutMs: number; signal: AbortSignal },
+  options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<DeviceRotation | undefined> {
   try {
     const indices = await readAndroidDisplayRotationIndices(device, options);

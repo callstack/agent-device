@@ -1,3 +1,7 @@
+import {
+  deviceRotationFromSurfaceIndex,
+  type DeviceRotation,
+} from '@agent-device/contracts/device';
 import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -6,14 +10,17 @@ import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
+import type { AndroidHelperScreenshot } from './automation-helper.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ANDROID_SCREENSHOT_SETTLE_DELAY_MS = 1_000;
+// The `dumpsys` rotation probe serves only captures whose helper reported no display facts: the
+// `screencap` fallback and a helper that predates the display headers.
 const ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS = 2_000;
-// The rotation probe is optional metadata: one still running once the image is written gets this
-// long, then is aborted, so a slow `dumpsys` adds at most this much to a screenshot and no adb
-// work outlives it.
+// Beside `screencap` the probe is optional metadata: one still running once the image is written
+// gets this long, then is aborted, so a slow `dumpsys` adds at most this much to a screenshot and
+// no adb work outlives it.
 const ANDROID_SCREENSHOT_ROTATION_GRACE_MS = 250;
 
 export type AndroidScreenshotOptions = {
@@ -109,15 +116,52 @@ async function captureAndroidScreenshotWithRotation(
   device: DeviceInfo,
   outPath: string,
 ): Promise<ScreenshotCaptureFacts> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const helper = await runAndroidAutomationHelper(device, { action: 'screenshot' });
+  if (!helper) return await captureAndroidScreencapWithRotation(device, outPath);
+  await writeAndroidPng(helper.png, outPath);
+  if (helper.displays) return rotationFacts(helperDisplayRotation(helper.displays));
+  // A helper that predates the display headers learns nothing about rotation until it answers.
+  return rotationFacts(
+    await probeAndroidDisplayRotation(device, {
+      timeoutMs: ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
+    }),
+  );
+}
+
+/**
+ * The helper captures the default display, but a device with more than one display reports no
+ * rotation on every capture path, so the helper's reading follows the `dumpsys` probe's rule.
+ */
+function helperDisplayRotation(
+  displays: NonNullable<AndroidHelperScreenshot['displays']>,
+): DeviceRotation | undefined {
+  return displays.count === 1 && displays.rotationIndex !== undefined
+    ? deviceRotationFromSurfaceIndex(displays.rotationIndex)
+    : undefined;
+}
+
+function rotationFacts(displayRotation: DeviceRotation | undefined): ScreenshotCaptureFacts {
+  return displayRotation ? { displayRotation } : {};
+}
+
+async function captureAndroidScreencapWithRotation(
+  device: DeviceInfo,
+  outPath: string,
+): Promise<ScreenshotCaptureFacts> {
   const probeController = new AbortController();
   const probe = probeAndroidDisplayRotation(device, {
     timeoutMs: ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
     signal: probeController.signal,
   });
   try {
-    await captureAndroidScreenshot(device, outPath);
-    const displayRotation = await settledWithin(probe, ANDROID_SCREENSHOT_ROTATION_GRACE_MS);
-    return displayRotation ? { displayRotation } : {};
+    const bytes = (await runAndroidExecOut(device, ['screencap', '-p'], { binaryStdout: true }))
+      .stdoutBuffer;
+    if (!bytes) {
+      throw new AppError('COMMAND_FAILED', 'Failed to capture screenshot');
+    }
+    await writeAndroidPng(bytes, outPath);
+    return rotationFacts(await settledWithin(probe, ANDROID_SCREENSHOT_ROTATION_GRACE_MS));
   } finally {
     probeController.abort();
   }
@@ -137,16 +181,7 @@ async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T
   }
 }
 
-async function captureAndroidScreenshot(device: DeviceInfo, outPath: string): Promise<void> {
-  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
-  const helper = await runAndroidAutomationHelper(device, { action: 'screenshot' });
-  const bytes = helper
-    ? helper
-    : (await runAndroidExecOut(device, ['screencap', '-p'], { binaryStdout: true })).stdoutBuffer;
-  if (!bytes) {
-    throw new AppError('COMMAND_FAILED', 'Failed to capture screenshot');
-  }
-
+async function writeAndroidPng(bytes: Buffer, outPath: string): Promise<void> {
   // On multi-display devices (e.g. Galaxy Z Fold), adb screencap may write a
   // warning to stdout before the PNG data. Strip any leading garbage by
   // locating the PNG signature and discarding everything before it.

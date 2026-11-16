@@ -24,6 +24,14 @@ type AndroidAutomationRequest =
   | { action: 'focus' };
 
 type AndroidHelperFocus = { focusedPackage?: string; windowType?: string };
+/**
+ * `displays` is absent when the helper predates the display headers. `rotationIndex` is the default
+ * display's `Surface.ROTATION_*` index, absent when the display turned during the capture.
+ */
+export type AndroidHelperScreenshot = {
+  png: Buffer;
+  displays?: { count: number; rotationIndex?: number };
+};
 type AndroidHelperAppResult =
   | { kind: 'component-unavailable' }
   | { kind: 'launched'; output: string };
@@ -43,7 +51,7 @@ export function runAndroidAutomationHelper(
 export function runAndroidAutomationHelper(
   device: DeviceInfo,
   request: Extract<AndroidAutomationRequest, { action: 'screenshot' }>,
-): Promise<Buffer | undefined>;
+): Promise<AndroidHelperScreenshot | undefined>;
 export function runAndroidAutomationHelper(
   device: DeviceInfo,
   request: Extract<AndroidAutomationRequest, { action: 'focus' }>,
@@ -55,7 +63,9 @@ export function runAndroidAutomationHelper(
 export async function runAndroidAutomationHelper(
   device: DeviceInfo,
   request: AndroidAutomationRequest,
-): Promise<true | AndroidHelperAppResult | Buffer | AndroidHelperFocus | undefined> {
+): Promise<
+  true | AndroidHelperAppResult | AndroidHelperScreenshot | AndroidHelperFocus | undefined
+> {
   const { action } = request;
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   if (!(await getLiveAndroidSnapshotHelperSession(deviceKey))?.commands.has(action))
@@ -77,7 +87,10 @@ export async function runAndroidAutomationHelper(
       case 'input':
         return true;
       case 'screenshot':
-        return decodeHelperPayload(headers, 'payloadBase64', false);
+        return {
+          png: decodeHelperPayload(headers, 'payloadBase64', false),
+          displays: decodeHelperDisplays(headers),
+        };
       case 'focus':
         return { focusedPackage: headers.focusedPackage, windowType: headers.windowType };
       case 'app':
@@ -105,6 +118,19 @@ export async function runAndroidAutomationHelper(
     });
     return undefined;
   }
+}
+
+function decodeHelperDisplays(
+  headers: Record<string, string>,
+): AndroidHelperScreenshot['displays'] {
+  const count = decodeHelperIndex(headers.displayCount);
+  if (count === undefined) return undefined;
+  const rotationIndex = decodeHelperIndex(headers.displayRotation);
+  return rotationIndex === undefined ? { count } : { count, rotationIndex };
+}
+
+function decodeHelperIndex(value: string | undefined): number | undefined {
+  return value !== undefined && /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
 function decodeHelperPayload(
