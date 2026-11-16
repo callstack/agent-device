@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -57,8 +57,10 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration press --verify returns post-action evidence digest', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i to obtain refs; the first capture after open settles: one extra read
-    snapshotEntry(BEFORE_NODES),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry([...FIRST_SCREEN_NODES]),
+    snapshotEntry([...FIRST_SCREEN_NODES]),
+    // snapshot -i to obtain refs
     snapshotEntry(BEFORE_NODES),
     {
       command: 'ios.runner.tap',
@@ -92,6 +94,7 @@ test('Provider-backed integration press --verify returns post-action evidence di
         udid: DEVICE_ID,
       });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
 
       const snapshot = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,

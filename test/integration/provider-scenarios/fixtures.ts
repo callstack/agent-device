@@ -97,3 +97,24 @@ export function createDemoIosApp(prefix: string): { tempRoot: string; appPath: s
   );
   return { tempRoot, appPath };
 }
+
+/**
+ * A populated first screen for the reads that settle the first capture after `open`. The post-open
+ * wait refuses a tree that holds only the app root and holds a tree of four or fewer nodes for a
+ * quiet window, so these reads carry five rows and settle on one quiet pair.
+ */
+export const FIRST_SCREEN_NODES: readonly Record<string, unknown>[] = [
+  {
+    index: 0,
+    type: 'Application',
+    label: 'Example',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  },
+  ...Array.from({ length: 5 }, (_, row) => ({
+    index: row + 1,
+    parentIndex: 0,
+    type: 'StaticText',
+    label: `Row ${row}`,
+    rect: { x: 20, y: 100 + row * 50, width: 300, height: 44 },
+  })),
+];

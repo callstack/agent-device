@@ -35,6 +35,7 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     'visibility',
     'viewport',
     'presentedSurface',
+    'postGestureOutcome',
     'snapshotQuality',
     'snapshotQualityNotes',
     'targetActivation',

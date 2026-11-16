@@ -3,6 +3,7 @@ import { beforeEach, test, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ObservationClock } from './observe-until.ts';
 import {
+  formatPostGestureOutcomeWarning,
   runPostGestureStabilityLoop,
   type PostGestureBaseline,
   type PostGesturePreActionBaseline,
@@ -20,7 +21,13 @@ beforeEach(() => {
   vi.mocked(emitDiagnostic).mockClear();
 });
 
-type Surface = Readonly<{ signature: readonly string[]; costMs: number; backend?: string }>;
+type Surface = Readonly<{
+  signature: readonly string[];
+  costMs: number;
+  backend?: string;
+  /** Whether this read shows a launched app's first screen; absent reads count as one. */
+  firstScreen?: boolean;
+}>;
 
 // The negative half of these lines is type-level: each @ts-expect-error fails `pnpm typecheck`
 // the moment the baseline union would accept a post-action reading as pre-action evidence again
@@ -93,6 +100,7 @@ function hooksFor(
       same(baseline.signature, quiet.signature) ? 'unchanged' : 'changed',
     surfacesIdentical: same,
     summarizeDivergence: () => ({}),
+    showsFirstScreen: (value) => value.firstScreen ?? true,
   };
 }
 
@@ -217,4 +225,94 @@ test('an effect that lands after a rebase keeps the loop polling until the moved
   assert.equal(outcome.postGestureOutcome, undefined);
   assert.equal(diagnostics('post_gesture_snapshot_baseline_rebased').length, 1);
   assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 0);
+});
+
+// --- first-screen readiness after an app launch ---
+
+const LAUNCH = { action: 'open', positionals: [], readiness: 'first-screen' as const };
+
+function launchSurface(name: string, firstScreen: boolean, costMs = 50): Surface {
+  return { signature: [name], costMs, firstScreen };
+}
+
+test('a launch keeps polling through a splash that holds unchanged until the first screen appears', async () => {
+  const clock = fakeClock();
+  const splash = launchSurface('splash', false);
+  const home = launchSurface('home', true);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    // Ten reads a 200 ms poll apart: the splash holds unchanged for over 2 s.
+    hooks: hooksFor(clock, [...Array.from({ length: 10 }, () => splash), home, home]),
+    clock,
+  });
+
+  assert.equal(outcome.value, home);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.ok(clock.now() > 2_000, `a quiet splash settled after ${clock.now()}ms`);
+});
+
+test('a launch returns on the first quiet pair that shows the first screen', async () => {
+  const clock = fakeClock();
+  const home = launchSurface('home', true);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, [home, home]),
+    clock,
+  });
+
+  assert.equal(outcome.value, home);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.ok(clock.now() < 500, `settled after ${clock.now()}ms`);
+});
+
+test('a launch whose budget expires on a loading tree reports the app as loading', async () => {
+  const clock = fakeClock();
+  const loading = launchSurface('loading', false);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(
+      clock,
+      Array.from({ length: 60 }, () => loading),
+    ),
+    clock,
+  });
+
+  assert.equal(outcome.value, loading);
+  assert.deepEqual(outcome.postGestureOutcome, {
+    kind: 'loading',
+    gesture: { action: 'open', positionals: [] },
+  });
+  assert.ok(clock.now() >= 10_000 && clock.now() < 10_500, `gave up after ${clock.now()}ms`);
+  assert.match(formatPostGestureOutcomeWarning(outcome.postGestureOutcome!), /still loading/);
+});
+
+test('a launch whose first screen never quiets reports it unsettled, not loading', async () => {
+  const clock = fakeClock();
+  const frames = Array.from({ length: 60 }, (_, frame) => launchSurface(`frame ${frame}`, true));
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: LAUNCH,
+    hooks: hooksFor(clock, frames),
+    clock,
+  });
+
+  assert.equal(outcome.postGestureOutcome?.kind, 'unsettled');
+  assert.ok(clock.now() >= 10_000, `gave up after ${clock.now()}ms`);
+});
+
+test('a gesture record never applies the first-screen rule to an empty tree', async () => {
+  const clock = fakeClock();
+  const empty = launchSurface('empty', false);
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: PENDING,
+    hooks: hooksFor(clock, [empty, empty]),
+    clock,
+  });
+
+  assert.equal(outcome.value, empty);
+  assert.equal(outcome.postGestureOutcome, undefined);
 });

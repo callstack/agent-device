@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  readPostGestureOutcome,
   snapshotStateProvenance,
   type SnapshotProvenance,
   type SnapshotStateProvenance,
@@ -30,4 +31,17 @@ test('snapshotStateProvenance extracts exactly the pair', () => {
     backend: 'xctest',
     producer: 'revyl-ios-tree',
   });
+});
+
+test('readPostGestureOutcome reads every outcome kind off the wire and drops malformed values', () => {
+  const gesture = { action: 'open', positionals: [] };
+  for (const kind of ['unsettled', 'no-effect', 'loading'] as const) {
+    expect(readPostGestureOutcome({ kind, gesture })).toEqual({ kind, gesture });
+  }
+  expect(readPostGestureOutcome({ kind: 'toString', gesture })).toBeUndefined();
+  expect(readPostGestureOutcome({ kind: 'loading', gesture: { action: 'open' } })).toBeUndefined();
+  expect(
+    readPostGestureOutcome({ kind: 'loading', gesture: { action: 'open', positionals: [1] } }),
+  ).toBeUndefined();
+  expect(readPostGestureOutcome('loading')).toBeUndefined();
 });

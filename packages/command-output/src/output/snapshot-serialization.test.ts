@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import type { PostGestureOutcome } from '@agent-device/contracts/snapshot-model';
 import { serializeSnapshotResult } from './result-serialization.ts';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
@@ -142,6 +143,31 @@ test('serializeSnapshotResult omits a presented surface the producer did not rea
   });
 
   assert.equal('presentedSurface' in data, false);
+});
+
+test('serializeSnapshotResult publishes the post-gesture outcome beside the tree', () => {
+  const postGestureOutcome: PostGestureOutcome = {
+    kind: 'loading',
+    gesture: { action: 'open', positionals: [] },
+  };
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    postGestureOutcome,
+    identifiers: { session: 'qa' },
+  });
+
+  assert.deepEqual(data.postGestureOutcome, postGestureOutcome);
+});
+
+test('serializeSnapshotResult omits the post-gesture outcome of a tree read at rest', () => {
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    identifiers: { session: 'qa' },
+  });
+
+  assert.equal('postGestureOutcome' in data, false);
 });
 
 test('serializeSnapshotResult retains clipping notes with or without a capture verdict', () => {

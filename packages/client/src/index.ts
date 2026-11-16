@@ -1,4 +1,5 @@
 import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
+import { readPostGestureOutcome } from '@agent-device/contracts/snapshot';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -589,6 +590,7 @@ function optionalSnapshotResponseFields(
     | 'keyboard'
     | 'viewport'
     | 'presentedSurface'
+    | 'postGestureOutcome'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -602,10 +604,12 @@ function optionalSnapshotResponseFields(
   const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   const presentedSurface = readPresentedSurfaceFact(data);
+  const postGestureOutcome = readPostGestureOutcome(data.postGestureOutcome);
   return {
     ...(keyboard ? { keyboard } : {}),
     ...(viewport ? { viewport } : {}),
     ...(presentedSurface ? { presentedSurface } : {}),
+    ...(postGestureOutcome ? { postGestureOutcome } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),

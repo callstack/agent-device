@@ -5,10 +5,17 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 import { createRecordingAppleToolProvider } from './providers.ts';
+
+// Rows that make each tree a populated first screen, so the first capture after open settles on one
+// quiet pair.
+const FIRST_SCREEN_ROWS = FIRST_SCREEN_NODES.slice(1).map((node, row) => ({
+  ...node,
+  index: row + 2,
+}));
 
 test.each([
   ['wait', 'selector'],
@@ -65,6 +72,7 @@ test.each([
               label: 'Ready',
               rect: { x: 10, y: 10, width: 100, height: 100 },
             },
+            ...FIRST_SCREEN_ROWS,
           ],
         };
       },
@@ -153,6 +161,7 @@ test('Apple wait text ignores a text field’s typed value but matches its label
               value: 'benchad',
               rect: { x: 16, y: 200, width: 361, height: 44 },
             },
+            ...FIRST_SCREEN_ROWS,
           ],
         };
       },

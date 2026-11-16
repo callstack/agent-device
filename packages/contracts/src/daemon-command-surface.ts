@@ -8,6 +8,7 @@ import type { ArtifactDescriptor, FileOutputRef } from './artifact-adapter.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ClickButton } from './click-button.ts';
 import type { DiffSnapshotCommandResult } from './diff.ts';
+import type { PostGestureOutcome } from './snapshot-model.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { ReplayTargetGuardDenotation } from './replay.ts';
@@ -82,6 +83,7 @@ export type DaemonSnapshotResult = Readonly<
     snapshotDiagnostics?: SnapshotDiagnosticsSummary;
     keyboard?: SnapshotKeyboardBandFact;
     viewport?: SnapshotViewportSize;
+    postGestureOutcome?: PostGestureOutcome;
   } & PublicSnapshotCaptureAnnotations
 >;
 

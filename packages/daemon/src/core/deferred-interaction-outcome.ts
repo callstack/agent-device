@@ -3,6 +3,7 @@ import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contra
 import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
+import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
@@ -26,6 +27,7 @@ import {
   runPostGestureStabilityLoop,
   type PostGestureStabilityOutcome,
 } from '@agent-device/capture-kit/post-gesture-stability';
+import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { DeferredSurface, SessionState } from './session-state.ts';
 
 /**
@@ -222,12 +224,19 @@ export function movingTargetBaseline(
 }
 
 /**
- * Called once an app open has published its session. A verdict other than `observable` means the
- * open never read the launched app: the probe failed or could not identify it, the device has no
- * observation path, or the app stayed unreadable. Nothing proved its layout at rest, so the next
- * capture runs the quiet-window loop (#3354, #3367). An open that reports no verdict does not mark.
- * No baseline: the pre-open tree is a different surface, so the open is never reported as having no
- * effect.
+ * Called once an Apple app open has published its session. Every verdict means the open launched an
+ * app, and none proves its first screen: an `observable` app can still show its launch or loading
+ * surface. The next capture therefore waits for the first screen (#3354, #3367). An open that
+ * reports no verdict launched no app, such as a URL or deep link, and does not mark. No baseline: the
+ * pre-open tree is a different surface, so the open is never reported as having no effect.
+ *
+ * The record replaces whatever the session's deferred surface held. A scroll's owed stabilization
+ * judged the scroll against its pre-action tree, and a moving-target baseline describes where the
+ * previous action's targets were. The open launched or foregrounded an app, so both describe a screen
+ * the open replaced: a verdict against them would charge the open's effect to the earlier action.
+ *
+ * Apple only: {@link showsFirstScreen} reads the Application and Window roots of an Apple tree, and
+ * an Android tree has no root node to tell them apart.
  */
 export function markPostOpenStabilization(
   session: SessionState,
@@ -235,14 +244,37 @@ export function markPostOpenStabilization(
 ): void {
   if (!isApplePlatform(session.device.platform)) return;
   if (!supportsPostGestureStabilization(session.device)) return;
-  if (observation === undefined || observation === 'observable') return;
+  if (observation === undefined) return;
   session.deferredSurface = {
     kind: 'stabilize',
     action: 'open',
     positionals: [],
     markedAt: Date.now(),
+    readiness: 'first-screen',
   };
 }
+
+/**
+ * Whether a launched app's tree shows its first screen: some node besides the Application and Window
+ * roots carries a label or value that is not a busy indicator's. Launch surfaces carry none. Measured
+ * on Bluesky, the storyboard splash is one unlabeled full-screen Image and the empty React Native
+ * root is one unlabeled view, and each can hold unchanged for longer than a second. A busy indicator
+ * is labeled ("In progress") but says only that the screen is not ready. No node count or quiet
+ * window is needed: a one-button screen is ready at once, and a two-image splash never is.
+ */
+function showsFirstScreen(nodes: readonly SnapshotNode[]): boolean {
+  return nodes.some(
+    (node) =>
+      !isViewportRootNode(node) &&
+      Boolean(node.label?.trim() || node.value?.trim()) &&
+      !BUSY_INDICATOR_ROLES.has(formatRole(node.type ?? '')),
+  );
+}
+
+const BUSY_INDICATOR_ROLES: ReadonlySet<string> = new Set([
+  'activity-indicator',
+  'progress-indicator',
+]);
 
 function clearSurfaceStabilization(session: SessionState | undefined): void {
   if (session?.deferredSurface?.kind !== 'stabilize') return;
@@ -366,6 +398,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         action: pending.action,
         positionals: pending.positionals ?? [],
         baseline: pending.baseline,
+        ...(pending.readiness ? { readiness: pending.readiness } : {}),
       },
       initial: params.initial,
       hooks: {
@@ -382,6 +415,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
+        showsFirstScreen: (value) => showsFirstScreen(readSnapshot(value).nodes),
       },
     });
   } finally {

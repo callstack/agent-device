@@ -4,7 +4,7 @@ import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provid
 import type { SimulatorSnapshotSource } from '@agent-device/platform-apple/snapshot-source';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -148,8 +148,10 @@ function iosSimulatorTool(): { provider: AppleToolProvider } {
 
 test('Provider-backed integration scroll down answers moved on the first post-gesture capture', async () => {
   const runnerTranscript = createProviderTranscript([
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
     snapshotEntry(screen(0, true)), // pre-scroll baseline
-    snapshotEntry(screen(0, true)), // the first capture after open settles: one extra read
     scrollEntry(),
     snapshotEntry(screen(-100, true)), // post-gesture: rows shifted into view on the first read
   ]);
@@ -168,6 +170,7 @@ test('Provider-backed integration scroll down answers moved on the first post-ge
       }),
     async (daemon) => {
       assertRpcOk(await daemon.callCommand('open', [APP], { platform: 'ios', udid: DEVICE_ID }));
+      assertRpcOk(await daemon.callCommand('snapshot'));
       assertRpcOk(await daemon.callCommand('snapshot'));
 
       const callsBeforeScroll = runnerTranscript.calls.length;
@@ -194,8 +197,10 @@ test('Provider-backed integration scroll down answers moved on the first post-ge
 // unscripted runner call, so either regression fails this scenario.
 test('Provider-backed integration scroll with postGestureStabilization false skips the movement check and the next read waits for nothing', async () => {
   const runnerTranscript = createProviderTranscript([
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
     snapshotEntry(screen(0, true)), // pre-scroll baseline
-    snapshotEntry(screen(0, true)), // the first capture after open settles: one extra read
     scrollEntry(),
     snapshotEntry(screen(-100, true)), // the only read after the gesture: the caller's own
   ]);
@@ -215,6 +220,7 @@ test('Provider-backed integration scroll with postGestureStabilization false ski
     async (daemon) => {
       const client = daemon.client();
       await client.apps.open({ app: APP, platform: 'ios', udid: DEVICE_ID });
+      await client.capture.snapshot();
       await client.capture.snapshot();
 
       const callsBeforeScroll = runnerTranscript.calls.length;

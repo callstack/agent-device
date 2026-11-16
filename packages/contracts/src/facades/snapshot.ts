@@ -11,6 +11,8 @@ export {
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,
+  isPostGestureRestUnproven,
+  readPostGestureOutcome,
   snapshotRefMinting,
   buildSnapshotNodeMap,
   findSnapshotAncestor,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -67,8 +67,8 @@ async function withPressSelectorDaemon(
   // The scripted open is not read back, so the first capture after it settles over a quiet pair of
   // reads. A snapshot consumes that pair here, keeping the scenario's own captures one-for-one.
   const runnerTranscript = createProviderTranscript([
-    snapshotEntry(APPLICATION_ONLY_NODES),
-    snapshotEntry(APPLICATION_ONLY_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
     ...entries,
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(

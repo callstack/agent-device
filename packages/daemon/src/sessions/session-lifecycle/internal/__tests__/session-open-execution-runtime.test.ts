@@ -932,8 +932,11 @@ test('a fresh iOS open whose observation probe failed leaves the next capture to
   expect(pendingSurfaceStabilization(session)?.action).toBe('open');
 });
 
-test('a fresh iOS open that observed its app leaves nothing pending', async () => {
+test('a fresh iOS open that observed its app still leaves the next capture to wait for its first screen', async () => {
   const session = await openReportingObservation('observed-open', 'observable');
 
-  expect(pendingSurfaceStabilization(session)).toBeUndefined();
+  expect(pendingSurfaceStabilization(session)).toMatchObject({
+    action: 'open',
+    readiness: 'first-screen',
+  });
 });

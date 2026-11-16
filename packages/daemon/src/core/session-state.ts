@@ -107,6 +107,8 @@ export type DeferredSurface =
        * marker carries no baseline at all.
        */
       baseline?: PostGesturePreActionBaseline<InteractionSurfaceEntry[]>;
+      /** `first-screen`: an app launch marked this record; the loop waits for its first screen. */
+      readiness?: 'first-screen';
     }
   | {
       kind: 'recheck';

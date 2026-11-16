@@ -19,7 +19,7 @@ import type {
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { PostGestureOutcome, SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type {
   AgentDeviceRuntime,
@@ -76,6 +76,11 @@ export type SnapshotCommandResult = {
    * non-iOS backend — publishes nothing.
    */
   presentedSurface?: PresentedSurface;
+  /**
+   * What the post-gesture or post-open wait concluded about this tree, when it found the surface
+   * not at rest: still changing, unchanged by the gesture, or, after an app launch, still loading.
+   */
+  postGestureOutcome?: PostGestureOutcome;
 } & PublicSnapshotCaptureAnnotations;
 
 type SnapshotCapture = {
@@ -122,6 +127,9 @@ export const snapshotCommand: RuntimeCommand<
     ...(capture.snapshot.viewport ? { viewport: capture.snapshot.viewport } : {}),
     ...(capture.snapshot.presentedSurface
       ? { presentedSurface: capture.snapshot.presentedSurface }
+      : {}),
+    ...(capture.snapshot.postGestureOutcome
+      ? { postGestureOutcome: capture.snapshot.postGestureOutcome }
       : {}),
     ...snapshotAppFields(capture),
   });

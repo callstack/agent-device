@@ -83,6 +83,15 @@ test('digest carries the presented-surface fact of the tree it collapsed (#3565)
   expect('presentedSurface' in unread).toBe(false);
 });
 
+test('digest carries the post-gesture outcome of the tree it collapsed', () => {
+  const postGestureOutcome = { kind: 'loading', gesture: { action: 'open', positionals: [] } };
+  const digest = snapshotView!({ ...SNAPSHOT_DATA, postGestureOutcome }, 'digest');
+  expect(digest.postGestureOutcome).toEqual(postGestureOutcome);
+
+  const atRest = snapshotView!(SNAPSHOT_DATA, 'digest');
+  expect('postGestureOutcome' in atRest).toBe(false);
+});
+
 test('digest tolerates missing/empty node trees', () => {
   const digest = snapshotView!({ truncated: true }, 'digest');
   expect(digest).toMatchObject({ nodeCount: 0, refs: [], truncated: true });

@@ -5,7 +5,7 @@ import {
   truncateToUtf8Bytes,
 } from '@agent-device/ad-script';
 import type { SnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { PostGestureOutcome, SnapshotState } from '@agent-device/contracts/snapshot-model';
 
 export type AbsenceFirstMatch = {
   id?: string;
@@ -30,16 +30,27 @@ export type AbsenceObservation =
   | { kind: 'present'; matches: number; firstMatch: AbsenceFirstMatch }
   | { kind: 'sparse'; matches: number; firstMatch?: AbsenceFirstMatch; quality: SparseQuality }
   | { kind: 'truncated'; matches: number; firstMatch?: AbsenceFirstMatch }
-  | { kind: 'unsettled'; matches: 0 };
+  | { kind: 'unsettled'; matches: 0 }
+  | { kind: 'loading'; matches: 0 };
 
 /** Why a capture with no match still cannot prove absence. */
 export const UNPROVABLE_ABSENCE_CAUSES = {
   sparse: 'capture was sparse',
   truncated: 'capture was truncated',
   unsettled: 'the surface was still changing after a gesture',
+  loading: 'the launched app was still loading its first screen',
 } as const;
 
 export type UnprovableAbsenceKind = keyof typeof UNPROVABLE_ABSENCE_CAUSES;
+
+/** Which post-gesture outcomes leave a zero-match capture unable to prove absence; every kind must be listed. */
+const ABSENCE_UNPROVEN_BY_OUTCOME: Readonly<
+  Record<PostGestureOutcome['kind'], 'unsettled' | 'loading' | undefined>
+> = {
+  unsettled: 'unsettled',
+  loading: 'loading',
+  'no-effect': undefined,
+};
 
 export function isUnprovableAbsence(kind: unknown): kind is UnprovableAbsenceKind {
   return typeof kind === 'string' && Object.hasOwn(UNPROVABLE_ABSENCE_CAUSES, kind);
@@ -96,13 +107,14 @@ export function classifyAbsenceObservation(
       },
     };
   }
-  if (matchCount === 0) {
-    return {
-      kind: snapshot.postGestureOutcome?.kind === 'unsettled' ? 'unsettled' : 'absent',
-      matches: 0,
-    };
-  }
+  if (matchCount === 0) return zeroMatchObservation(snapshot.postGestureOutcome);
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
+}
+
+/** A zero-match capture proves absence unless its post-gesture outcome left the screen unproven. */
+function zeroMatchObservation(outcome: PostGestureOutcome | undefined): AbsenceObservation {
+  const unproven = outcome ? ABSENCE_UNPROVEN_BY_OUTCOME[outcome.kind] : undefined;
+  return unproven ? { kind: unproven, matches: 0 } : { kind: 'absent', matches: 0 };
 }
 
 /**

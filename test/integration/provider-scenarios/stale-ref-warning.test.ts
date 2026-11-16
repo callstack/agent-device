@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
+import { FIRST_SCREEN_NODES, PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
@@ -62,7 +62,7 @@ const MAGIC_CODE_NODES = [
   },
 ];
 
-function snapshotEntry(nodes = NODES): ProviderScenarioProviderEntry {
+function snapshotEntry(nodes: readonly unknown[] = NODES): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
@@ -82,8 +82,10 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration iOS @refs reject after a selector press replaces the tree', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs to the client; the first capture after open settles: one extra read
-    snapshotEntry(),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    // snapshot -i: issues refs to the client
     snapshotEntry(),
     // press label=Continue: selector resolution capture replaces the stored tree
     snapshotEntry(),
@@ -117,6 +119,7 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
         udid: DEVICE_ID,
       });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
 
       const snapshot = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,
@@ -150,9 +153,10 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
 
 test('Provider-backed iOS press rejects a stale ref after navigation', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: @e3 is Verify on the magic-code screen; the first capture after open settles:
-    // one extra read.
-    snapshotEntry(MAGIC_CODE_NODES),
+    // The first capture after open settles over a quiet pair of first-screen reads.
+    snapshotEntry(FIRST_SCREEN_NODES),
+    snapshotEntry(FIRST_SCREEN_NODES),
+    // snapshot -i: @e3 is Verify on the magic-code screen.
     snapshotEntry(MAGIC_CODE_NODES),
     // press label=Back: the pre-action capture still sees that screen.
     snapshotEntry(MAGIC_CODE_NODES),
@@ -183,6 +187,7 @@ test('Provider-backed iOS press rejects a stale ref after navigation', async () 
           udid: DEVICE_ID,
         }),
       );
+      assertRpcOk(await daemon.callCommand('snapshot'));
       assertRpcOk(
         await daemon.callCommand('snapshot', [], {
           snapshotInteractiveOnly: true,

@@ -6,11 +6,30 @@ import {
   absenceCaptureOptionRefusal,
   classifyAbsenceObservation,
 } from './absence-observation.ts';
+import { absenceObservationError } from './absence-observation-errors.ts';
 
 test('classifies a complete capture with no selector matches as absent', () => {
   const observation = classifyAbsenceObservation(makeSnapshotState([]), []);
 
   assert.deepEqual(observation, { kind: 'absent', matches: 0 });
+});
+
+test('classifies a miss on a still-moving or still-loading tree by its own cause, not as absent', () => {
+  const miss = (kind: 'unsettled' | 'loading' | 'no-effect') =>
+    classifyAbsenceObservation(
+      {
+        ...makeSnapshotState([]),
+        postGestureOutcome: { kind, gesture: { action: 'open', positionals: [] } },
+      },
+      [],
+    );
+
+  assert.deepEqual(miss('unsettled'), { kind: 'unsettled', matches: 0 });
+  assert.deepEqual(miss('loading'), { kind: 'loading', matches: 0 });
+  assert.deepEqual(miss('no-effect'), { kind: 'absent', matches: 0 });
+  const error = absenceObservationError('label=Done', miss('loading'));
+  assert.match(error.message, /the launched app was still loading its first screen/);
+  assert.equal(error.details?.observation, 'loading');
 });
 
 test('classifies matches as present and exposes only stable first-match fields', () => {
