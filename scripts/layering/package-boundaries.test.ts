@@ -943,9 +943,12 @@ test('Node resolution enforces the exports map at runtime', () => {
     contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
     contractsReactNativeOverlayResolved,
   );
-  const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver');
+  assert.throws(() => import.meta.resolve('@agent-device/provider-webdriver'), {
+    code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
+  });
+  const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver/plugin');
   assert.ok(
-    providerWebDriverResolved.endsWith('packages/provider-webdriver/src/index.ts'),
+    providerWebDriverResolved.endsWith('packages/provider-webdriver/src/plugin.ts'),
     providerWebDriverResolved,
   );
   const providerLimrunResolved = import.meta.resolve('@agent-device/provider-limrun');
