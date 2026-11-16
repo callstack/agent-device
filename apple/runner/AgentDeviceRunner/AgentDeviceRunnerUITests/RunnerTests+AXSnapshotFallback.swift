@@ -285,7 +285,11 @@ extension RunnerTests {
       let fullScreenFrame = Self.fullScreenFrame(of: app)
       let viewport = Self.privateAXRootViewport(rootFrame: rootFrame, fullScreenFrame: fullScreenFrame)
       let kind: String
-      if case .reported = viewport { kind = "reported" } else { kind = "derived" }
+      switch viewport {
+      case .reported: kind = "reported"
+      case .derived: kind = "derived"
+      case .missing: kind = "missing"
+      }
       NSLog(
         "AGENT_DEVICE_RUNNER_PRIVATE_AX_ROOT_VIEWPORT kind=%@ root=%@ fullScreen=%@",
         kind,
