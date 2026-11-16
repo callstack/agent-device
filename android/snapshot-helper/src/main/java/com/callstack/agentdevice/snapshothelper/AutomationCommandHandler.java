@@ -1,8 +1,10 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import android.app.UiAutomation;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Base64;
@@ -23,7 +25,12 @@ final class AutomationCommandHandler {
   private AutomationCommandHandler() {}
 
   static void writeSessionResponse(
-      OutputStream output, String requestId, String action, String payload, UiAutomation automation)
+      OutputStream output,
+      String requestId,
+      String action,
+      String payload,
+      UiAutomation automation,
+      Context context)
       throws IOException {
     Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
     InputDispatch dispatch = new InputDispatch();
@@ -31,7 +38,7 @@ final class AutomationCommandHandler {
       if ("app".equals(action)) {
         ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
       } else if ("screenshot".equals(action)) {
-        screenshot(result, automation);
+        screenshot(result, automation, context);
       } else if ("focus".equals(action)) {
         focus(result, automation);
       } else {
@@ -176,7 +183,14 @@ final class AutomationCommandHandler {
     }
   }
 
-  private static void screenshot(Bundle result, UiAutomation automation) {
+  /**
+   * The display count lets the host keep its rule that a device with more than one display reports
+   * no rotation. The rotation is published only when a read before and a read after the capture
+   * agree, so a rotation landing mid-capture reports none.
+   */
+  private static void screenshot(Bundle result, UiAutomation automation, Context context) {
+    DisplayManager displays = ScreenshotDisplay.displays(context);
+    int rotationBefore = ScreenshotDisplay.rotation(displays);
     Bitmap image = automation.takeScreenshot();
     if (image == null) throw new IllegalStateException("Screen capture was unavailable");
     try {
@@ -187,6 +201,14 @@ final class AutomationCommandHandler {
       result.putString("payloadBase64", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP));
     } finally {
       image.recycle();
+    }
+    int count = ScreenshotDisplay.count(displays);
+    if (count == ScreenshotDisplay.UNKNOWN) return;
+    result.putString("displayCount", Integer.toString(count));
+    int rotation =
+        ScreenshotDisplay.whenBothAgree(rotationBefore, ScreenshotDisplay.rotation(displays));
+    if (rotation != ScreenshotDisplay.UNKNOWN) {
+      result.putString("displayRotation", Integer.toString(rotation));
     }
   }
 

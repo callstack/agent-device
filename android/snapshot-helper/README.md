@@ -113,7 +113,11 @@ closes that connection; the process stays alive for the next connection:
 - `snapshot-short-idle <requestId>` — capture with at most a 100 ms idle wait, capped by the session's configured timeout
 - `input <requestId> <payloadBase64>` — inject a tap, key, or point-targeted text replacement
 - `focus <requestId>` — read the focused window type and root package after clearing the accessibility cache
-- `screenshot <requestId>` — return a PNG in the `payloadBase64` header
+- `screenshot <requestId>` — return a PNG of the default display in the `payloadBase64` header,
+  with the number of logical displays the helper can see in `displayCount` and the default
+  display's logical `Surface.ROTATION_*` index in `displayRotation`. `displayRotation` is omitted
+  when the rotation changed during the capture or could not be read. Both are omitted when the
+  helper could not read its displays.
 - `viewport <requestId>` — return interactive-window viewport bounds
 - `gesture <requestId> <payloadBase64>` — inject a planned touch gesture (same payload as the
   one-shot `gesture` mode)

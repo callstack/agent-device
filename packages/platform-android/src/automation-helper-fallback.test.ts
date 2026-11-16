@@ -119,6 +119,42 @@ test.each<Record<string, string>>([
   },
 );
 
+test.each<[string, Record<string, string>, object, number]>([
+  [
+    'one display',
+    { displayCount: '1', displayRotation: '1' },
+    { displayRotation: 'landscape-left' },
+    0,
+  ],
+  ['two displays', { displayCount: '2', displayRotation: '1' }, {}, 0],
+  ['a rotation mid-capture', { displayCount: '1' }, {}, 0],
+  ['an older helper', {}, { displayRotation: 'landscape-right' }, 1],
+])(
+  'a helper screenshot from %s reports its rotation facts without screencap',
+  async (_name, displays, facts, dumpsysReads) => {
+    const f = fixture({ ok: 'true', payloadBase64: png.toString('base64'), ...displays });
+    const exec = f.provider.exec;
+    f.provider.exec = async (args, options) => {
+      if (args[0] === 'shell' && args[1] === 'dumpsys' && args[2] === 'display') {
+        f.calls.push(args);
+        return { exitCode: 0, stdout: '  mCurrentOrientation=3\n', stderr: '' };
+      }
+      return await exec(args, options);
+    };
+    const dir = await mkdtempForTest('android-helper-screenshot-rotation-');
+    const output = path.join(dir, 'helper.png');
+    await withAndroidAdbProvider(f.provider, { serial: device.id }, async () => {
+      await readAndroidFillTargetBeforeMutation(device, 10, 10, helper);
+      expect(await screenshotAndroid(device, output)).toEqual(facts);
+    });
+    expect(await fs.readFile(output)).toEqual(png);
+    expect(f.calls.filter((args) => args[1] === 'dumpsys' && args[2] === 'display')).toHaveLength(
+      dumpsysReads,
+    );
+    expect(f.calls.some((args) => args[0] === 'exec-out')).toBe(false);
+  },
+);
+
 test('a cached ended helper is retired before a pointer command takes the host path', async () => {
   const f = fixture({ ok: 'true' });
   await withAndroidAdbProvider(f.provider, { serial: device.id }, async () => {

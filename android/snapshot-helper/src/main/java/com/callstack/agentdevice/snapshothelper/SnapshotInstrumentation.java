@@ -210,7 +210,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
           if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
             AutomationCommandHandler.writeSessionResponse(
                 socket.getOutputStream(), requestId, action,
-                parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked());
+                parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked(), getContext());
             continue;
           }
           if ("viewport".equals(action)) {
