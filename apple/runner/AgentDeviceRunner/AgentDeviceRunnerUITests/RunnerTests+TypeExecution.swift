@@ -75,16 +75,22 @@ extension RunnerTests {
       case .performed:
         // The synthesized clear and typing reach whichever input holds focus, so where the point
         // lies on several inputs, the one the tap reached is bound before any keystroke.
-        let boundInput = try inputsAtPoint.count > 1
-          ? textInputTheTapReached(candidates: inputsAtPoint, contentTranslation: contentTranslation).input
-          : inputAtPoint
+        // The read that confirmed focus is reused, as on the XCTest route.
+        let reached: (input: TextInputAtPoint, read: ResolvedTextEntryInput?)
+        if inputsAtPoint.count > 1 {
+          let confirmed = try textInputTheTapReached(candidates: inputsAtPoint, contentTranslation: contentTranslation)
+          reached = (confirmed.input, confirmed.read)
+        } else {
+          reached = (inputAtPoint, nil)
+        }
         resolvedCoordinateContext = context
         resolvedCoordinateTarget = TextEntryTarget(
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
           contentTranslation: contentTranslation,
-          inputAtRefreshPoint: boundInput
+          inputAtRefreshPoint: reached.input,
+          postFocusRead: reached.read
         )
       case .xctestFallback:
         break
