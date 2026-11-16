@@ -1,17 +1,15 @@
-import type { CloudWebDriverCapabilityOverrides } from '@agent-device/provider-webdriver/plugin';
 import {
   buildCloudWebDriverBaseCapabilities,
   releaseOnFailure,
+  type CloudWebDriverCapabilityOverrides,
+  type CloudWebDriverPlatform,
+  type CloudWebDriverPrepareSession,
 } from '@agent-device/provider-webdriver/plugin';
 import {
   readAwsArtifacts,
   type AwsDeviceFarmArtifact,
   type AwsDeviceFarmArtifactGroup,
 } from './aws-device-farm-artifacts.ts';
-import type {
-  CloudWebDriverPlatform,
-  CloudWebDriverPrepareSession,
-} from '@agent-device/provider-webdriver/plugin';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { PROVIDER_PROFILE_FIELD_FLAGS } from '@agent-device/contracts/remote';
 import { setTimeout as sleep } from 'node:timers/promises';
