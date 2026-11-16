@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException;
 import org.json.JSONObject;
 
 /** Executes session input and image capture inside the instrumentation's automation context. */
@@ -73,7 +74,8 @@ final class AutomationCommandHandler {
     }
   }
 
-  private static void tap(UiAutomation automation, double x, double y, InputDispatch dispatch) {
+  private static void tap(UiAutomation automation, double x, double y, InputDispatch dispatch)
+      throws TimeoutException {
     if (Double.isNaN(x) || Double.isInfinite(x) || Double.isNaN(y) || Double.isInfinite(y)
         || x < 0 || y < 0) {
       throw new IllegalArgumentException("Invalid tap coordinates");
@@ -82,19 +84,24 @@ final class AutomationCommandHandler {
     requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y)), "Touch");
   }
 
-  private static void key(UiAutomation automation, int code, InputDispatch dispatch) {
+  private static void key(UiAutomation automation, int code, InputDispatch dispatch)
+      throws TimeoutException {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
     dispatch.attempted = true;
     requireDispatched(PressSequence.run(new KeyPress(automation, code)), "Key");
   }
 
-  private static void requireDispatched(PressSequence.Outcome outcome, String kind) {
+  private static void requireDispatched(PressSequence.Outcome outcome, String kind)
+      throws TimeoutException {
     switch (outcome) {
       case DISPATCHED:
         return;
       case ANIMATION_SYNC_UNAVAILABLE:
         throw new UnsupportedOperationException(
             kind + " injection was refused and this runtime cannot wait for animations to retry it");
+      case START_TIMED_OUT:
+        throw new TimeoutException(
+            kind + " injection timed out before the app finished handling it; it was cancelled");
       case START_REFUSED:
       case END_REFUSED:
         throw new IllegalStateException(kind + " injection was refused");
@@ -140,8 +147,13 @@ final class AutomationCommandHandler {
     }
 
     @Override
-    public void discardRefusedStart(long downTime) {
-      UiAutomationInputDispatcher.cancelRefusedDown(automation, downTime, x, y);
+    public void discardDroppedStart(long downTime) {
+      UiAutomationInputDispatcher.cancelDown(automation, downTime, x, y);
+    }
+
+    @Override
+    public void cancelStart(long downTime) {
+      UiAutomationInputDispatcher.cancelDown(automation, downTime, x, y);
     }
 
     private boolean inject(int action, long downTime) {
@@ -173,18 +185,29 @@ final class AutomationCommandHandler {
       return inject(KeyEvent.ACTION_UP, downTime);
     }
 
-    /** The injection verifier checks motion events only, so a refused key DOWN leaves no state. */
+    /** The injection verifier checks motion events only, so a dropped key DOWN leaves no state. */
     @Override
-    public void discardRefusedStart(long downTime) {}
+    public void discardDroppedStart(long downTime) {}
+
+    /** Android releases an interrupted key with an ACTION_UP that carries FLAG_CANCELED. */
+    @Override
+    public void cancelStart(long downTime) {
+      UiAutomationInputDispatcher.inject(automation, event(KeyEvent.ACTION_UP, downTime,
+          KeyEvent.FLAG_CANCELED), false);
+    }
 
     private boolean inject(int action, long downTime) {
-      return UiAutomationInputDispatcher.inject(automation, new KeyEvent(downTime,
-          SystemClock.uptimeMillis(), action, code, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0,
-          InputDevice.SOURCE_KEYBOARD), true);
+      return UiAutomationInputDispatcher.inject(automation, event(action, downTime, 0), true);
+    }
+
+    private KeyEvent event(int action, long downTime, int flags) {
+      return new KeyEvent(downTime, SystemClock.uptimeMillis(), action, code, 0, 0,
+          KeyCharacterMap.VIRTUAL_KEYBOARD, 0, flags, InputDevice.SOURCE_KEYBOARD);
     }
   }
 
-  private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch) {
+  private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch)
+      throws TimeoutException {
     AccessibilityNodeInfo target = null;
     try {
       for (AccessibilityWindowInfo window : automation.getWindows()) {

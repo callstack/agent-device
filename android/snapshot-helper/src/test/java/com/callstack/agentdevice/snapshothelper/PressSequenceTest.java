@@ -5,55 +5,92 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class PressSequenceTest {
+  private static final long TIMEOUT = PressSequence.INJECTION_TIMEOUT_MS;
+
   private PressSequenceTest() {}
 
   static void run() {
     endsWithTheStartDownTime();
-    retriesARefusedStartAfterTheAnimationSyncWithAFreshDownTime();
-    discardsAStartRefusedAgainAfterTheSync();
+    retriesADroppedStartAfterTheAnimationSyncWithAFreshDownTime();
+    retriesAStartRefusedJustBeforeTheInjectionDeadline();
+    cancelsAndDoesNotRetryAStartRefusedAtTheInjectionDeadline();
+    discardsAStartDroppedAgainAfterTheSync();
+    cancelsARetriedStartThatTimesOut();
     doesNotCancelARefusedEnd();
     doesNotRetryWhenInjectionAlreadyWaited();
     reportsAnUnavailableAnimationSyncApartFromARefusal();
   }
 
   private static void endsWithTheStartDownTime() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, true);
+    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
     expect(injections.calls, "start 1", "end 1");
   }
 
-  private static void retriesARefusedStartAfterTheAnimationSyncWithAFreshDownTime() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, false, true);
+  private static void retriesADroppedStartAfterTheAnimationSyncWithAFreshDownTime() {
+    FakeInjections injections =
+        new FakeInjections(PressSequence.AnimationSync.WAITED, refusedAfter(0), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
-    expect(injections.calls, "start 1", "discard 1", "sync", "start 2", "end 2");
+    expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "end 3");
   }
 
-  private static void discardsAStartRefusedAgainAfterTheSync() {
+  private static void retriesAStartRefusedJustBeforeTheInjectionDeadline() {
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT - 2), accepted());
+    expect(PressSequence.run(injections), PressSequence.Outcome.DISPATCHED);
+    expect(injections.calls, "start 1", "discard 1", "sync", "start 30001", "end 30001");
+  }
+
+  private static void cancelsAndDoesNotRetryAStartRefusedAtTheInjectionDeadline() {
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.WAITED, refusedAfter(TIMEOUT - 1), accepted());
+    expect(PressSequence.run(injections), PressSequence.Outcome.START_TIMED_OUT);
+    expect(injections.calls, "start 1", "cancel 1");
+  }
+
+  private static void discardsAStartDroppedAgainAfterTheSync() {
     FakeInjections injections =
-        new FakeInjections(PressSequence.AnimationSync.WAITED, false, false);
+        new FakeInjections(PressSequence.AnimationSync.WAITED, refusedAfter(0), refusedAfter(0));
     expect(PressSequence.run(injections), PressSequence.Outcome.START_REFUSED);
-    expect(injections.calls, "start 1", "discard 1", "sync", "start 2", "discard 2");
+    expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "discard 3");
+  }
+
+  private static void cancelsARetriedStartThatTimesOut() {
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.WAITED, refusedAfter(0), refusedAfter(TIMEOUT));
+    expect(PressSequence.run(injections), PressSequence.Outcome.START_TIMED_OUT);
+    expect(injections.calls, "start 1", "discard 1", "sync", "start 3", "cancel 3");
   }
 
   private static void doesNotCancelARefusedEnd() {
-    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, true);
+    FakeInjections injections = new FakeInjections(PressSequence.AnimationSync.WAITED, accepted());
     injections.endAccepted = false;
     expect(PressSequence.run(injections), PressSequence.Outcome.END_REFUSED);
     expect(injections.calls, "start 1", "end 1");
   }
 
   private static void doesNotRetryWhenInjectionAlreadyWaited() {
-    FakeInjections injections =
-        new FakeInjections(PressSequence.AnimationSync.ALREADY_WAITED, false, true);
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.ALREADY_WAITED, refusedAfter(0), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.START_REFUSED);
     expect(injections.calls, "start 1", "discard 1", "sync");
   }
 
   private static void reportsAnUnavailableAnimationSyncApartFromARefusal() {
-    FakeInjections injections =
-        new FakeInjections(PressSequence.AnimationSync.UNAVAILABLE, false, true);
+    FakeInjections injections = new FakeInjections(
+        PressSequence.AnimationSync.UNAVAILABLE, refusedAfter(0), accepted());
     expect(PressSequence.run(injections), PressSequence.Outcome.ANIMATION_SYNC_UNAVAILABLE);
     expect(injections.calls, "start 1", "discard 1", "sync");
+  }
+
+  /** A start the framework accepts. */
+  private static long accepted() {
+    return -1;
+  }
+
+  /** A start the framework refuses after this many milliseconds. */
+  private static long refusedAfter(long elapsedMs) {
+    return elapsedMs;
   }
 
   private static void expect(PressSequence.Outcome actual, PressSequence.Outcome expected) {
@@ -66,17 +103,18 @@ public final class PressSequenceTest {
     }
   }
 
+  /** Each {@code now()} advances the clock by 1 ms; a refused start also advances it by its delay. */
   private static final class FakeInjections implements PressSequence.Injections {
     final List<String> calls = new ArrayList<>();
     private final PressSequence.AnimationSync sync;
-    private final boolean[] startAccepted;
-    private int starts;
+    private final long[] starts;
+    private int startIndex;
     private long clock;
     boolean endAccepted = true;
 
-    FakeInjections(PressSequence.AnimationSync sync, boolean... startAccepted) {
+    FakeInjections(PressSequence.AnimationSync sync, long... starts) {
       this.sync = sync;
-      this.startAccepted = startAccepted;
+      this.starts = starts;
     }
 
     @Override
@@ -87,7 +125,10 @@ public final class PressSequenceTest {
     @Override
     public boolean start(long downTime) {
       calls.add("start " + downTime);
-      return startAccepted[starts++];
+      long refusedAfterMs = starts[startIndex++];
+      if (refusedAfterMs < 0) return true;
+      clock += refusedAfterMs;
+      return false;
     }
 
     @Override
@@ -97,8 +138,13 @@ public final class PressSequenceTest {
     }
 
     @Override
-    public void discardRefusedStart(long downTime) {
+    public void discardDroppedStart(long downTime) {
       calls.add("discard " + downTime);
+    }
+
+    @Override
+    public void cancelStart(long downTime) {
+      calls.add("cancel " + downTime);
     }
 
     @Override

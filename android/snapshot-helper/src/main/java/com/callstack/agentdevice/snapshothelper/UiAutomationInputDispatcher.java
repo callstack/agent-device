@@ -38,10 +38,10 @@ final class UiAutomationInputDispatcher {
   }
 
   /**
-   * Closes the verifier state of a refused touch DOWN with an ACTION_CANCEL. The verifier records a
-   * dropped DOWN as a pointer that is still down; no window holds the touch to receive the cancel.
+   * Ends a refused touch DOWN with an ACTION_CANCEL. The verifier records a dropped DOWN as a pointer
+   * that is still down, and a window that received a timed-out DOWN holds the pointer.
    */
-  static void cancelRefusedDown(UiAutomation automation, long downTime, float x, float y) {
+  static void cancelDown(UiAutomation automation, long downTime, float x, float y) {
     MotionEvent.PointerProperties[] properties = {new MotionEvent.PointerProperties()};
     properties[0].id = 0;
     MotionEvent.PointerCoords[] coords = {new MotionEvent.PointerCoords()};
