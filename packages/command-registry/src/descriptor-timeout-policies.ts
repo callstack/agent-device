@@ -1,8 +1,10 @@
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
+import { parseTimeout } from './parse-timeout.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
   LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
+  MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
 } from './timeout-policy.ts';
 import type { CommandTimeoutPolicy } from './types.ts';
 
@@ -66,3 +68,39 @@ export function postActionObservationTimeoutPolicy(
     ? SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY
     : withoutObservation;
 }
+
+/** The one `alert` subaction whose trailing number is a wait the command polls. */
+const ALERT_WAIT_ACTION = 'wait';
+
+/**
+ * The `alert` budget travels as the second positional, and what it means depends on the
+ * subaction that comes first:
+ *
+ *  - `alert wait <ms>` is the window the leg polls, so the request envelope has to sit above it
+ *    (#4566) — the same shape `wait`'s positional budget has.
+ *  - `alert get <ms>` is the Apple runner's read budget, which its owner clamps to 25 s (#4540),
+ *    and `accept`/`dismiss` run their own retry window. Neither is a request budget, so neither
+ *    widens anything: reading the trailing number without its subaction would turn every
+ *    `alert get 120000` into a 150 s envelope the command never uses.
+ *
+ * A window past {@link MAX_ARMABLE_ALERT_WAIT_WINDOW_MS} resolves to no envelope rather than a
+ * shortened one: the alert handler refuses it with its own typed reason before it polls, so the
+ * caller never watches a wait end early.
+ */
+function resolveAlertWaitBudgetMs(positionals: string[]): number | null {
+  const action = positionals[0] ?? 'get';
+  if (action.toLowerCase() !== ALERT_WAIT_ACTION) return null;
+  const windowMs = parseTimeout(positionals[1]);
+  if (windowMs === null || windowMs <= 0) return null;
+  return windowMs > MAX_ARMABLE_ALERT_WAIT_WINDOW_MS ? null : windowMs;
+}
+
+/**
+ * `alert` keeps the default envelope for `get`, `accept` and `dismiss`, and widens it past the
+ * window only for `wait`. Timeout-on-timeout stays the default's daemon reset: a wait cut off by
+ * its envelope is the daemon's own `alert wait` answer, and the read legs never reach it.
+ */
+export const ALERT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...DEFAULT_TIMEOUT_POLICY,
+  budget: { source: 'positional-parser', parser: resolveAlertWaitBudgetMs },
+};

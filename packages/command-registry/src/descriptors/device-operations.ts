@@ -22,6 +22,7 @@ import {
   type RawCommandDescriptor,
 } from '../descriptor-traits.ts';
 import {
+  ALERT_TIMEOUT_POLICY,
   PRESERVE_DAEMON_TIMEOUT_POLICY,
   SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
   postActionObservationTimeoutPolicy,
@@ -115,7 +116,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
         route: 'snapshot',
         refFrameEffect: alertRefFrameEffect,
       },
-      timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+      timeoutPolicy: ALERT_TIMEOUT_POLICY,
       batchable: true,
       compositeResource: 'none',
       platformExecution: { kind: 'device-runtime', uses: alertRuntimePlanUses },
