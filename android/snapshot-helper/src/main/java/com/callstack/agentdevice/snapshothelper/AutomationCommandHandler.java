@@ -8,7 +8,6 @@ import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Base64;
-import android.view.Display;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -185,14 +184,13 @@ final class AutomationCommandHandler {
   }
 
   /**
-   * {@code UiAutomation.takeScreenshot()} captures the default display in its current rotation, so
-   * that display's rotation pairs with the image. It is published only when one read before and one
-   * after the capture agree, so a rotation landing mid-capture reports none. The display count lets
-   * the host keep its rule that a device with more than one display reports no rotation.
+   * The display count lets the host keep its rule that a device with more than one display reports
+   * no rotation. The rotation is published only when a read before and a read after the capture
+   * agree, so a rotation landing mid-capture reports none.
    */
   private static void screenshot(Bundle result, UiAutomation automation, Context context) {
-    DisplayManager displays = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
-    int rotationBefore = defaultDisplayRotation(displays);
+    DisplayManager displays = ScreenshotDisplay.displays(context);
+    int rotationBefore = ScreenshotDisplay.rotation(displays);
     Bitmap image = automation.takeScreenshot();
     if (image == null) throw new IllegalStateException("Screen capture was unavailable");
     try {
@@ -204,19 +202,14 @@ final class AutomationCommandHandler {
     } finally {
       image.recycle();
     }
-    if (displays == null) return;
-    int rotationAfter = defaultDisplayRotation(displays);
-    result.putString("displayCount", Integer.toString(displays.getDisplays().length));
-    if (rotationBefore >= 0 && rotationBefore == rotationAfter) {
-      result.putString("displayRotation", Integer.toString(rotationAfter));
+    int count = ScreenshotDisplay.count(displays);
+    if (count == ScreenshotDisplay.UNKNOWN) return;
+    result.putString("displayCount", Integer.toString(count));
+    int rotation =
+        ScreenshotDisplay.whenBothAgree(rotationBefore, ScreenshotDisplay.rotation(displays));
+    if (rotation != ScreenshotDisplay.UNKNOWN) {
+      result.putString("displayRotation", Integer.toString(rotation));
     }
-  }
-
-  /** The default display's {@code Surface.ROTATION_*} index, or -1 when it cannot be read. */
-  private static int defaultDisplayRotation(DisplayManager displays) {
-    if (displays == null) return -1;
-    Display display = displays.getDisplay(Display.DEFAULT_DISPLAY);
-    return display == null ? -1 : display.getRotation();
   }
 
   private static void focus(Bundle result, UiAutomation automation) throws Exception {

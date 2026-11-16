@@ -25,8 +25,9 @@ type AndroidAutomationRequest =
 
 type AndroidHelperFocus = { focusedPackage?: string; windowType?: string };
 /**
- * `displays` is absent when the helper predates the display headers. `rotationIndex` is the default
- * display's `Surface.ROTATION_*` index, absent when the display turned during the capture.
+ * `displays` is absent when the helper predates the display headers or could not read its displays.
+ * `rotationIndex` is the default display's logical `Surface.ROTATION_*` index, absent when the
+ * display turned during the capture or the read failed.
  */
 export type AndroidHelperScreenshot = {
   png: Buffer;

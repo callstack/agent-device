@@ -11,5 +11,6 @@ public final class SnapshotHelperTestSuite {
     BoundedUiAutomationConnectionTest.run();
     GestureViewportReaderTest.run();
     DisplayExtentTest.run();
+    ScreenshotDisplayTest.run();
   }
 }

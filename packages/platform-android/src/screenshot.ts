@@ -15,8 +15,9 @@ import type { AndroidHelperScreenshot } from './automation-helper.ts';
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ANDROID_SCREENSHOT_SETTLE_DELAY_MS = 1_000;
-// The `dumpsys` rotation probe serves only captures whose helper reported no display facts: the
-// `screencap` fallback and a helper that predates the display headers.
+// The `dumpsys` rotation probe serves only captures without helper display facts: the `screencap`
+// fallback, and a helper that predates the display headers or could not read its displays. For
+// that helper the probe runs after the image, so it can add up to this budget to a screenshot.
 const ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS = 2_000;
 // Beside `screencap` the probe is optional metadata: one still running once the image is written
 // gets this long, then is aborted, so a slow `dumpsys` adds at most this much to a screenshot and
@@ -121,7 +122,7 @@ async function captureAndroidScreenshotWithRotation(
   if (!helper) return await captureAndroidScreencapWithRotation(device, outPath);
   await writeAndroidPng(helper.png, outPath);
   if (helper.displays) return rotationFacts(helperDisplayRotation(helper.displays));
-  // A helper that predates the display headers learns nothing about rotation until it answers.
+  // A helper without display facts is only known once it answers, so the probe cannot overlap it.
   return rotationFacts(
     await probeAndroidDisplayRotation(device, {
       timeoutMs: ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
@@ -130,8 +131,10 @@ async function captureAndroidScreenshotWithRotation(
 }
 
 /**
- * The helper captures the default display, but a device with more than one display reports no
- * rotation on every capture path, so the helper's reading follows the `dumpsys` probe's rule.
+ * The helper captures the default display, so its rotation pairs with the image. A device with more
+ * than one display still reports no rotation, as on the `dumpsys` path. The helper counts the
+ * logical displays it can see, so an inactive foldable panel or another app's private virtual
+ * display does not count, while `dumpsys` counts every display device.
  */
 function helperDisplayRotation(
   displays: NonNullable<AndroidHelperScreenshot['displays']>,

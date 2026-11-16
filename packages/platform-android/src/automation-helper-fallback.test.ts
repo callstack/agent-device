@@ -130,7 +130,7 @@ test.each<[string, Record<string, string>, object, number]>([
   ['a rotation mid-capture', { displayCount: '1' }, {}, 0],
   ['an older helper', {}, { displayRotation: 'landscape-right' }, 1],
 ])(
-  'a helper screenshot from %s reports its rotation without screencap',
+  'a helper screenshot from %s reports its rotation facts without screencap',
   async (_name, displays, facts, dumpsysReads) => {
     const f = fixture({ ok: 'true', payloadBase64: png.toString('base64'), ...displays });
     const exec = f.provider.exec;
