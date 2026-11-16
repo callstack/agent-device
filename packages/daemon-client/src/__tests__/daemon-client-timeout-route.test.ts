@@ -377,7 +377,7 @@ for (const row of ROUTE_ROWS) {
           row.transport === 'remote' ? 'http' : row.transport,
           statePaths,
           TIMEOUT_MS,
-          { host: createTestHostEnvironment() },
+          { host: createTestHostEnvironment(), timeoutRecovery: 'retire-unresponsive' },
         ),
         row.hintPattern,
       );
@@ -425,7 +425,7 @@ test('request-timeout route: a reset never deletes a registration a replacement 
         'socket',
         statePaths,
         TIMEOUT_MS,
-        { host: createTestHostEnvironment() },
+        { host: createTestHostEnvironment(), timeoutRecovery: 'retire-unresponsive' },
       ),
       /The daemon could not be safely retired/,
     );
@@ -465,7 +465,7 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
         'socket',
         paths,
         TIMEOUT_MS,
-        { host: createTestHostEnvironment() },
+        { host: createTestHostEnvironment(), timeoutRecovery: 'retire-unresponsive' },
       ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
@@ -537,7 +537,7 @@ test('request-timeout route: the reset acts on the resolved state paths, not the
         'http',
         resolvedPaths,
         TIMEOUT_MS,
-        { host: createTestHostEnvironment() },
+        { host: createTestHostEnvironment(), timeoutRecovery: 'retire-unresponsive' },
       ),
       /The daemon did not answer the liveness probes and was reset after the timeout/,
     );
