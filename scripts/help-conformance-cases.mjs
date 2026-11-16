@@ -145,6 +145,11 @@ export const CASES = [
         id: 'capturesStrongIssueEvidence',
         pattern: /\b(?:screenshot\b[^\n]*--overlay-refs|record\s+start\b|logs\s+mark\b)/i,
       },
+      // help dogfood "Platform checks": the plan must carry an `agent-device
+      // audit` command anywhere in a line, so an accessibility pass that only
+      // eyeballs screenshots fails the case. The matcher checks presence, not
+      // order, and tolerates numbered or indented plan lines.
+      { id: 'runsPlatformAudit', pattern: /\bagent-device\s+audit\b/i },
     ],
   },
   {

@@ -24,4 +24,6 @@ agent-device help dogfood
 
 Loop: open app -> snapshot -i + screenshot -> explore flows -> capture evidence per issue -> close (`close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running).
 
+On the first screen, and after a screen changes meaningfully, run `agent-device audit` when the target supports snapshots. Report its findings as accessibility findings.
+
 Target app is required; infer platform or ask. Findings must come from runtime behavior, not source reads. Let `help dogfood` provide exact report shape, evidence commands, and current workflow guidance.
