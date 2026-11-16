@@ -8,6 +8,7 @@ import {
   closeLoopbackServer,
   createTestRuntimeStateHandle,
   listenOnLoopback,
+  skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import {
   cleanupUploadedArtifact,
@@ -25,9 +26,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-test.each(['disconnect and resume', 'uninterrupted'] as const)(
+test.for(['disconnect and resume', 'uninterrupted'] as const)(
   'an actual proxy-to-daemon upload handles %s and verifies finalized bytes',
-  async (mode) => {
+  async (mode, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'proxy-to-daemon upload coverage')) return;
     const runtime = createTestRuntimeStateHandle();
     try {
       await runtime.run(async () => {
@@ -128,6 +130,7 @@ test.each(['disconnect and resume', 'uninterrupted'] as const)(
             await rolledBack.promise;
             expect(fs.readFileSync(payload, 'utf8')).toBe('AB');
             expect(client.writableEnded).toBe(false);
+            expect(errors.length).toBeGreaterThan(0);
             expect(
               errors.every((error) => (error as NodeJS.ErrnoException).code === 'ECONNRESET'),
             ).toBe(true);

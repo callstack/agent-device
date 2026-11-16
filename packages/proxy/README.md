@@ -111,7 +111,9 @@ Transfer phase and aggregate timeout error responses use HTTP 500 and include `r
 `reason: transfer_phase_timeout` and the matching connect/header (30000ms) or body (120000ms)
 phase budget, or `reason: transfer_forwarding_deadline_exceeded` with
 `transferPhase: forwarding` and `timeoutMs: 600000`. Other errors omit these fields.
-A timeout while you consume an accepted response fails the body read instead of replacing its status.
+After the proxy returns a response, a timeout while you consume it fails the body read instead of
+replacing its status. Preflight bodies are consumed before ticket rewriting; a timeout there returns
+HTTP 500.
 
 On these routes:
 
@@ -126,7 +128,8 @@ Environment-proxy routing depends on your runtime. In loopback checks, Node 22.1
 `HTTP_PROXY` and `HTTPS_PROXY` for both transports. Node 26.11.1 uses them when
 `NODE_USE_ENV_PROXY=1`. Bun 1.4.2 Fetch uses them without that opt-in, while the default transfer
 transport requires it. On Node 26.11.1 and Bun 1.4.2, `NO_PROXY=127.0.0.1` bypasses the proxy.
-If you use Bun and rely on Fetch's proxy routing, set `NODE_USE_ENV_PROXY=1` or supply `upstreamFetch`.
+If your Bun deployment needs proxy routing for transfers, set `NODE_USE_ENV_PROXY=1` or supply
+`upstreamFetch`.
 
 By default, `/rpc`, `/health` and request diagnostics use global `fetch`.
 
@@ -206,7 +209,7 @@ authenticate: async (request) => {
 | `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
 | `upstreamFetch` | none | Sends one request to the daemon. Without it, transfer routes use `node:http(s)` and every other route uses the global `fetch`. |
 | `maxRpcBodyBytes` | 64 MiB, the daemon's own request limit | Larger `/rpc` bodies get a 400 response. |
-| `upstreamTimeoutMs` | none | Independent cap on one daemon request, including its body. Without it, a request lasts as long as the client waits, bounded by the client's command timeout and, on transfer routes, the 600-second forwarding aggregate. |
+| `upstreamTimeoutMs` | none | Independent cap on one daemon request, including its body. `/health` keeps its separate five-second limit. Without this option, other requests last as long as the client waits, bounded by the client's command timeout and, on transfer routes, the 600-second forwarding aggregate. |
 
 `maxRpcBodyBytes` limits the bytes of one `/rpc` body. The proxy reads the whole body before it
 authenticates the client, then decodes and parses it. One unauthenticated request can therefore
