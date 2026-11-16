@@ -5,7 +5,7 @@ import {
   readDaemonStatus,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { AppError } from '@agent-device/kernel/errors';
-import { changePlugin, listPlugins } from '@agent-device/plugins/store';
+import { addPluginArtifact, changePlugin, listPlugins } from '@agent-device/plugins/store';
 import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -14,18 +14,32 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
   const [action = 'list', name, extra] = positionals;
   if (
     extra ||
-    !['add', 'update', 'remove', 'list'].includes(action) ||
+    !['add', 'add-artifact', 'update', 'remove', 'list'].includes(action) ||
     (action === 'list' ? name !== undefined : !name)
   ) {
     throw new AppError(
       'INVALID_ARGS',
-      'Use plugins list, add <package[@version]>, update <package>, or remove <package>',
+      'Use plugins list, add <package[@version]>, add-artifact <path.tgz>, update <package>, or remove <package>',
     );
   }
-  if (action !== 'list' && name) {
+  const artifact =
+    action === 'add-artifact' && name
+      ? await addPluginArtifact(name, { env: process.env, cwd: process.cwd() })
+      : undefined;
+  if (action !== 'list' && action !== 'add-artifact' && name) {
     await changePlugin(action as 'add' | 'update' | 'remove', name, process.env);
   }
-  const plugins = await listPlugins(process.env, BUILTIN_PROVIDER_IDS);
+  const plugins = artifact
+    ? [
+        {
+          ...artifact,
+          compatible: undefined,
+          provider: undefined,
+          backend: undefined,
+          error: undefined,
+        },
+      ]
+    : await listPlugins(process.env, BUILTIN_PROVIDER_IDS);
   const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir));
   const daemonPlugins = readPluginInventory(daemon.plugins);
   const failedInDaemon = daemonPlugins.filter(({ state }) => state === 'failed');
@@ -40,8 +54,8 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
   await writeCommandOutput(flags, data, () =>
     [
       ...plugins.map((plugin) =>
-        plugin.compatible
-          ? `${plugin.name}@${plugin.version} (${plugin.provider ?? plugin.backend})`
+        plugin.compatible || artifact
+          ? `${plugin.name}@${plugin.version}${plugin.provider || plugin.backend ? ` (${plugin.provider ?? plugin.backend})` : ''}`
           : plugin.name === undefined
             ? `Plugin config unavailable: ${plugin.error?.message}`
             : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,

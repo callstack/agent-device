@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -66,6 +67,11 @@ test('plugin schema exposes operator help and preserves scoped npm package specs
   const help = await usageForCommand('plugins');
   assert.ok(help);
   assert.match(help, /plugins list \[--state-dir <path>\]\|add/);
+  assert.match(help, /add-artifact <path\.tgz>/);
+  assert.deepEqual(
+    parseRawArgs(['plugins', 'add-artifact', './plugin.tgz', '--json']).positionals,
+    ['add-artifact', './plugin.tgz'],
+  );
 });
 
 test('plugins list reports the running daemon inventory next to the store selections', async () => {
@@ -183,4 +189,51 @@ test('plugins list says when the daemon record cannot be used instead of hiding 
   const text = await listPluginsAsText(home, stateDir);
   assert.match(text, /No provider plugins installed\./);
   assert.match(text, /daemon record for .* is invalid, so its providers are unknown/);
+});
+
+test('plugins add-artifact installs without loading the factory', async () => {
+  const { home } = pluginHome();
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', path.join(home, 'state'));
+  vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
+  const source = path.join(home, 'source');
+  fs.mkdirSync(source);
+  const marker = path.join(home, 'executed');
+  fs.writeFileSync(
+    path.join(source, 'package.json'),
+    JSON.stringify({
+      name: 'cli-artifact',
+      version: '1.0.0',
+      type: 'module',
+      exports: { './agent-device': './plugin.mjs' },
+      scripts: { preinstall: 'node sentinel.cjs' },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(source, 'sentinel.cjs'),
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'script')`,
+  );
+  fs.writeFileSync(
+    path.join(source, 'plugin.mjs'),
+    `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'factory'); export default () => ({});`,
+  );
+  const packed = JSON.parse(
+    execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', home], {
+      cwd: source,
+      encoding: 'utf8',
+    }),
+  );
+  const archive = path.join(home, packed[0].filename);
+  const capture = beginStdoutCapture();
+  try {
+    await runCli(['plugins', 'add-artifact', archive, '--json'], { sendToDaemon: vi.fn() });
+    const { data } = JSON.parse(capture.read());
+    assert.equal(data.plugins[0].name, 'cli-artifact');
+    assert.equal(data.plugins[0].version, '1.0.0');
+    assert.match(data.plugins[0].integrity, /^sha512-/);
+    assert.equal(data.restartRequired, true);
+    assert.equal(fs.existsSync(marker), false);
+  } finally {
+    capture.restore();
+  }
 });

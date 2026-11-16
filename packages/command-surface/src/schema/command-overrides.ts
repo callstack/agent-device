@@ -15,13 +15,13 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Manage installed provider plugins',
       description:
-        'Install, list, update, or remove npm provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. list works offline and, when a daemon is running for --state-dir, also reports the providers it registered. Use --json for structured results.',
+        'Install, list, update, or remove provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. list works offline and, when a daemon is running for --state-dir, also reports the providers it registered. Use --json for structured results.',
     },
     usageOverride:
-      'plugins list [--state-dir <path>]|add <package[@version]>|update <package>|remove <package>',
+      'plugins list [--state-dir <path>]|add <package[@version]>|add-artifact <path.tgz>|update <package>|remove <package>',
     listUsageOverride: 'plugins',
-    positionalArgs: ['list|add|update|remove', 'package?'],
-    flagsByAction: { list: ['stateDir'], add: [], update: [], remove: [] },
+    positionalArgs: ['list|add|add-artifact|update|remove', 'package?'],
+    flagsByAction: { list: ['stateDir'], add: [], 'add-artifact': [], update: [], remove: [] },
     supportedFlags: ['stateDir'],
   },
   cdp: {

@@ -634,7 +634,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
             return runtime.provider;
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
-          './plugins': (mod) => Object.keys(mod).length === 0,
+          './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
           './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
