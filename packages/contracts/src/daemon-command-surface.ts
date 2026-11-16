@@ -170,7 +170,12 @@ export type DaemonWaitTarget =
       kind: 'selector';
       selector: string;
       timeoutMs?: number | null;
-      /** ADR 0012 / #1349: the recorded landmark identity a replayed wait must observe. */
+      /**
+       * ADR 0012 / #1349, replay-only: the recorded landmark identity this wait must observe before
+       * reporting success. Polling is unchanged: the loop keeps waiting while no selector match
+       * carries this identity, and a timeout with rejected candidates throws the
+       * `WAIT_LANDMARK_MISMATCH_REASON` refusal instead of success.
+       */
       recordedLandmark?: TargetAnnotationV1;
     }
   | { kind: 'absent'; selector: string; timeoutMs?: number | null }
