@@ -58,25 +58,26 @@ test('without a request deadline, input carries the host cap less the answer mar
 });
 
 test('a request with room sends the helper only what remains of its deadline', async () => {
-  await withinRequestDeadline(38_000, tap);
+  await withinRequestDeadline(34_000, tap);
   const { payload, timeoutMs } = sentCommand();
-  expect(timeoutMs).toBeLessThanOrEqual(38_000);
-  expect(timeoutMs).toBeGreaterThan(36_000);
+  expect(timeoutMs).toBeLessThanOrEqual(34_000);
+  expect(timeoutMs).toBeGreaterThan(32_000);
   expect(payload.budgetMs).toBe(timeoutMs - 5_000);
 });
 
-test('a request without room for one injection is refused before anything reaches the helper', async () => {
-  for (const remainingMs of [34_000, 3_000]) {
-    const refusal = await withinRequestDeadline(remainingMs, () =>
-      tap().catch((error: unknown) => error),
-    );
-    expect(refusal).toBeInstanceOf(AppError);
-    expect((refusal as AppError).details).toMatchObject({
-      reason: 'android-input-budget-exhausted',
-      minimumBudgetMs: 30_000,
-      dispatched: 'no',
-    });
-  }
+test('a request with room for one attempt but not the answer margin sends a zero budget', async () => {
+  await withinRequestDeadline(3_000, tap);
+  expect(sentCommand().payload.budgetMs).toBe(0);
+});
+
+test('a request without room for one attempt is refused before anything reaches the helper', async () => {
+  const refusal = await withinRequestDeadline(1_000, () => tap().catch((error: unknown) => error));
+  expect(refusal).toBeInstanceOf(AppError);
+  expect((refusal as AppError).details).toMatchObject({
+    reason: 'android-input-budget-exhausted',
+    minimumMs: 2_000,
+    dispatched: 'no',
+  });
   expect(runAndroidSnapshotHelperSessionTouchCommand).not.toHaveBeenCalled();
   expect(prepareAndroidAutomationHelper).not.toHaveBeenCalled();
   expect(stopAndroidSnapshotHelperSession).not.toHaveBeenCalled();

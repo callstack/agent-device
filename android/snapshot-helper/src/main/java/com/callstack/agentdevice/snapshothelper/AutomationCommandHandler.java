@@ -57,10 +57,26 @@ final class AutomationCommandHandler {
     boolean attempted;
   }
 
+  /**
+   * The budget of a host that sends none: a provider-supplied helper can be newer than its host, and
+   * an older host waits 30 s for input, less the 5 s answer margin. It never affords a retry.
+   */
+  private static final long OLDER_HOST_BUDGET_MS = 25_000;
+
+  /** The framework's accessibility interaction timeout, AccessibilityInteractionClient. */
+  private static final long TEXT_ENTRY_RESERVE_MS = 5_000;
+
+  /** The command deadline left too little time for the next step, so it was not started. */
+  static final class InputBudgetExhausted extends IllegalStateException {
+    InputBudgetExhausted(String message) {
+      super(message);
+    }
+  }
+
   private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
-    // The host's remaining time for this command bounds every retry decision. A provider-supplied
-    // helper can be newer than its host, which sends no budget; such a press is never retried.
-    long deadline = SystemClock.uptimeMillis() + input.optLong("budgetMs", 0);
+    // The host's remaining time for this command bounds every retry decision.
+    long deadline =
+        SystemClock.uptimeMillis() + input.optLong("budgetMs", OLDER_HOST_BUDGET_MS);
     switch (input.getString("kind")) {
       case "tap":
         tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch, deadline);
@@ -218,6 +234,9 @@ final class AutomationCommandHandler {
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
       tap(automation, x, y, dispatch, deadline);
+      if (deadline - SystemClock.uptimeMillis() < TEXT_ENTRY_RESERVE_MS) {
+        throw new InputBudgetExhausted("Fill text was not entered: too little time left after focus");
+      }
       if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");

@@ -51,10 +51,11 @@ const ACTION_POLICY = {
 const INPUT_ANSWER_MARGIN_MS = 5_000;
 
 /**
- * The least helper budget a press is sent with: one synchronous injection can block until the
- * framework's 30 s deadline, and a host that stopped waiting first would tear the session down.
+ * The least wait a press is sent with: one injection attempt round trip. On an emulator a whole
+ * press takes 0.25-0.4 s through the helper or `adb shell input`, so 2 s keeps a wide margin;
+ * with less, neither path can be expected to answer before the host stops waiting.
  */
-const MIN_INPUT_BUDGET_MS = 30_000;
+const MIN_INPUT_ATTEMPT_MS = 2_000;
 
 /** Reuses the session's automation context without starting instrumentation for sessionless input. */
 export function runAndroidAutomationHelper(
@@ -146,9 +147,9 @@ function decodeHelperIndex(value: string | undefined): number | undefined {
 
 /**
  * The host waits for input up to its cap, or until the request's own deadline when that is sooner.
- * A request too close to its deadline for one injection is refused before anything is sent. The
- * refusal is thrown before the helper call's fallback on purpose: that path stops the shared session
- * and runs `adb shell input`, which can block on the same injection deadline.
+ * A request with no room for one attempt is refused before anything is sent. The refusal is thrown
+ * before the helper call's fallback on purpose: that path stops the shared session, and
+ * `adb shell input` could not answer in that time either.
  */
 function admitInputTimeoutMs(): number {
   const capMs = ACTION_POLICY.input.timeoutMs;
@@ -157,15 +158,14 @@ function admitInputTimeoutMs(): number {
     requestDeadlineMs === undefined
       ? capMs
       : Math.max(0, Math.min(capMs, requestDeadlineMs - Date.now()));
-  const budgetMs = timeoutMs - INPUT_ANSWER_MARGIN_MS;
-  if (budgetMs < MIN_INPUT_BUDGET_MS) {
+  if (timeoutMs < MIN_INPUT_ATTEMPT_MS) {
     throw new AppError(
       'COMMAND_FAILED',
-      'Android input was not sent: the request has too little time left for one injection',
+      'Android input was not sent: the request has too little time left for one attempt',
       {
         reason: 'android-input-budget-exhausted',
-        budgetMs: Math.max(0, budgetMs),
-        minimumBudgetMs: MIN_INPUT_BUDGET_MS,
+        remainingMs: timeoutMs,
+        minimumMs: MIN_INPUT_ATTEMPT_MS,
         dispatched: 'no',
       },
     );
@@ -180,7 +180,7 @@ function encodeHelperPayload(
   if (!('input' in request)) return undefined;
   const payload =
     request.action === 'input'
-      ? { ...request.input, budgetMs: timeoutMs - INPUT_ANSWER_MARGIN_MS }
+      ? { ...request.input, budgetMs: Math.max(0, timeoutMs - INPUT_ANSWER_MARGIN_MS) }
       : request.input;
   return Buffer.from(JSON.stringify(payload)).toString('base64');
 }
