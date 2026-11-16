@@ -19,8 +19,10 @@ Alternatively, pass a model from your configured AI SDK provider. See the AI SDK
 
 ```ts
 import { ToolLoopAgent } from 'ai';
+import { ensureDaemon, isAgentDeviceError } from 'agent-device';
 import { createAgentDeviceTools } from 'agent-device/ai-sdk';
 
+await ensureDaemon();
 const { tools, client } = await createAgentDeviceTools({
   session: 'ai-sdk-agent',
   platform: 'ios',
@@ -42,7 +44,11 @@ try {
 
   console.log(result.text);
 } finally {
-  await client.sessions.close();
+  await client.sessions.close().catch((error) => {
+    if (isAgentDeviceError(error) && error.code === 'SESSION_NOT_FOUND') return;
+    console.error('Session cleanup failed:', error);
+    process.exitCode = 1;
+  });
 }
 ```
 
