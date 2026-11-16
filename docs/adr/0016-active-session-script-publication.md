@@ -10,6 +10,8 @@ Remote delivery (#4511 amendment) is owned by `packages/daemon/src/core/session-
 
 ## Rules at a glance
 
+Ordinary recording and publication remain core capabilities without the replay plugin. Native `.ad` replay/test execution or replay repair requires `@agent-device/replay` on the daemon host.
+
 This section is a normative summary.
 [Decision](#decision) contains the binding contracts and refusal cases.
 

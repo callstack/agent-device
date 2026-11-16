@@ -29,6 +29,26 @@ Install only packages you trust: plugin factories run with the daemon's host per
 
 A failed install keeps the previous selection. A running daemon keeps the plugin set and files it started with, including removed installations. To apply changes, close sessions and run `agent-device daemon stop` with the matching `--state-dir`; the next device command uses the new set. Use separate state directories for different plugin homes.
 
+## Install replay and test support
+
+The 0.22 `@agent-device/replay` and `@agent-device/maestro` packages are private and not yet published. The npm commands below apply after publication. Native replay and suites cannot be installed from npm until then.
+
+In 0.22, install the native replay plugin on the daemon host:
+
+```bash
+agent-device plugins add @agent-device/replay
+```
+
+Finish your sessions and restart that daemon, then retry the original invocation with all its arguments. Native `.ad` scripts keep their syntax, variables, target verification, resume and repair behavior. Ordinary script recording stays in core.
+
+The plugin uses API version 2 and supports core `>=0.22.0-0 <0.23.0`, plus the pinned `0.21.38-dev` extraction host. A mismatched release returns `incompatible_plugin`.
+
+A remote daemon needs its own installation. A local plugin store does not make an engine available remotely. An embedded host imports the factory from `@agent-device/replay/agent-device` and supplies `plugins: [replay()]` to `startAgentDevice`. Supplied plugins are authoritative; the embedded runtime does not read the store.
+
+Maestro YAML replay requires `@agent-device/maestro` on both client and daemon hosts. Maestro suites also need `@agent-device/replay` on the daemon host. `replay export` needs the Maestro plugin on the client only.
+
+A missing installation returns `plugin-not-installed` with the package and installation command. Selected package failures keep `plugin_load_failed`, `invalid_plugin`, `incompatible_plugin` or `plugin_setup_failed`; repair or update that selected package. `daemon-plugin-set-stale` requires restarting the daemon after sessions finish. For an embedded daemon, its host closes and recreates the runtime. No recovery installs packages or ends sessions automatically.
+
 ## See which providers are registered
 
 `agent-device daemon status` lists every provider the running daemon registered: the bundled ones (BrowserStack, AWS Device Farm, and Limrun when it is configured), then installed plugins. With `--json`, each entry has:

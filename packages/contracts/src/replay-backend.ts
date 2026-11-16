@@ -281,6 +281,7 @@ export type ReplayBackendHost = Readonly<{
 export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
   id: TId;
   package: string;
+  installationHint: string;
   help: Readonly<{ summary: string; body: string }>;
 }>;
 
