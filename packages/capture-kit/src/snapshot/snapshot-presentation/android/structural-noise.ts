@@ -6,7 +6,7 @@ import {
   collectDescendants,
   markNodeAndDescendantsForRemoval,
   type ChildrenByParent,
-} from './tree.ts';
+} from '../../snapshot-tree.ts';
 
 const ACTIONABLE_STRUCTURAL_TYPE_TOKENS = ['button', 'switch', 'checkbox', 'radio'];
 const STRUCTURAL_NOISE_TYPE_TOKENS = ['button', 'image', 'textview', 'view'];
