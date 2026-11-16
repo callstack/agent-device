@@ -25,10 +25,7 @@ import {
 } from './stable-capture-signal.ts';
 import { preferredSnapshotBackendForVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
-import {
-  ADAPTIVE_CONFIRMATION_GAP_MS,
-  createAdaptiveConfirmation,
-} from './settle-adaptive-confirmation.ts';
+import type { AdaptiveEarlyExit } from './settle-adaptive-confirmation.ts';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -144,13 +141,7 @@ export async function runStableCaptureLoop(
   // loop recovers on private AX, the rest of the loop stays on it.
   let preferredBackend: SnapshotPreferredBackend | undefined;
   const pacing = createStableCapturePacing(start);
-  const adaptive = params.adaptiveConfirmation
-    ? createAdaptiveConfirmation({
-        baseline: params.broadTransitionBaseline,
-        baselineFresh: params.adaptiveConfirmation.baselineFresh,
-        appBundleId: session?.appBundleId,
-      })
-    : undefined;
+  const adaptive = await loadAdaptiveEarlyExit(params, session?.appBundleId);
   let captures = 0;
   let lastCapture: CapturedSnapshot | undefined;
   const result = (
@@ -175,14 +166,7 @@ export async function runStableCaptureLoop(
       runtime,
       options,
       deadlineMs - now(runtime),
-      params.broadTransitionBaseline
-        ? postActionPresentation(params.broadTransitionBaseline)
-        : {
-            ...postActionPresentation(undefined),
-            depth: options.depth,
-            scope: options.scope,
-            raw: options.raw,
-          },
+      stableCapturePresentation(params.broadTransitionBaseline, options),
       preferredBackend,
     );
     if (read.kind !== 'captured') return unfinished(read);
@@ -219,23 +203,95 @@ export async function runStableCaptureLoop(
     }
     const step = recovered
       ? { settled: false, delayMs: recovered.delayMs }
-      : pacing.observe({ signal, nodeCount, nowMs, requiredQuietMs, pollMs, deadlineMs, captures });
-    if (step.settled) return result(true, false, nowMs - start);
-    const early = recovered
-      ? 'none'
-      : adaptive?.observe({
+      : observeStableCapture({
+          pacing,
+          adaptive,
           snapshot: capture.snapshot,
           signal,
-          floorInForce: requiredQuietMs > window.quietMs,
+          window,
+          nowMs,
+          deadlineMs,
+          captures,
         });
-    if (early === 'settle') return result(true, false, nowMs - start);
+    if (step.settled) return result(true, false, nowMs - start);
     if (step.delayMs <= 0) break;
-    await sleep(
-      runtime,
-      early === 'confirm' ? Math.min(step.delayMs, ADAPTIVE_CONFIRMATION_GAP_MS) : step.delayMs,
-    );
+    await sleep(runtime, step.delayMs);
   }
   return result(false, false, now(runtime) - start);
+}
+
+/**
+ * The view every capture of the run reads: the baseline's, so the settled tree and the baseline
+ * compare (#4486), or without one the interactive view the caller's options narrow.
+ */
+function stableCapturePresentation(
+  baseline: SurfaceScopedNodes | undefined,
+  options: SelectorSnapshotOptions,
+): SnapshotPresentation {
+  if (baseline) return postActionPresentation(baseline);
+  return {
+    ...postActionPresentation(undefined),
+    depth: options.depth,
+    scope: options.scope,
+    raw: options.raw,
+  };
+}
+
+/**
+ * The internal adaptive early exit, loaded only when a settle asks for it so the default path keeps
+ * its import closure.
+ */
+async function loadAdaptiveEarlyExit(
+  params: {
+    broadTransitionBaseline?: SurfaceScopedNodes;
+    adaptiveConfirmation?: { baselineFresh: boolean };
+  },
+  appBundleId: string | undefined,
+): Promise<AdaptiveEarlyExit | undefined> {
+  if (!params.adaptiveConfirmation) return undefined;
+  const { createAdaptiveConfirmation } = await import('./settle-adaptive-confirmation.ts');
+  return createAdaptiveConfirmation({
+    baseline: params.broadTransitionBaseline,
+    baselineFresh: params.adaptiveConfirmation.baselineFresh,
+    appBundleId,
+  });
+}
+
+/**
+ * Folds one capture into the quiet window and, when the adaptive early exit is armed, into its
+ * short confirmation: settled, or how long to wait before the next capture (<= 0 ends the run).
+ */
+function observeStableCapture(params: {
+  pacing: StableCapturePacing;
+  adaptive: AdaptiveEarlyExit | undefined;
+  snapshot: SnapshotState;
+  signal: StableCaptureSignal;
+  window: ReturnType<typeof stableCaptureWindow>;
+  nowMs: number;
+  deadlineMs: number;
+  captures: number;
+}): { settled: boolean; delayMs: number } {
+  const { window, adaptive } = params;
+  const step = params.pacing.observe({
+    signal: params.signal,
+    nodeCount: params.snapshot.nodes.length,
+    nowMs: params.nowMs,
+    requiredQuietMs: window.requiredQuietMs,
+    pollMs: window.pollMs,
+    deadlineMs: params.deadlineMs,
+    captures: params.captures,
+  });
+  if (step.settled || !adaptive) return step;
+  const early = adaptive.observe({
+    snapshot: params.snapshot,
+    signal: params.signal,
+    floorInForce: window.requiredQuietMs > window.quietMs,
+  });
+  if (early === 'settle') return { settled: true, delayMs: 0 };
+  if (early === 'confirm' && step.delayMs > 0) {
+    return { settled: false, delayMs: Math.min(step.delayMs, adaptive.confirmGapMs) };
+  }
+  return step;
 }
 
 /**

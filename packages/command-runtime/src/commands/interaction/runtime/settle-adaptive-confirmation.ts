@@ -22,7 +22,9 @@ import {
  * for navigation, a plateau between transition stages, a late value write. That is the trade this
  * prototype measures.
  */
-export const ADAPTIVE_CONFIRMATION_GAP_MS = 110;
+const ADAPTIVE_CONFIRMATION_GAP_MS = 110;
+
+export type AdaptiveEarlyExit = ReturnType<typeof createAdaptiveConfirmation>;
 
 export function createAdaptiveConfirmation(params: {
   baseline: SurfaceScopedNodes | undefined;
@@ -71,6 +73,8 @@ export function createAdaptiveConfirmation(params: {
     },
     /** A private-AX recovery re-read the screen through another backend. */
     disarm,
+    /** The wait before the confirming capture. */
+    confirmGapMs: ADAPTIVE_CONFIRMATION_GAP_MS,
   };
 }
 
