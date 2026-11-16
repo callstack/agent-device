@@ -264,15 +264,10 @@ type CaptureTargetPlan = {
 };
 
 /**
- * Decides which display the capture names and how its rotation is read.
- *
- * A foldable lights one panel at a time, so a multi-panel capture must name the panel the system
- * is currently showing rather than accept simctl's implicit default. That panel changes when the
- * device folds, so a device not known to be single-panel reads its panel table before every
- * capture. A known single-panel capture never names a display: its read only supplies the
- * rotation, so it runs beside the capture, and a read still running
- * `IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS` after the image is written is aborted and the
- * capture reports no rotation.
+ * Decides which display the capture names and how its rotation is read. A foldable's lit panel
+ * changes when it folds, so a device not known to be single-panel reads its panel table before
+ * every capture. A known single-panel capture never names a display, so its read only supplies
+ * the rotation and runs beside the capture.
  */
 async function planCaptureTarget(
   device: DeviceInfo,
@@ -291,21 +286,40 @@ async function planCaptureTarget(
       signal: signal ? AbortSignal.any([signal, probeController.signal]) : probeController.signal,
     })
     .then(
-      (target) => target.displayRotation,
+      (target) => {
+        if (target.display) emitSinglePanelCountStaleDiagnostic(device, target.display);
+        return target.displayRotation;
+      },
       () => undefined,
     );
   return {
     display: undefined,
     readCaptureFacts: async () => {
-      const displayRotation = await settledWithin(
-        rotation,
-        IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
-      );
-      probeController.abort();
-      return displayRotation ? { displayRotation } : {};
+      try {
+        const displayRotation = await settledWithin(
+          rotation,
+          IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
+        );
+        return displayRotation ? { displayRotation } : {};
+      } finally {
+        probeController.abort();
+      }
     },
     cancelRotationRead: () => probeController.abort(),
   };
+}
+
+/** The read resolved a named panel, so this capture went out without the display it needed. */
+function emitSinglePanelCountStaleDiagnostic(device: DeviceInfo, display: AppleDeviceDisplay) {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'apple_display_single_panel_count_stale',
+    data: {
+      deviceId: device.id,
+      display: display.name,
+      hint: 'The device was known to have one panel, but its panel table now names a panel to capture. Retake the screenshot; the next capture names that panel.',
+    },
+  });
 }
 
 export async function captureSimulatorScreenshotWithRetry(

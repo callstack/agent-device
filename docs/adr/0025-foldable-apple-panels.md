@@ -27,7 +27,7 @@ Only inference answers the second question.
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
 | Zero or multiple lit panels with a `primary` panel | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
 | No sole lit panel and no `primary` panel | Refuse with `COMMAND_FAILED` and `details.reason: capture-panel-unidentified`. Never choose a panel by array order. |
-| One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
+| One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. Once a resolved table shows one panel, read the table beside the capture for `displayRotation` only. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
 | Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports an exact pose only after hinge readings verify it. |
 | Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back inside the simulator until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
@@ -101,7 +101,7 @@ It is the only reader of panel tables, and it selects the source.
   It leaves exact pose to the app under test through `UIHinge.status`.
   If a caller needs pose, it asks the operator and takes another snapshot.
 - **No cache.**
-  The probe executes per capture.
+  The probe executes per capture. Only the resolved panel count is kept (see the 2026-11-16 amendment).
   An operator changes the lit panel through a fold or open action.
   Cached inventory could resume capture of the dark panel and recreate the failure.
   `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` limits the probe to 5s, below the subsequent 20s screenshot deadline.
@@ -755,3 +755,18 @@ Consequences:
 - `runner.log` prints `AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=<id>(<w>x<h>) windows=<n> outcome=<reason> frame=(…)`. `SYNTHESIZED_DISPATCH reference=` must equal that frame. Snapshot points are translated by that frame's origin, as for a placed iPad window, and a synthesized turn is about the lit panel's screen in the app's interface orientation, not the window's shape: an app beside the inner panel's 80 pt status strip still maps into the whole screen. `SYNTHESIZED_RECORD displayID=` must equal `lit=`.
 - A recording keeps the panel that its `recordStart` named. The runner cannot read panel power, so it does not notice a fold during the recording: SpringBoard keeps windows on the panel that went dark, and later frames show that dark panel. Start a new recording after a fold.
 - Open gap: on the folded home screen, XCTest reports the page icons with the inner panel's layout in both panels' windows. The Dock and the page indicator report the outer panel correctly.
+
+## Amendment: a single-panel table read runs beside the capture (2026-11-16)
+
+This amendment narrows the capture rule "first resolve the panel table" to devices not known to be single-panel.
+The display inventory keeps each device's panel count from its latest resolved table for the daemon's lifetime; an unresolved read does not change it.
+When that count is one, the capture names no display, so the table read only supplies `displayRotation`.
+That read then starts beside `simctl io screenshot` with a 2s budget, in both simulator sets.
+A read still running 250ms after the image is written is aborted, and the capture reports no rotation, as for an unresolved table.
+A multi-panel device or a device with no resolved count keeps the read before the capture, so a fold still names the lit panel.
+If a read beside a capture resolves to a named panel, the capture emits `apple_display_single_panel_count_stale`, and the new count routes the next capture.
+
+Rejected alternatives:
+
+- **A cached panel table: rejected.** The lit panel changes on a fold, and rotation changes without an agent-device command.
+- **Waiting for the read without a bound: rejected.** Rotation is optional metadata and must not delay the image.

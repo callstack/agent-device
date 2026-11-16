@@ -1,6 +1,13 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { bindTestCommandHost } from '@agent-device/test-kit';
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn() };
+});
+
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
@@ -102,4 +109,35 @@ test('a device not known to be single-panel reads its panel table before the cap
     },
   });
   assert.deepEqual(events, ['probe', 'capture LCD-1']);
+});
+
+test('a read beside the capture that names a panel reports the stale single-panel count', async () => {
+  const panel = {
+    name: 'LCD',
+    displayId: 1,
+    power: 'lit',
+    primary: true,
+    widthPx: 1398,
+    heightPx: 2034,
+    pointScale: 3,
+    currentOrientation: 'rot0',
+    integrated: true,
+  } as const;
+  const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    env: process.env,
+    skipIosSimulatorBootCheck: true,
+    deps: {
+      ensureBooted: async () => {},
+      normalizeDensity: async () => {},
+      isKnownSinglePanel: () => true,
+      resolveCaptureTarget: async () => ({ display: panel }),
+      captureWithRetry: async () => {},
+    },
+  });
+  assert.deepEqual(facts, {});
+  assert.ok(
+    vi
+      .mocked(emitDiagnostic)
+      .mock.calls.some(([event]) => event.phase === 'apple_display_single_panel_count_stale'),
+  );
 });

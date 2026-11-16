@@ -670,6 +670,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: litPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
@@ -702,6 +703,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
@@ -729,6 +731,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {},
         normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {
