@@ -1,7 +1,7 @@
 import type { ReplayEnginePlugin } from 'agent-device/plugins';
 
 /** The managed entry is engine-free. Only a selected backend evaluates the implementation. */
-function maestroPlugin(): ReplayEnginePlugin {
+function maestroPlugin(): ReplayEnginePlugin<'maestro'> {
   return {
     apiVersion: 2,
     kind: 'replay-backend',
