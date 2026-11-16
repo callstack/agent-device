@@ -1,24 +1,12 @@
-import { awsDeviceFarmProvider } from './aws-device-farm-provider.ts';
-import type { BundledCloudWebDriverProvider } from './provider-plugin.ts';
-
-export type { RunHostCommand } from './dependencies.ts';
-export type {
-  BundledCloudWebDriverProvider,
-  CloudWebDriverConnection,
-  CloudWebDriverProviderHost,
-} from './provider-plugin.ts';
+import type { CloudWebDriverRuntimeOptions, CloudWebDriverRuntime } from './runtime.ts';
 
 /**
- * The hosted WebDriver providers agent-device ships. Each presents the shape an installed plugin
- * returns, so moving one out of the bundle is a packaging change, not a provider rewrite.
+ * The shared hosted-WebDriver engine. A provider plugin contributes the descriptor it drives
+ * through `agent-device/plugins/webdriver`; this package keeps the engine and its helpers.
  */
-export const BUNDLED_CLOUD_WEBDRIVER_PROVIDERS: readonly BundledCloudWebDriverProvider[] =
-  Object.freeze([awsDeviceFarmProvider]);
-
-export function bundledCloudWebDriverProvider(
-  provider: string | undefined,
-): BundledCloudWebDriverProvider | undefined {
-  return BUNDLED_CLOUD_WEBDRIVER_PROVIDERS.find(
-    (bundled) => bundled.declaration.provider === provider,
-  );
+export async function createCloudWebDriverRuntime(
+  options: CloudWebDriverRuntimeOptions,
+): Promise<CloudWebDriverRuntime> {
+  const runtime = await import('./runtime.ts');
+  return runtime.createCloudWebDriverRuntime(options);
 }

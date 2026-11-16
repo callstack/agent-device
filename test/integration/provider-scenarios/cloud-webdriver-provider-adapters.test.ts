@@ -1,21 +1,16 @@
-import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import {
   BROWSERSTACK_PROVIDER,
   browserStackWebDriver,
   createBrowserStackRuntime,
 } from './browserstack-runtime.ts';
+import { AWS_DEVICE_FARM_PROVIDER, createAwsDeviceFarmRuntime } from './aws-runtime.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  DeviceLease,
-  LeaseLifecycleContext,
-  ProviderDeviceRuntime,
-} from '@agent-device/contracts/device';
-import type { RunHostCommand } from '@agent-device/provider-webdriver';
+import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
@@ -28,9 +23,8 @@ import {
 } from './cloud-webdriver-test-server.ts';
 
 import testmu from '@agent-device/testmu';
-import { createPluginHost } from '@agent-device/plugins/host';
+import { createPluginHost, type RunHostCommand } from '@agent-device/plugins/host';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const CLIENT_VERSION = '0.20.3-test';
 
@@ -146,15 +140,12 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
 test('AWS Device Farm facade rejects device features it does not read at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
-    const runtime = runtimeFor(
-      await createBundledCloudWebDriverRuntimes({
-        env: { AWS_REGION: 'us-west-2' },
-        clientVersion: CLIENT_VERSION,
-        runHostCommand: host.run,
-      }),
-      CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    );
-    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const runtime = await createAwsDeviceFarmRuntime({
+      env: { AWS_REGION: 'us-west-2' },
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: host.run,
+    });
+    const lease = makeLease(AWS_DEVICE_FARM_PROVIDER);
     const context = awsContext(lease);
 
     try {
@@ -354,15 +345,12 @@ test('BrowserStack refuses a refused field on a repeat allocation of its live le
 test('AWS Device Farm facade uses the injected host-command capability for its full lifecycle', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
-    const runtime = runtimeFor(
-      await createBundledCloudWebDriverRuntimes({
-        env: { AWS_REGION: 'us-west-2' },
-        clientVersion: CLIENT_VERSION,
-        runHostCommand: host.run,
-      }),
-      CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    );
-    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
+    const runtime = await createAwsDeviceFarmRuntime({
+      env: { AWS_REGION: 'us-west-2' },
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: host.run,
+    });
+    const lease = makeLease(AWS_DEVICE_FARM_PROVIDER);
     try {
       const allocation = await runtime.leaseLifecycle.allocate?.(lease, awsContext(lease));
       assert.equal(allocation?.awsDeviceFarmSessionArn, host.sessionArn);
@@ -474,15 +462,6 @@ test('BrowserStack artifact lookup uses the released provider id without allocat
     assertAgentDeviceHeaders(server.calls[0]?.headers);
   });
 });
-
-function runtimeFor(
-  runtimes: readonly ProviderDeviceRuntime[],
-  provider: string,
-): ProviderDeviceRuntime {
-  const runtime = runtimes.find((candidate) => candidate.provider === provider);
-  assert.ok(runtime, `missing ${provider} runtime`);
-  return runtime;
-}
 
 function operationSupport(
   allocation: Record<string, unknown> | undefined,

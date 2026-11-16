@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "AWS Device Farm WebDriver provider for agent-device. Internal workspace package bundled into the published artifact.",
+  "description": "Shared hosted-WebDriver engine for agent-device provider plugins. Internal workspace package bundled into the published artifact.",
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
@@ -23,10 +23,6 @@
     "./plugin": {
       "types": "./src/plugin.ts",
       "default": "./src/plugin.ts"
-    },
-    "./connection-verification": {
-      "types": "./src/connection-verification.ts",
-      "default": "./src/connection-verification.ts"
     },
     "./android-snapshot": {
       "types": "./src/webdriver-android-source.ts",

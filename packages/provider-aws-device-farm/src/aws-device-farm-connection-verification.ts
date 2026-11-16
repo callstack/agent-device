@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { createAwsDeviceFarmCommandRunner } from './aws-device-farm.ts';
-import type { RunHostCommand } from './dependencies.ts';
+import type { RunHostCommand } from './run-host-command.ts';
 import type {
   ProviderConnectionResource,
   ProviderConnectionVerification,

@@ -4,7 +4,7 @@ import type {
   LeaseLifecycleContext,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
-import type { RunHostCommand } from '@agent-device/provider-webdriver';
+import type { RunHostCommand } from '@agent-device/plugins/host';
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,

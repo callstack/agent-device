@@ -1,6 +1,6 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStdoutAsync } from '@agent-device/test-kit';
+import { withCapturedStdoutAsync, pluginHome } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -32,6 +32,7 @@ import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { hasDeferredMetroConfig } from '../cli/commands/connection-metro-runtime.ts';
 import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';
+import { selectAwsDeviceFarmPlugin } from './test-utils/aws-device-farm-plugin-inventory.ts';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
@@ -298,7 +299,7 @@ test('connect proxy rejects remote-config and unknown provider combinations', as
         },
         client: createTestClient(),
       }),
-    /Supported providers: cloud, proxy, aws-device-farm/,
+    /Supported providers: cloud, proxy, limrun/,
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
@@ -737,6 +738,11 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-cloud-ttl-',
   );
+  // The AWS Device Farm capabilities a plugin declares are what earn the extended TTL, so the
+  // store declares them here the way the installed package does.
+  const { home } = pluginHome();
+  selectAwsDeviceFarmPlugin(home);
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
   fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
   seedConnectionState({
     stateDir,

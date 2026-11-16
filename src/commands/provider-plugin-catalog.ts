@@ -5,6 +5,11 @@ type ProviderPluginDeclaration = Readonly<{
 }>;
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
+  {
+    provider: 'aws-device-farm',
+    package: '@agent-device/aws-device-farm',
+    label: 'AWS Device Farm',
+  },
   { provider: 'browserstack', package: '@agent-device/browserstack', label: 'BrowserStack' },
   { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },

@@ -5,6 +5,16 @@ description: Drive AWS Device Farm remote-access sessions with agent-device.
 
 Use AWS Device Farm to run agent-device on hosted Android and iOS devices through remote-access WebDriver sessions. You need an AWS account with a Device Farm project and the AWS CLI installed. AWS Device Farm does not cover Vega OS: agent-device rejects a Vega Fire TV ARN. For Vega, use a local Vega Virtual Device (VVD).
 
+## Install the plugin
+
+Install the plugin on the host that runs the daemon:
+
+```bash
+agent-device plugins add @agent-device/aws-device-farm
+```
+
+If you used AWS Device Farm before upgrading, close its sessions and stop your daemon with `agent-device daemon stop --state-dir <path>`, then reconnect. If the plugin is missing, install it and retry the command.
+
 ## Set credentials and connect
 
 agent-device runs `aws devicefarm ...`, so it uses the AWS CLI credential provider chain and works with any non-interactive AWS CLI credential source in CI. You do not need `aws login`. See the [AWS CLI environment variable reference](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) for supported credential sources.

@@ -1,48 +1,22 @@
-import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
-import { buildCloudWebDriverBaseCapabilities } from './runtime.ts';
+import type { CloudWebDriverCapabilityOverrides } from '@agent-device/provider-webdriver/plugin';
+import {
+  buildCloudWebDriverBaseCapabilities,
+  releaseOnFailure,
+} from '@agent-device/provider-webdriver/plugin';
 import {
   readAwsArtifacts,
   type AwsDeviceFarmArtifact,
   type AwsDeviceFarmArtifactGroup,
 } from './aws-device-farm-artifacts.ts';
-import type { CloudWebDriverPlatform, CloudWebDriverPrepareSession } from './runtime.ts';
+import type {
+  CloudWebDriverPlatform,
+  CloudWebDriverPrepareSession,
+} from '@agent-device/provider-webdriver/plugin';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
-import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import { PROVIDER_PROFILE_FIELD_FLAGS } from '@agent-device/contracts/remote';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RunHostCommand } from './dependencies.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
-import { releaseOnFailure } from './webdriver-utils.ts';
-
-export const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
-  provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-  label: 'AWS Device Farm',
-  fields: {
-    providerApp: 'refused',
-    providerOsVersion: 'refused',
-    providerDeviceType: 'refused',
-    providerProject: 'refused',
-    providerBuild: 'refused',
-    providerSessionName: 'consumed',
-    providerDeviceOrientation: 'refused',
-    providerGeoLocation: 'refused',
-    providerTimezone: 'refused',
-    providerAppiumVersion: 'refused',
-    providerLanguage: 'refused',
-    providerLocale: 'refused',
-    providerNetworkProfile: 'refused',
-    providerCustomNetwork: 'refused',
-    providerNoResignApp: 'refused',
-    providerNetworkLogs: 'refused',
-    providerNetworkHosts: 'refused',
-    awsProjectArn: 'consumed',
-    awsDeviceArn: 'consumed',
-    awsAppArn: 'consumed',
-    awsRegion: 'consumed',
-    awsInteractionMode: 'consumed',
-  },
-};
+import type { RunHostCommand } from './run-host-command.ts';
 
 /** Each selector reads its flag first, then the agent-device variable, then the AWS CLI one. */
 const AWS_SELECTOR_VARIABLES = {

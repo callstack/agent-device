@@ -31,14 +31,11 @@ test('built-in providers register ahead of the store and an unconfigured Limrun 
 
   assert.deepEqual(
     composition.runtimes.map((runtime) => runtime.provider),
-    ['aws-device-farm', 'example'],
+    ['example'],
   );
   assert.deepEqual(
     composition.inventory.map(({ provider, source, state }) => [provider, source, state]),
-    [
-      ['aws-device-farm', 'builtin', 'active'],
-      ['example', 'store', 'active'],
-    ],
+    [['example', 'store', 'active']],
   );
   await composition.shutdown();
 });
@@ -58,7 +55,7 @@ test('daemon composition records Limrun as failed for a partial instance set and
 
   assert.deepEqual(
     composition.runtimes.map((runtime) => runtime.provider),
-    ['aws-device-farm', 'example'],
+    ['example'],
   );
   const limrun = composition.inventory.find(({ provider }) => provider === 'limrun');
   assert.equal(limrun?.state, 'failed');
@@ -68,7 +65,7 @@ test('daemon composition records Limrun as failed for a partial instance set and
 });
 
 test('a plugin claiming a built-in provider ID is recorded as failed and the built-in keeps the ID', async () => {
-  for (const provider of ['limrun', 'aws-device-farm']) {
+  for (const provider of ['limrun']) {
     const { home, env } = pluginHome();
     selectV2Plugin(home, 'example', v2RegistrationSource(provider));
     const composition = await createDaemonProviderRuntimeComposition({
@@ -79,10 +76,7 @@ test('a plugin claiming a built-in provider ID is recorded as failed and the bui
     assert.equal(plugin?.state, 'failed');
     assert.equal(plugin?.error?.reason, 'duplicate_provider');
     // An unconfigured Limrun claims its id without registering a runtime.
-    assert.equal(
-      composition.runtimes.filter((runtime) => runtime.provider === provider).length,
-      provider === 'limrun' ? 0 : 1,
-    );
+    assert.equal(composition.runtimes.filter((runtime) => runtime.provider === provider).length, 0);
     await composition.shutdown();
   }
 });
@@ -100,6 +94,23 @@ test('BrowserStack registers as an ordinary store plugin, not a built-in', async
       .filter(({ provider }) => provider === 'browserstack')
       .map(({ provider, source, state, package: name }) => [provider, source, state, name]),
     [['browserstack', 'store', 'active', '@agent-device/browserstack']],
+  );
+  await composition.shutdown();
+});
+
+test('AWS Device Farm registers as an ordinary store plugin, not a built-in', async () => {
+  const { home, env } = pluginHome();
+  selectV2Plugin(home, '@agent-device/aws-device-farm', v2RegistrationSource('aws-device-farm'));
+  const composition = await createDaemonProviderRuntimeComposition({
+    env: env,
+    cwd: process.cwd(),
+  });
+
+  assert.deepEqual(
+    composition.inventory
+      .filter(({ provider }) => provider === 'aws-device-farm')
+      .map(({ provider, source, state, package: name }) => [provider, source, state, name]),
+    [['aws-device-farm', 'store', 'active', '@agent-device/aws-device-farm']],
   );
   await composition.shutdown();
 });

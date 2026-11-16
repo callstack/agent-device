@@ -22,6 +22,9 @@ const setupHost = {
   env: {},
   options: {},
   clientVersion: '0.22.0-dev',
+  runHostCommand: async () => {
+    throw new Error('host command unused');
+  },
   createError: () => {
     throw new Error('setup must not use host services');
   },

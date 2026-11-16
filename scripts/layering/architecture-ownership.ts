@@ -308,6 +308,7 @@ export const ARCHITECTURE_OWNERSHIP = {
         'packages/platform-linux/',
         'packages/platform-vega/',
         'packages/platform-web/',
+        'packages/provider-aws-device-farm/',
         'packages/provider-browserstack/',
         'packages/provider-limrun/',
         'packages/provider-revyl/',
