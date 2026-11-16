@@ -256,6 +256,38 @@ const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest
       ]
     : [];
 
+const replayBackendOwnership: OwnershipRule = ({ file }) =>
+  (file.endsWith('.ts') &&
+    (file.startsWith('packages/maestro/src/') ||
+      file.startsWith('packages/maestro/test/conformance/') ||
+      file.startsWith('packages/replay-port/src/'))) ||
+  /^packages\/plugins\/src\/(?:registry|replay-backend|store|discovery|validate)\./.test(file)
+    ? [
+        reason(
+          'maestro-conformance',
+          file,
+          'own:replay-backend-conformance',
+          'managed replay backends retain the generated conformance oracle',
+        ),
+        reason(
+          'maestro-differential',
+          file,
+          'own:replay-backend-differential',
+          'installed replay backends retain live outcome and timing invariants',
+        ),
+        ...(file.startsWith('packages/maestro/test/conformance/')
+          ? [
+              reason(
+                'unit',
+                file,
+                'own:maestro-conformance-unit',
+                'the unit suite covers conformance selector projection and its shared helpers',
+              ),
+            ]
+          : []),
+      ]
+    : [];
+
 // Workspace package source (#1490 W0): bundled into the published artifact,
 // type-checked in the root graph, covered by Vitest's module graph, and
 // guarded by layering R11. Fallow scans it too — the W0 ignorePatterns entry
@@ -689,6 +721,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   macosCoverageOwnership,
   testAppOwnership,
   replayCompatOwnership,
+  replayBackendOwnership,
   daemonWireCompatOwnership,
   buildOwnership,
   nativeDupesOwnership,
