@@ -434,9 +434,9 @@ agent-device audit
 - `missing-name`: a control with no accessible name. An identifier, a resource id, or a field value is not a name; a label, an Android content description, a placeholder, or a named child is.
 - `covered-control`: a control or row the snapshot already marks `[covered]`.
 
-Controls are recognized by role (button, link, switch, checkbox, radio, slider, menu item, text and search fields). Generic clickable containers on Android are not evaluated. iOS visibility relies on the `hittable` fact. System bars and keyboard keys are skipped. A control that is the only child of a same-role control reports only through the parent.
+Controls are recognized by role (button, link, switch, checkbox, radio, slider, menu item, text and search fields). Generic clickable containers on Android are not evaluated. iOS visibility relies on the `hittable` fact. System bars and keyboard keys are skipped. When a control is the only child of a control with the same role, the child drops a finding only if the parent reports the same kind of finding.
 
-Like `find`, `audit` publishes only the refs it returns. The text prints each as `@eN~s<refsGeneration>`; press that pinned ref. A plain ref from before the audit stays refused after the frame expired, and an audit with no findings issues no refs. `--json` returns `findings`, `checks`, `limitations`, and `refsGeneration` (only with findings). `checks.snapshot` is `unknown` when the capture cannot report truncation, such as Appium page source.
+Like `find`, `audit` publishes only the refs it returns. The text prints each as `@eN~s<refsGeneration>`; press that pinned ref. A plain ref from before the audit stays refused after the frame expired, and an audit with no findings issues no refs. An audit with findings also ends the snapshot's complete frame, so take a new snapshot before you use refs that the audit did not return. `--json` returns `findings`, `checks`, `limitations`, and `refsGeneration` (only with findings). `checks.snapshot` is `unknown` when the capture cannot report truncation, such as Appium page source.
 
 ## Wait and alerts
 
