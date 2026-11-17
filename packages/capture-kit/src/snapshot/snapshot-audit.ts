@@ -49,6 +49,7 @@ type SizeRule =
   | { kind: 'unchecked'; limitation: string };
 
 type AuditScan = {
+  platform: AuditContext['platform'];
   byIndex: ReadonlyMap<number, SnapshotNode>;
   children: ChildrenByParent;
 };
@@ -59,6 +60,7 @@ type AuditScan = {
  */
 export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditContext): AuditResult {
   const scan: AuditScan = {
+    platform: context.platform,
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
   };
@@ -95,8 +97,12 @@ function controlFindings(
   scan: AuditScan,
   rule: SizeRule,
 ): AuditFinding[] {
-  if (node.ref === undefined || !isActionable(node)) return [];
-  const small = isInlineLink(node, role, scan) ? undefined : smallTargetFinding(node, role, rule);
+  const ownership = controlOwnership(node, scan);
+  if (node.ref === undefined || !isActionable(node, ownership)) return [];
+  const small =
+    ownership === 'platform-sized' || isInlineLink(node, role, scan)
+      ? undefined
+      : smallTargetFinding(node, role, rule);
   const unnamed = hasAccessibleName(node, role, scan) ? undefined : missingNameFinding(node, role);
   return [small, unnamed].filter((finding) => finding !== undefined);
 }
@@ -124,15 +130,26 @@ function controlRole(node: SnapshotNode): string | undefined {
   return CONTROL_ROLES.find(([suffix]) => type.endsWith(suffix))?.[1];
 }
 
-/**
- * Visible, enabled, not already proven unreachable by position, and owned by the app: system bars
- * and keyboard keys are the platform's controls.
- */
-function isActionable(node: SnapshotNode): boolean {
+type ControlOwnership = 'app' | 'platform-sized' | 'system';
+
+function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership {
+  if (node.systemBar !== undefined || node.keyboardOwned === true) return 'system';
+  if (scan.platform !== 'ios') return 'app';
+  if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
+  const visited = new Set<number>();
+  let ancestor = parentOf(node, scan);
+  while (ancestor && !visited.has(ancestor.index)) {
+    if (isPersistentChromeKind(ancestor.type)) return 'platform-sized';
+    visited.add(ancestor.index);
+    ancestor = parentOf(ancestor, scan);
+  }
+  return 'app';
+}
+
+function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean {
   return (
     isPositiveFiniteRect(node.rect) &&
-    node.systemBar === undefined &&
-    node.keyboardOwned !== true &&
+    ownership !== 'system' &&
     node.enabled !== false &&
     node.visibleToUser !== false &&
     node.hittable !== false &&
@@ -304,9 +321,12 @@ const PERSISTENT_CHROME_KINDS = new Set([
   'bottomnavigationview',
 ]);
 
+function isPersistentChromeKind(kind: string | undefined): boolean {
+  return PERSISTENT_CHROME_KINDS.has(normalizeType(kind ?? '').replaceAll('-', ''));
+}
+
 function isScrollableChromeOcclusion(node: SnapshotNode, scan: AuditScan): boolean {
-  if (!PERSISTENT_CHROME_KINDS.has(normalizeType(node.coveredBy?.kind ?? '').replaceAll('-', '')))
-    return false;
+  if (!isPersistentChromeKind(node.coveredBy?.kind)) return false;
   const visited = new Set<number>();
   let ancestor = parentOf(node, scan);
   while (ancestor && !visited.has(ancestor.index)) {

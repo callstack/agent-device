@@ -418,3 +418,37 @@ test('keeps a child under an overlay when its covered row is excluded as scroll 
   ]).findings;
   expect(summarize(findings)).toEqual(['covered-control @e2']);
 });
+
+test('skips UIKit sheet grabbers by captured class without matching their label', () => {
+  const small = { x: 0, y: 0, width: 73, height: 24 };
+  const findings = audit([
+    node(1, { role: '_UIGrabber', label: 'Sheet Grabber', value: 'Expanded', rect: small }),
+    node(2, { role: '_UIGrabber', label: 'Poignée', rect: small }),
+    node(3, { subrole: '_UIGrabber', rect: small }),
+    node(4, { label: 'Sheet Grabber', rect: small }),
+  ]).findings;
+  expect(summarize(findings)).toEqual(['small-target @e4']);
+});
+
+test.each(['NavigationBar', 'Toolbar', 'TabBar'])(
+  'skips iOS %s target size but keeps missing names and app content',
+  (type) => {
+    const small = { x: 0, y: 0, width: 42.2, height: 42.2 };
+    const nodes = [
+      node(0, { type, hittable: false }),
+      node(1, { type: 'Other', parentIndex: 0 }),
+      node(2, { parentIndex: 1, label: 'Cancel', rect: { ...small, width: 50.6 } }),
+      node(3, { parentIndex: 1, label: 'Add', rect: small }),
+      node(4, { parentIndex: 1, identifier: 'unnamed-bar-item', rect: small }),
+      node(5, { label: 'App action', rect: small }),
+    ];
+    expect(summarize(audit(nodes).findings)).toEqual(['missing-name @e4', 'small-target @e5']);
+    expect(summarize(audit(nodes, ANDROID).findings)).toEqual([
+      'small-target @e2',
+      'small-target @e3',
+      'small-target @e4',
+      'missing-name @e4',
+      'small-target @e5',
+    ]);
+  },
+);
