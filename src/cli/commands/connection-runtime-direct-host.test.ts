@@ -42,7 +42,7 @@ test('direct materialization uses supplied host store without an ambient command
     }),
   );
   const host = { cwd: home, env: { AGENT_DEVICE_HOME: home } };
-  const requests: Array<{ command: string; flags?: Record<string, unknown> }> = [];
+  const requests: Array<{ command: string; meta?: { leaseTtlMs?: number } }> = [];
   const client = createAgentDeviceClient(
     {},
     {
@@ -83,5 +83,5 @@ test('direct materialization uses supplied host store without an ambient command
   assert.equal(result.flags.leaseId, 'lease-1');
   assert.equal(requests.length, 1);
   assert.equal(requests[0]?.command, 'lease_allocate');
-  assert.equal(requests[0]?.flags?.ttlMs, REMOTE_LEASE_IDLE_TTL_MS);
+  assert.equal(requests[0]?.meta?.leaseTtlMs, REMOTE_LEASE_IDLE_TTL_MS);
 });
