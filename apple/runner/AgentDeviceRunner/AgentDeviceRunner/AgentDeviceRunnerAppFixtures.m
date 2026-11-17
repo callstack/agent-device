@@ -435,6 +435,23 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   self.alertActivationBusyBackstop = nil;
 }
 
+// Places a keyboard fixture's field below `above`, and the label that answers what its controls did
+// below the field.
+static void AgentDeviceAddKeyboardFieldWithAnswer(UIView *view, UITextField *field, UILabel *answer, UIView *above) {
+  field.translatesAutoresizingMaskIntoConstraints = NO;
+  answer.translatesAutoresizingMaskIntoConstraints = NO;
+  [view addSubview:field];
+  [view addSubview:answer];
+  [NSLayoutConstraint activateConstraints:@[
+    [field.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
+    [field.topAnchor constraintEqualToAnchor:above.bottomAnchor constant:24],
+    [field.widthAnchor constraintEqualToConstant:240],
+    [field.heightAnchor constraintEqualToConstant:44],
+    [answer.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
+    [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
+  ]];
+}
+
 // The keyboard counterpart of the busy alert: the field starts the same never-ending UIView animation
 // when it takes focus, so XCTest sees work in flight for as long as the keyboard is up. Its Done
 // accessory and its return key record whether they landed while the app was still busy. The backstop
@@ -928,21 +945,10 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     [field addTarget:self
                   action:@selector(keyboardBusyReturnPressed)
         forControlEvents:UIControlEventEditingDidEndOnExit];
-    field.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:field];
     UILabel *answer = [[UILabel alloc] init];
     answer.text = @"Unanswered";
     answer.accessibilityIdentifier = @"agent-device-keyboard-busy-answer";
-    answer.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:answer];
-    [NSLayoutConstraint activateConstraints:@[
-      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
-      [field.widthAnchor constraintEqualToConstant:240],
-      [field.heightAnchor constraintEqualToConstant:44],
-      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
-    ]];
+    AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
     self.keyboardBusyField = field;
     self.keyboardBusyAnswer = answer;
   }
@@ -962,7 +968,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     UILabel *answer = [[UILabel alloc] init];
     answer.text = @"Unanswered";
     answer.accessibilityIdentifier = @"agent-device-keyboard-done-return-answer";
-    answer.translatesAutoresizingMaskIntoConstraints = NO;
     __weak UITextField *weakField = field;
     __weak UILabel *weakAnswer = answer;
     [field addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
@@ -987,17 +992,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       ];
       field.inputAccessoryView = accessory;
     }
-    field.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:field];
-    [self.view addSubview:answer];
-    [NSLayoutConstraint activateConstraints:@[
-      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
-      [field.widthAnchor constraintEqualToConstant:240],
-      [field.heightAnchor constraintEqualToConstant:44],
-      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
-    ]];
+    AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {
