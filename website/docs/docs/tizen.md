@@ -108,5 +108,6 @@ Not supported yet: system buttons (`home`, menu, volume, and channel), `network 
 - Snapshots are read from the DOM. Labels come from `aria-label`, `alt`, `title`, or own text. Rects
   are CSS pixels. The screenshot magnifies them by the page's `visualViewport.scale`: a `width=1280`
   meta viewport on a 1920x1080 TV gives 1.5. `screenshot --crop-on` applies that scale, and refuses
-  a page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
-  enter iframes or shadow roots.
+  a page whose browser has no `visualViewport` or whose visual viewport is panned.
+  `screenshot --overlay-refs` draws ref boxes at the same scale; without one it draws them 1:1. The
+  walk does not enter iframes or shadow roots.

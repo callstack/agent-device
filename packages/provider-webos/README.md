@@ -116,8 +116,9 @@ in `open`, `power`. webOS has separate Play and Pause key codes and no play-paus
   1920x1080 TV, an app at `"resolution": "1280x720"` reports 1.5 yet fills only the top-left
   1280x720 of the capture. `screenshot --crop-on` scales rects by the page's `visualViewport.scale`,
   which is 1 because webOS ignores the meta viewport, and clips the crop to the page. It refuses a
-  page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
-  enter iframes or shadow roots, so overlays rendered there (for example a dev-server error overlay)
+  page whose browser has no `visualViewport` or whose visual viewport is panned.
+  `screenshot --overlay-refs` draws ref boxes at the same scale and stops them at the page edge. The
+  walk does not enter iframes or shadow roots, so overlays rendered there (for example a dev-server error overlay)
   appear in screenshots but not in snapshots.
 - **`click`, `press`, `fill` and `focus` refuse a control marked `[covered]`.** A tap at its
   centre would land on the element on top, such as a card's own pressable area. `snapshot -i`

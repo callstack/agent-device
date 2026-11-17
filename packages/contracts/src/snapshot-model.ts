@@ -7,6 +7,7 @@ import type {
   SnapshotQualityNote,
   SnapshotQualityVerdict,
   SnapshotRefMinting,
+  SnapshotCaptureScale,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import {
@@ -136,6 +137,12 @@ export type SnapshotState = {
    * producer measured instead of inferring one from the largest rect still on screen.
    */
   viewport?: SnapshotViewportSize;
+  /**
+   * Screenshot pixels per rect unit, when the producer published one (a TV app page's CSS px). The
+   * state carries it beside `viewport` so every projection of a stored tree onto a capture uses the
+   * producer's scale. See {@link SnapshotCaptureScale}.
+   */
+  captureScale?: SnapshotCaptureScale;
   /**
    * iOS: this capture's own command found the session app out of foreground and the runner
    * activated it before answering, so an earlier observation in the session described whatever held

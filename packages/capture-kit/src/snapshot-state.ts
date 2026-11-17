@@ -19,6 +19,7 @@ import {
   type PresentedSurface,
   type RawSnapshotNode,
   type SnapshotKeyboardBandFact,
+  type SnapshotCaptureScale,
   type SnapshotViewportSize,
   type SnapshotQualityNote,
 } from '@agent-device/kernel/snapshot';
@@ -75,6 +76,8 @@ export function buildSnapshotState(
     keyboard?: SnapshotKeyboardBandFact;
     /** The box the producer measured the rects in (#3182), carried to the response that reads this state. */
     viewport?: SnapshotViewportSize;
+    /** Screenshot pixels per rect unit, carried beside `viewport` to every projection of this state. */
+    captureScale?: SnapshotCaptureScale;
     /**
      * iOS: the producer's reading of a modal presentation over the app (#3565), decided on the
      * acquired tree so every projection of one screen carries the same value.
@@ -129,13 +132,22 @@ export function buildSnapshotState(
     ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
     ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),
-    ...(data.viewport ? { viewport: data.viewport } : {}),
+    ...snapshotStateGeometry(data),
     presentationKey: buildSnapshotPresentationKey(presentation),
     presentation,
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
     // or filtered view, preserve that output contract but avoid pretending it is safe for
     // route-level comparisons on the next capture.
     comparisonSafe: isAndroidComparisonSafeSnapshot(data?.backend, flags),
+  };
+}
+
+function snapshotStateGeometry(
+  data: Readonly<{ viewport?: SnapshotViewportSize; captureScale?: SnapshotCaptureScale }>,
+): Pick<SnapshotState, 'viewport' | 'captureScale'> {
+  return {
+    ...(data.viewport ? { viewport: data.viewport } : {}),
+    ...(data.captureScale ? { captureScale: data.captureScale } : {}),
   };
 }
 
