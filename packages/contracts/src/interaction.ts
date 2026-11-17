@@ -331,10 +331,6 @@ export type SettleObservation = {
   settled: boolean;
   waitedMs: number;
   captures: number;
-  /**
-   * The quiet window the settle held: the requested or producer default window, or, when the
-   * internal adaptive early exit settled the run, the span its confirming pair actually held.
-   */
   quietMs: number;
   timeoutMs: number;
   /**

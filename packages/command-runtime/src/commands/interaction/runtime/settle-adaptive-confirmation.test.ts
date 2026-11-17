@@ -3,6 +3,8 @@ import { test } from 'vitest';
 import type { SnapshotProvenance, SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
+import { runStableCaptureLoop } from './stable-capture.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { createSettleDevice, welcomeSnapshot } from './__tests__/settle-device-fixtures.ts';
 import {
   elementCatalogTabSnapshot,
@@ -83,9 +85,8 @@ test('a changed capture that the next capture confirms settles before the quiet 
   assert.equal(adaptive.settled, true);
   assert.equal(adaptive.captures, 2);
   assert.ok(adaptive.waitedMs < 200, `adaptive held ${adaptive.waitedMs}ms`);
-  // The run reports the span the confirming pair held, not the window it never waited out.
-  assert.equal(adaptive.quietMs, adaptive.waitedMs);
-  assert.ok(quiet.quietMs >= DEFAULT_QUIET_MS);
+  // The response shape is unchanged: quietMs stays the priced window, waitedMs shows the early exit.
+  assert.equal(adaptive.quietMs, quiet.quietMs);
   assert.ok(adaptive.diff?.lines.some((line) => line.text.includes('Welcome back!')));
   assert.equal(quiet.settled, true);
   assert.ok(quiet.waitedMs >= DEFAULT_QUIET_MS, `quiet window held ${quiet.waitedMs}ms`);
@@ -311,4 +312,32 @@ test('a rootless broad replacement the latch could not judge yet keeps the quiet
 
   assert.equal(adaptive.settled, true);
   assert.ok(adaptive.waitedMs >= DEFAULT_QUIET_MS, `adaptive held ${adaptive.waitedMs}ms`);
+});
+
+test('an adaptive exit keeps quietMs at the configured window and carries the held span apart', async () => {
+  // Public shape: the settle reports the window it priced, never the confirmation span.
+  const settle = await press({ loop: [relabeled()], adaptive: true, quietMs: 700 });
+
+  assert.equal(settle.settled, true);
+  assert.equal(settle.quietMs, 700);
+  assert.ok(settle.waitedMs < 700, `adaptive held ${settle.waitedMs}ms`);
+
+  // Loop result: the span the confirming pair held rides on its own internal field.
+  const outcome = await runStableCaptureLoop(
+    createSettleDevice({
+      stored: welcomeSnapshot(),
+      captureSnapshot: () => ({ snapshot: relabeled() }),
+    }),
+    { session: 'default' },
+    {
+      quietMs: 700,
+      timeoutMs: 5_000,
+      broadTransitionBaseline: surfaceScopedNodes(welcomeSnapshot()),
+      adaptiveConfirmation: { baselineFresh: true },
+    },
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.equal(outcome.quietMs, 700);
+  assert.equal(outcome.heldQuietMs, outcome.waitedMs);
 });

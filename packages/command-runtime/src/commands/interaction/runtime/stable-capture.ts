@@ -85,10 +85,14 @@ export type StableCaptureLoopResult = {
   /**
    * The quiet window the run was holding when it returned: the caller's, or the default resolved
    * from the last capture that paid it. A run that completed no capture never priced a window, so
-   * it reports the general default it started from. A run the adaptive early exit settled reports
-   * the span its confirming pair actually held instead.
+   * it reports the general default it started from.
    */
   quietMs: number;
+  /**
+   * Set only when the internal adaptive early exit settled the run: how long its confirming pair
+   * held still. `quietMs` stays the window the run priced, so the response shape is unchanged.
+   */
+  heldQuietMs?: number;
   /** The most recent completed capture, settled or not. */
   lastCapture?: CapturedSnapshot;
   /** A capture threw; the run ended there, without a verdict. */
@@ -215,14 +219,16 @@ export async function runStableCaptureLoop(
           deadlineMs,
           captures,
         });
-    if (step.settled) {
-      quietMs = step.heldQuietMs ?? quietMs;
-      return result(true, false, nowMs - start);
-    }
+    if (step.settled) return { ...result(true, false, nowMs - start), ...heldSpan(step) };
     if (step.delayMs <= 0) break;
     await sleep(runtime, step.delayMs);
   }
   return result(false, false, now(runtime) - start);
+}
+
+/** The confirming pair's span, carried only by a run the adaptive early exit settled. */
+function heldSpan(step: { heldQuietMs?: number }): { heldQuietMs?: number } {
+  return step.heldQuietMs === undefined ? {} : { heldQuietMs: step.heldQuietMs };
 }
 
 /**
