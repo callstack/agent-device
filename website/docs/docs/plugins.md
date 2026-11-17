@@ -2,7 +2,7 @@
 title: Plugins
 ---
 
-Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
+Provider plugins add device providers that agent-device does not bundle, such as [BrowserStack](/docs/browserstack), [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
 
 ```bash
 agent-device plugins add @example/agent-device-provider
@@ -13,9 +13,9 @@ agent-device plugins remove @example/agent-device-provider
 
 `agent-device help connect` and `agent-device help remote` identify known optional providers as
 `plugin, install separately` and show their installation commands, even before you install them.
-For example, TestMu AI requires `agent-device plugins add @agent-device/testmu`.
+For example, BrowserStack requires `agent-device plugins add @agent-device/browserstack`, and TestMu AI requires `agent-device plugins add @agent-device/testmu`.
 
-If you run `agent-device connect testmu` without its plugin, the error gives that installation
+If you run `agent-device connect browserstack` or `agent-device connect testmu` without its plugin, the error gives that installation
 command and tells you to retry your original command. With `--json`, the error has
 `details.reason: plugin-not-installed`, `details.package`, and `details.installCommand`.
 If the plugin is selected but unavailable, the reason is `plugin-unavailable`; run
@@ -51,7 +51,7 @@ A missing installation returns `plugin-not-installed` with the package and insta
 
 ## See which providers are registered
 
-`agent-device daemon status` lists every provider the running daemon registered: the bundled ones (BrowserStack, AWS Device Farm, and Limrun when it is configured), then installed plugins. With `--json`, each entry has:
+`agent-device daemon status` lists every provider the running daemon registered: the bundled ones (AWS Device Farm, and Limrun when it is configured), then installed plugins such as BrowserStack. With `--json`, each entry has:
 
 ```json
 {

@@ -37,6 +37,7 @@
   "include": [".", "../../src/**/*", "../../packages/command-registry/src/global.d.ts"],
   "exclude": ["../../src/**/*.test.ts", "../../src/**/__tests__/**", "../../src/**/*.fixtures.ts"],
   "references": [
+    { "path": "../../packages/build-config" },
     { "path": "../../packages/ad-replay" },
     { "path": "../../packages/ad-script" },
     { "path": "../../packages/apple-runner" },
@@ -64,6 +65,7 @@
     { "path": "../../packages/provider-limrun" },
     { "path": "../../packages/provider-revyl" },
     { "path": "../../packages/provider-testmu" },
+    { "path": "../../packages/provider-browserstack" },
     { "path": "../../packages/provider-webos" },
     { "path": "../../packages/provider-tizen" },
     { "path": "../../packages/provider-webdriver" },

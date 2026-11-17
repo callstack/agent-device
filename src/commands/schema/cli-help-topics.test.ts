@@ -411,7 +411,10 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /agent-device connect cloud discovers the agent-device cloud profile/);
   assert.match(help, /Direct proxy: agent-device connect proxy/);
   assert.match(help, /stores the shared proxy profile and client identity/);
-  assert.match(help, /BrowserStack: agent-device connect browserstack/);
+  assert.match(
+    help,
+    /BrowserStack \(plugin, install separately\): agent-device connect browserstack/,
+  );
   assert.match(help, /AWS Device Farm: agent-device connect aws-device-farm/);
   assert.match(help, /Limrun: agent-device connect limrun/);
   assert.match(help, /It does not create an App Automate session/);

@@ -9,18 +9,43 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
-import { verifyBrowserStackConnection } from '@agent-device/provider-webdriver/connection-verification';
+import { verifyBrowserStackConnection } from '@agent-device/browserstack/connection-verification';
+import browserstack from '@agent-device/browserstack';
+import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { resolveConnectProviderProfile } from '../connection/connect-provider-adapters.ts';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  pluginHome,
+  selectV2Plugin,
+  v2RegistrationSource,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
+import manifest from '@agent-device/browserstack/package.json' with { type: 'json' };
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
 
 bindTestCommandHost();
 
-vi.mock('@agent-device/provider-webdriver/connection-verification', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@agent-device/provider-webdriver/connection-verification')
-  >()),
+const CREDENTIALS = {
+  BROWSERSTACK_USERNAME: 'browser-user',
+  BROWSERSTACK_ACCESS_KEY: 'browser-key',
+};
+
+vi.mock('@agent-device/browserstack/connection-verification', () => ({
   verifyBrowserStackConnection: vi.fn(),
+}));
+vi.mock('@agent-device/plugins/load', () => ({
+  withPluginConnection: async (
+    _provider: string,
+    _builtinProviders: readonly string[],
+    _env: NodeJS.ProcessEnv,
+    runConnection: (connection: PluginConnectionCallbacks) => Promise<unknown>,
+  ) => {
+    const { connections } = await resolveProviderPlugins([
+      { source: 'store', package: manifest.name, load: () => browserstack() },
+    ]);
+    return await runConnection(connections.get('browserstack')!);
+  },
 }));
 
 afterEach(() => {
@@ -30,7 +55,22 @@ afterEach(() => {
 
 const mockedVerifyBrowserStackConnection = vi.mocked(verifyBrowserStackConnection);
 
+let pluginHomeDir = '';
+
 beforeEach(() => {
+  const { home } = pluginHome();
+  pluginHomeDir = home;
+  // The store declares the plugin installed with BrowserStack's capabilities; the mocked loader
+  // above supplies the workspace factory those assertions exercise.
+  selectV2Plugin(
+    home,
+    manifest.name,
+    v2RegistrationSource('browserstack', {
+      extra: `connection: { capabilities: ${JSON.stringify(browserstack().connection?.capabilities)}, resolve() {}, verify() {} },`,
+      credentials: '{ variables: ["BROWSERSTACK_USERNAME", "BROWSERSTACK_ACCESS_KEY"] }',
+    }),
+  );
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
   mockedVerifyBrowserStackConnection.mockImplementation(async (options) => ({
     provider: 'browserstack',
     service: 'BrowserStack',
@@ -111,7 +151,7 @@ test('connect browserstack canonicalizes the app scheme and refuses a malformed 
           provider: 'browserstack',
           stateDir,
           cwd: tempRoot,
-          env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
+          env: CREDENTIALS,
           flags: { json: false, help: false, version: false, ...flags, providerApp: app },
         }),
         (error: unknown) => {
@@ -213,13 +253,15 @@ test('connect browserstack refuses AWS Device Farm flags', async () => {
         provider: 'browserstack',
         stateDir: path.join(tempRoot, '.state'),
         cwd: tempRoot,
-        env: {},
+        env: CREDENTIALS,
         flags: {
           json: false,
           help: false,
           version: false,
           platform: 'android',
           device: 'Google Pixel 8',
+          providerOsVersion: '14.0',
+          providerApp: 'bs://app-id',
           awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
         },
       }),
@@ -236,7 +278,42 @@ test('connect browserstack refuses AWS Device Farm flags', async () => {
   }
 });
 
-test('connect JSON preserves BrowserStack workflow notes from human output', async () => {
+test('connect browserstack refuses --provider-device-type before saving a profile', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-device-type-');
+
+  try {
+    await assert.rejects(
+      resolveConnectProviderProfile({
+        provider: 'browserstack',
+        stateDir: path.join(tempRoot, '.state'),
+        cwd: tempRoot,
+        env: CREDENTIALS,
+        flags: {
+          json: false,
+          help: false,
+          version: false,
+          platform: 'android',
+          device: 'Google Pixel 8',
+          providerOsVersion: '14.0',
+          providerApp: 'bs://app-id',
+          providerDeviceType: 'real',
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.match(error.message, /^--provider-device-type is not supported by /);
+        assert.equal(error.details?.provider, 'browserstack');
+        return true;
+      },
+    );
+    assert.equal(fs.existsSync(path.join(tempRoot, '.state')), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect browserstack JSON preserves the workflow notes from human output', async () => {
   const result = await runCliCapture(
     [
       'connect',
@@ -253,10 +330,7 @@ test('connect JSON preserves BrowserStack workflow notes from human output', asy
       '--json',
     ],
     {
-      env: {
-        BROWSERSTACK_USERNAME: 'browser-user',
-        BROWSERSTACK_ACCESS_KEY: 'browser-key',
-      },
+      env: { ...CREDENTIALS, AGENT_DEVICE_HOME: pluginHomeDir },
       stateDirPrefix: 'agent-device-connect-browserstack-json-',
     },
   );
@@ -289,9 +363,7 @@ test('every command BrowserStack connect emits resolves back to the connection t
     '--state-dir',
     stateDir,
   ];
-  const captureOptions = {
-    env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
-  };
+  const captureOptions = { env: { ...CREDENTIALS, AGENT_DEVICE_HOME: pluginHomeDir } };
 
   try {
     const json = await runCliCapture(
