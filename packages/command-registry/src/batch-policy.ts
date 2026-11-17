@@ -3,6 +3,8 @@ import { commandDescriptors } from './registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
 
+export { normalizeBatchCommandName };
+
 /**
  * The exact set of command names exposed through `batch`, as a narrow union.
  *

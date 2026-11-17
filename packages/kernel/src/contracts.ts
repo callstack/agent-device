@@ -266,6 +266,8 @@ export type ScriptDeliveryReceipt = {
 /** How many `failures` one receipt may name; a receipt naming more authorizes nothing. */
 const SCRIPT_DELIVERY_RECEIPT_MAX_FAILURES = 1000;
 
+const SCRIPT_DELIVERY_RECEIPT_MAX_STRING_LENGTH = 4096;
+
 /**
  * Reads the delivery receipt a response names (ADR 0016, #4595). A receipt the field contract does
  * not describe in FULL authorizes nothing and answers `undefined`: a half-shaped `version`, `close`
@@ -281,8 +283,7 @@ export function readScriptDeliveryReceipt(
   const receipt = body?.scriptDeliveryReceipt;
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return undefined;
   const { publicationId, version, close, failures } = receipt as Partial<ScriptDeliveryReceipt>;
-  if (typeof publicationId !== 'string' || publicationId.trim() !== publicationId) return undefined;
-  if (publicationId.length === 0) return undefined;
+  if (!isReceiptPublicationId(publicationId)) return undefined;
   if (version !== undefined && !isScriptVersionArtifact(version, publicationId)) return undefined;
   if (close !== undefined && !isReceiptClose(close)) return undefined;
   if (failures !== undefined && !readsAsReceiptFailures(failures, publicationId)) return undefined;
@@ -294,6 +295,19 @@ export function readScriptDeliveryReceipt(
       ? {}
       : { failures: (failures as readonly ScriptDeliveryFailure[]).slice() }),
   };
+}
+
+function isReceiptPublicationId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim() === value &&
+    value.length > 0 &&
+    withinReceiptStringBudget(value)
+  );
+}
+
+function withinReceiptStringBudget(value: string): boolean {
+  return value.length <= SCRIPT_DELIVERY_RECEIPT_MAX_STRING_LENGTH;
 }
 
 function isReceiptClose(close: unknown): close is { step: number } {
@@ -315,7 +329,12 @@ function readsAsReceiptFailures(
   }
   return failures.every((failure) => {
     const read = readScriptDeliveryFailure({ scriptDeliveryFailure: failure });
-    return read !== undefined && read.publicationId === publicationId;
+    if (read === undefined || read.publicationId !== publicationId) return false;
+    return (
+      withinReceiptStringBudget(read.message) &&
+      withinReceiptStringBudget(read.hint) &&
+      (read.cause === undefined || withinReceiptStringBudget(read.cause))
+    );
   });
 }
 
@@ -330,6 +349,7 @@ function isScriptVersionArtifact(
     artifact.field === 'savedScript' &&
     artifact.artifactType === 'session-script' &&
     typeof artifact.artifactId === 'string' &&
+    withinReceiptStringBudget(artifact.artifactId) &&
     artifact.scriptPublicationId === publicationId &&
     Number.isSafeInteger(artifact.scriptRevision) &&
     (artifact.scriptRevision as number) > 0

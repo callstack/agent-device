@@ -19,13 +19,13 @@ import {
   DEFAULT_BATCH_MAX_STEPS,
   assertBatchStepCount,
   isValidBatchMaxSteps,
-  normalizeBatchCommandName,
   parseBatchStepRuntime,
 } from '@agent-device/contracts/command';
 import {
   BATCH_DAEMON_STEP_KEYS,
   INHERITED_PARENT_FLAG_KEYS,
   assertBatchRuntimeCommandAllowed,
+  normalizeBatchCommandName,
 } from './batch-policy.ts';
 import { resolveCommandRecordingEffect } from './registry.ts';
 

@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import os from 'node:os';
-import { normalizeBatchCommandName } from '@agent-device/contracts/command';
+import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';

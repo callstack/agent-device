@@ -3,7 +3,12 @@ import http from 'node:http';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import type { DaemonBatchStep, DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import {
+  readScriptDeliveryFailure,
+  readScriptDeliveryReceipt,
+  type DaemonArtifact,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 import {
   closeLoopbackServer,
   createTestHostEnvironment,
@@ -598,6 +603,12 @@ test('a failed batch that names no position delivers the version and discloses, 
     v2: 'open Demo\nwait\nclose\n',
   });
   const id = await opened(baseUrl, stateDir, destination);
+  const failure = {
+    reason: 'script_delivery_failed',
+    publicationId: id,
+    message: 'The daemon could not write a version.',
+    hint: 'Keep the previous recording.',
+  };
   const settled = await settleScriptDeliveryReceiptOfFailure(
     { baseUrl, token: 't' },
     batchRequest([
@@ -607,15 +618,229 @@ test('a failed batch that names no position delivers the version and discloses, 
     {
       code: 'COMMAND_FAILED' as const,
       message: 'original batch failure',
-      details: receipt(id, { version: script('v2', 2, id), close: { step: 2 } }),
+      details: receipt(id, {
+        version: script('v2', 2, id),
+        close: { step: 2 },
+        failures: [failure],
+      }),
     },
     stateDir,
     downloadRemoteArtifact,
   );
   expect(settled.message).toBe('original batch failure');
   expect(settled.details?.scriptDeliveryReceipt).toBeDefined();
+  expect(settled.details?.scriptDeliveryFailure).toEqual(failure);
+  expect(settled.details?.warnings).toEqual([`${failure.message} ${failure.hint}`]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\nclose\n');
   expect(records(stateDir)).toHaveLength(1);
+});
+
+test('script artifacts aimed at the disclosure fields erase neither a failure nor a publication', async () => {
+  const { stateDir, destination } = world();
+  const baseUrl = await artifactServer({
+    'open-v1': 'open Demo\n',
+    'close-v2': { refused: true },
+    ghost: 'not a script artifact\n',
+  });
+  const id = await opened(baseUrl, stateDir, destination);
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    batchRequest([
+      { command: 'wait', input: {} },
+      { command: 'close', input: {} },
+    ]),
+    {
+      scriptDeliveryReceipt: {
+        publicationId: id,
+        version: script('close-v2', 2, id),
+        close: { step: 2 },
+      },
+      artifacts: [
+        { ...script('close-v2', 2, id), field: 'warnings' },
+        { ...script('close-v2', 2, id), field: 'scriptDeliveryFailure' },
+        { ...script('ghost', 9, id), field: 'warnings', artifactId: 7 },
+        { ...script('ghost', 9, id), field: 'scriptDeliveryFailure', artifactType: 'screenshot' },
+      ],
+    },
+  );
+
+  const data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
+  expect(response.ok).toBe(true);
+  const failure = data.scriptDeliveryFailure as { reason: string; cause?: string };
+  expect(failure.reason).toBe('script_delivery_failed');
+  expect(failure.cause).toBe('script_download_failed');
+  expect(data.warnings).toEqual([expect.stringContaining('could not be saved')]);
+  expect(data.savedScript).toBeUndefined();
+  expect(data.artifacts).toEqual([]);
+  // The file keeps the version it had, and the close the plan carries still retires the record.
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  expect(records(stateDir)).toEqual([]);
+});
+
+test('a malformed script artifact cannot erase the version a valid one just published', async () => {
+  const { stateDir, destination } = world();
+  const baseUrl = await artifactServer({
+    'open-v1': 'open Demo\n',
+    'close-v2': 'open Demo\nwait\nclose\n',
+  });
+  const id = await opened(baseUrl, stateDir, destination);
+
+  const response = await answer(
+    baseUrl,
+    stateDir,
+    batchRequest([
+      { command: 'wait', input: {} },
+      { command: 'close', input: {} },
+    ]),
+    {
+      scriptDeliveryReceipt: {
+        publicationId: id,
+        version: script('close-v2', 2, id),
+        close: { step: 2 },
+      },
+      artifacts: [
+        script('close-v2', 2, id),
+        { ...script('ghost', 9, id), field: 'savedScript', artifactType: 'screenshot' },
+        { ...script('ghost', 9, id), field: 'scriptDeliveryFailure' },
+        { ...script('ghost', 9, id), field: 'warnings' },
+      ],
+    },
+  );
+
+  const data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
+  expect(data.savedScript).toBe(destination);
+  expect(data.scriptDeliveryFailure).toBeUndefined();
+  expect(data.warnings).toBeUndefined();
+  expect(data.artifacts).toEqual([
+    expect.objectContaining({ artifactId: 'close-v2', localPath: destination }),
+  ]);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\nclose\n');
+  expect(records(stateDir)).toEqual([]);
+});
+
+test.each(['success', 'failure'])(
+  'an unreadable receipt on %s discloses and delivers nothing',
+  async (outcome) => {
+    const { stateDir, destination } = world();
+    const baseUrl = await artifactServer({ 'open-v1': 'open Demo\n', v2: 'untrusted\n' });
+    const id = await opened(baseUrl, stateDir, destination);
+
+    const plan = batchRequest([{ command: 'wait', input: {} }]);
+    const invalid = { scriptDeliveryReceipt: { publicationId: id, version: 'close-v2' } };
+    let data: Record<string, unknown>;
+    if (outcome === 'success') {
+      const response = await answer(baseUrl, stateDir, plan, {
+        ...invalid,
+        artifacts: [script('v2', 2, id)],
+      });
+      expect(response.ok).toBe(true);
+      data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
+    } else {
+      const { settleScriptDeliveryReceiptOfFailure, downloadRemoteArtifact } =
+        await import('../daemon-artifacts.ts');
+      const error = await settleScriptDeliveryReceiptOfFailure(
+        { baseUrl, token: 't' },
+        plan,
+        { code: 'COMMAND_FAILED', message: 'original error', details: invalid },
+        stateDir,
+        downloadRemoteArtifact,
+      );
+      expect(error.message).toBe('original error');
+      data = error.details ?? {};
+    }
+    expect(data.scriptDeliveryFailure).toMatchObject({ reason: 'script_delivery_failed' });
+    expect(data.warnings).toEqual([expect.stringContaining('malformed script delivery receipt')]);
+    expect(data.savedScript).toBeUndefined();
+    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+    expect(records(stateDir)).toHaveLength(1);
+  },
+);
+
+test.each(['publicationId', 'artifactId', 'message', 'hint', 'cause'] as const)(
+  'receipt string bounds cover %s at the accepted limit and one character past it',
+  (field) => {
+    for (const length of [4096, 4097]) {
+      const value = 'x'.repeat(length);
+      const publicationId = field === 'publicationId' ? value : 'recording-id';
+      const failure = {
+        reason: 'script_delivery_failed',
+        publicationId,
+        message: 'failed',
+        hint: 'keep the file',
+        cause: 'EIO',
+      };
+      if (field !== 'publicationId' && field !== 'artifactId') failure[field] = value;
+      const delivery = {
+        publicationId,
+        version: script(field === 'artifactId' ? value : 'v2', 2, publicationId),
+        failures: [failure],
+      };
+      const result = readScriptDeliveryReceipt({
+        ok: true,
+        data: { scriptDeliveryReceipt: delivery },
+      });
+      expect(result !== undefined, `${field}: ${length}`).toBe(length === 4096);
+    }
+  },
+);
+
+test.each([
+  {
+    name: 'a close its plan carries',
+    steps: [
+      { command: 'wait', input: {} },
+      { command: 'close', input: {} },
+    ],
+    close: { step: 2 },
+    offers: 'The session is closed, so no later version follows.',
+    withholds: 'The next recorded action or close delivers',
+  },
+  {
+    name: 'no close',
+    steps: [{ command: 'wait', input: {} }],
+    close: undefined,
+    offers: 'The next recorded action or close delivers the full recording again.',
+    withholds: 'The session is closed',
+  },
+])(
+  'a failed batch version of $name offers the recovery that is still left',
+  async ({ steps, close, offers, withholds }) => {
+    // A close retires the record, so promising that a later action delivers again would send the
+    // caller after a session that is already gone.
+    const { stateDir, destination } = world();
+    const baseUrl = await artifactServer({ 'open-v1': 'open Demo\n', v2: { refused: true } });
+    const id = await opened(baseUrl, stateDir, destination);
+
+    const response = await answer(
+      baseUrl,
+      stateDir,
+      batchRequest(steps),
+      receipt(id, { version: script('v2', 2, id), ...(close ? { close } : {}) }),
+    );
+
+    const hint = readScriptDeliveryFailure(response.ok ? response.data : undefined)?.hint;
+    expect(hint).toContain(offers);
+    expect(hint).not.toContain(withholds);
+  },
+);
+
+test('a peer value for savedScript never reaches the caller', async () => {
+  const { stateDir, destination } = world();
+  const baseUrl = await artifactServer({ 'open-v1': 'open Demo\n' });
+  const id = await opened(baseUrl, stateDir, destination);
+
+  const armed = await answer(baseUrl, stateDir, batchRequest([{ command: 'wait', input: {} }]), {
+    savedScript: '/daemon/x.ad',
+    scriptPublicationId: id,
+  });
+  const bare = await answer(baseUrl, stateDir, batchRequest([{ command: 'wait', input: {} }]), {
+    savedScript: '/daemon/y.ad',
+  });
+
+  expect((armed as Extract<DaemonResponse, { ok: true }>).data?.savedScript).toBeUndefined();
+  expect((bare as Extract<DaemonResponse, { ok: true }>).data?.savedScript).toBeUndefined();
 });
 
 test.each(['success', 'failure'] as const)(

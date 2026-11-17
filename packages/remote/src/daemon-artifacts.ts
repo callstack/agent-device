@@ -1,6 +1,10 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import type {
+  DaemonArtifact,
+  DaemonResponse,
+  DaemonResponseData,
+} from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -522,20 +526,20 @@ async function downloadResponseArtifacts(
   scripts: SessionScriptDelivery | undefined,
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  if (artifacts.length === 0) return response;
-  const nextData = response.data ? { ...response.data } : {};
+  const data = withoutScriptFieldOwner(response.data);
+  if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
+  const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   for (const artifact of artifacts) {
-    if (!artifact || typeof artifact !== 'object' || typeof artifact.artifactId !== 'string') {
+    if (isSessionScriptArtifact(artifact)) {
+      await scripts?.publish(artifact, nextData, nextArtifacts);
+      continue;
+    }
+    if (!hasDownloadableArtifactId(artifact)) {
       nextArtifacts.push(artifact);
       continue;
     }
-    // `savedScript` and the session-script type are reserved for the session-script owner, which
-    // drops a script artifact under another field or of another type.
-    if (scripts && isSessionScriptArtifact(artifact)) {
-      await scripts.publish(artifact, nextData, nextArtifacts);
-      continue;
-    }
+    if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
     const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
     const materializedPath = await downloadRemoteArtifact({
       ...endpoint,
@@ -561,8 +565,37 @@ async function downloadResponseArtifacts(
   return { ok: true, data: nextData };
 }
 
+function hasDownloadableArtifactId(
+  artifact: DaemonArtifact | undefined,
+): artifact is DaemonArtifact & { artifactId: string } {
+  return (
+    artifact !== undefined &&
+    artifact !== null &&
+    typeof artifact === 'object' &&
+    typeof artifact.artifactId === 'string'
+  );
+}
+
 function isSessionScriptArtifact(artifact: DaemonArtifact | undefined): boolean {
   return artifact?.field === 'savedScript' || artifact?.artifactType === 'session-script';
+}
+
+function isClientOwnedResponseField(field: string): boolean {
+  return (
+    field === 'artifacts' ||
+    field === 'savedScript' ||
+    field === 'scriptDeliveryFailure' ||
+    field === 'warnings'
+  );
+}
+
+// Only a successfully published version can name a caller's savedScript destination.
+function withoutScriptFieldOwner(
+  data: DaemonResponseData | undefined,
+): DaemonResponseData | undefined {
+  if (data === undefined || !('savedScript' in data)) return data;
+  const { savedScript: _peerValue, ...kept } = data;
+  return kept;
 }
 
 /**

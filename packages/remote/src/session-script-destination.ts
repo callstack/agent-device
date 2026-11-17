@@ -123,11 +123,11 @@ async function settleScriptReceipt(
     });
     return { failures };
   }
+  const closesOwnPlan = receipt.close !== undefined && closesSubmittedPlan(req, receipt.close.step);
   const published = receipt.version
-    ? await publishScriptVersion(context, receipt.version)
+    ? await publishScriptVersion(context, receipt.version, closesOwnPlan)
     : undefined;
   if (published && 'failure' in published) disclose(published.failure, published.error);
-  const closesOwnPlan = receipt.close !== undefined && closesSubmittedPlan(req, receipt.close.step);
   const destination = published && 'published' in published ? published.published : undefined;
   return {
     ...(closesOwnPlan ? { retire: file } : {}),
@@ -177,7 +177,9 @@ function closesSubmittedPlan(req: DaemonWireRequest, step: number): boolean {
  * A response that names a delivery receipt (#4595) delivers THROUGH that receipt: at most its one
  * version is downloaded, and the receipt's failures and close are what the client acts on. The
  * session-script artifacts such a response still lists are then dropped rather than downloaded, so
- * one response never moves two versions.
+ * one response never moves two versions. An entry that is not shaped as one script artifact is
+ * dropped without touching any response field: a peer cannot erase a disclosure or a publication
+ * this client already made.
  */
 export function sessionScriptDelivery(
   endpoint: Required<DaemonArtifactEndpoint>,
@@ -188,6 +190,12 @@ export function sessionScriptDelivery(
 ): SessionScriptDelivery {
   const context = { endpoint, req, stateDir, download };
   const receipt = req.command === 'batch' ? readScriptDeliveryReceipt(response) : undefined;
+  const rejected =
+    receipt === undefined &&
+    req.command === 'batch' &&
+    response.data?.scriptDeliveryReceipt !== undefined
+      ? unreadableReceiptFailure()
+      : undefined;
   const named = response.data?.scriptPublicationId;
   const closedId = req.command === 'close' && typeof named === 'string' ? named : undefined;
   // The receipt's own version is downloaded before the artifact loop runs, so the loop learns the
@@ -195,7 +203,7 @@ export function sessionScriptDelivery(
   let settled: ReceiptSettlement | undefined;
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
-      delete data[artifact.field];
+      if (artifact.field !== 'savedScript' || artifact.artifactType !== 'session-script') return;
       // The receipt is the one delivery instruction of this response; a step's or the batch's own
       // artifact entry is the same version it already names, so it is never downloaded a second time.
       if (req.command === 'batch') {
@@ -205,7 +213,7 @@ export function sessionScriptDelivery(
         }
         return;
       }
-      const outcome = await publishScriptVersion(context, artifact);
+      const outcome = await publishScriptVersion(context, artifact, req.command === 'close');
       if ('failure' in outcome) {
         // A delivery failure never changes the outcome of the action that recorded the version.
         discloseDeliveryFailure(data, req, outcome.failure, outcome.error);
@@ -218,6 +226,7 @@ export function sessionScriptDelivery(
     },
     settleAfter: async (run) => {
       const data = response.data ?? {};
+      if (rejected) discloseDeliveryFailure(data, req, rejected, undefined);
       settled = receipt
         ? await settleScriptReceipt(context, receipt, (failure, error) =>
             discloseDeliveryFailure(data, req, failure, error),
@@ -234,6 +243,15 @@ export function sessionScriptDelivery(
     },
   };
   return delivery;
+}
+
+function unreadableReceiptFailure(): ScriptDeliveryFailure {
+  return {
+    reason: 'script_delivery_failed',
+    publicationId: '',
+    message: 'The daemon answered a malformed script delivery receipt.',
+    hint: 'No batch recording was delivered from it. Update the daemon or proxy, then run the batch again.',
+  };
 }
 
 /**
@@ -270,8 +288,14 @@ export async function settleScriptDeliveryReceiptOfFailure(
   stateDir: string,
   download: typeof downloadRemoteArtifact,
 ): Promise<DaemonError> {
+  if (req.command !== 'batch') return error;
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
-  if (!receipt || req.command !== 'batch') return error;
+  if (!receipt) {
+    if (error.details?.scriptDeliveryReceipt === undefined) return error;
+    const details = { ...error.details };
+    discloseDeliveryFailure(details, req, unreadableReceiptFailure(), undefined);
+    return { ...error, details };
+  }
   // An error whose failure position cannot be reconciled with the submitted plan makes the whole
   // answer untrustworthy, and an untrustworthy answer authorizes nothing.
   if (unreconcilableFailurePosition(req, error)) return error;
@@ -335,7 +359,8 @@ function validatedFailedBatchStep(req: DaemonWireRequest, error: DaemonError): n
 /**
  * Publishes one version and returns the destination, `undefined` when no record of this client
  * matches the artifact, or a typed delivery failure. A version no newer than the one published is
- * skipped.
+ * skipped. `closesRecording` says this version is the last one any later command will ask for, so
+ * the failure hint offers the recovery that is actually left.
  *
  * The download streams, capped at `MAX_SCRIPT_BYTES`, into a new private file in a private staging
  * directory beside the destination, so it moves into place by one rename or link. The compare and
@@ -350,6 +375,7 @@ async function publishScriptVersion(
     download: typeof downloadRemoteArtifact;
   }>,
   artifact: DaemonArtifact,
+  closesRecording: boolean,
 ): Promise<PublishOutcome> {
   const { endpoint, req, stateDir } = context;
   const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
@@ -390,9 +416,8 @@ async function publishScriptVersion(
     const version = { revision: revision as number, staging, staged, pending };
     return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
   } catch (error) {
-    const closing = req.command === 'close';
     return {
-      failure: scriptDeliveryFailure(record.destination, id as string, error, closing),
+      failure: scriptDeliveryFailure(record.destination, id as string, error, closesRecording),
       error,
     };
   } finally {
