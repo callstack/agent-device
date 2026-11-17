@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import * as command from '@agent-device/host-kit/command';
+import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync, pluginHome, v2RegistrationSource } from '@agent-device/test-kit';
 import {
   addPluginArtifact,
@@ -261,3 +264,73 @@ test.each([undefined, '~/plugin-store'])(
     );
   },
 );
+
+test('failed staging cleanup reports both failures and releases the live store lock', async () => {
+  const root = mkdtempForTestSync('plugin-artifact-cleanup-');
+  const archive = path.join(root, 'broken.tgz');
+  fs.writeFileSync(archive, 'invalid archive');
+  const { home, env: isolated } = pluginHome();
+  const env = { ...process.env, ...isolated };
+  const plugins = path.join(fs.realpathSync(home), 'plugins');
+  const installError = new AppError('INVALID_ARGS', 'installation failed');
+  const cleanupError = new Error('staging cleanup failed');
+  const run = vi.spyOn(command, 'runCmd').mockRejectedValue(installError);
+  const rm = fs.rmSync.bind(fs);
+  const cleanup = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    if (typeof target === 'string' && path.dirname(target) === plugins) throw cleanupError;
+    return rm(target, options);
+  });
+  let failure: unknown;
+  try {
+    try {
+      await addPluginArtifact(archive, { cwd: root, env });
+      assert.fail('installation should fail');
+    } catch (error) {
+      failure = error;
+    }
+  } finally {
+    cleanup.mockRestore();
+    run.mockRestore();
+  }
+  const attempt = tryAcquireProcessLock({
+    lockDirPath: path.join(fs.realpathSync(home), 'plugins.lock'),
+    owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
+    description: 'plugin installation',
+  });
+  if (attempt.status === 'acquired') await attempt.acquisition.release();
+  assert.equal(attempt.status, 'acquired', 'the still-live host must not retain the lock');
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.code, 'COMMAND_FAILED');
+  assert.equal(failure.details?.reason, 'artifact_cleanup_failed');
+  assert.deepEqual(
+    (({ code, message }) => ({ code, message }))(
+      failure.details?.installationError as { code: string; message: string },
+    ),
+    { code: 'INVALID_ARGS', message: installError.message },
+  );
+  assert.deepEqual(
+    (({ code, message }) => ({ code, message }))(
+      failure.details?.cleanupError as { code: string; message: string },
+    ),
+    { code: 'UNKNOWN', message: cleanupError.message },
+  );
+  assert.equal(failure.cause, installError);
+});
+
+test('successful staging cleanup preserves the original installation error', async () => {
+  const root = mkdtempForTestSync('plugin-artifact-cleanup-success-');
+  const archive = path.join(root, 'broken.tgz');
+  fs.writeFileSync(archive, 'invalid archive');
+  const { home, env: isolated } = pluginHome();
+  const installError = new AppError('INVALID_ARGS', 'installation failed');
+  const run = vi.spyOn(command, 'runCmd').mockRejectedValue(installError);
+  try {
+    await assert.rejects(
+      addPluginArtifact(archive, { cwd: root, env: { ...process.env, ...isolated } }),
+      (error: unknown) => error === installError,
+    );
+    assert.deepEqual(fs.readdirSync(path.join(home, 'plugins')), []);
+  } finally {
+    run.mockRestore();
+  }
+});
