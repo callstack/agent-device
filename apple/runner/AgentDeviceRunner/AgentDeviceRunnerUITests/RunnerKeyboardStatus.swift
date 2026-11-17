@@ -37,8 +37,10 @@ extension RunnerKeyboardStatus {
     }
   }
 
-  /// One keyboard snapshot: its frame and every key's wording and frame, taken together so a decision
-  /// never mixes two reads of a keyboard that may be sliding.
+  /// One snapshot of the keyboard: its frame and every key's wording and frame, taken together so a
+  /// decision never mixes two reads of a keyboard that may be sliding. The dismiss read also carries,
+  /// as buttons, the dismiss-worded controls the app holds outside the keyboard, such as
+  /// an input accessory's `Done`, from the same snapshot.
   struct ObservedKeyboard {
     let frame: CGRect
     let keys: [ObservedKeyboardKey]
@@ -189,16 +191,22 @@ extension RunnerKeyboardStatus {
     return frame.maxY <= rowTop
   }
 
-  /// The first control in the snapshot that `keyboard dismiss` may press, in dismiss-label order.
-  static func dismissControl(in keyboard: ObservedKeyboard) -> ObservedKeyboardKey? {
-    for label in dismissLabels {
-      let match = keyboard.keys.first { key in
+  /// Every control in the snapshot that `keyboard dismiss` may press, in dismiss-label order, then
+  /// tree order. The decision reads one snapshot only, so a control's frame and the key rows it is
+  /// judged against never come from two reads of a keyboard that may be sliding.
+  static func dismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
+    dismissLabels.flatMap { label in
+      keyboard.keys.filter { key in
         (key.text == label || key.identifier == label)
           && mayDismiss(label: label, frame: key.frame, keyboardFrame: keyboard.frame, keys: keyboard.keys)
       }
-      if let match { return match }
     }
-    return nil
+  }
+
+  /// The dismiss controls that can be told apart from every other control of their type, in the same
+  /// order. The first one that a live lookup also resolves to a single element is the one pressed.
+  static func uniqueDismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
+    dismissControls(in: keyboard).filter { isUniqueDismissControl($0, in: keyboard.keys) }
   }
 
   /// The dismiss wording `key` carries, as its label or its identifier.
@@ -206,12 +214,13 @@ extension RunnerKeyboardStatus {
     dismissLabels.first { key.text == $0 || key.identifier == $0 }
   }
 
-  /// True when `key` is the only control of its type in `keys` that carries its dismiss wording. A
-  /// control is tapped by that identity, never by a coordinate from a snapshot the keyboard may have
-  /// moved since, so one that cannot be told apart from another is not pressed.
+  /// True when no other control in `keys` has the same type, label and identifier as `key`. A control is
+  /// tapped by that identity, never by a coordinate from a snapshot the keyboard may have moved since,
+  /// so one that cannot be told apart from another is not pressed. A toolbar `Done` and a return key
+  /// labelled `done` with the identifier `Done` differ in label and identifier, so each is unique.
   static func isUniqueDismissControl(_ key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> Bool {
-    guard let label = dismissLabel(of: key) else { return false }
-    return keys.filter { $0.kind == key.kind && ($0.text == label || $0.identifier == label) }.count == 1
+    guard dismissLabel(of: key) != nil else { return false }
+    return keys.filter { $0.kind == key.kind && $0.text == key.text && $0.identifier == key.identifier }.count == 1
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

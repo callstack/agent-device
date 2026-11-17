@@ -424,8 +424,9 @@ extension RunnerTests {
       XCTAssertEqual(keyboardStatus(app: app).returnKey, "done")
       let keyboard = try XCTUnwrap(readKeyboard(app: app))
       let returnControl = try XCTUnwrap(RunnerKeyboardStatus.returnControl(in: keyboard.keys))
-      let toolbarDone = RunnerKeyboardStatus.dismissControl(in: keyboard)
-      XCTAssertNotEqual(toolbarDone?.frame, returnControl.frame)
+      let surface = try XCTUnwrap(readKeyboardSurface(app: app))
+      let toolbarDone = try XCTUnwrap(RunnerKeyboardStatus.dismissControls(in: surface).first)
+      XCTAssertNotEqual(toolbarDone.frame, returnControl.frame)
       let response = try execute(
         command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-accessory"}"#)
       )

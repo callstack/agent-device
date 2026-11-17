@@ -263,6 +263,42 @@ extension RunnerTests {
 #endif
   }
 
+#if os(iOS)
+  /// The keyboard and the dismiss-worded controls beside it from one snapshot of the app, or `nil` when
+  /// that read fails or holds no keyboard. The keyboard's own window snapshot does not hold an input
+  /// accessory's buttons, and the keyboard and an accessory must be judged from one read.
+  func readKeyboardSurface(app: XCUIApplication) -> RunnerKeyboardStatus.ObservedKeyboard? {
+    let root = safely("KEYBOARD_SURFACE_SNAPSHOT") { try? app.snapshot() }
+    guard let root else { return nil }
+    var keyboard: XCUIElementSnapshot?
+    var beside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var pending = [root]
+    while let node = pending.popLast() {
+      if node.elementType == .keyboard, keyboard == nil {
+        keyboard = node
+        continue
+      }
+      pending.append(contentsOf: node.children.reversed())
+      let wording = RunnerKeyboardStatus.dismissLabels
+      if node.elementType == .button, wording.contains(node.label) || wording.contains(node.identifier) {
+        beside.append(
+          RunnerKeyboardStatus.ObservedKeyboardKey(
+            text: node.label,
+            frame: node.frame,
+            identifier: node.identifier.isEmpty ? nil : node.identifier,
+            kind: .button
+          )
+        )
+      }
+    }
+    guard let keyboard, !keyboard.frame.isEmpty else { return nil }
+    return RunnerKeyboardStatus.ObservedKeyboard(
+      frame: keyboard.frame,
+      keys: observedKeyboardKeys(in: keyboard) + beside
+    )
+  }
+#endif
+
   func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
     let keyboard = app.keyboards.firstMatch
     let wasVisible = isKeyboardVisible(app: app)
@@ -523,54 +559,31 @@ extension RunnerTests {
   /// labelled `Done`, which submits the focused field, is never pressed, and neither is a `Done`
   /// when the keyboard could not be read.
   ///
-  /// The keyboard is read once. The control it judged is tapped by identity: its wording and type must
-  /// be unique among the keyboard's controls, in the snapshot and in one targeted live query, and the
-  /// live element is tapped. Otherwise nothing is tapped, because a coordinate from a snapshot can land
-  /// on another key once the keyboard has moved. A control outside the keyboard, such as an input
-  /// accessory toolbar, comes from one query for every dismiss label and is tapped through its own
-  /// element.
+  /// One snapshot of the app decides which controls are eligible, accessory buttons
+  /// included. The first eligible control that is unique by type, label and identifier, in the snapshot and
+  /// in one live lookup, is tapped through its live element, never through a snapshot coordinate or a
+  /// second frame read. When none resolves uniquely, nothing is tapped.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
-#if os(tvOS)
-    return false
-#else
-    guard let liveKeyboardFrame = visibleKeyboardFrame(app: app) else {
+#if os(iOS)
+    guard let surface = readKeyboardSurface(app: app) else {
       return false
     }
-    let keyboard = readKeyboard(app: app)
-    let keyboardFrame = keyboard?.frame ?? liveKeyboardFrame
-    if let keyboard, let control = RunnerKeyboardStatus.dismissControl(in: keyboard) {
-      guard RunnerKeyboardStatus.isUniqueDismissControl(control, in: keyboard.keys),
-        let label = RunnerKeyboardStatus.dismissLabel(of: control)
-      else {
-        return false
-      }
-      let predicate = NSPredicate(format: "label == %@ OR identifier == %@", label, label)
-      let matches = app.keyboards.firstMatch
-        .descendants(matching: control.kind == .key ? .key : .button)
+    for control in RunnerKeyboardStatus.uniqueDismissControls(in: surface) {
+      let predicate = NSPredicate(
+        format: "label == %@ AND identifier == %@",
+        control.text ?? "",
+        control.identifier ?? ""
+      )
+      let matches = app.descendants(matching: control.kind == .key ? .key : .button)
         .matching(predicate)
         .allElementsBoundByIndex
-      guard matches.count == 1 else { return false }
-      matches[0].tap()
-      return true
-    }
-
-    let labels = RunnerKeyboardStatus.dismissLabels
-    let predicate = NSPredicate(format: "label IN %@ OR identifier IN %@", labels, labels)
-    let accessoryButtons = app.descendants(matching: .button).matching(predicate).allElementsBoundByIndex
-    for button in accessoryButtons where button.exists && button.isHittable {
-      guard let label = labels.first(where: { $0 == button.label || $0 == button.identifier }) else {
-        continue
-      }
-      if RunnerKeyboardStatus.mayDismiss(
-        label: label,
-        frame: button.frame,
-        keyboardFrame: keyboardFrame,
-        keys: keyboard?.keys
-      ) {
-        button.tap()
+      if matches.count == 1 {
+        matches[0].tap()
         return true
       }
     }
+    return false
+#else
     return false
 #endif
   }

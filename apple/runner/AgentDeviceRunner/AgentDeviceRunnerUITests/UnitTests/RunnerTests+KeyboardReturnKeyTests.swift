@@ -253,7 +253,7 @@ extension RunnerTests {
     let phone = observedKeyboardFixture([
       ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
     ], identifiers: ["done": "Done"])
-    XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: phone))
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: phone).isEmpty)
     XCTAssertFalse(
       dismissAllowed(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: phone)
     )
@@ -262,12 +262,12 @@ extension RunnerTests {
       ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
       ("Hide keyboard", 720, 1096, 98),
     ], keyboardFrame: CGRect(x: 0, y: 880, width: 834, height: 300))
-    XCTAssertEqual(RunnerKeyboardStatus.dismissControl(in: pad)?.text, "Hide keyboard")
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).first?.text, "Hide keyboard")
 
     let withToolbar = observedKeyboardFixture([
       ("Done", 330, 524, 63), ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
     ], identifiers: ["done": "Done"])
-    let pressed = RunnerKeyboardStatus.dismissControl(in: withToolbar)
+    let pressed = RunnerKeyboardStatus.dismissControls(in: withToolbar).first
     XCTAssertEqual(pressed?.text, "Done")
     XCTAssertEqual(pressed?.frame.minY, 524)
   }
@@ -319,7 +319,35 @@ extension RunnerTests {
     XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, hideButton]))
     XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, twin]))
     XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(identified, in: [identified, hide]))
+    // A toolbar `Done` and a return key labelled `done` with the identifier `Done` are two controls.
+    let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
+    )
+    let returnKey = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 56), identifier: "Done", kind: .button
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(toolbarDone, in: [toolbarDone, returnKey]))
     XCTAssertNil(RunnerKeyboardStatus.dismissLabel(of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "Q", frame: .zero)))
+  }
+
+  /// A control that cannot be told apart is skipped, not fatal: with two `Hide keyboard` keys and a
+  /// `Done` toolbar above the key rows, the unique `Done` is still pressed, and with nothing unique
+  /// left nothing is.
+  func testKeyboardDismissTriesTheNextControlWhenOneCannotBeToldApart() {
+    let twinHides = observedKeyboardFixture([
+      ("Done", 330, 524, 63), ("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98),
+      ("Hide keyboard", 20, 1096, 98),
+    ], keyboardFrame: CGRect(x: 0, y: 609, width: 834, height: 600))
+    XCTAssertEqual(
+      RunnerKeyboardStatus.dismissControls(in: twinHides).map(\.text),
+      ["Hide keyboard", "Hide keyboard", "Done"]
+    )
+    XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: twinHides).map(\.text), ["Done"])
+
+    let onlyTwins = observedKeyboardFixture([
+      ("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98),
+    ], keyboardFrame: CGRect(x: 0, y: 609, width: 834, height: 600))
+    XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: onlyTwins).isEmpty)
   }
 
   /// A QuickType candidate is a button in the prediction bar above the key rows, so a one-letter one
@@ -365,7 +393,7 @@ extension RunnerTests {
     XCTAssertFalse(dismissAllowed(label: "Hide keyboard", frame: CGRect(x: 20, y: 900, width: 80, height: 40), keyboard: nil))
 
     let unanchored = observedKeyboardFixture([("Done", 330, 524, 63), ("space", 108, 784, 207), ("done", 314, 784, 103)])
-    XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: unanchored))
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: unanchored).isEmpty)
     XCTAssertFalse(dismissAllowed(label: "Done", frame: doneFrame, keyboard: unanchored))
 
     let anchored = observedKeyboardFixture([("Q", 5, 616, 41)])
