@@ -3,5 +3,4 @@
  * so a host can substitute every bundled verifier together, the way a plugin's own
  * `connection-verification` subpath is substituted.
  */
-export { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 export { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';

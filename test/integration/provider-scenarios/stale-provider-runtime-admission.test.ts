@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
+import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -67,7 +68,7 @@ vi.mock('@limrun/api/instance-client', () => ({
 test('a released WebDriver device remains provider-owned with deployment unavailable', async () => {
   const server = await startCloudWebDriverTestServer(new StaleWebDriverServer());
   const runtime = await webDriverRuntime(server.url);
-  const lease = providerLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack, 'webdriver-stale');
+  const lease = providerLease(BROWSERSTACK_PROVIDER, 'webdriver-stale');
 
   try {
     const allocate = runtime.leaseLifecycle.allocate;
@@ -231,22 +232,14 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
 });
 
 async function webDriverRuntime(endpoint: string) {
-  const runtimes = await createBundledCloudWebDriverRuntimes({
+  return await createBrowserStackRuntime({
     env: {
       BROWSERSTACK_USERNAME: 'browser-user',
       BROWSERSTACK_ACCESS_KEY: 'browser-key',
       BROWSERSTACK_WEBDRIVER_ENDPOINT: `${endpoint}/wd/hub/`,
     },
     clientVersion: 'test',
-    runHostCommand: async () => {
-      throw new Error('stale WebDriver admission never invokes host commands');
-    },
   });
-  const runtime = runtimes.find(
-    (candidate) => candidate.provider === CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-  );
-  if (!runtime) throw new Error('Expected BrowserStack WebDriver runtime');
-  return runtime;
 }
 
 async function awsWebDriverRuntime(host: AwsRemoteAccessHost) {

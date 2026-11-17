@@ -1,47 +1,34 @@
+import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import {
+  buildCloudWebDriverBaseCapabilities,
+  readFlag,
+  requireFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from '@agent-device/provider-webdriver/plugin';
 import {
   BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
   BROWSERSTACK_APP_UPLOAD_ENDPOINT,
   BROWSERSTACK_CAPABILITY_OVERRIDES,
-  BROWSERSTACK_PROFILE_FIELDS,
   buildBrowserStackCapabilities,
   createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
-  requireBrowserStackCredentials,
   resolveBrowserStackAppReference,
 } from './browserstack.ts';
 import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
 } from './browserstack-device-features.ts';
-import { buildCloudWebDriverBaseCapabilities } from './capabilities.ts';
-import type {
-  BundledCloudWebDriverProvider,
-  CloudWebDriverConnection,
-  CloudWebDriverProviderHost,
-  CloudWebDriverProviderOptions,
-  CloudWebDriverProviderRegistration,
-} from './provider-plugin.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS, cloudWebDriverProviderDeclaration } from './providers.ts';
-import {
-  readFlag,
-  requireFlag,
-  requireRequest,
-  requireRequestPlatform,
-} from './webdriver-utils.ts';
+import { BROWSERSTACK_PROFILE_FIELDS } from './profile-fields.ts';
+import { PROVIDER, requireBrowserStackCredentials } from './providers.ts';
 
-const PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const SERVICE = 'BrowserStack';
 
-export const browserStackProvider: BundledCloudWebDriverProvider = {
-  declaration: cloudWebDriverProviderDeclaration(PROVIDER)!,
-  create: createBrowserStackProvider,
-};
-
-function createBrowserStackProvider(
-  host: CloudWebDriverProviderHost,
-): CloudWebDriverProviderRegistration {
+/** The BrowserStack WebDriver descriptor the host drives through its shared engine. */
+export function createBrowserStackWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
   const { env, clientVersion } = host;
-  const webDriver: CloudWebDriverProviderOptions = {
+  const webDriver: WebDriverPluginOptions = {
     provider: PROVIDER,
     profileFields: BROWSERSTACK_PROFILE_FIELDS,
     platform: 'android',
@@ -102,11 +89,5 @@ function createBrowserStackProvider(
       };
     },
   };
-  const connect = async () =>
-    (await import('./browserstack-connection.ts')).createBrowserStackConnection(host);
-  const connection: CloudWebDriverConnection = {
-    resolve: async (context) => (await connect()).resolve(context),
-    verify: async (context) => await (await connect()).verify(context),
-  };
-  return { webDriver, connection };
+  return webDriver;
 }

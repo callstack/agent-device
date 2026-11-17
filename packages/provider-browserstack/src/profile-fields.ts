@@ -1,0 +1,30 @@
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
+
+export const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: 'browserstack',
+  label: 'BrowserStack',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'consumed',
+    providerDeviceType: 'refused',
+    providerProject: 'consumed',
+    providerBuild: 'consumed',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'consumed',
+    providerGeoLocation: 'consumed',
+    providerTimezone: 'consumed',
+    providerAppiumVersion: 'consumed',
+    providerLanguage: 'consumed',
+    providerLocale: 'consumed',
+    providerNetworkProfile: 'consumed',
+    providerCustomNetwork: 'consumed',
+    providerNoResignApp: 'consumed',
+    providerNetworkLogs: 'refused',
+    providerNetworkHosts: 'refused',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};

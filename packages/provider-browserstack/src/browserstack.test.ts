@@ -9,7 +9,7 @@ import {
   resolveBrowserStackAppReference,
   uploadBrowserStackApp,
 } from './browserstack.ts';
-import { mkdtempForTest } from './tmp-dir.fixtures.ts';
+import { mkdtempForTest } from '@agent-device/test-kit';
 
 const realFetch = globalThis.fetch;
 
