@@ -286,3 +286,54 @@ for (const command of ['snapshot', 'clipboard'] as const) {
     }
   });
 }
+
+test.each([
+  ['wait', ['text', 'ready']],
+  ['find', ['ready', 'exists']],
+  ['settings', ['text-size']],
+  ['alert', []],
+  ['keyboard', ['status']],
+])(
+  '%s: caller abort stops sessionless Android readiness through real HTTP admission',
+  async (command, positionals) => {
+    const { server, send, runtime, unexpected } = await route();
+    const polling = deferred<void>();
+    const release = deferred<typeof BOOTED>();
+    let abortedIo = false;
+    mockRunCmd.mockImplementation(async (_command, args, options) => {
+      expect(args).toContain('sys.boot_completed');
+      polling.resolve();
+      return await new Promise((resolve, reject) => {
+        options?.signal?.addEventListener(
+          'abort',
+          () => {
+            abortedIo = true;
+            reject(createRequestCanceledError());
+          },
+          { once: true },
+        );
+        void release.promise.then(resolve);
+      });
+    });
+    const call = send(command, false, [], positionals);
+    try {
+      await Promise.race([
+        polling.promise,
+        call.answer.then((response) => {
+          expect.fail(`request ended before Android readiness: ${JSON.stringify(response)}`);
+        }),
+      ]);
+      await call.cancel(false);
+      expect(abortedIo, 'caller abort must stop the in-flight getprop I/O').toBe(true);
+      expect(await call.answer).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'request_canceled' } },
+      });
+    } finally {
+      release.resolve(BOOTED);
+      await server.close();
+    }
+    expect(runtime.captureSnapshot).not.toHaveBeenCalled();
+    expect(unexpected).not.toHaveBeenCalled();
+  },
+);

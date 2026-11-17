@@ -34,6 +34,9 @@ export async function route() {
     producer: 'android-uiautomator' as const,
   }));
   const readClipboard = vi.fn(async () => 'ready clipboard');
+  const unexpected = vi.fn(async () => {
+    throw new Error('readiness route dispatched before Android readiness');
+  });
   const owner = localRuntimeOwner('android');
   const facts = (target: DeviceInfo) => {
     const base = createUnavailableRuntimeFactsForTest(target, owner);
@@ -44,6 +47,9 @@ export async function route() {
         captureSnapshot: { available: true as const },
         captureSnapshotWithoutActiveApp: { available: true as const },
         readClipboard: { available: true as const },
+        readAlert: { available: true as const },
+        readSetting: { available: true as const },
+        keyboardStatus: { available: true as const },
       },
     };
   };
@@ -57,6 +63,9 @@ export async function route() {
         captureSnapshot,
         captureSnapshotWithoutActiveApp: captureSnapshot,
         readClipboard,
+        readAlert: unexpected,
+        readSetting: unexpected,
+        keyboardStatus: unexpected,
       },
       [Symbol.asyncDispose]: async () => {},
     }),
@@ -138,14 +147,15 @@ export async function route() {
   if (!daemon.httpPort) throw new Error('readiness fixture did not start its HTTP runtime');
   let requestIndex = 0;
   function send(
-    command: 'snapshot' | 'clipboard',
+    command: string,
     bounded = false,
     followingCommands: readonly ('snapshot' | 'clipboard')[] = [],
+    positionals = command === 'clipboard' ? ['read'] : [],
   ) {
     const requestId = `readiness-${deviceIndex}-${++requestIndex}`;
     const step = {
       command,
-      positionals: command === 'clipboard' ? ['read'] : [],
+      positionals,
       flags: { platform: 'android', serial: device.id },
     };
     const closed = deferred<void>();
@@ -226,5 +236,6 @@ export async function route() {
     send,
     runtime: { captureSnapshot },
     readClipboard,
+    unexpected,
   };
 }
