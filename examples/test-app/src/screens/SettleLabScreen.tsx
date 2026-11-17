@@ -70,6 +70,8 @@ export function SettleLabScreen() {
         label="Fade overlay"
         onPress={() => {
           const id = nextRun();
+          // One fade at a time: the stopped fade completes as stale, and the latest-run guard drops it.
+          opacity.stopAnimation();
           opacity.setValue(1);
           setOverlayVisible(true);
           Animated.timing(opacity, {
