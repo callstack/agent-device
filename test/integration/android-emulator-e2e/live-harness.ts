@@ -113,14 +113,15 @@ export async function captureDiagnosticSnapshot(
   step: string,
 ) {
   const startedAtMs = Date.now();
-  const result = await runStep(context, step, ['snapshot', '-i', '--debug']);
-  writeSnapshotEvidence(
-    context.artifactDir,
-    name,
-    context.session,
-    startedAtMs,
-    Date.now(),
-    result,
-  );
-  return result;
+  return await runStep(context, step, ['snapshot', '-i', '--debug'], {
+    observeResult: (result) =>
+      writeSnapshotEvidence(
+        context.artifactDir,
+        name,
+        context.session,
+        startedAtMs,
+        Date.now(),
+        result,
+      ),
+  });
 }
