@@ -609,6 +609,202 @@ test('the SDK, the CLI and MCP each disclose a failed final script delivery', as
     }
   });
 }, 30_000);
+test('a remote batch delivers one final script and retires the closed recording', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = mkdtempForTestSync('batch-script-final-');
+    const destination = path.join(root, 'journey.ad');
+    const stateDir = path.join(root, 'client-state');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'batch-client' });
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'batch-client',
+      session: 'batch-script',
+      stateDir,
+    });
+    try {
+      await client.apps.open({ app: 'settings', saveScript: destination, ...world.selection });
+      const before = proxy.forwarded.length;
+      const result = await client.batch.run({
+        steps: [
+          { command: 'wait', input: { selector: 'label="Apps"' } },
+          { command: 'close', input: {} },
+        ],
+        ...world.selection,
+      });
+      assert.equal(result.executed, 2);
+      const final = fs.readFileSync(destination, 'utf8');
+      assert.match(final, /^open /m);
+      assert.match(final, /^wait /m);
+      assert.match(final, /^close/m);
+      assert.equal(
+        proxy.forwarded.slice(before).filter((r) => r.route.startsWith('/artifacts/')).length,
+        1,
+      );
+      assert.deepEqual(
+        fs
+          .readdirSync(path.join(stateDir, 'remote-connections', 'session-scripts'))
+          .filter((f) => f.endsWith('.json')),
+        [],
+      );
+      world.assertNoHostAdbCalls();
+    } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);
+
+test('a failed remote batch delivers completed steps while retaining its original failure', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = mkdtempForTestSync('batch-script-partial-');
+    const destination = path.join(root, 'journey.ad');
+    const stateDir = path.join(root, 'client-state');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'batch-client' });
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'batch-client',
+      session: 'batch-partial',
+      stateDir,
+    });
+    try {
+      await client.apps.open({ app: 'settings', saveScript: destination, ...world.selection });
+      const before = proxy.forwarded.length;
+      await assert.rejects(
+        client.batch.run({
+          steps: [
+            { command: 'wait', input: { selector: 'label="Apps"' } },
+            { command: 'press', input: { selector: 'id="missing-batch-target"' } },
+            { command: 'close', input: {} },
+          ],
+          ...world.selection,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Batch failed at step 2/);
+          assert.equal((error as { details?: { step?: number } }).details?.step, 2);
+          return true;
+        },
+      );
+      assert.match(fs.readFileSync(destination, 'utf8'), /^wait /m);
+      assert.doesNotMatch(fs.readFileSync(destination, 'utf8'), /^close/m);
+      assert.equal(
+        proxy.forwarded.slice(before).filter((r) => r.route.startsWith('/artifacts/')).length,
+        1,
+      );
+      assert.equal(
+        fs
+          .readdirSync(path.join(stateDir, 'remote-connections', 'session-scripts'))
+          .filter((f) => f.endsWith('.json')).length,
+        1,
+      );
+      await client.sessions.close();
+      world.assertNoHostAdbCalls();
+    } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);
+
+test('batch delivery failures reach SDK results and CLI/MCP human output', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = mkdtempForTestSync('batch-script-surfaces-');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'batch-client' });
+    let refused = false;
+    const gate = await createArtifactGate(proxy.baseUrl, () => refused);
+    const steps = [
+      { command: 'wait', input: { selector: 'label="Apps"' } },
+      { command: 'close', input: {} },
+    ];
+    const env = {
+      AGENT_DEVICE_DAEMON_BASE_URL: gate.baseUrl,
+      AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'batch-client',
+      AGENT_DEVICE_DAEMON_TRANSPORT: 'http',
+    };
+    try {
+      const sdk = createAgentDeviceClient({
+        daemonBaseUrl: gate.baseUrl,
+        daemonAuthToken: 'batch-client',
+        session: 'batch-sdk',
+        stateDir: path.join(root, 'sdk'),
+      });
+      const sdkFile = path.join(root, 'sdk.ad');
+      await sdk.apps.open({ app: 'settings', saveScript: sdkFile, ...world.selection });
+      refused = true;
+      const result = await sdk.batch.run({ steps, ...world.selection });
+      refused = false;
+      assert.equal(
+        (result.scriptDeliveryFailure as { reason: string }).reason,
+        'script_delivery_failed',
+      );
+      assert.match(JSON.stringify(result.warnings), /remote script could not be saved/i);
+      assert.doesNotMatch(fs.readFileSync(sdkFile, 'utf8'), /^close/m);
+
+      const cliState = path.join(root, 'cli');
+      const cli = (argv: string[]) =>
+        runCliCapture(argv, {
+          env: { ...env, AGENT_DEVICE_STATE_DIR: cliState },
+          useRealDaemonClient: true,
+        });
+      const opened = await cli([
+        'open',
+        'settings',
+        '--save-script',
+        path.join(root, 'cli.ad'),
+        '--session',
+        'batch-cli',
+        '--platform',
+        world.selection.platform,
+        '--serial',
+        world.selection.serial,
+      ]);
+      assert.equal(opened.code, null, opened.stderr);
+      refused = true;
+      const output = await cli([
+        'batch',
+        '--steps',
+        JSON.stringify(steps),
+        '--session',
+        'batch-cli',
+      ]);
+      refused = false;
+      assert.equal(output.code, null, output.stderr);
+      assert.match(output.stdout + output.stderr, /Warning: .*remote script could not be saved/i);
+
+      const restore = installIsolatedCliTestEnv({
+        ...env,
+        AGENT_DEVICE_STATE_DIR: path.join(root, 'mcp'),
+      });
+      try {
+        const executor = createCommandToolExecutor({ structuredContent: 'always' });
+        const opened = await executor.execute('open', {
+          app: 'settings',
+          saveScript: path.join(root, 'mcp.ad'),
+          session: 'batch-mcp',
+          ...world.selection,
+        });
+        assert.equal(opened.isError, false, JSON.stringify(opened));
+        refused = true;
+        const output = await executor.execute('batch', {
+          steps,
+          session: 'batch-mcp',
+          ...world.selection,
+        });
+        refused = false;
+        assert.equal(output.isError, false, JSON.stringify(output));
+        assert.match(
+          output.content.map((p) => p.text ?? '').join('\n'),
+          /Warning: .*remote script could not be saved/i,
+        );
+      } finally {
+        restore();
+      }
+      world.assertNoHostAdbCalls();
+    } finally {
+      await gate.close();
+      await proxy.close();
+    }
+  });
+}, 30_000);
+
 /**
  * A gate in front of the daemon proxy that answers the artifact downloads of a refused moment with
  * 503, which is how these scenarios make one delivery fail.

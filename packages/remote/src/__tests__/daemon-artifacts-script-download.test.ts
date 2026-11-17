@@ -431,7 +431,7 @@ test('a session-script artifact under another field writes nothing', async () =>
     artifacts: [{ ...script('hostile', 2, id), field: 'path', fileName: 'victim.ad' }],
   });
 
-  expect(response).toEqual({ ok: true, data: { artifacts: [] } });
+  expect(response).toEqual({ ok: true, data: { path: '/daemon/x.ad', artifacts: [] } });
   expect(fs.existsSync(path.join(root, 'victim.ad'))).toBe(false);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
 });

@@ -76,7 +76,7 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 - A bare remote `open --save-script` writes `recording-<timestamp>.ad` in your working directory.
 - If the file already exists, `open` fails unless you pass `--force`. Without `--force`, a file that appears before the first version arrives is kept too: `open` still succeeds, but the script is not saved there, and the result carries a `scriptDeliveryFailure` and a warning. With `--force`, the first version replaces it. After that, the session owns the file and replaces it on each update.
 - Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in batch steps are refused.
-- Steps of a remote `batch` do not update the file. A batch that would close a remote recording is refused; run `close` on its own after the batch. Batch delivery is tracked in [#4595](https://github.com/callstack/agent-device/issues/4595).
+- A remote `batch` updates your file once with the recording from its completed steps, including the final script when a step closes the session. If a step fails, the batch keeps that error and delivers the recording from earlier completed steps. A delivery failure adds `scriptDeliveryFailure` and a warning; your file keeps its previous version.
 - The remote daemon must report the `script-artifacts` capability in its `/health` response. Through a proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` fails before the app opens.
 - For a bare file name that could be read as another argument, use `--save-script=workflow.ad` or a path-like value such as `./workflow.ad`.
 

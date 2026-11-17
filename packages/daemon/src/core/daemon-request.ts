@@ -7,6 +7,7 @@ import type { WebSessionIdentity } from '@agent-device/kernel/device';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type { EndedLeaseLedger } from './request-ended-leases.ts';
+import type { ScriptDeliveryLedger } from './request-script-delivery-ledger.ts';
 
 /**
  * The daemon's request vocabulary: the wire shape from `@agent-device/contracts/command`
@@ -65,6 +66,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * it reports it, once, on its reply.
    */
   endedLeases?: EndedLeaseLedger;
+  /**
+   * The script-delivery effects the outermost request and its nested requests produced. Only the
+   * request that created it reports them, once, as one receipt on its reply (#4595).
+   */
+  scriptDelivery?: ScriptDeliveryLedger;
   /** Authority minted only by the test suite for its own attempt-session cleanup. */
   cleanupIntent?: 'suite-owned-test-session';
 };

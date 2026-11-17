@@ -46,3 +46,8 @@ export function readOptionalNumber(
  * because every producer and consumer of the reason already evaluates this module.
  */
 export const ANDROID_SHELL_TEXT_UNSUPPORTED_REASON = 'android_shell_text_unsupported' as const;
+
+/** Resolves a batch step command with the same whitespace and case rules on both peers. */
+export function normalizeBatchCommandName(command: unknown): string {
+  return typeof command === 'string' ? command.trim().toLowerCase() : '';
+}

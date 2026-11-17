@@ -1,6 +1,9 @@
 import { deriveStructuredBatchCommandNames } from './derive.ts';
 import { commandDescriptors } from './registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
+
+export { normalizeBatchCommandName };
 
 /**
  * The exact set of command names exposed through `batch`, as a narrow union.
@@ -69,10 +72,6 @@ const structuredBatchCommandNames = new Set<string>(STRUCTURED_BATCH_COMMAND_NAM
 
 function isStructuredBatchCommandName(command: string): command is StructuredBatchCommandName {
   return structuredBatchCommandNames.has(command);
-}
-
-export function normalizeBatchCommandName(command: unknown): string {
-  return typeof command === 'string' ? command.trim().toLowerCase() : '';
 }
 
 /**

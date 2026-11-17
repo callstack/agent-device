@@ -205,7 +205,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
       };
     }
-    return await reportEndedLeases(req, handleRequestOnLedger);
+    if (req.command !== 'batch') return await reportEndedLeases(req, handleRequestOnLedger);
+    const { reportScriptDelivery } = await import('../core/request-script-delivery-ledger.ts');
+    return await reportEndedLeases(req, (scoped) =>
+      reportScriptDelivery(scoped, handleRequestOnLedger),
+    );
   }
 
   async function handleRequestOnLedger(req: DaemonRequest): Promise<DaemonResponse> {

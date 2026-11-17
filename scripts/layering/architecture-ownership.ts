@@ -254,7 +254,6 @@ export const ARCHITECTURE_OWNERSHIP = {
         'applyRecordedSaveScriptFlags',
         'armAuthoringOnOpen',
         'effectiveWriteForce',
-        'isArmedRemoteRecording',
         'isAuthoringArmedSession',
         'isSessionRecording',
         'isSessionScriptPublished',

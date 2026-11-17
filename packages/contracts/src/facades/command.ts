@@ -15,6 +15,7 @@ export type { DaemonWireRequest, DaemonWireRequestMeta } from '../daemon-wire-re
 export type { DispatchedCommand } from '../dispatched-command.ts';
 export {
   ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+  normalizeBatchCommandName,
   readOptionalInteger,
   readOptionalNumber,
 } from '../input-validation.ts';
