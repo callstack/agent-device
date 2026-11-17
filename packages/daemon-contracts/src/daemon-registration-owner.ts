@@ -356,6 +356,8 @@ function repairStateLevel(level: string): boolean {
   // The name is gone: whatever removed it also removed the mode this call came to force, and there is
   // nothing below a name that does not exist.
   if (judged === undefined) return false;
+  // Asked BEFORE the mode, never after it: a LINK whose own bits are 0700 answers the mode question with the
+  // private mode, and a repair that read the mode first would pass that link without judging it at all.
   if (!judged.isDirectory()) {
     skipStateDirMode(level, 'not_a_directory');
     return false;

@@ -103,6 +103,32 @@ skipOnWindows('stops at an intermediate link and leaves where it leads alone', a
   expect(fs.lstatSync(sessions).isSymbolicLink()).toBe(true);
 });
 
+skipOnWindows('reports a state level that is a LINK CARRYING the private mode', async () => {
+  // Where the host lets a link carry its own mode, `lchmod` 0700 makes the link answer the mode question
+  // with the private mode. A repair that asks the mode before it asks what the entry IS returns there and
+  // passes a link it never judged, so the level-by-level order is the pin: `isDirectory` first, the mode
+  // second. The far side is not what this shape is about — the silent pass is.
+  const base = mkdtempForTestSync('agent-device-state-link-mode-');
+  fs.chmodSync(base, 0o755);
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(outside);
+  fs.chmodSync(outside, 0o755);
+  const sessions = path.join(base, 'sessions');
+  fs.symlinkSync(outside, sessions);
+  // On a host that gives every link the same mode, the shape below is the ordinary link case and the skip
+  // has to be answered either way.
+  try {
+    fs.lchmodSync(sessions, 0o700);
+  } catch {
+    /* this host reports one mode for all links */
+  }
+
+  expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, base))).toBe(1);
+
+  expect(modeOf(outside)).toBe(0o755);
+  expect(fs.lstatSync(sessions).isSymbolicLink()).toBe(true);
+});
+
 skipOnWindows('repairs above a planted link and stops below it', async () => {
   // The same stop, judged the other way: `sessions` is a directory this user owns and gets repaired, and
   // `remote-scripts` under it is a link. The chain repairs what it may and refuses to follow the name it
