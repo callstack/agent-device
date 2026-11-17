@@ -220,7 +220,32 @@ extension RunnerKeyboardStatus {
   /// labelled `done` with the identifier `Done` differ in label and identifier, so each is unique.
   static func isUniqueDismissControl(_ key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> Bool {
     guard dismissLabel(of: key) != nil else { return false }
-    return keys.filter { $0.kind == key.kind && $0.text == key.text && $0.identifier == key.identifier }.count == 1
+    return keys.filter {
+      $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
+    }.count == 1
+  }
+
+  /// The first candidate, in order, whose live element resolves and can be tapped. A candidate that does
+  /// not resolve to one element, or that is covered or off screen, is passed over for the next; with
+  /// none left the answer is `nil`, which is a refusal and not a tap.
+  static func firstTappable<Element>(
+    in candidates: [ObservedKeyboardKey],
+    resolve: (ObservedKeyboardKey) -> Element?,
+    isTappable: (Element) -> Bool
+  ) -> Element? {
+    for candidate in candidates {
+      if let element = resolve(candidate), isTappable(element) { return element }
+    }
+    return nil
+  }
+
+  /// The label and identifier a live lookup of `key` must match. A control with no identifier is
+  /// looked up by label alone, so `nil` and an empty identifier are the same.
+  static func lookupFormat(of key: ObservedKeyboardKey) -> (format: String, arguments: [String]) {
+    guard let identifier = key.identifier, !identifier.isEmpty else {
+      return ("label == %@", [key.text ?? ""])
+    }
+    return ("label == %@ AND identifier == %@", [key.text ?? "", identifier])
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

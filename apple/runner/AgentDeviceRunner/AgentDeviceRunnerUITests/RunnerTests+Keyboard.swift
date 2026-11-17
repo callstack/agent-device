@@ -561,28 +561,28 @@ extension RunnerTests {
   ///
   /// One snapshot of the app decides which controls are eligible, accessory buttons
   /// included. The first eligible control that is unique by type, label and identifier, in the snapshot and
-  /// in one live lookup, is tapped through its live element, never through a snapshot coordinate or a
-  /// second frame read. When none resolves uniquely, nothing is tapped.
+  /// in one live lookup, and that is hittable, is tapped through its live element, never through a
+  /// snapshot coordinate or a second frame read. A covered or off-screen control is passed over for the
+  /// next. When none qualifies, nothing is tapped.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(iOS)
     guard let surface = readKeyboardSurface(app: app) else {
       return false
     }
-    for control in RunnerKeyboardStatus.uniqueDismissControls(in: surface) {
-      let predicate = NSPredicate(
-        format: "label == %@ AND identifier == %@",
-        control.text ?? "",
-        control.identifier ?? ""
-      )
-      let matches = app.descendants(matching: control.kind == .key ? .key : .button)
-        .matching(predicate)
-        .allElementsBoundByIndex
-      if matches.count == 1 {
-        matches[0].tap()
-        return true
-      }
-    }
-    return false
+    let element = RunnerKeyboardStatus.firstTappable(
+      in: RunnerKeyboardStatus.uniqueDismissControls(in: surface),
+      resolve: { control in
+        let lookup = RunnerKeyboardStatus.lookupFormat(of: control)
+        let matches = app.descendants(matching: control.kind == .key ? .key : .button)
+          .matching(NSPredicate(format: lookup.format, argumentArray: lookup.arguments))
+          .allElementsBoundByIndex
+        return matches.count == 1 ? matches[0] : nil
+      },
+      isTappable: { $0.exists && $0.isHittable }
+    )
+    guard let element else { return false }
+    element.tap()
+    return true
 #else
     return false
 #endif

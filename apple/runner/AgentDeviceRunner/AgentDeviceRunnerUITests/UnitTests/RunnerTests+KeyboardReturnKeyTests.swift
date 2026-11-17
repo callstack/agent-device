@@ -350,6 +350,40 @@ extension RunnerTests {
     XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: onlyTwins).isEmpty)
   }
 
+  /// A dismiss control that resolves but is covered or off screen is passed over for the next eligible
+  /// one, and with none tappable the answer is a refusal. Missing or empty identifiers are one thing.
+  func testKeyboardDismissSkipsACoveredControlAndRefusesWhenNoneIsTappable() {
+    let covered = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Hide keyboard", frame: CGRect(x: 700, y: 1096, width: 98, height: 54)
+    )
+    let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
+    )
+    let hittable: Set<String> = ["Done"]
+    let tapped = RunnerKeyboardStatus.firstTappable(
+      in: [covered, toolbarDone], resolve: { $0.text }, isTappable: { hittable.contains($0) }
+    )
+    XCTAssertEqual(tapped, "Done")
+    XCTAssertNil(
+      RunnerKeyboardStatus.firstTappable(in: [covered, toolbarDone], resolve: { $0.text }, isTappable: { _ in false })
+    )
+    XCTAssertNil(
+      RunnerKeyboardStatus.firstTappable(in: [covered], resolve: { _ in String?.none }, isTappable: { _ in true })
+    )
+
+    let noIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero)
+    let emptyIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero, identifier: "")
+    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(noIdentifier, in: [noIdentifier, emptyIdentifier]))
+    XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: noIdentifier).format, "label == %@")
+    XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: emptyIdentifier).format, "label == %@")
+    XCTAssertEqual(
+      RunnerKeyboardStatus.lookupFormat(
+        of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "done", frame: .zero, identifier: "Done")
+      ).arguments,
+      ["done", "Done"]
+    )
+  }
+
   /// A QuickType candidate is a button in the prediction bar above the key rows, so a one-letter one
   /// such as `I` or `A` must not pull the key-row anchor up to the bar: only keys anchor. With it
   /// anchored on the bar, a `Done` in the key rows could look like an accessory button and be pressed.
