@@ -289,82 +289,129 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
  * changes nothing about any other, so a state directory on a mounted volume, or one another uid left at
  * 0755, still gets a daemon that starts. The destination walk is what refuses a recording under ground this
  * daemon does not own. Returns the path, so a caller can name what it made without a second `mkdir`.
+ *
+ * `stateBase` is the daemon's state directory that the levels below it are judged from: a level is repaired
+ * only when every level above it, down from that base, is one this process may judge. {@link
+ * repairStateChain} says why the whole chain has to be judged rather than the leaf alone.
  */
-export function ensurePrivateDaemonStateDir(directory: string): string {
-  const firstCreated = fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
-  // `mkdir` reports the FIRST directory it made, and everything from there down is this call's to force
-  // private. Repairing only the leaf would leave `sessions/` at the 0775 a umask-002 creation gives it, and
-  // every recording is walked through that directory.
-  for (const level of createdStateLevels(firstCreated, directory)) {
-    repairPrivateStateDir(level);
-  }
+export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): string {
+  // Creation is one recursive `mkdir`: it creates the whole tail, while the repair below judges every level
+  // it reached. Creating one level at a time would have to decide what to do when the BASE is a link, which
+  // is the shape of a `~/.agent-device` on another disk, and refusing to create there would break a host the
+  // operator pointed at that disk. What creation can leave on ground the chain rejects is an empty
+  // directory, and the destination walk refuses any recording under it.
+  fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
+  repairStateChain(stateBase, directory);
   return directory;
-}
-
-/** Every level one creation made: `firstCreated` itself, down to `directory`. */
-function createdStateLevels(
-  firstCreated: string | undefined,
-  directory: string,
-): readonly string[] {
-  const below =
-    firstCreated === undefined || firstCreated === directory
-      ? []
-      : path.relative(firstCreated, directory).split(path.sep);
-  if (firstCreated === undefined || below.length === 0 || below[0] === '..') return [directory];
-  return [
-    firstCreated,
-    ...below.map((_, index) => path.join(firstCreated, ...below.slice(0, index + 1))),
-  ];
 }
 
 const STATE_DIR_MODE = 0o700;
 
 /**
- * Forces one existing state level to {@link STATE_DIR_MODE}, or changes nothing and says why.
+ * Forces every state level from `stateBase` down to `directory` to {@link STATE_DIR_MODE}, and never throws.
  *
- * `chmod` given the NAME acts on whatever the name resolves to, so the mode goes through a descriptor opened
- * `O_DIRECTORY | O_NOFOLLOW`, and only after that descriptor's `fstat` says this uid owns the entry: a root
- * daemon repairing a legacy state directory another local user could write would otherwise reach through a
- * `sessions` they left as a link, and strip access from an owner who never ran the daemon.
+ * `O_NOFOLLOW` guards only the LAST name of an open, so judging the leaf alone is not enough: a `sessions`
+ * left as a link to `/etc` by a user who could write a legacy state directory makes the leaf `sessions/ssh`
+ * resolve to `/etc/ssh`, and a root daemon repairing that leaf would change the mode of a directory nobody
+ * asked it to touch. So the chain is walked DOWN from the state base, each level judged by the `lstat` of the
+ * entry under its name, and the first level that is a link, is not a directory, or belongs to another uid
+ * stops the descent: that level and every level beneath it are left exactly as they are.
  *
- * A link, a name that is not a directory, a level another uid owns and a mount that denies the open or the
- * chmod are all a SKIP with a diagnostic, never a refusal: this decides a mode, not whether the daemon
- * starts (ADR 0016).
+ * Nothing here decides whether the daemon starts (ADR 0016), so no error is allowed to travel either: the
+ * `lstat`, the open, the `fstat`, the `fchmod` and the closing `close` are inside one catch, and any of them
+ * failing — `EACCES` on a directory this user cannot read, `ENOENT` on a name that went missing meanwhile,
+ * `EIO` on a host that cannot even release the descriptor — is reported as a skipped level and stopped there.
+ * Creation keeps its own failures, which come from the `mkdir` above.
  */
-function repairPrivateStateDir(directory: string): void {
+function repairStateChain(stateBase: string, directory: string): void {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
   if (process.platform === 'win32') return;
-  const judged = fs.lstatSync(directory, { bigint: true, throwIfNoEntry: false });
-  // The name is gone by now: whatever removed it also removed the mode this call came to force.
-  if (judged === undefined) return;
+  const levels = stateLevelsBelow(stateBase, directory);
+  // A caller that names a directory outside the state base has no chain here to judge it from.
+  if (levels === undefined) {
+    skipStateDirMode(directory, 'not_below_state_base');
+    return;
+  }
+  for (const level of levels) {
+    try {
+      if (!repairStateLevel(level)) return;
+    } catch (error) {
+      skipStateDirMode(level, (error as NodeJS.ErrnoException).code ?? 'unknown');
+      return;
+    }
+  }
+}
+
+/**
+ * Forces one level, and reports whether the descent may go on beneath it.
+ *
+ * `chmod` given the NAME acts on whatever the name resolves to, so the mode goes through a descriptor opened
+ * `O_DIRECTORY | O_NOFOLLOW`, and only after that descriptor's `fstat` says this uid owns the entry — the
+ * entry the `fchmod` will change is the one asked about, because a writable parent can swap the name between
+ * two calls. A LINK or a non-directory is not a level of this tree, and a foreign directory is not this
+ * process's to judge, so both stop the descent rather than being followed or forced.
+ */
+function repairStateLevel(level: string): boolean {
+  const judged = fs.lstatSync(level, { bigint: true, throwIfNoEntry: false });
+  // The name is gone: whatever removed it also removed the mode this call came to force, and there is
+  // nothing below a name that does not exist.
+  if (judged === undefined) return false;
+  if (!judged.isDirectory()) {
+    skipStateDirMode(level, 'not_a_directory');
+    return false;
+  }
+  if (Number(judged.uid) !== (process.getuid?.() ?? -1)) {
+    skipStateDirMode(level, 'foreign_owned');
+    return false;
+  }
   // The fast path: a level that already has the mode needs nothing, and asking nothing of the mount keeps
   // the common start free of an open.
-  if ((Number(judged.mode) & 0o777) === STATE_DIR_MODE) return;
+  if ((Number(judged.mode) & 0o777) === STATE_DIR_MODE) return true;
+  forcePrivateStateDir(level);
+  return true;
+}
+
+/** Forces one level whose ownership passed, through a descriptor that cannot follow a link. */
+function forcePrivateStateDir(level: string): void {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(
-      directory,
+      level,
       fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
     );
+    // The entry this open REACHED, asked before the mode is forced: the name can be swapped for a link
+    // between the `lstat` above and this open, and only the descriptor says what the `fchmod` will change.
     if (Number(fs.fstatSync(descriptor, { bigint: true }).uid) !== (process.getuid?.() ?? -1)) {
-      skipStateDirMode(directory, 'not owned by this user');
+      skipStateDirMode(level, 'foreign_owned');
       return;
     }
     fs.fchmodSync(descriptor, STATE_DIR_MODE);
-  } catch (error) {
-    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
-    skipStateDirMode(directory, (error as NodeJS.ErrnoException).code ?? 'unknown');
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 
-/** Reports the one state level whose mode this repair will not change. */
-function skipStateDirMode(directory: string, because: string): void {
+/** Every level from `stateBase` down to `directory`, base first, or `undefined` if it is not below it. */
+function stateLevelsBelow(stateBase: string, directory: string): readonly string[] | undefined {
+  const below = path.relative(stateBase, directory);
+  if (below === '') return [stateBase];
+  if (below.startsWith('..') || path.isAbsolute(below)) return undefined;
+  const names = below.split(path.sep);
+  return [
+    stateBase,
+    ...names.map((_, index) => path.join(stateBase, ...names.slice(0, index + 1))),
+  ];
+}
+
+/**
+ * Reports the one state level whose mode this repair will not change, and returns nothing: a skip is never a
+ * refusal, and a caller that cannot reach a level still gets the directory it asked for.
+ */
+function skipStateDirMode(level: string, reason: string): void {
   emitDiagnostic({
     level: 'warn',
     phase: 'daemon_state_mode_repair_skipped',
-    data: { path: directory, error: { message: `state level kept as it is: ${because}` } },
+    data: { path: level, reason: `state mode repair stopped at this level: ${reason}` },
   });
 }
 
@@ -419,7 +466,7 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  ensurePrivateDaemonStateDir(input.paths.baseDir);
+  ensurePrivateDaemonStateDir(input.paths.baseDir, input.paths.baseDir);
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
     repairStateMode(input.paths.logPath, 0o600);

@@ -370,7 +370,10 @@ export class SessionStore {
     const session = this.resolveCurrent(ref);
     if (!session) return;
     try {
-      ensurePrivateDaemonStateDir(this.resolveSessionDir(ref.address));
+      ensurePrivateDaemonStateDir(
+        this.resolveSessionDir(ref.address),
+        this.resolveDaemonStateDir(),
+      );
       const tombstone: RepairSessionTombstone = {
         owner: ref.address,
         reapedAt: Date.now(),
@@ -439,7 +442,10 @@ export class SessionStore {
    */
   writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
     try {
-      ensurePrivateDaemonStateDir(this.resolveSessionDir(sessionName));
+      ensurePrivateDaemonStateDir(
+        this.resolveSessionDir(sessionName),
+        this.resolveDaemonStateDir(),
+      );
       fs.writeFileSync(
         resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
         `${JSON.stringify(tombstone)}\n`,
@@ -523,7 +529,10 @@ export class SessionStore {
   // The daemon-paths owner creates and repairs each level (ADR 0016): under the shared-checkout umask a
   // mode-less creation is 0775, and the script-destination rule then refuses the daemon's own recordings.
   ensureSessionDir(sessionName: string): string {
-    return ensurePrivateDaemonStateDir(this.resolveSessionDir(sessionName));
+    return ensurePrivateDaemonStateDir(
+      this.resolveSessionDir(sessionName),
+      this.resolveDaemonStateDir(),
+    );
   }
 
   /** Path to session-scoped app log file. Agent can grep this for token-efficient debugging. */

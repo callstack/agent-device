@@ -169,7 +169,7 @@ test.skipIf(process.platform === 'win32')(
 
     // How the daemon reaches this state: startup forces `sessions/` private, an `open` then ensures its own
     // session directory, and the remote route is the one that puts `remote-scripts/` in place.
-    ensurePrivateDaemonStateDir(sessions);
+    ensurePrivateDaemonStateDir(sessions, root);
     store.ensureSessionDir('journey');
     expect(fs.lstatSync(sessions).mode & 0o777).toBe(0o700);
     expect(fs.lstatSync(path.join(sessions, 'journey')).mode & 0o777).toBe(0o700);
@@ -198,7 +198,7 @@ test.skipIf(process.platform === 'win32')(
     fs.chmodSync(sessions, 0o775);
     serveHostOwnership({ [sessions]: FOREIGN_UID });
 
-    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions))).toBe(1);
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, root))).toBe(1);
 
     // Nothing was touched: the owner's directory keeps the mode they set for it.
     expect(fs.lstatSync(sessions).mode & 0o777).toBe(0o775);
@@ -220,7 +220,7 @@ test.skipIf(process.platform === 'win32')(
     const sessions = path.join(root, 'sessions');
     fs.symlinkSync(planted, sessions);
 
-    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions))).toBe(1);
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, root))).toBe(1);
 
     expect(fs.lstatSync(planted).mode & 0o777).toBe(0o777);
     expect(fs.readdirSync(planted)).toEqual([]);

@@ -166,7 +166,10 @@ export class SessionScriptWriter {
    * `publishScriptFileSync` decides.
    */
   private remoteScriptPath(): string {
-    const directory = ensurePrivateDaemonStateDir(path.join(this.sessionsDir, 'remote-scripts'));
+    const directory = ensurePrivateDaemonStateDir(
+      path.join(this.sessionsDir, 'remote-scripts'),
+      path.dirname(this.sessionsDir),
+    );
     return path.join(directory, `${crypto.randomUUID()}.ad`);
   }
 
