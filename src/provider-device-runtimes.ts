@@ -55,7 +55,7 @@ async function composeProviderRuntime(
     ...builtinProviderCandidates(host),
     ...candidates,
   ]);
-  const registry = await startProviderRegistry(resolved, host.env, policy);
+  const registry = await startProviderRegistry(resolved, host, policy);
   return Object.freeze({
     runtimes: Object.freeze(registry.registrations.map(({ runtime }) => runtime)),
     platformModules: Object.freeze(

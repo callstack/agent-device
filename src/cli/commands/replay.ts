@@ -47,7 +47,7 @@ async function handleReplayExportCommand({
   // lazily by the router, and the engine sits one further thunk behind the backend.
   const result = await (
     await import('@agent-device/replay-port/replay-backend-registry')
-  ).withReplayBackend('maestro', host.env, (backend) =>
+  ).withReplayBackend('maestro', host, (backend) =>
     backend.exportReplayScript(parsed.actions, {
       actionLines: parsed.actionLines,
       metadata: readReplayScriptMetadata(script),

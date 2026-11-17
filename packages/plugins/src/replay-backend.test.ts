@@ -39,7 +39,11 @@ function engine(backend = 'maestro') {
 test('managed replay setup stays lazy and retains one backend and one cleanup owner', async () => {
   const e = engine();
   const resolved = await resolveProviderPlugins([candidate(e.plugin)]);
-  const registry = await startProviderRegistry(resolved, { TOKEN: 'host-value' }, policy);
+  const registry = await startProviderRegistry(
+    resolved,
+    { env: { TOKEN: 'host-value' }, cwd: '/' },
+    policy,
+  );
   expect(e.create).not.toHaveBeenCalled();
   expect(e.setup.mock.calls[0]?.[0]).toMatchObject({ env: { TOKEN: 'host-value' } });
   expect(registry.registrations).toEqual([]);
@@ -78,7 +82,7 @@ test('backend identity is separate from provider identity and first failure clai
     candidate(engine().plugin),
     candidate(other.plugin),
   ]);
-  const registry = await startProviderRegistry(resolved, {}, policy);
+  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' }, policy);
   expect(registry.claimedProviders).toEqual([]);
   expect(registry.inventory).toMatchObject([
     { backend: 'maestro', state: 'failed', error: { reason: 'incompatible_plugin' } },
@@ -104,7 +108,7 @@ test('setup failures stay permanent while failed lazy loads can retry without fa
   load.create.mockRejectedValueOnce(new Error('engine failed'));
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(setup.plugin), candidate(load.plugin)]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   await expect(registry.resolveReplayBackend('absent', host)).rejects.toMatchObject({
@@ -145,7 +149,7 @@ test('the registry rejects the wrong runtime id and cleans up an invalid setup',
   const invalid = { ...engine('invalid').plugin, setup: () => ({ replayBackend: {}, dispose }) };
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(wrong.plugin), candidate(invalid)]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   await expect(registry.resolveReplayBackend('wrong', host)).rejects.toMatchObject({
@@ -170,7 +174,7 @@ test('one backend disposer cannot delay another backend disposer', async () => {
   );
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(first.plugin), candidate(second.plugin)]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   const closing = registry.close();
@@ -213,7 +217,7 @@ test('native execution retries failed lazy loads while sharing claims, caching a
       }),
       candidate(competingPlugin),
     ]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   expect(registry.inventory).toMatchObject([
@@ -277,7 +281,7 @@ test.each([
           ...override,
         }),
       ]),
-      {},
+      { env: {}, cwd: '/' },
       policy,
     );
     await expect(registry.resolveReplayExecution()).rejects.toMatchObject({ details: { reason } });
@@ -304,7 +308,7 @@ test('wrong native capability fails inventory, disposes setup and keeps its firs
       candidate({ apiVersion: 2, kind: 'replay-backend', backend: 'ad', setup: laterSetup }),
       candidate(engine('maestro').plugin),
     ]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   expect(registry.inventory).toMatchObject([
@@ -336,7 +340,7 @@ test('a package name cannot select an active foreign backend for native executio
         },
       },
     ]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   try {
@@ -364,7 +368,7 @@ test('a selected native package load failure cannot masquerade as absence by its
         },
       },
     ]),
-    {},
+    { env: {}, cwd: '/' },
     policy,
   );
   try {
@@ -378,4 +382,32 @@ test('a selected native package load failure cannot masquerade as absence by its
   } finally {
     await registry.close();
   }
+});
+
+test('replay setup receives the supplied command host', async () => {
+  const { mkdtempForTestSync } = await import('@agent-device/test-kit');
+  const { realpathSync } = await import('node:fs');
+  const cwd = realpathSync(mkdtempForTestSync('plugin-replay-host-'));
+  let result = '';
+  const e = engine();
+  const plugin = {
+    ...e.plugin,
+    setup: async (pluginHost: ProviderPluginHost) => {
+      result = (
+        await pluginHost.runHostCommand(process.execPath, [
+          '-e',
+          'process.stdout.write(JSON.stringify([process.cwd(), process.env.REPLAY_HOST_VALUE]))',
+        ])
+      ).stdout;
+      return e.setup(pluginHost);
+    },
+  };
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([candidate(plugin)]),
+    { cwd, env: { REPLAY_HOST_VALUE: 'supplied' } },
+    policy,
+    'replay-backends',
+  );
+  expect(JSON.parse(result)).toEqual([cwd, 'supplied']);
+  await registry.close();
 });

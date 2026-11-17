@@ -24,7 +24,6 @@ import {
   awsRegressionContext,
 } from './cloud-webdriver-regression-fixtures.ts';
 import { inspectProviderDeploymentAdmission } from './stale-provider-runtime-admission.fixtures.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 bindTestCommandHost();
 
@@ -171,14 +170,14 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
     tenant: 'team-a',
     runId: 'run-a',
     leaseId,
-    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    leaseProvider: 'aws-device-farm',
   };
   const meta = {
     tenantId: 'team-a',
     runId: 'run-a',
     leaseId,
     leaseBackend: 'android-instance' as const,
-    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    leaseProvider: 'aws-device-farm',
     deviceKey: 'provider-device-regression',
     clientId: 'client-a',
   };
@@ -248,9 +247,7 @@ async function awsWebDriverRuntime(host: AwsRemoteAccessHost) {
     clientVersion: 'test',
     runHostCommand: host.run,
   });
-  const runtime = runtimes.find(
-    (candidate) => candidate.provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-  );
+  const runtime = runtimes.find((candidate) => candidate.provider === 'aws-device-farm');
   if (!runtime) throw new Error('Expected AWS Device Farm WebDriver runtime');
   return runtime;
 }
