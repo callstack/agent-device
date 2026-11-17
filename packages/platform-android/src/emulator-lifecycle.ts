@@ -5,7 +5,10 @@ import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { androidAdbInvocation, androidAdbSerialTarget } from './adb-transport.ts';
 import { runAndroidHostAdb } from './adb-executor.ts';
-import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import {
+  bootFailureHint,
+  type BootFailureReason,
+} from '@agent-device/provision-kit/boot-diagnostics';
 
 const ANDROID_BOOT_POLL_MS = 1_000;
 const ANDROID_BOOT_PROP_TIMEOUT_MS = 10_000;
@@ -52,7 +55,7 @@ export async function waitForAndroidBoot(
           Math.min(remainingMs, ANDROID_BOOT_PROP_TIMEOUT_MS),
           signal,
         );
-        if (signal?.aborted) throw createRequestCanceledError();
+        if (signal?.aborted) throw androidBootCancellation(signal);
         lastBootResult = result;
         if (result.stdout.trim() === '1') return;
         // exec-guard-allow: getprop exits 0 while the device is still booting;
@@ -80,9 +83,16 @@ export async function waitForAndroidBoot(
       },
     );
   } catch (error) {
-    if (signal?.aborted) throw createRequestCanceledError();
+    if (signal?.aborted) throw androidBootCancellation(signal);
     throwAndroidBootFailure({ error, serial, timeoutMs, deadline, lastBootResult, timedOut });
   }
+}
+
+/** Keeps the cancellation owner's typed error, such as its deadline details. */
+function androidBootCancellation(signal: AbortSignal): AppError {
+  return signal.reason instanceof AppError
+    ? signal.reason
+    : createRequestCanceledError(undefined, signal.reason);
 }
 
 function isTransientAndroidBootFailure(error: unknown): boolean {
@@ -94,7 +104,7 @@ function isTransientAndroidBootFailure(error: unknown): boolean {
   );
 }
 
-function androidBootFailureReason(error: unknown): ReturnType<typeof classifyBootFailure> {
+function androidBootFailureReason(error: unknown): BootFailureReason {
   const appError = asAppError(error);
   if (
     appError.code === 'TOOL_MISSING' ||
@@ -130,14 +140,14 @@ function throwAndroidBootFailure(params: {
 function normalizedAndroidBootFailureReason(
   params: Parameters<typeof throwAndroidBootFailure>[0],
   appError: AppError,
-): ReturnType<typeof classifyBootFailure> {
+): BootFailureReason {
   if (isTransientAndroidBootFailure(params.error) || params.timedOut) return 'ANDROID_BOOT_TIMEOUT';
   return androidBootFailureReason(appError);
 }
 
 function buildAndroidBootFailureDetails(
   params: Parameters<typeof throwAndroidBootFailure>[0],
-  reason: ReturnType<typeof classifyBootFailure>,
+  reason: BootFailureReason,
 ) {
   return {
     serial: params.serial,
@@ -154,7 +164,7 @@ function buildAndroidBootFailureDetails(
 
 function buildAndroidBootError(
   appError: AppError,
-  reason: ReturnType<typeof classifyBootFailure>,
+  reason: BootFailureReason,
   timedOut: boolean,
   details: ReturnType<typeof buildAndroidBootFailureDetails>,
 ): AppError {

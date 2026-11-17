@@ -129,6 +129,36 @@ test.each(['0', '1'])('cancellation wins when getprop returns %s', async (stdout
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
+test('cancellation keeps the owner reason details and wraps a reason-less abort', async () => {
+  const owned = new AbortController();
+  const ownerReason = new AppError('COMMAND_FAILED', 'canceled', {
+    reason: 'request_canceled',
+    timeoutMs: 250,
+    requestId: 'req-boot',
+  });
+  mockRunCmd.mockImplementationOnce(async () => {
+    owned.abort(ownerReason);
+    return { stdout: '0', stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, owned.signal), (error) => {
+    assert.equal(error, ownerReason);
+    return true;
+  });
+
+  const generic = new AbortController();
+  const genericReason = new Error('caller went away');
+  mockRunCmd.mockImplementationOnce(async () => {
+    generic.abort(genericReason);
+    return { stdout: '0', stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, generic.signal), (error) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'request_canceled');
+    assert.equal(error.cause, genericReason);
+    return true;
+  });
+});
+
 test.each([
   {
     message: 'changed command-timeout wording',

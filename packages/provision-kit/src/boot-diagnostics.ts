@@ -9,7 +9,7 @@ export type BootFailureReason =
   | 'UNKNOWN';
 
 type BootDiagnosticContext = {
-  platform?: 'ios' | 'android';
+  platform?: 'ios';
   phase?: 'boot' | 'connect' | 'transport';
 };
 
@@ -24,9 +24,7 @@ export function classifyBootFailure(input: {
   const appErr = input.error ? asAppError(input.error) : null;
   const platform = input.context?.platform;
   const phase = input.context?.phase;
-  if (appErr?.code === 'TOOL_MISSING') {
-    return platform === 'android' ? 'ADB_TRANSPORT_UNAVAILABLE' : 'IOS_TOOL_MISSING';
-  }
+  if (appErr?.code === 'TOOL_MISSING') return 'IOS_TOOL_MISSING';
   const details = (appErr?.details ?? {}) as Record<string, unknown>;
   const detailMessage = typeof details.message === 'string' ? details.message : undefined;
   const detailStdout = typeof details.stdout === 'string' ? details.stdout : undefined;
@@ -91,32 +89,12 @@ export function classifyBootFailure(input: {
     return 'IOS_BOOT_TIMEOUT';
   }
   if (
-    platform === 'android' &&
-    phase === 'boot' &&
-    (haystack.includes('timed out') || haystack.includes('timeout'))
-  ) {
-    return 'ANDROID_BOOT_TIMEOUT';
-  }
-  if (
     haystack.includes('resource temporarily unavailable') ||
     haystack.includes('killed: 9') ||
     haystack.includes('cannot allocate memory') ||
     haystack.includes('system is low on memory')
   ) {
     return 'CI_RESOURCE_STARVATION_SUSPECTED';
-  }
-  if (
-    platform === 'android' &&
-    (haystack.includes('device not found') ||
-      haystack.includes('no devices') ||
-      haystack.includes('device offline') ||
-      haystack.includes('offline') ||
-      haystack.includes('unauthorized') ||
-      haystack.includes('not authorized') ||
-      haystack.includes('unable to locate device') ||
-      haystack.includes('invalid device'))
-  ) {
-    return 'ADB_TRANSPORT_UNAVAILABLE';
   }
   if (appErr?.code === 'COMMAND_FAILED' || haystack.length > 0) return 'BOOT_COMMAND_FAILED';
   return 'UNKNOWN';
