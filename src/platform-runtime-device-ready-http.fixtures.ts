@@ -49,6 +49,7 @@ export async function route() {
         readClipboard: { available: true as const },
         readAlert: { available: true as const },
         readSetting: { available: true as const },
+        setSetting: { available: true as const },
         keyboardStatus: { available: true as const },
       },
     };
@@ -65,6 +66,7 @@ export async function route() {
         readClipboard,
         readAlert: unexpected,
         readSetting: unexpected,
+        setSetting: unexpected,
         keyboardStatus: unexpected,
       },
       [Symbol.asyncDispose]: async () => {},

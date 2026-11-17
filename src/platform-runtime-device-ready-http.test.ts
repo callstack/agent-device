@@ -291,10 +291,11 @@ test.each([
   ['wait', ['text', 'ready']],
   ['find', ['ready', 'exists']],
   ['settings', ['text-size']],
+  ['settings', ['wifi', 'on']],
   ['alert', []],
   ['keyboard', ['status']],
 ])(
-  '%s: caller abort stops sessionless Android readiness through real HTTP admission',
+  '%s %j: caller abort stops sessionless Android readiness through real HTTP admission',
   async (command, positionals) => {
     const { server, send, runtime, unexpected } = await route();
     const polling = deferred<void>();
