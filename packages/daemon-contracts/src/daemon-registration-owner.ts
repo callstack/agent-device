@@ -36,6 +36,7 @@ import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-invent
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
+  configuredStateBaseDisagrees,
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonRuntimeOwnership,
@@ -724,22 +725,19 @@ function retirePrivateStateIfEligible(
 }
 
 /**
- * Creates one of the daemon's own state directories at 0700 and answers whether every level of that chain is
- * private ground. A refusal is the ANCESTRY, never a MODE (#4565); ADR 0016 owns the rule that reads it.
+ * Forces the daemon's own state chain to 0700 and answers whether every level is private ground (#4565). A
+ * refusal is the ANCESTRY, never a MODE, and never a re-spelling: the caller writes its own `directory`.
  */
 export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): DaemonStateDir {
   return repairStateChain(stateBase, directory, 'script');
 }
 
-/** The directory to write under, and whether every level is this uid's at 0700, reached by no link. */
-export type DaemonStateDir = Readonly<{ path: string; privateChain: boolean }>;
+/** Whether every level the caller's own text walks to is this uid's at 0700, reached by no link. */
+export type DaemonStateDir = Readonly<{ privateChain: boolean }>;
 
-/**
- * For a caller that writes no script under the directory — startup, a session's artifacts, a tombstone: the
- * path, verdict unread. Untrusted ground refuses the script writer, never this caller.
- */
-export function ensureDaemonStateDir(directory: string, stateBase: string): string {
-  return repairStateChain(stateBase, directory, 'own-state').path;
+/** For a caller that writes no script under the directory: startup, an artifact, a tombstone. */
+export function ensureDaemonStateDir(directory: string, stateBase: string): void {
+  repairStateChain(stateBase, directory, 'own-state');
 }
 
 /** The only creation ground the walk refused sees: `main`'s recursive `mkdir`, and NO mode change. */
@@ -757,14 +755,20 @@ const STATE_DIR_MODE = 0o700;
 const STATE_DIR_FLAGS = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
 
 /**
- * Forces every state level from `stateBase` down to `directory` to {@link STATE_DIR_MODE}, and never throws.
- * The base is resolved ONCE by {@link verifiedDirectoryPath}; only NAMES below it are built (ADR 0016).
+ * Forces every state level from `stateBase` down to `directory` to {@link STATE_DIR_MODE}, never throwing. The
+ * base is stood on ONCE; only NAMES below it are built (ADR 0016).
  */
 function repairStateChain(stateBase: string, directory: string, use: StateDirUse): DaemonStateDir {
   // Windows answers access from an ACL and `chmod` only toggles the read-only bit: nothing to judge.
   if (process.platform === 'win32') {
     createOwnStateLevels(directory);
-    return { path: directory, privateChain: true };
+    return { privateChain: true };
+  }
+  // Asked FIRST, read-only: a base naming two directories is repaired in neither (#4584).
+  if (configuredStateBaseDisagrees(stateBase)) {
+    skipStateDirMode(stateBase, 'state_spelling_disagrees');
+    if (use === 'own-state') createOwnStateLevels(directory);
+    return { privateChain: false };
   }
   let physical: string;
   try {
@@ -772,25 +776,21 @@ function repairStateChain(stateBase: string, directory: string, use: StateDirUse
     // No script goes on ground nothing judged; `own-state` still gets its own levels (#4584).
     if (base === undefined) {
       if (use === 'own-state') createOwnStateLevels(directory);
-      return { path: directory, privateChain: false };
+      return { privateChain: false };
     }
     physical = base;
   } catch (error) {
     // Nothing is known of this chain, so nothing else is touched; one skip says so.
     skipStateDirMode(stateBase, stateRepairReason(error));
-    return { path: directory, privateChain: false };
+    return { privateChain: false };
   }
   const tail = stateTailBelow(stateBase, directory);
   if (tail === undefined) {
     skipStateDirMode(directory, 'not_below_state_base');
-    return { path: directory, privateChain: false };
+    return { privateChain: false };
   }
-  // Every level is a NAME under the verified base: the descent is the chain the walk judged.
-  const verified = tail.reduce((level, name) => childPath(level, name), physical);
-  return {
-    path: verified,
-    privateChain: descendStateChain(stateBase, directory, physical, tail, use),
-  };
+  // Every level is a NAME under the base the walk arrived at: the chain the caller's text walks to.
+  return { privateChain: descendStateChain(stateBase, directory, physical, tail, use) };
 }
 
 /**

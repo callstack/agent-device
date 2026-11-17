@@ -18,7 +18,10 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import {
+  configuredStateBaseDisagrees,
+  resolveDaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   authoringPublication,
@@ -157,31 +160,25 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'startup keeps the state chain it verified for the scripts it picks, and nothing else',
+  'startup refuses the recordings it picks for a state dir spelled `..` behind a link, and creates nothing',
   async () => {
     // `AGENT_DEVICE_STATE_DIR=<root>/alias/../state`, with `alias` a link into `actual/x`. The kernel resolves
-    // that base to `<root>/actual/state`, and creates under there; `path.join` folds the step away and answers
-    // `<root>/state`, a DIFFERENT directory that happens to exist here. Two things follow, and they are not the
-    // same demand:
-    //
-    // - The runtime, its store, the lock, the registration and the tombstones keep the name the setting spells,
-    //   as they have always done. A client reads those entries by the same setting and the same rule, and the
-    //   kernel resolves the step for it, so one spelling is one entry. Answering them with the verified name
-    //   would move them out of what every client can name.
-    // - The two destinations the DAEMON picks for itself — a default recording, and a remote version — are
-    //   CREATED below that base, so they go where the walk arrived and only if that chain is private ground.
+    // that base to `<root>/actual/state`; `path.join` folds the step away and answers `<root>/state`. One
+    // setting, two directories, and every path this daemon BUILDS — `sessions/`, the lock, the registration —
+    // is a folded one, because `resolveDaemonPaths` hands out `path.join`'s answers. A state path has ONE
+    // spelling, so the daemon keeps the configured text and refuses the two destinations it picks a path for,
+    // rather than force a mode in, or write a recording under, a directory no client can name (ADR 0016).
     const root = mkdtempForTestSync('agent-device-startup-state-alias-');
-    // `actual/x` exists, and `actual` (one step above where the link lands) is where the kernel's `..`
-    // arrives — so the state base has to be there before the walk can stand on it.
     fs.mkdirSync(path.join(root, 'actual', 'x'), { recursive: true });
     fs.symlinkSync(path.join(root, 'actual', 'x'), path.join(root, 'alias'));
     // Spelled by hand: `path.join` would fold the step here, and the setting has to carry it to the daemon.
     const configuredBase = `${root}/alias/../state`;
-    const verifiedBase = path.join(root, 'actual', 'state');
+    const walkedBase = path.join(root, 'actual', 'state');
     const foldedBase = path.join(root, 'state');
-    // The folded name already stands, the way a previous run that folded left it: owned by this user, and open.
+    // Both trees stand loose, the way a release that folded left one of them.
+    fs.mkdirSync(path.join(walkedBase, 'sessions'), { recursive: true });
     fs.mkdirSync(path.join(foldedBase, 'sessions'), { recursive: true });
-    fs.chmodSync(foldedBase, 0o755);
+    for (const directory of [walkedBase, foldedBase]) fs.chmodSync(directory, 0o755);
 
     // The composition input is the real construction: it is what the server passes to the root's factory.
     let composed: DaemonRuntimeDepsInput | undefined;
@@ -197,23 +194,22 @@ test.skipIf(process.platform === 'win32')(
       skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
     }));
     try {
-      // Everything a CLIENT names too — the base, the sessions dir, and behind them the lock, the registration
-      // and the tombstones — keeps the spelling the setting gave, exactly as on main. A client reads those
-      // entries by the same setting with the same rule, and the kernel resolves the step for it, so one
-      // spelling is one entry. Rebinding them to the verified chain would move them out of what a client can
-      // name. `baseDir` is the spelled text; `sessionsDir` is what `path.join` has always made of it.
+      // Startup carries on: the daemon runs, on the text the operator spelled. Two skips, one per level it
+      // asked for, each saying the setting names two directories.
       const input = composed!;
       expect(input.baseDir).toBe(`${root}/alias/../state`);
       expect(input.sessionsDir).toBe(path.join(foldedBase, 'sessions'));
-      // Startup repaired the base it verified: the chain the kernel arrives at stands private.
-      expect(modeOf(verifiedBase)).toBe(0o700);
-      // Nothing was skipped, and that is the whole point of the rewrite: the chain the kernel arrives at is
-      // created and judged level by level, so `sessions/` appears under the VERIFIED base rather than under the
-      // folded text. The skip this used to count was the repair stopping at a name the folded spelling never
-      // created — a symptom of creating the tail as text before judging it.
-      expect(skipped).toBe(0);
+      expect(skipped).toBe(2);
+      // And startup created NOTHING in either tree — no forced mode, no `sessions` entry — because repairing
+      // one of them would judge a chain the caller of the other one reads.
+      for (const state of [walkedBase, foldedBase]) {
+        expect(modeOf(state)).toBe(0o755);
+        expect(fs.readdirSync(path.join(state, 'sessions'))).toEqual([]);
+      }
 
-      const store = new SessionStore(input.sessionsDir, createTestHostEnvironment(), input.baseDir);
+      // The same answer the runtime hands ITS store: this setting names two directories, so the store
+      // refuses the destinations it picks for itself before creating either of them.
+      const store = new SessionStore(input.sessionsDir, createTestHostEnvironment(), false);
       const record = (name: string, extra: Parameters<typeof authoringPublication>[1]) =>
         store.writeSessionLog(
           store.publish(
@@ -225,38 +221,22 @@ test.skipIf(process.platform === 'win32')(
           ),
         );
 
-      // The default recording: a directory this daemon creates for itself, so it stands on the chain judged
-      // from the base, and not on the folded text `path.join` made of the same setting.
-      const written = record('journey', {});
-      if (!written.written) throw new Error(`recording refused: ${JSON.stringify(written)}`);
-      expect(path.dirname(written.path)).toBe(path.join(verifiedBase, 'sessions'));
-      // The remote version, in the directory the same answer names for it.
-      const version = record('download', { remote: true });
-      if (!version.written) throw new Error(`remote version refused: ${JSON.stringify(version)}`);
-      expect(path.dirname(version.path)).toBe(
-        path.join(verifiedBase, 'sessions', 'remote-scripts'),
-      );
-      expect(modeOf(path.join(verifiedBase, 'sessions'))).toBe(0o700);
+      // Both destinations the DAEMON picks for itself are refused, and the hint names the setting as the thing
+      // to fix: an explicit `--save-script` path is a caller's own path and is unaffected.
+      for (const name of ['journey', 'download']) {
+        const refused = refusalOf(record(name, name === 'download' ? { remote: true } : {}));
+        expect(refused).toMatchObject({ reason: 'state_chain_untrusted' });
+        expect(String(refused.hint)).toContain('..');
+      }
+      // The proof: neither tree gained a `remote-scripts`, and neither gained a recording.
+      for (const state of [walkedBase, foldedBase]) {
+        expect(fs.readdirSync(path.join(state, 'sessions'))).toEqual([]);
+      }
 
-      // The folded directory is the proof: nobody judged it, so nobody wrote in it or changed its mode.
-      expect(modeOf(foldedBase)).toBe(0o755);
-      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
-
-      // The same base, asked of the STORE: it repairs the chain from the base it was handed, not from
-      // `path.dirname(sessionsDir)`. `path.join` folded the `alias/../` step out of `sessionsDir`, so the derived
-      // parent is `foldedBase` — a directory the walk never arrived at, and one this daemon must not chmod or
-      // populate. The store hands its base to the repair, so the tombstone directory is made under the VERIFIED
-      // chain and the folded directory stays exactly as it was found.
-      expect(store.resolveDaemonStateDir()).toBe(`${root}/alias/../state`);
-      expect(store.ensureSessionDir('journey')).toBe(
-        path.join(verifiedBase, 'sessions', 'journey'),
-      );
-      expect(modeOf(foldedBase)).toBe(0o755);
-      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
-
-      // Creating that directory is only half the rule: the same path has to be used for everything written
-      // under it. Both markers are written, read back and cleared through the store, and the folded directory
-      // staying empty is what proves the read found them where the repair put them (#4584).
+      // What the refused chain still does is run: the store's own state is created on the configured text, by
+      // `main`'s recursive `mkdir`, and both markers round-trip through it (#4584).
+      expect(store.resolveDaemonStateDir()).toBe(path.join(foldedBase));
+      expect(store.ensureSessionDir('journey')).toBe(path.join(foldedBase, 'sessions', 'journey'));
       const marker = {
         owner: 'marker',
         expiredAtMs: Date.now(),
@@ -266,14 +246,9 @@ test.skipIf(process.platform === 'win32')(
       };
       store.writeIdleExpiryTombstone('marker', marker);
       expect(store.readIdleExpiryTombstone('marker')).toEqual(marker);
-      expect(fs.existsSync(path.join(verifiedBase, 'sessions', 'marker', 'idle-expiry.json'))).toBe(
-        true,
-      );
       store.clearIdleExpiryTombstone('marker');
       expect(store.readIdleExpiryTombstone('marker')).toBeUndefined();
 
-      // The repair marker carries the commit failure a reaped transaction preserved, so a later command names
-      // that cause instead of a generic expiry. Its details surviving the round-trip is the thing at risk.
       const reaped = store.publish('marker', makeAuthoringSession('marker', {}));
       store.writeRepairTombstone(reaped, 60_000, {
         code: 'COMMAND_FAILED',
@@ -285,12 +260,124 @@ test.skipIf(process.platform === 'win32')(
       });
       store.clearRepairTombstone('marker');
       expect(store.readRepairTombstone('marker')).toBeUndefined();
-
-      // And still nothing landed on the spelling the walk never arrived at.
-      expect(modeOf(foldedBase)).toBe(0o755);
-      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
     } finally {
       await runtime.close();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'startup delivers the recordings it picks to a state dir under a linked home',
+  async () => {
+    // The layout that MUST keep working: the home directory itself is the link (an encrypted volume, a data
+    // disk), and the state dir is an ordinary directory below it. The setting spells itself, so there is one
+    // directory to stand on and one tree for a client to read, every level is this uid's at 0700, and the
+    // chain is private ground. A link AT the base is the case the walk refuses, and startup keeps that host
+    // running with its own `mkdir` (the suite above pins both halves).
+    const realHome = fs.realpathSync(mkdtempForTestSync('agent-device-startup-home-'));
+    fs.chmodSync(realHome, 0o700);
+    const parent = mkdtempForTestSync('agent-device-startup-link-');
+    const linkedHome = path.join(parent, 'home');
+    fs.symlinkSync(realHome, linkedHome);
+    const stateDir = path.join(linkedHome, '.agent-device');
+
+    const runtime = await startDaemonRuntime({
+      host: hostFor(stateDir),
+      ...silent,
+      composeDeps: daemonRuntimeDepsFixture({}),
+    });
+    try {
+      const { sessionsDir } = resolveDaemonPaths(stateDir);
+      const store = new SessionStore(sessionsDir, createTestHostEnvironment());
+      const written = store.writeSessionLog(
+        store.publish(
+          'journey',
+          makeAuthoringSession('journey', {
+            scriptPublication: authoringPublication('armed', {}),
+            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+          }),
+        ),
+      );
+      if (!written.written)
+        throw new Error(`a linked home refused its own recording: ${JSON.stringify(written)}`);
+      // Recorded, and named by the spelling the operator gave: a client reads it back by the same text.
+      expect(path.dirname(written.path)).toBe(sessionsDir);
+      expect(fs.existsSync(written.path)).toBe(true);
+      // The bytes are under the directory the link leads to, forced private from the base down.
+      expect(fs.existsSync(path.join(realHome, '.agent-device', 'sessions'))).toBe(true);
+      expect(modeOf(path.join(realHome, '.agent-device', 'sessions'))).toBe(0o700);
+    } finally {
+      await runtime.close();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'startup delivers the recordings it picks for a state dir spelled with a trailing or doubled separator',
+  async () => {
+    // `AGENT_DEVICE_STATE_DIR=~/.agent-device/` — the shape a shell variable, a Dockerfile `ENV` or a mounted
+    // volume usually carries, and the one a first run cannot recover from if the two-spelling check mistakes a
+    // SEPARATOR for a step. A trailing separator names the same directory, so it is not a disagreement: the
+    // repair runs, the chain answers private, and both destinations the daemon picks for itself are delivered.
+    // A doubled separator is the same question from the other side (`state//sessions`), and is answered the
+    // same way. (https://github.com/callstack/agent-device/pull/4584 review)
+    const root = mkdtempForTestSync('agent-device-startup-separators-');
+    fs.chmodSync(root, 0o700);
+    // Fresh: nothing below the setting exists, which is exactly when the old check latched the refusal.
+    for (const [label, spelled] of [
+      ['trailing', `${root}/agent-device/`],
+      ['doubled', `${root}/agent-device/versions//live`],
+    ] as const) {
+      // Asked BEFORE anything exists, as startup asks it: the state directory is spelled long before it is
+      // created, and a setting that is refused here stays refused for that daemon's whole life.
+      const { baseDir, sessionsDir } = resolveDaemonPaths(spelled);
+      const stateSpellingAgrees = !configuredStateBaseDisagrees(baseDir);
+      expect({ label, stateSpellingAgrees }).toEqual({ label, stateSpellingAgrees: true });
+
+      let composed: DaemonRuntimeDepsInput | undefined;
+      const runtime = await startDaemonRuntime({
+        host: hostFor(spelled),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture((input) => {
+          composed = input;
+          return {};
+        }),
+      });
+      try {
+        const input = composed!;
+        expect(input.baseDir).toBe(baseDir);
+        expect(input.sessionsDir).toBe(sessionsDir);
+        // Startup repaired the chain it was given.
+        expect(modeOf(baseDir)).toBe(0o700);
+        expect(modeOf(sessionsDir)).toBe(0o700);
+        // The store is built as the runtime builds its own: same paths, same one startup answer.
+        const store = new SessionStore(
+          input.sessionsDir,
+          createTestHostEnvironment(),
+          stateSpellingAgrees,
+        );
+        for (const name of ['journey', 'download']) {
+          const written = store.writeSessionLog(
+            store.publish(
+              name,
+              makeAuthoringSession(name, {
+                scriptPublication: authoringPublication(
+                  'armed',
+                  name === 'download' ? { remote: true } : {},
+                ),
+                actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+              }),
+            ),
+          );
+          if (!written.written)
+            throw new Error(
+              `a ${label} separator refused its own recording: ${JSON.stringify(written)}`,
+            );
+          expect(fs.existsSync(written.path)).toBe(true);
+        }
+      } finally {
+        await runtime.close();
+      }
     }
   },
 );
@@ -329,7 +416,7 @@ test.skipIf(process.platform === 'win32')(
 
       // What the shared ground DOES refuse: the daemon's own recording destinations. Both go through the
       // chain, which never reached the destination walk, so neither is published.
-      const store = new SessionStore(sessionsDir, createTestHostEnvironment(), baseDir);
+      const store = new SessionStore(sessionsDir, createTestHostEnvironment());
       const record = (name: string, extra: Parameters<typeof authoringPublication>[1]) =>
         store.writeSessionLog(
           store.publish(
@@ -370,7 +457,7 @@ test.skipIf(process.platform === 'win32')(
     fs.mkdirSync(outside);
     fs.chmodSync(outside, 0o755);
     fs.symlinkSync(outside, sessionsDir);
-    const store = new SessionStore(sessionsDir, createTestHostEnvironment(), baseDir);
+    const store = new SessionStore(sessionsDir, createTestHostEnvironment());
     const marker = {
       owner: 'journey',
       expiredAtMs: Date.now(),

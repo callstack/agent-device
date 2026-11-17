@@ -19,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { childPath, publishScriptFileSync } from '@agent-device/host-kit/file';
+import { publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -115,18 +115,22 @@ export class SessionScriptWriter {
   private readonly hostCwd: string;
   /** The directory this store's sessions live in, spelled the way the path owner spells it. */
   private readonly sessionsDir: string;
-  /** The state base that directory hangs off, as the daemon's path owner spells that base. */
+  /** The state directory `sessionsDir` was built from, its own parent by the same rule main derived. */
   private readonly stateBase: string;
-
   /**
-   * `stateBase` is the state directory `sessionsDir` was built from, and the default is that directory's own
-   * parent. The daemon passes it explicitly because the two are NOT the same text once the setting names the
-   * state dir through a link and a step back — see {@link resolveScriptDestination}.
+   * Whether the state setting's OWN text walks to where the names built below it land. A `..` behind a
+   * symbolic link is the one step `path.join` folds away while the kernel walks THROUGH it, and then the
+   * caller reads one directory while every path the daemon builds names the other. Nothing is re-spelled for
+   * that (a state path has one spelling), so such a chain is simply not ground for a recording the daemon
+   * picked a path for (#4584, ADR 0016).
    */
-  constructor(sessionsDir: string, hostCwd: string, stateBase = path.dirname(sessionsDir)) {
+  private readonly stateSpellingAgrees: boolean;
+
+  constructor(sessionsDir: string, hostCwd: string, stateSpellingAgrees = true) {
     this.hostCwd = hostCwd;
     this.sessionsDir = sessionsDir;
-    this.stateBase = stateBase;
+    this.stateBase = path.dirname(sessionsDir);
+    this.stateSpellingAgrees = stateSpellingAgrees;
   }
 
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -187,20 +191,26 @@ export class SessionScriptWriter {
     session: SessionState,
     remote: boolean,
   ): { path: string; pickedByDaemon: boolean; privateChain: boolean } {
-    // Re-spelled below the base, not used as the store handed it over. The daemon's path owner keeps the
-    // setting's own text for the base and builds `sessionsDir` with `path.join`, which folds a `..` out of
-    // it, so the folded name is NOT the chain the walk judges — and only the chain gets created and judged.
-    // A caller that names no base gets its own parent, so this answers the directory it was given.
-    const sessionsDir = childPath(this.stateBase, path.basename(this.sessionsDir));
+    // Asked FIRST: a chain this verdict refuses is created nowhere, so a refused recording leaves no
+    // `remote-scripts` directory behind it.
+    if (!this.stateSpellingAgrees) {
+      return {
+        path: remote
+          ? path.join(this.sessionsDir, 'remote-scripts')
+          : this.defaultRecordingPath(session),
+        pickedByDaemon: true,
+        privateChain: false,
+      };
+    }
     if (remote) {
       const directory = ensurePrivateDaemonStateDir(
-        childPath(sessionsDir, 'remote-scripts'),
+        path.join(this.sessionsDir, 'remote-scripts'),
         this.stateBase,
       );
       return {
         ...directory,
         pickedByDaemon: true,
-        path: path.join(directory.path, `${crypto.randomUUID()}.ad`),
+        path: path.join(this.sessionsDir, 'remote-scripts', `${crypto.randomUUID()}.ad`),
       };
     }
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
@@ -211,14 +221,18 @@ export class SessionScriptWriter {
         privateChain: true,
       };
     }
+    return {
+      ...ensurePrivateDaemonStateDir(this.sessionsDir, this.stateBase),
+      pickedByDaemon: true,
+      path: this.defaultRecordingPath(session),
+    };
+  }
+
+  /** The recording this store names for a session: `main`'s name, in the directory it keeps sessions in. */
+  private defaultRecordingPath(session: SessionState): string {
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
-    const own = ensurePrivateDaemonStateDir(sessionsDir, this.stateBase);
-    return {
-      ...own,
-      pickedByDaemon: true,
-      path: path.join(own.path, `${safeName}-${timestamp}.ad`),
-    };
+    return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
   }
 }
 
@@ -310,7 +324,9 @@ function daemonStateUntrustedFailure(scriptPath: string): AppError {
         'shape of a bind-mounted CI volume, a container image that leaves the state directory to another ' +
         'uid, or a state directory inside a shared directory anyone can write. Make the daemon own that ' +
         'tree (chown -R the state directory to the daemon user), or point AGENT_DEVICE_STATE_DIR at a ' +
-        'directory it owns, then re-record. A recording to an explicit --save-script path is unaffected.',
+        'directory it owns, then re-record. One spelling is refused on its own: an ' +
+        'AGENT_DEVICE_STATE_DIR with a `..` that follows a symbolic link names two directories at once, ' +
+        'so spell it without the `..`. A recording to an explicit --save-script path is unaffected.',
     },
   );
 }

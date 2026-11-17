@@ -3,10 +3,7 @@ import {
   resolveSessionAppLogPath,
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
-import {
-  answeredDaemonStateDir,
-  DAEMON_SHUTTING_DOWN_REASON,
-} from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
 import { ensureDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
@@ -68,7 +65,6 @@ export class SessionStore {
   private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
   private readonly sessionsDir: string;
-  private readonly stateBase: string;
   private readonly scriptWriter: SessionScriptWriter;
 
   /**
@@ -78,14 +74,10 @@ export class SessionStore {
    */
   readonly host: HostEnvironment;
 
-  constructor(sessionsDir: string, host: HostEnvironment, stateBase = path.dirname(sessionsDir)) {
+  constructor(sessionsDir: string, host: HostEnvironment, stateSpellingAgrees = true) {
     this.sessionsDir = sessionsDir;
-    // Carried for the two destinations this store's writer picks itself AND for every level this store creates
-    // (ADR 0016): `sessionsDir` is `path.join`'s answer, which folds a `..` step out of the base's spelling, so
-    // repairs built from it would judge a chain the walk never arrived at.
-    this.stateBase = stateBase;
     this.host = host;
-    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd, stateBase);
+    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd, stateSpellingAgrees);
   }
 
   /**
@@ -378,7 +370,7 @@ export class SessionStore {
     const session = this.resolveCurrent(ref);
     if (!session) return;
     try {
-      const sessionDir = this.ensureSessionDir(ref.address);
+      this.ensureSessionDir(ref.address);
       const tombstone: RepairSessionTombstone = {
         owner: ref.address,
         reapedAt: Date.now(),
@@ -388,7 +380,7 @@ export class SessionStore {
           : {}),
         ...(commitFailure ? { commitFailure } : {}),
       };
-      fs.writeFileSync(this.repairTombstonePath(sessionDir), `${JSON.stringify(tombstone)}\n`);
+      fs.writeFileSync(this.repairTombstonePath(ref.address), `${JSON.stringify(tombstone)}\n`);
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
@@ -401,26 +393,14 @@ export class SessionStore {
     }
   }
 
-  /**
-   * Returns a non-expired repair tombstone for `sessionName`, or `undefined`. The directory is the one
-   * {@link writeRepairTombstone} wrote to, spelled from the state base rather than from `sessionsDir`: on an
-   * aliased base those are two different directories, and a marker looked for in the wrong one reads as a
-   * marker that was never written. Being a read, it asks the repair's ANSWER rather than the repair: finding a
-   * marker must not create a session directory for a key that has none (#4584).
-   */
+  /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
   readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
-    return readRepairTombstoneFile(
-      this.repairTombstonePath(this.answeredSessionDir(sessionName)),
-      sessionName,
-    );
+    return readRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
   clearRepairTombstone(sessionName: string): void {
-    clearRepairTombstoneFile(
-      this.repairTombstonePath(this.answeredSessionDir(sessionName)),
-      sessionName,
-    );
+    clearRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /**
@@ -459,8 +439,6 @@ export class SessionStore {
    */
   writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
     try {
-      // Written INTO the directory the repair created, not into one derived from it afterwards: on an aliased
-      // base the derived name is a different directory, and the marker vanished inside this catch (#4584).
       const sessionDir = this.ensureSessionDir(sessionName);
       fs.writeFileSync(
         resolveIdleSessionTombstonePath(sessionDir),
@@ -494,7 +472,7 @@ export class SessionStore {
   readIdleExpiryTombstone(sessionName: string): IdleSessionTombstone | undefined {
     if (!isSafeSessionSegment(sessionName)) return undefined;
     const tombstone = readIdleSessionTombstoneFile(
-      resolveIdleSessionTombstonePath(this.answeredSessionDir(sessionName)),
+      resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
     );
     return tombstone?.owner === sessionName ? tombstone : undefined;
   }
@@ -506,7 +484,7 @@ export class SessionStore {
    */
   clearIdleExpiryTombstone(sessionName: string): void {
     try {
-      fs.rmSync(resolveIdleSessionTombstonePath(this.answeredSessionDir(sessionName)), {
+      fs.rmSync(resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)), {
         force: true,
       });
     } catch (error) {
@@ -521,8 +499,8 @@ export class SessionStore {
     }
   }
 
-  private repairTombstonePath(sessionDir: string): string {
-    return resolveRepairTombstonePath(sessionDir);
+  private repairTombstonePath(sessionName: string): string {
+    return resolveRepairTombstonePath(this.resolveSessionDir(sessionName));
   }
 
   defaultTracePath(session: SessionState): string {
@@ -535,33 +513,22 @@ export class SessionStore {
     return resolveSessionDir(this.sessionsDir, sessionName);
   }
 
-  // Daemon state dir (the state directory `sessionsDir` was built from), matching daemonPaths.baseDir. Called
-  // via sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
-  // session-lifecycle/internal/session-close.ts. The base as it was HANDED, not `path.dirname(sessionsDir)`:
-  // `path.join` folds a `..` step out of `sessionsDir`, so a derived parent is a different directory from the
-  // base whenever the setting spells one, and the repair would judge a chain the walk never arrived at (#4584).
+  // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
+  // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
+  // session-lifecycle/internal/session-close.ts. A state path has ONE spelling, so the parent of
+  // `sessionsDir` IS the base its setting named (ADR 0016).
   resolveDaemonStateDir(): string {
-    return this.stateBase;
+    return path.dirname(this.sessionsDir);
   }
 
-  // The daemon-paths owner creates and repairs each level (ADR 0016): under the shared-checkout umask a
-  // mode-less creation is 0775, and the script-destination rule then refuses the daemon's own recordings.
-  // The path it RETURNS is the one this store writes session artifacts to: `resolveSessionDir` hands back
-  // `path.join`'s text, which on a base spelled with a step names a directory the walk never stood on.
+  // The daemon-paths owner forces each level to 0700 (ADR 0016): under the shared-checkout umask a
+  // mode-less creation is 0775, and the script-destination rule then refuses the daemon's own
+  // recordings. The directory the CALLER named is the directory returned: a state chain is repaired
+  // in place, never under another spelling (#4584).
   ensureSessionDir(sessionName: string): string {
-    return ensureDaemonStateDir(this.resolveSessionDir(sessionName), this.resolveDaemonStateDir());
-  }
-
-  /**
-   * The directory {@link ensureSessionDir} would answer for `sessionName`, asked WITHOUT creating or forcing
-   * anything, for a step that only reads or removes. Falls back to the same name `ensureDaemonStateDir` falls
-   * back to, so the two cannot name different directories (ADR 0016).
-   */
-  private answeredSessionDir(sessionName: string): string {
-    return (
-      answeredDaemonStateDir(this.resolveDaemonStateDir(), this.resolveSessionDir(sessionName)) ??
-      this.resolveSessionDir(sessionName)
-    );
+    const sessionDir = this.resolveSessionDir(sessionName);
+    ensureDaemonStateDir(sessionDir, this.resolveDaemonStateDir());
+    return sessionDir;
   }
 
   /** Path to session-scoped app log file. Agent can grep this for token-efficient debugging. */

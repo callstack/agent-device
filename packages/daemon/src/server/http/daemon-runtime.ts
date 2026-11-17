@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
+  configuredStateBaseDisagrees,
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -211,13 +212,13 @@ async function startDaemonRuntimeOnHost(
   // The daemon's own state dirs are on the chain of every recording it picks a path for, and a
   // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
-  // otherwise only ever created as a side effect of a per-session mkdir.
-  //
-  // Each answer is the PHYSICAL spelling of the directory it created or repaired, and `ensureSessionDir` and
-  // the script writer read that answer for themselves, so every level they build is one the walk judged —
-  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back. Where the walk refuses
-  // ground above the base, these levels are still made and the chain answers untrusted: that refuses only the
-  // daemon-picked recordings, and startup and every other command carry on (ADR 0016).
+  // otherwise only ever created as a side effect of a per-session mkdir. Each call repairs the level it is
+  // named, in place: a state path has ONE spelling, the configured one, so nothing here answers another
+  // directory's name, and where the walk refuses ground the levels are still made and only the
+  // daemon-picked recordings are refused (ADR 0016).
+  // Also asked of the STORE, on the same text: the repair answers UNTRUSTED for this base, and the two
+  // destinations the writer picks for itself are then refused before anything is created under them.
+  const stateSpellingAgrees = !configuredStateBaseDisagrees(baseDir);
   ensureDaemonStateDir(baseDir, baseDir);
   ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
@@ -232,10 +233,7 @@ async function startDaemonRuntimeOnHost(
     ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
     : undefined;
 
-  // `baseDir` travels with `sessionsDir` because the two are not one spelling: `resolveDaemonPaths` keeps the
-  // base as the setting spells it and builds `sessionsDir` with `path.join`, which folds a step out of it. The
-  // state repair reads the first and writes the second, so the store has to be told which one is the base.
-  const sessionStore = new SessionStore(sessionsDir, host, baseDir);
+  const sessionStore = new SessionStore(sessionsDir, host, stateSpellingAgrees);
   const deps = await options.composeDeps({
     host,
     baseDir,

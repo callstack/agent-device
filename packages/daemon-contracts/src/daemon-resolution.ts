@@ -2,11 +2,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  childPath,
   expandUserHomePath,
   resolveUserPath,
   verifiedDirectoryGround,
-  verifiedDirectoryPath,
   withoutTrailingSeparators,
 } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
@@ -60,59 +58,47 @@ export function resolveDaemonPaths(
 }
 
 /**
- * Where `stateBase` STANDS and the names below it, spelled the way the kernel WALKS to them, or `undefined`
- * when the walk knows nothing of that ground. {@link resolveDaemonPaths} builds every path under a state dir
- * with `path.join`, and normalization MOVES a directory: `<root>/alias/../state` plus `sessions` joins to
- * `<root>/state/sessions`, while the kernel walks `<root>/alias` — a link — and comes back at
- * `<root>/actual/state/sessions`. The state-chain repair creates and judges the WALKED chain, so an artifact
- * it wrote lives there, and a caller that comes back for that artifact without asking the repair has to name
- * the same directory — a marker looked for in the folded text is a marker that was never written (#4584,
- * ADR 0016).
+ * Whether the setting's text and the text this module builds below it name TWO directories — the one step
+ * {@link path.join} folds away while the kernel walks THROUGH it: a `..` that comes AFTER a symbolic link is
+ * applied to where the link LED, while the folded text names the directory BESIDE the link. One setting then
+ * names both, and every name built here is the folded one, so the daemon refuses what it picks a path for
+ * rather than write on a chain a client cannot name.
  *
- * CREATES and `chmod`s NOTHING, and emits nothing: the repair does that, and the callers here only read or
- * remove what the repair already made, so a lookup must not create a session directory for a key that has
- * none. `undefined` is never a guess — it is where the repair falls back to the name it was handed too, so the
- * two answers cannot land on different directories. TOTAL: the callers are the ones answering another
- * command's failure, and a marker that cannot be located is an absent marker, never an error of ours.
+ * Each spelling is asked of the walk that CREATES under it (`verifiedDirectoryGround`), not of `realpath`: a
+ * state directory is often spelled before it exists, and a name that is simply absent is not a second
+ * directory. What the two answers have to agree on is WHERE they land — the directory the walk stood on, and
+ * the names still missing below it. A plain link (`/private/tmp` behind `/tmp`, a symlinked
+ * `~/.agent-device`), a `..` with no link to step back out of, text with nothing to fold, and a chain the walk
+ * cannot stand on at all are all NOT a disagreement: the first two name one directory, the third has nothing
+ * to compare, and the last is answered by the chain judgment itself.
+ *
+ * A SEPARATOR is not a step: `~/.agent-device/` names the same directory as `~/.agent-device`, so the setting's
+ * text is cut of its trailing separators before it is folded and compared, and only a `..` that the walk lands
+ * somewhere else for can answer true.
  */
-export function answeredDaemonStateDir(stateBase: string, directory: string): string | undefined {
-  // Windows answers access from an ACL and there is no chain to walk: the name given is where it stands.
-  if (process.platform === 'win32') return undefined;
-  const below = path.relative(
-    withoutTrailingSeparators(stateBase),
-    withoutTrailingSeparators(directory),
-  );
-  // NAMES below the base, never a joined path: a `..` would move a level onto ground nobody judged.
-  if (
-    below === '' ||
-    below === '.' ||
-    below === '..' ||
-    below.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(below)
-  )
-    return undefined;
-  const base = stoodStateBase(stateBase);
-  return base === undefined
-    ? undefined
-    : below.split(path.sep).reduce((level, name) => childPath(level, name), base);
+export function configuredStateBaseDisagrees(stateBase: string): boolean {
+  // Windows access is an ACL and the walk does not run there: it answers both texts with their own spelling.
+  if (process.platform === 'win32') return false;
+  // Nothing to fold is one directory by construction, so the common setting never reaches the filesystem.
+  const spelled = withoutTrailingSeparators(stateBase);
+  const folded = path.resolve(spelled);
+  if (folded === spelled) return false;
+  const walked = whereTheWalkLands(spelled);
+  const built = whereTheWalkLands(folded);
+  return walked !== undefined && built !== undefined && walked !== built;
 }
 
 /**
- * The base as the walk spells it: its own physical name once it stands, or the deepest directory it judged
- * plus the names merely ABSENT below it — the one ground creation lands on. Anywhere else it knows nothing.
+ * Where the creation walk lands for one spelling, as one comparable token; `undefined` when that walk cannot
+ * answer a place — a `..` queued behind an absent name resolves nowhere, and a refusal is the chain
+ * judgment's to make.
  */
-function stoodStateBase(stateBase: string): string | undefined {
-  try {
-    const answered = verifiedDirectoryPath(stateBase);
-    if ('physical' in answered) return answered.physical;
-    // A `..` queued behind an absent name is walkable by no amount of creating: end the question there.
-    const ground = verifiedDirectoryGround(stateBase);
-    return ground.ended === 'short' && !ground.unresolvable
-      ? ground.missing.reduce((level, name) => childPath(level, name), ground.established)
-      : undefined;
-  } catch {
-    return undefined;
-  }
+function whereTheWalkLands(directory: string): string | undefined {
+  const ground = verifiedDirectoryGround(directory);
+  if (ground.ended === 'arrived') return `at:${ground.physical}`;
+  if (ground.ended === 'short' && !ground.unresolvable)
+    return `below:${ground.established}:${ground.missing.join('/')}`;
+  return undefined;
 }
 
 function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOptions): string {

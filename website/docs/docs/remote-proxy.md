@@ -135,7 +135,11 @@ users can write. That daemon still starts and answers every other command, and t
 daemon host: the state directory has to belong to the daemon's user, and every directory above it
 has to belong to that user or to root and keep its contents closed to everyone else — root-owned
 system directories are accepted, so this is usually a `chmod g-w` on an ancestor rather than a
-`chown` of everything. Otherwise point `AGENT_DEVICE_STATE_DIR` at a directory it owns. That check
+`chown` of everything. Otherwise point `AGENT_DEVICE_STATE_DIR` at a directory it
+owns, and spell it without a `..` that comes after a symbolic link: the system walks such a step from where the link
+leads, while the daemon builds its paths beside the link, so the setting names two directories and neither is
+ground the check stands on. That state directory then delivers no recording the daemon picks a path for, and the
+refusal names the setting. Use the directory the link leads to. That check
 of the daemon's own directories never stops the daemon from starting, and it is not a check that
 runs after the fact: each directory of the chain is judged before anything is created below it, and
 only a name that is missing is created, so the recording directories it refuses are never made — no

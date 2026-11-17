@@ -51,7 +51,7 @@ skipOnWindows('repairs the state chain it owns, whatever mode its levels were cr
   // ensures `remote-scripts/`, and each call repairs the chain down to the level it was asked for.
   ensurePrivateDaemonStateDir(sessions, base);
   const answer = ensurePrivateDaemonStateDir(remote, base);
-  expect(answer).toEqual({ path: remote, privateChain: true });
+  expect(answer).toEqual({ privateChain: true });
 
   for (const directory of [base, sessions, remote]) {
     expect(modeOf(directory)).toBe(0o700);
@@ -70,7 +70,6 @@ skipOnWindows('answers that a chain it stopped on is not private ground', async 
   fs.chmodSync(sessions, 0o775);
 
   expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
-    path: sessions,
     privateChain: true,
   });
 
@@ -79,7 +78,6 @@ skipOnWindows('answers that a chain it stopped on is not private ground', async 
   const planted = path.join(sessions, 'remote-scripts');
   fs.symlinkSync(outside, planted);
   expect(ensurePrivateDaemonStateDir(planted, base)).toEqual({
-    path: planted,
     privateChain: false,
   });
 
@@ -251,7 +249,6 @@ skipOnWindows('reports a level it cannot judge, and creates nothing for it', asy
 
   // Nothing was changed, and the chain says so for the writer that reads it.
   expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
-    path: sessions,
     privateChain: false,
   });
   expect(modeOf(sessions)).toBe(0o755);
@@ -320,7 +317,6 @@ skipOnWindows(
     const coUser = swapBaseWhenDescentLooksAt(base, sessions, outside);
 
     expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
-      path: remote,
       privateChain: false,
     });
     // Said once, and named for the ground that is not this process's to rely on.
@@ -355,7 +351,6 @@ skipOnWindows(
     for (const directory of [base, sessions]) fs.chmodSync(directory, 0o755);
 
     expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
-      path: sessions,
       privateChain: true,
     });
 
@@ -380,7 +375,6 @@ skipOnWindows(
     serveHostOwnership({ [parent]: FOREIGN_UID });
 
     expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
-      path: sessions,
       privateChain: false,
     });
 
@@ -454,7 +448,6 @@ skipOnWindows(
     // The answer carries the base's own name — the kernel resolves the link on the way in, exactly as it always
     // has, and a client names this spelling too. Only the verdict changes: not private ground.
     expect(answer).toEqual({
-      path: sessions,
       privateChain: false,
     });
     // One skip, for the level the repair would not stand on: the base itself.
@@ -487,7 +480,6 @@ skipOnWindows(
     serveHostOwnership({ [base]: FOREIGN_UID });
 
     expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
-      path: remote,
       privateChain: false,
     });
     // Nothing stands on ground this rule will not stand on, and the base keeps the mode its owner chose.
@@ -636,30 +628,24 @@ skipOnWindows(
   },
 );
 
-skipOnWindows('repairs the chain the walk reached, not the one the base spells', async () => {
+skipOnWindows('repairs NEITHER tree for a base that spells `..` behind a link', async () => {
   // The base is spelled `alias/../state`, which the kernel resolves as a step BACK out of wherever `alias`
-  // physically stands: its real base is `actual/state`. Deriving the levels with `path.relative` and
-  // `path.join` folds that step away, and the tail is then re-attached to `state` beside the ALIAS — a
-  // different tree, one the ancestry was never asked about. Here that folded name is a link out of the state
-  // tree, so a descent built from the spelling judges and forces a directory on the far side of a link nobody
-  // walked, while the real chain the daemon writes under is left alone.
+  // physically stands: `actual/state`. `path.join` folds that step away and answers `state` BESIDE the alias,
+  // so one setting names two directories. The daemon keeps the configured text for everything a client names
+  // too, and so cannot force a mode in a tree the caller does not use, or write a recording in a tree the
+  // caller cannot name. A chain that cannot be stood on answers UNTRUSTED, which refuses only a recording the
+  // daemon picked a path for (ADR 0016). The old repair forced a mode on the folded tree, through a link.
   const root = mkdtempForTestSync('agent-device-state-alias-base-');
   fs.chmodSync(root, 0o700);
   fs.mkdirSync(path.join(root, 'actual', 'x'), { recursive: true });
   const alias = path.join(root, 'alias');
   fs.symlinkSync(path.join(root, 'actual', 'x'), alias);
-  const state = path.join(root, 'actual', 'state');
-  const sessions = path.join(state, 'sessions');
-  fs.mkdirSync(sessions, { recursive: true });
-  // Left loose, the way a state dir made by an older version under a shared umask is found.
-  for (const directory of [state, sessions]) fs.chmodSync(directory, 0o755);
-  // The name the folded spelling leads to, and the directory its link leads to: the mode the old descent
-  // forced there belongs to a tree this call has nothing to do with.
-  const outside = path.join(root, 'outside');
-  const farSessions = path.join(outside, 'sessions');
-  fs.mkdirSync(farSessions, { recursive: true });
-  for (const directory of [outside, farSessions]) fs.chmodSync(directory, 0o755);
-  fs.symlinkSync(outside, path.join(root, 'state'));
+  const walkedState = path.join(root, 'actual', 'state');
+  const foldedState = path.join(root, 'state');
+  // Both trees already stand, each loose, the way an older release that folded left one of them.
+  fs.mkdirSync(path.join(walkedState, 'sessions'), { recursive: true });
+  fs.mkdirSync(path.join(foldedState, 'sessions'), { recursive: true });
+  for (const directory of [walkedState, foldedState]) fs.chmodSync(directory, 0o755);
 
   const base = `${alias}/../state`;
   const { answer, skips } = await withDiagnosticsScope({ session: 'daemon' }, () => ({
@@ -667,15 +653,22 @@ skipOnWindows('repairs the chain the walk reached, not the one the base spells',
     skips: countDiagnosticEventsByPhase(SKIPPED),
   }));
 
-  // The chain the walk arrived at, repaired and reported as it is: nothing here had to be refused.
-  expect(answer.privateChain).toBe(true);
-  expect(skips).toBe(0);
-  expect(modeOf(state)).toBe(0o700);
-  expect(modeOf(sessions)).toBe(0o700);
-  // The folded spelling was never judged, so nothing on it is touched — which is the point. A descent built
-  // off the spelled base reached `state/sessions` through that link and forced its mode.
-  expect(modeOf(farSessions)).toBe(0o755);
-  expect(fs.lstatSync(path.join(root, 'state')).isSymbolicLink()).toBe(true);
+  // One skip saying the setting names two trees, and no verdict to write a script on.
+  expect(answer).toEqual({ privateChain: false });
+  expect(skips).toBe(1);
+  // Neither tree is touched: forcing a mode in either one would be judging a chain the other one's caller
+  // reads, and creating in either would populate a tree no request path resolves to.
+  expect(modeOf(walkedState)).toBe(0o755);
+  expect(modeOf(foldedState)).toBe(0o755);
+  expect(fs.readdirSync(path.join(walkedState, 'sessions'))).toEqual([]);
+  expect(fs.readdirSync(path.join(foldedState, 'sessions'))).toEqual([]);
+
+  // The caller that writes no script — startup, an artifact, a tombstone — keeps `main`'s one recursive
+  // `mkdir`, on the configured text, with no mode forced anywhere.
+  expect(await skipCountFor(() => ensureDaemonStateDir(`${base}/sessions/journey`, base))).toBe(1);
+  expect(fs.lstatSync(path.join(walkedState, 'sessions', 'journey')).isDirectory()).toBe(true);
+  expect(modeOf(walkedState)).toBe(0o755);
+  expect(modeOf(foldedState)).toBe(0o755);
 });
 
 /** The host error an ancestry walk can only answer by stopping: it cannot judge ground it could not read. */
@@ -733,7 +726,6 @@ skipOnWindows(
     expect(modeOf(base) & 0o700).toBe(0o700);
 
     expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
-      path: remote,
       privateChain: false,
     });
     expect(fs.existsSync(remote)).toBe(false);
@@ -747,11 +739,12 @@ function modeOf(target: string): number {
 
 /**
  * Runs one repair inside its own diagnostics scope and reports how often it said it skipped a level. No
- * `logPath`, so the events are tallied and written nowhere.
+ * `logPath`, so the events are tallied and written nowhere. The repair answers a verdict, or nothing at all
+ * for the caller that writes no script, so its answer is read only where the test asks for it.
  */
 async function skipCountFor(repair: () => unknown): Promise<number> {
   return await withDiagnosticsScope({ session: 'daemon' }, () => {
-    expect(repair()).toBeDefined();
+    repair();
     return countDiagnosticEventsByPhase(SKIPPED);
   });
 }
