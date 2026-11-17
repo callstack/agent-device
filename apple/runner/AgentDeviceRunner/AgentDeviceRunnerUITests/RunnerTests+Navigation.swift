@@ -683,15 +683,18 @@ extension RunnerTests {
     return dismissControlWords.contains(word) || word == "xmark" || word.hasPrefix("xmark.")
   }
 
-  /// Every button whose label or identifier contains a dismiss word, a superset of the buttons a
-  /// listed control's selector matches: `selectorText` then decides.
+  /// Every button whose label or identifier contains a dismiss word, and every unlabeled one, whose
+  /// snapshot label can come from a child's text: a superset of the buttons a listed control's
+  /// selector matches. `selectorText` then decides on the label `press` resolves.
   static let dismissControlPredicate: NSPredicate = {
     let names = dismissControlWords.sorted() + ["xmark"]
-    let clauses = names.flatMap { _ in ["label CONTAINS[c] %@", "identifier CONTAINS[c] %@"] }
+    let clauses = names.flatMap { _ in ["label CONTAINS[c] %@", "identifier CONTAINS[c] %@"] } + ["label == ''"]
     return NSPredicate(format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] })
   }()
 
-  /// One button the dismiss control read found, with its snapshot frame in its window's own space.
+  /// One button the dismiss control read found: the label and identifier a snapshot node publishes for
+  /// it (`evaluateSnapshot`), which `press` resolves selectors against, and its snapshot frame in its
+  /// window's own space.
   struct TopBandButton {
     let label: String
     let identifier: String
@@ -754,8 +757,9 @@ extension RunnerTests {
     }
   }
 
-  /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe: the back
-  /// window's buttons, and every root's buttons for the uniqueness check. It runs only on that
+  /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe: every root's
+  /// buttons for the uniqueness check, and the back window's buttons, which are the same read when no
+  /// window resolved. It runs only on that
   /// refusal, so a back that navigates pays nothing for it. Nil when there are none, or when the tree
   /// is not readable, a read fails, its 1 s budget runs out, or a query hangs: the list is advice,
   /// and back refuses the same either way.
@@ -772,21 +776,25 @@ extension RunnerTests {
       guard let searchRoots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else {
         return nil
       }
-      @MainActor func matching(_ roots: [XCUIElement]) -> [XCUIElement] {
-        roots.flatMap { $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex }
+      @MainActor func buttons(under roots: [XCUIElement]) -> (elements: [XCUIElement], buttons: [TopBandButton])? {
+        let elements = roots.flatMap {
+          $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex
+        }
+        var buttons: [TopBandButton] = []
+        for element in elements {
+          guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
+          let node = evaluateSnapshot(snapshot)
+          buttons.append(TopBandButton(label: node.label, identifier: node.identifier, frame: snapshot.frame))
+        }
+        return (elements, buttons)
       }
-      var everyButton: [ButtonName] = []
-      for element in matching(searchRoots) {
-        guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
-        everyButton.append(ButtonName(label: snapshot.label, identifier: snapshot.identifier))
+      guard let every = buttons(under: searchRoots) else { return nil }
+      let roots = Self.dismissControlRoots(resolvedWindow: context.resolvedWindow, searchRoots: searchRoots)
+      guard let listed = context.resolvedWindow == nil ? every : buttons(under: roots) else { return nil }
+      let everyButton = every.buttons.map { ButtonName(label: $0.label, identifier: $0.identifier) }
+      return Self.dismissControls(listed.buttons, everyButton: everyButton, window: window) {
+        listed.elements[$0].isHittable
       }
-      let elements = matching(Self.dismissControlRoots(resolvedWindow: context.resolvedWindow, searchRoots: searchRoots))
-      var buttons: [TopBandButton] = []
-      for element in elements {
-        guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
-        buttons.append(TopBandButton(label: snapshot.label, identifier: snapshot.identifier, frame: snapshot.frame))
-      }
-      return Self.dismissControls(buttons, everyButton: everyButton, window: window) { elements[$0].isHittable }
     }
     guard case .read(let controls) = read, !controls.isEmpty else { return nil }
     return controls

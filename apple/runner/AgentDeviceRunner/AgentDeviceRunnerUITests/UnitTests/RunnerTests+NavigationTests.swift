@@ -939,6 +939,16 @@ extension RunnerTests {
     XCTAssertEqual(labels([button("Back", identifier: Self.navigationBarBackButtonIdentifier)]), [])
   }
 
+  /// The runner's text comparison is the selector engine's `normalizeText`: both are asserted on
+  /// contracts/fixtures/selector-text-normalization.json, so a listed selector is unique to `press`.
+  func testSelectorTextMatchesTheSelectorEngineNormalization() throws {
+    let cases = try XCTUnwrap(runnerContractFixture("selector-text-normalization.json") as? [[String: String]])
+    XCTAssertFalse(cases.isEmpty)
+    for fixture in cases {
+      XCTAssertEqual(Self.selectorText(try XCTUnwrap(fixture["input"])), fixture["normalized"], fixture["name"] ?? "")
+    }
+  }
+
   /// Dismiss controls come from the window back swiped on; another window's buttons are not listed,
   /// but a press resolves against every window, so one there that shares a label makes it ambiguous.
   func testDismissControlsComeFromTheBackWindowAndAreUniqueAcrossEveryWindow() {

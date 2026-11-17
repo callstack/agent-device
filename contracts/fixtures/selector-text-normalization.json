@@ -1,0 +1,19 @@
+[
+  {
+    "name": "surrounding spaces and a tab are trimmed, case is folded",
+    "input": " Cancel\t",
+    "normalized": "cancel"
+  },
+  {
+    "name": "a run of whitespace inside the text is one space",
+    "input": "Close\n\n  Now",
+    "normalized": "close now"
+  },
+  { "name": "no-break spaces count as whitespace", "input": " Back ", "normalized": "back" },
+  {
+    "name": "an icon name keeps its dots",
+    "input": "XMARK.circle.fill",
+    "normalized": "xmark.circle.fill"
+  },
+  { "name": "whitespace only is empty", "input": " \t\n", "normalized": "" }
+]
