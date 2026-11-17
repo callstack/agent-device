@@ -216,14 +216,7 @@ extension RunnerTests {
           XCTAssertTrue(keyboardFocusConfirmed(app: app, element: partlyCovered), context)
         }
         if penalized { try penalizeOverlappingFixtureChannel() }
-        let failures = currentXCTestFailureCount()
-
-        let response = try executeWitnessEntry(popoverField, text: "popovervalue", at: point)
-
-        XCTAssertTrue(response.ok, "\(context): \(String(describing: response.error))")
-        XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
-        XCTAssertEqual(popoverField.value as? String, "popovervalue", context)
-        XCTAssertEqual(partlyCovered.value as? String, "background", context)
+        try assertOverlappingPopoverFill(popoverField: popoverField, partlyCovered: partlyCovered, at: point, context: context)
       }
     }
   }
@@ -241,14 +234,7 @@ extension RunnerTests {
       partlyCovered.tap()
       XCTAssertTrue(keyboardFocusConfirmed(app: app, element: partlyCovered), context)
       if penalized { try penalizeOverlappingFixtureChannel() }
-      let failures = currentXCTestFailureCount()
-
-      let response = try executeWitnessEntry(popoverField, text: "popovervalue", at: point)
-
-      XCTAssertTrue(response.ok, "\(context): \(String(describing: response.error))")
-      XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
-      XCTAssertEqual(popoverField.value as? String, "popovervalue", context)
-      XCTAssertEqual(partlyCovered.value as? String, "background", context)
+      try assertOverlappingPopoverFill(popoverField: popoverField, partlyCovered: partlyCovered, at: point, context: context)
     }
   }
 
@@ -385,6 +371,21 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures), "delayMs=\(delayMs)")
     XCTAssertEqual(foreground.value as? String, "sheetvalue", "delayMs=\(delayMs)")
     XCTAssertEqual(background.value as? String, "background", "delayMs=\(delayMs)")
+  }
+
+  @MainActor
+  private func assertOverlappingPopoverFill(
+    popoverField: XCUIElement,
+    partlyCovered: XCUIElement,
+    at point: CGPoint,
+    context: String
+  ) throws {
+    let failures = currentXCTestFailureCount()
+    let response = try executeWitnessEntry(popoverField, text: "popovervalue", at: point)
+    XCTAssertTrue(response.ok, "\(context): \(String(describing: response.error))")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
+    XCTAssertEqual(popoverField.value as? String, "popovervalue", context)
+    XCTAssertEqual(partlyCovered.value as? String, "background", context)
   }
 
   @MainActor
