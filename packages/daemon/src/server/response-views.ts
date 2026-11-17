@@ -133,6 +133,10 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'selectionStart',
   'selectionEnd',
   'hittable',
+  'clickable',
+  'focusable',
+  'longClickable',
+  'scrollable',
 ] as const;
 
 function compactSelectorNode(node: SnapshotNode): Record<string, unknown> {
