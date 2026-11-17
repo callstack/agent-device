@@ -156,13 +156,15 @@ test('routed status uses capabilities from the supplied host store rather than t
       readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' })?.leaseProvider,
       provider,
     );
+    const statusOutputStart = capture.read().length;
     await runCli(
       ['connection', 'status', '--state-dir', f.stateDir],
       { sendToDaemon },
       suppliedHost,
     );
-    assert.match(capture.read(), /The first device command shown below will allocate one/);
-    assert.doesNotMatch(capture.read(), /install-from-source/);
+    const statusOutput = capture.read().slice(statusOutputStart);
+    assert.match(statusOutput, /The first device command shown below will allocate one/);
+    assert.doesNotMatch(statusOutput, /install-from-source/);
     assert.equal(sendToDaemon.mock.calls.length, 0);
   } finally {
     capture.restore();
