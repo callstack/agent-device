@@ -284,7 +284,11 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      # The audit classifies every function parameter's declared type, so a parameter typed as a
+      # parser's whole expression union makes one file cost minutes of analysis. The budget is on
+      # the step, not the job, so a cold install cannot trip it.
       - name: Check numeric ranges
+        timeout-minutes: 3
         uses: ./.github/actions/run-gate
         with: { gate: freerange }
 
