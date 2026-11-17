@@ -993,6 +993,22 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       field.inputAccessoryView = accessory;
     }
     AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
+    if (withAccessory) {
+      // A screen-level Done with the toolbar Done's label and no identifier, far from the keyboard, as a
+      // navigation bar's would be: dismiss must still press the toolbar's, never this one.
+      UIButton *screenDone = [UIButton buttonWithType:UIButtonTypeSystem];
+      [screenDone setTitle:@"Done" forState:UIControlStateNormal];
+      [screenDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                       weakAnswer.text = @"Screen";
+                     }]
+            forControlEvents:UIControlEventTouchUpInside];
+      screenDone.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:screenDone];
+      [NSLayoutConstraint activateConstraints:@[
+        [screenDone.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [screenDone.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+      ]];
+    }
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {

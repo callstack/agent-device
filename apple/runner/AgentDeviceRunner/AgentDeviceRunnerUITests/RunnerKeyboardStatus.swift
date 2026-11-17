@@ -206,7 +206,9 @@ extension RunnerKeyboardStatus {
   /// The dismiss controls that can be told apart from every other control of their type, in the same
   /// order. The first one that a live lookup also resolves to a single element is the one pressed.
   static func uniqueDismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
-    dismissControls(in: keyboard).filter { isUniqueDismissControl($0, in: keyboard.keys) }
+    dismissControls(in: keyboard).filter {
+      isUniqueDismissControl($0, in: keyboard.keys, keyboardFrame: keyboard.frame)
+    }
   }
 
   /// The dismiss wording `key` carries, as its label or its identifier.
@@ -214,14 +216,33 @@ extension RunnerKeyboardStatus {
     dismissLabels.first { key.text == $0 || key.identifier == $0 }
   }
 
-  /// True when no other control in `keys` has the same type, label and identifier as `key`. A control is
-  /// tapped by that identity, never by a coordinate from a snapshot the keyboard may have moved since,
-  /// so one that cannot be told apart from another is not pressed. A toolbar `Done` and a return key
-  /// labelled `done` with the identifier `Done` differ in label and identifier, so each is unique.
-  static func isUniqueDismissControl(_ key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> Bool {
+  /// Where `key` stands among the controls in `keys` that share its type, label and identifier, in tree
+  /// order: its `index`, and how many there are in all. The count includes controls anywhere in the app,
+  /// because a live lookup by identity finds them all, so the live match count must equal it and the
+  /// control is then tapped by `index`. Never by a coordinate from a snapshot the keyboard may have
+  /// moved since.
+  static func identityPosition(of key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> (index: Int, count: Int)? {
+    let same = keys.filter {
+      $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
+    }
+    guard let index = same.firstIndex(where: { $0.frame == key.frame }) else { return nil }
+    return (index, same.count)
+  }
+
+  /// True when `key` is the only control near the keyboard that has its type, label and identifier. A
+  /// control that cannot be told apart from another near the keyboard is not pressed. One far from the
+  /// keyboard, such as a navigation bar's `Done` beside a toolbar `Done` with the same identity, belongs
+  /// to the screen and does not count. A toolbar `Done` and a return key labelled `done` with the
+  /// identifier `Done` differ in label and identifier, so each is unique.
+  static func isUniqueDismissControl(
+    _ key: ObservedKeyboardKey,
+    in keys: [ObservedKeyboardKey],
+    keyboardFrame: CGRect
+  ) -> Bool {
     guard dismissLabel(of: key) != nil else { return false }
     return keys.filter {
       $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
+        && isNearKeyboard($0.frame, keyboardFrame: keyboardFrame)
     }.count == 1
   }
 
