@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { DaemonWaitTarget } from '@agent-device/contracts/daemon-command-surface';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import { checkWaitText, STALE_REF_HINT } from '@agent-device/selectors';
@@ -27,25 +27,7 @@ export type SelectorSnapshotOptions = {
 
 export type WaitCommandOptions = WaitCommandContext &
   SelectorSnapshotOptions & {
-    target:
-      | { kind: 'sleep'; durationMs: number }
-      | { kind: 'text'; text: string; timeoutMs?: number | null }
-      | { kind: 'ref'; ref: string; timeoutMs?: number | null }
-      | {
-          kind: 'selector';
-          selector: string;
-          timeoutMs?: number | null;
-          /**
-           * ADR 0012 / #1349, replay-only: the recorded landmark identity this
-           * wait must observe before reporting success. Polling is unchanged —
-           * the loop keeps waiting while no selector match carries this
-           * identity, and a timeout with rejected candidates throws the
-           * `WAIT_LANDMARK_MISMATCH_REASON` refusal instead of success.
-           */
-          recordedLandmark?: TargetAnnotationV1;
-        }
-      | { kind: 'absent'; selector: string; timeoutMs?: number | null }
-      | { kind: 'stable'; quietMs?: number | null; timeoutMs?: number | null };
+    target: DaemonWaitTarget;
   };
 
 export type WaitCommandResult =
