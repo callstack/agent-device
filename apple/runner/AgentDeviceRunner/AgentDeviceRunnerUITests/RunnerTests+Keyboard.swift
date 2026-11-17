@@ -246,6 +246,20 @@ extension RunnerTests {
   }
 #endif
 
+  /// The visible keyboard's controls as one snapshot read, for the lookups that must tell the return
+  /// key apart from other controls. Off iOS there is no software keyboard to read, so nothing is
+  /// observed and no control is the return key.
+  func observedKeyboardKeys(app: XCUIApplication) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
+#if os(iOS)
+    guard let snapshot = safely("KEYBOARD_KEYS_SNAPSHOT", { try? app.keyboards.firstMatch.snapshot() }) else {
+      return []
+    }
+    return observedKeyboardKeys(in: snapshot)
+#else
+    return []
+#endif
+  }
+
   func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
     let keyboard = app.keyboards.firstMatch
     let wasVisible = isKeyboardVisible(app: app)
