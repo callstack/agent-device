@@ -119,7 +119,46 @@ test('a credentials object missing one key falls back to the environment for tha
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });
   assert.equal(captured.read(), basic('opt-user', 'env-key'));
+  await listArtifacts(browserstack({ credentials: { accessKey: 'opt-key' } }), {
+    BROWSERSTACK_USERNAME: 'env-user',
+    BROWSERSTACK_ACCESS_KEY: 'env-key',
+  });
+  assert.equal(captured.read(), basic('env-user', 'opt-key'));
 });
+
+test.each([
+  [{ username: '' }, ['BROWSERSTACK_ACCESS_KEY']],
+  [{ accessKey: '' }, ['BROWSERSTACK_USERNAME']],
+] as const)(
+  'explicit empty credential %j never falls back to the environment',
+  async (credentials, variables) => {
+    const env = { BROWSERSTACK_USERNAME: 'env-user', BROWSERSTACK_ACCESS_KEY: 'env-key' };
+    const fetch = vi.fn(async () => new Response('{}'));
+    globalThis.fetch = fetch;
+    const flags = {
+      json: false,
+      help: false,
+      version: false,
+      platform: 'android',
+      device: 'Pixel',
+      providerOsVersion: '14',
+      providerApp: 'bs://app-id',
+    } as const;
+    const plugin = browserstack({ credentials });
+    const [resolve, artifacts] = await Promise.allSettled([
+      Promise.resolve().then(() =>
+        plugin.connection!.resolve({ flags, stateDir: '/state', cwd: '/', env, host: host(env) }),
+      ),
+      listArtifacts(plugin, env),
+    ]);
+    assert.equal(resolve.status, 'rejected');
+    if (resolve.status === 'rejected') assert.equal(resolve.reason.code, 'INVALID_ARGS');
+    assert.equal(artifacts.status, 'rejected');
+    if (artifacts.status === 'rejected') assert.equal(artifacts.reason.code, 'INVALID_ARGS');
+    assert.deepEqual(plugin.credentials, { variables });
+    assert.equal(fetch.mock.calls.length, 0);
+  },
+);
 
 test('connect uses the option credentials without an environment and verifies with them', async () => {
   vi.mocked(verifyBrowserStackConnection).mockResolvedValue({
