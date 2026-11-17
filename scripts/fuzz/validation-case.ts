@@ -1,3 +1,9 @@
+import {
+  encodeValidationCase,
+  type ValidationCase,
+  type ValidationExpectation,
+} from '@agent-device/test-kit';
+export { encodeValidationCase, type ValidationCase } from '@agent-device/test-kit';
 // Expectation-carrying cases for the validation fuzz targets (#1781 B2).
 //
 // The classic targets judge only rejections ("fails well"), which cannot see the bug class
@@ -10,20 +16,6 @@
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { describeThrown } from './invariant.ts';
 import type { FuzzFailure, FuzzTargetName } from './target-types.ts';
-
-export type ValidationExpectation = { outcome: 'accept' } | { outcome: 'reject'; code: string };
-
-export type ValidationCase = {
-  /** CLI argv vector or Maestro flow source, depending on the target. */
-  payload: string[] | string;
-  /** Which generator rule produced the case — names the finding and the calibration row. */
-  mutation: string;
-  expect: ValidationExpectation;
-};
-
-export function encodeValidationCase(validationCase: ValidationCase): string {
-  return JSON.stringify(validationCase);
-}
 
 /** A pinned case the parser must accept. */
 export function acceptCase(payload: ValidationCase['payload']): string {
