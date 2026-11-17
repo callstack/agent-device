@@ -1,40 +1,30 @@
+import type { PluginConnection, ProviderPluginHost } from 'agent-device/plugins';
 import {
   rejectRefusedProviderProfileFields,
   requireResolvedProfilePlatform,
   requireResolvedProfileValue,
 } from '@agent-device/contracts/provider-profile-fields';
 import {
-  BROWSERSTACK_PROFILE_FIELDS,
-  parseBrowserStackAppReference,
-  requireBrowserStackCredentials,
-} from './browserstack.ts';
-import { readBrowserStackDeviceFeatureFields } from './browserstack-device-features.ts';
-import { verifyBrowserStackConnection } from './connection-verification.ts';
-import type {
-  CloudWebDriverConnection,
-  CloudWebDriverConnectionContext,
-  CloudWebDriverConnectProfileResolution,
-  CloudWebDriverProviderHost,
-} from './provider-plugin.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
-import {
   requireConnectFlag,
   requireConnectPlatform,
   resolveLocalAppArtifact,
-} from './webdriver-utils.ts';
+} from '@agent-device/provider-webdriver/plugin';
+import { parseBrowserStackAppReference } from './browserstack.ts';
+import { readBrowserStackDeviceFeatureFields } from './browserstack-device-features.ts';
+import { BROWSERSTACK_PROFILE_FIELDS } from './profile-fields.ts';
+import { PROVIDER, requireBrowserStackCredentials } from './providers.ts';
+import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 
-const PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const SERVICE = 'BrowserStack';
-const CONSUMER = `connect ${PROVIDER}`;
 
 /** The `connect browserstack` callbacks, loaded only when the CLI runs them. */
-export function createBrowserStackConnection(host: CloudWebDriverProviderHost): {
-  resolve(context: CloudWebDriverConnectionContext): CloudWebDriverConnectProfileResolution;
-} & CloudWebDriverConnection {
+export function createBrowserStackConnection(
+  host: ProviderPluginHost,
+): Pick<PluginConnection, 'resolve' | 'verify'> {
   return {
-    resolve: ({ flags, cwd }): CloudWebDriverConnectProfileResolution => {
+    resolve: ({ flags, cwd }) => {
       rejectRefusedProviderProfileFields(flags, BROWSERSTACK_PROFILE_FIELDS);
-      requireBrowserStackCredentials(host.env, CONSUMER);
+      requireBrowserStackCredentials(host.env, `connect ${PROVIDER}`);
       const platform = requireConnectPlatform(flags, PROVIDER);
       const device = requireConnectFlag(flags.device, PROVIDER, '--device <name>');
       const providerOsVersion = requireConnectFlag(
@@ -70,7 +60,7 @@ export function createBrowserStackConnection(host: CloudWebDriverProviderHost): 
     verify: async ({ flags }) =>
       await verifyBrowserStackConnection(
         {
-          ...requireBrowserStackCredentials(host.env, CONSUMER),
+          ...requireBrowserStackCredentials(host.env, `connect ${PROVIDER}`),
           platform: requireResolvedProfilePlatform(flags.platform, SERVICE),
           deviceName: requireResolvedProfileValue(
             flags.device,

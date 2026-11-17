@@ -20,7 +20,7 @@ import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 function capabilities(
   platform: CloudWebDriverPlatform = 'android',
   overrides?: CloudWebDriverCapabilityOverrides,
-  provider: string = CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  provider: string = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
 ) {
   return createCloudWebDriverCapabilities({
     provider,

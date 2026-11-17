@@ -474,7 +474,7 @@ export const cloud = {
       icon: 'cube',
       label: 'Device clouds',
       title: 'On hosted devices',
-      body: 'The same commands drive BrowserStack, AWS Device Farm and Limrun devices built in, TestMu AI through its provider plugin, and Expo Simulators on EAS.',
+      body: 'The same commands drive AWS Device Farm and Limrun devices built in, BrowserStack and TestMu AI through their provider plugins, and Expo Simulators on EAS.',
       cmd: 'agent-device connect limrun --platform ios',
       href: docs.clouds,
     },

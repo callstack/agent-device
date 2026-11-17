@@ -1,7 +1,7 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
+import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -18,9 +18,8 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
-const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
+const WEBDRIVER_PROVIDER = BROWSERSTACK_PROVIDER;
 const CLIENT_VERSION = '0.20.6-test';
 
 /**
@@ -407,18 +406,17 @@ function textEntryTranscript(server: FakeIosWebDriverServer): string[] {
 
 async function createCloudIosWorld() {
   const server = await FakeIosWebDriverServer.start();
-  const runtimes = await createBundledCloudWebDriverRuntimes({
-    env: {
-      BROWSERSTACK_USERNAME: 'browser-user',
-      BROWSERSTACK_ACCESS_KEY: 'browser-key',
-      BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-      BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
-    },
-    clientVersion: CLIENT_VERSION,
-    runHostCommand: async () => {
-      throw new Error('BrowserStack scenario must not run host commands');
-    },
-  });
+  const runtimes = [
+    await createBrowserStackRuntime({
+      env: {
+        BROWSERSTACK_USERNAME: 'browser-user',
+        BROWSERSTACK_ACCESS_KEY: 'browser-key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+      },
+      clientVersion: CLIENT_VERSION,
+    }),
+  ];
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const daemon = await createProviderScenarioHarness({
     ...providers,
