@@ -122,9 +122,10 @@ recorded a version discloses it: the CLI prints a warning and carries a typed
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
-batch steps are refused. A `batch` whose steps would close the recording is refused before any step
-runs; run `close` on its own after the batch. A batch delivers no script versions from its steps
-([#4595](https://github.com/callstack/agent-device/issues/4595)).
+batch steps are refused. A remote `batch` updates your file once with the recording from its
+completed steps, including the final script when a step closes the session. If a step fails, the
+batch keeps that error and delivers the recording from earlier completed steps. Delivery failures
+add `scriptDeliveryFailure` and a warning, and your file may keep its previous version.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
