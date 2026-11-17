@@ -134,7 +134,18 @@ export async function acquireAndroidSnapshotHelperSession(
     adb: options.adb,
     signal: options.signal,
   });
-  if (!isAndroidSnapshotHelperSessionEnabled() || !options.adbProvider?.spawn) {
+  if (!isAndroidSnapshotHelperSessionEnabled()) {
+    emitDiagnostic({
+      phase: 'android_snapshot_helper_session_acquisition',
+      data: { outcome: 'disabled' },
+    });
+    return undefined;
+  }
+  if (!options.adbProvider?.spawn) {
+    emitDiagnostic({
+      phase: 'android_snapshot_helper_session_acquisition',
+      data: { outcome: 'spawn-unavailable' },
+    });
     return undefined;
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
@@ -172,9 +183,21 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
+  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) {
+    emitDiagnostic({
+      phase: 'android_snapshot_helper_session_acquisition',
+      data: { outcome: 'backed-off' },
+    });
+    return undefined;
+  }
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
-  return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
+  const existing = sessions().get(params.deviceKey);
+  const session = existing ?? (await tryStartAndroidSnapshotHelperSession(params));
+  emitDiagnostic({
+    phase: 'android_snapshot_helper_session_acquisition',
+    data: { outcome: existing ? 'reused' : session ? 'created' : 'start-failed' },
+  });
+  return session;
 }
 
 /** Drops a cached session this command cannot write to, so only its forward is left behind. */
