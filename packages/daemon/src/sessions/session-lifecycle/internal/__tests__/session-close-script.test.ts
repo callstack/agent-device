@@ -14,6 +14,7 @@ import {
   commitRepairScriptBeforeClose,
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
+import { remoteCloseScriptDelivery } from '../../../../core/session-script-publication-capability.ts';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { failScriptStagingWrite } from '../../../../__tests__/support/script-staging-failure.ts';
@@ -89,6 +90,37 @@ test('repair close failure keeps normalized metadata and is explicitly retriable
       },
       retriable: true,
     },
+  });
+});
+
+test('a refused remote close write keeps its typed reason as the delivery failure cause', () => {
+  // #4584: a remote recording's close discloses a failed final write instead of failing, and the
+  // disclosure has to say WHICH failure it was. `state_chain_untrusted` — the daemon's own state chain
+  // is not private ground — is a different recovery from a full disk, and a client cannot tell them
+  // apart from prose. The reason comes from the write error, so it has to travel with it.
+  const { req, ref, sessionStore } = setup('remote-ordinary');
+  sessionStore.requireCurrent(ref).scriptPublication = authoringPublication('armed', {
+    remote: true,
+  });
+  const failure = new AppError('COMMAND_FAILED', 'state chain is not private ground', {
+    reason: 'state_chain_untrusted',
+    hint: 'Make the daemon own that tree.',
+  });
+  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
+
+  const { remote } = finalizeOrdinaryCloseScript({
+    req,
+    ref,
+    sessionStore,
+    platformCloseError: undefined,
+  });
+
+  const delivered = remoteCloseScriptDelivery({ ok: true, data: {} }, remote);
+  if (!delivered.ok) throw new Error('a failed remote version keeps the close successful');
+  expect(delivered.data?.scriptDeliveryFailure).toMatchObject({
+    reason: 'script_delivery_failed',
+    publicationId: 'publication-0001',
+    cause: 'state_chain_untrusted',
   });
 });
 

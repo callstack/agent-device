@@ -6,6 +6,7 @@ import type {
   ScriptDeliveryFailure,
 } from '@agent-device/kernel/contracts';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import type { AppError } from '@agent-device/kernel/errors';
 import type { SessionStore } from './session-store.ts';
 import { asDaemonDeliveredArtifact } from './capture-output-ownership.ts';
 import type { SessionState } from './session-state.ts';
@@ -221,7 +222,9 @@ export function isSessionScriptPublished(session: SessionState): boolean {
  */
 type RemoteScriptVersion =
   | Readonly<{ path: string }>
-  | Readonly<{ failure: Readonly<{ message: string; hint: string }> }>;
+  | Readonly<{
+      failure: Readonly<{ message: string; hint: string; cause?: string }>;
+    }>;
 
 /** What a close delivers for a remote recording: the recording it ended and its final version. */
 export type RemoteCloseScript = Readonly<{
@@ -306,8 +309,7 @@ export function remoteScriptVersionDelivery(
     }
     if (!result.error) return response;
     // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response. The typed
-    // reason goes along as the failure's cause, so a client can tell a refused state chain from a full
-    // disk without reading prose (ADR 0016).
+    // reason travels as the failure's `cause`, so a client can tell which refusal this was (ADR 0016).
     return withRemoteScriptVersion(response, delivery, {
       failure: {
         message: 'The action succeeded, but the daemon could not write the remote recording.',
@@ -324,18 +326,32 @@ export function remoteScriptVersionDelivery(
  * Reads what a close of a remote recording delivers from the session that the close-time write
  * just marked, because teardown may have replaced the session object before that write. A
  * published final version is stamped after every earlier version, so it replaces the last one.
+ *
+ * `writeFailure` is the close write's own error, and its typed reason travels as the failure's
+ * `cause`: a close refused for the daemon's state chain is a different recovery than a full disk,
+ * and the client sees which without reading prose (ADR 0016).
  */
 export function remoteCloseScript(
   session: SessionState,
-  writeFailed: boolean,
+  writeFailure: AppError | undefined,
 ): RemoteCloseScript | undefined {
   const state = session.scriptPublication;
   if (state?.kind !== 'authoring' || !state.remoteDelivery) return undefined;
   const delivery = state.remoteDelivery;
-  if (writeFailed) {
+  if (writeFailure) {
     const message = 'The session was closed, but the daemon could not write its final script.';
     const hint = 'The --save-script file keeps the version from the last recorded action.';
-    return { delivery, version: { failure: { message, hint } } };
+    const reason = writeFailure.details?.reason;
+    return {
+      delivery,
+      version: {
+        failure: {
+          message,
+          hint,
+          ...(typeof reason === 'string' ? { cause: reason } : {}),
+        },
+      },
+    };
   }
   const writtenPath = state.status === 'published' ? scriptTargetPath(state) : undefined;
   if (!writtenPath) return { delivery };

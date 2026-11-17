@@ -112,6 +112,10 @@ test.skipIf(process.platform === 'win32')(
       );
       expect(refusalOf(refused)).toMatchObject({ reason: 'state_chain_untrusted' });
       expect(String(refusalOf(refused).path).startsWith(sessionsDir + path.sep)).toBe(true);
+      // This host shape is what the hint has to name: this uid is not the owner of that tree, and the two
+      // ways out are chown and AGENT_DEVICE_STATE_DIR.
+      expect(String(refusalOf(refused).hint)).toContain('chown');
+      expect(String(refusalOf(refused).hint)).toContain('AGENT_DEVICE_STATE_DIR');
       // Nothing was written under the foreign directory.
       expect(fs.readdirSync(sessionsDir)).toEqual([]);
     } finally {

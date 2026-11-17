@@ -5,7 +5,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   FOREIGN_UID,
   ancestryRoot as root,
-  currentGid,
   directoryWith,
   expectUntrusted,
   expectUntrustedReplaced,
@@ -95,7 +94,7 @@ skipOnWindows('refuses a destination created inside a directory others can add e
 });
 
 skipOnWindows('refuses a destination under a group-writable shared directory', () => {
-  const team = directoryWith(path.join(root(), 'team'), 0o775, currentGid);
+  const team = directoryWith(path.join(root(), 'team'), 0o775);
   const sub = path.join(team, 'sub');
   fs.mkdirSync(sub);
 
@@ -558,7 +557,7 @@ skipOnWindows('refuses a group-writable 0775 directory with the hint to close th
   // The stock shape on a shared Linux checkout: the project directory is 0775 and its group is this
   // user's own. Membership of that group cannot be proven from the host's account files, so the rule
   // refuses on the mode alone and tells the caller how to make the destination acceptable.
-  const home = directoryWith(path.join(root(), 'home'), 0o775, currentGid);
+  const home = directoryWith(path.join(root(), 'home'), 0o775);
   let hint = '';
   try {
     publish(path.join(home, 'journey.ad'));
@@ -573,7 +572,7 @@ skipOnWindows('refuses a group-writable 0775 directory with the hint to close th
 
 skipOnWindows('refuses a setgid group-writable directory on the same mode', () => {
   // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
-  const home = directoryWith(path.join(root(), 'home'), 0o2775, currentGid);
+  const home = directoryWith(path.join(root(), 'home'), 0o2775);
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
 });

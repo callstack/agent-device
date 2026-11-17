@@ -416,9 +416,9 @@ async function publishScriptVersion(
     // staging goes, so this route is not walked twice to be told the same directory.
     const prepared = prepareScriptDestination(record.destination);
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
-    staging = allocated?.staging;
-    if (!staging || !allocated) return { published: undefined };
-    const staged = path.join(staging, 'script.ad');
+    staging = allocated;
+    if (!allocated) return { published: undefined };
+    const staged = path.join(allocated, 'script.ad');
     await context.download({
       ...endpoint,
       artifactId: artifactId as string,
@@ -428,10 +428,10 @@ async function publishScriptVersion(
     });
     const version = {
       revision: revision as number,
-      staging,
+      staging: allocated,
       staged,
-      // What host-kit answered when staging was allocated, for the one confirmation before the rename.
-      prepared: allocated.prepared,
+      // What host-kit answered above, carried for the one confirmation before the rename.
+      prepared,
       pending,
     };
     return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
@@ -451,16 +451,13 @@ async function publishScriptVersion(
 
 /**
  * Creates a staging directory beside the destination and lists it in the record before any script bytes
- * reach it, and reports the prepared destination the publish confirms before its rename.
+ * reach it, answering the directory it made, or nothing when the record went away.
  *
  * Staging sits in the directory the walk JUDGED — its answer, not `path.dirname` of the spelled destination:
  * where a `..` or a link leads elsewhere, the spelled parent is ground nobody judged, and a directory in it
  * is one another local user can populate before the rename does.
  */
-function allocateStaging(
-  file: string,
-  prepared: ScriptDestination,
-): { staging: string; prepared: ScriptDestination } | undefined {
+function allocateStaging(file: string, prepared: ScriptDestination): string | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
   const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
@@ -470,7 +467,7 @@ function allocateStaging(
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  return { staging, prepared };
+  return staging;
 }
 
 /**

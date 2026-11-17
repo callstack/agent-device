@@ -8,9 +8,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { publishScriptFileSync } from './atomic-file.ts';
 
-/** This process's ids. Windows has neither, and every test that uses them is skipped there. */
+/** This process's uid. Windows has none, and every test that uses it is skipped there. */
 export const currentUid = process.getuid?.() ?? -1;
-export const currentGid = process.getgid?.() ?? -1;
+const currentGid = process.getgid?.() ?? -1;
 
 /** Some other local user, not this one and not root. */
 export const FOREIGN_UID = 65534;
@@ -21,12 +21,12 @@ export function ancestryRoot(): string {
 }
 
 /**
- * A directory carrying `mode` and `gid`, so the rule reads the group the test chose. The group is set
- * explicitly because a scratch directory inherits one from its parent, not necessarily this user's.
+ * A directory carrying `mode`, owned by this user. The ownership is set explicitly because a scratch
+ * directory inherits one from its parent, not necessarily this user's.
  */
-export function directoryWith(directory: string, mode: number, gid = currentGid): string {
+export function directoryWith(directory: string, mode: number): string {
   fs.mkdirSync(directory);
-  fs.chownSync(directory, currentUid, gid);
+  fs.chownSync(directory, currentUid, currentGid);
   fs.chmodSync(directory, mode);
   return directory;
 }

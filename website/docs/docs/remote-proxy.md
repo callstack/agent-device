@@ -124,7 +124,12 @@ than 8 MiB. The command still succeeds, and the file may keep the previous versi
 action or `close` delivers the full recording again. If `close` cannot deliver the final script,
 the session still closes and the file keeps the version from the last action. Every result that
 recorded a version discloses it: the CLI prints a warning and carries a typed
-`scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
+`scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field. Its `cause`
+names why: a daemon that cannot call its own state directory private ground, for example one whose
+state tree a container or a mounted volume left to another uid, refuses every version it picks a
+path for with `state_chain_untrusted`. That daemon still starts and answers every other command, and
+the fix is on the daemon host: make its user own the state directory, or point
+`AGENT_DEVICE_STATE_DIR` at a directory it owns.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
 batch steps are refused. A remote `batch` updates your file once with the recording from its

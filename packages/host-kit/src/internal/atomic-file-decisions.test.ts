@@ -12,11 +12,10 @@ import {
 } from './atomic-file.ts';
 
 const currentUid = process.getuid?.() ?? -1;
-const currentGid = process.getgid?.() ?? -1;
 
 // --- what makes one directory unsafe to publish inside ---
 
-const OWN = { uid: currentUid, gid: currentGid, mode: 0o755 };
+const OWN = { uid: currentUid, mode: 0o755 };
 const TRUST = { uid: currentUid };
 
 function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
@@ -39,10 +38,7 @@ test('refuses a directory that is world-writable', () => {
 test('refuses a directory that is group-writable, whoever owns the group', () => {
   // ADR 0016 carries no private-group exception: proving a group holds no other user means reading the
   // host's account files, which cannot be settled on a host whose name service answers membership from
-  // somewhere else. The mode alone decides, so `gid` does not enter the answer.
-  expect(untrustedAncestryExposure(directoryOf({ gid: 4321, mode: 0o775 }), TRUST)).toBe(
-    'shared_group_writable',
-  );
+  // somewhere else. The mode alone decides, which is why the rule does not read a `gid` at all.
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBe(
     'shared_group_writable',
   );

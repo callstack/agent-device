@@ -285,23 +285,18 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
  * umask 002 creates `sessions/` at 0775, so creation carries the mode and the repair forces it for a level
  * an older version already left loose.
  *
- * The repair is BEST-EFFORT and never refuses (#4565): it forces the mode on a level this uid owns and
- * changes nothing about any other, so a state directory on a mounted volume, or one another uid left at
- * 0755, still gets a daemon that starts. It answers {@link DaemonStateDir} — the path, and whether the
- * chain is private ground — because a caller that WRITES under the directory needs that second answer: a
- * chain the repair stopped on leads outside the state tree, and the destination rule accepts a link whose
- * parent others cannot write. Startup ignores the answer; the script writer refuses on it (ADR 0016).
+ * The repair is BEST-EFFORT and never refuses (#4565): a state directory on a mounted volume, or one another
+ * uid left at 0755, still gets a daemon that starts. It answers {@link DaemonStateDir}, and a caller that
+ * WRITES under the directory reads the verdict on the chain; startup ignores it.
  *
  * `stateBase` is the daemon's state directory that the levels below it are judged from: a level is repaired
  * only when every level above it, down from that base, is one this process may judge. {@link
  * repairStateChain} says why the whole chain has to be judged rather than the leaf alone.
  */
 export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): DaemonStateDir {
-  // Creation is one recursive `mkdir`: it creates the whole tail, while the repair below judges every level
-  // it reached. Creating one level at a time would have to decide what to do when the BASE is a link, which
-  // is the shape of a `~/.agent-device` on another disk, and refusing to create there would break a host the
-  // operator pointed at that disk. What creation can leave on ground the chain rejects is an empty
-  // directory, and the destination walk refuses any recording under it.
+  // One recursive `mkdir`, BEFORE the chain is judged: it creates the whole tail even on ground the repair
+  // will stop at, which is what keeps a `~/.agent-device` linked to another disk working. What it can leave
+  // beyond a rejected level is an empty directory, and no script is published on a chain the verdict refuses.
   fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
   return { path: directory, privateChain: repairStateChain(stateBase, directory) };
 }
@@ -315,9 +310,8 @@ export function ensurePrivateDaemonStateDir(directory: string, stateBase: string
 export type DaemonStateDir = Readonly<{ path: string; privateChain: boolean }>;
 
 /**
- * {@link ensurePrivateDaemonStateDir} for a caller that only names the directory it made — startup, or a
- * tombstone written beside a session — and writes no script under it. Such a caller has nothing to refuse
- * on, so it takes the path and leaves the verdict unread.
+ * {@link ensurePrivateDaemonStateDir} for a caller that writes no script under the directory — startup, or a
+ * tombstone written beside a session — so it takes the path and leaves the verdict unread.
  */
 export function ensureDaemonStateDir(directory: string, stateBase: string): string {
   return ensurePrivateDaemonStateDir(directory, stateBase).path;
@@ -339,11 +333,8 @@ const STATE_DIR_MODE = 0o700;
  * `lstat`, the open, the `fstat`, the `fchmod` and the closing `close` are inside one catch, and any of them
  * failing — `EACCES` on a directory this user cannot read, `ENOENT` on a name that went missing meanwhile,
  * `EIO` on a host that cannot even release the descriptor — is reported as a skipped level and stopped there.
- * Creation keeps its own failures, which come from the `mkdir` above.
- *
- * The answer is whether the WHOLE chain reached `directory` and stands private. A caller that only forces
- * modes ignores it; a caller that writes under the directory (ADR 0016) refuses, because a chain that
- * stopped at a link leads to ground outside the state tree that the destination rule has no reason to reject.
+ * Creation keeps its own failures, which come from the `mkdir` in the caller. The answer says whether the
+ * WHOLE chain reached `directory` and stands private; {@link DaemonStateDir} says who reads it.
  */
 function repairStateChain(stateBase: string, directory: string): boolean {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
@@ -378,8 +369,11 @@ function repairStateChain(stateBase: string, directory: string): boolean {
 function repairStateLevel(level: string): boolean {
   const judged = fs.lstatSync(level, { bigint: true, throwIfNoEntry: false });
   // The name is gone: whatever removed it also removed the mode this call came to force, and there is
-  // nothing below a name that does not exist.
-  if (judged === undefined) return false;
+  // nothing below it. Said out loud like every other stop, because the log has to show WHERE it stopped.
+  if (judged === undefined) {
+    skipStateDirMode(level, 'absent');
+    return false;
+  }
   // Asked BEFORE the mode, never after it: a LINK whose own bits are 0700 answers the mode question with the
   // private mode, and a repair that read the mode first would pass that link without judging it at all.
   if (!judged.isDirectory()) {

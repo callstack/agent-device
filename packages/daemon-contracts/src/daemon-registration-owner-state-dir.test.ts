@@ -219,6 +219,45 @@ skipOnWindows(
   },
 );
 
+skipOnWindows('reports the level that disappeared before the repair reached it', async () => {
+  // The chain is walked AFTER a recursive `mkdir`, so at rest every level it asks about exists: a name is
+  // absent only when something removes it between the creation and the `lstat` of the same call. That race
+  // cannot be set up on disk, so the fixture answers the level ABSENT, which is what `throwIfNoEntry: false`
+  // really returns for a name that is not there (asserted below against a real absent name, so the injected
+  // value is the host's own answer and not a made-up shape). What must not happen is a silent stop: an
+  // operator reading the daemon log has to see where the chain stopped.
+  const base = mkdtempForTestSync('agent-device-state-absent-level-');
+  fs.chmodSync(base, 0o700);
+  const sessions = path.join(base, 'sessions');
+  fs.mkdirSync(sessions);
+  fs.chmodSync(sessions, 0o755);
+  const realLstat = originals.lstatSync;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((target: unknown, options?: unknown) => {
+    if (
+      String(target) === sessions &&
+      (options as { throwIfNoEntry?: boolean })?.throwIfNoEntry === false
+    )
+      return undefined;
+    return realLstat(target as fs.PathLike, options as never);
+  }) as typeof fs.lstatSync);
+
+  // The same call, on a name that is truly absent, answers the same way.
+  expect(
+    originals.lstatSync(path.join(base, 'no-such-level'), {
+      bigint: true,
+      throwIfNoEntry: false,
+    }),
+  ).toBeUndefined();
+
+  // Nothing was changed, and the chain says so for the writer that reads it.
+  expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
+    path: sessions,
+    privateChain: false,
+  });
+  expect(modeOf(sessions)).toBe(0o755);
+  expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, base))).toBe(1);
+});
+
 skipOnWindows('skips a state directory another user owns, and leaves its mode', async () => {
   // The container and shared-CI shape: `sessions/` belongs to the uid a volume was mounted with, and the
   // daemon runs as root or as somebody else. Ownership is asked of the descriptor the mode would be forced

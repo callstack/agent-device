@@ -521,9 +521,9 @@ function standOn(
   };
 }
 
-/** The fields this rule reads off one `lstat` answer: owner, group and mode of the ENTRY. */
+/** The fields this rule reads off one `lstat` answer: owner and mode of the ENTRY. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
-  return { uid: Number(stats.uid), gid: Number(stats.gid), mode: Number(stats.mode) };
+  return { uid: Number(stats.uid), mode: Number(stats.mode) };
 }
 
 /**
@@ -657,7 +657,7 @@ function scriptTrust(): ScriptDestinationTrust {
 }
 
 /** The fields of a directory the ancestry rule reads, so the decision is testable without a filesystem. */
-export type DirectoryAuthority = Readonly<{ uid: number; gid: number; mode: number }>;
+export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
 
 /** The fields of a symbolic link the ancestry rule reads. */
 export type LinkAuthority = Readonly<{ uid: number }>;
