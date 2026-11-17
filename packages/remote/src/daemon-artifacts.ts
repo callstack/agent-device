@@ -1,7 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
-import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -479,7 +478,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
     >
   >
 > {
-  if (!readScriptDeliveryReceipt({ ok: false, error: args[2] })) return args[2];
+  if (args[2].details?.scriptDeliveryReceipt === undefined) return args[2];
   const scripts = await import('./session-script-destination.ts');
   return await scripts.settleScriptDeliveryReceiptOfFailure(...args);
 }
@@ -505,7 +504,7 @@ export async function materializeRemoteArtifacts(
   // publication and no script artifact of its own (#4595).
   if (
     response.data?.scriptPublicationId === undefined &&
-    readScriptDeliveryReceipt(response) === undefined &&
+    response.data?.scriptDeliveryReceipt === undefined &&
     !artifacts.some(isSessionScriptArtifact)
   ) {
     return await download();

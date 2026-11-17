@@ -7,7 +7,6 @@ export {
   readBatchStepInputObject,
   readBatchStepRecord,
 } from '../batch-contract.ts';
-export { normalizeBatchCommandName } from '../batch-step.ts';
 export type { DaemonBatchStep } from '../batch-step.ts';
 export type { CliFlags, DaemonExcludedCliFlag } from '../cli-flags.ts';
 export type { CommandExecutionOptions, InternalRequestOptions } from '../request-envelope.ts';
@@ -16,6 +15,7 @@ export type { DaemonWireRequest, DaemonWireRequestMeta } from '../daemon-wire-re
 export type { DispatchedCommand } from '../dispatched-command.ts';
 export {
   ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+  normalizeBatchCommandName,
   readOptionalInteger,
   readOptionalNumber,
 } from '../input-validation.ts';

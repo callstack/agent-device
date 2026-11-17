@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import { normalizeBatchCommandName } from '@agent-device/contracts/command';
+import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
 import type {
   DaemonArtifact,
   DaemonResponse,

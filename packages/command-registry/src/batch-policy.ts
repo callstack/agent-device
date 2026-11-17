@@ -1,7 +1,7 @@
 import { deriveStructuredBatchCommandNames } from './derive.ts';
 import { commandDescriptors } from './registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeBatchCommandName } from '@agent-device/contracts/command';
+import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
 
 export { normalizeBatchCommandName };
 

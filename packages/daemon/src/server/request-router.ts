@@ -108,7 +108,6 @@ import {
 } from '../execution/request-dispatch-disclosure.ts';
 import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
 import { handDownEndedLeases, reportEndedLeases } from '../core/request-ended-leases.ts';
-import { reportScriptDelivery } from '../core/request-script-delivery-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
@@ -206,6 +205,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
       };
     }
+    if (req.command !== 'batch') return await reportEndedLeases(req, handleRequestOnLedger);
+    const { reportScriptDelivery } = await import('../core/request-script-delivery-ledger.ts');
     return await reportEndedLeases(req, (scoped) =>
       reportScriptDelivery(scoped, handleRequestOnLedger),
     );

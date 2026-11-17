@@ -17,15 +17,3 @@ export type DaemonBatchStep = {
   flags?: Record<string, unknown>;
   runtime?: SessionRuntimeHints;
 };
-
-/**
- * The command name a submitted step carries, as the daemon will RUN it.
- *
- * Declared here because both sides of the batch boundary read a step: the daemon normalizes it
- * before its handler sees it, and a client that checks a daemon's answer against the plan it
- * submitted resolves the same step to the same command. A caller that matched the raw value would
- * read ` CLOSE ` as no command at all while the daemon runs `close`.
- */
-export function normalizeBatchCommandName(command: unknown): string {
-  return typeof command === 'string' ? command.trim().toLowerCase() : '';
-}
