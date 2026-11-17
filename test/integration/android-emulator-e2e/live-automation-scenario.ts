@@ -14,7 +14,13 @@ import {
   requireAndroidResourceId,
   scrollToVisibleSelector,
 } from './live-assertions.ts';
-import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
+import {
+  type LiveContext,
+  runStep,
+  verifyBehavior,
+  verifyCommand,
+  captureDiagnosticSnapshot,
+} from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -38,10 +44,11 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'id="automation-continue-catalog"',
   ]);
   await assertWaitSelector(context, 'id="catalog-title"');
-  const catalogSnapshot = await runStep(context, 'capture Android catalog navigation', [
-    'snapshot',
-    '-i',
-  ]);
+  const catalogSnapshot = await captureDiagnosticSnapshot(
+    context,
+    'catalog',
+    'capture Android catalog navigation',
+  );
   assertPersistentAndroidHelper(catalogSnapshot, { reused: true });
   const settingsTab = (
     catalogSnapshot.json?.data?.nodes as { label?: unknown; ref?: unknown }[] | undefined

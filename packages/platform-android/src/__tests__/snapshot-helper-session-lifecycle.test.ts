@@ -594,3 +594,38 @@ function countForceStops(options: SessionProviderOptions): number {
 function isHelperRuntimeForceStop(args: readonly string[]): boolean {
   return args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper';
 }
+
+test('records a declined acquisition in its request diagnostics', async () => {
+  const dir = await mkdtempForTest('android-session-decline-');
+  const logPath = path.join(dir, 'request.ndjson');
+  try {
+    process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION = '0';
+    const provider = createSessionProvider({ calls: [] });
+    await withDiagnosticsScope(
+      { debug: true, logPath, session: 'fixture', requestId: 'req-decline', command: 'snapshot' },
+      async () => {
+        assert.equal(
+          await captureAndroidSnapshotWithHelperSession({
+            adb: provider.exec,
+            adbProvider: provider,
+          }),
+          undefined,
+        );
+      },
+    );
+    const events = (await fs.readFile(logPath, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.ok(
+      events.some(
+        (event) =>
+          event.phase === 'android_snapshot_helper_session_acquisition' &&
+          event.data.outcome === 'disabled' &&
+          event.requestId === 'req-decline',
+      ),
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
