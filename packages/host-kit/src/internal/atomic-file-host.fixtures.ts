@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { publishScriptFileSync } from './atomic-file.ts';
-import { PRIVATE_GROUP_HOST_FILES } from './private-group.ts';
+import { PRIVATE_GROUP_HOST_FILES } from './owner-identity.ts';
 
 /** This process's uid. Windows has none, and every test that uses it is skipped there. */
 export const currentUid = process.getuid?.() ?? -1;

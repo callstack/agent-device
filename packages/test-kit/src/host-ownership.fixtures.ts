@@ -89,8 +89,8 @@ export type HostOwnershipProbe = Readonly<{
 
 /**
  * The three account files the private-group exception reads. host-kit owns the same record in
- * `internal/private-group.ts`; host-kit's tests may not reach test-kit and one package may not publish test
- * support to another, so each keeps its own copy — change both together.
+ * `internal/owner-identity.ts`; host-kit's tests may not reach test-kit and one package may not publish
+ * test support to another, so each keeps its own copy — change both together.
  */
 const ACCOUNT_FILES = {
   group: '/etc/group',

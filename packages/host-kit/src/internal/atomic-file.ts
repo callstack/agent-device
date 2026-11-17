@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-import { privateGroupOwned } from './private-group.ts';
+import { privateGroupOwned } from './owner-identity.ts';
 
 /**
  * What this process may rely on when it judges ground: who it is, as the kernel answers. The rule reads no

@@ -10,7 +10,7 @@ import {
   privateGroupOwned,
   type GroupMembership,
   type PrivateGroupHost,
-} from './private-group.ts';
+} from './owner-identity.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
