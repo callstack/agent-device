@@ -16,6 +16,7 @@ export type ExecSettlementReason =
   | 'success'
   | 'exit_failure'
   | 'timeout'
+  | 'output_limit'
   | 'abort'
   | 'spawn_error'
   | 'stdin_error';
@@ -67,4 +68,24 @@ export function createExecTraceContext(
   );
   emit('spawn_start');
   return { emit };
+}
+
+export function commandSettlementReason(input: {
+  didAbort: boolean;
+  exceededStream: 'stdout' | 'stderr' | undefined;
+  didTimeout: boolean;
+  code: number | null;
+  allowFailure: boolean | undefined;
+}): ExecSettlementReason {
+  if (input.didAbort) return 'abort';
+  if (input.didTimeout) return 'timeout';
+  if (input.exceededStream) return 'output_limit';
+  return (input.code ?? 1) !== 0 && !input.allowFailure ? 'exit_failure' : 'success';
+}
+
+export function normalizeTimeoutMs(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const timeout = Math.floor(value as number);
+  if (timeout <= 0) return undefined;
+  return timeout;
 }
