@@ -106,8 +106,9 @@ play-pause toggle, so `media-play-pause` is refused; use `media-play` or `media-
   on a 1920x1080 TV, an app at `"resolution": "1280x720"` reports 1.5 yet fills only the top-left
   1280x720 of the capture. `screenshot --crop-on` scales rects by the page's `visualViewport.scale`,
   which is 1 because webOS ignores the meta viewport, and clips the crop to the page. It refuses a
-  page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
-  enter iframes or shadow roots.
+  page whose browser has no `visualViewport` or whose visual viewport is panned.
+  `screenshot --overlay-refs` draws ref boxes at the same scale and stops them at the page edge. The
+  walk does not enter iframes or shadow roots.
 - `click`, `press`, `fill`, and `focus` refuse a control marked `[covered]`, because a tap at its
   centre would land on the element on top, such as a card's own pressable area. `snapshot -i` still
   lists it, and `tv-remote` reaches it through focus.
