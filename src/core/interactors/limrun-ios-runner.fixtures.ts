@@ -15,6 +15,18 @@ afterEach(async () => {
   cleanups.length = 0;
 });
 
+async function readRequestBody(request: IncomingMessage): Promise<Buffer | undefined> {
+  const chunks: Buffer[] = [];
+  try {
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  } catch (error) {
+    if (request.destroyed && (error as NodeJS.ErrnoException).code === 'ECONNRESET')
+      return undefined;
+    throw error;
+  }
+  return Buffer.concat(chunks);
+}
+
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 type Manifest = {
   files: Array<{ path: string; mode: number }>;
@@ -195,9 +207,8 @@ export async function fixture(
       response.writeHead(401).end();
       return;
     }
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    let body = Buffer.concat(chunks);
+    let body = await readRequestBody(request);
+    if (body === undefined) return;
     if (request.headers['content-encoding'] === 'gzip') body = gunzipSync(body);
     if (storage.serve(request, response, body)) return;
     if (request.url === '/v1/ios_test/api/sync') {
