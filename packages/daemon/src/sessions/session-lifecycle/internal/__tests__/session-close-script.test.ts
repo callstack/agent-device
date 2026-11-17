@@ -124,6 +124,37 @@ test('a refused remote close write keeps its typed reason as the delivery failur
   });
 });
 
+test('a close write failure the wire names no cause for is disclosed generically', () => {
+  // #4584 review: the failure's `cause` is a small named set (ADR 0016), not the daemon's own reason
+  // vocabulary. An error that carries some other reason — an `EACCES` that reached the close path, or a
+  // reason a later release adds before the wire contract knows it — is disclosed as the generic delivery
+  // failure, so no daemon-internal string reaches a client by accident.
+  const { req, ref, sessionStore } = setup('remote-ordinary');
+  sessionStore.requireCurrent(ref).scriptPublication = authoringPublication('armed', {
+    remote: true,
+  });
+  const failure = new AppError('COMMAND_FAILED', 'permission denied', {
+    reason: 'EACCES',
+    hint: 'Check the target path.',
+  });
+  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
+
+  const { remote } = finalizeOrdinaryCloseScript({
+    req,
+    ref,
+    sessionStore,
+    platformCloseError: undefined,
+  });
+
+  const delivered = remoteCloseScriptDelivery({ ok: true, data: {} }, remote);
+  if (!delivered.ok) throw new Error('a failed remote version keeps the close successful');
+  expect(delivered.data?.scriptDeliveryFailure).toMatchObject({
+    reason: 'script_delivery_failed',
+    publicationId: 'publication-0001',
+    cause: 'script_download_failed',
+  });
+});
+
 test('ordinary publication failure retains its close action after making the error non-retriable', () => {
   const { req, ref, session, sessionStore } = setup('ordinary');
   const failure = new AppError('COMMAND_FAILED', 'target exists', {

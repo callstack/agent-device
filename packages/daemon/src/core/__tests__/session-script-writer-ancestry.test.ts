@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   FOREIGN_UID,
   createLiveTestHostEnvironment,
@@ -601,6 +602,45 @@ skipOnWindows(
     });
     expect(response.data?.warnings).toHaveLength(1);
     expect(scriptFilesIn(outside)).toEqual([]);
+  },
+);
+
+skipOnWindows(
+  'a delivery failure the wire names no cause for is disclosed generically, not by its internal reason',
+  () => {
+    // #4584 review: the per-action route reads the write error's reason to say WHICH recovery a caller has
+    // (`state_chain_untrusted` is not a full disk), but the wire contract names its causes (ADR 0016). An
+    // error carrying a reason outside that set — here a `sessions` link reported by a filesystem error — is
+    // disclosed as the generic delivery failure, and never leaks the daemon's own string.
+    const stateDir = root();
+    const outside = path.join(stateDir, 'outside');
+    fs.mkdirSync(outside);
+    const sessions = path.join(stateDir, 'sessions');
+    fs.symlinkSync(outside, sessions);
+    const store = new SessionStore(sessions, createLiveTestHostEnvironment());
+    const ref = store.publish(
+      'journey',
+      makeAuthoringSession('journey', {
+        scriptPublication: authoringPublication('armed', { remote: true }),
+        actions: [action('open')],
+      }),
+    );
+    const deliver = remoteScriptVersionDelivery(store, 'journey');
+    ref.session.actions.push(action('click'));
+    // The write answers with a reason the wire does not carry: an internal string with no client meaning.
+    vi.spyOn(store, 'writeRemoteScriptVersion').mockReturnValue({
+      written: false,
+      error: new AppError('COMMAND_FAILED', 'permission denied', { reason: 'EACCES' }),
+    });
+
+    const response = deliver({ ok: true, data: {} });
+    if (!response.ok) throw new Error('a failed version keeps the action successful');
+
+    expect(response.data?.scriptDeliveryFailure).toMatchObject({
+      reason: 'script_delivery_failed',
+      cause: 'script_download_failed',
+    });
+    expect(JSON.stringify(response.data?.scriptDeliveryFailure)).not.toContain('EACCES');
   },
 );
 

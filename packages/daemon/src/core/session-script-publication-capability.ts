@@ -27,6 +27,32 @@ import {
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 
 /**
+ * The causes this daemon may name on a failed script delivery: the ancestry refusals of the destination
+ * walk, the state-chain refusal of its own repair, and the two outcomes of a write that went ahead
+ * (`packages/remote`'s `scriptDeliveryFailure` names the last two). ADR 0016 owns the list.
+ */
+const SCRIPT_DELIVERY_CAUSES = [
+  'state_chain_untrusted',
+  'script_ancestor_untrusted',
+  'script_ancestry_replaced',
+  'script_target_exists',
+  'script_download_failed',
+] as const;
+
+/**
+ * Why a delivery failed, in the words the wire is allowed to carry. An error from anywhere else — an
+ * `EACCES`, or a reason some future writer adds — is disclosed as the generic delivery failure, so a
+ * daemon-internal reason string never reaches a client by accident.
+ */
+function scriptDeliveryCause(error: AppError): string {
+  const reason = error.details?.reason;
+  return typeof reason === 'string' &&
+    (SCRIPT_DELIVERY_CAUSES as readonly string[]).includes(reason)
+    ? reason
+    : 'script_download_failed';
+}
+
+/**
  * `SessionScriptPublication` (#1478 P4a): the daemon-private projection owning every supported
  * ordinary-authoring write — arming on `open`, the shared `--save-script` flag ingress on
  * recorded actions, active publication (`session save-script`), and the published transition.
@@ -308,15 +334,14 @@ export function remoteScriptVersionDelivery(
       return withRemoteScriptVersion(response, stamped, { path: result.path });
     }
     if (!result.error) return response;
-    // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response. The typed
-    // reason travels as the failure's `cause`, so a client can tell which refusal this was (ADR 0016).
+    // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response. A KNOWN
+    // script-delivery reason travels as the failure's `cause`; anything else is disclosed generically,
+    // because the wire contract names its causes and does not carry daemon internals (ADR 0016).
     return withRemoteScriptVersion(response, delivery, {
       failure: {
         message: 'The action succeeded, but the daemon could not write the remote recording.',
         hint: 'The --save-script file keeps the previous version. The next recorded action or close delivers the full recording again.',
-        ...(typeof result.error.details?.reason === 'string'
-          ? { cause: result.error.details.reason }
-          : {}),
+        cause: scriptDeliveryCause(result.error),
       },
     });
   };
@@ -327,28 +352,27 @@ export function remoteScriptVersionDelivery(
  * just marked, because teardown may have replaced the session object before that write. A
  * published final version is stamped after every earlier version, so it replaces the last one.
  *
- * `writeFailure` is the close write's own error, and its typed reason travels as the failure's
- * `cause`: a close refused for the daemon's state chain is a different recovery than a full disk,
- * and the client sees which without reading prose (ADR 0016).
+ * `writeError` is the close write's own error, when there was one. Its known reason travels as the
+ * failure's `cause`: a close refused for the daemon's state chain is a different recovery than a full
+ * disk, and the client sees which without reading prose (ADR 0016).
  */
 export function remoteCloseScript(
   session: SessionState,
-  writeFailure: AppError | undefined,
+  writeError: AppError | undefined,
 ): RemoteCloseScript | undefined {
   const state = session.scriptPublication;
   if (state?.kind !== 'authoring' || !state.remoteDelivery) return undefined;
   const delivery = state.remoteDelivery;
-  if (writeFailure) {
+  if (writeError !== undefined) {
     const message = 'The session was closed, but the daemon could not write its final script.';
     const hint = 'The --save-script file keeps the version from the last recorded action.';
-    const reason = writeFailure.details?.reason;
     return {
       delivery,
       version: {
         failure: {
           message,
           hint,
-          ...(typeof reason === 'string' ? { cause: reason } : {}),
+          cause: scriptDeliveryCause(writeError),
         },
       },
     };
