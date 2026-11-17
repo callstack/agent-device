@@ -85,7 +85,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
-  await primeProviderConnection(providerOf(existingState, remoteConfig.profile));
+  await primeProviderConnection(providerOf(existingState, remoteConfig.profile), host.env);
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(

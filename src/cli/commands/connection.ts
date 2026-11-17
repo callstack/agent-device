@@ -395,7 +395,7 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
-  await primeProviderConnection(state.leaseProvider);
+  await primeProviderConnection(state.leaseProvider, host.env);
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state, host);
   await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
