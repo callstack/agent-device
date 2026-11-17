@@ -555,9 +555,60 @@ export function classifyRunnerReportedError(
 
 export type RunnerResponsePayload = {
   ok?: unknown;
-  error?: { code?: unknown; message?: unknown; hint?: unknown };
+  error?: { code?: unknown; message?: unknown; hint?: unknown; dismissControls?: unknown };
   data?: unknown;
 };
+
+/**
+ * One entry of `details.dismissControls`: a control the caller may press to leave the screen an iOS
+ * `back` could not, such as a full-screen modal's Close button. `selector` presses it without a new
+ * snapshot. It is a selector, not a ref: back is a mutation, so it expires the session's ref frame
+ * before it swipes (ADR 0014), and the runner reads no snapshot tree to mint refs from.
+ */
+export type BackDismissControl = Readonly<{ selector: string; label: string; identifier?: string }>;
+
+/**
+ * The dismiss controls the runner names on a `BACK_SWIPE_NO_CHANGE` refusal, each with its selector.
+ * The runner's `pressBy` names the attribute no other button shares. Both forms carry `role=button`,
+ * which scopes the match to the buttons the runner checked, and resolves through the snapshot tree:
+ * `identifier` becomes `role=button id="…"`, and `label` becomes `role=button label="…"`. Other codes, and entries that are not
+ * `{ label, identifier?, pressBy }` objects, publish nothing.
+ */
+function readBackDismissControls(
+  runnerErrorCode: string | undefined,
+  error: RunnerResponsePayload['error'],
+): BackDismissControl[] {
+  if (runnerErrorCode !== BACK_SWIPE_NO_CHANGE_RUNNER_CODE) return [];
+  const entries = error?.dismissControls;
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap((entry: unknown): BackDismissControl[] => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { label, identifier, pressBy } = entry as {
+      label?: unknown;
+      identifier?: unknown;
+      pressBy?: unknown;
+    };
+    if (typeof label !== 'string') return [];
+    const id = typeof identifier === 'string' && identifier.length > 0 ? identifier : undefined;
+    const selector =
+      pressBy === 'identifier' && id !== undefined
+        ? `role=button id=${JSON.stringify(id)}`
+        : pressBy === 'label' && label.length > 0
+          ? `role=button label=${JSON.stringify(label)}`
+          : undefined;
+    if (selector === undefined) return [];
+    return [{ selector, label, ...(id === undefined ? {} : { identifier: id }) }];
+  });
+}
+
+/** The refusal hint once dismiss controls are known; the runner's own hint otherwise. */
+function backDismissHint(controls: readonly BackDismissControl[]): string | undefined {
+  const [only] = controls;
+  if (only === undefined) return undefined;
+  return controls.length === 1
+    ? `Press '${only.selector}' to dismiss this screen; back only pops the navigation stack.`
+    : 'Press one of details.dismissControls by its selector to dismiss this screen; back only pops the navigation stack.';
+}
 
 /**
  * The one decoding of a runner response body (#2662). The envelope arrives at three readers — a
@@ -606,15 +657,17 @@ export function buildRunnerResponseError(
     typeof payload.error?.message === 'string' ? payload.error.message : undefined;
   const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
   const classification = classifyRunnerReportedError(runnerErrorCode);
+  const dismissControls = readBackDismissControls(runnerErrorCode, payload.error);
   return new AppError(classification.code, errorMessage ?? 'Runner error', {
     runner: payload,
     ...classification.details,
+    ...(dismissControls.length > 0 ? { dismissControls } : {}),
     xcodebuild: {
       exitCode: 1,
       stdout: '',
       stderr: '',
     },
-    hint,
+    hint: backDismissHint(dismissControls) ?? hint,
     logPath,
   });
 }

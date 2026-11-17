@@ -280,3 +280,39 @@ test('appName selector matches nodes with appName field', () => {
   assert.ok(match3);
   assert.equal(match3.matches, 1);
 });
+
+// iOS `back` lists a dismiss control with a role-scoped selector after the runner checked that no
+// other button shares its label or identifier; the role term is what keeps non-buttons out.
+test('role=button scopes a dismiss control selector to buttons, so same-text non-buttons stay out', () => {
+  const node = (ref: string, type: string, label: string, identifier = '') => ({
+    ref,
+    index: Number(ref.slice(1)),
+    type,
+    kind: formatRole(type),
+    label,
+    identifier,
+    rect: { x: 366, y: 72, width: 24, height: 24 },
+    enabled: true,
+    hittable: true,
+  });
+  const nodes: SnapshotState['nodes'] = [
+    node('n0', 'XCUIElementTypeStaticText', 'Close', 'modal-close'),
+    node('n1', 'XCUIElementTypeImage', 'close', 'modal-close'),
+    node('n2', 'XCUIElementTypeButton', 'Close', 'modal-close'),
+  ];
+  for (const selector of ['role=button label="Close"', 'role=button id="modal-close"']) {
+    const resolved = resolveSelectorChain(nodes, parseSelectorChain(selector), {
+      platform: 'ios',
+      requireUnique: true,
+    });
+    assert.equal(resolved?.node.ref, 'n2', selector);
+  }
+  // Without the role term the same label is ambiguous across the three element types.
+  assert.equal(
+    resolveSelectorChain(nodes, parseSelectorChain('label="Close"'), {
+      platform: 'ios',
+      requireUnique: true,
+    }),
+    null,
+  );
+});

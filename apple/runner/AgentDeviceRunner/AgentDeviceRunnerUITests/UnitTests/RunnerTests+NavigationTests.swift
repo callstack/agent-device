@@ -339,6 +339,7 @@ extension RunnerTests {
       case .finalConfirmation:
         finalReads += 1
         return nil
+      case .dismissControlLookup: return nil
       }
     }
     defer { navigationBarBackReadForTesting = nil }
@@ -352,7 +353,7 @@ extension RunnerTests {
   }
 
   /// A bar button titled "Back" is not the system back button, so back never presses it: it swipes,
-  /// and the swipe that changes nothing reports so.
+  /// and the swipe that changes nothing reports so and names that button for the caller to press.
   @MainActor
   func testInAppBackNeverPressesABarButtonOnlyTitledBack() throws {
     let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar", "--custom-back-item"])
@@ -362,6 +363,7 @@ extension RunnerTests {
       return XCTFail("a bar button titled Back must not count as the back button")
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
+    XCTAssertEqual(payload.dismissControls, [DismissControlPayload(label: "Back", identifier: nil, pressBy: .label)])
     XCTAssertEqual(status.label, "Navigation root")
   }
 
@@ -901,6 +903,67 @@ extension RunnerTests {
     XCTAssertEqual(Self.backButtonCandidates([inBar, below, content], barFrames: [bar], windowHeight: 874), [0])
     XCTAssertEqual(Self.backButtonCandidates([below, content], barFrames: [bar], windowHeight: 874), [0])
     XCTAssertEqual(Self.backButtonCandidates([content], barFrames: [bar], windowHeight: 874), [])
+  }
+
+  /// The dismiss controls a no-change refusal names: hittable buttons in the window's top band whose
+  /// label or identifier is a dismiss name and no other button shares. An iPhone 17 Pro window: the band
+  /// ends at 180 pt.
+  func testDismissControlsListOnlyTopBandDismissButtons() {
+    let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+    func button(_ label: String, identifier: String = "", y: CGFloat = 72) -> TopBandButton {
+      TopBandButton(label: label, identifier: identifier, frame: CGRect(x: 366, y: y, width: 24, height: 24))
+    }
+    func controls(_ buttons: [TopBandButton], others: [ButtonName] = [], hittable: Set<Int>? = nil) -> [DismissControlPayload] {
+      let every = buttons.map { ButtonName(label: $0.label, identifier: $0.identifier) } + others
+      return Self.dismissControls(buttons, everyButton: every, window: window) { hittable?.contains($0) ?? true }
+    }
+    func labels(_ buttons: [TopBandButton], others: [ButtonName] = [], hittable: Set<Int>? = nil) -> [String] {
+      controls(buttons, others: others, hittable: hittable).map(\.label)
+    }
+    XCTAssertEqual(
+      controls([button("Close")]), [DismissControlPayload(label: "Close", identifier: nil, pressBy: .label)],
+      "a lone Close in the band")
+    XCTAssertEqual(labels([button("Cancel"), button("Title"), button("close")]), ["Cancel", "close"], "both, in tree order")
+    XCTAssertEqual(labels([button("Done"), button("Save")]), [], "commit words never count")
+    XCTAssertEqual(labels([button("Close", y: 400)]), [], "a Close below the band")
+    XCTAssertEqual(labels([button("Close")], hittable: []), [], "an unhittable Close")
+    XCTAssertEqual(labels([button("Close account")]), [], "a longer label")
+    XCTAssertEqual(
+      labels([button("Cancel"), button(" cancel ", y: 600)]), [],
+      "a label another button reads the same as, to the selector engine, is pressed by no selector alone")
+    XCTAssertEqual(
+      controls([button("", identifier: "xmark.circle.fill")]),
+      [DismissControlPayload(label: "", identifier: "xmark.circle.fill", pressBy: .identifier)],
+      "an xmark icon identifier is pressed by it")
+    // The system back button is back's own target, pressed or declined by its own path, so it is never listed.
+    XCTAssertEqual(labels([button("Back", identifier: Self.navigationBarBackButtonIdentifier)]), [])
+  }
+
+  /// The runner's text comparison is the selector engine's `normalizeText`: both are asserted on
+  /// contracts/fixtures/selector-text-normalization.json, so a listed selector is unique to `press`.
+  func testSelectorTextMatchesTheSelectorEngineNormalization() throws {
+    let cases = try XCTUnwrap(runnerContractFixture("selector-text-normalization.json") as? [[String: String]])
+    XCTAssertFalse(cases.isEmpty)
+    for fixture in cases {
+      XCTAssertEqual(Self.selectorText(try XCTUnwrap(fixture["input"])), fixture["normalized"], fixture["name"] ?? "")
+    }
+  }
+
+  /// Dismiss controls come from the window back swiped on; another window's buttons are not listed,
+  /// but a press resolves against every window, so one there that shares a label makes it ambiguous.
+  func testDismissControlsComeFromTheBackWindowAndAreUniqueAcrossEveryWindow() {
+    XCTAssertEqual(Self.dismissControlRoots(resolvedWindow: "back window", searchRoots: ["app"]), ["back window"])
+    XCTAssertEqual(Self.dismissControlRoots(resolvedWindow: nil, searchRoots: ["left", "right"]), ["left", "right"])
+    let window = CGRect(x: 0, y: 0, width: 834, height: 1194)
+    let close = TopBandButton(label: "Close", identifier: "", frame: CGRect(x: 780, y: 40, width: 30, height: 30))
+    let backWindowClose = ButtonName(label: "Close", identifier: "")
+    XCTAssertEqual(
+      Self.dismissControls([close], everyButton: [backWindowClose], window: window) { _ in true }.map(\.label), ["Close"])
+    XCTAssertEqual(
+      Self.dismissControls(
+        [close], everyButton: [backWindowClose, ButtonName(label: "close", identifier: "")], window: window
+      ) { _ in true },
+      [], "a Close in a second window shares the selector")
   }
 #endif
 
