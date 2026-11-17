@@ -6,7 +6,11 @@ import type {
 } from '@agent-device/plugins/contract';
 import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdriver/plugin';
 
-export type { ProviderPluginHost } from '@agent-device/plugins/host';
+export type {
+  HostCommandResult,
+  ProviderPluginHost,
+  RunHostCommand,
+} from '@agent-device/plugins/host';
 export type {
   PluginConnection,
   PluginConnectionContext,

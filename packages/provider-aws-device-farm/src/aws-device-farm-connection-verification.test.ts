@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { verifyAwsDeviceFarmConnection } from './connection-verification.ts';
-import type { RunHostCommand } from './dependencies.ts';
+import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
+import type { RunHostCommand } from 'agent-device/plugins';
 
 const awsResources = {
   project: { arn: 'project-arn', name: 'Agent Device' },

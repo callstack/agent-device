@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
+import type { PluginConnectionContext, ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
-import { createAwsDeviceFarmConnection } from './aws-device-farm-connection.ts';
-import { verifyAwsDeviceFarmConnection } from './connection-verification.ts';
-import type { CloudWebDriverProviderHost } from './provider-plugin.ts';
+import { createAwsDeviceFarmConnection } from './connection.ts';
+import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
 
-vi.mock('./connection-verification.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./connection-verification.ts')>()),
+vi.mock('./aws-device-farm-connection-verification.ts', () => ({
   verifyAwsDeviceFarmConnection: vi.fn(),
 }));
 
@@ -23,14 +22,30 @@ const FLAGS = {
   awsDeviceArn: DEVICE_ARN,
 };
 
-function host(env: Record<string, string | undefined> = {}): CloudWebDriverProviderHost {
+function host(env: Record<string, string | undefined> = {}): ProviderPluginHost {
   return {
     env,
+    options: {},
     clientVersion: '1.2.3',
+    createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async () => {
       throw new Error('this scenario runs no host commands');
     },
   };
+}
+
+function context(
+  overrides: Partial<PluginConnectionContext> & { flags?: Record<string, unknown> } = {},
+): PluginConnectionContext {
+  const pluginHost = overrides.host ?? host();
+  return {
+    flags: FLAGS,
+    stateDir: '/state',
+    cwd: '/',
+    env: { ...pluginHost.env },
+    host: pluginHost,
+    ...overrides,
+  } as PluginConnectionContext;
 }
 
 test('connect resolves selectors from flags, then agent-device variables, then AWS variables', async () => {
@@ -41,8 +56,7 @@ test('connect resolves selectors from flags, then agent-device variables, then A
       AWS_DEFAULT_REGION: 'eu-west-1',
     }),
   );
-  const { profile, extraFlags } = connection.resolve({ flags: FLAGS, cwd: '/' });
-  assert.equal(extraFlags, undefined);
+  const { profile } = await connection.resolve(context());
   assert.deepEqual(profile, {
     leaseProvider: 'aws-device-farm',
     platform: 'ios',
@@ -55,41 +69,49 @@ test('connect resolves selectors from flags, then agent-device variables, then A
     providerSessionName: undefined,
   });
   // With no region configured, the project ARN names it.
-  const fromArn = createAwsDeviceFarmConnection(host()).resolve({ flags: FLAGS, cwd: '/' });
+  const fromArn = await createAwsDeviceFarmConnection(host()).resolve(context());
   assert.equal(fromArn.profile.awsRegion, 'us-west-2');
 });
 
 test('connect names the flag and the AWS variable a missing selector can come from', async () => {
   const connection = createAwsDeviceFarmConnection(host());
-  assert.throws(
-    () => connection.resolve({ flags: { ...FLAGS, awsDeviceArn: undefined }, cwd: '/' }),
+  await assert.rejects(
+    async () => await connection.resolve(context({ flags: { ...FLAGS, awsDeviceArn: undefined } })),
     {
       code: 'INVALID_ARGS',
       message:
         'connect aws-device-farm requires --aws-device-arn <arn> or AWS_DEVICE_FARM_DEVICE_ARN.',
     },
   );
-  assert.throws(
-    () => connection.resolve({ flags: { ...FLAGS, providerApp: 'app.ipa' }, cwd: '/' }),
+  await assert.rejects(
+    async () => await connection.resolve(context({ flags: { ...FLAGS, providerApp: 'app.ipa' } })),
     (error: unknown) =>
       error instanceof AppError && JSON.stringify(error.details?.flags) === '["--provider-app"]',
   );
 });
 
-test('verify hands the saved selectors and the host command runner to the verifier', async () => {
-  const providerHost = host();
+test('verify hands the saved selectors and a host-command runner to the verifier', async () => {
+  const calls: string[][] = [];
+  const providerHost = {
+    ...host(),
+    runHostCommand: async (command: string, args: readonly string[]) => {
+      calls.push([command, ...args]);
+      return { stdout: '{}' };
+    },
+  };
   const connection = createAwsDeviceFarmConnection(providerHost);
   await connection.verify({ flags: { ...FLAGS, awsRegion: 'us-west-2' } });
-  assert.deepEqual(vi.mocked(verifyAwsDeviceFarmConnection).mock.calls[0], [
-    {
-      platform: 'ios',
-      projectArn: PROJECT_ARN,
-      deviceArn: DEVICE_ARN,
-      appArn: undefined,
-      region: 'us-west-2',
-    },
-    providerHost.runHostCommand,
-  ]);
+  const [options, runHostCommand] = vi.mocked(verifyAwsDeviceFarmConnection).mock.calls[0]!;
+  assert.deepEqual(options, {
+    platform: 'ios',
+    projectArn: PROJECT_ARN,
+    deviceArn: DEVICE_ARN,
+    appArn: undefined,
+    region: 'us-west-2',
+  });
+  // The verifier drives the AWS CLI through the host capability, with the plugin host's own bounds.
+  await runHostCommand('aws', ['devicefarm', 'get-project', '--arn', PROJECT_ARN]);
+  assert.deepEqual(calls, [['aws', 'devicefarm', 'get-project', '--arn', PROJECT_ARN]]);
   await assert.rejects(connection.verify({ flags: { ...FLAGS, platform: undefined } }), {
     code: 'COMMAND_FAILED',
     message: 'AWS Device Farm profile missed a mobile platform.',

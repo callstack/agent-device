@@ -1,11 +1,7 @@
-// The TypeScript project graph is three hand-written views of one fact: the workspace package
-// set, the root manifest's `workspace:*` declarations, and the `references` lists in the root
-// build node (tsconfig.typecheck.json), examples/sdk, and per-package tsconfigs. `tsc -b` fails
-// loudly on a MISSING reference it needs but silently tolerates EXTRA ones (#3289 review), so a
-// package added to the workspace while a references list goes un-updated keeps building a stale
-// graph that still exits 0.
-// These tests read the committed declarations against each other so the four views cannot
-// drift: an added, renamed, or removed workspace package must edit every list or fail here.
+// The TypeScript project graph covers every workspace package. Root and example references
+// must match that set, and each package's references must match its own manifest dependencies.
+// Root workspace dependency declarations follow root imports, which R11 checks separately.
+// A package-local build dependency does not require a root declaration.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -115,7 +111,7 @@ test('the compiled-set predicate is licensed by the tsconfig include/exclude sha
   }
 });
 
-test('root workspace dependencies cover every core package and exclude optional engines', () => {
+test('root workspace dependencies name existing packages and exclude optional engines', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -127,24 +123,11 @@ test('root workspace dependencies cover every core package and exclude optional 
     .filter(([, range]) => String(range).startsWith('workspace:'))
     .map(([name]) => name)
     .sort();
-  const expected = readWorkspacePackages(repoRoot)
-    .filter(
-      (pkg) =>
-        ![
-          '@agent-device/maestro',
-          '@agent-device/replay',
-          '@agent-device/ad-replay',
-          '@agent-device/replay-test',
-        ].includes(pkg.name),
-    )
-    .map((pkg) => pkg.name)
-    .sort();
+  const workspaceNames = new Set(readWorkspacePackages(repoRoot).map((pkg) => pkg.name));
   assert.deepEqual(
-    declared,
-    expected,
-    'a workspace package the root program consumes must be declared workspace:* in the root ' +
-      'manifest (its tsconfig references already name it; the root project resolves package ' +
-      'specifiers through these declarations)',
+    declared.filter((name) => !workspaceNames.has(name)),
+    [],
+    'every root workspace:* dependency must name an existing workspace package',
   );
   assert.ok(
     ![

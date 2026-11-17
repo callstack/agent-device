@@ -30,7 +30,7 @@ async function startStoreRegistry(env: NodeJS.ProcessEnv) {
     ...claimProviderIds([]),
     ...(await storePluginCandidates(env)),
   ]);
-  return await startProviderRegistry(resolved, env, PROVIDER_PLUGIN_POLICY);
+  return await startProviderRegistry(resolved, { env, cwd: '/' }, PROVIDER_PLUGIN_POLICY);
 }
 
 afterEach(() => {

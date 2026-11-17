@@ -7,7 +7,7 @@ export const BROWSERSTACK_PROVIDER = 'browserstack';
 /** The WebDriver descriptor the BrowserStack plugin's `setup` builds from `env`, as `clientVersion` hosted. */
 export async function browserStackWebDriver(env: Record<string, string>, clientVersion: string) {
   const setup = await browserstack().setup({
-    ...createPluginHost(env, undefined),
+    ...createPluginHost({ env, cwd: '/' }, undefined),
     clientVersion,
   });
   if (!('webDriver' in setup)) throw new Error('BrowserStack sets up a WebDriver descriptor');
