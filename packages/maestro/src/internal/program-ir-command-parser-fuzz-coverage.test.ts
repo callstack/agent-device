@@ -25,11 +25,8 @@ describe('shape coverage against the converter', () => {
         return typeof payload === 'string' ? payload.split('\n') : [];
       }),
     );
-    const covered = (command: string) =>
-      [...emitted].some((line) => coversCommand(line, command));
-    const missing = SUPPORTED_MAESTRO_COMMAND_NAMES.filter(
-      (command) => !covered(command),
-    );
+    const covered = (command: string) => [...emitted].some((line) => coversCommand(line, command));
+    const missing = SUPPORTED_MAESTRO_COMMAND_NAMES.filter((command) => !covered(command));
     expect(missing).toEqual([]);
   });
 });
