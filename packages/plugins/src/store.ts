@@ -447,7 +447,6 @@ export async function addPluginArtifact(
       });
     const selection: PluginSelection = {
       installation,
-      version: manifest.version,
       artifact: { integrity, version: manifest.version },
     };
     await describeInstallation(name, directory, selection);
