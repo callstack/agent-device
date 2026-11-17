@@ -231,7 +231,8 @@ extension RunnerTests {
   /// A keyboard read for the dismiss decision: the frame and the controls of one snapshot.
   private func observedKeyboardFixture(
     _ entries: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
-    identifiers: [String: String] = [:]
+    identifiers: [String: String] = [:],
+    keyboardFrame: CGRect = CGRect(x: 0, y: 609, width: 440, height: 240)
   ) -> RunnerKeyboardStatus.ObservedKeyboard {
     var keys = observedKeyboardKeysFixture(entries)
     keys = keys.map { key in
@@ -241,7 +242,7 @@ extension RunnerTests {
         identifier: key.text.flatMap { identifiers[$0] }
       )
     }
-    return RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 609, width: 440, height: 240), keys: keys)
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: keyboardFrame, keys: keys)
   }
 
   /// `keyboard dismiss` never presses a `Done` that could be the return key, which submits the field:
@@ -260,7 +261,7 @@ extension RunnerTests {
     let pad = observedKeyboardFixture([
       ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
       ("Hide keyboard", 720, 1096, 98),
-    ])
+    ], keyboardFrame: CGRect(x: 0, y: 880, width: 834, height: 300))
     XCTAssertEqual(RunnerKeyboardStatus.dismissControl(in: pad)?.text, "Hide keyboard")
 
     let withToolbar = observedKeyboardFixture([
