@@ -153,31 +153,44 @@ function preparedGround(world: World): Set<string> {
   ]);
 }
 
-/** The record files this client owns, by EXACT name, whose fields `recordsAsWritten` pins. */
-function ownRecordFiles(world: World): string[] {
-  return recordNames(world).map((name) => `${world.recordDir}/${name}`);
-}
-
-/** The record names this client has written, sorted, spelled relative to the watched root only as a name. */
+/**
+ * The record names this client owns, captured NOW, sorted. A caller about to let a daemon answer has to KEEP
+ * the result: read again AFTER the answer, the directory is the very thing under test, and a client that moved
+ * its own record to another hash-shaped name would then be handed that name as its own expected value.
+ */
 function recordNames(world: World): string[] {
   return records(world.stateDir).sort();
 }
 
 /**
- * What each record the client wrote SAYS, in full: its exact name and every field of the record. A second
- * record of the same hash SHAPE, a destination moved, a revision that did not move, or a staging directory
- * left listed all fail the caller's `toEqual`.
+ * The record files the client owns, spelled from names pinned BEFORE the answer arrived. Because the pin, not a
+ * fresh listing, is what builds the allowed list, a record that is ADDED or RENAMED after it is reported by
+ * `entriesThatMoved` instead of accepted as one of the client's own.
  */
-function recordsAsWritten(world: World): Array<Record<string, unknown>> {
-  return recordNames(world).map((name) => ({
-    name,
-    ...JSON.parse(
-      fs.readFileSync(
-        path.join(world.stateDir, 'remote-connections', 'session-scripts', name),
-        'utf8',
-      ),
-    ),
-  }));
+function ownRecordFiles(world: World, pinnedNames: readonly string[]): string[] {
+  return pinnedNames.map((name) => `${world.recordDir}/${name}`);
+}
+
+/**
+ * What the records named `pinnedNames` SAY, in full: each exact name and every field of the record. Nothing is
+ * discovered by listing the directory, so a renamed record, a destination moved, a revision that did not move,
+ * or a staging directory left listed all fail the caller's `toEqual`. The listing is compared against the PIN
+ * first, so a record that was added, or moved to another hash-shaped name, fails as the name it moved to.
+ */
+function recordsAsWritten(
+  world: World,
+  pinnedNames: readonly string[],
+): Array<Record<string, unknown>> {
+  expect(recordNames(world)).toEqual([...pinnedNames].sort());
+  return pinnedNames.map((name) => ({ name, ...readRecord(world, name) }));
+}
+
+function readRecord(world: World, name: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(recordFile(world, name), 'utf8')) as Record<string, unknown>;
+}
+
+function recordFile(world: World, name: string): string {
+  return path.join(world.stateDir, 'remote-connections', 'session-scripts', name);
 }
 
 /**
@@ -215,7 +228,10 @@ skipOnWindows(
     const first = await open(baseUrl, world.stateDir, world.destination);
     const second = await open(baseUrl, world.stateDir, other);
     expect(first.response.ok && second.response.ok).toBe(true);
-    const recordsAtStart = recordsAsWritten(world);
+    // Pinned BEFORE the answer arrives: these two names, and no others, are this client's own records.
+    const namesAtSend = recordNames(world);
+    expect(namesAtSend).toHaveLength(2);
+    const recordsAtSend = recordsAsWritten(world, namesAtSend);
     expect(fs.readFileSync(other, 'utf8')).toBe('open Demo\n');
 
     // ONE send: nothing about the answer depends on a hostile string. It names two publication ids this
@@ -237,7 +253,7 @@ skipOnWindows(
     const data = response.ok ? (response.data as Record<string, unknown>) : {};
     expect(data.savedScript).toBeUndefined();
     expect(entriesThatMoved(world, before)).toEqual([]);
-    expect(recordsAsWritten(world)).toEqual(recordsAtStart);
+    expect(recordsAsWritten(world, namesAtSend)).toEqual(recordsAtSend);
     expect(nothingEscaped(world, HOSTILE_NAMES)).toEqual([]);
   },
 );
@@ -256,7 +272,8 @@ skipOnWindows(
     });
     const opened = await open(baseUrl, world.stateDir, world.destination);
     expect(opened.response.ok).toBe(true);
-    const recordsAtStart = recordsAsWritten(world);
+    const namesAtSend = recordNames(world);
+    const recordsAtSend = recordsAsWritten(world, namesAtSend);
     expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
 
     for (const hostile of HOSTILE_NAMES) {
@@ -276,7 +293,7 @@ skipOnWindows(
       expect(failure?.publicationId ?? '', hostile).toBe('');
       expect(fs.readFileSync(world.destination, 'utf8'), hostile).toBe('open Demo\n');
       expect(entriesThatMoved(world, before), hostile).toEqual([]);
-      expect(recordsAsWritten(world), hostile).toEqual(recordsAtStart);
+      expect(recordsAsWritten(world, namesAtSend), hostile).toEqual(recordsAtSend);
       expect(nothingEscaped(world, [hostile]), hostile).toEqual([]);
     }
   },
@@ -295,6 +312,8 @@ skipOnWindows(
     });
     const opened = await open(baseUrl, world.stateDir, world.destination);
     const publicationId = opened.id;
+    // The one name this client owns, as of BEFORE this answer arrives.
+    const namesAtSend = recordNames(world);
 
     const before = snapshotTree(world.outer);
     const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
@@ -311,16 +330,16 @@ skipOnWindows(
         world,
         before,
         new Set([
-          ...ownRecordFiles(world),
+          ...ownRecordFiles(world, namesAtSend),
           `${world.rel(world.destination)}=${bytesOf('click Demo\n')}`,
         ]),
       ),
     ).toEqual([]);
     // Revision 2, and the staging list EMPTY: the publication released the directory it staged in, and this
     // assertion is what proves no staging directory is still named there.
-    expect(recordsAsWritten(world)).toEqual([
+    expect(recordsAsWritten(world, namesAtSend)).toEqual([
       {
-        name: recordNames(world)[0],
+        name: namesAtSend[0],
         destination: world.destination,
         force: false,
         revision: 2,
@@ -346,13 +365,15 @@ skipOnWindows(
       const world = scratchWorld();
       const baseUrl = await artifactServer({ [hostile]: { body: 'open Demo\n' } });
 
-      const { response } = await open(baseUrl, world.stateDir, world.destination, {
+      const { response, recordsAtSend } = await open(baseUrl, world.stateDir, world.destination, {
         respond: (id) =>
           answer(baseUrl, world.stateDir, request('open'), {
             scriptPublicationId: id,
             artifacts: [{ ...script(hostile, 1, id) }],
           }),
       });
+      // The fixture lists the record directory at SEND, so this name is independent of the answer's effect.
+      expect(recordsAtSend, hostile).toHaveLength(1);
 
       expect(response.ok, hostile).toBe(true);
       // `savedScript` is the published path, as a string, and the answer names exactly the recorded
@@ -370,16 +391,16 @@ skipOnWindows(
           new Map(),
           new Set([
             ...preparedGround(world),
-            ...ownRecordFiles(world),
+            ...ownRecordFiles(world, recordsAtSend),
             `${world.rel(world.destination)}=${bytesOf('open Demo\n')}`,
           ]),
         ),
         hostile,
       ).toEqual([]);
       // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing staged.
-      expect(recordsAsWritten(world), hostile).toEqual([
+      expect(recordsAsWritten(world, recordsAtSend), hostile).toEqual([
         {
-          name: recordNames(world)[0],
+          name: recordsAtSend[0],
           destination: world.destination,
           force: false,
           revision: 1,
@@ -400,13 +421,14 @@ skipOnWindows(
     const world = scratchWorld();
     const baseUrl = await artifactServer({ '..': { body: 'open Demo\n' } });
 
-    const { response } = await open(baseUrl, world.stateDir, world.destination, {
+    const { response, recordsAtSend } = await open(baseUrl, world.stateDir, world.destination, {
       respond: (id) =>
         answer(baseUrl, world.stateDir, request('open'), {
           scriptPublicationId: id,
           artifacts: [{ ...script('..', 1, id) }],
         }),
     });
+    expect(recordsAtSend).toHaveLength(1);
 
     expect(response.ok).toBe(true);
     const data = response.ok ? (response.data as Record<string, unknown>) : {};
@@ -419,7 +441,7 @@ skipOnWindows(
       entriesThatMoved(
         world,
         new Map(),
-        new Set([...preparedGround(world), ...ownRecordFiles(world)]),
+        new Set([...preparedGround(world), ...ownRecordFiles(world, recordsAtSend)]),
       ),
     ).toEqual([]);
     expect(nothingEscaped(world, ['..'])).toEqual([]);
@@ -442,6 +464,7 @@ skipOnWindows(
           artifacts: [{ ...script('v1', 1, id), fileName: '../../../../tmp/evil.ad' }],
         }),
     });
+    expect(opened.recordsAtSend).toHaveLength(1);
 
     expect(opened.response.ok).toBe(true);
     expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
@@ -451,7 +474,7 @@ skipOnWindows(
         new Map(),
         new Set([
           ...preparedGround(world),
-          ...ownRecordFiles(world),
+          ...ownRecordFiles(world, opened.recordsAtSend),
           `${world.rel(world.destination)}=${bytesOf('open Demo\n')}`,
         ]),
       ),
@@ -470,7 +493,8 @@ skipOnWindows(
     const world = scratchWorld();
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
     const publicationId = (await open(baseUrl, world.stateDir, world.destination)).id;
-    const recordsAtStart = recordsAsWritten(world);
+    const namesAtSend = recordNames(world);
+    const recordsAtSend = recordsAsWritten(world, namesAtSend);
 
     const before = snapshotTree(world.outer);
     const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
@@ -493,7 +517,7 @@ skipOnWindows(
     expect(JSON.stringify(data.scriptDeliveryFailure)).toContain('../../../../tmp/etc/passwd');
     expect(entriesThatMoved(world, before)).toEqual([]);
     expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
-    expect(recordsAsWritten(world)).toEqual(recordsAtStart);
+    expect(recordsAsWritten(world, namesAtSend)).toEqual(recordsAtSend);
     expect(nothingEscaped(world, ['../../../../tmp/etc/passwd'])).toEqual([]);
   },
 );
