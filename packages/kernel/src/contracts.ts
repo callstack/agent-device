@@ -245,6 +245,101 @@ export function readScriptDeliveryFailure(
   return { reason, publicationId, message, hint, ...(cause === undefined ? {} : { cause }) };
 }
 
+/**
+ * What one daemon request delivered for a remote script recording (ADR 0016, #4595). A composite
+ * request (a `batch`) collects the script effects of its nested steps and answers ONE of these on
+ * its own reply, in `data` on success and in `error.details` on failure, so a client never
+ * reconstructs delivery from step results.
+ *
+ * `version` is the newest applicable full-script version of the recording — the client downloads at
+ * most it, once. `close` names the 1-based step of the submitted plan that ended the recording; a
+ * client retires its record only for a close its own plan carries. `failures` are the typed
+ * delivery failures the request owns, each paired with a warning of the same text.
+ */
+export type ScriptDeliveryReceipt = {
+  publicationId: string;
+  version?: DaemonArtifact;
+  close?: { step: number };
+  failures?: ScriptDeliveryFailure[];
+};
+
+/** How many `failures` one receipt may name; a receipt naming more authorizes nothing. */
+const SCRIPT_DELIVERY_RECEIPT_MAX_FAILURES = 1000;
+
+/**
+ * Reads the delivery receipt a response names (ADR 0016, #4595). A receipt the field contract does
+ * not describe in FULL authorizes nothing and answers `undefined`: a half-shaped `version`, `close`
+ * or `failures` entry is not repaired, because a client that acts on part of a receipt it cannot
+ * account for is exactly how a batch delivered the wrong version before.
+ */
+export function readScriptDeliveryReceipt(
+  response: DaemonResponse,
+): ScriptDeliveryReceipt | undefined {
+  const body: Record<string, unknown> | undefined = response.ok
+    ? response.data
+    : response.error.details;
+  const receipt = body?.scriptDeliveryReceipt;
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return undefined;
+  const { publicationId, version, close, failures } = receipt as Partial<ScriptDeliveryReceipt>;
+  if (typeof publicationId !== 'string' || publicationId.trim() !== publicationId) return undefined;
+  if (publicationId.length === 0) return undefined;
+  if (version !== undefined && !isScriptVersionArtifact(version, publicationId)) return undefined;
+  if (
+    close !== undefined &&
+    (close === null ||
+      typeof close !== 'object' ||
+      Array.isArray(close) ||
+      typeof close.step !== 'number' ||
+      !Number.isSafeInteger(close.step) ||
+      close.step < 1)
+  ) {
+    return undefined;
+  }
+  if (failures !== undefined && !readsAsReceiptFailures(failures, publicationId)) return undefined;
+  return {
+    publicationId,
+    ...(version === undefined ? {} : { version: version as DaemonArtifact }),
+    ...(close === undefined ? {} : { close: { step: close.step } }),
+    ...(failures === undefined
+      ? {}
+      : { failures: (failures as readonly ScriptDeliveryFailure[]).slice() }),
+  };
+}
+
+/**
+ * Whether every named entry is a delivery failure of the recording the receipt names. The bound is
+ * checked before any entry is read, so an oversized answer costs nothing beyond its own size.
+ */
+function readsAsReceiptFailures(
+  failures: unknown,
+  publicationId: string,
+): failures is readonly ScriptDeliveryFailure[] {
+  if (!Array.isArray(failures) || failures.length > SCRIPT_DELIVERY_RECEIPT_MAX_FAILURES) {
+    return false;
+  }
+  return failures.every((failure) => {
+    const read = readScriptDeliveryFailure({ scriptDeliveryFailure: failure });
+    return read !== undefined && read.publicationId === publicationId;
+  });
+}
+
+/** Whether `version` is a `session-script` version of the recording the receipt names. */
+function isScriptVersionArtifact(
+  version: unknown,
+  publicationId: string,
+): version is DaemonArtifact {
+  if (!version || typeof version !== 'object' || Array.isArray(version)) return false;
+  const artifact = version as Partial<DaemonArtifact>;
+  return (
+    artifact.field === 'savedScript' &&
+    artifact.artifactType === 'session-script' &&
+    typeof artifact.artifactId === 'string' &&
+    artifact.scriptPublicationId === publicationId &&
+    Number.isSafeInteger(artifact.scriptRevision) &&
+    (artifact.scriptRevision as number) > 0
+  );
+}
+
 export type ResponseCost = {
   wallClockMs: number;
   // Number of real iOS-runner round-trips made while serving the request (the

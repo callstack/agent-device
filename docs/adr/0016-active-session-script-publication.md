@@ -204,12 +204,13 @@ It adds no state name, command, or flag:
 - Teardown without `close` writes no daemon file; the caller keeps the version from the last recorded action.
 - At the public HTTP boundary, `saveScript` is accepted only as `true` on `open` with a well-formed publication ID.
   `session save-script` refuses a remote recording (`remote_script_publication_unsupported`), and remote `close --save-script`, `replay --save-script`, and `--save-script` in batch steps stay refused.
-  A batch whose steps would close an armed remote recording is refused before any step runs (`remote_script_batch_close_unsupported`), because a batch delivers no script versions from its steps.
+  A batch whose steps record or close an armed remote recording is not refused. The daemon collects the versions and the close that the batch's steps wrote, and delivers them on the batch response as one `scriptDeliveryReceipt` (#4595).
 - The daemon reports the `script-artifacts` capability in `/health`, through a proxy in its upstream health; the client refuses a remote `--save-script` before dispatch without it.
 
 The destination keeps local `--save-script` semantics: the client creates a missing parent directory and checks no ancestor ownership, so another local user who can write an ancestor directory can redirect the file, locally and remotely alike (#4565).
 Every result that can carry a script version discloses a failed delivery: the SDK result, the CLI human output and `--json`, and the MCP tool result each carry `scriptDeliveryFailure` and the warning, so no caller reads a stale file as current.
-Known limitation (#4595): a batch delivers no script versions from its steps, so closing an armed remote recording inside a batch stays refused.
+A batch delivers through one receipt the daemon's request owner answers on the batch reply, successful or failed (#4595). The daemon collects each executed step's script effects as the batch runner reports them, because a step's own reply travels inside a result entry a client must not read. The receipt names the newest full-script version of the recording, the plan position of a step that closed it, and the typed failures; it is answered only for a request whose nested steps fed it, so every single-command reply keeps the shape it had before. A client validates the receipt against its own record and its submitted plan, downloads at most its one version, and treats a receipt it cannot fully account for as authorizing nothing.
+Rejected: deriving delivery effects by interpreting the batch's step entries, partial results and failure position, because six review rounds kept finding answers that made a client deliver the wrong version, retire a recording that never closed, or drop a failure (#4582).
 Rejected: a remote `session save-script` download, because it added a second publication path and a retry protocol.
 Rejected: delivery only at close, because a session that an external owner closes would lose its recording.
 Rejected: daemon-minted recording IDs bound through per-request claims, because the claim, binding, and tombstone protocol cost more than a client-minted ID that only its own client can match.

@@ -2,11 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import { normalizeBatchCommandName } from '@agent-device/contracts/command';
 import type {
   DaemonArtifact,
   DaemonResponse,
   ScriptDeliveryFailure,
+  ScriptDeliveryReceipt,
 } from '@agent-device/kernel/contracts';
+import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
+import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -89,10 +93,93 @@ export type SessionScriptDelivery = Readonly<{
 }>;
 
 /**
+ * Settles the one delivery receipt a response names (ADR 0016, #4595): at most one version
+ * downloaded, and a record retired only for a close validated against the plan this client submitted.
+ *
+ * The receipt is validated against THIS client's record — exact publication ID, tenant, session and
+ * endpoint. A receipt naming a recording this client never opened under that scope authorizes nothing
+ * and says so in the diagnostic, because a response never establishes a destination.
+ */
+async function settleScriptReceipt(
+  context: Readonly<{
+    endpoint: Required<DaemonArtifactEndpoint>;
+    req: DaemonWireRequest;
+    stateDir: string;
+    download: typeof downloadRemoteArtifact;
+  }>,
+  receipt: ScriptDeliveryReceipt,
+  disclose: (failure: ScriptDeliveryFailure, error: unknown) => void,
+): Promise<ReceiptSettlement> {
+  const { endpoint, req, stateDir } = context;
+  const failures = [...(receipt.failures ?? [])];
+  const file = recordPath(stateDir, endpoint.baseUrl, req, receipt.publicationId);
+  const record = readRecord(file);
+  if (!record) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'session_script_artifact_dropped',
+      data: { session: req.session, publicationId: receipt.publicationId },
+    });
+    return { failures };
+  }
+  // A daemon failure is disclosed whether or not this client can save anything: the caller's file is
+  // stale either way.
+  for (const failure of failures) disclose(failure, undefined);
+  const published = receipt.version
+    ? await publishScriptVersion(context, receipt.version)
+    : undefined;
+  if (published && 'failure' in published) disclose(published.failure, published.error);
+  const closesOwnPlan = receipt.close !== undefined && closesSubmittedPlan(req, receipt.close.step);
+  const destination = published && 'published' in published ? published.published : undefined;
+  return {
+    ...(closesOwnPlan ? { retire: file } : {}),
+    ...(destination !== undefined && receipt.version?.artifactId !== undefined
+      ? { artifactId: receipt.version.artifactId, published: destination }
+      : {}),
+    failures,
+  };
+}
+
+type ReceiptSettlement = {
+  retire?: string;
+  published?: string;
+  artifactId?: string;
+  failures: ScriptDeliveryFailure[];
+};
+
+/** Retires a record without letting a failure here replace the request's own outcome. */
+function retireQuietly(req: DaemonWireRequest, file: string): Promise<void> {
+  return withRecordLock(file, async () => removeRecord(file)).catch((retireError: unknown) =>
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'session_script_retire_failed',
+      data: { session: req.session, error: String(retireError) },
+    }),
+  );
+}
+
+/**
+ * Whether the batch plan this client submitted carries a `close` at 1-based position `step`. A
+ * position past the plan, one whose command is not `close`, or a request that submitted no plan
+ * authorizes no retirement.
+ */
+function closesSubmittedPlan(req: DaemonWireRequest, step: number): boolean {
+  if (req.command !== 'batch') return false;
+  const steps = req.flags?.batchSteps;
+  if (!Array.isArray(steps) || step > steps.length) return false;
+  return normalizeBatchCommandName(steps[step - 1]?.command) === 'close';
+}
+
+/**
  * Publishes the session-script artifacts of one remote response to the destinations this client
  * recorded, and retires the record that a close names. A version that cannot be saved keeps the
  * response successful and adds `scriptDeliveryFailure` and a warning. A close retires its record
  * even when another artifact fails, and the first error is the one reported.
+ *
+ * A response that names a delivery receipt (#4595) delivers THROUGH that receipt: at most its one
+ * version is downloaded, and the receipt's failures and close are what the client acts on. The
+ * session-script artifacts such a response still lists are then dropped rather than downloaded, so
+ * one response never moves two versions.
  */
 export function sessionScriptDelivery(
   endpoint: Required<DaemonArtifactEndpoint>,
@@ -101,27 +188,29 @@ export function sessionScriptDelivery(
   stateDir: string,
   download: typeof downloadRemoteArtifact,
 ): SessionScriptDelivery {
+  const context = { endpoint, req, stateDir, download };
+  const receipt = req.command === 'batch' ? readScriptDeliveryReceipt(response) : undefined;
   const named = response.data?.scriptPublicationId;
   const closedId = req.command === 'close' && typeof named === 'string' ? named : undefined;
-  const retire = async (): Promise<void> => {
-    if (closedId === undefined) return;
-    const file = recordPath(stateDir, endpoint.baseUrl, req, closedId);
-    await withRecordLock(file, async () => removeRecord(file));
-  };
+  // The receipt's own version is downloaded before the artifact loop runs, so the loop learns the
+  // published destination from here rather than downloading anything a second time.
+  let settled: ReceiptSettlement | undefined;
   const delivery: SessionScriptDelivery = {
     publish: async (artifact, data, kept) => {
       delete data[artifact.field];
-      const outcome = await publishScriptVersion({ endpoint, req, stateDir, download }, artifact);
+      // The receipt is the one delivery instruction of this response; a step's or the batch's own
+      // artifact entry is the same version it already names, so it is never downloaded a second time.
+      if (req.command === 'batch') {
+        if (settled?.published && artifact.artifactId === settled.artifactId) {
+          data.savedScript = settled.published;
+          kept.push({ ...artifact, localPath: settled.published });
+        }
+        return;
+      }
+      const outcome = await publishScriptVersion(context, artifact);
       if ('failure' in outcome) {
         // A delivery failure never changes the outcome of the action that recorded the version.
-        const { failure, error } = outcome;
-        data.scriptDeliveryFailure = failure;
-        data.warnings = [...readResponseWarnings(data), `${failure.message} ${failure.hint}`];
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'session_script_delivery_failed',
-          data: { session: req.session, error: String(error) },
-        });
+        discloseDeliveryFailure(data, req, outcome.failure, outcome.error);
         return;
       }
       const { published } = outcome;
@@ -130,23 +219,89 @@ export function sessionScriptDelivery(
       kept.push({ ...artifact, localPath: published });
     },
     settleAfter: async (run) => {
-      // A record that cannot be retired stays inert, so the close keeps its own outcome.
-      const retireQuietly = () =>
-        retire().catch((retireError: unknown) =>
-          emitDiagnostic({
-            level: 'warn',
-            phase: 'session_script_retire_failed',
-            data: { session: req.session, error: String(retireError) },
-          }),
-        );
+      const data = response.data ?? {};
+      settled = receipt
+        ? await settleScriptReceipt(context, receipt, (failure, error) =>
+            discloseDeliveryFailure(data, req, failure, error),
+          )
+        : undefined;
       try {
         return await run(delivery);
       } finally {
-        await retireQuietly();
+        // A record that cannot be retired stays inert, so the request keeps its own outcome.
+        if (settled?.retire) await retireQuietly(req, settled.retire);
+        else if (closedId !== undefined)
+          await retireQuietly(req, recordPath(stateDir, endpoint.baseUrl, req, closedId));
       }
     },
   };
   return delivery;
+}
+
+/**
+ * Adds one delivery failure and its warning to a response body's disclosure fields. One field
+ * reports the latest failure; all earlier failures remain in the receipt and their paired warnings —
+ * the text of every failure still reaches the caller.
+ */
+function discloseDeliveryFailure(
+  data: Record<string, unknown>,
+  req: DaemonWireRequest,
+  failure: ScriptDeliveryFailure,
+  error: unknown,
+): void {
+  data.scriptDeliveryFailure = failure;
+  data.warnings = [...readResponseWarnings(data), `${failure.message} ${failure.hint}`];
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'session_script_delivery_failed',
+    data: { session: req.session, ...(error === undefined ? {} : { error: String(error) }) },
+  });
+}
+
+/**
+ * Settles the one delivery receipt a FAILED response names (#4595), where no successful-artifact
+ * path runs: a batch that stopped mid-plan still delivers what its completed steps wrote. The
+ * disclosure rides the error the caller receives, and a close validated against the submitted plan
+ * still retires the record.
+ */
+export async function settleScriptDeliveryReceiptOfFailure(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  error: DaemonError,
+  stateDir: string,
+  download: typeof downloadRemoteArtifact,
+): Promise<DaemonError> {
+  const receipt = readScriptDeliveryReceipt({ ok: false, error });
+  if (!receipt || req.command !== 'batch') return error;
+  const steps = req.flags?.batchSteps;
+  const failedStep = error.details?.step;
+  const failedCommand = error.details?.command;
+  if (
+    !Array.isArray(steps) ||
+    typeof failedStep !== 'number' ||
+    !Number.isSafeInteger(failedStep) ||
+    failedStep < 1 ||
+    failedStep > steps.length ||
+    typeof failedCommand !== 'string' ||
+    normalizeBatchCommandName(steps[failedStep - 1]?.command) !== failedCommand ||
+    (receipt.close !== undefined && receipt.close.step >= failedStep)
+  )
+    return error;
+  const data: Record<string, unknown> = { ...(error.details ?? {}) };
+  const settled = await settleScriptReceipt(
+    { endpoint, req, stateDir, download },
+    receipt,
+    (failure, failureError) => discloseDeliveryFailure(data, req, failure, failureError),
+  );
+  if (settled.retire) await retireQuietly(req, settled.retire);
+  const disclosure: Record<string, unknown> = {
+    ...(data.scriptDeliveryFailure === undefined
+      ? {}
+      : { scriptDeliveryFailure: data.scriptDeliveryFailure }),
+    ...(data.warnings === undefined ? {} : { warnings: data.warnings }),
+  };
+  if (Object.keys(disclosure).length === 0) return error;
+  return { ...error, details: { ...(error.details ?? {}), ...disclosure } };
 }
 
 /**

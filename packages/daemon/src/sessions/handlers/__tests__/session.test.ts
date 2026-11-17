@@ -46,7 +46,9 @@ test('the session router maps boot, shutdown and appstate straight to their hand
   }
 });
 
-test('the session router refuses a batch that would close an armed remote recording', async () => {
+test('the session router routes a batch over an armed remote recording to the batch runner', async () => {
+  // #4595 removed the route's close refusal: the route runs the plan and the outer request answers
+  // one delivery receipt for what its steps delivered.
   const sessionStore = makeSessionStore('agent-device-batch-route-');
   sessionStore.publish(
     'journey',
@@ -71,9 +73,6 @@ test('the session router refuses a batch that would close an armed remote record
     invoke,
   });
 
-  expect(response).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'remote_script_batch_close_unsupported' } },
-  });
-  expect(invoke).not.toHaveBeenCalled();
+  expect(response).toMatchObject({ ok: true });
+  expect(invoke).toHaveBeenCalledTimes(2);
 });

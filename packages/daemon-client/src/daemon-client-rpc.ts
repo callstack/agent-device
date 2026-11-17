@@ -10,7 +10,11 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
+import {
+  downloadRemoteArtifact,
+  materializeRemoteArtifacts,
+  settleScriptDeliveryReceiptOfFailure,
+} from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
@@ -102,7 +106,37 @@ async function rejectDaemonHttpRpcError(
     stateDir,
     requestId,
   });
-  reject(appErrorFromDaemonError(localized, requestId));
+  reject(
+    appErrorFromDaemonError(
+      await settleFailedDeliveryReceipt(info, req, stateDir, localized),
+      requestId,
+    ),
+  );
+}
+
+/**
+ * Settles the batch delivery receipt (#4595) a failed remote answer names: a batch that stopped
+ * mid-plan still delivers what its completed steps wrote, and the disclosure rides the error the
+ * caller receives. Never throws, so a receipt that cannot settle still leaves the original failure.
+ */
+async function settleFailedDeliveryReceipt(
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  stateDir: string,
+  error: DaemonError,
+): Promise<DaemonError> {
+  if (!info.baseUrl) return error;
+  try {
+    return await settleScriptDeliveryReceiptOfFailure(
+      { baseUrl: info.baseUrl, token: info.token },
+      req,
+      error,
+      stateDir,
+      downloadRemoteArtifact,
+    );
+  } catch {
+    return error;
+  }
 }
 
 function toDaemonHttpRpcError(error: {

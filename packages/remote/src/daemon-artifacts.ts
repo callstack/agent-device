@@ -1,6 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -463,6 +464,27 @@ export async function sendRemoteScriptOpen(
 }
 
 /**
+ * Settles the batch delivery receipt a FAILED remote response names (ADR 0016, #4595): a batch that
+ * stopped mid-plan still delivers what its completed steps wrote. The destination owner loads only
+ * for an error that carries a receipt.
+ */
+export async function settleScriptDeliveryReceiptOfFailure(
+  ...args: Parameters<
+    typeof import('./session-script-destination.ts').settleScriptDeliveryReceiptOfFailure
+  >
+): Promise<
+  Awaited<
+    ReturnType<
+      typeof import('./session-script-destination.ts').settleScriptDeliveryReceiptOfFailure
+    >
+  >
+> {
+  if (!readScriptDeliveryReceipt({ ok: false, error: args[2] })) return args[2];
+  const scripts = await import('./session-script-destination.ts');
+  return await scripts.settleScriptDeliveryReceiptOfFailure(...args);
+}
+
+/**
  * Downloads the artifacts of a successful remote response. A session script goes only where this
  * client's own `open --save-script` recorded under `stateDir`, never where a response says; that
  * owner loads only for a response that names a publication or carries a script artifact.
@@ -479,8 +501,11 @@ export async function materializeRemoteArtifacts(
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, host, scripts);
+  // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
+  // publication and no script artifact of its own (#4595).
   if (
     response.data?.scriptPublicationId === undefined &&
+    readScriptDeliveryReceipt(response) === undefined &&
     !artifacts.some(isSessionScriptArtifact)
   ) {
     return await download();

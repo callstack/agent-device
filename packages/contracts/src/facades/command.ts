@@ -7,6 +7,7 @@ export {
   readBatchStepInputObject,
   readBatchStepRecord,
 } from '../batch-contract.ts';
+export { normalizeBatchCommandName } from '../batch-step.ts';
 export type { DaemonBatchStep } from '../batch-step.ts';
 export type { CliFlags, DaemonExcludedCliFlag } from '../cli-flags.ts';
 export type { CommandExecutionOptions, InternalRequestOptions } from '../request-envelope.ts';
