@@ -656,13 +656,18 @@ const TV_PAGE_TREE: RawSnapshotNode[] = [
   },
 ];
 
-async function cropProviderTv(page: {
+type ProviderTvPage = {
   producer?: 'cdp-dom' | 'android-uiautomator';
   captureScale: number;
   viewport: { width: number; height: number };
-  cropOn?: string;
-}) {
-  const { producer = 'cdp-dom', cropOn = 'label="Save"' } = page;
+};
+
+async function cropProviderTv(page: ProviderTvPage & { cropOn?: string }) {
+  return await screenshotProviderTv(page, { screenshotCropOn: page.cropOn ?? 'label="Save"' });
+}
+
+async function screenshotProviderTv(page: ProviderTvPage, flags: DaemonRequest['flags']) {
+  const { producer = 'cdp-dom' } = page;
   const captureScale = snapshotCaptureScaleFrom(page.captureScale);
   const viewport = snapshotViewportSizeFrom({ x: 0, y: 0, ...page.viewport });
   const fixture = screenshotRuntimeFixture({
@@ -676,11 +681,8 @@ async function cropProviderTv(page: {
     }),
   });
   const session = makeSession('tv', { device: PROVIDER_TV });
-  const outPath = path.join(mkdtempForTestSync('provider-tv-crop'), 'tv.png');
-  const req = screenshotRequest({
-    positionals: [outPath],
-    flags: { screenshotCropOn: cropOn },
-  });
+  const outPath = path.join(mkdtempForTestSync('provider-tv-screenshot'), 'tv.png');
+  const req = screenshotRequest({ positionals: [outPath], flags });
   const resolved = await resolveScreenshotGenericExecution({
     hostCwd: process.cwd(),
     createCommandSurface: testCreateCommandSurface,
@@ -718,6 +720,35 @@ test('a provider TV crop clips a node at the page edge to the page, not to the l
   expect(result.warnings).toEqual([
     expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}:`)),
   ]);
+});
+
+test("provider TV overlay refs are drawn at the page's capture scale", async () => {
+  const result = await screenshotProviderTv(
+    { captureScale: 1.5, viewport: PAGE_720 },
+    { overlayRefs: true },
+  );
+
+  expect(result.overlayRefs).toContainEqual(
+    expect.objectContaining({
+      label: 'Save',
+      rect: { x: 10, y: 10, width: 40, height: 20 },
+      overlayRect: { x: 15, y: 15, width: 60, height: 30 },
+    }),
+  );
+});
+
+test('provider TV overlay refs stop at the page edge, not at the larger capture', async () => {
+  const result = await screenshotProviderTv(
+    { captureScale: 1, viewport: PAGE_720 },
+    { overlayRefs: true },
+  );
+
+  expect(result.overlayRefs).toContainEqual(
+    expect.objectContaining({
+      label: 'Tile',
+      overlayRect: { x: 1200, y: 100, width: 80, height: 200 },
+    }),
+  );
 });
 
 test('a provider TV crop is refused on a tree the TV plugins did not capture', async () => {

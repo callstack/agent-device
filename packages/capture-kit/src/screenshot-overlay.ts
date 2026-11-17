@@ -9,6 +9,7 @@ import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { decodePngAsync, encodePngAsync } from './png-worker-client.ts';
 import {
   projectSnapshotRectToScreenshot,
+  resolveScreenshotFrame,
   resolveSnapshotBounds,
 } from './snapshot-rect-projection.ts';
 import { analyzeReactNativeOverlay } from './react-native-overlay.ts';
@@ -270,10 +271,21 @@ function projectRectToScreenshot(
   screenshotHeight: number,
 ): Rect {
   const space = snapshot.backend === 'android' ? 'device-pixels' : 'viewport-points';
+  const frame = resolveScreenshotFrame(
+    { width: screenshotWidth, height: screenshotHeight },
+    snapshot,
+  );
   return clampRect(
-    projectSnapshotRectToScreenshot(space, bounds, rect, screenshotWidth, screenshotHeight),
-    screenshotWidth,
-    screenshotHeight,
+    projectSnapshotRectToScreenshot(
+      space,
+      bounds,
+      rect,
+      screenshotWidth,
+      screenshotHeight,
+      snapshot.captureScale,
+    ),
+    frame.width,
+    frame.height,
   );
 }
 
