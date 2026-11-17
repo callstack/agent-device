@@ -15,28 +15,18 @@ import {
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import {
-  acquireProcessLockAcquisition,
-  childName,
-  childPath,
-  createStateLevels,
-  inspectProcessLock,
-  parentDirectoryPath,
   publishFileSync,
-  scriptAncestryReason,
+  inspectProcessLock,
   tryAcquireProcessLock,
-  verifiedDirectoryGround,
-  verifiedDirectoryPath,
-  withoutTrailingSeparators,
+  acquireProcessLockAcquisition,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
-  configuredStateBaseDisagrees,
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonRuntimeOwnership,
@@ -286,6 +276,26 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
+/**
+ * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
+ * only toggles the read-only bit, so it cannot make the path private. The repair never decides
+ * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
+ */
+function repairStateMode(target: string, mode: number): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch (error) {
+    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'daemon_state_mode_repair_skipped',
+      data: { path: target, error: normalizeError(error) },
+    });
+  }
+}
+
+const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
+
 /** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
   input: Readonly<{
@@ -304,7 +314,8 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  ensureDaemonStateDir(input.paths.baseDir, input.paths.baseDir);
+  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
+  repairStateMode(input.paths.baseDir, 0o700);
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
     repairStateMode(input.paths.logPath, 0o600);
@@ -721,280 +732,5 @@ function retirePrivateStateIfEligible(
       removedStateDir: false,
       error: normalizeError(error),
     };
-  }
-}
-
-/**
- * Forces the daemon's own state chain to 0700 and answers whether every level is private ground (#4565). A
- * refusal is the ANCESTRY, never a MODE, and never a re-spelling: the caller writes its own `directory`.
- */
-export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): DaemonStateDir {
-  return repairStateChain(stateBase, directory, 'script');
-}
-
-/** Whether every level the caller's own text walks to is this uid's at 0700, reached by no link. */
-export type DaemonStateDir = Readonly<{ privateChain: boolean }>;
-
-/** For a caller that writes no script under the directory: startup, an artifact, a tombstone. */
-export function ensureDaemonStateDir(directory: string, stateBase: string): void {
-  repairStateChain(stateBase, directory, 'own-state');
-}
-
-/** The only creation ground the walk refused sees: `main`'s recursive `mkdir`, and NO mode change. */
-function createOwnStateLevels(directory: string): void {
-  try {
-    fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
-  } catch (error) {
-    skipStateDirMode(directory, stateRepairReason(error));
-  }
-}
-
-type StateDirUse = 'script' | 'own-state';
-
-const STATE_DIR_MODE = 0o700;
-const STATE_DIR_FLAGS = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
-
-/**
- * Forces every state level from `stateBase` down to `directory` to {@link STATE_DIR_MODE}, never throwing. The
- * base is stood on ONCE; only NAMES below it are built (ADR 0016).
- */
-function repairStateChain(stateBase: string, directory: string, use: StateDirUse): DaemonStateDir {
-  // Windows answers access from an ACL and `chmod` only toggles the read-only bit: nothing to judge.
-  if (process.platform === 'win32') {
-    createOwnStateLevels(directory);
-    return { privateChain: true };
-  }
-  // Asked FIRST, read-only: a base naming two directories is repaired in neither (#4584).
-  if (configuredStateBaseDisagrees(stateBase)) {
-    skipStateDirMode(stateBase, 'state_spelling_disagrees');
-    if (use === 'own-state') createOwnStateLevels(directory);
-    return { privateChain: false };
-  }
-  let physical: string;
-  try {
-    const base = standOnStateBase(stateBase);
-    // No script goes on ground nothing judged; `own-state` still gets its own levels (#4584).
-    if (base === undefined) {
-      if (use === 'own-state') createOwnStateLevels(directory);
-      return { privateChain: false };
-    }
-    physical = base;
-  } catch (error) {
-    // Nothing is known of this chain, so nothing else is touched; one skip says so.
-    skipStateDirMode(stateBase, stateRepairReason(error));
-    return { privateChain: false };
-  }
-  const tail = stateTailBelow(stateBase, directory);
-  if (tail === undefined) {
-    skipStateDirMode(directory, 'not_below_state_base');
-    return { privateChain: false };
-  }
-  // Every level is a NAME under the base the walk arrived at: the chain the caller's text walks to.
-  return { privateChain: descendStateChain(stateBase, directory, physical, tail, use) };
-}
-
-/**
- * Stands on the state base and answers its name as the walk spells it — UNNORMALIZED, so a link AT the base
- * is `lstat`ed as a level, not followed — or `undefined` after saying why.
- */
-function standOnStateBase(stateBase: string): string | undefined {
-  const answered = verifiedDirectoryPath(stateBase);
-  if ('physical' in answered) {
-    const base = answered.physical;
-    if (fs.lstatSync(base, { bigint: true, throwIfNoEntry: false }) !== undefined) return base;
-    const parent = parentDirectoryPath(base);
-    if (parent === undefined) {
-      skipStateDirMode(base, 'state_base_unreachable');
-      return undefined;
-    }
-    createStateLevels(base, parent, [childName(base)]);
-    if (fs.lstatSync(base, { bigint: true, throwIfNoEntry: false }) === undefined) {
-      skipStateDirMode(base, 'absent');
-      return undefined;
-    }
-    return base;
-  }
-  // The one refusal that is a fresh host rather than an exposure: a name above the base is absent.
-  if (answered.exposure !== 'unreachable_parent') {
-    skipStateDirMode(answered.ancestor, `state_ancestry_${answered.exposure}`);
-    return undefined;
-  }
-  const ground = verifiedDirectoryGround(stateBase);
-  if (ground.ended !== 'short' || ground.unresolvable) {
-    skipStateDirMode(stateBase, `state_ancestry_${answered.exposure}`);
-    return undefined;
-  }
-  createStateLevels(stateBase, ground.established, ground.missing);
-  // Asked again now the names stand: the answer is the base's own name on judged ground.
-  const reached = verifiedDirectoryPath(stateBase);
-  if (!('physical' in reached)) {
-    skipStateDirMode(reached.ancestor, `state_ancestry_${reached.exposure}`);
-    return undefined;
-  }
-  return reached.physical;
-}
-
-/**
- * Walks the base and the names below it, one at a time, forcing each to the private mode, and reports whether
- * every one is private ground. The ORDER is the blocker fix: a level is judged BEFORE anything is created below
- * it, so a link at `sessions` stops the descent and no SCRIPT destination is made under it.
- */
-function descendStateChain(
-  base: string,
-  directory: string,
-  physicalBase: string,
-  tail: readonly string[],
-  use: StateDirUse,
-): boolean {
-  let physical = physicalBase;
-  let spelled = base;
-  let privateChain = true;
-  for (let index = -1; index < tail.length; index += 1) {
-    const parent = physical;
-    if (index >= 0) {
-      const name = tail[index]!;
-      spelled = childPath(spelled, name);
-      physical = childPath(physical, name);
-    }
-    const verdict = judgeStateLevel(spelled, physical, parent, tail, index);
-    if (verdict === 'stop') {
-      // ANY level this walk stops on ends the chain for a script destination, whoever owns it. The caller that
-      // writes no script there is still given main's one recursive `mkdir` of the requested directory, however
-      // far below the stopped level it sits: that is what it ran before this rule existed.
-      if (use === 'own-state') createOwnStateLevels(directory);
-      return false;
-    }
-    if (verdict !== 'private') privateChain = false;
-  }
-  return privateChain;
-}
-
-/** Whether the descent may pass one level, and what that level is. */
-type StateLevelVerdict = 'private' | 'loose' | 'stop';
-
-/** Stands on one level and answers whether the descent may pass it; an ABSENT name is made first. */
-function judgeStateLevel(
-  spelled: string,
-  physical: string,
-  parent: string,
-  tail: readonly string[],
-  index: number,
-): StateLevelVerdict {
-  let standing;
-  try {
-    standing = repairStateLevel(physical);
-    if (standing.ended === 'absent' && index >= 0) {
-      createStateLevels(spelled, parent, tail.slice(index));
-      standing = repairStateLevel(physical);
-      // Still absent after creating: that is no level to stand on, and not a fresh host to create for.
-      if (standing.ended === 'absent') return 'stop';
-    }
-  } catch (error) {
-    // A plain FILE where a level must be: the caller gets `mkdir`'s own `ENOTDIR`.
-    if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') throw error;
-    skipStateDirMode(physical, stateRepairReason(error));
-    return 'stop';
-  }
-  if (standing.ended === 'absent') {
-    skipStateDirMode(physical, 'absent');
-    return 'stop';
-  }
-  if (standing.ended === 'stopped') return 'stop';
-  return standing.ended === 'private' ? 'private' : 'loose';
-}
-
-type StateLevelStanding = Readonly<{ ended: 'absent' | 'stopped' | 'private' }>;
-
-/** Why the chain stopped: the host's `errno` code, or host-kit's ancestry reason for the same rule. */
-function stateRepairReason(error: unknown): string {
-  return (
-    scriptAncestryReason(error) ?? (error as NodeJS.ErrnoException).code ?? 'state_chain_unjudged'
-  );
-}
-
-/**
- * The NAMES from `stateBase` down to `directory`, base excluded, or `undefined` when it is not below it:
- * names, never a path, so no `..` or alias moves a level onto unjudged ground.
- */
-function stateTailBelow(stateBase: string, directory: string): readonly string[] | undefined {
-  const below = path.relative(
-    withoutTrailingSeparators(stateBase),
-    withoutTrailingSeparators(directory),
-  );
-  if (below === '' || below === '.') return [];
-  if (below === '..' || below.startsWith(`..${path.sep}`) || path.isAbsolute(below))
-    return undefined;
-  return below.split(path.sep);
-}
-
-/**
- * Forces one level, judged by `lstat` first: a link, a non-directory or a foreign owner stops the
- * descent. The mode goes by descriptor, since `chmod` by NAME acts on what the name resolves to.
- */
-function repairStateLevel(level: string): StateLevelStanding {
-  const judged = fs.lstatSync(level, { bigint: true, throwIfNoEntry: false });
-  if (judged === undefined) return { ended: 'absent' };
-  // Asked BEFORE the mode: a LINK at 0700 answers the mode question privately.
-  if (judged.isSymbolicLink()) {
-    skipStateDirMode(level, 'link_at_state_level');
-    return { ended: 'stopped' };
-  }
-  // A plain FILE at a level: `mkdir`'s own `ENOTDIR`, since every write under that name fails anyway.
-  if (!judged.isDirectory())
-    throw Object.assign(new Error(`ENOTDIR: not a directory, mkdir '${level}'`), {
-      code: 'ENOTDIR',
-      path: level,
-    });
-  if (Number(judged.uid) !== (process.getuid?.() ?? -1)) {
-    skipStateDirMode(level, 'foreign_owned');
-    return { ended: 'stopped' };
-  }
-  // A level already at the mode needs nothing: the common start pays no open.
-  if ((Number(judged.mode) & 0o777) === STATE_DIR_MODE) return { ended: 'private' };
-  return { ended: forcePrivateStateDir(level) ? 'private' : 'stopped' };
-}
-
-/** Forces one level through a link-proof descriptor: only it says what the `fchmod` actually changed. */
-function forcePrivateStateDir(level: string): boolean {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(level, STATE_DIR_FLAGS);
-    if (Number(fs.fstatSync(descriptor, { bigint: true }).uid) !== (process.getuid?.() ?? -1)) {
-      skipStateDirMode(level, 'foreign_owned');
-      return false;
-    }
-    fs.fchmodSync(descriptor, STATE_DIR_MODE);
-    return true;
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
-/** Says where the repair stopped: a skip is never a refusal. */
-function skipStateDirMode(level: string, reason: string): void {
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'daemon_state_mode_repair_skipped',
-    data: { path: level, reason: `state mode repair stopped at this level: ${reason}` },
-  });
-}
-
-/** Host limits a `chmod` cannot beat: none is ground to judge or a reason to stop a daemon. */
-const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
-
-/**
- * Forces a pre-existing state PATH — file as much as directory — to `mode`, and never decides whether the
- * daemon starts: what another user owns, or a mount with no chmod, keeps what it has.
- */
-function repairStateMode(target: string, mode: number): void {
-  try {
-    fs.chmodSync(target, mode);
-  } catch (error) {
-    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_state_mode_repair_skipped',
-      data: { path: target, error: normalizeError(error) },
-    });
   }
 }

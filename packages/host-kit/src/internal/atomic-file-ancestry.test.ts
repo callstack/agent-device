@@ -10,12 +10,13 @@ import {
   expectUntrustedReplaced,
   modeOf,
   publish,
+  seedMissingNsswitchHost,
+  seedPrivateGroupHost,
+  seedUntrustedMembershipHost,
 } from './atomic-file-host.fixtures.ts';
 import {
   confirmScriptDestination,
   prepareScriptDestination,
-  verifiedDirectoryAncestry,
-  verifiedDirectoryPath,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -126,14 +127,32 @@ skipOnWindows('refuses a destination created inside a directory others can add e
   expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(false);
 });
 
-skipOnWindows('refuses a destination under a group-writable shared directory', () => {
-  const team = directoryWith(path.join(root(), 'team'), 0o775);
-  const sub = path.join(team, 'sub');
-  privateDir(sub);
+skipOnWindows(
+  'refuses a destination under a group-writable directory whose members are unknown',
+  () => {
+    seedUntrustedMembershipHost();
+    const team = directoryWith(path.join(root(), 'team'), 0o775);
+    const sub = path.join(team, 'sub');
+    privateDir(sub);
 
-  expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
-  expect(fs.readdirSync(sub)).toEqual([]);
-});
+    expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
+    expect(fs.readdirSync(sub)).toEqual([]);
+  },
+);
+
+skipOnWindows(
+  'accepts a destination under a group-writable directory whose group is this user alone',
+  () => {
+    // The stock Ubuntu home: 0775, owned by this user, its group a private group of this user. The name
+    // service here is `files`, so the account files settle the question and the save goes through (#4565).
+    seedPrivateGroupHost();
+    const team = directoryWith(path.join(root(), 'team'), 0o775);
+
+    publish(path.join(team, 'journey.ad'));
+
+    expect(fs.existsSync(path.join(team, 'journey.ad'))).toBe(true);
+  },
+);
 
 // --- ownership decides, not the mode alone ---
 
@@ -586,25 +605,49 @@ skipOnWindows('refuses a path component that cannot carry a publish', () => {
 
 // --- a group-writable directory is refused, whoever owns the group (ADR 0016) ---
 
-skipOnWindows('refuses a group-writable 0775 directory with the hint to close the group', () => {
-  // The stock shape on a shared Linux checkout: the project directory is 0775 and its group is this
-  // user's own. Membership of that group cannot be proven from the host's account files, so the rule
-  // refuses on the mode alone and tells the caller how to make the destination acceptable.
-  const home = directoryWith(path.join(root(), 'home'), 0o775);
-  let hint = '';
-  try {
-    publish(path.join(home, 'journey.ad'));
-  } catch (error) {
-    hint = String((error as AppError).details?.hint);
-  }
+skipOnWindows(
+  'refuses a group-writable 0775 directory whose group it cannot prove, with a hint',
+  () => {
+    // A host whose name service answers membership from elsewhere: the account files cannot settle whether
+    // this group holds another user, so the mode alone refuses and the hint names the fix.
+    seedUntrustedMembershipHost();
+    const home = directoryWith(path.join(root(), 'home'), 0o775);
+    let hint = '';
+    try {
+      publish(path.join(home, 'journey.ad'));
+    } catch (error) {
+      hint = String((error as AppError).details?.hint);
+    }
 
-  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
-  expect(hint).toContain(`chmod g-w ${home}`);
-  expect(fs.readdirSync(home)).toEqual([]);
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+    expect(hint).toContain(`chmod g-w ${home}`);
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
+
+skipOnWindows('accepts a group-writable 0775 directory on a stock Ubuntu host', () => {
+  // The same directory and mode as the case above, on the host that shape actually has: `files`, a private
+  // group, no other account claiming it. A plain Ubuntu or Debian home directory is therefore saved to.
+  seedPrivateGroupHost();
+  const home = directoryWith(path.join(root(), 'home'), 0o775);
+
+  publish(path.join(home, 'journey.ad'));
+
+  expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
-skipOnWindows('refuses a setgid group-writable directory on the same mode', () => {
+skipOnWindows('refuses a group-writable 0775 directory when no nsswitch.conf can be read', () => {
+  // A host that answers nothing: an unreadable name-service config proves nothing about membership, so the
+  // exception does not apply and the mode stands.
+  seedMissingNsswitchHost();
+  const home = directoryWith(path.join(root(), 'home'), 0o775);
+
+  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+});
+
+skipOnWindows('refuses a setgid group-writable directory whose members are unknown', () => {
   // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
+  seedUntrustedMembershipHost();
   const home = directoryWith(path.join(root(), 'home'), 0o2775);
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
@@ -839,143 +882,3 @@ skipOnWindows(
     expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), work);
   },
 );
-
-// --- the same rule, asked of a directory a caller is about to CHANGE (#4584) ---
-//
-// `verifiedDirectoryAncestry` and `verifiedDirectoryPath` are the walk above, over a directory instead of over
-// a file about to be written: the daemon's state repair asks them before it forces a single mode, and builds
-// every path below the answer from what they return. It has to be THIS rule and not a copy of it, so what it
-// answers is pinned here, where the rule lives.
-
-skipOnWindows('the standing-on judgment accepts a chain only this user can move', () => {
-  const directory = root();
-  const home = directoryWith(path.join(directory, 'home'), 0o700);
-  const base = path.join(home, 'agent-device');
-  privateDir(base);
-
-  expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
-  // The directory itself was stood on, and asking created nothing.
-  expect(fs.readdirSync(home)).toEqual(['agent-device']);
-});
-
-skipOnWindows('the standing-on judgment answers the physical directory it stood on', () => {
-  // The answer is what a caller builds its own levels from, so it has to be where the kernel ARRIVED rather
-  // than the text it was handed. `..` steps back out of wherever the link physically is, and the walk reports
-  // the directory it reached through it.
-  const directory = root();
-  const actual = path.join(directory, 'actual', 'x');
-  fs.mkdirSync(actual, { recursive: true, mode: PRIVATE_DIR_MODE });
-  const alias = path.join(directory, 'alias');
-  fs.symlinkSync(path.join(directory, 'actual', 'x'), alias);
-
-  expect(verifiedDirectoryAncestry(`${alias}/..`)).toEqual({
-    physical: path.join(directory, 'actual'),
-  });
-});
-
-skipOnWindows('the standing-on judgment names an ancestor another user can write', () => {
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
-  const base = path.join(shared, 'agent-device');
-  privateDir(base);
-
-  expect(verifiedDirectoryAncestry(base)).toEqual({
-    ancestor: shared,
-    exposure: 'world_writable',
-  });
-});
-
-skipOnWindows('the standing-on judgment passes a sticky ancestor through, as the walk does', () => {
-  // The one mode exception this rule carries, and the reason it cannot be restated more strictly elsewhere:
-  // the sticky bit stops anyone but an entry's owner or root from renaming that entry, which is the swap the
-  // judgment exists to rule out.
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
-  const base = path.join(shared, 'agent-device');
-  privateDir(base);
-
-  expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
-});
-
-skipOnWindows('the standing-on judgment refuses a chain it cannot resolve', () => {
-  // An absent name above the directory means the walk never reached it, so there is no judgment to report:
-  // the answer names the last directory it did stand on and says the rest has nowhere to be resolved from.
-  // The destination rule refuses that shape; so does this, instead of answering "trusted" about ground it
-  // never saw. A `..` behind the absent name is the same stop with a different word (`unresolvable_parent`),
-  // and the state-repair suite pins that spelling where the caller decides what to do with it.
-  const directory = root();
-  const base = path.join(directory, 'missing', 'agent-device');
-
-  expect(verifiedDirectoryAncestry(base)).toEqual({
-    ancestor: directory,
-    exposure: 'unreachable_parent',
-  });
-});
-
-skipOnWindows('the standing-on judgment refuses a chain a `..` cannot resolve either', () => {
-  // Spelled without `path.join`, which would fold the `..` away: this is the shape where the name the walk
-  // stops at is absent AND a step back is queued behind it, so creating cannot finish the resolution.
-  const directory = root();
-  const base = `${directory}/missing/../agent-device`;
-
-  expect(verifiedDirectoryAncestry(base)).toEqual({
-    ancestor: directory,
-    exposure: 'unresolvable_parent',
-  });
-});
-
-// --- `verifiedDirectoryPath`: the ONE name a caller may build levels from (#4584) ---
-
-skipOnWindows(
-  "the base answer keeps the base's own name and stops at the link that is the base",
-  () => {
-    // `AGENT_DEVICE_STATE_DIR` ends in a slash. Every one of `lstat`, `open` and `fchmod` given `state/` lands
-    // on the TARGET of a link at `state` — the kernel resolves a trailing separator by definition — so the name
-    // this answers has no separator on the end, and it is the link's own name rather than the directory behind
-    // it. Judging that entry is the caller's next step; what it must never get here is the far side.
-    const directory = root();
-    const trusted = path.join(directory, 'trusted');
-    privateDir(trusted);
-    const outside = path.join(directory, 'outside');
-    privateDir(outside);
-    fs.symlinkSync(outside, path.join(trusted, 'state'));
-
-    expect(verifiedDirectoryPath(`${trusted}/state/`)).toEqual({
-      physical: path.join(trusted, 'state'),
-    });
-    expect(fs.lstatSync(path.join(trusted, 'state')).isSymbolicLink()).toBe(true);
-  },
-);
-
-skipOnWindows('the base answer is where a `..` in the base physically arrives', () => {
-  // The state base spelled `alias/../state` is NOT `state` beside the alias: `..` steps back out of wherever
-  // `alias` is physically, so the kernel's chain runs through the link's target. A caller that folded the step
-  // with `path.dirname` and `path.join` would repair a directory nobody judged.
-  const directory = root();
-  const actual = path.join(directory, 'actual', 'x');
-  fs.mkdirSync(actual, { recursive: true, mode: PRIVATE_DIR_MODE });
-  const alias = path.join(directory, 'alias');
-  fs.symlinkSync(actual, alias);
-  // Where the kernel's `..` arrives is the directory the link's TARGET stands in, so the state dir is the one
-  // beside `x`, NOT the one `path.join(alias, '..', 'state')` spells beside the alias.
-  const state = path.join(directory, 'actual', 'state');
-  privateDir(state);
-
-  expect(verifiedDirectoryPath(`${alias}/../state`)).toEqual({ physical: state });
-  expect(path.join(alias, '..', 'state')).not.toBe(state);
-});
-
-skipOnWindows('the base answer refuses ground another user can steer, and creates nothing', () => {
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
-
-  expect(verifiedDirectoryPath(path.join(shared, 'agent-device', 'state'))).toEqual({
-    ancestor: shared,
-    exposure: 'world_writable',
-  });
-  expect(verifiedDirectoryPath('state')).toEqual({
-    ancestor: 'state',
-    exposure: 'relative_destination',
-  });
-  expect(fs.readdirSync(shared)).toEqual([]);
-});

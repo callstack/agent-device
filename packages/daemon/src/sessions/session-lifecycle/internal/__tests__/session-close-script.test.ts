@@ -95,16 +95,16 @@ test('repair close failure keeps normalized metadata and is explicitly retriable
 
 test('a refused remote close write keeps its typed reason as the delivery failure cause', () => {
   // #4584: a remote recording's close discloses a failed final write instead of failing, and the
-  // disclosure has to say WHICH failure it was. `state_chain_untrusted` — the daemon's own state chain
-  // is not private ground — is a different recovery from a full disk, and a client cannot tell them
-  // apart from prose. The reason comes from the write error, so it has to travel with it.
+  // disclosure has to say WHICH failure it was. `script_ancestor_untrusted` — ground the caller's
+  // destination crosses is writable by somebody else — is a different recovery from a full disk, and a
+  // client cannot tell them apart from prose. The reason comes from the write error, so it travels with it.
   const { req, ref, sessionStore } = setup('remote-ordinary');
   sessionStore.requireCurrent(ref).scriptPublication = authoringPublication('armed', {
     remote: true,
   });
-  const failure = new AppError('COMMAND_FAILED', 'state chain is not private ground', {
-    reason: 'state_chain_untrusted',
-    hint: 'Make the daemon own that tree.',
+  const failure = new AppError('COMMAND_FAILED', 'that directory is writable by another user', {
+    reason: 'script_ancestor_untrusted',
+    hint: 'Save the script under a directory only you can write.',
   });
   vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
 
@@ -120,7 +120,7 @@ test('a refused remote close write keeps its typed reason as the delivery failur
   expect(delivered.data?.scriptDeliveryFailure).toMatchObject({
     reason: 'script_delivery_failed',
     publicationId: 'publication-0001',
-    cause: 'state_chain_untrusted',
+    cause: 'script_ancestor_untrusted',
   });
 });
 

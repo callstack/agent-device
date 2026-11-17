@@ -9,7 +9,6 @@ import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
-  configuredStateBaseDisagrees,
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -85,7 +84,6 @@ import {
   resolveDaemonCodeSignature,
 } from './server-lifecycle.ts';
 import {
-  ensureDaemonStateDir,
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
   type DaemonRegistrationOwner,
@@ -209,18 +207,6 @@ async function startDaemonRuntimeOnHost(
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
-  // The daemon's own state dirs are on the chain of every recording it picks a path for, and a
-  // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
-  // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
-  // otherwise only ever created as a side effect of a per-session mkdir. Each call repairs the level it is
-  // named, in place: a state path has ONE spelling, the configured one, so nothing here answers another
-  // directory's name, and where the walk refuses ground the levels are still made and only the
-  // daemon-picked recordings are refused (ADR 0016).
-  // Also asked of the STORE, on the same text: the repair answers UNTRUSTED for this base, and the two
-  // destinations the writer picks for itself are then refused before anything is created under them.
-  const stateSpellingAgrees = !configuredStateBaseDisagrees(baseDir);
-  ensureDaemonStateDir(baseDir, baseDir);
-  ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -233,7 +219,7 @@ async function startDaemonRuntimeOnHost(
     ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
     : undefined;
 
-  const sessionStore = new SessionStore(sessionsDir, host, stateSpellingAgrees);
+  const sessionStore = new SessionStore(sessionsDir, host);
   const deps = await options.composeDeps({
     host,
     baseDir,

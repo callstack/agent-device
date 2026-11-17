@@ -10,12 +10,15 @@ import {
   untrustedLinkExposure,
   type DirectoryAuthority,
 } from './atomic-file.ts';
-import { FOREIGN_UID, currentUid } from './atomic-file-host.fixtures.ts';
+import { FOREIGN_UID, currentGid, currentUid } from './atomic-file-host.fixtures.ts';
 
 // --- what makes one directory unsafe to publish inside ---
 
-const OWN = { uid: currentUid, mode: 0o755 };
-const TRUST = { uid: currentUid };
+const OWN = { uid: currentUid, gid: currentGid, mode: 0o755 };
+/** Ground whose group this probe does not vouch for: the mode alone decides, as it did before #4584. */
+const TRUST = { uid: currentUid, privateGroup: () => false };
+/** Ground whose group the host proves holds no other user, so a group bit opens nothing up. */
+const PRIVATE_TRUST = { uid: currentUid, privateGroup: () => true };
 
 function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
   return { ...OWN, ...overrides };
@@ -34,16 +37,28 @@ test('refuses a directory that is world-writable', () => {
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o777 }), TRUST)).toBe('world_writable');
 });
 
-test('refuses a directory that is group-writable, whoever owns the group', () => {
-  // ADR 0016 carries no private-group exception: proving a group holds no other user means reading the
-  // host's account files, which cannot be settled on a host whose name service answers membership from
-  // somewhere else. The mode alone decides, which is why the rule does not read a `gid` at all.
+test('refuses a directory that is group-writable while its group cannot be proven private', () => {
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBe(
     'shared_group_writable',
   );
   expect(untrustedAncestryExposure(directoryOf({ uid: 0, mode: 0o2770 }), TRUST)).toBe(
     'shared_group_writable',
   );
+});
+
+test('accepts a group-writable directory whose group holds no other user (ADR 0016)', () => {
+  // The stock Ubuntu and Debian shape: the home directory is 0775 and its group belongs to this user
+  // alone. The probe answers that from the host's own account files, so the group bit stops mattering.
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), PRIVATE_TRUST)).toBeUndefined();
+  expect(untrustedAncestryExposure(directoryOf({ mode: 0o2770 }), PRIVATE_TRUST)).toBeUndefined();
+});
+
+test('refuses a group-writable directory another user owns even when a group is private to this one', () => {
+  // The exception is about THIS user's own group on THIS user's own directory: a co-user's 0775 directory
+  // lets that co-user replace the entry whatever its group's membership is.
+  expect(
+    untrustedAncestryExposure(directoryOf({ uid: FOREIGN_UID, mode: 0o775 }), PRIVATE_TRUST),
+  ).toBe('foreign_owned');
 });
 
 test('accepts a root-owned directory and a directory this user owns', () => {
@@ -79,6 +94,13 @@ test('refuses a link in a group-writable directory, which is ground others can w
   );
 });
 
+test('accepts a link in a group-writable directory whose group holds no other user', () => {
+  // Nobody else can add a name here, so no co-user can have planted this link.
+  expect(
+    untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o775 }), PRIVATE_TRUST),
+  ).toBeUndefined();
+});
+
 test('refuses a link in a shared directory unless the sticky bit and its owner hold it in place', () => {
   expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
     'planted_link',
@@ -100,6 +122,10 @@ test('names a directory others can add entries in, sticky bit or no sticky bit',
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o777 }), TRUST)).toBe(true);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o1777 }), TRUST)).toBe(true);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), TRUST)).toBe(true);
+});
+
+test('names no group-writable directory whose group holds no other user', () => {
+  expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), PRIVATE_TRUST)).toBe(false);
 });
 
 test('names no directory that keeps its contents closed to the group', () => {

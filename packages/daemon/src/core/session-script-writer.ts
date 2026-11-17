@@ -1,11 +1,11 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
-import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   inferFillText,
   appendScriptSeriesFlags,
@@ -19,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishScriptFileSync } from '@agent-device/host-kit/file';
+import { publishFileSync, publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -111,26 +111,13 @@ function isPublicationWriteBlocked(session: SessionState): boolean {
 }
 
 export class SessionScriptWriter {
+  private readonly sessionsDir: string;
   /** The runtime host's working directory, the base every recorded script target resolves against. */
   private readonly hostCwd: string;
-  /** The directory this store's sessions live in, spelled the way the path owner spells it. */
-  private readonly sessionsDir: string;
-  /** The state directory `sessionsDir` was built from, its own parent by the same rule main derived. */
-  private readonly stateBase: string;
-  /**
-   * Whether the state setting's OWN text walks to where the names built below it land. A `..` behind a
-   * symbolic link is the one step `path.join` folds away while the kernel walks THROUGH it, and then the
-   * caller reads one directory while every path the daemon builds names the other. Nothing is re-spelled for
-   * that (a state path has one spelling), so such a chain is simply not ground for a recording the daemon
-   * picked a path for (#4584, ADR 0016).
-   */
-  private readonly stateSpellingAgrees: boolean;
 
-  constructor(sessionsDir: string, hostCwd: string, stateSpellingAgrees = true) {
-    this.hostCwd = hostCwd;
+  constructor(sessionsDir: string, hostCwd: string) {
     this.sessionsDir = sessionsDir;
-    this.stateBase = path.dirname(sessionsDir);
-    this.stateSpellingAgrees = stateSpellingAgrees;
+    this.hostCwd = hostCwd;
   }
 
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -144,21 +131,29 @@ export class SessionScriptWriter {
         activePublication,
       });
       const remote =
-        session.scriptPublication?.kind === 'authoring' &&
-        session.scriptPublication.remoteDelivery !== undefined;
-      const destination = this.resolveScriptDestination(session, remote);
-      scriptPath = destination.path;
-      if (destination.pickedByDaemon && !destination.privateChain) {
-        throw daemonStateUntrustedFailure(destination.path);
+        session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
+      scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
+      // A destination the CALLER named is the caller's own, and host-kit's destination rule is what judges it:
+      // that route walks the chain, creates nothing outside what it judged, and writes the file at 0600. A path
+      // of this daemon's own is made the way it has always been made (#4565).
+      const callerOwnsDestination =
+        !remote &&
+        scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION) !== undefined;
+      if (!callerOwnsDestination) {
+        const scriptDir = path.dirname(scriptPath);
+        if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       }
       // #1258: `options.force` is the caller's already-merged decision
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
       // formatting+publish step.
-      // host-kit owns the rest (#4565): the publisher walks the chain, refuses a destination another
-      // local user can steer BEFORE creating anything, creates what is missing at 0700 inside the
-      // directory it judged, and judges that completed chain before the entry is created.
-      publishHealedScriptAtomically({ scriptPath, script: prepared.script, force: options?.force });
+      publishHealedScriptAtomically({
+        scriptPath,
+        script: prepared.script,
+        force: options?.force,
+        callerOwnsDestination,
+        ...(remote ? { mode: 0o600 } : {}),
+      });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) {
         session.scriptPublication = commitRepair(
@@ -178,58 +173,22 @@ export class SessionScriptWriter {
   }
 
   /**
-   * Where this write's script goes, and whether the daemon picked that path itself.
-   *
-   * A caller's `--save-script=<path>` is the caller's own destination, and the destination rule in host-kit
-   * is what judges it. Everything else is a path the daemon picked for itself — a default recording under
-   * `sessions/`, or a remote version under `sessions/remote-scripts/`, each a fresh file in a private (0700)
-   * directory. Ensuring that directory answers whether the chain from the state base is private ground, which
-   * is what the refusal below is for, and its `path` is the VERIFIED spelling of that directory — the only name
-   * a script of this daemon's is ever joined onto. Startup keeps going either way (#4565).
+   * A remote recording's caller downloads each version once, so every version, the close-time
+   * script included, gets a fresh private (0600) file in a private (0700) directory that only the
+   * daemon user can read.
    */
-  private resolveScriptDestination(
-    session: SessionState,
-    remote: boolean,
-  ): { path: string; pickedByDaemon: boolean; privateChain: boolean } {
-    // Asked FIRST: a chain this verdict refuses is created nowhere, so a refused recording leaves no
-    // `remote-scripts` directory behind it.
-    if (!this.stateSpellingAgrees) {
-      return {
-        path: remote
-          ? path.join(this.sessionsDir, 'remote-scripts')
-          : this.defaultRecordingPath(session),
-        pickedByDaemon: true,
-        privateChain: false,
-      };
-    }
-    if (remote) {
-      const directory = ensurePrivateDaemonStateDir(
-        path.join(this.sessionsDir, 'remote-scripts'),
-        this.stateBase,
-      );
-      return {
-        ...directory,
-        pickedByDaemon: true,
-        path: path.join(this.sessionsDir, 'remote-scripts', `${crypto.randomUUID()}.ad`),
-      };
-    }
-    const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
-    if (targetPath) {
-      return {
-        path: expandSessionPath(targetPath, this.hostCwd),
-        pickedByDaemon: false,
-        privateChain: true,
-      };
-    }
-    return {
-      ...ensurePrivateDaemonStateDir(this.sessionsDir, this.stateBase),
-      pickedByDaemon: true,
-      path: this.defaultRecordingPath(session),
-    };
+  private remoteScriptPath(): string {
+    const directory = path.join(this.sessionsDir, 'remote-scripts');
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    fs.chmodSync(directory, 0o700);
+    return path.join(directory, `${crypto.randomUUID()}.ad`);
   }
 
-  /** The recording this store names for a session: `main`'s name, in the directory it keeps sessions in. */
-  private defaultRecordingPath(session: SessionState): string {
+  private resolveScriptPath(session: SessionState): string {
+    const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
+    if (targetPath) {
+      return expandSessionPath(targetPath, this.hostCwd);
+    }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
@@ -281,63 +240,19 @@ function handleSessionScriptWriteFailure(params: {
   return { written: false, error: toOrdinaryWriteFailure(error, scriptPath) };
 }
 
-/**
- * A filesystem failure that has to reach the caller as its own typed error: an ordinary recording
- * carries `script_write_failed` with the path it could not be written to, and both name what was being
- * written, because the same writer publishes a recording and a healed repair.
- */
-function toScriptWriteFailure(
-  error: unknown,
-  scriptPath: string | undefined,
-  subject: Readonly<{ noun: string; hint: string; reportsPath?: boolean }>,
-): AppError {
+function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
+  if (error instanceof AppError) return error;
   const detail = error instanceof Error ? error.message : String(error);
-  const where = scriptPath === undefined ? '' : ` to ${scriptPath}`;
   return new AppError(
     'COMMAND_FAILED',
-    `Failed to write the ${subject.noun}${where}: ${detail}`,
+    `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
     {
-      ...(subject.reportsPath === true && scriptPath !== undefined
-        ? { reason: 'script_write_failed' as const, path: scriptPath }
-        : {}),
-      hint: subject.hint,
+      reason: 'script_write_failed',
+      ...(scriptPath ? { path: scriptPath } : {}),
+      hint: 'Check the target path and its permissions, then re-record with open --save-script.',
     },
     error,
   );
-}
-
-/**
- * Refusal for a script the daemon was about to write on a state chain the repair did not accept: a path
- * the daemon picked for itself, on ground it could not establish as its own. The destination walk is not
- * what refuses it — the walk ACCEPTS a link whose parent others cannot write (ADR 0016).
- */
-function daemonStateUntrustedFailure(scriptPath: string): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `The recording was not written: the daemon's own state directory is not private ground, so ${scriptPath} does not name a directory this daemon owns.`,
-    {
-      reason: 'state_chain_untrusted',
-      path: scriptPath,
-      hint:
-        'A level of the daemon state chain, or a directory above it, is a symbolic link, is owned by ' +
-        'another user, or is open to other users, so the daemon cannot call it private ground. This is the ' +
-        'shape of a bind-mounted CI volume, a container image that leaves the state directory to another ' +
-        'uid, or a state directory inside a shared directory anyone can write. Make the daemon own that ' +
-        'tree (chown -R the state directory to the daemon user), or point AGENT_DEVICE_STATE_DIR at a ' +
-        'directory it owns, then re-record. One spelling is refused on its own: an ' +
-        'AGENT_DEVICE_STATE_DIR with a `..` that follows a symbolic link names two directories at once, ' +
-        'so spell it without the `..`. A recording to an explicit --save-script path is unaffected.',
-    },
-  );
-}
-
-function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined): AppError {
-  if (error instanceof AppError) return error;
-  return toScriptWriteFailure(error, scriptPath, {
-    noun: 'session script',
-    reportsPath: true,
-    hint: 'Check the target path and its permissions, then re-record with open --save-script.',
-  });
 }
 
 /**
@@ -349,12 +264,15 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
  */
 function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): AppError {
   if (error instanceof AppError) return error;
-  return toScriptWriteFailure(error, scriptPath, {
-    noun: 'healed script',
-    hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
-  });
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AppError(
+    'COMMAND_FAILED',
+    `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
+    {
+      hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and its permissions.',
+    },
+  );
 }
-
 /**
  * ADR 0012 decision 6, no-clobber (maintainer-approved simplification):
  * publishes `script` to `scriptPath` atomically, refusing ANY pre-existing
@@ -391,19 +309,33 @@ function publishHealedScriptAtomically(params: {
   scriptPath: string;
   script: string;
   force?: boolean;
+  mode?: number;
+  callerOwnsDestination: boolean;
 }): void {
-  const { scriptPath, script, force } = params;
+  const { scriptPath, script, force, mode, callerOwnsDestination } = params;
   try {
-    publishScriptFileSync({
+    if (callerOwnsDestination) {
+      // host-kit owns this route's whole sequence (#4565): it walks the destination's chain, refuses a
+      // destination another local user can steer BEFORE creating anything, creates what is missing one level
+      // at a time at 0700 inside the directory it judged, and writes the script itself at 0600.
+      publishScriptFileSync({
+        destination: scriptPath,
+        contents: script,
+        publish: force ? 'replace' : 'link-exclusive',
+      });
+      return;
+    }
+    publishFileSync({
       destination: scriptPath,
       contents: script,
       publish: force ? 'replace' : 'link-exclusive',
+      ...(mode === undefined ? {} : { mode }),
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     throw new AppError(
       'COMMAND_FAILED',
-      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
+      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force.`,
       { reason: 'script_target_exists', path: scriptPath },
     );
   }

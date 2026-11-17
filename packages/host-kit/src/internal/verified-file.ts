@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { lstatIfPresent } from './atomic-file.ts';
 
 /**
  * Both guards are the same failure mode seen from two sides — something other than a plain
@@ -131,6 +130,16 @@ function lstatRegularFile(pathname: string): fs.Stats | undefined {
     });
   }
   return stats;
+}
+
+/** `lstat` that treats absence as `undefined`; every other errno propagates. */
+export function lstatIfPresent(pathname: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(pathname);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 
 function sameFile(left: fs.Stats, right: fs.Stats): boolean {

@@ -3,60 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-
-/**
- * The SHAPE of a path name: cut and joined by ONE platform's rules, with no filesystem in it, so a
- * Windows-shaped path is checked on a macOS host. The walk that judges ground stays host-bound — it `lstat`s
- * real entries — and takes no platform parameter. The helpers below read the host's platform per call, so a
- * test can move it under a caller.
- */
-const winHost = () => process.platform === 'win32';
-
-/**
- * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing one
- * resolves THROUGH a link at that name. A linear walk, not a regular expression. A root keeps one: `C:` cut
- * from `C:\` is drive-RELATIVE, so the two spellings name other ground.
- */
-export function withoutTrailingSeparators(directory: string, windows = winHost()): string {
-  const separator = windows ? '\\' : '/';
-  let end = directory.length;
-  while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
-  if (end === 0) return directory.length === 0 ? directory : '/';
-  if (windows && directory[end - 1] === ':') return directory.slice(0, end + 1);
-  return directory.slice(0, end);
-}
-
-/**
- * The name `name` occupies inside `directory`, spelled so it stays WHERE `directory` stands. NOT `path.join`,
- * which normalizes: appending keeps the step in `alias/../state`, `join` answers `state` beside the alias.
- */
-export function childPath(directory: string, name: string, windows = winHost()): string {
-  const spelled = withoutTrailingSeparators(directory, windows);
-  const separator = windows ? '\\' : '/';
-  // A root keeps its one separator, so the name is already attached, and so is a name with nothing above it.
-  return spelled === '' || spelled.endsWith('/') || spelled.endsWith(separator)
-    ? `${spelled}${name}`
-    : `${spelled}${separator}${name}`;
-}
-
-/** The name `spelled` stands as inside its parent, cut by the same rule that cuts the parent. */
-export function childName(spelled: string, windows = winHost()): string {
-  return (windows ? path.win32 : path.posix).basename(withoutTrailingSeparators(spelled, windows));
-}
-
-/**
- * The directory `directory` stands IN, or `undefined` when nothing stands above it. Asks the platform: Windows
- * reads `/` AND `\` as separators, `C:\state` stands in `C:\`, `\\\\srv\\share` in nothing, `C:` alone is
- * drive-RELATIVE. `dirname` is safe: it cuts one separator without folding a surviving `..`.
- */
-export function parentDirectoryPath(directory: string, windows = winHost()): string | undefined {
-  const platform = windows ? path.win32 : path.posix;
-  const spelled = withoutTrailingSeparators(directory, windows);
-  // `dirname('/a//b')` and a share root keep a separator on the end.
-  const parent = withoutTrailingSeparators(platform.dirname(spelled), windows);
-  // A root is its own parent, and `dirname` answers `.` for a bare name: neither is a base to build under.
-  return parent === spelled || parent === '.' ? undefined : parent;
-}
+import { privateGroupOwned } from './private-group.ts';
 
 /**
  * What this process may rely on when it judges ground: who it is, as the kernel answers. The rule reads no
@@ -66,18 +13,39 @@ export function parentDirectoryPath(directory: string, windows = winHost()): str
  * process may rely on, whether a directory is safe to publish inside, whether a link belongs to somebody
  * else, and whether another local user could claim the destination's entry.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number }>;
+export type ScriptDestinationTrust = Readonly<{
+  uid: number;
+  /** Whether this directory's group provably holds no other user (ADR 0016). */
+  privateGroup: (directory: DirectoryAuthority) => boolean;
+}>;
 
-/** What this process may rely on when it judges ground. */
+/**
+ * What this process may rely on when it judges ground: who it is, and a probe for whether one of its groups is
+ * private to it alone. The probe is asked ONCE per walk and remembers its answer, because the account database
+ * does not change while a destination is judged and a long path would otherwise read it per step.
+ */
 function scriptTrust(): ScriptDestinationTrust {
-  return { uid: process.getuid?.() ?? -1 };
+  return { uid: process.getuid?.() ?? -1, privateGroup: memoizedPrivateGroupProbe() };
+}
+
+/** Wraps {@link privateGroupOwned} so one walk reads the account files at most once. */
+function memoizedPrivateGroupProbe(): (directory: DirectoryAuthority) => boolean {
+  const answers = new Map<string, boolean>();
+  return (directory) => {
+    const key = `${directory.uid}:${directory.gid}`;
+    const known = answers.get(key);
+    if (known !== undefined) return known;
+    const answer = privateGroupOwned(directory);
+    answers.set(key, answer);
+    return answer;
+  };
 }
 
 /**
  * The fields of a directory, or of a link, that the ancestry rule reads, so each decision is testable on the
  * fields of one `lstat` rather than through a filesystem.
  */
-export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
+export type DirectoryAuthority = Readonly<{ uid: number; gid: number; mode: number }>;
 
 export type LinkAuthority = Readonly<{ uid: number }>;
 
@@ -116,7 +84,7 @@ export function untrustedAncestryExposure(
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
   if (directory.mode & 0o1000) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020) return 'shared_group_writable';
+  if (directory.mode & 0o020 && !trust.privateGroup(directory)) return 'shared_group_writable';
   return undefined;
 }
 
@@ -131,7 +99,8 @@ export function othersCreateEntriesIn(
 ): boolean {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
-  return Boolean(directory.mode & 0o020);
+  // A group-writable directory whose group holds nobody but this user still shuts every other local user out.
+  return Boolean(directory.mode & 0o020) && !trust.privateGroup(directory);
 }
 
 /**
@@ -381,16 +350,6 @@ function syncDirectoryBestEffort(directory: string): void {
   }
 }
 
-/** `lstat` that treats absence as `undefined`; every other errno propagates. */
-export function lstatIfPresent(pathname: string): fs.Stats | undefined {
-  try {
-    return fs.lstatSync(pathname);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
 /**
  * Identifies a temp path produced for a particular destination.
  *
@@ -552,118 +511,6 @@ type WalkOutcome =
     }>;
 
 /**
- * Judges the ground `directory` STANDS ON and answers the PHYSICAL directory the walk arrived on, by asking
- * what a name INSIDE it would resolve to. Nothing is created: the probe name is never looked up.
- *
- * A caller that CHANGES anything below `directory` has to ask this first: `O_NOFOLLOW` guards only the LAST
- * name of an open, and the answer is the only name further levels may be built from, because a spelled path
- * is NOT the chain the kernel walks (ADR 0016).
- *
- * Trusted: `{ physical }`, no trailing separator. Untrusted: the step it could not stand on and why.
- */
-export function verifiedDirectoryAncestry(
-  directory: string,
-):
-  | Readonly<{ physical: string }>
-  | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  const ground = verifiedDirectoryGround(directory);
-  // STOPPED SHORT has no directory to vouch for here, which a caller that only reads has to be told about.
-  if (ground.ended === 'short')
-    return {
-      ancestor: ground.established,
-      exposure: ground.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
-    };
-  return ground.ended === 'arrived'
-    ? { physical: ground.physical }
-    : { ancestor: ground.ancestor, exposure: ground.exposure };
-}
-
-/**
- * What the walk answers about `directory` itself, in the three shapes it can end in: the physical directory it
- * arrived on, the names it found ABSENT below the deepest directory it judged, or the step it could not stand
- * on. {@link verifiedDirectoryAncestry} collapses the middle shape into a refusal, right for a caller that only
- * reads. A caller that CREATES has to tell them apart, because that decides whether creating is safe: `short`
- * with no `unresolvable` step behind it is the ONE case creation may proceed in, and {@link createStateLevels}
- * makes each missing name inside the judged directory so a link cannot carry the creation to its far side.
- */
-export function verifiedDirectoryGround(directory: string): DirectoryGround {
-  if (!path.isAbsolute(directory))
-    return { ended: 'refused', ancestor: directory, exposure: 'relative_destination' };
-  const spelled = withoutTrailingSeparators(directory);
-  // Windows access is an ACL, so there is no chain to walk and the shaped name is the answer.
-  if (process.platform === 'win32') return { ended: 'arrived', physical: spelled };
-  const walked = walkSpelledParent(spelled, `${spelled}/${CHAIN_PROBE_NAME}`, scriptTrust());
-  if (walked.ended === 'refused')
-    return { ended: 'refused', ancestor: walked.ancestor, exposure: walked.exposure };
-  if (walked.ended === 'arrived') return { ended: 'arrived', physical: walked.deepest };
-  return {
-    ended: 'short',
-    established: walked.deepest,
-    missing: walked.missing,
-    unresolvable: walked.unresolvable,
-  };
-}
-
-/** The three endings {@link verifiedDirectoryGround} answers with. */
-export type DirectoryGround =
-  | Readonly<{ ended: 'arrived'; physical: string }>
-  | Readonly<{
-      ended: 'short';
-      /** The deepest directory the walk judged; every name of `missing` is below it and absent. */
-      established: string;
-      missing: readonly string[];
-      /** A `..` is queued behind an absent name, so no amount of creating resolves the chain. */
-      unresolvable: boolean;
-    }>
-  | Readonly<{ ended: 'refused'; ancestor: string; exposure: ScriptAncestryExposure }>;
-
-/**
- * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the ancestry above it, and
- * answers the name every path below it has to be built from. The last component is CUT and re-attached, never
- * normalized: `alias/../state` is not `/state`, and `state/` resolves THROUGH a link at `state` (ADR 0016).
- *
- * Everything here is the HOST's: the shape is read with the host's separator and the judgment `lstat`es real
- * entries, so no platform selection is offered. On a Windows host the walk is a no-op and this answers the
- * host-shaped name.
- */
-export function verifiedDirectoryPath(
-  directory: string,
-):
-  | Readonly<{ physical: string }>
-  | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  const spelled = withoutTrailingSeparators(directory);
-  // CUT at BOTH ends by the host's rule. Slicing at `dirname`'s length spends the name's first character when
-  // its parent is a root: `/state` answered `//tate`, and every real child of a root was then refused.
-  const name = childName(spelled);
-  const parent = parentDirectoryPath(spelled);
-  // Nothing above it to walk: judging `state` would put the working directory in the chain.
-  if (parent === undefined || name === '')
-    return { ancestor: directory, exposure: 'relative_destination' };
-  const judged = verifiedDirectoryAncestry(parent);
-  if (!('physical' in judged)) return judged;
-  return { physical: childPath(judged.physical, name) };
-}
-
-/**
- * Judges ground, then creates ONLY what is missing, by the same per-level rule a script destination is created
- * by. A caller that owns a state chain asks this rather than `mkdir -p`: a recursive creation resolves the whole
- * tail as TEXT, so a link at a missing name carries the creation to its far side, where as root it creates with
- * privileges. {@link createMissingLevel} is the ONE creator here: `established` is ground already judged to be
- * this caller's to build under, `missing` the spelled tail below it. A step that cannot be stood on is refused
- * and nothing below it is created, so a refusal leaves no directory behind.
- */
-export function createStateLevels(
-  subject: string,
-  established: string,
-  missing: readonly string[],
-): void {
-  createMissingLevels(subject, established, missing, scriptTrust());
-}
-
-/** The name {@link verifiedDirectoryAncestry} asks the walk about; it is never created. */
-const CHAIN_PROBE_NAME = '.agent-device-ancestry-probe';
-
-/**
  * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the first
  * one another local user could steer. The directory it reports is where the entry gets created.
  *
@@ -745,7 +592,7 @@ function standOn(
 
 /** Owner and mode of the ENTRY one `lstat` answer describes. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
-  return { uid: Number(stats.uid), mode: Number(stats.mode) };
+  return { uid: Number(stats.uid), gid: Number(stats.gid), mode: Number(stats.mode) };
 }
 
 /**
@@ -847,6 +694,15 @@ function stepThroughLink(
 export const MAX_SCRIPT_PATH_LINK_HOPS = 30;
 
 /** One directory's identity, so a route that runs no walk on Windows can still answer with one. */
+function lstatIfPresent(pathname: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(pathname);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
 function publishDirectoryIdentity(directory: string): string | undefined {
   if (process.platform === 'win32') return 'windows';
   const stats = lstatEntry(directory);

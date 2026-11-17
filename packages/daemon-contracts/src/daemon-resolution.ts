@@ -1,12 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  expandUserHomePath,
-  resolveUserPath,
-  verifiedDirectoryGround,
-  withoutTrailingSeparators,
-} from '@agent-device/host-kit/file';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -55,50 +50,6 @@ export function resolveDaemonPaths(
     allocationsDir: path.join(baseDir, 'allocations'),
     sessionsDir: path.join(baseDir, 'sessions'),
   };
-}
-
-/**
- * Whether the setting's text and the text this module builds below it name TWO directories — the one step
- * {@link path.join} folds away while the kernel walks THROUGH it: a `..` that comes AFTER a symbolic link is
- * applied to where the link LED, while the folded text names the directory BESIDE the link. One setting then
- * names both, and every name built here is the folded one, so the daemon refuses what it picks a path for
- * rather than write on a chain a client cannot name.
- *
- * Each spelling is asked of the walk that CREATES under it (`verifiedDirectoryGround`), not of `realpath`: a
- * state directory is often spelled before it exists, and a name that is simply absent is not a second
- * directory. What the two answers have to agree on is WHERE they land — the directory the walk stood on, and
- * the names still missing below it. A plain link (`/private/tmp` behind `/tmp`, a symlinked
- * `~/.agent-device`), a `..` with no link to step back out of, text with nothing to fold, and a chain the walk
- * cannot stand on at all are all NOT a disagreement: the first two name one directory, the third has nothing
- * to compare, and the last is answered by the chain judgment itself.
- *
- * A SEPARATOR is not a step: `~/.agent-device/` names the same directory as `~/.agent-device`, so the setting's
- * text is cut of its trailing separators before it is folded and compared, and only a `..` that the walk lands
- * somewhere else for can answer true.
- */
-export function configuredStateBaseDisagrees(stateBase: string): boolean {
-  // Windows access is an ACL and the walk does not run there: it answers both texts with their own spelling.
-  if (process.platform === 'win32') return false;
-  // Nothing to fold is one directory by construction, so the common setting never reaches the filesystem.
-  const spelled = withoutTrailingSeparators(stateBase);
-  const folded = path.resolve(spelled);
-  if (folded === spelled) return false;
-  const walked = whereTheWalkLands(spelled);
-  const built = whereTheWalkLands(folded);
-  return walked !== undefined && built !== undefined && walked !== built;
-}
-
-/**
- * Where the creation walk lands for one spelling, as one comparable token; `undefined` when that walk cannot
- * answer a place — a `..` queued behind an absent name resolves nowhere, and a refusal is the chain
- * judgment's to make.
- */
-function whereTheWalkLands(directory: string): string | undefined {
-  const ground = verifiedDirectoryGround(directory);
-  if (ground.ended === 'arrived') return `at:${ground.physical}`;
-  if (ground.ended === 'short' && !ground.unresolvable)
-    return `below:${ground.established}:${ground.missing.join('/')}`;
-  return undefined;
 }
 
 function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOptions): string {

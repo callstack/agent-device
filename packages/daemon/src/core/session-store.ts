@@ -4,7 +4,6 @@ import {
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
-import { ensureDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -74,10 +73,10 @@ export class SessionStore {
    */
   readonly host: HostEnvironment;
 
-  constructor(sessionsDir: string, host: HostEnvironment, stateSpellingAgrees = true) {
+  constructor(sessionsDir: string, host: HostEnvironment) {
     this.sessionsDir = sessionsDir;
     this.host = host;
-    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd, stateSpellingAgrees);
+    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd);
   }
 
   /**
@@ -370,7 +369,8 @@ export class SessionStore {
     const session = this.resolveCurrent(ref);
     if (!session) return;
     try {
-      this.ensureSessionDir(ref.address);
+      const dir = this.resolveSessionDir(ref.address);
+      fs.mkdirSync(dir, { recursive: true });
       const tombstone: RepairSessionTombstone = {
         owner: ref.address,
         reapedAt: Date.now(),
@@ -439,9 +439,9 @@ export class SessionStore {
    */
   writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
     try {
-      const sessionDir = this.ensureSessionDir(sessionName);
+      fs.mkdirSync(this.resolveSessionDir(sessionName), { recursive: true });
       fs.writeFileSync(
-        resolveIdleSessionTombstonePath(sessionDir),
+        resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
         `${JSON.stringify(tombstone)}\n`,
       );
     } catch (error) {
@@ -515,19 +515,14 @@ export class SessionStore {
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
   // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
-  // session-lifecycle/internal/session-close.ts. A state path has ONE spelling, so the parent of
-  // `sessionsDir` IS the base its setting named (ADR 0016).
+  // session-lifecycle/internal/session-close.ts.
   resolveDaemonStateDir(): string {
     return path.dirname(this.sessionsDir);
   }
 
-  // The daemon-paths owner forces each level to 0700 (ADR 0016): under the shared-checkout umask a
-  // mode-less creation is 0775, and the script-destination rule then refuses the daemon's own
-  // recordings. The directory the CALLER named is the directory returned: a state chain is repaired
-  // in place, never under another spelling (#4584).
   ensureSessionDir(sessionName: string): string {
     const sessionDir = this.resolveSessionDir(sessionName);
-    ensureDaemonStateDir(sessionDir, this.resolveDaemonStateDir());
+    fs.mkdirSync(sessionDir, { recursive: true });
     return sessionDir;
   }
 

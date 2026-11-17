@@ -86,3 +86,68 @@ export type HostOwnershipProbe = Readonly<{
   closedDescriptors: () => readonly number[];
   descriptorFor: (target: string) => number | undefined;
 }>;
+
+/**
+ * The three account files the private-group exception reads. host-kit owns the same record in
+ * `internal/private-group.ts`; host-kit's tests may not reach test-kit and one package may not publish test
+ * support to another, so each keeps its own copy — change both together.
+ */
+const ACCOUNT_FILES = {
+  group: '/etc/group',
+  nsswitch: '/etc/nsswitch.conf',
+  passwd: '/etc/passwd',
+} as const;
+
+/**
+ * Answers `files` for the account databases, with this user's own login and a private group of one. A test
+ * that judges a group-writable directory names the host it stands on: a real `/etc/nsswitch.conf` differs
+ * between a container, a CI runner and a developer's laptop, and a test that left it alone would decide by
+ * the machine rather than by the rule. `vi.restoreAllMocks()` takes the answer away again.
+ *
+ * The same helper is written in host-kit's `internal/atomic-file-host.fixtures.ts`; host-kit's tests may not
+ * reach test-kit, and one package may not publish test support to another, so each keeps its own copy —
+ * change both together.
+ */
+export function seedPrivateGroupHost(): void {
+  seedAccountDatabase({
+    [ACCOUNT_FILES.nsswitch]: 'passwd: files systemd\ngroup: files systemd\n',
+    ...ownAccountRecords,
+  });
+}
+
+/**
+ * Answers a name service that reads membership from somewhere else, which no local file can settle. A
+ * group-writable directory keeps its refusal there, whatever its group's contents look like.
+ */
+export function seedUntrustedMembershipHost(): void {
+  seedAccountDatabase({
+    [ACCOUNT_FILES.nsswitch]: 'passwd: files ldap\ngroup: files ldap\n',
+    ...ownAccountRecords,
+  });
+}
+
+const SEEDED_ACCOUNT = 'tester';
+
+/**
+ * This user's own login and private group, spelled for the seeded databases. The rule compares the passwd
+ * record's name with the members each group line lists, so a name both files agree on proves as much as the
+ * machine's real one, and a CI account may have no readable record at all.
+ */
+const ownAccountRecords = {
+  [ACCOUNT_FILES.passwd]: `${SEEDED_ACCOUNT}:x:${String(process.getuid?.() ?? -1)}:${String(
+    process.getgid?.() ?? -1,
+  )}:${SEEDED_ACCOUNT},,,:/home/${SEEDED_ACCOUNT}:/bin/bash\n`,
+  [ACCOUNT_FILES.group]: `${SEEDED_ACCOUNT}:x:${String(process.getgid?.() ?? -1)}:\n`,
+};
+
+function seedAccountDatabase(files: Record<string, string>): void {
+  const real = fs.readFileSync;
+  const known: ReadonlySet<string> = new Set(Object.values(ACCOUNT_FILES));
+  vi.spyOn(fs, 'readFileSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    const seeded = files[String(pathname)];
+    if (seeded !== undefined) return seeded;
+    if (known.has(String(pathname)))
+      throw new Error(`ENOENT: no seeded account file ${String(pathname)}`);
+    return (real as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.readFileSync);
+}

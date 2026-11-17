@@ -124,6 +124,8 @@ export {
 export { createTestRuntimeStateHandle, type TestRuntimeStateHandle } from './runtime-state.ts';
 export {
   FOREIGN_UID,
+  seedPrivateGroupHost,
+  seedUntrustedMembershipHost,
   serveHostOwnership,
   type HostOwnershipProbe,
 } from './host-ownership.fixtures.ts';

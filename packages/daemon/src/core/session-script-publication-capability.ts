@@ -32,7 +32,6 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
  * (`packages/remote`'s `scriptDeliveryFailure` names the last two). ADR 0016 owns the list.
  */
 const SCRIPT_DELIVERY_CAUSES = [
-  'state_chain_untrusted',
   'script_ancestor_untrusted',
   'script_ancestry_replaced',
   'script_target_exists',
@@ -353,7 +352,7 @@ export function remoteScriptVersionDelivery(
  * published final version is stamped after every earlier version, so it replaces the last one.
  *
  * `writeError` is the close write's own error, when there was one. Its known reason travels as the
- * failure's `cause`: a close refused for the daemon's state chain is a different recovery than a full
+ * failure's `cause`: a close refused for the destination's ancestry is a different recovery than a full
  * disk, and the client sees which without reading prose (ADR 0016).
  */
 export function remoteCloseScript(
