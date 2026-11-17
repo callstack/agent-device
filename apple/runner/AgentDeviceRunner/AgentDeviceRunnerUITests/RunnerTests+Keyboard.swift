@@ -213,11 +213,10 @@ extension RunnerTests {
   /// is one round trip instead of one per key.
   func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus {
 #if os(iOS)
-    let snapshot = safely("KEYBOARD_STATUS_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
-    guard let snapshot, !snapshot.frame.isEmpty else {
+    guard let keyboard = readKeyboard(app: app) else {
       return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
     }
-    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: observedKeyboardKeys(in: snapshot))
+    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keyboard.keys)
 #else
     guard isKeyboardVisible(app: app) else {
       return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
@@ -524,22 +523,23 @@ extension RunnerTests {
   /// when the keyboard could not be read.
   ///
   /// The keyboard is read once. A control inside it is tapped at the centre its snapshot frame had,
-  /// relative to the keyboard, so the tap lands on the control that was judged. A control outside it,
-  /// such as an input accessory toolbar, comes from one query for every dismiss label and is tapped
-  /// through its own element.
+  /// relative to the keyboard, so the tap lands on the control that was judged. A control the snapshot
+  /// holds but that lies outside the keyboard's frame, and any control outside the keyboard such as an
+  /// input accessory toolbar, comes from one query for every dismiss label and is tapped through its
+  /// own element.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(tvOS)
     return false
 #else
-    guard visibleKeyboardFrame(app: app) != nil else {
+    guard let liveKeyboardFrame = visibleKeyboardFrame(app: app) else {
       return false
     }
     let keyboard = readKeyboard(app: app)
-    if let keyboard, let control = RunnerKeyboardStatus.dismissControl(in: keyboard) {
-      let center = CGVector(
-        dx: (control.frame.midX - keyboard.frame.minX) / keyboard.frame.width,
-        dy: (control.frame.midY - keyboard.frame.minY) / keyboard.frame.height
-      )
+    let keyboardFrame = keyboard?.frame ?? liveKeyboardFrame
+    if let keyboard,
+      let control = RunnerKeyboardStatus.dismissControl(in: keyboard),
+      let center = RunnerKeyboardStatus.normalizedCenter(of: control.frame, in: keyboard.frame)
+    {
       app.keyboards.firstMatch.coordinate(withNormalizedOffset: center).tap()
       return true
     }
@@ -551,7 +551,12 @@ extension RunnerTests {
       guard let label = labels.first(where: { $0 == button.label || $0 == button.identifier }) else {
         continue
       }
-      if RunnerKeyboardStatus.mayDismiss(label: label, frame: button.frame, keyboard: keyboard) {
+      if RunnerKeyboardStatus.mayDismiss(
+        label: label,
+        frame: button.frame,
+        keyboardFrame: keyboardFrame,
+        keys: keyboard?.keys
+      ) {
         button.tap()
         return true
       }

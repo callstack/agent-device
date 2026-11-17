@@ -133,33 +133,73 @@ extension RunnerKeyboardStatus {
   }
 
   /// Wording of the controls that only hide the keyboard. Neither can be a return key, so they stay
-  /// pressable even when the keyboard could not be read.
+  /// pressable even when the key rows could not be read.
   static let hideKeyboardLabels = ["Hide keyboard", "Dismiss keyboard"]
   static let doneLabel = "Done"
 
   /// The dismiss controls `keyboard dismiss` may press, in the order it tries them.
   static let dismissLabels = hideKeyboardLabels + [doneLabel]
 
-  /// The one decision that `keyboard dismiss` may press a control: `label` is the dismiss wording it
-  /// matched, `frame` is its frame, and `keyboard` is the snapshot read, or `nil` when the read failed.
-  ///
-  /// A hide-keyboard control is never a return key, so it is pressable on any read. A `Done` is
-  /// pressable only when it is proven to be an accessory button: wholly above the first row of
-  /// character keys and within `accessoryReach` of the keyboard. A `Done` inside the key rows may be
-  /// the return key, and with a failed read or no character key to anchor on nothing can prove
-  /// otherwise, so it is never pressed.
-  static func mayDismiss(label: String, frame: CGRect, keyboard: ObservedKeyboard?) -> Bool {
-    if hideKeyboardLabels.contains(label) { return true }
-    guard label == doneLabel, let keyboard, !frame.isEmpty,
-      let rowTop = characterKeyRowTop(in: keyboard.keys)
-    else {
-      return false
-    }
-    return frame.maxY <= rowTop && keyboard.frame.minY - frame.maxY <= accessoryReach
-  }
-
   /// How far above the keyboard an accessory toolbar's button can sit and still belong to it.
   static let accessoryReach: CGFloat = 80
+
+  /// True when `frame` belongs to the keyboard: it has a frame, it does not start below the keyboard,
+  /// and it is inside the keyboard or no more than `accessoryReach` above it. An app button with the
+  /// same wording elsewhere on screen is not the keyboard's.
+  static func isNearKeyboard(_ frame: CGRect, keyboardFrame: CGRect) -> Bool {
+    !frame.isEmpty && !keyboardFrame.isEmpty
+      && frame.minY < keyboardFrame.maxY
+      && keyboardFrame.minY - frame.maxY <= accessoryReach
+  }
+
+  /// The one decision that `keyboard dismiss` may press a control: `label` is the dismiss wording it
+  /// matched, `frame` is its frame, `keyboardFrame` is the keyboard's, and `keys` is the snapshot's
+  /// controls, or `nil` when the snapshot read failed.
+  ///
+  /// Either wording must belong to the keyboard (`isNearKeyboard`). A hide-keyboard control is never a
+  /// return key, so it is pressable on any read. A `Done` is pressable only when it is also proven to be
+  /// an accessory button: wholly above the first row of character keys. That covers a toolbar above the
+  /// keyboard and an input assistant band inside its frame. A `Done` inside the key rows may be the
+  /// return key, and with a failed read or no character key to anchor on nothing can prove otherwise,
+  /// so it is never pressed.
+  static func mayDismiss(
+    label: String,
+    frame: CGRect,
+    keyboardFrame: CGRect,
+    keys: [ObservedKeyboardKey]?
+  ) -> Bool {
+    guard isNearKeyboard(frame, keyboardFrame: keyboardFrame) else { return false }
+    if hideKeyboardLabels.contains(label) { return true }
+    guard label == doneLabel, let keys, let rowTop = characterKeyRowTop(in: keys) else {
+      return false
+    }
+    return frame.maxY <= rowTop
+  }
+
+  /// The first control in the snapshot that `keyboard dismiss` may press, in dismiss-label order.
+  static func dismissControl(in keyboard: ObservedKeyboard) -> ObservedKeyboardKey? {
+    for label in dismissLabels {
+      let match = keyboard.keys.first { key in
+        (key.text == label || key.identifier == label)
+          && mayDismiss(label: label, frame: key.frame, keyboardFrame: keyboard.frame, keys: keyboard.keys)
+      }
+      if let match { return match }
+    }
+    return nil
+  }
+
+  /// Where `frame`'s centre falls in `keyboardFrame`, as the normalized offset a coordinate on the
+  /// keyboard element takes, or `nil` when the frame is not wholly inside the keyboard. A control
+  /// outside the keyboard, such as a toolbar above it, would need an offset outside 0...1, which taps
+  /// whatever lies there through the keyboard's coordinate space, so it must be tapped through its own
+  /// element instead.
+  static func normalizedCenter(of frame: CGRect, in keyboardFrame: CGRect) -> CGVector? {
+    guard !frame.isEmpty, !keyboardFrame.isEmpty, keyboardFrame.contains(frame) else { return nil }
+    return CGVector(
+      dx: (frame.midX - keyboardFrame.minX) / keyboardFrame.width,
+      dy: (frame.midY - keyboardFrame.minY) / keyboardFrame.height
+    )
+  }
 
   /// The first control in the snapshot that `keyboard dismiss` may press, in dismiss-label order.
   static func dismissControl(in keyboard: ObservedKeyboard) -> ObservedKeyboardKey? {

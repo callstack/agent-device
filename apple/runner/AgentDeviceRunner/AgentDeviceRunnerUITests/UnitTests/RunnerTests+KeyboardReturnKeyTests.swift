@@ -217,6 +217,17 @@ extension RunnerTests {
     )
   }
 
+  /// The dismiss decision for a control against a keyboard read, or against the keyboard's live frame
+  /// alone (`keyboard: nil`) when the snapshot read failed.
+  private func dismissAllowed(label: String, frame: CGRect, keyboard: RunnerKeyboardStatus.ObservedKeyboard?) -> Bool {
+    RunnerKeyboardStatus.mayDismiss(
+      label: label,
+      frame: frame,
+      keyboardFrame: keyboard?.frame ?? CGRect(x: 0, y: 609, width: 440, height: 240),
+      keys: keyboard?.keys
+    )
+  }
+
   /// A keyboard read for the dismiss decision: the frame and the controls of one snapshot.
   private func observedKeyboardFixture(
     _ entries: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
@@ -243,7 +254,7 @@ extension RunnerTests {
     ], identifiers: ["done": "Done"])
     XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: phone))
     XCTAssertFalse(
-      RunnerKeyboardStatus.mayDismiss(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: phone)
+      dismissAllowed(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: phone)
     )
 
     let pad = observedKeyboardFixture([
@@ -260,23 +271,81 @@ extension RunnerTests {
     XCTAssertEqual(pressed?.frame.minY, 524)
   }
 
+  /// A `Done` inside the keyboard's frame but above the key rows, such as an input assistant band
+  /// merged into the keyboard element, is an accessory button and is pressable; one that overlaps the
+  /// key rows is refused. A hide-keyboard key just below the keyboard's top edge is pressable wherever
+  /// it sits. Only a control wholly inside the keyboard is tapped through the keyboard's coordinate: a
+  /// toolbar above it has no valid offset there and is tapped through its own element.
+  func testKeyboardDismissAdmitsAnAccessoryDoneInsideTheKeyboardFrameAboveTheKeyRows() {
+    let keyboard = observedKeyboardFixture([
+      ("Done", 330, 612, 63), ("Q", 5, 666, 41), ("space", 108, 784, 207),
+      ("Hide keyboard", 380, 612, 50),
+    ])
+    let band = CGRect(x: 330, y: 612, width: 63, height: 40)
+    XCTAssertTrue(dismissAllowed(label: "Done", frame: band, keyboard: keyboard))
+    XCTAssertFalse(
+      dismissAllowed(
+        label: "Done",
+        frame: CGRect(x: 330, y: 640, width: 63, height: 54),
+        keyboard: keyboard
+      )
+    )
+    XCTAssertTrue(
+      dismissAllowed(
+        label: "Hide keyboard",
+        frame: CGRect(x: 380, y: 612, width: 50, height: 54),
+        keyboard: keyboard
+      )
+    )
+  }
+
+  /// A control is tapped through the keyboard's coordinate only when its frame lies inside the
+  /// keyboard, so the normalized offset stays within 0...1. A toolbar above the keyboard, or one that
+  /// only overlaps its edge, has no such offset.
+  func testKeyboardDismissTapsThroughTheKeyboardCoordinateOnlyInsideItsFrame() {
+    let keyboardFrame = CGRect(x: 0, y: 609, width: 440, height: 240)
+    let inside = RunnerKeyboardStatus.normalizedCenter(
+      of: CGRect(x: 380, y: 789, width: 50, height: 50),
+      in: keyboardFrame
+    )
+    XCTAssertEqual(inside?.dx ?? -1, (405 - 0) / 440, accuracy: 0.0001)
+    XCTAssertEqual(inside?.dy ?? -1, (814 - 609) / 240, accuracy: 0.0001)
+    XCTAssertNil(
+      RunnerKeyboardStatus.normalizedCenter(of: CGRect(x: 330, y: 524, width: 63, height: 54), in: keyboardFrame)
+    )
+    XCTAssertNil(
+      RunnerKeyboardStatus.normalizedCenter(of: CGRect(x: 330, y: 590, width: 63, height: 54), in: keyboardFrame)
+    )
+    XCTAssertNil(RunnerKeyboardStatus.normalizedCenter(of: .zero, in: keyboardFrame))
+  }
+
+  private func anchoredFixtureForReach() -> RunnerKeyboardStatus.ObservedKeyboard {
+    observedKeyboardFixture([("Q", 5, 616, 41)])
+  }
+
   /// Dismiss fails closed. With the keyboard unread, or read with no character key to place a `Done`
   /// against, or with a toolbar button too far above the keyboard to belong to it, only a hide-keyboard
   /// control may be pressed and no `Done` is: any of them might be the return key.
   func testKeyboardDismissFailsClosedWhenTheReturnKeyCannotBeTold() {
     let doneFrame = CGRect(x: 330, y: 524, width: 63, height: 54)
-    XCTAssertFalse(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: nil))
-    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Hide keyboard", frame: .zero, keyboard: nil))
-    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Dismiss keyboard", frame: .zero, keyboard: nil))
+    XCTAssertFalse(dismissAllowed(label: "Done", frame: doneFrame, keyboard: nil))
+    let hideFrame = CGRect(x: 380, y: 789, width: 50, height: 50)
+    XCTAssertTrue(dismissAllowed(label: "Hide keyboard", frame: hideFrame, keyboard: nil))
+    XCTAssertTrue(dismissAllowed(label: "Dismiss keyboard", frame: hideFrame, keyboard: nil))
+    // An app button with a hide wording far from the keyboard is not the keyboard's, on any read.
+    let farAway = CGRect(x: 20, y: 100, width: 80, height: 40)
+    XCTAssertFalse(dismissAllowed(label: "Hide keyboard", frame: farAway, keyboard: nil))
+    XCTAssertFalse(dismissAllowed(label: "Dismiss keyboard", frame: farAway, keyboard: anchoredFixtureForReach()))
+    XCTAssertFalse(dismissAllowed(label: "Hide keyboard", frame: CGRect(x: 20, y: 900, width: 80, height: 40), keyboard: nil))
 
     let unanchored = observedKeyboardFixture([("Done", 330, 524, 63), ("space", 108, 784, 207), ("done", 314, 784, 103)])
     XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: unanchored))
-    XCTAssertFalse(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: unanchored))
+    XCTAssertFalse(dismissAllowed(label: "Done", frame: doneFrame, keyboard: unanchored))
 
     let anchored = observedKeyboardFixture([("Q", 5, 616, 41)])
-    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: anchored))
+    XCTAssertTrue(dismissAllowed(label: "Done", frame: doneFrame, keyboard: anchored))
     XCTAssertFalse(
-      RunnerKeyboardStatus.mayDismiss(label: "Done", frame: CGRect(x: 330, y: 300, width: 63, height: 54), keyboard: anchored)
+      dismissAllowed(label: "Done", frame: CGRect(x: 330, y: 300, width: 63, height: 54), keyboard: anchored)
     )
   }
 
