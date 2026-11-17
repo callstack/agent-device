@@ -335,10 +335,17 @@ extension RunnerTests {
   static func privateAXRootViewport(rootFrame: CGRect, fullScreenFrame: CGRect) -> SnapshotViewport {
     // CONSERVATIVE: orientation is unknown here, so a landscape root (the portrait screen with width
     // and height swapped) stays `.derived` rather than guess which way to rotate it.
-    guard !fullScreenFrame.isNull, rootFrame.origin == .zero, rootFrame == fullScreenFrame else {
+    guard Self.isFullScreenAtOrigin(rootFrame, fullScreenFrame: fullScreenFrame) else {
       return .derived(box: rootFrame)
     }
     return .reported(box: rootFrame, interfaceOrientation: RunnerInterfaceOrientation.unknown)
+  }
+
+  /// True when `frame` is exactly the screen AXRuntime reports the app filling, at the origin: the one
+  /// case where window space is screen space without a live XCTest read. `fullScreenFrame` is `.null`
+  /// when the app does not fill the screen.
+  static func isFullScreenAtOrigin(_ frame: CGRect, fullScreenFrame: CGRect) -> Bool {
+    !fullScreenFrame.isNull && frame.origin == .zero && frame == fullScreenFrame
   }
 
   func privateAXRect(_ value: Any?) -> CGRect {

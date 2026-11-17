@@ -180,7 +180,11 @@ extension RunnerTests {
         app.terminate()
       }
       XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
-      try XCTSkipIf(Self.fullScreenFrame(of: app).isNull, "the fixture app does not fill this device's screen")
+      let appWindows = app.windows.allElementsBoundByIndex.filter(\.exists).map(\.frame)
+      try XCTSkipIf(
+        Self.fullScreenWindowFrame(windowFrames: appWindows, fullScreenFrame: Self.fullScreenFrame(of: app)) == nil,
+        "the fixture app's window is not the full screen at the origin on this device"
+      )
       let hint = CaptureHint(
         projection: .regular,
         depth: nil,
@@ -209,7 +213,10 @@ extension RunnerTests {
 
       let window = try XCTUnwrap(context.rootSnapshot.children.first { $0.elementType == .window })
       XCTAssertEqual(RunnerWindowFrameReads.recorded(), 0)
-      XCTAssertEqual(context.viewport.rect, window.frame)
+      XCTAssertEqual(
+        context.viewport,
+        .reported(box: window.frame, interfaceOrientation: capturedInterfaceOrientation(app: app))
+      )
     }
   }
 #endif

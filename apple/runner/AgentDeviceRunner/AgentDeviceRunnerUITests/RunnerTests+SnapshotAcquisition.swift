@@ -158,10 +158,8 @@ extension RunnerTests {
   /// is the portrait screen with width and height swapped.
   static func fullScreenWindowFrame(windowFrames: [CGRect], fullScreenFrame: CGRect) -> CGRect? {
     guard
-      !fullScreenFrame.isNull,
       let window = windowFrames.first(where: { !$0.isEmpty }),
-      window.origin == .zero,
-      window == fullScreenFrame
+      Self.isFullScreenAtOrigin(window, fullScreenFrame: fullScreenFrame)
     else {
       return nil
     }
