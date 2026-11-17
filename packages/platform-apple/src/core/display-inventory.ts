@@ -100,12 +100,27 @@ const DISPLAYS_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not report 'devicectl device info displays'. Update Xcode to a version that ships the display-information feature before targeting multi-display Apple devices.";
 
 /**
+ * Each device's multi-panel verdict: whether its latest resolved panel table listed more than one
+ * integrated panel. The verdict is a hardware fact, so it is kept for the daemon's lifetime; the
+ * table itself is not (see {@link queryAppleDisplayInventory}).
+ */
+const multiScreenByDevice = new Map<string, boolean>();
+
+/**
+ * Whether a resolved panel table for this device listed more than one integrated panel, or
+ * `undefined` when no table for it has resolved in this daemon.
+ */
+export function knownAppleMultiScreen(device: DeviceInfo): boolean | undefined {
+  return multiScreenByDevice.get(device.id);
+}
+
+/**
  * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
  * simulator in a scoped device set or a caller that explicitly requests the guest table.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
- * the dark panel. The probe costs ~0.2s against a ~5s simulator screenshot.
+ * the dark panel. Only the multi-panel verdict it resolves is kept ({@link knownAppleMultiScreen}).
  *
  * A failure to ask is reported as an unresolved inventory instead of an error:
  * every caller has a correct pre-inventory path, and a missing host feature must
@@ -123,7 +138,9 @@ export async function queryAppleDisplayInventory(
     emitUnresolvedDiagnostic(device, table.reason, table.detail);
     return unresolvedInventory();
   }
-  return inventoryFromPanelTable(device, table.payload);
+  const inventory = inventoryFromPanelTable(device, table.payload);
+  if (!inventory.unresolved) multiScreenByDevice.set(device.id, inventory.multiScreen);
+  return inventory;
 }
 
 type PanelTableRead =
@@ -145,7 +162,8 @@ async function readCoreDevicePanelTable(
     return { ok: false, reason: outcome.reason, detail: outcome.result.stderr.trim() };
   } catch (error) {
     // exec classifies its own kills, so a probe that never answered is told apart
-    // from a toolchain that refused the subcommand.
+    // from a toolchain that refused the subcommand, and a caller that stopped the read is named.
+    if (options.signal?.aborted) return probeFailure(error, 'probe-canceled');
     return probeFailure(error, isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed');
   }
 }
@@ -222,7 +240,8 @@ function countIntegratedEntries(payload: unknown): number {
 
 function emitUnresolvedDiagnostic(device: DeviceInfo, reason: string, detail: string): void {
   emitDiagnostic({
-    level: 'warn',
+    // A read its caller stopped, such as a rotation read past its grace, is expected under load.
+    level: reason === 'probe-canceled' ? 'info' : 'warn',
     phase: 'apple_display_inventory_unresolved',
     data: {
       platform: device.platform,

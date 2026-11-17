@@ -54,6 +54,10 @@
       "types": "./src/capture-admission/audio-probe-session-resource.ts",
       "default": "./src/capture-admission/audio-probe-session-resource.ts"
     },
+    "./capture-fact-grace": {
+      "types": "./src/capture-fact-grace.ts",
+      "default": "./src/capture-fact-grace.ts"
+    },
     "./durable-capture": {
       "types": "./src/durable-capture/index.ts",
       "default": "./src/durable-capture/index.ts"

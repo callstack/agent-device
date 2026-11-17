@@ -11,6 +11,7 @@ import {
 } from '../core/config.ts';
 import {
   establishedLitPanel,
+  knownAppleMultiScreen,
   panelContentRotation,
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
@@ -26,9 +27,6 @@ const UPSIDE_DOWN_UNSUPPORTED_HINT =
 const ORIENTATION_UNVERIFIED_HINT =
   'The lit panel did not show the requested orientation, or the simulator never reported a single lit panel; the app in front may not support that orientation. Take a screenshot to see the screen, then retry.';
 
-/** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
-const multiPanelByDevice = new Map<string, boolean>();
-
 // A device whose panel count was never read routes as single-panel. A full-budget read that failed
 // for it is not repeated for a few seconds, because every surface command would pay it again.
 const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
@@ -37,12 +35,9 @@ const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
 let panelTableReads = 0;
 const latestResolvedRead = new Map<string, number>();
 
-function recordPanelTable(
-  device: DeviceInfo,
-  inventory: AppleDisplayInventory,
-  read: number,
-): void {
-  multiPanelByDevice.set(device.id, inventory.multiScreen);
+// A resolved multi-panel verdict is a hardware fact that the panel table read keeps per daemon
+// (knownAppleMultiScreen), so each simulator is probed once.
+function recordResolvedRead(device: DeviceInfo, read: number): void {
   unansweredPanelTables.delete(device.id);
   latestResolvedRead.set(device.id, Math.max(read, latestResolvedRead.get(device.id) ?? 0));
 }
@@ -57,14 +52,14 @@ export async function isAppleFoldableSimulator(
   signal: AbortSignal | undefined,
 ): Promise<boolean> {
   if (!appleFoldableFacts(device).setFoldPose.available) return false;
-  const known = multiPanelByDevice.get(device.id);
+  const known = knownAppleMultiScreen(device);
   if (known !== undefined) return known;
   const read = ++panelTableReads;
   const inventory = await queryAppleDisplayInventory(device, {
     signal,
   });
   if (inventory.unresolved) return false;
-  recordPanelTable(device, inventory, read);
+  recordResolvedRead(device, read);
   return inventory.multiScreen;
 }
 
@@ -84,7 +79,7 @@ export async function readFoldablePanelTable(
   options: { signal?: AbortSignal; timeoutMs: number },
 ): Promise<FoldablePanelTableRead> {
   if (!appleFoldableFacts(device).setFoldPose.available) return { kind: 'single-panel' };
-  const known = multiPanelByDevice.get(device.id);
+  const known = knownAppleMultiScreen(device);
   if (known === false) return { kind: 'single-panel' };
   if (known === undefined && unansweredPanelTables.get(device.id)) return { kind: 'single-panel' };
   const read = ++panelTableReads;
@@ -98,7 +93,7 @@ export async function readFoldablePanelTable(
     }
     return { kind: 'single-panel' };
   }
-  recordPanelTable(device, inventory, read);
+  recordResolvedRead(device, read);
   return inventory.multiScreen ? { kind: 'multi-panel', inventory } : { kind: 'single-panel' };
 }
 

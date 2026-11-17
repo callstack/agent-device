@@ -38,6 +38,7 @@ import {
   establishedLitPanel,
   buildInventory,
   parseCoreDeviceDisplays,
+  knownAppleMultiScreen,
   readPanelPower,
   resolveAppleCaptureDisplay,
   queryAppleDisplayInventory,
@@ -567,6 +568,84 @@ describe('resolveAppleCaptureTarget', () => {
   });
 });
 
+describe('knownAppleMultiScreen', () => {
+  beforeEach(() => {
+    mockRunXcrun.mockClear();
+    mockEmitDiagnostic.mockClear();
+    mockReadHostTextFile.mockReset();
+    mockReadHostTextFile.mockResolvedValue('');
+  });
+
+  test('keeps the panel count of the latest resolved table, not of an unresolved one', async () => {
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-panel-count` };
+    assert.equal(knownAppleMultiScreen(device), undefined);
+
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_17_SINGLE_PANEL));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockRunXcrun.mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'The specified device was not found',
+    } as Awaited<ReturnType<typeof runXcrun>>);
+    assert.equal((await queryAppleDisplayInventory(device, {})).unresolved, true);
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_DUO_CLOSED));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), true);
+  });
+
+  test('a refused multi-panel table still records the multi-panel verdict', async () => {
+    // A single-panel capture's read beside it relies on this to send the next capture through the
+    // table read, even when the table names no panel to capture.
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-unidentified` };
+    mockReadHostTextFile.mockResolvedValueOnce(JSON.stringify(IPHONE_17_SINGLE_PANEL));
+    await queryAppleDisplayInventory(device, {});
+    assert.equal(knownAppleMultiScreen(device), false);
+
+    mockReadHostTextFile.mockResolvedValueOnce(
+      JSON.stringify({
+        result: {
+          displays: IPHONE_DUO_CLOSED.result.displays.map((entry) => ({
+            ...entry,
+            primary: false,
+            backlightState: 'activeOn',
+          })),
+        },
+      }),
+    );
+    await assert.rejects(
+      resolveAppleCaptureTarget(device),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'capture-panel-unidentified',
+    );
+    assert.equal(knownAppleMultiScreen(device), true);
+  });
+
+  test('a read its caller aborted reports the cancellation, not a toolchain failure', async () => {
+    // The fold hint points at this diagnostic, so a CoreDevice read its caller aborted must still
+    // fire it and say why. A guest read rethrows the cancellation instead and reaches no hint.
+    const device = { ...IOS_TEST_SIMULATOR, id: `${IOS_TEST_SIMULATOR.id}-aborted-read` };
+    const controller = new AbortController();
+    mockRunXcrun.mockImplementationOnce(async () => {
+      controller.abort();
+      throw new Error('aborted');
+    });
+    const inventory = await queryAppleDisplayInventory(device, { signal: controller.signal });
+    assert.equal(inventory.unresolved, true);
+    const unresolved = mockEmitDiagnostic.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.phase === 'apple_display_inventory_unresolved');
+    assert.equal(unresolved.length, 1);
+    assert.equal(unresolved[0]?.data?.reason, 'probe-canceled');
+    assert.equal(unresolved[0]?.level, 'info', 'a canceled read is expected, not a warning');
+    assert.equal(unresolved[0]?.data?.hint, undefined);
+    assert.equal(knownAppleMultiScreen(device), undefined);
+  });
+});
+
 describe('appleSimulatorDisplayArgvFragment', () => {
   test('names the panel for capture commands that share the same implicit default', () => {
     assert.deepEqual(appleSimulatorDisplayArgvFragment(outerPanel), ['--display=LCD']);
@@ -621,6 +700,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: litPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
@@ -653,6 +733,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
@@ -680,6 +761,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
+        isKnownSinglePanel: () => false,
         resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {},
         normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {

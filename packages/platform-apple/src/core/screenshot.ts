@@ -17,12 +17,15 @@ import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
+import { resolvedWithinGrace } from '@agent-device/capture-kit/capture-fact-grace';
 import { computeDensityScaledScreenshotSize } from '@agent-device/capture-kit/screenshot-density';
 import {
   IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_BASE_DELAY_MS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_ATTEMPTS,
   IOS_SIMULATOR_SCREENSHOT_RETRY_MAX_DELAY_MS,
+  IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
+  IOS_SIMULATOR_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_STATE_PROBE_TIMEOUT_MS,
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
@@ -38,6 +41,7 @@ import {
 } from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
+  knownAppleMultiScreen,
   resolveAppleCaptureTarget,
   type AppleCaptureTarget,
   type AppleDeviceDisplay,
@@ -70,7 +74,15 @@ type SimulatorScreenshotFlowDeps = {
     capture: () => Promise<T>,
     signal?: AbortSignal,
   ) => Promise<T>;
-  resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
+  /**
+   * Whether a resolved panel table for this device listed one integrated panel. Such a capture
+   * never names a display, so its panel table read only supplies the rotation and runs beside it.
+   */
+  isKnownSinglePanel: (device: DeviceInfo) => boolean;
+  resolveCaptureTarget: (
+    device: DeviceInfo,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
@@ -118,6 +130,7 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
   withStatusBarHeld: withSimulatorStatusBarHeld,
+  isKnownSinglePanel: (device) => knownAppleMultiScreen(device) === false,
   resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
@@ -176,10 +189,11 @@ export async function captureSimulatorScreenshotWithFallback(
   if (!options.skipIosSimulatorBootCheck) {
     await deps.ensureBooted(device);
   }
-  // A foldable lights one panel at a time, so the capture must name the panel the
-  // system is currently showing rather than accept simctl's implicit default.
-  const { display, displayRotation } = await deps.resolveCaptureTarget(device);
-  const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
+  const { display, readCaptureFacts, cancelRotationRead } = await planCaptureTarget(
+    device,
+    deps,
+    options.runnerOptions?.signal,
+  );
   const captureAndNormalize = async () => {
     await deps.captureWithRetry(device, outPath, options.screenMask, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
@@ -194,18 +208,18 @@ export async function captureSimulatorScreenshotWithFallback(
     return await observesSimulatorShutdown(device, error, options.runnerOptions?.signal);
   };
 
-  const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
+  const captureWithFallback = async (): Promise<void> => {
     if (resolveAppleToolProvider().simulatorScreenshotBackend !== 'runner') {
       try {
         await captureAndNormalize();
-        return captureFacts;
+        return;
       } catch (error) {
         let screenshotError = error;
         if (await mayRecoverSkippedBootCheck(error)) {
           await deps.ensureBooted(device);
           try {
             await captureAndNormalize();
-            return captureFacts;
+            return;
           } catch (retryError) {
             screenshotError = retryError;
           }
@@ -229,12 +243,93 @@ export async function captureSimulatorScreenshotWithFallback(
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
-    return captureFacts;
   };
 
   const holdStatusBar =
     options.normalizeStatusBar === true ? deps.withNormalizedStatusBar : deps.withStatusBarHeld;
-  return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+  try {
+    await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
+    // The rotation read is metadata, so its grace runs after the status bar is released.
+    return await readCaptureFacts();
+  } finally {
+    cancelRotationRead();
+  }
+}
+
+type CaptureTargetPlan = {
+  display: AppleDeviceDisplay | undefined;
+  /** The facts to report once the image is written and the status bar is released. */
+  readCaptureFacts: () => Promise<ScreenshotCaptureFacts>;
+  /** Stops a rotation read that runs beside the capture. */
+  cancelRotationRead: () => void;
+};
+
+/**
+ * Decides which display the capture names and how its rotation is read. A foldable's lit panel
+ * changes when it folds, so a device not known to be single-panel reads its panel table before
+ * every capture. A known single-panel capture never names a display, so its read only supplies
+ * the rotation and runs beside the capture.
+ */
+async function planCaptureTarget(
+  device: DeviceInfo,
+  deps: SimulatorScreenshotFlowDeps,
+  signal: AbortSignal | undefined,
+): Promise<CaptureTargetPlan> {
+  if (!deps.isKnownSinglePanel(device)) {
+    const { display, displayRotation } = await deps.resolveCaptureTarget(device);
+    const facts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
+    return { display, readCaptureFacts: async () => facts, cancelRotationRead: () => {} };
+  }
+  const probeController = new AbortController();
+  const rotation = deps
+    .resolveCaptureTarget(device, {
+      timeoutMs: IOS_SIMULATOR_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
+      signal: signal ? AbortSignal.any([signal, probeController.signal]) : probeController.signal,
+    })
+    .then(
+      (target) => {
+        if (target.display) emitSinglePanelCountStaleDiagnostic(device, target.display.name);
+        return target.displayRotation;
+      },
+      (error: unknown) => {
+        // A multi-panel table that names no panel refuses; this capture still went out unnamed.
+        if (error instanceof AppError && error.details?.reason === 'capture-panel-unidentified') {
+          emitSinglePanelCountStaleDiagnostic(device, undefined);
+        }
+        return undefined;
+      },
+    );
+  return {
+    display: undefined,
+    readCaptureFacts: async () => {
+      try {
+        const displayRotation = await resolvedWithinGrace(
+          rotation,
+          IOS_SIMULATOR_SCREENSHOT_ROTATION_GRACE_MS,
+        );
+        return displayRotation ? { displayRotation } : {};
+      } finally {
+        probeController.abort();
+      }
+    },
+    cancelRotationRead: () => probeController.abort(),
+  };
+}
+
+/**
+ * The read resolved a multi-panel table, so this capture went out without the display it needed.
+ * That read already recorded the multi-panel verdict, so the next capture reads the table first.
+ */
+function emitSinglePanelCountStaleDiagnostic(device: DeviceInfo, display: string | undefined) {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'apple_display_single_panel_count_stale',
+    data: {
+      deviceId: device.id,
+      ...(display ? { display } : {}),
+      hint: 'The device was known to have one panel, but its panel table now lists several, so this capture named no panel and may show a dark one. Retake the screenshot; the next capture reads the panel table first.',
+    },
+  });
 }
 
 export async function captureSimulatorScreenshotWithRetry(
