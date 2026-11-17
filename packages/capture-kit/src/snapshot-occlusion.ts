@@ -8,7 +8,8 @@ import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   isScrollableNodeLike,
-  normalizeType,
+  isSnapshotBarNode,
+  snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 
@@ -25,7 +26,6 @@ const OVERLAY_KIND_FRAGMENTS = [
   'popover',
   'menu',
 ];
-const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
 const FLOATING_BAR_CONTAINER_ROLE = '_UIFloatingBarContainerView';
 /**
  * How far below the viewport top a full-viewport chrome container may start, before the 0.5pt rect
@@ -380,7 +380,7 @@ function isSiblingSizedChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (!isSnapshotBarNode(node)) return false;
   if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
@@ -539,7 +539,7 @@ function isNavigationBarAround(bar: RawSnapshotNode, rect: Rect): boolean {
 /** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
 function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
   const isHostedRegion =
-    nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS) ||
+    isSnapshotBarNode(node) ||
     (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
@@ -549,7 +549,7 @@ function isFullViewportChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (!isSnapshotBarNode(node)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
 
@@ -663,24 +663,6 @@ function isRenderableAdditionalOverlayNode(
 
 function isSemanticTouchNode(node: RawSnapshotNode): boolean {
   return nodeKindIncludesAny(node, SEMANTIC_TOUCH_KIND_FRAGMENTS);
-}
-
-function nodeKindIncludesAny(
-  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
-  fragments: readonly string[],
-): boolean {
-  const normalized = normalizeNodeKind(node);
-  return fragments.some((fragment) => normalized.includes(fragment));
-}
-
-// Mutation-lane note: the `?? ''` fallback's exact replacement text is not
-// observable through this module's public API — every caller only checks
-// substring membership against a fixed, known fragment list, and no
-// plausible filler text coincides with any of them, so no test can
-// distinguish `''` from another non-matching filler here without reaching
-// into this private function directly.
-function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
-  return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
 }
 
 function areRelatedSnapshotNodes(

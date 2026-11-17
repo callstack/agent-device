@@ -14,6 +14,33 @@ export function normalizeType(type: string): string {
   return normalized;
 }
 
+const SNAPSHOT_BAR_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+
+/** Reads bar identity from the captured type, role, and subrole. */
+export function isSnapshotBarNode(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): boolean {
+  return snapshotNodeKindIncludesAny(node, SNAPSHOT_BAR_KIND_FRAGMENTS);
+}
+
+export function snapshotNodeKindIncludesAny(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+  fragments: readonly string[],
+): boolean {
+  const normalized = normalizeNodeKind(node);
+  return fragments.some((fragment) => normalized.includes(fragment));
+}
+
+// Mutation-lane note: the `?? ''` fallback's exact replacement text is not
+// observable through this module's public API — every caller only checks
+// substring membership against a fixed, known fragment list, and no
+// plausible filler text coincides with any of them, so no test can
+// distinguish `''` from another non-matching filler here without reaching
+// into this private function directly.
+function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
+  return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
+}
+
 export function isFillableType(type: string, platform: Platform | PublicPlatform): boolean {
   const normalized = normalizeType(type);
   if (!normalized) return true;

@@ -465,3 +465,22 @@ test.each(['NavigationBar', 'Toolbar', 'TabBar', 'BottomNavigationView'])(
     }
   },
 );
+
+test.each([{ role: 'UITabBar' }, { subrole: 'UIToolbar' }, { subrole: 'AXToolbar' }])(
+  'recognizes a direct bar item through its parent class %j',
+  (barClass) => {
+    const item = node(1, {
+      parentIndex: 0,
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 36, height: 36 },
+    });
+    const parent = node(0, { type: 'Other', hittable: false, ...barClass });
+    expect(audit([parent, item]).findings).toEqual([]);
+    expect(summarize(audit([parent, { ...item, label: undefined }]).findings)).toEqual([
+      'missing-name @e1',
+    ]);
+    expect(
+      summarize(audit([{ ...parent, role: 'UIView', subrole: undefined }, item]).findings),
+    ).toEqual(['small-target @e1']);
+  },
+);
