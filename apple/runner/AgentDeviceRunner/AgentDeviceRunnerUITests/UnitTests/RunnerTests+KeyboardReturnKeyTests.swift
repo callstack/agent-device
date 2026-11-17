@@ -266,6 +266,27 @@ extension RunnerTests {
     }
   }
 
+#if os(iOS)
+  /// One snapshot of the keyboard answers the whole read, so the walk has to reach keys nested below
+  /// the keyboard's own children, answer keys before buttons the way two per-type queries did, keep the
+  /// whitespace-only space bar, and drop what carries no wording or is not a key or a button.
+  @MainActor
+  func testObservedKeyboardKeysReadsKeysThenButtonsFromOneKeyboardSnapshot() {
+    let frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+    let keyboard = ElementAttributesFixture(.keyboard, frame, children: [
+      ElementAttributesFixture(.other, frame, children: [
+        ElementAttributesFixture(.key, frame, label: "q"),
+        ElementAttributesFixture(.button, frame, label: "shift"),
+        ElementAttributesFixture(.key, frame, label: ""),
+      ]),
+      ElementAttributesFixture(.key, frame, label: " "),
+      ElementAttributesFixture(.staticText, frame, label: "ignored"),
+      ElementAttributesFixture(.button, frame, label: "Next:"),
+    ])
+    XCTAssertEqual(observedKeyboardKeys(in: keyboard).map(\.text), ["q", " ", "shift", "Next:"])
+  }
+#endif
+
   /// Builds a keyboard's observed controls from the frames this read measured; a zero width is an
   /// element with no usable frame, such as the padding entries a keyboard exposes.
   private func observedKeyboardKeysFixture(
