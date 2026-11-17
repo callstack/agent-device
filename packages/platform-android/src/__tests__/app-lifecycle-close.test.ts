@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import './test-utils/android-host-test-setup.ts';
 
@@ -215,6 +215,17 @@ test.each([
                 phase,
                 packageName: 'com.example.app',
                 timeoutMs,
+                ...(phase === 'foreground'
+                  ? {
+                      initialProcessCount: 1,
+                      foregroundObservations: [1750, 1800, 1850, 1900, 1950].map((ms) => ({
+                        startMs: ms,
+                        endMs: ms,
+                        remainingMs: 2000 - ms,
+                        result: 'target',
+                      })),
+                    }
+                  : {}),
               });
               return true;
             },
@@ -264,12 +275,12 @@ test.each([
             : assert.rejects(close, (error: unknown) => {
                 assert.ok(error instanceof AppError);
                 assert.equal(error.code, 'COMMAND_FAILED');
-                assert.deepEqual(error.details, {
-                  reason: 'android-app-close-timeout',
-                  phase: 'foreground',
-                  packageName: 'com.example.app',
-                  timeoutMs: 2_000,
-                });
+                assert.equal(error.details?.reason, 'android-app-close-timeout');
+                assert.equal(error.details?.phase, 'foreground');
+                assert.equal(error.details?.timeoutMs, 2_000);
+                assert.deepEqual(normalizeError(error).details?.foregroundObservations, [
+                  { startMs: 0, endMs: completionMs, remainingMs: 0, result: 'other' },
+                ]);
                 return true;
               });
           await Promise.all([result, vi.runAllTimersAsync()]);
@@ -552,4 +563,71 @@ test('closeAndroidApp reports an unanswered pidof after force-stop instead of an
     },
   );
   assert.equal(pidofCalls, 2);
+});
+
+test('foreground probe failure retains bounded history in request diagnostics and rethrows the original error', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const { withDiagnosticsScope, flushDiagnosticsToSessionFile } =
+    await import('@agent-device/host-kit/diagnostics');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { mkdtempForTestSync } = await import('@agent-device/test-kit');
+  const logPath = path.join(mkdtempForTestSync('foreground-fence'), 'request.ndjson');
+  const cause = new Error('underlying failure');
+  const failure = new AppError('COMMAND_FAILED', 'probe failed', { reason: 'probe-failed' }, cause);
+  let probes = 0;
+  try {
+    await withDiagnosticsScope({ logPath }, async () => {
+      await withAndroidAdbProvider(
+        {
+          exec: async (args) => {
+            if (args[1] === 'dumpsys' && ++probes === 7) throw failure;
+            return {
+              stdout:
+                args[1] === 'dumpsys'
+                  ? 'mCurrentFocus=Window{42 u0 com.example.app/.Main}\n'
+                  : '123\n',
+              stderr: '',
+              exitCode: 0,
+            };
+          },
+        },
+        { serial: ANDROID_EMULATOR.id },
+        async () => {
+          const rejected = assert.rejects(
+            closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+            (error: unknown) => {
+              assert.equal(error, failure);
+              assert.equal(failure.cause, cause);
+              assert.equal(failure.details?.reason, 'probe-failed');
+              return true;
+            },
+          );
+          await Promise.all([rejected, vi.runAllTimersAsync()]);
+        },
+      );
+      flushDiagnosticsToSessionFile({ force: true });
+    });
+    const events = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const event = events.find((item) => item.phase === 'android_close_foreground_fence');
+    assert.deepEqual(event.data, {
+      initialProcessCount: 1,
+      observations: [
+        ...[100, 150, 200, 250].map((ms) => ({
+          startMs: ms,
+          endMs: ms,
+          remainingMs: 2000 - ms,
+          result: 'target',
+        })),
+        { startMs: 300, endMs: 300, remainingMs: 1700, result: 'error' },
+      ],
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
