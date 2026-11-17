@@ -31,15 +31,16 @@ export type PreviousLeaseReleaseNotice = {
 
 export function buildLeasePreparationNotice(
   state: RemoteConnectionState,
-  verification?: ConnectVerification,
+  verification: ConnectVerification | undefined,
+  env: NodeJS.ProcessEnv,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
+      nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
       message:
         'No live device session has been created. Run devices to inspect inventory without allocating, then open when ready.',
     };
@@ -47,7 +48,7 @@ export function buildLeasePreparationNotice(
   if (capabilities.supportsDeferredAppSelection) {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
+      nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
       message:
         'No live device session has been created. Run apps to inspect uploaded assets without allocating; open <uploaded-asset-name> creates the instance.',
     };
@@ -55,7 +56,7 @@ export function buildLeasePreparationNotice(
   if (leaseKind === 'direct-device-provider') {
     return {
       status: 'deferred',
-      nextSteps: buildConnectWorkflow(state, verification).nextSteps,
+      nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
       message:
         'No live device session has been created. The first device command shown below will allocate one.',
     };
@@ -81,13 +82,14 @@ export function buildLeasePreparationNotice(
 export function presentConnectReadiness(
   state: RemoteConnectionState,
   verification: ConnectVerification,
+  env: NodeJS.ProcessEnv,
 ): ConnectReadiness {
   return {
     ...verification,
     preparationMessage:
-      buildLeasePreparationNotice(state, verification)?.message ??
+      buildLeasePreparationNotice(state, verification, env)?.message ??
       'No live device session has been created.',
-    ...buildConnectWorkflow(state, verification),
+    ...buildConnectWorkflow(state, verification, env),
   };
 }
 
@@ -96,10 +98,11 @@ export function renderConnectSuccess(options: {
   readiness?: ConnectReadiness;
   runtimePreparation?: RuntimePreparationNotice;
   previousLeaseNotice?: PreviousLeaseReleaseNotice;
+  env: NodeJS.ProcessEnv;
 }): string {
-  const { state, readiness, runtimePreparation, previousLeaseNotice } = options;
+  const { state, readiness, runtimePreparation, previousLeaseNotice, env } = options;
   if (!readiness) {
-    const leasePreparation = buildLeasePreparationNotice(state);
+    const leasePreparation = buildLeasePreparationNotice(state, undefined, env);
     return [
       `Configured remote session "${state.session}" tenant "${state.tenant}" run "${state.runId}"${state.leaseId ? ` lease ${state.leaseId}` : ''}.`,
       leasePreparation?.message,
@@ -118,7 +121,7 @@ export function renderConnectSuccess(options: {
     lines.push(`Project: ${readiness.project.name ?? readiness.project.reference} — verified`);
   }
   if (readiness.device) lines.push(renderDevice(readiness.device));
-  if (readiness.app) lines.push(renderApp(state, readiness.app));
+  if (readiness.app) lines.push(renderApp(state, readiness.app, env));
   lines.push(readiness.preparationMessage);
   lines.push('Next:');
   lines.push(...readiness.nextSteps.map((step) => `  ${step}`));
@@ -133,9 +136,10 @@ export function serializeConnectionState(options: {
   runtimePreparation?: RuntimePreparationNotice;
   readiness?: ConnectReadiness;
   previousLeaseNotice?: PreviousLeaseReleaseNotice;
+  env: NodeJS.ProcessEnv;
 }): Record<string, unknown> {
-  const { state, runtimePreparation, readiness, previousLeaseNotice } = options;
-  const leasePreparation = buildLeasePreparationNotice(state, readiness);
+  const { state, runtimePreparation, readiness, previousLeaseNotice, env } = options;
+  const leasePreparation = buildLeasePreparationNotice(state, readiness, env);
   return {
     connected: true,
     session: state.session,
@@ -212,9 +216,10 @@ function renderDevice(device: NonNullable<ConnectReadiness['device']>): string {
 function renderApp(
   state: RemoteConnectionState,
   app: NonNullable<ConnectReadiness['app']>,
+  env: NodeJS.ProcessEnv,
 ): string {
   if (app.status === 'missing') {
-    return `App: ${missingAppLabel(state)} — ${app.message ?? 'Install or attach an app before open.'}`;
+    return `App: ${missingAppLabel(state, env)} — ${app.message ?? 'Install or attach an app before open.'}`;
   }
   const label = app.name ?? app.reference ?? 'configured app';
   const suffix = app.status === 'verified' ? 'verified' : (app.message ?? 'configured');
@@ -223,17 +228,19 @@ function renderApp(
 
 function buildConnectWorkflow(
   state: RemoteConnectionState,
-  verification?: ConnectVerification,
+  verification: ConnectVerification | undefined,
+  env: NodeJS.ProcessEnv,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const workflow = buildUnscopedConnectWorkflow(state, verification);
+  const workflow = buildUnscopedConnectWorkflow(state, verification, env);
   return { ...workflow, nextSteps: scopeNextSteps(state, workflow.nextSteps) };
 }
 
 function buildUnscopedConnectWorkflow(
   state: RemoteConnectionState,
-  verification?: ConnectVerification,
+  verification: ConnectVerification | undefined,
+  env: NodeJS.ProcessEnv,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
     return {
@@ -246,7 +253,7 @@ function buildUnscopedConnectWorkflow(
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };
   }
-  if (connectionProviderCapabilities(verification?.provider).supportsDeferredAppSelection) {
+  if (connectionProviderCapabilities(verification?.provider, env).supportsDeferredAppSelection) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
     };
@@ -256,7 +263,7 @@ function buildUnscopedConnectWorkflow(
     nextSteps: requiresInstall(verification)
       ? installThenOpenWorkflow(state)
       : [...missingAttachedAppRecovery(verification), ...openWorkflow(state).nextSteps],
-    ...(supportsProviderArtifacts(verification)
+    ...(supportsProviderArtifacts(verification, env)
       ? { notes: providerArtifactNotes(state, !appMissing) }
       : {}),
   };
@@ -266,8 +273,11 @@ function requiresInstall(verification?: ConnectVerification): boolean {
   return verification?.app?.status === 'missing' && verification.device?.status === 'deferred';
 }
 
-function supportsProviderArtifacts(verification?: ConnectVerification): boolean {
-  return connectionProviderCapabilities(verification?.provider).supportsArtifacts;
+function supportsProviderArtifacts(
+  verification: ConnectVerification | undefined,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  return connectionProviderCapabilities(verification?.provider, env).supportsArtifacts;
 }
 
 function missingAttachedAppRecovery(verification?: ConnectVerification): string[] {
@@ -345,8 +355,8 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
   return platform === 'ios' ? '<bundle-id>' : '<package-id>';
 }
 
-function missingAppLabel(state: RemoteConnectionState): string {
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+function missingAppLabel(state: RemoteConnectionState, env: NodeJS.ProcessEnv): string {
+  const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   if (capabilities.requiresAppAttachment) return 'not attached';
   if (capabilities.supportsDeferredAppSelection) {
     return 'not installed yet';
