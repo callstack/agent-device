@@ -13,7 +13,7 @@ import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { getCliCommandSchema, isFlagSupportedForCommand } from '@agent-device/command-surface';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
-import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
+import { ACCEPT, SAFE_VALUES } from '@agent-device/test-kit';
 
 type CliCommandSurface = {
   name: string;
