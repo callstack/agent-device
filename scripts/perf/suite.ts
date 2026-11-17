@@ -303,8 +303,9 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('type-suffix', C.type, ['type', '.test']),
       // iOS's only Done key is the field's return key, which `keyboard dismiss` never presses, so
       // `keyboard enter` submits the field and hides the keyboard. Android emulators type through the
-      // headless test IME, which has no Done key, so `keyboard dismiss` hides it.
-      step('keyboard-hide', C.keyboard, ['keyboard', 'enter'], {
+      // headless test IME, which has no Done key, so `keyboard dismiss` hides it. The step id stays
+      // `keyboard-dismiss` because the harness keys every sample by it, and a rename drops its baseline.
+      step('keyboard-dismiss', C.keyboard, ['keyboard', 'enter'], {
         before: [['wait', 'label="Done" visible=true', '10000']],
         on: { android: { args: ['keyboard', 'dismiss'], before: [] } },
       }),
