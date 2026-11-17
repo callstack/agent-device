@@ -453,7 +453,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     iosSimulator: iosSimulator.live(
       'smoke:form-input',
-      'real keyboard dismissal reports dismissed=true and visible=false',
+      'a Done return key is refused by dismiss untapped and hidden by enter',
     ),
     macos: macos.contract(
       APPLE_NAVIGATION_FACTS_EVIDENCE.path,

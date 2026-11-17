@@ -947,6 +947,59 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     self.keyboardBusyAnswer = answer;
   }
 
+  // A field whose return key reads "Done" and submits, which `keyboard dismiss` must never press. The
+  // optional `accessory` argument adds a Done toolbar above the keys, the one control it may press.
+  NSArray<NSString *> *launchArguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger doneReturnFlag = [launchArguments indexOfObject:@"--agent-device-keyboard-done-return"];
+  if (doneReturnFlag != NSNotFound) {
+    BOOL withAccessory = doneReturnFlag + 1 < launchArguments.count &&
+        [launchArguments[doneReturnFlag + 1] isEqualToString:@"accessory"];
+    UITextField *field = [[UITextField alloc] init];
+    field.accessibilityIdentifier = @"agent-device-keyboard-done-return-input";
+    field.placeholder = @"Return key is Done";
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.returnKeyType = UIReturnKeyDone;
+    UILabel *answer = [[UILabel alloc] init];
+    answer.text = @"Unanswered";
+    answer.accessibilityIdentifier = @"agent-device-keyboard-done-return-answer";
+    answer.translatesAutoresizingMaskIntoConstraints = NO;
+    __weak UITextField *weakField = field;
+    __weak UILabel *weakAnswer = answer;
+    [field addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+            weakAnswer.text = @"Submitted";
+            [weakField resignFirstResponder];
+          }]
+        forControlEvents:UIControlEventEditingDidEndOnExit];
+    if (withAccessory) {
+      UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+      accessory.items = @[
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                                                      target:nil
+                                                      action:nil],
+        [[UIBarButtonItem alloc]
+            initWithPrimaryAction:[UIAction actionWithTitle:@"Done"
+                                                      image:nil
+                                                 identifier:nil
+                                                    handler:^(__kindof UIAction *action) {
+                                                      weakAnswer.text = @"Accessory";
+                                                      [weakField resignFirstResponder];
+                                                    }]],
+      ];
+      field.inputAccessoryView = accessory;
+    }
+    field.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:field];
+    [self.view addSubview:answer];
+    [NSLayoutConstraint activateConstraints:@[
+      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      [field.widthAnchor constraintEqualToConstant:240],
+      [field.heightAnchor constraintEqualToConstant:44],
+      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
+    ]];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {
     for (NSUInteger index = 0; index < 3; index++) {
       UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(40, 120 + index * 60, 260, 44)];

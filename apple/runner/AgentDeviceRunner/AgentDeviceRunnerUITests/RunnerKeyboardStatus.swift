@@ -91,13 +91,34 @@ extension RunnerKeyboardStatus {
     guard visible else {
       return RunnerKeyboardStatus(visible: false, returnKey: nil, returnKeyLabel: nil)
     }
-    let worded = keyboardKeys.filter { key in
+    return observed(visible: true, returnControlText: returnControl(in: keyboardKeys)?.text)
+  }
+
+  /// The one decision that a control is the visible keyboard's return key, by wording first and by
+  /// slot otherwise (see `observed(visible:keyboardKeys:)`). `keyboard status` reports it and
+  /// `keyboard dismiss` refuses to press it, so the two commands cannot disagree about which key is
+  /// the return key.
+  static func returnControl(in keys: [ObservedKeyboardKey]) -> ObservedKeyboardKey? {
+    let worded = keys.filter { key in
       !(key.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     if let named = worded.first(where: { RunnerKeyboardReturnKey.kind(of: $0.text ?? "") != .unknown }) {
-      return observed(visible: true, returnControlText: named.text)
+      return named
     }
-    return observed(visible: true, returnControlText: returnKeySlot(in: keyboardKeys)?.text)
+    return returnKeySlot(in: keys)
+  }
+
+  /// True when `frame` is the frame of the return key among `keys`. A control with no usable frame
+  /// cannot be told apart from another control, so it is never the return key here.
+  static func isReturnControl(frame: CGRect, in keys: [ObservedKeyboardKey]) -> Bool {
+    guard !frame.isEmpty, let returnControl = returnControl(in: keys), !returnControl.frame.isEmpty else {
+      return false
+    }
+    let tolerance = returnKeySlotTolerance
+    return abs(frame.minX - returnControl.frame.minX) <= tolerance
+      && abs(frame.minY - returnControl.frame.minY) <= tolerance
+      && abs(frame.maxX - returnControl.frame.maxX) <= tolerance
+      && abs(frame.maxY - returnControl.frame.maxY) <= tolerance
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

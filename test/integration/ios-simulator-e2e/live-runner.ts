@@ -345,9 +345,25 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   await assertWaitSelector(context, 'label="Done" visible=true');
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
   await capturePng(context, 'capture visible input keyboard', keyboardVisiblePath);
-  const keyboard = await runStep(context, 'dismiss input keyboard', ['keyboard', 'dismiss']);
-  assert.equal(keyboard.json?.data?.dismissed, true, JSON.stringify(keyboard.json));
-  assert.equal(keyboard.json?.data?.visible, false, JSON.stringify(keyboard.json));
+  // The email field's return key reads "Done" and submits, so `keyboard dismiss` must refuse it
+  // untapped; `keyboard enter` is the way to submit, and this field's submit hides the keyboard.
+  const refused = await runStep(
+    context,
+    'refuse to dismiss through the Done return key',
+    ['keyboard', 'dismiss'],
+    { allowFailure: true },
+  );
+  assert.equal(refused.json?.success, false, JSON.stringify(refused.json));
+  assert.equal(
+    refused.json?.error?.details?.reason,
+    'keyboard_dismiss_unavailable',
+    JSON.stringify(refused.json),
+  );
+  assert.equal(refused.json?.error?.details?.dispatched, 'no', JSON.stringify(refused.json));
+  await runStep(context, 'submit input keyboard through its return key', ['keyboard', 'enter']);
+  await runStep(context, 'let the keyboard finish hiding', ['wait', '1000']);
+  const hidden = await runStep(context, 'read keyboard after submit', ['keyboard', 'status']);
+  assert.equal(hidden.json?.data?.visible, false, JSON.stringify(hidden.json));
   const keyboardHiddenPath = path.join(context.artifactDir, 'keyboard-hidden.png');
   await capturePng(context, 'capture dismissed input keyboard', keyboardHiddenPath);
   assertFilesDiffer(
@@ -358,7 +374,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   verifyCommand(
     context,
     C.keyboard,
-    'dismiss reports dismissed=true and visible=false while before/after pixels differ',
+    'dismiss refuses a Done return key untapped, and enter hides the keyboard while before/after pixels differ',
   );
   // Pins whether `keyboard dismiss` itself clears the field, independent of the coordinate
   // refocus + type steps that follow.
@@ -413,9 +429,9 @@ async function assertFormInput(context: LiveContext): Promise<void> {
 }
 
 async function assertSnapshotBackendConformanceLive(context: LiveContext): Promise<void> {
-  await runStep(context, 'dismiss keyboard before backend conformance capture', [
+  await runStep(context, 'submit keyboard before backend conformance capture', [
     'keyboard',
-    'dismiss',
+    'enter',
   ]);
   const fixture = loadSnapshotBackendConformanceFixture();
   const createAgentDeviceClient = await loadBuiltAgentDeviceClient();

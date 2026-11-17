@@ -217,6 +217,41 @@ extension RunnerTests {
     )
   }
 
+  /// `keyboard dismiss` never presses the return key, and it asks the same decision `keyboard status`
+  /// reports: a `Done` key in the return slot is the return key, so it is excluded, while a `Done`
+  /// toolbar above the keys and the iPad hide-keyboard key are different controls and stay eligible.
+  func testKeyboardDismissExcludesTheReturnKeyAndKeepsOtherDoneControls() {
+    let phone = observedKeyboardKeysFixture([
+      ("Q", 5, 959, 39), ("Numbers", 5, 1121, 49), (" ", 103, 1121, 197), ("Done", 301, 1121, 99),
+    ])
+    let returnKeyFrame = CGRect(x: 301, y: 1121, width: 99, height: 54)
+    let accessoryDoneFrame = CGRect(x: 330, y: 1070, width: 60, height: 44)
+    XCTAssertTrue(RunnerKeyboardStatus.isReturnControl(frame: returnKeyFrame, in: phone))
+    XCTAssertFalse(RunnerKeyboardStatus.isReturnControl(frame: accessoryDoneFrame, in: phone))
+
+    let pad = observedKeyboardKeysFixture([
+      ("Tab", 6, 905, 81), ("Done", 691.5, 969, 126.5), ("Next keyboard", 6, 1096, 69),
+      (" ", 212.5, 1096, 410), ("numbers", 622.5, 1096, 97.5), ("Hide keyboard", 720, 1096, 98),
+    ])
+    XCTAssertTrue(
+      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 691.5, y: 969, width: 126.5, height: 54), in: pad)
+    )
+    XCTAssertFalse(
+      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 720, y: 1096, width: 98, height: 54), in: pad)
+    )
+  }
+
+  /// Without an identified return key, or without a usable frame to compare, nothing is excluded: a
+  /// number pad has no return key, and a control with no frame cannot be matched to the key.
+  func testKeyboardDismissExcludesNothingWhenNoReturnKeyIsIdentified() {
+    let pad = observedKeyboardKeysFixture([("1", 5, 881, 132), ("Delete", 268, 1043, 132)])
+    XCTAssertFalse(
+      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 268, y: 1043, width: 132, height: 54), in: pad)
+    )
+    let phone = observedKeyboardKeysFixture([(" ", 103, 1121, 197), ("Done", 301, 1121, 99)])
+    XCTAssertFalse(RunnerKeyboardStatus.isReturnControl(frame: .zero, in: phone))
+  }
+
   /// A visible keyboard with no return control this read can identify answers `unknown` with no label:
   /// nothing observed, only keys with no wording (a headless test IME), a space bar with nothing beside
   /// it, and wording carried only by a zero-frame padding element.

@@ -501,6 +501,10 @@ extension RunnerTests {
 #endif
   }
 
+  /// Taps the first hittable dismiss control that is not the keyboard's return key. A return key
+  /// labelled `Done` submits the focused field, so the decision `keyboard status` reports it with
+  /// (`RunnerKeyboardStatus.isReturnControl`) excludes it here. A `Done` toolbar above the keys is a
+  /// different control and stays eligible.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(tvOS)
     return false
@@ -508,27 +512,31 @@ extension RunnerTests {
     guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
       return false
     }
+    let keyboardKeys = observedKeyboardKeys(app: app)
+    func isEligible(_ element: XCUIElement) -> Bool {
+      element.exists && element.isHittable
+        && !RunnerKeyboardStatus.isReturnControl(frame: element.frame, in: keyboardKeys)
+    }
     for label in ["Hide keyboard", "Dismiss keyboard", "Done"] {
-      let candidates = [
-        app.keyboards.buttons[label],
-        app.keyboards.keys[label],
-        app.keyboards.toolbars.buttons[label],
-      ]
-      if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        hittable.tap()
-        return true
-      }
-
       let toolbarButtonPredicate = NSPredicate(
         format: "label == %@ OR identifier == %@",
         label,
         label
       )
+      let keyboardControls =
+        app.keyboards.buttons.matching(toolbarButtonPredicate).allElementsBoundByIndex
+        + app.keyboards.keys.matching(toolbarButtonPredicate).allElementsBoundByIndex
+        + app.keyboards.toolbars.buttons.matching(toolbarButtonPredicate).allElementsBoundByIndex
+      if let hittable = keyboardControls.first(where: isEligible) {
+        hittable.tap()
+        return true
+      }
+
       let toolbarButtons = app.descendants(matching: .button)
         .matching(toolbarButtonPredicate)
         .allElementsBoundByIndex
       if let hittable = toolbarButtons.first(where: {
-        $0.exists && $0.isHittable && isKeyboardAccessoryControl($0, keyboardFrame: keyboardFrame)
+        isEligible($0) && isKeyboardAccessoryControl($0, keyboardFrame: keyboardFrame)
       }) {
         hittable.tap()
         return true

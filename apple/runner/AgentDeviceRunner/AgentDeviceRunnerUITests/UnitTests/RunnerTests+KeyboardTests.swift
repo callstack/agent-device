@@ -397,6 +397,65 @@ extension RunnerTests {
     }
   }
 
+  /// A return key labelled `Done` submits the form, so `keyboard dismiss` refuses it as it refuses a
+  /// keyboard with no dismiss key: nothing is tapped, the field keeps focus, and nothing is submitted.
+  @MainActor
+  func testKeyboardDismissNeverPressesADoneReturnKey() throws {
+    try withDoneReturnField(accessory: false) { answer in
+      XCTAssertEqual(keyboardStatus(app: app).returnKey, "done")
+      let response = try execute(
+        command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-return"}"#)
+      )
+
+      XCTAssertFalse(response.ok)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.keyboardDismissUnavailable)
+      XCTAssertEqual(answer.label, "Unanswered")
+      XCTAssertTrue(isKeyboardVisible(app: app))
+    }
+  }
+
+  /// The `Done` toolbar above the keys is a real dismiss key even when the return key is also `Done`:
+  /// dismiss presses the toolbar and never submits through the return key.
+  @MainActor
+  func testKeyboardDismissPressesTheDoneToolbarNotTheDoneReturnKey() throws {
+    try withDoneReturnField(accessory: true) { answer in
+      let response = try execute(
+        command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-accessory"}"#)
+      )
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertEqual(answer.label, "Accessory")
+      XCTAssertFalse(isKeyboardVisible(app: app))
+    }
+  }
+
+  @MainActor
+  private func withDoneReturnField(accessory: Bool, _ body: (XCUIElement) throws -> Void) throws {
+    app.launchArguments = ["--agent-device-keyboard-done-return"] + (accessory ? ["accessory"] : [])
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-keyboard-done-return-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    field.tap()
+    let keyboardDeadline = Date().addingTimeInterval(5)
+    while !isKeyboardVisible(app: app) && Date() < keyboardDeadline {
+      sleepFor(0.2)
+    }
+    XCTAssertTrue(
+      isKeyboardVisible(app: app),
+      "Enable the simulator software keyboard before running the keyboard dismiss tests; see apple/runner/README.md"
+    )
+    let answer = app.staticTexts["agent-device-keyboard-done-return-answer"]
+    XCTAssertEqual(answer.label, "Unanswered")
+    try body(answer)
+  }
+
   @MainActor
   private func withBusyKeyboardField(_ body: () throws -> Void) throws {
     app.launchArguments = ["--agent-device-keyboard-busy", String(Self.keyboardBusyBackstop)]
