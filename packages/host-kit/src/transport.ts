@@ -8,6 +8,9 @@ export {
   readNodeHttpRequestBody,
   readNodeHttpResponseBody,
   timingSafeStringEqual,
+  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
+  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
+  type TransferPhaseWatchdog,
   type NodeHttpRequester,
 } from './internal/transport.ts';

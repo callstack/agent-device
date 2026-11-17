@@ -160,6 +160,9 @@ export type TransferPhaseWatchdog = {
   signal: AbortSignal;
   arm(phase: TransferPhase, timeoutMs: number): void;
   touchBody(): void;
+  /** Stops counting an idle ceiling while the holder waits on demand, keeping its armed phase. */
+  suspend(): void;
+  /** Stops observing this attempt. A suspended phase stays suspended. */
   dispose(): void;
 };
 
@@ -168,11 +171,12 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
   const signal = callerSignal ? AbortSignal.any([callerSignal, phase.signal]) : phase.signal;
   let armed: { phase: TransferPhase; timeoutMs: number } | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let suspended = false;
   const rearm = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
     const current = armed;
-    if (!current) return;
+    if (!current || suspended) return;
     timer = setTimeout(() => {
       timer = undefined;
       phase.abort(createTransferPhaseTimeoutError(current.phase, current.timeoutMs));
@@ -183,12 +187,18 @@ export function createTransferPhaseWatchdog(callerSignal?: AbortSignal): Transfe
     signal,
     arm(nextPhase, timeoutMs) {
       if (signal.aborted) return;
+      suspended = false;
       armed = { phase: nextPhase, timeoutMs };
       rearm();
     },
     touchBody() {
       if (!armed || !BODY_PHASES.has(armed.phase)) return;
       rearm();
+    },
+    suspend() {
+      suspended = true;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
     },
     dispose() {
       armed = undefined;
