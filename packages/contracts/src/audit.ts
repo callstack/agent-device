@@ -23,6 +23,9 @@ type AuditFindingBase = {
   rect?: Rect;
   /** Control role as the snapshot presents it, such as `button`. */
   role: string;
+  /** Accessible label from the captured node. */
+  label?: string;
+  identifier?: string;
 };
 
 export type AuditFinding =
@@ -50,6 +53,7 @@ export type AuditChecks = {
 
 export type AuditResult = {
   findings: AuditFinding[];
+  guidance: Partial<Record<AuditFindingKind, string>>;
   checks: AuditChecks;
   /** Checks the audit could not run or could only partly run, with the reason. */
   limitations: string[];

@@ -102,6 +102,7 @@ const RESPONSE_FIXTURES: Partial<Record<CommandName, unknown>> = {
   apps: ['com.example.app'],
   artifacts: { source: 'daemon', artifacts: [], message: 'No daemon artifacts.' },
   audit: {
+    guidance: {},
     findings: [],
     checks: { snapshot: 'complete' },
     limitations: [],

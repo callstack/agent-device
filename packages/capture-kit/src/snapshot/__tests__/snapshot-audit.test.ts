@@ -321,3 +321,100 @@ describe('scope', () => {
     expect(result.limitations).toEqual([expect.stringContaining('web rects')]);
   });
 });
+
+test('publishes the captured label and identifier but omits a missing-name label', () => {
+  const findings = audit([
+    node(1, { label: 'Save Lemon Herb Rice', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+    node(2, { identifier: 'save', label: 'com.example:id/save' }),
+    node(3, { label: 'Pay', interactionBlocked: 'covered', hittable: false }),
+  ]).findings;
+  expect(findings[0]).toMatchObject({ label: 'Save Lemon Herb Rice' });
+  expect(findings[1]).toMatchObject({ kind: 'missing-name', identifier: 'save' });
+  expect(findings[1]).not.toHaveProperty('label');
+  expect(findings[2]).toMatchObject({ label: 'Pay' });
+});
+
+test.each(['tab-bar', 'navigation-bar', 'toolbar', 'bottomnavigation', 'bottomnavigationview'])(
+  'ignores %s over a scrolled row but retains it over a fixed control',
+  (kind) => {
+    const covered = {
+      interactionBlocked: 'covered',
+      hittable: false,
+      coveredBy: { kind, label: 'Not a chrome label' },
+    } as const;
+    const findings = audit([
+      node(0, { type: 'ScrollView', hittable: false }),
+      node(1, { type: 'Other', parentIndex: 0 }),
+      node(2, { parentIndex: 1, label: 'Scrolled row', ...covered }),
+      node(3, { label: 'Fixed control', ...covered }),
+    ]).findings;
+    expect(summarize(findings)).toEqual(['covered-control @e3']);
+  },
+);
+
+test.each(['sheet', 'dialog', 'banner', 'group', 'floating-view'])(
+  'retains %s over a control inside a scroll container',
+  (kind) => {
+    const findings = audit([
+      node(0, { type: 'ScrollView', hittable: false }),
+      node(1, {
+        parentIndex: 0,
+        label: 'Pay',
+        interactionBlocked: 'covered',
+        hittable: false,
+        coveredBy: { kind, label: 'Tab Bar' },
+      }),
+    ]).findings;
+    expect(summarize(findings)).toEqual(['covered-control @e1']);
+  },
+);
+
+test.each([
+  [IOS, 'Apple HIG recommends 44×44pt.'],
+  [ANDROID, 'Material recommends 48×48dp.'],
+] as const)('returns guidance only for present kinds on %j', (context, size) => {
+  const result = audit(
+    [
+      node(1, { label: 'Save', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      node(2, { label: 'Save again', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      node(3),
+      node(4, { interactionBlocked: 'covered', hittable: false }),
+    ],
+    context,
+  );
+  expect(result.guidance).toEqual({
+    'small-target': `${size} Enlarge the touch area with padding, a minimum size, or hitSlop.`,
+    'missing-name':
+      'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+    'covered-control':
+      'Move the control out from under the overlay, or dismiss the overlay before you use it.',
+  });
+  expect(
+    audit([node(1, { label: 'Large', rect: { x: 0, y: 0, width: 100, height: 100 } })], context)
+      .guidance,
+  ).toEqual({});
+  expect(
+    Object.keys(
+      audit([node(1, { rect: { x: 0, y: 0, width: 100, height: 100 } })], context).guidance,
+    ),
+  ).toEqual(['missing-name']);
+});
+
+test('keeps a child under an overlay when its covered row is excluded as scroll chrome', () => {
+  const findings = audit([
+    node(0, { type: 'ScrollView', hittable: false }),
+    node(1, {
+      type: 'Cell',
+      parentIndex: 0,
+      interactionBlocked: 'covered',
+      coveredBy: { kind: 'tab-bar' },
+    }),
+    node(2, {
+      parentIndex: 1,
+      label: 'Pay',
+      interactionBlocked: 'covered',
+      coveredBy: { kind: 'sheet' },
+    }),
+  ]).findings;
+  expect(summarize(findings)).toEqual(['covered-control @e2']);
+});

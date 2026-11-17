@@ -2,10 +2,11 @@ import type {
   AuditChecks,
   AuditContext,
   AuditFinding,
+  AuditFindingKind,
   AuditResult,
   AuditSizeUnit,
 } from '@agent-device/contracts/capture';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { isScrollableNodeLike, normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
@@ -65,6 +66,7 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
   const findings = nodes.flatMap((node) => auditNode(node, scan, rule));
   return {
     findings,
+    guidance: auditGuidance(findings, context),
     checks: { snapshot: snapshotCompleteness(context) },
     limitations: collectLimitations(context, rule),
   };
@@ -217,7 +219,8 @@ function smallTargetFinding(
 }
 
 function missingNameFinding(node: SnapshotNode, role: string): AuditFinding {
-  return { ...findingBase(node, role), kind: 'missing-name', severity: 'warning' };
+  const { label: _label, ...base } = findingBase(node, role);
+  return { ...base, kind: 'missing-name', severity: 'warning' };
 }
 
 /**
@@ -227,6 +230,7 @@ function missingNameFinding(node: SnapshotNode, role: string): AuditFinding {
 function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
   const role = coveredRole(node);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
+  if (isScrollableChromeOcclusion(node, scan)) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
   return { ...findingBase(node, role), kind: 'covered-control', severity: 'observation' };
 }
@@ -243,7 +247,9 @@ function isRow(node: SnapshotNode): boolean {
 function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditScan): boolean {
   const parent = parentOf(node, scan);
   if (!parent || parent.ref === undefined || coveredRole(parent) === undefined) return false;
-  return scan.children.get(parent.index)?.length === 1;
+  return (
+    !isScrollableChromeOcclusion(parent, scan) && scan.children.get(parent.index)?.length === 1
+  );
 }
 
 function findingBase(node: SnapshotNode, role: string) {
@@ -251,6 +257,8 @@ function findingBase(node: SnapshotNode, role: string) {
     ref: `@${node.ref}`,
     ...(node.rect ? { rect: node.rect } : {}),
     role,
+    ...(node.label?.trim() ? { label: node.label.trim() } : {}),
+    ...(node.identifier?.trim() ? { identifier: node.identifier.trim() } : {}),
   };
 }
 
@@ -286,4 +294,41 @@ function typedContent(node: SnapshotNode): string | undefined {
 
 function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+const PERSISTENT_CHROME_KINDS = new Set([
+  'tabbar',
+  'navigationbar',
+  'toolbar',
+  'bottomnavigation',
+  'bottomnavigationview',
+]);
+
+function isScrollableChromeOcclusion(node: SnapshotNode, scan: AuditScan): boolean {
+  if (!PERSISTENT_CHROME_KINDS.has(normalizeType(node.coveredBy?.kind ?? '').replaceAll('-', '')))
+    return false;
+  const visited = new Set<number>();
+  let ancestor = parentOf(node, scan);
+  while (ancestor && !visited.has(ancestor.index)) {
+    if (isScrollableNodeLike(ancestor)) return true;
+    visited.add(ancestor.index);
+    ancestor = parentOf(ancestor, scan);
+  }
+  return false;
+}
+
+function auditGuidance(
+  findings: readonly AuditFinding[],
+  context: AuditContext,
+): AuditResult['guidance'] {
+  const size =
+    context.platform === 'ios' ? 'Apple HIG recommends 44×44pt.' : 'Material recommends 48×48dp.';
+  const sentences: Record<AuditFindingKind, string> = {
+    'small-target': `${size} Enlarge the touch area with padding, a minimum size, or hitSlop.`,
+    'missing-name':
+      'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+    'covered-control':
+      'Move the control out from under the overlay, or dismiss the overlay before you use it.',
+  };
+  return Object.fromEntries(findings.map(({ kind }) => [kind, sentences[kind]]));
 }
