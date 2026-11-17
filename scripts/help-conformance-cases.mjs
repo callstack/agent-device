@@ -160,8 +160,8 @@ export const CASES = [
     expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
     matchers: [
       { id: 'runsAudit', pattern: /\bagent-device\s+audit\b/i },
-      // More than one screen: at least two audit runs, or an audit plus a tab or
-      // screen change. Matches presence, not order.
+      // More than one screen: at least two audit runs, because the topic runs audit on
+      // each screen. A screen change without a second audit does not count.
       {
         id: 'auditsMoreThanOneScreen',
         test: ({ joined }) => (joined.match(/\bagent-device\s+audit\b/gi) ?? []).length >= 2,
