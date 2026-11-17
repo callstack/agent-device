@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { writeSnapshotEvidence } from './snapshot-evidence.ts';
 import path from 'node:path';
 
 import {
@@ -116,4 +117,23 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
 function assertTier(value: string): asserts value is Tier {
   if (value === 'smoke' || value === 'full') return;
   throw new Error(`unsupported Android E2E tier: ${value}`);
+}
+
+export async function captureDiagnosticSnapshot(
+  context: LiveContext,
+  name: 'preflight' | 'catalog',
+  step: string,
+) {
+  const startedAtMs = Date.now();
+  return await runStep(context, step, ['snapshot', '-i', '--debug'], {
+    observeResult: (result) =>
+      writeSnapshotEvidence(
+        context.artifactDir,
+        name,
+        context.session,
+        startedAtMs,
+        Date.now(),
+        result,
+      ),
+  });
 }

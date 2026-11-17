@@ -11,7 +11,10 @@ import {
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
-import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import {
+  withDiagnosticsScope,
+  registerDiagnosticSensitiveValue,
+} from '@agent-device/host-kit/diagnostics';
 
 beforeEach(async () => {
   await resetAndroidSnapshotHelperSessions();
@@ -285,16 +288,19 @@ test('the session fallback diagnostic reads the typed timeout reason', async () 
     await withDiagnosticsScope(
       { debug: true, logPath, session: 'android-test', requestId: 'req-1', command: 'snapshot' },
       async () => {
+        registerDiagnosticSensitiveValue('sensitive-device-value');
         const output = await captureAndroidSnapshotWithHelperSession({
           adb: provider.exec,
           adbProvider: provider,
-          deviceKey: 'android:emulator-5554',
+          deviceKey: 'android:sensitive-device-value',
         });
         assert.equal(output, undefined);
       },
     );
 
     const log = await fs.readFile(logPath, 'utf8');
+    assert.ok(!log.includes('sensitive-device-value'));
+    assert.ok(log.includes('req-1'));
     const fallback = log
       .split('\n')
       .filter(Boolean)
