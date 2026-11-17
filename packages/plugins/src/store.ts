@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isRecord } from '@agent-device/kernel/record';
 import { canonicalJson } from '@agent-device/kernel/collections';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   acquireProcessLock,
@@ -409,7 +409,6 @@ export async function addPluginArtifact(
   });
   const installation = crypto.randomUUID();
   const project = path.join(home, 'plugins', installation);
-  let published = false;
   try {
     fs.mkdirSync(project, { recursive: true, mode: 0o700 });
     const artifact = path.join(project, 'artifact.tgz');
@@ -462,10 +461,24 @@ export async function addPluginArtifact(
       contents: `${JSON.stringify({ ...config, plugins: selections }, null, 2)}\n`,
       mode: 0o600,
     });
-    published = true;
     return { name, version: manifest.version, installation, integrity };
+  } catch (error) {
+    try {
+      fs.rmSync(project, { recursive: true, force: true });
+    } catch (cleanupError) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Plugin artifact installation and staging cleanup failed',
+        {
+          reason: 'artifact_cleanup_failed',
+          installationError: normalizeError(error),
+          cleanupError: normalizeError(cleanupError),
+        },
+        error,
+      );
+    }
+    throw error;
   } finally {
-    if (!published) fs.rmSync(project, { recursive: true, force: true });
     await release();
   }
 }
