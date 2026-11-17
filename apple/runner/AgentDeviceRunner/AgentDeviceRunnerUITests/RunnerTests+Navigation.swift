@@ -98,8 +98,9 @@ extension RunnerTests {
 
   /// iOS `back` presses the navigation bar's system back button when exactly one is on screen, read
   /// from the live tree in this call, and confirms that the bar changed. Otherwise it is the
-  /// left-edge back swipe, verified by a change of the app's screen. No other button counts,
-  /// whatever its label.
+  /// left-edge back swipe, verified by a change of the app's screen. No other button is pressed,
+  /// whatever its label: a swipe that changed nothing names the dismiss controls the caller may press
+  /// instead (`topBandDismissControls`).
   @MainActor
   func performInAppBack(app: XCUIApplication) throws -> InAppBackOutcome {
 #if os(macOS)
@@ -137,8 +138,12 @@ extension RunnerTests {
       return pressed
     }
     do {
-      let outcome = try verifiedBackSwipe(app: app, context: context, trace: &trace)
+      var outcome = try verifiedBackSwipe(app: app, context: context, trace: &trace)
       logSwipe(trace.logLine(outcome: outcome))
+      if case .unconfirmed(var payload) = outcome, payload.code == RunnerWireErrorCode.backSwipeNoChange {
+        payload.dismissControls = topBandDismissControls(app: app, context: context)
+        outcome = .unconfirmed(payload)
+      }
       return outcome
     } catch {
       logSwipe(trace.logLine(name: "error", code: String(describing: type(of: error))))
@@ -508,12 +513,14 @@ extension RunnerTests {
     return !isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
   }
 
-  /// The phase a bar read belongs to: the lookup before the tap, a confirmation read after it, or the
-  /// final confirmation read. The read passes it to the test read hook.
+  /// The phase a bar read belongs to: the lookup before the tap, a confirmation read after it, the
+  /// final confirmation read, or the dismiss control read after a swipe that changed nothing. The
+  /// read passes it to the test read hook.
   enum NavigationBarBackReadPhase {
     case lookup
     case confirmation
     case finalConfirmation
+    case dismissControlLookup
   }
 
   /// One read of the bar: its value, a read that proved nothing, or an XCTest query that hung.
@@ -657,6 +664,84 @@ extension RunnerTests {
     state.barCount = bars.count
     if state.hasUnlabeledBackButton { state.barTitles = bars.map(\.title) }
     return state
+  }
+
+  /// A dismiss control's label or identifier, compared without case. These words only leave a screen;
+  /// "Done", "Save", and the like may commit, so they never count.
+  static let dismissControlWords: Set<String> = ["back", "close", "cancel"]
+
+  /// Whether `name` is a dismiss word, or an SF Symbols xmark name such as `xmark.circle.fill`.
+  static func isDismissControlName(_ name: String) -> Bool {
+    let word = name.lowercased()
+    return dismissControlWords.contains(word) || word == "xmark" || word.hasPrefix("xmark.")
+  }
+
+  /// Narrows the button query to the dismiss names; `isDismissControlName` decides.
+  static let dismissControlPredicate: NSPredicate = {
+    let names = dismissControlWords.sorted() + ["xmark"]
+    let clauses = names.flatMap { _ in ["label BEGINSWITH[c] %@", "identifier BEGINSWITH[c] %@"] }
+    return NSPredicate(format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] })
+  }()
+
+  /// One button the dismiss control read found, with its live frame in screen points.
+  struct TopBandButton {
+    let label: String
+    let identifier: String
+    let frame: CGRect
+    let isHittable: Bool
+  }
+
+  /// The app window's top band, where a bar or header holds its controls and content does not:
+  /// 22% of the window's height, held between 96 and 180 pt.
+  static func isTopNavigationControlFrame(_ candidate: CGRect, in window: CGRect) -> Bool {
+    guard SnapshotGeometry.isPositiveFinite(candidate), SnapshotGeometry.isPositiveFinite(window) else {
+      return false
+    }
+    let maxY = window.minY + min(max(window.height * 0.22, 96), 180)
+    return candidate.midY >= window.minY && candidate.midY <= maxY
+  }
+
+  /// The dismiss controls a caller may press: the hittable buttons in the top band of `window` whose
+  /// label or identifier is a dismiss name, in tree order. The system back button is never one, since
+  /// back itself presses it.
+  static func dismissControlCandidates(_ buttons: [TopBandButton], window: CGRect) -> [Int] {
+    buttons.indices.filter { index in
+      let button = buttons[index]
+      return button.isHittable && button.identifier != navigationBarBackButtonIdentifier
+        && isTopNavigationControlFrame(button.frame, in: window)
+        && (isDismissControlName(button.label) || isDismissControlName(button.identifier))
+    }
+  }
+
+  /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe. It runs
+  /// only on that refusal, so a back that navigates pays nothing for it. Nil when there are none, or
+  /// when the tree is not readable, a read fails, or a query hangs: the list is advice, and back
+  /// refuses the same either way.
+  @MainActor
+  private func topBandDismissControls(
+    app: XCUIApplication,
+    context: SynthesizedCoordinateContext
+  ) -> [DismissControlPayload]? {
+    guard navigationBarBackButtonIsReadable(context: context) else { return nil }
+    let deadlineMs = currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+    let read = heldNavigationBarRead(.dismissControlLookup) { () -> [TopBandButton]? in
+      guard let roots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else { return nil }
+      let elements = roots.flatMap {
+        $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex
+      }
+      var buttons: [TopBandButton] = []
+      for element in elements {
+        guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
+        buttons.append(TopBandButton(
+          label: snapshot.label, identifier: snapshot.identifier, frame: element.frame, isHittable: element.isHittable))
+      }
+      return buttons
+    }
+    guard case .read(let buttons) = read else { return nil }
+    let controls = Self.dismissControlCandidates(buttons, window: context.geometry.windowOnScreen.rect).map {
+      DismissControlPayload(label: buttons[$0].label, identifier: buttons[$0].identifier.isEmpty ? nil : buttons[$0].identifier)
+    }
+    return controls.isEmpty ? nil : controls
   }
 
   @MainActor

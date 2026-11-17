@@ -688,6 +688,13 @@ enum RetryableResponseFailure: Equatable {
   case targetAppUnavailable
 }
 
+/// A control that dismisses the screen, such as a modal's Close button. The identifier is absent when
+/// the control has none.
+struct DismissControlPayload: Codable, Equatable {
+  let label: String
+  let identifier: String?
+}
+
 struct ErrorPayload: Codable {
   var code: String?
   let message: String
@@ -695,11 +702,15 @@ struct ErrorPayload: Codable {
   /// Runner-internal: read by `shouldRetryResponse` and never encoded, so the host's decoding of
   /// the error is unchanged.
   var retryableFailure: RetryableResponseFailure? = nil
+  /// Only on an iOS `BACK_SWIPE_NO_CHANGE`: the dismiss controls in the top band the caller may press
+  /// instead. Absent when there are none.
+  var dismissControls: [DismissControlPayload]? = nil
 
   private enum CodingKeys: String, CodingKey {
     case code
     case message
     case hint
+    case dismissControls
   }
 
   static func targetAppUnavailable(bundleId: String?) -> ErrorPayload {
