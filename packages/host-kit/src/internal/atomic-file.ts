@@ -130,7 +130,7 @@ export function publishFileSync(options: {
  * Publishes a session script, and nothing else: {@link publishFileSync} at {@link SCRIPT_FILE_MODE}, with the
  * destination-ancestry rule asked through {@link prepareScriptDestination}. A recording is a transcript of what
  * someone did here, so it is private, and the mode is asked EXACT: the umask of a shared checkout would
- * otherwise widen it away from what the rule publishes everywhere else.
+ * otherwise narrow it away from what the rule publishes everywhere else.
  */
 export function publishScriptFileSync(options: {
   destination: string;

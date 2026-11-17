@@ -58,8 +58,9 @@ const PLAN = [{ command: 'wait', input: {} }];
 
 /**
  * One world. The client works in `root`, which is planted DEEP inside the watched tree `outer`, and the depth
- * is the point: `../../../../tmp/evil` from `root` lands INSIDE `outer`, where the snapshot sees it, instead of
- * in the system's own scratch directory, where nothing is watching and an escaped write would go unnoticed.
+ * is the point: a short climb such as `../../x` from `root` lands INSIDE `outer`, where the snapshot sees it.
+ * A longer climb such as `../../../../tmp/evil` resolves outside `outer`, so {@link escapeTargets} checks those
+ * names at their resolved locations, from `root` and from the working directory.
  */
 function scratchWorld() {
   const outer = fs.realpathSync(mkdtempForTestSync('script-hostile-'));
@@ -201,10 +202,16 @@ function recordFile(world: World, name: string): string {
  */
 function escapeTargets(world: World, names: readonly string[]): string[] {
   return names
-    .map((name) => path.resolve(world.root, name))
+    .flatMap((name) => [path.resolve(world.root, name), path.resolve(process.cwd(), name)])
     .filter((target) => {
       if (target === world.root || target.startsWith(world.root + path.sep)) return false;
-      return !world.root.startsWith(target + path.sep);
+      // A climb that ends on a directory above either base already existed before the test.
+      const cwd = process.cwd();
+      return (
+        !world.root.startsWith(target + path.sep) &&
+        target !== cwd &&
+        !cwd.startsWith(target + path.sep)
+      );
     });
 }
 
