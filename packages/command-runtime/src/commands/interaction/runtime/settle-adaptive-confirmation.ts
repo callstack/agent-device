@@ -2,6 +2,8 @@ import { isBusyIndicatorNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import { resolvePostActionSurfaceChange } from './post-action-surface.ts';
 import {
   sharedIdentityCount,
   stableCaptureSignal,
@@ -12,11 +14,17 @@ import {
 /**
  * Internal prototype (`SettleParams.earlyExit: 'adaptive'`): a capture that differs from a fresh
  * pre-action baseline, and that one short confirmation capture agrees with, settles before the
- * quiet window. Every other case keeps the quiet window: no capture has differed yet (a no-op, a
- * toggle that has not rendered, a late effect), the confirmation disagrees, a busy indicator is on
- * screen, the producer or the presented surface changed, the broad-replacement floor is in force,
- * the capture still holds the baseline screen beside a new one, or the baseline may predate a side
- * effect. One failed check disarms the rule for the rest of the run.
+ * quiet window. Every other case keeps the quiet window:
+ * - no capture has differed yet (a no-op, a toggle that has not rendered, a late effect);
+ * - the confirmation disagrees, or comes from another producer;
+ * - a busy indicator is on screen;
+ * - the presented surface changed;
+ * - the capture reads another surface than the baseline, such as an iOS system sheet (#2438);
+ * - the broad-replacement floor is in force, or its latch is armed but has not ruled on a capture
+ *   that already replaces the baseline broadly;
+ * - the capture still holds the baseline screen beside a new one;
+ * - the baseline may predate a side effect.
+ * One failed check disarms the rule for the rest of the run.
  *
  * Two equal captures ~110 ms apart cannot exclude a later stage nothing marks: a toast standing in
  * for navigation, a plateau between transition stages, a late value write. That is the trade this
@@ -58,7 +66,7 @@ export function createAdaptiveConfirmation(params: {
         hasBusyIndicator(snapshot) ||
         isTransitionalUnion(baseline, snapshot, appBundleId) ||
         presentedSurfaceChanged(baseline, snapshot) ||
-        surfaceBundleChanged(baseline, snapshot)
+        resolvePostActionSurfaceChange(baseline, surfaceScopedNodes(snapshot)) !== undefined
       ) {
         disarm();
         return { kind: 'none' };
@@ -139,19 +147,10 @@ function presentedSurfaceChanged(baseline: SurfaceScopedNodes, snapshot: Snapsho
   return before !== undefined && after !== undefined && before !== after;
 }
 
-/**
- * The capture reads another surface than the baseline: an in-place iOS system surface (a web sign-in
- * sheet) arriving over the app, or leaving it (#2438). An app capture names none.
- */
-function surfaceBundleChanged(baseline: SurfaceScopedNodes, snapshot: SnapshotState): boolean {
-  return baseline.surfaceBundleId !== snapshot.iosSystemSurfaceBundleId;
-}
-
 function sameProvenance(left: SnapshotState, right: SnapshotState): boolean {
   return (
     left.producer === right.producer &&
     left.backend === right.backend &&
-    left.presentedSurface === right.presentedSurface &&
-    left.iosSystemSurfaceBundleId === right.iosSystemSurfaceBundleId
+    left.presentedSurface === right.presentedSurface
   );
 }
