@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readPluginInventory } from '@agent-device/contracts/plugin-inventory';
 import {
@@ -14,17 +15,19 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
   const [action = 'list', name, extra] = positionals;
   if (
     extra ||
-    !['add', 'add-artifact', 'update', 'remove', 'list'].includes(action) ||
+    !['add', 'update', 'remove', 'list'].includes(action) ||
     (action === 'list' ? name !== undefined : !name)
   ) {
     throw new AppError(
       'INVALID_ARGS',
-      'Use plugins list, add <package[@version]>, add-artifact <path.tgz>, update <package>, or remove <package>',
+      'Use plugins list, add <package[@version]|path.tgz>, update <package>, or remove <package>',
     );
   }
   const artifact =
-    action === 'add-artifact' && name ? await addPluginArtifact(name, host) : undefined;
-  if (action !== 'list' && action !== 'add-artifact' && name) {
+    action === 'add' && name && (path.isAbsolute(name) || /^\.{1,2}[\\/]/.test(name))
+      ? await addPluginArtifact(name, host)
+      : undefined;
+  if (action !== 'list' && !artifact && name) {
     await changePlugin(action as 'add' | 'update' | 'remove', name, host.env);
   }
   const plugins = artifact ? [] : await listPlugins(host.env, BUILTIN_PROVIDER_IDS);

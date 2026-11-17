@@ -200,10 +200,10 @@ The daemon owns sessions, policy, selector/ref authority, and device cleanup. `d
 
 ## Install a local plugin artifact
 
-On each host that needs the plugin, install its `.tgz` file:
+On each host that needs the plugin, install its `.tgz` file. Use `./` or `../` for a relative path, or provide an absolute path:
 
 ```sh
-agent-device plugins add-artifact ./provider-plugin.tgz --json
+agent-device plugins add ./provider-plugin.tgz --json
 agent-device plugins list --json
 ```
 
