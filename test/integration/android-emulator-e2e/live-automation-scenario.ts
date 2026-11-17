@@ -88,7 +88,7 @@ export async function assertAutomationSystem(
     'click',
     'id="automation-continue-catalog"',
   ]);
-  await assertWaitText(context, 'Catalog');
+  await assertWaitSelector(context, 'id="catalog-title"');
   const catalogSnapshot = await runStep(context, 'capture Android catalog navigation', [
     'snapshot',
     '-i',
