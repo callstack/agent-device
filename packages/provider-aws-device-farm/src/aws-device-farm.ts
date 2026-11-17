@@ -14,7 +14,7 @@ import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { PROVIDER_PROFILE_FIELD_FLAGS } from '@agent-device/contracts/remote';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RunHostCommand } from './run-host-command.ts';
+import type { RunHostCommand } from 'agent-device/plugins';
 
 /** Each selector reads its flag first, then the agent-device variable, then the AWS CLI one. */
 const AWS_SELECTOR_VARIABLES = {
