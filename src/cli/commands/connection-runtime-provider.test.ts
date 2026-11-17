@@ -9,8 +9,8 @@ import {
   createTestClient,
   recordedLeaseAllocate,
   seedConnectionState,
-} from './remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from './test-utils/host-bound-commands.ts';
+} from '../../__tests__/remote-connection.fixtures.ts';
+import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/host-bound-commands.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
