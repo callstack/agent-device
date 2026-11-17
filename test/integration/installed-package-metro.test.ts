@@ -108,10 +108,14 @@ async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<v
   const source = path.join(consumerRoot, 'plugin-contract-smoke.ts');
   fs.writeFileSync(
     source,
-    `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+    `import { addPluginArtifact, type AgentDevicePluginFactory } from 'agent-device/plugins';
 import { startAgentDevice, type AgentDeviceHost, type StartAgentDeviceOptions, type AgentDeviceClientConfig } from 'agent-device';
 import maestro from '@agent-device/maestro/agent-device';
 import replay from '@agent-device/replay/agent-device';
+
+export async function installArtifact(archive: string, host: { cwd: string; env: Record<string, string | undefined> }) {
+  return await addPluginArtifact(archive, host);
+}
 
 export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['host']>) {
   const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example(), maestro(), replay()] };
@@ -323,6 +327,38 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       );
     }
     await typeCheckInstalledPluginContract(consumerRoot);
+    const managedHome = path.join(consumerRoot, 'managed-plugin-home');
+    const replayArchive = path.join(consumerRoot, 'replay.tgz');
+    const expectedIntegrity = `sha512-${crypto.createHash('sha512').update(fs.readFileSync(replayArchive)).digest('base64')}`;
+    const selection = await runNodeModuleJson(
+      consumerRoot,
+      ['--input-type=module', '-e'],
+      `import { addPluginArtifact } from 'agent-device/plugins';
+       const selected = await addPluginArtifact(${JSON.stringify(replayArchive)}, {
+         cwd: process.cwd(),
+         env: { ...process.env, HOME: ${JSON.stringify(managedHome)}, AGENT_DEVICE_HOME: ${JSON.stringify(managedHome)} },
+       });
+       console.log(JSON.stringify(selected));`,
+    );
+    assert.equal(selection.name, '@agent-device/replay');
+    assert.equal(selection.integrity, expectedIntegrity);
+    const inventory = await runCmd(
+      process.execPath,
+      [path.join(installedPackageRoot, 'bin/agent-device.mjs'), 'plugins', 'list', '--json'],
+      {
+        cwd: consumerRoot,
+        env: { ...process.env, HOME: managedHome, AGENT_DEVICE_HOME: managedHome },
+        timeoutMs: SUBPROCESS_TIMEOUT_MS,
+      },
+    );
+    const selectedPlugin = readJson(inventory.stdout).data.plugins.find(
+      (plugin: { name?: string }) => plugin.name === '@agent-device/replay',
+    );
+    assert.equal(selectedPlugin?.installation, selection.installation);
+    assert.equal(selectedPlugin?.integrity, expectedIntegrity);
+    assert.equal(selectedPlugin?.version, selection.version);
+    assert.equal(selectedPlugin?.backend, 'ad');
+    assert.equal(selectedPlugin?.compatible, true);
     fs.writeFileSync(
       path.join(consumerRoot, 'fixture-plugin.mjs'),
       String.raw`
@@ -634,7 +670,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
             return runtime.provider;
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
-          './plugins': (mod) => Object.keys(mod).length === 0,
+          './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
           './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>

@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { request as httpRequest } from 'node:http';
 import {
   registerRequestAbort,
   markRequestCanceled,
@@ -811,4 +812,19 @@ test('a new cache waiter retries after the canceled preparation finishes cleanup
     finishCleanup();
     cleanup.mockRestore();
   }
+});
+
+test('an interrupted upload does not prevent the fixture from serving a later request', async () => {
+  const f = await fixture();
+  const request = httpRequest(`${f.apiUrl}/sync`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer instance-token', 'content-length': '100' },
+  });
+  request.on('error', () => {});
+  request.write('partial');
+  await vi.waitFor(() => expect(f.requests).toContain('/v1/ios_test/api/sync'));
+  request.destroy();
+  await new Promise<void>((resolve) => request.once('close', resolve));
+  await f.runner.applicationTools.prewarmRunnerCache(f.device, {}, new AbortController().signal);
+  expect(f.uploads).toHaveLength(1);
 });
