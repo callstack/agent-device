@@ -179,8 +179,8 @@ function readLocalWorkflowJobs(uses: string, root: string): Job[] | null {
   return jobs.length > 0 ? jobs : null;
 }
 
-/** A job's steps with each `parallel:` group opened into the steps it runs. */
-function runnableSteps(steps: readonly RawStep[]): RawStep[] {
+/** Steps a job runs, with each `parallel:` group opened into the steps it runs. */
+export function runnableSteps<S extends { parallel?: readonly S[] }>(steps: readonly S[]): S[] {
   return steps.flatMap((step) => (step.parallel ? runnableSteps(step.parallel) : [step]));
 }
 

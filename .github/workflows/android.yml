@@ -56,11 +56,8 @@ jobs:
         with:
           package-helpers: 'true'
 
-      # The build and the fixture restore prepare the same emulator session and share no outputs:
-      # the build writes dist/, the repack writes .tmp/fixture-app through
-      # examples/test-app/node_modules. The build was previously the first command of the emulator
-      # script, so it held the booted emulator before the first case ran. The restore is the slower
-      # of the two, so the build costs the job nothing on the critical path.
+      # The build writes dist/. The repack writes .tmp/fixture-app through
+      # examples/test-app/node_modules. Neither reads the other's output, so they run together.
       - parallel:
           - name: Build the shared CLI
             if: steps.impact.outputs.run != 'false'

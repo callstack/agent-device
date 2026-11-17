@@ -10,15 +10,9 @@ import {
   findTrustedArtifact,
 } from '../../.github/actions/setup-fixture-app/trusted-artifact.mjs';
 import { assertAndroidFixtureSnapshot } from '../scripts/assert-android-fixture-snapshot.mjs';
+import { runnableSteps } from '../../scripts/gate/workflows.ts';
 
 const repository = { default_branch: 'main', id: 42 };
-
-/** A job's steps with each `parallel:` group opened into the steps it runs. */
-function jobSteps(job) {
-  return (job?.steps ?? []).flatMap((step) =>
-    step.parallel ? jobSteps({ steps: step.parallel }) : [step],
-  );
-}
 const trustedRun = {
   event: 'pull_request',
   head_branch: 'feature',
@@ -152,9 +146,11 @@ test('Android smoke consumes the restored APK through catalog fixture E2E', (t) 
   assert.equal(replayEvidence.workflow, '.github/workflows/android.yml');
   const evidenceJob = workflow.jobs[replayEvidence.job];
   assert.ok(evidenceJob, `missing declared Android replay job: ${replayEvidence.job}`);
-  const smokeStep = jobSteps(evidenceJob).find((step) => step.name === replayEvidence.step);
+  const smokeStep = runnableSteps(evidenceJob.steps).find(
+    (step) => step.name === replayEvidence.step,
+  );
   assert.ok(smokeStep, `missing declared Android replay step: ${replayEvidence.step}`);
-  const smokeJobSteps = jobSteps(workflow.jobs['smoke-android']);
+  const smokeJobSteps = runnableSteps(workflow.jobs['smoke-android'].steps);
   const restoreStep = smokeJobSteps.find((step) => step.name === 'Restore fixture APK');
   const sourceStep = smokeJobSteps.find((step) => step.name === 'Report fixture cache source');
   const assertion = fs.readFileSync('test/scripts/assert-android-fixture-snapshot.mjs', 'utf8');
