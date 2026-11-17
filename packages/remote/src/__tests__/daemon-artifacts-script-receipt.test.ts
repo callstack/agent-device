@@ -551,3 +551,56 @@ test.each([
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(records(stateDir)).toHaveLength(1);
 });
+
+test.each(['success', 'failure'] as const)(
+  'a %s receipt discloses daemon failures after the client record is gone',
+  async (outcome) => {
+    const { stateDir, destination } = world();
+    const baseUrl = await artifactServer({ 'open-v1': 'open Demo\n', v2: 'must not publish\n' });
+    const id = await opened(baseUrl, stateDir, destination);
+    for (const file of records(stateDir)) {
+      fs.unlinkSync(path.join(stateDir, 'remote-connections', 'session-scripts', file));
+    }
+    const failure = {
+      reason: 'script_delivery_failed' as const,
+      publicationId: id,
+      message: 'The daemon could not write the final script.',
+      hint: 'The caller file keeps its earlier recording.',
+    };
+    const plan = batchRequest([
+      { command: 'close', input: {} },
+      { command: 'press', input: {} },
+    ]);
+    const delivery = receipt(id, {
+      version: script('v2', 2, id),
+      close: { step: 1 },
+      failures: [failure],
+    });
+    let disclosed: Record<string, unknown> | undefined;
+    if (outcome === 'success') {
+      const response = await answer(baseUrl, stateDir, plan, delivery);
+      expect(response.ok).toBe(true);
+      if (response.ok) disclosed = response.data;
+    } else {
+      const { settleScriptDeliveryReceiptOfFailure, downloadRemoteArtifact } =
+        await import('../daemon-artifacts.ts');
+      const error = await settleScriptDeliveryReceiptOfFailure(
+        { baseUrl, token: 't' },
+        plan,
+        {
+          code: 'COMMAND_FAILED',
+          message: 'Original batch failure',
+          details: { step: 2, command: 'press', ...delivery },
+        },
+        stateDir,
+        downloadRemoteArtifact,
+      );
+      expect(error.message).toBe('Original batch failure');
+      disclosed = error.details;
+    }
+    expect(disclosed?.scriptDeliveryFailure).toEqual(failure);
+    expect(disclosed?.warnings).toEqual([`${failure.message} ${failure.hint}`]);
+    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+    expect(records(stateDir)).toEqual([]);
+  },
+);

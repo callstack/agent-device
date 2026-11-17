@@ -1,3 +1,4 @@
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 // #1596/#1706 fixture: writes an oversized payload through a real piped CLI
 // process so the parent must receive the trailing marker before either exit.
 import https, { type RequestOptions } from 'node:https';
@@ -49,7 +50,7 @@ async function routeFixtureRequest(request: Request, payloadMarker: string): Pro
         ok: true,
         service: 'agent-device-daemon',
         version: '0.20.6',
-        rpcProtocolVersion: 2,
+        rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
       });
     case `POST ${DAEMON_BASE_URL}/rpc`:
       return await rpcResponse(request, payloadMarker);

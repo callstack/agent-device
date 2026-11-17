@@ -112,6 +112,7 @@ async function settleScriptReceipt(
 ): Promise<ReceiptSettlement> {
   const { endpoint, req, stateDir } = context;
   const failures = [...(receipt.failures ?? [])];
+  for (const failure of failures) disclose(failure, undefined);
   const file = recordPath(stateDir, endpoint.baseUrl, req, receipt.publicationId);
   const record = readRecord(file);
   if (!record) {
@@ -122,9 +123,6 @@ async function settleScriptReceipt(
     });
     return { failures };
   }
-  // A daemon failure is disclosed whether or not this client can save anything: the caller's file is
-  // stale either way.
-  for (const failure of failures) disclose(failure, undefined);
   const published = receipt.version
     ? await publishScriptVersion(context, receipt.version)
     : undefined;

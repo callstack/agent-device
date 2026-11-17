@@ -1,3 +1,4 @@
+import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import fs from 'node:fs';
 import https from 'node:https';
 import { EventEmitter } from 'node:events';
@@ -31,7 +32,7 @@ function createFixtureFetch(logPath) {
         ok: true,
         service: 'agent-device-daemon',
         version: '0.0.0-test',
-        rpcProtocolVersion: 2,
+        rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
       }),
     ),
     route('POST', `${DAEMON_BASE_URL}/rpc`, async (request) => {

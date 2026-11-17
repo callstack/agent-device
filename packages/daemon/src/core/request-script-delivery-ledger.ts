@@ -5,7 +5,7 @@ import type {
   ScriptDeliveryReceipt,
 } from '@agent-device/kernel/contracts';
 import { readScriptDeliveryFailure } from '@agent-device/kernel/contracts';
-import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
+import { normalizeBatchCommandName } from '@agent-device/contracts/command';
 import type { DaemonRequest } from './daemon-request.ts';
 /**
  * The script-delivery ledger of one daemon request (ADR 0016, #4595).
