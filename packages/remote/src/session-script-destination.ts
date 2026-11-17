@@ -259,8 +259,9 @@ function discloseDeliveryFailure(
 /**
  * Settles the one delivery receipt a FAILED response names (#4595), where no successful-artifact
  * path runs: a batch that stopped mid-plan still delivers what its completed steps wrote. The
- * disclosure rides the error the caller receives, and a close validated against the submitted plan
- * still retires the record.
+ * disclosure rides the error the caller receives. A close retires the record only when the failure
+ * position is validated against the submitted plan and the close comes before that failure; nothing
+ * else proves the close ran.
  */
 export async function settleScriptDeliveryReceiptOfFailure(
   endpoint: Required<DaemonArtifactEndpoint>,
@@ -271,13 +272,21 @@ export async function settleScriptDeliveryReceiptOfFailure(
 ): Promise<DaemonError> {
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
   if (!receipt || req.command !== 'batch') return error;
+  // An error whose failure position cannot be reconciled with the submitted plan makes the whole
+  // answer untrustworthy, and an untrustworthy answer authorizes nothing.
+  if (unreconcilableFailurePosition(req, error)) return error;
+  // A validated position before the receipt's close proves the close step never ran, and a batch
+  // can stop with no position at all (a request deadline, or a step that threw inside the runner).
+  // Neither case proves a close, so the close is dropped; the version and the failures are facts the
+  // daemon answered about THIS client's publication, so they still settle. Silently dropping them
+  // would leave the caller file stale with no warning, which is what this disclosure exists for.
   const failedStep = validatedFailedBatchStep(req, error);
-  if (failedStep === undefined) return error;
-  if (receipt.close !== undefined && receipt.close.step >= failedStep) return error;
+  const honored =
+    receipt.close === undefined || (failedStep !== undefined && receipt.close.step < failedStep);
   const data: Record<string, unknown> = { ...(error.details ?? {}) };
   const settled = await settleScriptReceipt(
     { endpoint, req, stateDir, download },
-    receipt,
+    honored ? receipt : withoutClose(receipt),
     (failure, failureError) => discloseDeliveryFailure(data, req, failure, failureError),
   );
   if (settled.retire) await retireQuietly(req, settled.retire);
@@ -291,6 +300,27 @@ export async function settleScriptDeliveryReceiptOfFailure(
   return { ...error, details: { ...(error.details ?? {}), ...disclosure } };
 }
 
+/** The receipt with its close dropped: its version and failures still settle, nothing retires. */
+function withoutClose(receipt: ScriptDeliveryReceipt): ScriptDeliveryReceipt {
+  return {
+    publicationId: receipt.publicationId,
+    ...(receipt.version === undefined ? {} : { version: receipt.version }),
+    ...(receipt.failures === undefined ? {} : { failures: receipt.failures }),
+  };
+}
+
+function unreconcilableFailurePosition(req: DaemonWireRequest, error: DaemonError): boolean {
+  const { step, command } = error.details ?? {};
+  if (step === undefined && command === undefined) return false;
+  return validatedFailedBatchStep(req, error) === undefined;
+}
+
+/**
+ * The batch step this error names, when the submitted plan carries exactly that command at exactly
+ * that position. An answer naming an unparseable position, a position past the plan, or a command
+ * the plan does not carry there cannot be reconciled with the plan the client sent, and the client
+ * acts on no part of an answer it cannot reconcile.
+ */
 function validatedFailedBatchStep(req: DaemonWireRequest, error: DaemonError): number | undefined {
   const steps = req.flags?.batchSteps;
   const step = error.details?.step;

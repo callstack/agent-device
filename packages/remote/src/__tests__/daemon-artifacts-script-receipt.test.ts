@@ -519,10 +519,9 @@ test('a malformed close receipt cannot throw or fall back to batch script artifa
 });
 
 test.each([
-  { name: 'an unreached close', details: { step: 1, command: 'wait' } },
-  { name: 'missing failure position', details: {} },
   { name: 'a position past the plan', details: { step: 3, command: 'close' } },
   { name: 'a different command', details: { step: 1, command: 'close' } },
+  { name: 'a position that is not a number', details: { step: 'two', command: 'close' } },
 ])('a failed batch with $name authorizes no delivery', async ({ details }) => {
   const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
   const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
@@ -549,6 +548,73 @@ test.each([
   );
   expect(settled).toEqual(error);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  expect(records(stateDir)).toHaveLength(1);
+});
+
+test('a failed batch whose close the plan never reached delivers the version and retires nothing', async () => {
+  // The position is reconciled with the plan and proves the close step never ran, so the version
+  // the completed steps wrote is still delivered — but nothing retires the record.
+  const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
+  const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
+  const { stateDir, destination } = world();
+  const baseUrl = await artifactServer({
+    'open-v1': 'open Demo\n',
+    v2: 'open Demo\nwait\n',
+  });
+  const id = await opened(baseUrl, stateDir, destination);
+  const settled = await settleScriptDeliveryReceiptOfFailure(
+    { baseUrl, token: 't' },
+    batchRequest([
+      { command: 'wait', input: {} },
+      { command: 'close', input: {} },
+    ]),
+    {
+      code: 'COMMAND_FAILED' as const,
+      message: 'original batch failure',
+      details: {
+        step: 1,
+        command: 'wait',
+        ...receipt(id, { version: script('v2', 2, id), close: { step: 2 } }),
+      },
+    },
+    stateDir,
+    downloadRemoteArtifact,
+  );
+  expect(settled.message).toBe('original batch failure');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\n');
+  expect(records(stateDir)).toHaveLength(1);
+});
+
+test('a failed batch that names no position delivers the version and discloses, and retires nothing', async () => {
+  // A request deadline or a step that throws into the runner fails the batch with no step position.
+  // The version and failures are still facts about this client's publication, and dropping them
+  // would leave the caller file stale with no warning. An answer that cannot name where it stopped
+  // proves no close, so nothing retires.
+  const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
+  const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
+  const { stateDir, destination } = world();
+  const baseUrl = await artifactServer({
+    'open-v1': 'open Demo\n',
+    v2: 'open Demo\nwait\nclose\n',
+  });
+  const id = await opened(baseUrl, stateDir, destination);
+  const settled = await settleScriptDeliveryReceiptOfFailure(
+    { baseUrl, token: 't' },
+    batchRequest([
+      { command: 'wait', input: {} },
+      { command: 'close', input: {} },
+    ]),
+    {
+      code: 'COMMAND_FAILED' as const,
+      message: 'original batch failure',
+      details: receipt(id, { version: script('v2', 2, id), close: { step: 2 } }),
+    },
+    stateDir,
+    downloadRemoteArtifact,
+  );
+  expect(settled.message).toBe('original batch failure');
+  expect(settled.details?.scriptDeliveryReceipt).toBeDefined();
+  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\nclose\n');
   expect(records(stateDir)).toHaveLength(1);
 });
 

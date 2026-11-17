@@ -1,4 +1,4 @@
-import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
+import { normalizeBatchCommandName } from '@agent-device/contracts/command';
 import type {
   AppDeviceResolver,
   ComposedDeviceInventoryGateways,

@@ -63,6 +63,21 @@ test('a request whose steps delivered nothing answers no receipt', async () => {
   expect(response).toEqual({ ok: true, data: { results: [] } });
 });
 
+test('a reply no nested step fed answers no receipt, even when it names script artifacts', async () => {
+  // A single command's own reply already delivers through its artifacts; a receipt on it would
+  // change every recorded action's shape. Only a request whose ledger its nested steps fed — a
+  // composite — answers one.
+  const response = await reportScriptDelivery(batchRequest(1), async () => ({
+    ok: true,
+    data: { artifacts: [script('v2', 2)], scriptDeliveryFailure: failure() },
+  }));
+
+  expect(response).toEqual({
+    ok: true,
+    data: { artifacts: [script('v2', 2)], scriptDeliveryFailure: failure() },
+  });
+});
+
 test('the versions, the failure and the close the steps answered become one receipt on the outer reply', async () => {
   let scriptDelivery: ScriptDeliveryLedger | undefined;
   const response = await reportScriptDelivery(batchRequest(2), async (outer) => {
