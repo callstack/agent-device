@@ -54,6 +54,14 @@ try {
   // of packing this checkout, to prove a plugin still loads on a host without the newest contract.
   const coreSpec = process.env.AGENT_DEVICE_CORE_SPEC ?? (await pack(root));
   const pluginTarball = await pack(plugin);
+  const sha256 = async (file) =>
+    crypto
+      .createHash('sha256')
+      .update(await fs.readFile(file))
+      .digest('hex');
+  if (!process.env.AGENT_DEVICE_CORE_SPEC)
+    console.log(`Core tarball sha256: ${await sha256(coreSpec)}`);
+  console.log(`Plugin tarball sha256: ${await sha256(pluginTarball)}`);
   for (const directory of [consumer, project]) {
     await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, 'package.json'), '{"private":true,"type":"module"}');
@@ -70,8 +78,8 @@ try {
   );
   assert.deepEqual(installed.exports, {
     ...fixture.additionalExports,
-    '.': { import: './dist/agent-device.mjs' },
-    './agent-device': { import: './dist/agent-device.mjs' },
+    '.': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
+    './agent-device': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
   });
   assert.equal(installed.dependencies, undefined);
   assert.equal(installed.peerDependencies, undefined);
@@ -92,12 +100,32 @@ try {
       project,
     );
   }
+  if (fixture.verifyTypes) {
+    await run(
+      'npm',
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', pluginTarball],
+      consumer,
+    );
+    await fixture.verifyTypes({ consumer, run, root });
+    console.log(`Packed ${manifest.name}: TypeScript consumer passed.`);
+  }
   await fs.writeFile(
     path.join(home, 'config.json'),
     JSON.stringify({ plugins: { [manifest.name]: { installation } } }),
   );
   const core = path.join(consumer, 'node_modules', 'agent-device');
   const coreManifest = JSON.parse(await fs.readFile(path.join(core, 'package.json'), 'utf8'));
+  if (fixture.verifyPacked) {
+    const pluginRoot = path.join(project, 'node_modules', manifest.name);
+    const loadExport = async (directory, exports, name) =>
+      await import(pathToFileURL(path.resolve(directory, exports[name].import)).href);
+    await fixture.verifyPacked({
+      core: await loadExport(core, coreManifest.exports, '.'),
+      contracts: await loadExport(core, coreManifest.exports, './contracts'),
+      plugin: await loadExport(pluginRoot, installed.exports, './agent-device'),
+    });
+    console.log(`Packed ${manifest.name}: failure contract passed.`);
+  }
   const bin = path.resolve(core, coreManifest.bin['agent-device']);
   const env = {
     ...process.env,

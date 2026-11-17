@@ -1,6 +1,6 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { AwsDeviceFarmClient } from './aws-device-farm.ts';
-import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
+import { cloudArtifactsReadyOrPending } from '@agent-device/provider-webdriver/plugin';
 
 export type AwsDeviceFarmArtifactGroup = 'FILE' | 'LOG' | 'SCREENSHOT';
 

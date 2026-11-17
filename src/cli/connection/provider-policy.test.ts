@@ -30,8 +30,23 @@ test('provider policy projects provider identity into semantic capabilities', ()
     connectionProviderCapabilities('browserstack', pluginHome().env).leaseKind,
     'remote-provider',
   );
-  assert.equal(connectionProviderCapabilities('aws-device-farm', {}).requiresAppAttachment, true);
+  assert.equal(connectionProviderCapabilities('aws-device-farm', {}).leaseKind, 'remote-provider');
   assert.equal(connectionProviderCapabilities('proxy', {}).leaseKind, 'proxy');
+});
+
+test('an installed AWS Device Farm plugin declares its capabilities once the store is primed', async () => {
+  const { home, env } = pluginHome();
+  selectV2Plugin(
+    home,
+    '@agent-device/aws-device-farm',
+    v2RegistrationSource('aws-device-farm', {
+      extra: `connection: { capabilities: { leaseKind: 'direct-device-provider', requiresAppAttachment: true, requiresRemoteDaemon: false, supportsArtifacts: true, supportsDeferredAppSelection: false, supportsDirectPortReverse: false, usesCloudWebDriverLease: true }, resolve() {}, verify() {} },`,
+    }),
+  );
+
+  assert.equal(connectionProviderCapabilities('aws-device-farm', env).requiresAppAttachment, false);
+  await primeProviderConnection('aws-device-farm', env);
+  assert.equal(connectionProviderCapabilities('aws-device-farm', env).requiresAppAttachment, true);
 });
 
 test('a manifest connection on a store package supplies no capabilities', async () => {

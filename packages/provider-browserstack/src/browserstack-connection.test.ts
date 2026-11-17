@@ -31,6 +31,9 @@ function host(env: Record<string, string | undefined> = CREDENTIALS): ProviderPl
     env,
     options: {},
     clientVersion: '1.2.3',
+    runHostCommand: async () => {
+      throw new Error('host command unused');
+    },
     createError: (code, message, details) => new AppError(code, message, details),
   };
 }

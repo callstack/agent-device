@@ -87,6 +87,11 @@ const KNOWN_FREE_NAME_STUB_TYPES: Record<string, string> = {
 function writeSnippetProgram(snippets: string[]): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-api-doc-snippets-'));
   fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"type":"module"}\n');
+  fs.symlinkSync(
+    path.join(repoRoot, 'node_modules'),
+    path.join(tmpDir, 'node_modules'),
+    'junction',
+  );
   fs.writeFileSync(
     path.join(tmpDir, 'tsconfig.json'),
     JSON.stringify({

@@ -5,6 +5,7 @@
     "tools/depgraph-view/app.js",
     "scripts/check-provider-plugin.mjs",
     "scripts/check-affected/command.ts",
+    "packages/provider-aws-device-farm/test/package-smoke.mjs",
     "packages/provider-browserstack/test/package-smoke.mjs",
     "packages/provider-browserstack/tsdown.config.ts",
     "packages/provider-testmu/test/package-smoke.mjs",
