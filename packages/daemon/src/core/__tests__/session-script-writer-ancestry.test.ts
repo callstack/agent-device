@@ -505,9 +505,9 @@ skipOnWindows(
   'a delivery failure the wire names no cause for is disclosed generically, not by its internal reason',
   () => {
     // #4584 review: the per-action route reads the write error's reason to say WHICH recovery a caller has
-    // (`state_chain_untrusted` is not a full disk), but the wire contract names its causes (ADR 0016). An
-    // error carrying a reason outside that set — here a `sessions` link reported by a filesystem error — is
-    // disclosed as the generic delivery failure, and never leaks the daemon's own string.
+    // (`script_ancestor_untrusted` is not a full disk), but the wire contract names its causes (ADR 0016). An
+    // error carrying a reason outside that set — here an `EACCES` from a filesystem — is disclosed as the
+    // generic delivery failure, and never leaks a daemon-internal string to a client.
     const stateDir = root();
     const outside = path.join(stateDir, 'outside');
     fs.mkdirSync(outside);

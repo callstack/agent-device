@@ -269,7 +269,7 @@ function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): 
     'COMMAND_FAILED',
     `Failed to write the healed script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
     {
-      hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and its permissions.',
+      hint: 'The repair transaction completed but the healed .ad could not be published; check the target path and permissions, then retry close --save-script.',
     },
   );
 }
@@ -335,7 +335,7 @@ function publishHealedScriptAtomically(params: {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     throw new AppError(
       'COMMAND_FAILED',
-      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force.`,
+      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
       { reason: 'script_target_exists', path: scriptPath },
     );
   }
