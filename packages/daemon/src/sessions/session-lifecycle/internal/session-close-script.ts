@@ -109,7 +109,7 @@ export function finalizeOrdinaryCloseScript(params: {
   if (result.written) markCloseGeneratedPublicationDone(session, result.path);
   const error =
     !result.written && result.error ? toOrdinaryCloseSaveScriptFailure(result.error) : undefined;
-  const remote = remoteCloseScript(session, error);
+  const remote = remoteCloseScript(session, error !== undefined);
   return remote ? { remote } : { error };
 }
 

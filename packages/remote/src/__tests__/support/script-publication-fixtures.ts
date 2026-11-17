@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { onTestFinished } from 'vitest';
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonBatchStep, DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   closeLoopbackServer,
@@ -56,6 +56,26 @@ export async function artifactServer(artifacts: Record<string, Served>): Promise
 
 export function request(command: string, meta: DaemonWireRequest['meta'] = {}): DaemonWireRequest {
   return { token: 't', session: 'journey', command, positionals: [], meta };
+}
+
+/**
+ * A real `batch` request, the only command whose answer the client reads a `scriptDeliveryReceipt` from
+ * (`session-script-destination.ts` gates the read on the command). A case that wants the receipt validator
+ * to run has to send this: a receipt on any other command is never read, and the case passes without
+ * reaching what it means to pin.
+ */
+export function batch(
+  steps: readonly DaemonBatchStep[],
+  meta: DaemonWireRequest['meta'] = {},
+): DaemonWireRequest {
+  return {
+    token: 't',
+    session: 'journey',
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: [...steps] },
+    meta,
+  };
 }
 
 export function script(

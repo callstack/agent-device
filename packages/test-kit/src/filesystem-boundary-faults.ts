@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { isAtomicPublishTemporaryPath } from '@agent-device/host-kit/file';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export type FilesystemErrno = 'EIO' | 'ENOSPC' | 'EMFILE';
@@ -71,14 +70,15 @@ function installFilesystemFault(options: {
   const failure = createErrno(options.errno);
   let injected = false;
   const temporaryDescriptors = new Set<number>();
+  const temporaryPath = (value: unknown) => isPublishTemporarySiblingOf(value, options.targetPath);
   const isTargetOrTemporary = (value: unknown): boolean =>
-    value === options.targetPath || isAtomicPublishTemporaryPath(value, options.targetPath);
+    value === options.targetPath || temporaryPath(value);
 
   if (options.faultPoint === 'write') {
     const originalOpenSync = fs.openSync;
     vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
       const descriptor = Reflect.apply(originalOpenSync, fs, args);
-      if (isAtomicPublishTemporaryPath(args[0], options.targetPath)) {
+      if (temporaryPath(args[0])) {
         temporaryDescriptors.add(descriptor);
       }
       return descriptor;
@@ -88,7 +88,7 @@ function installFilesystemFault(options: {
     vi.spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
       const destination = args[0];
       const writesPublishedTemporary =
-        isAtomicPublishTemporaryPath(destination, options.targetPath) ||
+        temporaryPath(destination) ||
         (typeof destination === 'number' && temporaryDescriptors.has(destination));
       if (writesPublishedTemporary) {
         injected = true;
@@ -109,6 +109,40 @@ function installFilesystemFault(options: {
   }
 
   return { wasInjected: () => injected };
+}
+
+/**
+ * Whether a value is the temporary sibling a publish makes for `targetPath`, by NAME and by directory.
+ *
+ * The directory is asked as device and inode, not as text: a publisher that judges ground stages its sibling
+ * in the PHYSICAL directory it judged, and a spelling through a symbolic link (`/var` on macOS) or a `..`
+ * behind a link is one directory in the filesystem and two in text. Comparing the text would leave the real
+ * sibling unmatched.
+ */
+export function isPublishTemporarySiblingOf(value: unknown, targetPath: string): boolean {
+  if (typeof value !== 'string' || !value.endsWith('.tmp')) return false;
+  const name = path.basename(value);
+  const prefix = `.${path.basename(targetPath)}.`;
+  if (!name.startsWith(prefix) || name.length <= prefix.length + 1) return false;
+  const directory = path.dirname(value);
+  const spelled = path.dirname(targetPath);
+  if (directory === spelled) return true;
+  const expected = statOrNull(spelled);
+  const seen = statOrNull(directory);
+  return (
+    expected !== undefined &&
+    seen !== undefined &&
+    seen.dev === expected.dev &&
+    seen.ino === expected.ino
+  );
+}
+
+function statOrNull(pathname: string): fs.Stats | undefined {
+  try {
+    return fs.statSync(pathname);
+  } catch {
+    return undefined;
+  }
 }
 
 function createErrno(errno: FilesystemErrno): NodeJS.ErrnoException {

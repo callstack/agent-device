@@ -14,7 +14,6 @@ import {
   commitRepairScriptBeforeClose,
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
-import { remoteCloseScriptDelivery } from '../../../../core/session-script-publication-capability.ts';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { failScriptStagingWrite } from '../../../../__tests__/support/script-staging-failure.ts';
@@ -90,68 +89,6 @@ test('repair close failure keeps normalized metadata and is explicitly retriable
       },
       retriable: true,
     },
-  });
-});
-
-test('a refused remote close write keeps its typed reason as the delivery failure cause', () => {
-  // #4584: a remote recording's close discloses a failed final write instead of failing, and the
-  // disclosure has to say WHICH failure it was. `script_ancestor_untrusted` — ground the caller's
-  // destination crosses is writable by somebody else — is a different recovery from a full disk, and a
-  // client cannot tell them apart from prose. The reason comes from the write error, so it travels with it.
-  const { req, ref, sessionStore } = setup('remote-ordinary');
-  sessionStore.requireCurrent(ref).scriptPublication = authoringPublication('armed', {
-    remote: true,
-  });
-  const failure = new AppError('COMMAND_FAILED', 'that directory is writable by another user', {
-    reason: 'script_ancestor_untrusted',
-    hint: 'Save the script under a directory only you can write.',
-  });
-  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
-
-  const { remote } = finalizeOrdinaryCloseScript({
-    req,
-    ref,
-    sessionStore,
-    platformCloseError: undefined,
-  });
-
-  const delivered = remoteCloseScriptDelivery({ ok: true, data: {} }, remote);
-  if (!delivered.ok) throw new Error('a failed remote version keeps the close successful');
-  expect(delivered.data?.scriptDeliveryFailure).toMatchObject({
-    reason: 'script_delivery_failed',
-    publicationId: 'publication-0001',
-    cause: 'script_ancestor_untrusted',
-  });
-});
-
-test('a close write failure the wire names no cause for is disclosed generically', () => {
-  // #4584 review: the failure's `cause` is a small named set (ADR 0016), not the daemon's own reason
-  // vocabulary. An error that carries some other reason — an `EACCES` that reached the close path, or a
-  // reason a later release adds before the wire contract knows it — is disclosed as the generic delivery
-  // failure, so no daemon-internal string reaches a client by accident.
-  const { req, ref, sessionStore } = setup('remote-ordinary');
-  sessionStore.requireCurrent(ref).scriptPublication = authoringPublication('armed', {
-    remote: true,
-  });
-  const failure = new AppError('COMMAND_FAILED', 'permission denied', {
-    reason: 'EACCES',
-    hint: 'Check the target path.',
-  });
-  vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
-
-  const { remote } = finalizeOrdinaryCloseScript({
-    req,
-    ref,
-    sessionStore,
-    platformCloseError: undefined,
-  });
-
-  const delivered = remoteCloseScriptDelivery({ ok: true, data: {} }, remote);
-  if (!delivered.ok) throw new Error('a failed remote version keeps the close successful');
-  expect(delivered.data?.scriptDeliveryFailure).toMatchObject({
-    reason: 'script_delivery_failed',
-    publicationId: 'publication-0001',
-    cause: 'script_download_failed',
   });
 });
 

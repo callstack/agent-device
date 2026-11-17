@@ -410,10 +410,7 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    // host-kit owns the creation sequence (#4565): walk, refuse before anything is created, create what
-    // is missing at 0700 inside the judged directory, judge the completed chain. A destination this route
-    // refuses therefore leaves no directories behind in the shared ground it names, and the answer is where
-    // staging goes, so this route is not walked twice to be told the same directory.
+    // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
     staging = allocated;
@@ -450,12 +447,8 @@ async function publishScriptVersion(
 }
 
 /**
- * Creates a staging directory beside the destination and lists it in the record before any script bytes
- * reach it, answering the directory it made, or nothing when the record went away.
- *
- * Staging sits in the directory the walk JUDGED — its answer, not `path.dirname` of the spelled destination:
- * where a `..` or a link leads elsewhere, the spelled parent is ground nobody judged, and a directory in it
- * is one another local user can populate before the rename does.
+ * Creates a staging directory in the ground host-kit judged, and lists it in the record before any script
+ * bytes reach it, or nothing when the record went away (ADR 0016).
  */
 function allocateStaging(file: string, prepared: ScriptDestination): string | undefined {
   const record = readRecord(file);
@@ -563,9 +556,8 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
-  // Confirmed here, under the record lock and right before the entry is created, because the download ran
-  // in between: host-kit walks the destination again and refuses if it now answers a DIFFERENT directory
-  // than the one staging was allocated in, so bytes are never renamed into ground nobody judged (#4565).
+  // Confirmed here, under the record lock and right before the entry is created, because the download ran in
+  // between (ADR 0016).
   const judged = confirmScriptDestination(current.destination, prepared);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
@@ -573,10 +565,8 @@ function publishStaged(
   writeRecord(file, { ...current, publishing });
   pending.named = true;
   const exclusive = current.revision === 0 && !current.force;
-  // The entry is created in the directory THAT ANSWER came back with, spelled from it, and never through
-  // the destination's own spelling: handing the kernel the spelled destination makes it resolve the chain
-  // a second time, after the judgment, and `home/work/../y` names a different directory the moment `work`
-  // is pointed elsewhere. Same rule the local publisher applies.
+  // The entry is spelled FROM that answer, never through the destination's own spelling, as the local
+  // publisher does (ADR 0016).
   const entry = path.join(judged, path.basename(current.destination));
   try {
     if (exclusive) fs.linkSync(staged, entry);

@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import { vi } from 'vitest';
-import { isAtomicPublishTemporaryPath } from '@agent-device/host-kit/file';
+import { isPublishTemporarySiblingOf } from '@agent-device/test-kit';
 
 /**
  * Makes the staging write of a script publication fail, and only that write.
  *
  * A publication stages the recording in a private temp sibling of the destination and moves it into place,
- * so the seam where the filesystem can refuse a script is that one write. `host-kit`'s temp-path predicate
+ * so the seam where the filesystem can refuse a script is that one write. `test-kit`'s temp-path predicate
  * says which write it is, so the fixture does not have to know how the name is built.
  *
  * This replaces a fixture that made the destination's directory `0500`. That one asked the HOST whether a
@@ -21,7 +21,7 @@ export function failScriptStagingWrite(destination: string): void {
   );
   const realWriteFileSync = fs.writeFileSync;
   vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: fs.PathLike | number, ...rest) => {
-    if (isAtomicPublishTemporaryPath(file, destination)) throw failure;
+    if (isPublishTemporarySiblingOf(file, destination)) throw failure;
     return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
   }) as typeof fs.writeFileSync);
 }

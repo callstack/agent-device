@@ -57,6 +57,7 @@ export {
   type FilesystemBoundaryOwner,
   type FilesystemErrno,
   type FilesystemFaultPoint,
+  isPublishTemporarySiblingOf,
   registerFilesystemBoundaryMatrix,
 } from './filesystem-boundary-faults.ts';
 export {
