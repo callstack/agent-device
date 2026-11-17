@@ -10,8 +10,9 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - A replay plugin uses the same version 2 factory with `kind: 'replay-backend'`, `backend`, and `setup(host)`. Setup returns `{ replayBackend: { create(host) }, dispose? }` for a format backend. Provider and backend ids have separate claim sets in this registry. A replay plugin registers no provider runtime.
 - One registry. Composition selects built-in, store, or embedder sources. Built-in providers use the
   same shape as an installed plugin, and one function validates what every factory returns.
-- Plugins import only types from agent-device. The type-only contract is `agent-device/plugins`;
-  there is no runtime helper, and the contract does not depend on a plugin's module URL.
+- Plugins import only types from `agent-device/plugins`. The factory contract has no runtime
+  helper and does not depend on a plugin's module URL. The entry also exports the host-side manager
+  operation `addPluginArtifact(path, { env, cwd })`, which shares the CLI's managed store.
 - The first registration of a provider id claims it, even when that registration fails. Later ones
   are recorded as failed. `cloud` and `proxy` are routing identities no plugin can claim.
 - A plugin that fails to enumerate, load, validate or set up is recorded and skipped. The daemon
@@ -56,6 +57,8 @@ had to fake the store to load a plugin from its own dependencies (#3747).
 - **A client reads a daemon's inventory from `daemon.json`.** The client credential fingerprint
   takes variable names from it. A v2 plugin declares its connect capabilities in code, so a client
   loads the store, without setting up a runtime, before it reads them.
+
+Decision history (2026-11-17): the public artifact manager API in [#4615](https://github.com/callstack/agent-device/pull/4615) narrows the entry's type-only restriction to plugin factories. Hosts can use the shared manager without adding a runtime helper dependency to plugins.
 
 ## Daemon ownership
 
