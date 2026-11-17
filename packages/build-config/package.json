@@ -1,0 +1,16 @@
+{
+  "name": "@agent-device/build-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared repository bundler configuration.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "rolldown": "1.2.5"
+  }
+}

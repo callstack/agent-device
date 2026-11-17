@@ -1,8 +1,5 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseBrowserStackAppReference } from './browserstack.ts';
-import { isBrowserStackAppReference } from './providers.ts';
-import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   ProviderConnectionResource,
   ProviderConnectionVerification,
@@ -35,7 +32,9 @@ export async function verifyBrowserStackConnection(
   options: BrowserStackConnectionVerificationOptions,
   clientVersion: string,
 ): Promise<BrowserStackConnectionVerification> {
-  const providerApp = readBrowserStackAppOption(options.app);
+  const { parseBrowserStackAppReference } = await import('./browserstack.ts');
+  const { sameOsVersion } = await import('@agent-device/provider-webdriver/plugin');
+  const providerApp = parseBrowserStackAppReference(options.app) ?? options.app;
   const auth = { username: options.username, accessKey: options.accessKey };
   const devices = await fetchBrowserStackJson(
     options.devicesEndpoint ?? BROWSERSTACK_DEVICES_ENDPOINT,
@@ -76,17 +75,13 @@ export async function verifyBrowserStackConnection(
   };
 }
 
-/** Hand-authored remote configs reach verification without passing through connect's normalization. */
-function readBrowserStackAppOption(app: string): string {
-  return parseBrowserStackAppReference(app) ?? app;
-}
-
 async function verifyBrowserStackApp(
   app: string,
   options: BrowserStackConnectionVerificationOptions,
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<ProviderConnectionResource> {
+  const { isBrowserStackAppReference } = await import('./providers.ts');
   if (isBrowserStackAppReference(app)) {
     const apps = await fetchBrowserStackJson(
       options.appsEndpoint ?? BROWSERSTACK_APPS_ENDPOINT,
@@ -124,6 +119,7 @@ async function fetchBrowserStackJson(
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<unknown> {
+  const { fetchProviderVerificationJson } = await import('@agent-device/provider-webdriver/plugin');
   return await fetchProviderVerificationJson(endpoint, {
     clientVersion,
     auth,

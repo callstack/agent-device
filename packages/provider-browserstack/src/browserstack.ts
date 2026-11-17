@@ -1,64 +1,24 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
-import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
-import type { CloudWebDriverUploadApp } from './runtime.ts';
-import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
-import {
-  BROWSERSTACK_CREDENTIAL_VARIABLES,
-  canonicalBrowserStackAppReference,
-  CLOUD_WEBDRIVER_PROVIDERS,
-  isBrowserStackAppReference,
-} from './providers.ts';
 import {
   appendUrlPath,
   appFileUploadForm,
+  cloudArtifactsReadyOrPending,
   createHubUploadApp,
   fetchProviderSessionDetails,
   postHubAppUpload,
-  requireEnv,
   resolveHubAppReference,
-} from './webdriver-utils.ts';
-
-export const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
-  provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-  label: 'BrowserStack',
-  fields: {
-    providerApp: 'consumed',
-    providerOsVersion: 'consumed',
-    providerDeviceType: 'refused',
-    providerProject: 'consumed',
-    providerBuild: 'consumed',
-    providerSessionName: 'consumed',
-    providerDeviceOrientation: 'consumed',
-    providerGeoLocation: 'consumed',
-    providerTimezone: 'consumed',
-    providerAppiumVersion: 'consumed',
-    providerLanguage: 'consumed',
-    providerLocale: 'consumed',
-    providerNetworkProfile: 'consumed',
-    providerCustomNetwork: 'consumed',
-    providerNoResignApp: 'consumed',
-    providerNetworkLogs: 'refused',
-    providerNetworkHosts: 'refused',
-    awsProjectArn: 'refused',
-    awsDeviceArn: 'refused',
-    awsAppArn: 'refused',
-    awsRegion: 'refused',
-    awsInteractionMode: 'refused',
-  },
-};
-
-/** The BrowserStack credentials in `env`; `consumer` names the command a missing one fails. */
-export function requireBrowserStackCredentials(
-  env: Readonly<Record<string, string | undefined>>,
-  consumer: string,
-): { username: string; accessKey: string } {
-  return {
-    username: requireEnv(env, BROWSERSTACK_CREDENTIAL_VARIABLES.username, consumer),
-    accessKey: requireEnv(env, BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey, consumer),
-  };
-}
+  urlArtifactFromDetails,
+} from '@agent-device/provider-webdriver/plugin';
+import type {
+  CloudWebDriverCapabilityOverrides,
+  CloudWebDriverUploadApp,
+} from '@agent-device/provider-webdriver/plugin';
+import {
+  PROVIDER,
+  canonicalBrowserStackAppReference,
+  isBrowserStackAppReference,
+} from './providers.ts';
 
 export const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
 export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
@@ -130,7 +90,7 @@ export async function uploadBrowserStackApp(
   signal?.throwIfAborted();
   return await postHubAppUpload(
     await appFileUploadForm(appPath, 'file', {
-      provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      provider: PROVIDER,
       service: 'BrowserStack',
     }),
     {

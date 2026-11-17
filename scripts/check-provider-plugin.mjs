@@ -69,6 +69,7 @@ try {
     await fs.readFile(path.join(project, 'node_modules', manifest.name, 'package.json'), 'utf8'),
   );
   assert.deepEqual(installed.exports, {
+    ...fixture.additionalExports,
     '.': { import: './dist/agent-device.mjs' },
     './agent-device': { import: './dist/agent-device.mjs' },
   });
@@ -77,6 +78,20 @@ try {
   await assert.rejects(fs.stat(path.join(project, 'node_modules', 'agent-device')), {
     code: 'ENOENT',
   });
+  for (const subpath of Object.keys(fixture.additionalExports ?? {})) {
+    const specifier = `${manifest.name}${subpath.slice(1)}`;
+    await run(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `await import(${JSON.stringify(specifier)}, ${JSON.stringify(
+          subpath.endsWith('.json') ? { with: { type: 'json' } } : {},
+        )});`,
+      ],
+      project,
+    );
+  }
   await fs.writeFile(
     path.join(home, 'config.json'),
     JSON.stringify({ plugins: { [manifest.name]: { installation } } }),

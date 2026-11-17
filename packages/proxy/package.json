@@ -31,7 +31,8 @@
   "devDependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/build-config": "workspace:*"
   },
   "publishConfig": {
     "exports": {
