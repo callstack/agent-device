@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { assertWaitText } from './live-assertions.ts';
-import { type LiveContext, runStep } from './live-harness.ts';
+import { type LiveContext, runStep, captureDiagnosticSnapshot } from './live-harness.ts';
 
 export type AndroidEmulatorScenarioStart = {
   ime: 'system' | 'test';
@@ -24,7 +24,10 @@ export async function prepareAndroidEmulatorScenario(
     ...(start.ime === 'system' ? ['--no-test-ime'] : []),
     start.url,
   ]);
-  const preflight = await runStep(context, 'preflight Android snapshot helper', ['snapshot', '-i']);
+  const preflight =
+    context.currentScenario === 'smoke:automation-system'
+      ? await captureDiagnosticSnapshot(context, 'preflight', 'preflight Android snapshot helper')
+      : await runStep(context, 'preflight Android snapshot helper', ['snapshot', '-i']);
   assert.equal(preflight.json?.data?.androidSnapshot?.backend, 'android-helper');
   await assertWaitText(context, start.landmark);
 }
