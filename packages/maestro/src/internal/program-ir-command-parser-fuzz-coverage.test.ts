@@ -5,18 +5,20 @@ import { SUPPORTED_MAESTRO_COMMAND_NAMES } from './program-ir-command-parser.ts'
 
 const sample = fc.sample(maestroValidationArb, { numRuns: 3_000, seed: 1 });
 
-describe('shape coverage against the converter', () => {
-  // The valid Maestro shapes are rendered by hand here, so the one thing that cannot be left to
-  // drift is which commands they cover: a command the converter accepts but this generator never
-  // emits is a hole the nightly cannot see. Waivers are explicit and must say why.
-  const NOT_GENERATED = new Set([
-    // Both take a nested command list whose bodies the repeat/runFlow cases already cover.
-    'retry',
-    // Needs a JS file on disk to resolve, which a generated case has no way to provide.
-    'runScript',
-  ]);
+function coversCommand(line: string, command: string): boolean {
+  const trimmed = line.trim();
+  return trimmed === `- ${command}` || trimmed.startsWith(`- ${command}:`);
+}
 
-  it('emits every command the converter supports, or waives it explicitly', () => {
+describe('shape coverage against the converter', () => {
+  it('does not count invalid command-name prefixes as coverage', () => {
+    expect(coversCommand('- tapOnPoint: 10,20', 'tapOn')).toBe(false);
+    expect(coversCommand('- inputTextt: Login', 'inputText')).toBe(false);
+    expect(coversCommand('- tapOn: Login', 'tapOn')).toBe(true);
+    expect(coversCommand('  - back', 'back')).toBe(true);
+  });
+
+  it('emits every command the converter supports', () => {
     const emitted = new Set(
       sample.flatMap((entry) => {
         const { payload } = JSON.parse(entry) as { payload: string | string[] };
@@ -24,9 +26,9 @@ describe('shape coverage against the converter', () => {
       }),
     );
     const covered = (command: string) =>
-      [...emitted].some((line) => line.trim().startsWith(`- ${command}`));
+      [...emitted].some((line) => coversCommand(line, command));
     const missing = SUPPORTED_MAESTRO_COMMAND_NAMES.filter(
-      (command) => !NOT_GENERATED.has(command) && !covered(command),
+      (command) => !covered(command),
     );
     expect(missing).toEqual([]);
   });

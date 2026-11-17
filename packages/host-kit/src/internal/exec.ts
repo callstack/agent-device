@@ -33,7 +33,7 @@ export type ExecOptions = {
   timeoutMs?: number;
   detached?: boolean;
   signal?: AbortSignal;
-  /** Max captured bytes per output stream. Async runs are unlimited when omitted. */
+  /** Max captured bytes per stream for runCmd and runCmdSync. runCmd is unlimited when omitted. */
   maxBuffer?: number;
   /**
    * How a deadline or a cancelled request stops the child. Without this it is SIGKILL at
@@ -82,7 +82,7 @@ export type ExecDetachedProcess = {
  * `signal`; a caller that kills the child directly still waits for the streams to
  * drain, exactly as before.
  */
-export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
+export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs' | 'maxBuffer'> & {
   /**
    * Capture stdout/stderr into the wait result when the child has piped stdio.
    * Set false when the caller owns, ignores, or forwards the streams.
