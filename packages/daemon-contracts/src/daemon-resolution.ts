@@ -1,7 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import {
+  childPath,
+  expandUserHomePath,
+  resolveUserPath,
+  verifiedDirectoryGround,
+  verifiedDirectoryPath,
+  withoutTrailingSeparators,
+} from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -50,6 +57,62 @@ export function resolveDaemonPaths(
     allocationsDir: path.join(baseDir, 'allocations'),
     sessionsDir: path.join(baseDir, 'sessions'),
   };
+}
+
+/**
+ * Where `stateBase` STANDS and the names below it, spelled the way the kernel WALKS to them, or `undefined`
+ * when the walk knows nothing of that ground. {@link resolveDaemonPaths} builds every path under a state dir
+ * with `path.join`, and normalization MOVES a directory: `<root>/alias/../state` plus `sessions` joins to
+ * `<root>/state/sessions`, while the kernel walks `<root>/alias` — a link — and comes back at
+ * `<root>/actual/state/sessions`. The state-chain repair creates and judges the WALKED chain, so an artifact
+ * it wrote lives there, and a caller that comes back for that artifact without asking the repair has to name
+ * the same directory — a marker looked for in the folded text is a marker that was never written (#4584,
+ * ADR 0016).
+ *
+ * CREATES and `chmod`s NOTHING, and emits nothing: the repair does that, and the callers here only read or
+ * remove what the repair already made, so a lookup must not create a session directory for a key that has
+ * none. `undefined` is never a guess — it is where the repair falls back to the name it was handed too, so the
+ * two answers cannot land on different directories. TOTAL: the callers are the ones answering another
+ * command's failure, and a marker that cannot be located is an absent marker, never an error of ours.
+ */
+export function answeredDaemonStateDir(stateBase: string, directory: string): string | undefined {
+  // Windows answers access from an ACL and there is no chain to walk: the name given is where it stands.
+  if (process.platform === 'win32') return undefined;
+  const below = path.relative(
+    withoutTrailingSeparators(stateBase),
+    withoutTrailingSeparators(directory),
+  );
+  // NAMES below the base, never a joined path: a `..` would move a level onto ground nobody judged.
+  if (
+    below === '' ||
+    below === '.' ||
+    below === '..' ||
+    below.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(below)
+  )
+    return undefined;
+  const base = stoodStateBase(stateBase);
+  return base === undefined
+    ? undefined
+    : below.split(path.sep).reduce((level, name) => childPath(level, name), base);
+}
+
+/**
+ * The base as the walk spells it: its own physical name once it stands, or the deepest directory it judged
+ * plus the names merely ABSENT below it — the one ground creation lands on. Anywhere else it knows nothing.
+ */
+function stoodStateBase(stateBase: string): string | undefined {
+  try {
+    const answered = verifiedDirectoryPath(stateBase);
+    if ('physical' in answered) return answered.physical;
+    // A `..` queued behind an absent name is walkable by no amount of creating: end the question there.
+    const ground = verifiedDirectoryGround(stateBase);
+    return ground.ended === 'short' && !ground.unresolvable
+      ? ground.missing.reduce((level, name) => childPath(level, name), ground.established)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOptions): string {

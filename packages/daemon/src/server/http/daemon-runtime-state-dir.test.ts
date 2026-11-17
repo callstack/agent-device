@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   createTestHostEnvironment,
   FOREIGN_UID,
@@ -207,11 +207,11 @@ test.skipIf(process.platform === 'win32')(
       expect(input.sessionsDir).toBe(path.join(foldedBase, 'sessions'));
       // Startup repaired the base it verified: the chain the kernel arrives at stands private.
       expect(modeOf(verifiedBase)).toBe(0o700);
-      // Exactly one level is skipped, and it is the honest one: startup also ensures `sessions/` under the name
-      // the setting spells, and that name is the FOLDED text, so the repair of the verified chain stops at a
-      // level that spelled name never creates. Narrowing to the two script destinations leaves that as it is;
-      // the writer asks for the same chain again, for the directories it creates itself.
-      expect(skipped).toBe(1);
+      // Nothing was skipped, and that is the whole point of the rewrite: the chain the kernel arrives at is
+      // created and judged level by level, so `sessions/` appears under the VERIFIED base rather than under the
+      // folded text. The skip this used to count was the repair stopping at a name the folded spelling never
+      // created — a symptom of creating the tail as text before judging it.
+      expect(skipped).toBe(0);
 
       const store = new SessionStore(input.sessionsDir, createTestHostEnvironment(), input.baseDir);
       const record = (name: string, extra: Parameters<typeof authoringPublication>[1]) =>
@@ -241,9 +241,167 @@ test.skipIf(process.platform === 'win32')(
       // The folded directory is the proof: nobody judged it, so nobody wrote in it or changed its mode.
       expect(modeOf(foldedBase)).toBe(0o755);
       expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
+
+      // The same base, asked of the STORE: it repairs the chain from the base it was handed, not from
+      // `path.dirname(sessionsDir)`. `path.join` folded the `alias/../` step out of `sessionsDir`, so the derived
+      // parent is `foldedBase` — a directory the walk never arrived at, and one this daemon must not chmod or
+      // populate. The store hands its base to the repair, so the tombstone directory is made under the VERIFIED
+      // chain and the folded directory stays exactly as it was found.
+      expect(store.resolveDaemonStateDir()).toBe(`${root}/alias/../state`);
+      expect(store.ensureSessionDir('journey')).toBe(
+        path.join(verifiedBase, 'sessions', 'journey'),
+      );
+      expect(modeOf(foldedBase)).toBe(0o755);
+      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
+
+      // Creating that directory is only half the rule: the same path has to be used for everything written
+      // under it. Both markers are written, read back and cleared through the store, and the folded directory
+      // staying empty is what proves the read found them where the repair put them (#4584).
+      const marker = {
+        owner: 'marker',
+        expiredAtMs: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        idleExpiryMs: 1_500,
+        deviceKey: 'ios:sim-1',
+      };
+      store.writeIdleExpiryTombstone('marker', marker);
+      expect(store.readIdleExpiryTombstone('marker')).toEqual(marker);
+      expect(fs.existsSync(path.join(verifiedBase, 'sessions', 'marker', 'idle-expiry.json'))).toBe(
+        true,
+      );
+      store.clearIdleExpiryTombstone('marker');
+      expect(store.readIdleExpiryTombstone('marker')).toBeUndefined();
+
+      // The repair marker carries the commit failure a reaped transaction preserved, so a later command names
+      // that cause instead of a generic expiry. Its details surviving the round-trip is the thing at risk.
+      const reaped = store.publish('marker', makeAuthoringSession('marker', {}));
+      store.writeRepairTombstone(reaped, 60_000, {
+        code: 'COMMAND_FAILED',
+        message: 'commit refused',
+      });
+      expect(store.readRepairTombstone('marker')?.commitFailure).toEqual({
+        code: 'COMMAND_FAILED',
+        message: 'commit refused',
+      });
+      store.clearRepairTombstone('marker');
+      expect(store.readRepairTombstone('marker')).toBeUndefined();
+
+      // And still nothing landed on the spelling the walk never arrived at.
+      expect(modeOf(foldedBase)).toBe(0o755);
+      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
     } finally {
       await runtime.close();
     }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'startup creates its own state over an ancestor it will not call private, and refuses only recordings',
+  async () => {
+    // A fresh state directory inside an ancestor another local user could write — the bind-mounted CI volume
+    // and shared-scratch shape: world-writable and not sticky, so the walk will not stand on it. Startup may
+    // not read that as a reason to stop: `mkdir -p` made these levels before this rule existed, and the
+    // daemon's log, lock, registration and every artifact path sit below them. The chain is what refuses, and
+    // only a recording the daemon picks a path for (#4584 review).
+    const shared = mkdtempForTestSync('agent-device-startup-state-untrusted-');
+    fs.chmodSync(shared, 0o777);
+    const { baseDir, logPath, sessionsDir } = resolveDaemonPaths(path.join(shared, 'agent-device'));
+
+    const { runtime, skipped } = await withDiagnosticsScope({ session: 'daemon' }, async () => ({
+      runtime: await startDaemonRuntime({
+        host: hostFor(baseDir),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture({}),
+      }),
+      skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
+    }));
+    try {
+      // Startup got as far as the log it writes to: the base and its own levels were made, on ground the
+      // repair will not vouch for. The mode is what this process's own recursive `mkdir` gave it — no group or
+      // other access, and this uid's — because a state repair forces nothing on ground it refused to judge.
+      expect(fs.existsSync(baseDir)).toBe(true);
+      expect(modeOf(baseDir) & 0o077).toBe(0);
+      expect(Number(fs.lstatSync(baseDir).uid)).toBe(process.getuid?.() ?? -1);
+      expect(fs.existsSync(logPath)).toBe(true);
+      // The skips are the chain saying where it stopped: once for the base and once for `sessions/`, the two
+      // levels startup asks for, and it carried on past both.
+      expect(skipped).toBe(2);
+
+      // What the shared ground DOES refuse: the daemon's own recording destinations. Both go through the
+      // chain, which never reached the destination walk, so neither is published.
+      const store = new SessionStore(sessionsDir, createTestHostEnvironment(), baseDir);
+      const record = (name: string, extra: Parameters<typeof authoringPublication>[1]) =>
+        store.writeSessionLog(
+          store.publish(
+            name,
+            makeAuthoringSession(name, {
+              scriptPublication: authoringPublication('armed', extra),
+              actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+            }),
+          ),
+        );
+      expect(refusalOf(record('journey', {}))).toMatchObject({ reason: 'state_chain_untrusted' });
+      expect(refusalOf(record('download', { remote: true }))).toMatchObject({
+        reason: 'state_chain_untrusted',
+      });
+      // And the refused remote version created nothing of its own: no `remote-scripts` appeared on a chain the
+      // repair stopped above, which is the rule the blocker asked for.
+      expect(fs.readdirSync(path.join(baseDir, 'sessions'))).not.toContain('remote-scripts');
+    } finally {
+      await runtime.close();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'creates a session directory THROUGH a refused `sessions` level, and saves no recording on it',
+  async () => {
+    // The refused level is `sessions/` itself — a link out of the state tree — and the session directory the
+    // caller asks for does not exist on the far side yet. `main` made that work: the tombstone path ran one
+    // recursive `mkdir` over the spelled session directory, which resolves the tail as TEXT and created it
+    // wherever `sessions` points. When this PR moved creation behind the per-level walk, the walk stopped AT the
+    // link and the own-state caller was handed a path to a directory nobody had made, so an idle-expiry
+    // tombstone failed with `ENOENT` inside its own best-effort catch and the marker was simply lost (#4584
+    // review). Main's `mkdir` is given back to that caller; what stays refused is the destination type.
+    const stateDir = mkdtempForTestSync('agent-device-state-refused-level-');
+    const { baseDir, sessionsDir } = resolveDaemonPaths(stateDir);
+    fs.mkdirSync(baseDir, { recursive: true });
+    const outside = path.join(stateDir, 'outside');
+    fs.mkdirSync(outside);
+    fs.chmodSync(outside, 0o755);
+    fs.symlinkSync(outside, sessionsDir);
+    const store = new SessionStore(sessionsDir, createTestHostEnvironment(), baseDir);
+    const marker = {
+      owner: 'journey',
+      expiredAtMs: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      idleExpiryMs: 1_000,
+    };
+
+    // The child is created, on the far side of the refused level, by `mkdir` alone — no `chmod`, no `fchmod`.
+    const chmod = vi.spyOn(fs, 'chmodSync');
+    const fchmod = vi.spyOn(fs, 'fchmodSync');
+    expect(store.ensureSessionDir('journey')).toBe(path.join(sessionsDir, 'journey'));
+    expect(chmod.mock.calls.map(([, mode]) => mode)).toEqual([]);
+    expect(fchmod.mock.calls.map(([, mode]) => mode)).toEqual([]);
+    expect(fs.lstatSync(path.join(outside, 'journey')).isDirectory()).toBe(true);
+
+    // The write the lost marker was, now standing where main put it.
+    store.writeIdleExpiryTombstone('journey', marker);
+    expect(store.readIdleExpiryTombstone('journey')).toEqual(marker);
+
+    // And what that chain still refuses: a recording destination of the daemon's own choosing, made nowhere.
+    const refused = store.writeSessionLog(
+      store.publish(
+        'journey',
+        makeAuthoringSession('journey', {
+          scriptPublication: authoringPublication('armed', {}),
+          actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+        }),
+      ),
+    );
+    expect(refusalOf(refused)).toMatchObject({ reason: 'state_chain_untrusted' });
+    expect(fs.readdirSync(outside)).toEqual(['journey']);
   },
 );
 

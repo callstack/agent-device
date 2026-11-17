@@ -215,7 +215,9 @@ async function startDaemonRuntimeOnHost(
   //
   // Each answer is the PHYSICAL spelling of the directory it created or repaired, and `ensureSessionDir` and
   // the script writer read that answer for themselves, so every level they build is one the walk judged —
-  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back.
+  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back. Where the walk refuses
+  // ground above the base, these levels are still made and the chain answers untrusted: that refuses only the
+  // daemon-picked recordings, and startup and every other command carry on (ADR 0016).
   ensureDaemonStateDir(baseDir, baseDir);
   ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);

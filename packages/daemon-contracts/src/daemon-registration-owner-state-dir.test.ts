@@ -12,7 +12,7 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { ensurePrivateDaemonStateDir } from './daemon-registration-owner.ts';
+import { ensureDaemonStateDir, ensurePrivateDaemonStateDir } from './daemon-registration-owner.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 const SKIPPED = ['daemon_state_mode_repair_skipped'];
@@ -219,13 +219,13 @@ skipOnWindows(
   },
 );
 
-skipOnWindows('reports the level that disappeared before the repair reached it', async () => {
-  // The chain is walked AFTER a recursive `mkdir`, so at rest every level it asks about exists: a name is
-  // absent only when something removes it between the creation and the `lstat` of the same call. That race
-  // cannot be set up on disk, so the fixture answers the level ABSENT, which is what `throwIfNoEntry: false`
-  // really returns for a name that is not there (asserted below against a real absent name, so the injected
-  // value is the host's own answer and not a made-up shape). What must not happen is a silent stop: an
-  // operator reading the daemon log has to see where the chain stopped.
+skipOnWindows('reports a level it cannot judge, and creates nothing for it', async () => {
+  // The chain is walked before anything is created, so an ABSENT level is the one state the descent acts on: it
+  // creates that name and judges what appears. Here the answer stays absent through the creation attempt, which
+  // is what `throwIfNoEntry: false` really returns for a name that is not there (asserted below against a real
+  // absent name, so the injected value is the host's own answer and not a made-up shape) — a host that cannot
+  // tell the daemon what stands there. What must not happen is a silent stop, or a mode forced on a name nobody
+  // judged: an operator reading the daemon log has to see where the chain stopped.
   const base = mkdtempForTestSync('agent-device-state-absent-level-');
   fs.chmodSync(base, 0o700);
   const sessions = path.join(base, 'sessions');
@@ -257,6 +257,38 @@ skipOnWindows('reports the level that disappeared before the repair reached it',
   expect(modeOf(sessions)).toBe(0o755);
   expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, base))).toBe(1);
 });
+
+skipOnWindows(
+  'hands back ENOTDIR when a plain file stands where a state level has to be',
+  async () => {
+    // A LINK at a level is a host shape the verdict is for: the chain answers not private, the caller is told in
+    // the log, and the daemon keeps working. A plain FILE at `sessions` is not that. Nothing can ever be created
+    // or written under it, so a verdict of "not private" would send every command into a directory that cannot
+    // exist and fail later with a worse message. The recursive `mkdir` this rule replaced answered `ENOTDIR`
+    // there, and the caller that handled that handles this one — including the `open` that could not make its
+    // artifact directory.
+    const base = mkdtempForTestSync('agent-device-state-file-level-');
+    fs.chmodSync(base, 0o700);
+    const sessions = path.join(base, 'sessions');
+    fs.writeFileSync(sessions, 'not a directory\n');
+
+    // Said once, and THROWN: no skip is emitted, because a skipped level is something the daemon walked past and
+    // there is nothing of that kind here.
+    const { skips } = await withDiagnosticsScope({ session: 'daemon' }, () => {
+      let thrown: unknown;
+      try {
+        ensurePrivateDaemonStateDir(path.join(sessions, 'journey'), base);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({ code: 'ENOTDIR' });
+      return { skips: countDiagnosticEventsByPhase(SKIPPED) };
+    });
+    expect(skips).toBe(0);
+    // Nothing was created, and the file is exactly as it was.
+    expect(fs.lstatSync(sessions).isFile()).toBe(true);
+  },
+);
 
 skipOnWindows(
   'refuses to repair a chain whose state base stands on ground another user can write',
@@ -399,22 +431,128 @@ skipOnWindows('skips a state directory another user owns, and leaves its mode', 
 });
 
 skipOnWindows(
-  'skips a chain whose state base is a link, and creates its state anyway',
+  'stands on a state base that is a link, and keeps its state where the link points',
   async () => {
-    // `~/.agent-device` on another disk: the base ITSELF is a link, so the descent cannot judge it and every
-    // level under it is out of reach. That is a host the operator set up, not an attack, so creation goes
-    // through and the repair only reports — a daemon that refused to start here would fail every command.
+    // `~/.agent-device` linked to another disk: a layout the operator chose, and one every release before this
+    // rule kept its state on the far side of. What the link costs is the verdict — the chain is not private
+    // ground — and that verdict decides WHAT stands there: a destination of the daemon's own choosing is
+    // published nowhere on that chain and CREATED nowhere under it, while startup still gets the state it runs
+    // on. At head the descent crossed the refused base and built `sessions` on the far side anyway, reporting
+    // `privateChain: false` for a directory it had just made (#4584 review).
     const target = mkdtempForTestSync('agent-device-state-link-target-');
+    fs.chmodSync(target, 0o755);
     const parent = mkdtempForTestSync('agent-device-state-link-');
     const base = path.join(parent, 'agent-device');
     fs.symlinkSync(target, base);
     const sessions = path.join(base, 'sessions');
 
+    const { answer, skips } = await withDiagnosticsScope({ session: 'daemon' }, () => ({
+      answer: ensurePrivateDaemonStateDir(sessions, base),
+      skips: countDiagnosticEventsByPhase(SKIPPED),
+    }));
+
+    // The answer carries the base's own name — the kernel resolves the link on the way in, exactly as it always
+    // has, and a client names this spelling too. Only the verdict changes: not private ground.
+    expect(answer).toEqual({
+      path: sessions,
+      privateChain: false,
+    });
+    // One skip, for the level the repair would not stand on: the base itself.
+    expect(skips).toBe(1);
+    // And nothing was made on the far side of a name this rule refused to stand on.
+    expect(fs.lstatSync(sessions, { throwIfNoEntry: false })).toBeUndefined();
+    expect(fs.readdirSync(target)).toEqual([]);
+    expect(modeOf(target)).toBe(0o755);
+    expect(fs.lstatSync(base).isSymbolicLink()).toBe(true);
+
+    // The caller that writes no script still gets the state it runs on, where the link points.
+    expect(await skipCountFor(() => ensureDaemonStateDir(sessions, base))).toBe(1);
+    expect(fs.lstatSync(sessions).isDirectory()).toBe(true);
+    // The far side keeps the mode its owner chose: this creation forces no mode through the link.
+    expect(modeOf(target)).toBe(0o755);
+  },
+);
+
+skipOnWindows(
+  'creates nothing for a script under a state base another user owns, and only `mkdir` for its own',
+  async () => {
+    // The other refused BASE, with the tail missing rather than present: `~/.agent-device` left to the uid a
+    // volume was mounted with (#4565). Startup may not stop on that, so it still gets its levels. A recording
+    // the daemon picks for itself may not: at head the descent crossed the refused base and CREATED
+    // `sessions/remote-scripts` beneath it while answering `privateChain: false`, so the writer refused the
+    // recording and the repair had already built the directory for it.
+    const base = mkdtempForTestSync('agent-device-state-foreign-base-');
+    fs.chmodSync(base, 0o755);
+    const remote = path.join(base, 'sessions', 'remote-scripts');
+    serveHostOwnership({ [base]: FOREIGN_UID });
+
+    expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
+      path: remote,
+      privateChain: false,
+    });
+    // Nothing stands on ground this rule will not stand on, and the base keeps the mode its owner chose.
+    expect(fs.readdirSync(base)).toEqual([]);
+    expect(modeOf(base)).toBe(0o755);
+
+    // The own-state caller is the one caller that creates there, and it creates and forces NOTHING but its own
+    // recursive `mkdir`: the state stands, this uid's own, and the refused base keeps the mode its owner chose.
+    expect(await skipCountFor(() => ensureDaemonStateDir(remote, base))).toBe(1);
+    // Both reads go to the host, past the ownership the fixture serves for this path.
+    expect(fs.lstatSync(remote).isDirectory()).toBe(true);
+    expect(Number((originals.lstatSync(base) as fs.Stats).uid)).toBe(process.getuid?.() ?? -1);
+    expect(modeOf(base)).toBe(0o755);
+  },
+);
+
+skipOnWindows(
+  'makes its own state over an ancestor it will not judge forcing no mode at all',
+  async () => {
+    // A fresh state directory inside non-sticky shared scratch — the shared CI volume and the container shape.
+    // The walk refuses that ancestor and the daemon still has to start, so the own-state path creates. What it
+    // may not add is a MODE: `mkdir` then `chmod` BY NAME is a two-step, and every other local user of that
+    // shared directory holds the window between them — rename the name just created, put a link there, and the
+    // mode lands on whatever they pointed at, 0755 to 0700 on a directory whose owner never ran the daemon.
+    // At head this caller ran the trusted-parent per-level creator, which is exactly that two-step: the
+    // reviewer saw it `chmod` the fresh base by name (#4584 review).
+    const shared = fs.realpathSync(mkdtempForTestSync('agent-device-state-untrusted-own-'));
+    fs.chmodSync(shared, 0o777);
+    const base = path.join(shared, 'agent-device');
+    const remote = path.join(base, 'sessions', 'remote-scripts');
+
+    // Every `chmod` this repair makes is asked, by name or by descriptor, for one directory: the base it is
+    // about to force. At head that call is made here, on ground the walk refused.
+    const chmod = vi.spyOn(fs, 'chmodSync');
+    const fchmod = vi.spyOn(fs, 'fchmodSync');
+    expect(await skipCountFor(() => ensureDaemonStateDir(remote, base))).toBe(1);
+    expect(chmod.mock.calls.map(([, mode]) => mode)).toEqual([]);
+    expect(fchmod.mock.calls.map(([, mode]) => mode)).toEqual([]);
+    // The state still stands, and a script destination on that chain is still created nowhere.
+    expect(fs.lstatSync(remote).isDirectory()).toBe(true);
+    expect(ensurePrivateDaemonStateDir(path.join(base, 'other'), base).privateChain).toBe(false);
+    expect(fs.readdirSync(base)).toEqual(['sessions']);
+  },
+);
+
+skipOnWindows(
+  'refuses a state base that is a link another local user could have planted',
+  async () => {
+    // The same shape minus the one thing that made it the operator's own: the directory that holds the base
+    // belongs to a co-user, so they can swap the link for one pointing wherever they like between two of this
+    // call's steps. The walk above the base judges that parent, refuses it, and nothing is created at all.
+    const shared = fs.realpathSync(mkdtempForTestSync('agent-device-state-link-shared-'));
+    fs.chmodSync(shared, 0o777);
+    const target = path.join(shared, 'outside');
+    fs.mkdirSync(target, { mode: 0o755 });
+    fs.chmodSync(target, 0o755);
+    const base = path.join(shared, 'agent-device');
+    fs.symlinkSync(target, base);
+    const sessions = path.join(base, 'sessions');
+
     expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, base))).toBe(1);
 
-    // The state appeared under the directory the link points at, and nothing about the link changed.
-    expect(fs.lstatSync(sessions).isDirectory()).toBe(true);
-    expect(fs.lstatSync(base).isSymbolicLink()).toBe(true);
+    expect(originals.lstatSync(sessions, { throwIfNoEntry: false })).toBeUndefined();
+    expect(fs.readdirSync(target)).toEqual([]);
+    expect(modeOf(target)).toBe(0o755);
   },
 );
 
@@ -575,6 +713,33 @@ function denyCall(seam: SeamName, named: (argument: unknown) => boolean, error: 
     return real(...args);
   }) as typeof fs.lstatSync);
 }
+
+skipOnWindows(
+  'still makes the state it runs on over an ancestor it will not judge, never a script destination',
+  async () => {
+    // The same shared-ancestor ground the startup case builds, asked of the two entry points directly. A
+    // caller that writes no script under the directory is given that directory: the daemon's log, lock and
+    // every artifact path sit below it, and a recursive `mkdir` has always made it. A script destination on
+    // the same chain is refused and created nowhere (#4584 review).
+    const shared = mkdtempForTestSync('agent-device-state-untrusted-own-');
+    fs.chmodSync(shared, 0o777);
+    const base = path.join(shared, 'agent-device');
+    const remote = path.join(base, 'sessions', 'remote-scripts');
+
+    // The mode is what this process's own recursive `mkdir` gives it under the current umask; the repair
+    // forces nothing here, so the pin is ownership rather than one particular spelling of the bits.
+    expect(await skipCountFor(() => ensureDaemonStateDir(base, base))).toBe(1);
+    expect(Number(fs.lstatSync(base).uid)).toBe(process.getuid?.() ?? -1);
+    expect(modeOf(base) & 0o700).toBe(0o700);
+
+    expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
+      path: remote,
+      privateChain: false,
+    });
+    expect(fs.existsSync(remote)).toBe(false);
+    expect(fs.readdirSync(base)).toEqual([]);
+  },
+);
 
 function modeOf(target: string): number {
   return Number((originals.lstatSync(target) as fs.Stats).mode & 0o777);

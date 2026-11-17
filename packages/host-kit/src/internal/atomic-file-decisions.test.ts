@@ -10,8 +10,7 @@ import {
   untrustedLinkExposure,
   type DirectoryAuthority,
 } from './atomic-file.ts';
-
-const currentUid = process.getuid?.() ?? -1;
+import { FOREIGN_UID, currentUid } from './atomic-file-host.fixtures.ts';
 
 // --- what makes one directory unsafe to publish inside ---
 
@@ -23,10 +22,10 @@ function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority
 }
 
 test('refuses a directory another user owns, whatever its mode', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o700 }), TRUST)).toBe(
+  expect(untrustedAncestryExposure(directoryOf({ uid: FOREIGN_UID, mode: 0o700 }), TRUST)).toBe(
     'foreign_owned',
   );
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(
+  expect(untrustedAncestryExposure(directoryOf({ uid: FOREIGN_UID, mode: 0o755 }), TRUST)).toBe(
     'foreign_owned',
   );
 });
@@ -58,10 +57,10 @@ test('accepts a sticky directory this user or root owns for passing through', ()
 });
 
 test('refuses a sticky directory another user owns, since both bits shield others FROM that owner', () => {
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(
+  expect(untrustedAncestryExposure(directoryOf({ uid: FOREIGN_UID, mode: 0o1777 }), TRUST)).toBe(
     'foreign_owned',
   );
-  expect(untrustedAncestryExposure(directoryOf({ uid: 65534, mode: 0o2775 }), TRUST)).toBe(
+  expect(untrustedAncestryExposure(directoryOf({ uid: FOREIGN_UID, mode: 0o2775 }), TRUST)).toBe(
     'foreign_owned',
   );
 });
@@ -84,7 +83,7 @@ test('refuses a link in a shared directory unless the sticky bit and its owner h
   expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
     'planted_link',
   );
-  expect(untrustedLinkExposure({ uid: 65534 }, directoryOf({ mode: 0o1777 }), TRUST)).toBe(
+  expect(untrustedLinkExposure({ uid: FOREIGN_UID }, directoryOf({ mode: 0o1777 }), TRUST)).toBe(
     'planted_link',
   );
 });
@@ -109,8 +108,8 @@ test('names no directory that keeps its contents closed to the group', () => {
 });
 
 test('names a directory another user owns, whatever its mode', () => {
-  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o755 }), TRUST)).toBe(true);
-  expect(othersCreateEntriesIn(directoryOf({ uid: 65534, mode: 0o1777 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ uid: FOREIGN_UID, mode: 0o755 }), TRUST)).toBe(true);
+  expect(othersCreateEntriesIn(directoryOf({ uid: FOREIGN_UID, mode: 0o1777 }), TRUST)).toBe(true);
 });
 
 test('names no directory this user or root owns that others cannot write', () => {

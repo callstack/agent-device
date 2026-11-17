@@ -514,10 +514,12 @@ skipOnWindows.each(['sessions', 'remote-scripts'] as const)(
     const result = writerFor(stateDir).write(remoteRecording());
 
     expect(refusal(result)).toMatchObject({ reason: 'state_chain_untrusted' });
-    // No version was published on the far side of the link. The empty level the recursive `mkdir` may leave
-    // there is the disclosed creation behavior (#4584 review); what must not appear is the RECORDING, and
-    // the destination walk refuses any publication under that tree anyway.
+    // No version was published on the far side of the link, and NOTHING was created there: the descent judged
+    // `sessions`, found a link, and stopped, so the `remote-scripts` it was asked to create never was. One
+    // recursive `mkdir` before the judgment resolved the tail as text and built that directory on the far side
+    // with the daemon's privileges, which is the creation this round removes (#4584 review).
     expect(scriptFilesIn(outside)).toEqual([]);
+    expect(fs.readdirSync(outside)).toEqual([]);
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   },
 );
@@ -537,12 +539,12 @@ skipOnWindows(
     const result = writerFor(base).write(remoteRecording());
 
     expect(refusal(result)).toMatchObject({ reason: 'state_chain_untrusted' });
-    // The repair never went below the shared ancestor: the state chain was created at its own private modes,
-    // and the shared directory nobody owns keeps the mode its owner chose.
-    expect(fs.lstatSync(path.join(base, 'sessions')).mode & 0o777).toBe(0o700);
-    expect(fs.lstatSync(path.join(base, 'sessions', 'remote-scripts')).mode & 0o777).toBe(0o700);
+    // The repair stopped AT the shared ancestor and created nothing below it, so no part of this daemon's state
+    // stands in a tree a co-user can move, and the shared directory keeps the mode its owner chose. One
+    // recursive `mkdir`, run before the chain was judged, left the whole chain here at 0700.
+    expect(fs.lstatSync(base, { throwIfNoEntry: false })).toBeUndefined();
     expect(fs.lstatSync(shared).mode & 0o777).toBe(0o777);
-    expect(scriptFilesIn(path.join(base, 'sessions', 'remote-scripts'))).toEqual([]);
+    expect(fs.readdirSync(shared)).toEqual([]);
   },
 );
 

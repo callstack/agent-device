@@ -72,17 +72,43 @@ test('POSIX cuts the parent without folding a step the kernel still has to take'
   expect(parentDirectoryPath('state', false)).toBeUndefined();
 });
 
+test('POSIX cuts a run of separators in linear time and keeps the root', () => {
+  // The scan is an index walk from the end, so a long run costs its own length: this is the input a
+  // polynomial regular expression would reconsider, and the reason the rule does not use one.
+  const many = '/'.repeat(200_000);
+  const started = process.hrtime.bigint();
+  expect(withoutTrailingSeparators(`${many}sessions${many}`, false)).toBe(`${many}sessions`);
+  expect(withoutTrailingSeparators(`${many}${many}`, false)).toBe('/');
+  expect(Number(process.hrtime.bigint() - started)).toBeLessThan(2_000_000_000);
+  expect(withoutTrailingSeparators('/', false)).toBe('/');
+  expect(withoutTrailingSeparators('//', false)).toBe('/');
+  expect(withoutTrailingSeparators('/tmp/state', false)).toBe('/tmp/state');
+  expect(withoutTrailingSeparators('/tmp/state//', false)).toBe('/tmp/state');
+  expect(withoutTrailingSeparators('state', false)).toBe('state');
+  expect(withoutTrailingSeparators('', false)).toBe('');
+});
+
+test('POSIX appends a name where the directory stands, and does not fold a step away', () => {
+  // `path.join` normalizes, and that is the divergence this exists to prevent: with `alias` a link to
+  // `actual/x`, the kernel creates `alias/../state/sessions` under `actual/state/sessions`, while `join`
+  // answers `state/sessions` beside the alias. A repair that judged one and a writer that used the other
+  // would each be right about a different directory.
+  expect(childPath('/r/alias/../state', 'sessions', false)).toBe('/r/alias/../state/sessions');
+  expect(childPath('/r/alias/../state', 'sessions', false)).not.toBe('/r/state/sessions');
+  expect(childPath('/r/state/', 'sessions', false)).toBe('/r/state/sessions');
+});
+
 test.skipIf(process.platform === 'win32')(
   'a name whose parent is the root keeps its own name',
   () => {
     // The name used to be sliced off at the parent's length, which spends the name's first character when the
     // parent is a root: `/statexyz` was answered as `//tatexyz`. The root then refused every real child of `/`
     // as `relative_destination`, so a state dir named directly under `/` never had its chain judged at all.
-    expect(verifiedDirectoryPath('/agent-device-state-child-of-root', false)).toEqual({
+    expect(verifiedDirectoryPath('/agent-device-state-child-of-root')).toEqual({
       physical: '/agent-device-state-child-of-root',
     });
-    expect(verifiedDirectoryPath('/usr', false)).toEqual({ physical: '/usr' });
-    expect(verifiedDirectoryPath('state', false)).toEqual({
+    expect(verifiedDirectoryPath('/usr')).toEqual({ physical: '/usr' });
+    expect(verifiedDirectoryPath('state')).toEqual({
       ancestor: 'state',
       exposure: 'relative_destination',
     });

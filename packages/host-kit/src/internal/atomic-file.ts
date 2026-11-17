@@ -4,17 +4,161 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
 
+/**
+ * The SHAPE of a path name: cut and joined by ONE platform's rules, with no filesystem in it, so a
+ * Windows-shaped path is checked on a macOS host. The walk that judges ground stays host-bound — it `lstat`s
+ * real entries — and takes no platform parameter. The helpers below read the host's platform per call, so a
+ * test can move it under a caller.
+ */
+const winHost = () => process.platform === 'win32';
+
+/**
+ * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing one
+ * resolves THROUGH a link at that name. A linear walk, not a regular expression. A root keeps one: `C:` cut
+ * from `C:\` is drive-RELATIVE, so the two spellings name other ground.
+ */
+export function withoutTrailingSeparators(directory: string, windows = winHost()): string {
+  const separator = windows ? '\\' : '/';
+  let end = directory.length;
+  while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
+  if (end === 0) return directory.length === 0 ? directory : '/';
+  if (windows && directory[end - 1] === ':') return directory.slice(0, end + 1);
+  return directory.slice(0, end);
+}
+
+/**
+ * The name `name` occupies inside `directory`, spelled so it stays WHERE `directory` stands. NOT `path.join`,
+ * which normalizes: appending keeps the step in `alias/../state`, `join` answers `state` beside the alias.
+ */
+export function childPath(directory: string, name: string, windows = winHost()): string {
+  const spelled = withoutTrailingSeparators(directory, windows);
+  const separator = windows ? '\\' : '/';
+  // A root keeps its one separator, so the name is already attached, and so is a name with nothing above it.
+  return spelled === '' || spelled.endsWith('/') || spelled.endsWith(separator)
+    ? `${spelled}${name}`
+    : `${spelled}${separator}${name}`;
+}
+
+/** The name `spelled` stands as inside its parent, cut by the same rule that cuts the parent. */
+export function childName(spelled: string, windows = winHost()): string {
+  return (windows ? path.win32 : path.posix).basename(withoutTrailingSeparators(spelled, windows));
+}
+
+/**
+ * The directory `directory` stands IN, or `undefined` when nothing stands above it. Asks the platform: Windows
+ * reads `/` AND `\` as separators, `C:\state` stands in `C:\`, `\\\\srv\\share` in nothing, `C:` alone is
+ * drive-RELATIVE. `dirname` is safe: it cuts one separator without folding a surviving `..`.
+ */
+export function parentDirectoryPath(directory: string, windows = winHost()): string | undefined {
+  const platform = windows ? path.win32 : path.posix;
+  const spelled = withoutTrailingSeparators(directory, windows);
+  // `dirname('/a//b')` and a share root keep a separator on the end.
+  const parent = withoutTrailingSeparators(platform.dirname(spelled), windows);
+  // A root is its own parent, and `dirname` answers `.` for a bare name: neither is a base to build under.
+  return parent === spelled || parent === '.' ? undefined : parent;
+}
+
+/**
+ * What this process may rely on when it judges ground: who it is, as the kernel answers. The rule reads no
+ * account database, so the answer does not depend on which name services run (ADR 0016).
+ *
+ * The JUDGMENTS below decide over the fields of one `lstat`, so they are testable on their values: what this
+ * process may rely on, whether a directory is safe to publish inside, whether a link belongs to somebody
+ * else, and whether another local user could claim the destination's entry.
+ */
+export type ScriptDestinationTrust = Readonly<{ uid: number }>;
+
+/** What this process may rely on when it judges ground. */
+function scriptTrust(): ScriptDestinationTrust {
+  return { uid: process.getuid?.() ?? -1 };
+}
+
+/**
+ * The fields of a directory, or of a link, that the ancestry rule reads, so each decision is testable on the
+ * fields of one `lstat` rather than through a filesystem.
+ */
+export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
+
+export type LinkAuthority = Readonly<{ uid: number }>;
+
+/**
+ * The ways a step can be unsafe. `unreachable_parent` and `unresolvable_parent` say a walk stopped short with
+ * no directory to report; `link_loop_exceeded` says it ran out of hops — refused, never trusted.
+ * `untrustedGroundWording` words each one for the caller.
+ */
+export type ScriptAncestryExposure =
+  | 'foreign_owned'
+  | 'world_writable'
+  | 'shared_group_writable'
+  | 'shared_parent'
+  | 'planted_link'
+  | 'link_loop_exceeded'
+  | 'not_a_directory'
+  | 'entry_appeared'
+  | 'relative_destination'
+  | 'unresolvable_parent'
+  | 'unreachable_parent'
+  | 'parent_replaced';
+
+/**
+ * Whether this user can rely on a destination being inside `directory`, and why not if they cannot.
+ *
+ * Ownership first: a directory another user owns is theirs to chmod or repopulate whatever its mode says
+ * today, and no race is needed. Then the mode. A group-writable directory is refused whoever owns the group —
+ * proving one holds no other user means reading the host's account files, which ADR 0016 declines to do. The
+ * sticky bit is the one mode exception, and sound only for PASSING THROUGH: it cannot refuse a NEW entry by
+ * name, so {@link othersCreateEntriesIn} is asked separately before anything is created.
+ */
+export function untrustedAncestryExposure(
+  directory: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
+  if (directory.mode & 0o1000) return undefined;
+  if (directory.mode & 0o002) return 'world_writable';
+  if (directory.mode & 0o020) return 'shared_group_writable';
+  return undefined;
+}
+
+/**
+ * Whether other local users can add an entry here, which is how the destination's own name, or a directory
+ * below it, becomes theirs. A directory somebody else owns counts: they can create, rename or replace any
+ * entry in it whatever its mode says, sticky bit included — that bit protects other people's entries.
+ */
+export function othersCreateEntriesIn(
+  directory: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): boolean {
+  if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
+  if (directory.mode & 0o002) return true;
+  return Boolean(directory.mode & 0o020);
+}
+
+/**
+ * Whether a link on the path is one another local user could have put there, or could replace, and whose
+ * target is therefore theirs to choose. Where nobody but this user or root can add entries, a link cannot
+ * appear or change behind this rule. Where others CAN, the sticky bit is all that holds an entry in place, so
+ * a link this user or root owns stands and one anybody else owns does not. A component stepped back over with
+ * `..` is asked as a DIRECTORY: there the caller walks across it rather than publishing through it.
+ */
+export function untrustedLinkExposure(
+  link: LinkAuthority,
+  home: DirectoryAuthority,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  if (!othersCreateEntriesIn(home, trust)) return undefined;
+  if (home.mode & 0o1000 && (link.uid === 0 || link.uid === trust.uid)) return undefined;
+  return 'planted_link';
+}
+
 export type AtomicPublishMode = 'replace' | 'link-exclusive';
 
 /**
- * Publishes a complete file from a same-directory temporary sibling.
+ * Publishes a complete file from a same-directory temporary sibling. Contents are text or bytes: an
+ * encoding is passed only for text, so a PNG or a video chunk reaches the disk as the caller built it.
  *
- * Contents are either UTF-8 text or bytes: an encoding is only ever passed when the caller handed
- * over text, so a PNG or a video chunk reaches the disk exactly as the caller built it.
- *
- * The temporary file is always removed after the publish attempt. Cleanup is
- * best effort and never replaces the write or publish error; when a request
- * diagnostics scope exists, a cleanup failure is retained as secondary evidence.
+ * The temporary file is always removed. Cleanup is best effort and never replaces the write or publish
+ * error; a cleanup failure is retained as secondary evidence when a request diagnostics scope exists.
  */
 export function publishFileSync(options: {
   destination: string;
@@ -44,12 +188,9 @@ export function publishFileSync(options: {
 }
 
 /**
- * Publishes a session script, and nothing else, from a same-directory temporary sibling.
- *
- * This is `publishFileSync` plus the destination-ancestry rule (#4565), asked through
- * {@link prepareScriptDestination}: it creates what the destination is missing and answers with the
- * directory to create the entry in. The chain is judged once here, and the file is private, because a
- * recording is a transcript of what someone did on this machine.
+ * Publishes a session script, and nothing else, from a same-directory temporary sibling: `publishFileSync`
+ * plus the destination-ancestry rule, asked through {@link prepareScriptDestination}. The chain is judged
+ * once here, and the file is private, because a recording is a transcript of what someone did here.
  */
 export function publishScriptFileSync(options: {
   destination: string;
@@ -58,15 +199,17 @@ export function publishScriptFileSync(options: {
 }): void {
   let temporaryPath: string | undefined;
   try {
-    // The directory the entry is created in is the walk's ANSWER and never `path.dirname` of the
-    // spelling: a `..` or a link sends the entry elsewhere, and a temp file staged where the text points
-    // is one another local user can reach and put their bytes behind.
+    // The temp file is staged in the walk's ANSWER, never beside the spelling: a `..` or a link sends the
+    // entry elsewhere, and a temp file where the text points is one another local user can reach.
     const judged = prepareScriptDestination(options.destination).directory;
     temporaryPath = createAtomicPublishTempPath(judged, options.destination);
     fs.writeFileSync(temporaryPath, options.contents, { encoding: 'utf8', mode: SCRIPT_FILE_MODE });
-    // The entry is created in the directory the walk ANSWERED, spelled from it, never through the
-    // destination's own spelling: the kernel would resolve that a second time, against whatever stands on
-    // the path by then, and land the entry in ground the rule never reached.
+    // A file CREATE ANDs its mode with the umask, so this SAYS the mode on the temporary sibling
+    // rather than asking for it, and says it BEFORE the entry exists: no reader ever sees a wider file
+    // than {@link SCRIPT_FILE_MODE}. `createMissingLevel` pays the same umask for a directory.
+    fs.chmodSync(temporaryPath, SCRIPT_FILE_MODE);
+    // The entry is spelled FROM the judged directory, never resolved through the destination again:
+    // that second resolution runs against whatever stands on the path by then (ADR 0016).
     const entry = path.join(judged, path.basename(options.destination));
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, entry);
@@ -110,26 +253,23 @@ function removeTempBestEffort(destination: string, temporaryPath: string | undef
 const SCRIPT_FILE_MODE = 0o600;
 
 /**
- * A directory a script publish creates is itself judged on the way to a later version, so it is created
- * at 0700: the mode the rule accepts under every umask, including the shared-checkout 002 that would
- * otherwise leave a new directory 0775 and then refuse it.
+ * A directory a publish creates is itself judged on the way to a later version, so it is created at the mode
+ * the rule accepts under every umask — the shared-checkout umask 002 would otherwise leave it 0775 and refuse.
  */
 const SCRIPT_DIR_MODE = 0o700;
 
 /**
- * Readies a script destination and reports the PHYSICAL directory to create the entry in (#4565).
+ * Readies a script destination and reports the PHYSICAL directory to create the entry in.
  *
  * One call owns the sequence, because the ORDER is what makes "a refused destination leaves no directories
- * behind" true: the chain is walked, a refused destination is refused BEFORE anything is created, what is
- * missing is created at {@link SCRIPT_DIR_MODE} inside the judged directory, and the completed chain is
- * walked AGAIN before the answer. Only the second walk asks the CREATION question — whether other local
- * users could add the destination's own name where the entry lands — because below the first walk the
- * missing directories are this call's own to create at 0700, which is what keeps
- * `mkdir -p <sticky shared>/recordings` acceptable. {@link createMissingLevels} says why each level is
- * created on its own, and why a `..` queued behind an absent name is refused by the FIRST walk.
+ * behind" true: the chain is walked, a refusal happens BEFORE anything is created, what is missing is created
+ * at {@link SCRIPT_DIR_MODE} inside the judged directory, and the completed chain is walked AGAIN before the
+ * answer. Only the second walk asks the CREATION question — whether others could add the destination's own
+ * name where the entry lands — because below the first walk the missing directories are this call's own to
+ * create at 0700, which keeps `mkdir -p <sticky shared>/recordings` acceptable.
  *
- * On Windows access is an ACL rather than a mode, so the walk is a no-op and the parent is the answer — but
- * the destination still has to be absolute first, on every platform.
+ * On Windows access is an ACL, so the walk is a no-op and the parent is the answer — but the destination
+ * still has to be absolute first, on every platform.
  */
 export function prepareScriptDestination(destination: string): ScriptDestination {
   const spelled = spelledParent(destination);
@@ -225,7 +365,7 @@ export function withAtomicPublishTempPathSync<T>(
   }
 }
 
-/** Syncs a containing directory when the host filesystem supports directory fsync. */
+/** Syncs a containing directory where the filesystem supports directory fsync. */
 function syncDirectoryBestEffort(directory: string): void {
   let descriptor: number | undefined;
   try {
@@ -241,11 +381,7 @@ function syncDirectoryBestEffort(directory: string): void {
   }
 }
 
-/**
- * `lstat` that treats absence as `undefined`; every other errno propagates. Owned here rather than in a
- * module of its own: this file sits on the daemon's startup path, where a new module is eager code every
- * entry that publishes a file pays for (ADR 0019), and the verified-file guards are on this path already.
- */
+/** `lstat` that treats absence as `undefined`; every other errno propagates. */
 export function lstatIfPresent(pathname: string): fs.Stats | undefined {
   try {
     return fs.lstatSync(pathname);
@@ -258,10 +394,9 @@ export function lstatIfPresent(pathname: string): fs.Stats | undefined {
 /**
  * Identifies a temp path produced for a particular destination.
  *
- * The temp file is a sibling of the directory the entry is CREATED in, which is not the directory the
- * destination's spelling names: `home/work/../y` with `work` a link names `home/y` as text while the entry
- * lands beside the link's target. The two are therefore compared as device and inode, because `lstat` or
- * `realpathSync` applies a spelled `..` textually and answers the wrong directory.
+ * The temp file is a sibling of the directory the entry is CREATED in, which the spelling need not name
+ * (`home/work/../y` with `work` a link), so two spellings are compared as device and inode: `lstat` and
+ * `realpathSync` apply a spelled `..` textually and answer the wrong directory.
  */
 export function isAtomicPublishTemporaryPath(value: unknown, destination: string): boolean {
   if (typeof value !== 'string') return false;
@@ -270,7 +405,7 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
   return sameDirectory(path.dirname(value), path.dirname(destination));
 }
 
-/** Whether two directory spellings name one directory, by device and inode rather than by path text. */
+/** Whether two spellings name one directory, by device and inode rather than by path text. */
 function sameDirectory(left: string, right: string): boolean {
   if (left === right) return true;
   const here = statOrNull(left);
@@ -292,12 +427,10 @@ function statOrNull(pathname: string): fs.Stats | undefined {
 /**
  * Confirms a destination host-kit ANSWERED earlier, and reports the directory to create the entry in.
  *
- * One call, for the one check a caller that stages bytes owes: a download or a long upload can run between
- * the walk that judged the directory and the rename that creates the entry, so the chain is asked again
- * before the entry is made, and an ancestor pointed at a link meanwhile is caught. Every `parent_replaced`
- * refusal comes from {@link scriptAncestryFailure} — the reason, exposure, ancestor and hint a route would
- * have to copy, and would drift from. Nothing re-judges ground the walk already owns: the ownership rule is
- * what excludes anyone who could move a judged directory in the first place (ADR 0016).
+ * The one check a caller that stages bytes owes: a download or a long upload can run between the walk that
+ * judged the directory and the rename that creates the entry, so the chain is asked again and an ancestor
+ * pointed at a link meanwhile is caught. Nothing re-judges ground the walk already owns — the ownership rule
+ * is what excludes anyone who could move a judged directory in the first place (ADR 0016).
  */
 export function confirmScriptDestination(destination: string, prepared: ScriptDestination): string {
   const current = scriptDestination(destination);
@@ -308,12 +441,10 @@ export function confirmScriptDestination(destination: string, prepared: ScriptDe
 }
 
 /**
- * Walks a destination that has to stand as it is, creating nothing, and judges the answer: refuses unless
- * every directory the kernel looks a name up in is one no other non-root local user can change (#4565).
- * {@link prepareScriptDestination} is the same rule for a caller that also needs the missing tail created,
- * and everything written there about how ground is judged, and about the window being closed by PERMISSIONS
- * rather than by timing, applies here too. Because nothing is created, a walk that stopped short at an
- * absent name has no answer to give and refuses as `unreachable_parent`.
+ * Walks a destination that has to stand as it is, creating nothing: refuses unless every directory the
+ * kernel looks a name up in is one no other non-root local user can change. {@link prepareScriptDestination}
+ * is the same rule for a caller that also needs the tail created. Nothing is created here, so a walk that
+ * stopped short at an absent name has no answer and refuses as `unreachable_parent`.
  */
 function scriptDestination(destination: string): ScriptDestination {
   const spelled = spelledParent(destination);
@@ -328,12 +459,7 @@ function scriptDestination(destination: string): ScriptDestination {
 
 /**
  * Judges a finished walk and answers where the entry is created, with the identity THIS walk read so a
- * caller that stages bytes beside it can confirm the ground one time before its rename.
- *
- * Only an ARRIVED walk has that answer. A walk that stopped short at an absent name has no directory to
- * report: the name it stopped at is not one the entry can be created in, and the nearest ancestor it did
- * reach is a file under a name nobody asked for. A `..` queued behind that absent name says creating could
- * not resolve the chain either, which is the reason the caller that creates gets instead.
+ * caller that stages bytes can confirm the ground once before its rename. Only an ARRIVED walk has that.
  */
 function publishableDestination(
   destination: string,
@@ -357,11 +483,9 @@ function publishableDestination(
 }
 
 /**
- * The parent of `destination` exactly as the caller spells it, refusing a RELATIVE destination at the entry
- * ON EVERY PLATFORM, Windows included, where no walk runs to catch it. Walking a relative name would put
- * the process's working directory into the judged chain — a name Node answers from the first query after the
- * last `chdir`, so it can name a directory the process no longer stands in while the kernel resolves the
- * destination in the moved one (ADR 0016).
+ * The parent of `destination` exactly as the caller spells it, refusing a RELATIVE destination on EVERY
+ * platform, Windows included, where no walk runs to catch it: judging one would put the working directory in
+ * the chain, and Node answers that name from a query that can lag a `chdir` (ADR 0016).
  */
 function spelledParent(destination: string): string {
   const parent = path.dirname(destination);
@@ -371,10 +495,7 @@ function spelledParent(destination: string): string {
   return parent;
 }
 
-/**
- * Where the walk stands: a directory it judged and physically reached, the identity that directory had as
- * the walk's own `lstat` answered it, and the names still to resolve.
- */
+/** Where the walk stands: a judged directory, the identity its own `lstat` answered, names left to resolve. */
 type WalkState = Readonly<{
   deepest: string;
   authority: DirectoryAuthority;
@@ -398,15 +519,10 @@ type WalkStep =
   | Readonly<{ kind: 'stand'; state: WalkState }>;
 
 /**
- * Where a walk ended. Only a walk that ARRIVED reached the directory the entry is created in, and it carries
- * that directory together with the authority and identity it was judged under, so the caller never asks the
- * host again about ground the walk has already read. A walk that stopped SHORT reports the nearest directory
- * it did judge and the spelled tail below it, which is what a caller that creates needs in order to create
- * below judged ground only. A walk that REFUSED carries the failure it stopped on.
- *
- * A walk that stopped short has no answer for a publisher: the name it stopped at is not a directory the
- * entry can be created in, and publishing under the nearest ancestor writes a file nobody named. Its
- * `unresolvable` says a `..` is queued behind that name, so creating cannot finish the resolution either.
+ * Where a walk ended. Only an ARRIVED walk reached the directory the entry is created in, and carries the
+ * authority and identity it was judged under, so the caller never asks the host about ground the walk read. A
+ * SHORT walk reports the nearest judged directory and the spelled tail below it, which is what a caller that
+ * creates needs; `unresolvable` says a `..` is queued behind that tail. A REFUSED walk carries its failure.
  */
 type WalkOutcome =
   | Readonly<{
@@ -437,117 +553,125 @@ type WalkOutcome =
 
 /**
  * Judges the ground `directory` STANDS ON and answers the PHYSICAL directory the walk arrived on, by asking
- * what a name INSIDE `directory` would resolve to. Nothing is created: the probe name is never looked up.
+ * what a name INSIDE it would resolve to. Nothing is created: the probe name is never looked up.
  *
- * A caller that CHANGES anything below `directory` has to ask this first. `O_NOFOLLOW` guards only the LAST
- * name of an open, so an ancestor another user can write lets them rename `directory` between two of that
- * caller's calls; and the answer is the only name a caller may build further levels from, because a spelled
- * path is NOT the chain the kernel walks (ADR 0016).
+ * A caller that CHANGES anything below `directory` has to ask this first: `O_NOFOLLOW` guards only the LAST
+ * name of an open, and the answer is the only name further levels may be built from, because a spelled path
+ * is NOT the chain the kernel walks (ADR 0016).
  *
- * Trusted: `{ physical }`, no trailing separator. Untrusted: the step it could not stand on and why. A
- * relative name is answered rather than thrown: judging one would put the working directory in the chain.
+ * Trusted: `{ physical }`, no trailing separator. Untrusted: the step it could not stand on and why.
  */
 export function verifiedDirectoryAncestry(
   directory: string,
 ):
   | Readonly<{ physical: string }>
   | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  if (!path.isAbsolute(directory)) return { ancestor: directory, exposure: 'relative_destination' };
-  if (process.platform === 'win32') return { physical: withoutTrailingSeparators(directory) };
-  const spelled = withoutTrailingSeparators(directory);
-  const walked = walkSpelledParent(spelled, `${spelled}/${CHAIN_PROBE_NAME}`, scriptTrust());
-  if (walked.ended === 'refused') return { ancestor: walked.ancestor, exposure: walked.exposure };
-  // ARRIVED is the trusted answer, and `deepest` is this walk's own judgment of where that spelled name
-  // physically is. STOPPED SHORT says a name above `directory` is absent, so there is no judgment for the
-  // chain beyond it, and a `..` queued behind that name is its other spelling.
-  if (walked.ended === 'arrived') return { physical: walked.deepest };
-  return {
-    ancestor: walked.deepest,
-    exposure: walked.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
-  };
+  const ground = verifiedDirectoryGround(directory);
+  // STOPPED SHORT has no directory to vouch for here, which a caller that only reads has to be told about.
+  if (ground.ended === 'short')
+    return {
+      ancestor: ground.established,
+      exposure: ground.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
+    };
+  return ground.ended === 'arrived'
+    ? { physical: ground.physical }
+    : { ancestor: ground.ancestor, exposure: ground.exposure };
 }
 
 /**
+ * What the walk answers about `directory` itself, in the three shapes it can end in: the physical directory it
+ * arrived on, the names it found ABSENT below the deepest directory it judged, or the step it could not stand
+ * on. {@link verifiedDirectoryAncestry} collapses the middle shape into a refusal, right for a caller that only
+ * reads. A caller that CREATES has to tell them apart, because that decides whether creating is safe: `short`
+ * with no `unresolvable` step behind it is the ONE case creation may proceed in, and {@link createStateLevels}
+ * makes each missing name inside the judged directory so a link cannot carry the creation to its far side.
+ */
+export function verifiedDirectoryGround(directory: string): DirectoryGround {
+  if (!path.isAbsolute(directory))
+    return { ended: 'refused', ancestor: directory, exposure: 'relative_destination' };
+  const spelled = withoutTrailingSeparators(directory);
+  // Windows access is an ACL, so there is no chain to walk and the shaped name is the answer.
+  if (process.platform === 'win32') return { ended: 'arrived', physical: spelled };
+  const walked = walkSpelledParent(spelled, `${spelled}/${CHAIN_PROBE_NAME}`, scriptTrust());
+  if (walked.ended === 'refused')
+    return { ended: 'refused', ancestor: walked.ancestor, exposure: walked.exposure };
+  if (walked.ended === 'arrived') return { ended: 'arrived', physical: walked.deepest };
+  return {
+    ended: 'short',
+    established: walked.deepest,
+    missing: walked.missing,
+    unresolvable: walked.unresolvable,
+  };
+}
+
+/** The three endings {@link verifiedDirectoryGround} answers with. */
+export type DirectoryGround =
+  | Readonly<{ ended: 'arrived'; physical: string }>
+  | Readonly<{
+      ended: 'short';
+      /** The deepest directory the walk judged; every name of `missing` is below it and absent. */
+      established: string;
+      missing: readonly string[];
+      /** A `..` is queued behind an absent name, so no amount of creating resolves the chain. */
+      unresolvable: boolean;
+    }>
+  | Readonly<{ ended: 'refused'; ancestor: string; exposure: ScriptAncestryExposure }>;
+
+/**
  * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the ancestry above it, and
- * answers the name every path below it has to be built from. The last component is CUT and re-attached to the
- * judged parent, never normalized: `alias/../state` is not `/state`, because `..` steps back from wherever
- * `alias` PHYSICALLY stands, and `state/` resolves THROUGH a link at `state` (ADR 0016).
+ * answers the name every path below it has to be built from. The last component is CUT and re-attached, never
+ * normalized: `alias/../state` is not `/state`, and `state/` resolves THROUGH a link at `state` (ADR 0016).
+ *
+ * Everything here is the HOST's: the shape is read with the host's separator and the judgment `lstat`es real
+ * entries, so no platform selection is offered. On a Windows host the walk is a no-op and this answers the
+ * host-shaped name.
  */
 export function verifiedDirectoryPath(
   directory: string,
-  windows = winHost(),
 ):
   | Readonly<{ physical: string }>
   | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  const spelled = withoutTrailingSeparators(directory, windows);
-  // CUT at BOTH ends by the platform's rule. Slicing at `dirname`'s length spends the name's first character
-  // when its parent is a root: `/state` answered `//tate`, and every real child of a root was then refused.
-  const name = (windows ? path.win32 : path.posix).basename(spelled);
-  const parent = parentDirectoryPath(spelled, windows);
+  const spelled = withoutTrailingSeparators(directory);
+  // CUT at BOTH ends by the host's rule. Slicing at `dirname`'s length spends the name's first character when
+  // its parent is a root: `/state` answered `//tate`, and every real child of a root was then refused.
+  const name = childName(spelled);
+  const parent = parentDirectoryPath(spelled);
   // Nothing above it to walk: judging `state` would put the working directory in the chain.
   if (parent === undefined || name === '')
     return { ancestor: directory, exposure: 'relative_destination' };
   const judged = verifiedDirectoryAncestry(parent);
   if (!('physical' in judged)) return judged;
-  return { physical: childPath(judged.physical, name, windows) };
-}
-
-const winHost = () => process.platform === 'win32'; // read per call: a test moves the platform
-
-/**
- * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing one
- * resolves THROUGH a link at that name. A linear walk, not a regular expression. A root keeps one: `C:` cut
- * from `C:\` is drive-RELATIVE, so the two spellings name other ground.
- */
-export function withoutTrailingSeparators(directory: string, windows = winHost()): string {
-  const separator = windows ? '\\' : '/';
-  let end = directory.length;
-  while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
-  if (end === 0) return directory.length === 0 ? directory : '/';
-  if (windows && directory[end - 1] === ':') return directory.slice(0, end + 1);
-  return directory.slice(0, end);
+  return { physical: childPath(judged.physical, name) };
 }
 
 /**
- * The name `name` occupies inside `directory`, spelled so it stays WHERE `directory` stands. NOT `path.join`,
- * which normalizes: appending keeps the step in `alias/../state`, `join` answers `state` beside the alias.
+ * Judges ground, then creates ONLY what is missing, by the same per-level rule a script destination is created
+ * by. A caller that owns a state chain asks this rather than `mkdir -p`: a recursive creation resolves the whole
+ * tail as TEXT, so a link at a missing name carries the creation to its far side, where as root it creates with
+ * privileges. {@link createMissingLevel} is the ONE creator here: `established` is ground already judged to be
+ * this caller's to build under, `missing` the spelled tail below it. A step that cannot be stood on is refused
+ * and nothing below it is created, so a refusal leaves no directory behind.
  */
-export function childPath(directory: string, name: string, windows = winHost()): string {
-  const spelled = withoutTrailingSeparators(directory, windows);
-  const separator = windows ? '\\' : '/';
-  // A root keeps its one separator, so the name is already attached, and so is a name with nothing above it.
-  return spelled === '' || spelled.endsWith('/') || spelled.endsWith(separator)
-    ? `${spelled}${name}`
-    : `${spelled}${separator}${name}`;
+export function createStateLevels(
+  subject: string,
+  established: string,
+  missing: readonly string[],
+): void {
+  createMissingLevels(subject, established, missing, scriptTrust());
 }
 
-/**
- * The directory `directory` stands IN, or `undefined` when nothing stands above it. Asks the platform: Windows
- * reads `/` AND `\\` as separators, `C:\state` stands in `C:\`, `\\\\srv\\share` in nothing, `C:` alone is
- * drive-RELATIVE. `dirname` is safe: it cuts one separator without folding a surviving `..`.
- */
-export function parentDirectoryPath(directory: string, windows = winHost()): string | undefined {
-  const platform = windows ? path.win32 : path.posix;
-  const spelled = withoutTrailingSeparators(directory, windows);
-  // `dirname('/a//b')` and a share root keep a separator on the end.
-  const parent = withoutTrailingSeparators(platform.dirname(spelled), windows);
-  // A root is its own parent, and `dirname` answers `.` for a bare name: neither is a base to build under.
-  return parent === spelled || parent === '.' ? undefined : parent;
-}
-
-/** The name {@link verifiedDirectoryAncestry} asks the walk about, which it never creates. */
+/** The name {@link verifiedDirectoryAncestry} asks the walk about; it is never created. */
 const CHAIN_PROBE_NAME = '.agent-device-ancestry-probe';
 
 /**
  * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the first
- * step another local user could steer. The directory it reports is where the entry gets created.
+ * one another local user could steer. The directory it reports is where the entry gets created.
  *
- * No `realpath` is involved: it answers only with the FINAL directory, so every level stepped through can
- * vanish from the judgment when a link leads on to another link. Each component is resolved instead against
- * the directory physically reached — `.` skipped, `..` applied to that directory's parent, a link's RAW
- * components queued ahead of the rest — as ADR 0016 specifies. Hops are capped at
- * {@link MAX_SCRIPT_PATH_LINK_HOPS}; running out is a refusal, never a pass. `parent` is resolved as the
- * caller spells it, and `destination` appears only in the refusal that names it.
+ * No `realpath`: it answers only with the FINAL directory, so every level stepped through can vanish from the
+ * judgment when a link leads to another link. Each component is resolved against the directory PHYSICALLY
+ * reached — `.` skipped, `..` applied to that directory's parent, a link's RAW components queued ahead of the
+ * rest (ADR 0016). Hops are capped at {@link MAX_SCRIPT_PATH_LINK_HOPS}; running out is a refusal.
+ * `destination` appears only in the refusal that names it.
  */
 function walkSpelledParent(
   parent: string,
@@ -588,7 +712,7 @@ function walkSpelledParent(
   }
 }
 
-/** The first state: the root, with every component of the parent still to resolve. */
+/** The first state: the root, every component of the parent still to resolve. */
 function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
   return standOn('/', pathComponents(parent), trust, 0);
 }
@@ -597,9 +721,8 @@ function startWalk(parent: string, trust: ScriptDestinationTrust): WalkStep {
  * Stands the walk on `directory`, judged from this call's own `lstat` of it, or refuses it.
  *
  * A name come back around through a `..` or an alias is judged again from a fresh `lstat`, and reaches the
- * judgment it had on the first visit. The rule keeps no memory of ground it already owned, because a
- * directory it stands in is one this user or root owns that others cannot write in, or a sticky one where an
- * entry of this user's cannot be replaced (ADR 0016).
+ * judgment it had on the first visit: the rule keeps no memory of ground it already owned, because standing
+ * here already means others cannot write in it, or it is sticky (ADR 0016).
  */
 function standOn(
   directory: string,
@@ -620,35 +743,30 @@ function standOn(
   };
 }
 
-/** The fields this rule reads off one `lstat` answer: owner and mode of the ENTRY. */
+/** Owner and mode of the ENTRY one `lstat` answer describes. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
   return { uid: Number(stats.uid), mode: Number(stats.mode) };
 }
 
 /**
- * The device and inode an `lstat` answer names.
- *
- * BIGINT stats: a numeric `ino` cannot hold every inode a filesystem hands out, so two distinct large inodes
- * would collapse onto one identity, the collision the one retained comparison exists to catch.
+ * The device and inode an `lstat` answer names. BIGINT stats: a numeric `ino` cannot hold every inode a
+ * filesystem hands out, so two distinct large inodes would collapse onto one identity.
  */
 function identityOf(stats: fs.BigIntStats): string {
   return `${stats.dev}:${stats.ino}`;
 }
 
-/** `lstat` with bigint ids, treating absence as `undefined`: the only lookup this rule makes. */
+/** The only lookup this rule makes: `lstat` with bigint ids, absence as `undefined`. */
 function lstatEntry(pathname: string): fs.BigIntStats | undefined {
   return fs.lstatSync(pathname, { bigint: true, throwIfNoEntry: false });
 }
 
-/** The names of `directory`, with every `.` resolved away the way the kernel resolves it. */
+/** The names of `directory`, every `.` resolved away the way the kernel does. */
 function pathComponents(directory: string): string[] {
   return directory.split('/').filter((component) => component.length > 0 && component !== '.');
 }
 
-/**
- * Advances one component of the queue, which the caller knows to be non-empty: an empty queue is where a
- * walk arrives, and {@link walkSpelledParent} answers that itself.
- */
+/** Advances one component of the queue, which the caller knows to be non-empty. */
 function stepThrough(
   state: WalkState,
   component: string,
@@ -673,8 +791,7 @@ function stepIntoEntry(
   const entry = path.join(state.deepest, component);
   const stats = lstatEntry(entry);
   // Nothing below here exists yet, so the walk stops at the ground it judged and reports the tail under
-  // it. A caller that creates makes that tail; a caller that creates nothing refuses. Neither goes on as
-  // if the name had resolved.
+  // it: a caller that creates makes that tail, a caller that creates nothing refuses.
   if (stats === undefined) {
     return {
       kind: 'short',
@@ -683,9 +800,8 @@ function stepIntoEntry(
       behindUpwardStep: rest.includes('..'),
     };
   }
-  // This lstat IS the judgment: type, owner and mode of the ENTRY the name holds. Asking the same name
-  // again with `stat` would answer whatever stands there by then, which on a race is a link somebody else
-  // put there, and the walk would judge the target's permissions while entering on the name.
+  // This lstat IS the judgment: type, owner and mode of the ENTRY the name holds. `stat` would answer
+  // whatever stands there by then — on a race, a link somebody else put there.
   if (stats.isSymbolicLink()) return stepThroughLink(state, entry, stats, rest, trust);
   if (!stats.isDirectory()) return { kind: 'reject', path: entry, exposure: 'not_a_directory' };
   const authority = directoryAuthority(stats);
@@ -703,10 +819,7 @@ function stepIntoEntry(
   };
 }
 
-/**
- * One hop. The link is judged where it physically stands, and its target's components enter the queue,
- * because the kernel steps into them next.
- */
+/** One hop: the link is judged where it stands, and its target's components enter the queue. */
 function stepThroughLink(
   state: WalkState,
   link: string,
@@ -720,20 +833,16 @@ function stepThroughLink(
     return { kind: 'reject', path: link, exposure: 'link_loop_exceeded' };
   }
   const target = fs.readlinkSync(link);
-  // A relative target continues from the directory that HOLDS the link, not from where the walk happens
-  // to stand, and its components are queued RAW. `path.join` would fold a `..` inside the target away,
-  // which is the one simplification this walk may not make: the kernel applies that `..` to the physical
-  // directory it reaches after the components before it.
+  // A relative target continues from the directory that HOLDS the link, and its components are queued
+  // RAW: `path.join` would fold a `..` inside the target away, the one simplification this walk may not
+  // make, because the kernel applies that `..` to the physical directory it reaches after them.
   const home = path.isAbsolute(target) ? '/' : path.dirname(link);
   return standOn(home, [...pathComponents(target), ...rest], trust, state.hops + 1);
 }
 
 /**
- * How many link targets one destination walk expands before it refuses.
- *
- * Kept BELOW the smallest limit the supported kernels apply to a path (macOS 32, Linux 40), so this rule
- * reaches its own limit first and answers with its own reason. Running out of hops has NOT established
- * where the entry lands, which is a refusal rather than a pass.
+ * How many link targets one walk expands before it refuses, kept BELOW the smallest limit the supported
+ * kernels apply (macOS 32, Linux 40) so this rule reaches its own limit first and answers with its own reason.
  */
 export const MAX_SCRIPT_PATH_LINK_HOPS = 30;
 
@@ -742,106 +851,6 @@ function publishDirectoryIdentity(directory: string): string | undefined {
   if (process.platform === 'win32') return 'windows';
   const stats = lstatEntry(directory);
   return stats ? identityOf(stats) : undefined;
-}
-
-/**
- * What this process may rely on when it judges ground: who it is, as the kernel answers. Nothing else —
- * the rule reads no account database, so its answer does not depend on which name services run (ADR 0016).
- */
-export type ScriptDestinationTrust = Readonly<{ uid: number }>;
-
-/** What this process may rely on when it judges ground. */
-function scriptTrust(): ScriptDestinationTrust {
-  return { uid: process.getuid?.() ?? -1 };
-}
-
-/** The fields of a directory the ancestry rule reads, so the decision is testable without a filesystem. */
-export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
-
-/** The fields of a symbolic link the ancestry rule reads. */
-export type LinkAuthority = Readonly<{ uid: number }>;
-
-/**
- * The ways a step of the walk can be unsafe: others can change what is in that directory, create the
- * entry the destination names, or put the link there, or the step cannot be resolved at all. The two
- * `unreachable` and `unresolvable` shapes say a walk that stopped short has no directory to report, and
- * `link_loop_exceeded` says a walk that ran out of hops has not established where the entry lands — a
- * loop is refused, never trusted. {@link untrustedGroundWording} is what each one tells the caller.
- */
-export type ScriptAncestryExposure =
-  | 'foreign_owned'
-  | 'world_writable'
-  | 'shared_group_writable'
-  | 'shared_parent'
-  | 'planted_link'
-  | 'link_loop_exceeded'
-  | 'not_a_directory'
-  | 'entry_appeared'
-  | 'relative_destination'
-  | 'unresolvable_parent'
-  | 'unreachable_parent'
-  | 'parent_replaced';
-
-/**
- * Whether this directory is one this user can rely on a destination being inside of, and why not if it
- * is not.
- *
- * Ownership is asked first: a directory another user owns is theirs to chmod, empty and repopulate
- * whatever its mode says today, and no race is needed. Then the mode, because group- or other-writable
- * contents are open to those users directly. A group-writable directory is refused whoever owns the group:
- * proving one holds no other user means reading the host's account files, which ADR 0016 declines to do,
- * so the mode alone decides and the hint says to `chmod g-w`. The sticky bit is the one mode exception,
- * and sound only for PASSING THROUGH: it keeps the entries already on the path in place, but cannot refuse
- * a NEW entry by name, so {@link othersCreateEntriesIn} is asked separately before anything is created.
- */
-export function untrustedAncestryExposure(
-  directory: DirectoryAuthority,
-  trust: ScriptDestinationTrust,
-): ScriptAncestryExposure | undefined {
-  if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
-  if (directory.mode & 0o1000) return undefined;
-  if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020) return 'shared_group_writable';
-  return undefined;
-}
-
-/**
- * Whether other local users can add an entry here, which is how the destination's own name, or a
- * directory below it, becomes theirs.
- *
- * A directory somebody else owns counts: they can create, rename or replace any entry in it whatever its
- * mode says, sticky bit included, since that bit protects other people's entries from them, not their
- * own. The sticky bit is otherwise not consulted here — it cannot refuse a NEW entry by name.
- */
-export function othersCreateEntriesIn(
-  directory: DirectoryAuthority,
-  trust: ScriptDestinationTrust,
-): boolean {
-  if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
-  if (directory.mode & 0o002) return true;
-  return Boolean(directory.mode & 0o020);
-}
-
-/**
- * Whether a symbolic link on the path is one another local user could have put there, or could replace,
- * and whose target is therefore theirs to choose.
- *
- * Where nobody but this user or root can add entries, a link cannot appear or change behind this rule.
- * Where others CAN, the sticky bit is the only thing holding an entry in place, so a link this user or
- * root owns stands and one anybody else owns does not — it may be theirs, and any of them can swap it for
- * one pointing wherever they like.
- *
- * A component stepped back over with `..` is asked as a directory, not as a link: there the caller walks
- * across it rather than publishing through it, and the directory it lands in is judged on its own.
- */
-export function untrustedLinkExposure(
-  link: LinkAuthority,
-  home: DirectoryAuthority,
-  trust: ScriptDestinationTrust,
-): ScriptAncestryExposure | undefined {
-  if (!othersCreateEntriesIn(home, trust)) return undefined;
-  if (home.mode & 0o1000 && (link.uid === 0 || link.uid === trust.uid)) return undefined;
-  return 'planted_link';
 }
 
 /** Why each exposure makes that ground unsafe, in the caller's terms. */
@@ -867,10 +876,8 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
 };
 
 /**
- * The typed reasons a destination-ancestry refusal answers with.
- *
- * A caller that reports WHY a script was not saved reads one of these out of the refusal and passes it on;
- * they are named here, and not spelled again by whoever reads them, because the refusal is built here.
+ * The typed reasons a destination-ancestry refusal answers with, named here rather than spelled again by
+ * whoever reads them.
  */
 const SCRIPT_ANCESTRY_REASONS = ['script_ancestor_untrusted', 'script_ancestry_replaced'] as const;
 
@@ -906,10 +913,7 @@ function scriptAncestryFailure(
   );
 }
 
-/**
- * What to do about it. A group-writable directory is the one refusal the caller can fix in place, because
- * the mode alone is what this rule cannot resolve: it cannot tell who else belongs to that group.
- */
+/** What to do about it. A group-writable directory is the one refusal the caller can fix in place. */
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
@@ -921,17 +925,13 @@ function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): strin
 }
 
 /**
- * Creates the tail the walk found missing, ONE LEVEL AT A TIME, inside the directory the walk judged.
+ * Creates the tail the walk found missing, ONE LEVEL AT A TIME, inside the directory the walk judged. A
+ * recursive `mkdir` cannot be used here even though it takes a mode (see {@link createStateLevels}).
  *
- * A recursive `mkdir` cannot be used here even though it takes a mode: it resolves the whole tail as text, so
- * a link planted at one of those missing names carries the creation to its far side, where as root it creates
- * with privileges. One non-recursive `mkdir` lands inside the directory this call established, nowhere else.
- *
- * A name that was absent when the walk looked and exists by the time `mkdir` reaches it is JUDGED, not
- * refused and not trusted: two processes saving into the same new directory meet here. The entry under the
- * name is read by the same single `lstat` every other step is read by and judged by the same rule, which
- * accepts a private directory this user owns and refuses a link or a foreign one. A level that passes
- * becomes the directory the next name is created in, so creation never follows a name the rule did not take.
+ * A name absent when the walk looked but present by the time `mkdir` reaches it is JUDGED, not refused and not
+ * trusted: two processes saving into the same new directory meet here. It is read by the same single `lstat`
+ * every other step is, and a level that passes becomes the directory the next name is created in, so creation
+ * never follows a name the rule did not take.
  */
 function createMissingLevels(
   destination: string,
@@ -963,8 +963,8 @@ function createMissingLevel(
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     created = false;
   }
-  // The `lstat` of the NAME, taken after the creation attempt, is the judgment either way: what this call
-  // made and what arrived beside it are read the same way and judged by the same rule.
+  // The `lstat` of the NAME, after the creation attempt, is the judgment either way: what this call made
+  // and what arrived beside it are read the same way and judged by the same rule.
   const seen = lstatEntry(level);
   if (seen === undefined || !seen.isDirectory()) {
     throw scriptAncestryFailure(destination, level, created ? 'not_a_directory' : 'entry_appeared');
@@ -979,8 +979,7 @@ function createMissingLevel(
     fs.chmodSync(level, SCRIPT_DIR_MODE);
     return level;
   }
-  // Somebody else's directory, and the one place this rule asks whether OTHER users could add a name here:
-  // below a directory they can write, the destination's own name can be made before this call.
+  // Somebody else's directory: the one place this rule asks whether OTHER users could add a name here.
   if (othersCreateEntriesIn(authority, trust)) {
     throw scriptAncestryFailure(destination, level, 'shared_parent');
   }

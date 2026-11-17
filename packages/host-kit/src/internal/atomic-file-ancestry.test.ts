@@ -12,55 +12,27 @@ import {
   publish,
 } from './atomic-file-host.fixtures.ts';
 import {
-  childPath,
   confirmScriptDestination,
-  parentDirectoryPath,
   prepareScriptDestination,
   verifiedDirectoryAncestry,
   verifiedDirectoryPath,
-  withoutTrailingSeparators,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
-test('withoutTrailingSeparators cuts a run of separators in linear time and keeps the root', () => {
-  // The scan is an index walk from the end, so a long run costs its own length: this is the input a
-  // polynomial regular expression would reconsider, and the reason the rule does not use one.
-  const many = '/'.repeat(200_000);
-  const started = process.hrtime.bigint();
-  expect(withoutTrailingSeparators(`${many}sessions${many}`)).toBe(`${many}sessions`);
-  expect(withoutTrailingSeparators(`${many}${many}`)).toBe('/');
-  expect(Number(process.hrtime.bigint() - started)).toBeLessThan(2_000_000_000);
+/** The mode a test's own trusted ground stands at, so a runner's umask cannot widen it. */
+const PRIVATE_DIR_MODE = 0o700;
 
-  expect(withoutTrailingSeparators('/')).toBe('/');
-  expect(withoutTrailingSeparators('//')).toBe('/');
-  expect(withoutTrailingSeparators('/tmp/state')).toBe('/tmp/state');
-  expect(withoutTrailingSeparators('/tmp/state//')).toBe('/tmp/state');
-  expect(withoutTrailingSeparators('state')).toBe('state');
-  expect(withoutTrailingSeparators('')).toBe('');
-  // What counts as a separator is the platform's, so those cases are in `atomic-file-path-shape.test.ts`,
-  // which names the platform it asks about instead of the one it runs on.
-});
-
-test('parentDirectoryPath cuts the parent without normalizing a step the kernel still has to take', () => {
-  expect(parentDirectoryPath('/r/state/sessions')).toBe('/r/state');
-  expect(parentDirectoryPath('/r/state/sessions/')).toBe('/r/state');
-  // The `..` survives: it is a step the kernel resolves against the directory physically stood in, and a
-  // caller that folded it here would be shown a different directory than the one resolution arrives at.
-  expect(parentDirectoryPath('/r/alias/../state')).toBe('/r/alias/..');
-  expect(parentDirectoryPath('/state')).toBe('/');
-  expect(parentDirectoryPath('state')).toBeUndefined();
-});
-
-test('childPath appends a name where the directory stands, and does not fold a step away', () => {
-  // `path.join` normalizes, and that is the divergence this exists to prevent: with `alias` a link to
-  // `actual/x`, the kernel creates `alias/../state/sessions` under `actual/state/sessions`, while `join`
-  // answers `state/sessions` beside the alias. A repair that judged one and a writer that used the other
-  // would each be right about a different directory.
-  expect(childPath('/r/alias/../state', 'sessions')).toBe('/r/alias/../state/sessions');
-  expect(childPath('/r/alias/../state', 'sessions')).not.toBe('/r/state/sessions');
-  expect(childPath('/r/state/', 'sessions')).toBe('/r/state/sessions');
-});
+/**
+ * A directory this test owns and trusts, created at {@link PRIVATE_DIR_MODE} rather than at whatever umask the
+ * runner carries. A mode-less `mkdir` under a permissive umask creates 0775, which the ancestry rule refuses for
+ * a reason that has nothing to do with what the case is about.
+ */
+function privateDir(directory: string): string {
+  fs.mkdirSync(directory, { mode: PRIVATE_DIR_MODE });
+  fs.chmodSync(directory, PRIVATE_DIR_MODE);
+  return directory;
+}
 
 /**
  * Where the rule says an entry is created, and nothing more.
@@ -105,7 +77,7 @@ function serveOwnership(owners: Readonly<Record<string, number>>): void {
 
 skipOnWindows('publishes to a chain only this user can write', () => {
   const workflows = path.join(root(), 'workflows');
-  fs.mkdirSync(workflows);
+  privateDir(workflows);
 
   publish(path.join(workflows, 'journey.ad'));
 
@@ -114,10 +86,27 @@ skipOnWindows('publishes to a chain only this user can write', () => {
 
 skipOnWindows('creates the script so that only this user can read it', () => {
   const workflows = path.join(root(), 'workflows');
-  fs.mkdirSync(workflows);
+  privateDir(workflows);
   const destination = path.join(workflows, 'journey.ad');
 
   publish(destination);
+
+  expect(modeOf(destination)).toBe(0o600);
+});
+
+skipOnWindows('publishes the script at 0600 under a umask that takes an OWNER bit away', () => {
+  // `CREATE` answers the mode ANDed with the umask, so a host at 0277 leaves this recording 0400: the write
+  // succeeds and nothing is a red flag, yet the owner's own tools cannot read the transcript they saved. A umask
+  // that reaches into the owner bits is the one a mode on `writeFile` cannot survive. The rule says the mode.
+  const workflows = path.join(root(), 'workflows');
+  privateDir(workflows);
+  const destination = path.join(workflows, 'journey.ad');
+  const previous = process.umask(0o0277);
+  try {
+    publish(destination);
+  } finally {
+    process.umask(previous);
+  }
 
   expect(modeOf(destination)).toBe(0o600);
 });
@@ -140,7 +129,7 @@ skipOnWindows('refuses a destination created inside a directory others can add e
 skipOnWindows('refuses a destination under a group-writable shared directory', () => {
   const team = directoryWith(path.join(root(), 'team'), 0o775);
   const sub = path.join(team, 'sub');
-  fs.mkdirSync(sub);
+  privateDir(sub);
 
   expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
   expect(fs.readdirSync(sub)).toEqual([]);
@@ -163,7 +152,7 @@ skipOnWindows(
     const team = directoryWith(path.join(root(), 'team'), 0o1777);
     serveOwnership({ [team]: FOREIGN_UID });
     const work = path.join(team, 'work');
-    fs.mkdirSync(work);
+    privateDir(work);
 
     expectUntrusted(() => judgedDirectory(path.join(work, 'journey.ad')), 'foreign_owned', team);
   },
@@ -177,7 +166,7 @@ skipOnWindows(
     // place, whatever its mode says, so the destination has to be refused.
     const systemTmp = directoryWith(path.join(root(), 'tmp'), 0o1777);
     const recordings = path.join(systemTmp, 'recordings');
-    fs.mkdirSync(recordings);
+    privateDir(recordings);
     fs.chmodSync(recordings, 0o755);
     serveOwnership({ [systemTmp]: 0, [recordings]: FOREIGN_UID });
 
@@ -234,10 +223,10 @@ skipOnWindows('refuses a chain that leaves a shared directory through an interme
   // and its owner — or any teammate — can swap `relay` for a target of their own.
   const directory = root();
   const home = path.join(directory, 'home');
-  fs.mkdirSync(home);
+  privateDir(home);
   const srv = path.join(directory, 'srv');
   const team = path.join(srv, 'team');
-  fs.mkdirSync(team, { recursive: true });
+  fs.mkdirSync(team, { recursive: true, mode: PRIVATE_DIR_MODE });
   fs.chmodSync(team, 0o777);
   const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
   fs.symlinkSync(chosen, path.join(team, 'relay'));
@@ -260,7 +249,7 @@ skipOnWindows('judges the directory a .. steps back into', () => {
   const privateHome = directoryWith(path.join(directory, 'private'), 0o700);
   const elsewhere = directoryWith(path.join(directory, 'elsewhere'), 0o777);
   const dir = path.join(elsewhere, 'dir');
-  fs.mkdirSync(dir);
+  privateDir(dir);
   fs.symlinkSync(dir, path.join(privateHome, 'link'));
 
   expectUntrusted(
@@ -306,7 +295,7 @@ skipOnWindows(
     const chosen = directoryWith(path.join(directory, 'chosen'), 0o700);
     fs.symlinkSync(chosen, path.join(mine, 'relay'));
     const sub = path.join(chosen, 'sub');
-    fs.mkdirSync(sub);
+    privateDir(sub);
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     fs.symlinkSync(path.join('..', 'shared', 'mine', 'relay', 'sub'), path.join(home, 'rec'));
 
@@ -332,7 +321,7 @@ skipOnWindows(
     const sharedY = directoryWith(path.join(home, 'y'), 0o777);
     const priv = directoryWith(path.join(directory, 'priv'), 0o700);
     const privX = path.join(priv, 'x');
-    fs.mkdirSync(privX);
+    privateDir(privX);
     const privY = directoryWith(path.join(priv, 'y'), 0o700);
     fs.symlinkSync(privX, path.join(home, 'work'));
     const destination = `${home}/work/../y/journey.ad`;
@@ -362,7 +351,7 @@ skipOnWindows(
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const sub = directoryWith(path.join(home, 'sub'), 0o700);
     const below = path.join(sub, 'below');
-    fs.mkdirSync(below);
+    privateDir(below);
     fs.symlinkSync(sub, path.join(home, 'a'));
     fs.symlinkSync(sub, path.join(home, 'b'));
     const lstatPaths: string[] = [];
@@ -437,7 +426,7 @@ skipOnWindows('applies a .. inside a target to the directory the walk reached', 
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const inside = path.join(shared, 'inside');
-  fs.mkdirSync(inside);
+  privateDir(inside);
   fs.symlinkSync(inside, path.join(home, 'priv'));
   // Spelled by hand: `path.join` would fold the `..` away before the link ever existed.
   fs.symlinkSync('priv/../x', path.join(home, 'rel'));
@@ -468,7 +457,7 @@ skipOnWindows('refuses the spelled spelling of a link the walk also follows', ()
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const work = path.join(home, 'work');
-  fs.mkdirSync(work);
+  privateDir(work);
   fs.symlinkSync(shared, path.join(home, 'rec'));
 
   expectUntrusted(
@@ -487,7 +476,7 @@ skipOnWindows('applies .. to the directory the walk is in, not to the spelling',
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const priv = directoryWith(path.join(directory, 'priv'), 0o700);
   const privX = path.join(priv, 'x');
-  fs.mkdirSync(privX);
+  privateDir(privX);
   const privY = directoryWith(path.join(priv, 'y'), 0o777);
   fs.mkdirSync(path.join(home, 'y'));
   fs.symlinkSync(privX, path.join(home, 'work'));
@@ -626,7 +615,7 @@ skipOnWindows('refuses a setgid group-writable directory on the same mode', () =
 skipOnWindows('follows a symbolic link inside a directory only this user can write', () => {
   const directory = root();
   const real = path.join(directory, 'real');
-  fs.mkdirSync(real);
+  privateDir(real);
   fs.symlinkSync(real, path.join(directory, 'link'));
 
   publish(path.join(directory, 'link', 'journey.ad'));
@@ -640,7 +629,7 @@ skipOnWindows('refuses a link planted in a directory others can add entries to',
   const directory = root();
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const attacker = path.join(directory, 'attacker');
-  fs.mkdirSync(attacker);
+  privateDir(attacker);
   fs.symlinkSync(attacker, path.join(shared, 'work'));
 
   expectUntrusted(
@@ -657,13 +646,13 @@ skipOnWindows('refuses a private link whose target chain is a shared directory',
   // would sit in ground the whole team can write.
   const directory = root();
   const home = path.join(directory, 'home');
-  fs.mkdirSync(home);
+  privateDir(home);
   const srv = path.join(directory, 'srv');
   const team = path.join(srv, 'team');
-  fs.mkdirSync(team, { recursive: true });
+  fs.mkdirSync(team, { recursive: true, mode: PRIVATE_DIR_MODE });
   fs.chmodSync(team, 0o777);
   const rec = path.join(team, 'rec');
-  fs.mkdirSync(rec);
+  privateDir(rec);
   fs.symlinkSync(rec, path.join(home, 'rec'));
 
   expectUntrusted(
@@ -677,7 +666,7 @@ skipOnWindows('refuses a symbolic link whose target is a directory others can wr
   const directory = root();
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const privateWork = path.join(shared, 'private');
-  fs.mkdirSync(privateWork);
+  privateDir(privateWork);
   fs.symlinkSync(privateWork, path.join(directory, 'link'));
 
   expectUntrusted(
@@ -696,7 +685,7 @@ skipOnWindows(
     const directory = root();
     const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
     const attacker = path.join(directory, 'attacker');
-    fs.mkdirSync(attacker);
+    privateDir(attacker);
     const link = path.join(shared, 'work');
     fs.symlinkSync(attacker, link);
     serveOwnership({ [shared]: 0, [link]: FOREIGN_UID });
@@ -718,12 +707,12 @@ skipOnWindows('keeps working through a root-owned alias whose target is sticky',
   const directory = root();
   const shared = directoryWith(path.join(directory, 'tmp'), 0o1777);
   const target = path.join(directory, 'private-tmp');
-  fs.mkdirSync(target);
+  privateDir(target);
   fs.chmodSync(target, 0o1777);
   const alias = path.join(shared, 'alias');
   fs.symlinkSync(target, alias);
   const work = path.join(alias, 'work');
-  fs.mkdirSync(work);
+  privateDir(work);
   fs.chmodSync(work, 0o700);
   serveOwnership({ [shared]: 0, [alias]: 0, [target]: 0, [work]: 0 });
 
@@ -752,7 +741,7 @@ skipOnWindows('publishes to a path spelled through an alias of the directory tha
   // leads somewhere legal, so the publish follows it instead of refusing it.
   const directory = root();
   const real = path.join(directory, 'workflows');
-  fs.mkdirSync(real);
+  privateDir(real);
   fs.symlinkSync(real, path.join(directory, 'current'));
   const destination = path.join(directory, 'current', 'journey.ad');
 
@@ -783,14 +772,14 @@ skipOnWindows('publishes to a scratch path exactly as the host spelled it', () =
 skipOnWindows('refuses a parent replaced by name while the file was staged', () => {
   const directory = root();
   const staged = path.join(directory, 'work');
-  fs.mkdirSync(staged);
+  privateDir(staged);
   const destination = path.join(staged, 'journey.ad');
   const prepared = prepareScriptDestination(destination);
   // The replacement is a link to another real directory. Removing the directory and creating the same name
   // again is not enough to make the two differ: a filesystem may hand back the inode it just freed, and the
   // identity would match by luck.
   const elsewhere = path.join(directory, 'elsewhere');
-  fs.mkdirSync(elsewhere);
+  privateDir(elsewhere);
   fs.rmSync(staged, { recursive: true });
   fs.symlinkSync(elsewhere, staged);
 
@@ -805,7 +794,7 @@ skipOnWindows(
   () => {
     const directory = root();
     const staged = path.join(directory, 'work');
-    fs.mkdirSync(staged);
+    privateDir(staged);
     const destination = path.join(staged, 'journey.ad');
     const prepared = prepareScriptDestination(destination);
 
@@ -824,7 +813,7 @@ skipOnWindows(
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const work = path.join(home, 'work');
-    fs.mkdirSync(work);
+    privateDir(work);
     const LOW = 2n ** 53n;
     const realLstatSync = fs.lstatSync;
     let look = 0;
@@ -862,7 +851,7 @@ skipOnWindows('the standing-on judgment accepts a chain only this user can move'
   const directory = root();
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const base = path.join(home, 'agent-device');
-  fs.mkdirSync(base);
+  privateDir(base);
 
   expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
   // The directory itself was stood on, and asking created nothing.
@@ -875,7 +864,7 @@ skipOnWindows('the standing-on judgment answers the physical directory it stood 
   // the directory it reached through it.
   const directory = root();
   const actual = path.join(directory, 'actual', 'x');
-  fs.mkdirSync(actual, { recursive: true });
+  fs.mkdirSync(actual, { recursive: true, mode: PRIVATE_DIR_MODE });
   const alias = path.join(directory, 'alias');
   fs.symlinkSync(path.join(directory, 'actual', 'x'), alias);
 
@@ -888,7 +877,7 @@ skipOnWindows('the standing-on judgment names an ancestor another user can write
   const directory = root();
   const shared = directoryWith(path.join(directory, 'shared'), 0o777);
   const base = path.join(shared, 'agent-device');
-  fs.mkdirSync(base);
+  privateDir(base);
 
   expect(verifiedDirectoryAncestry(base)).toEqual({
     ancestor: shared,
@@ -903,7 +892,7 @@ skipOnWindows('the standing-on judgment passes a sticky ancestor through, as the
   const directory = root();
   const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
   const base = path.join(shared, 'agent-device');
-  fs.mkdirSync(base);
+  privateDir(base);
 
   expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
 });
@@ -946,9 +935,9 @@ skipOnWindows(
     // it. Judging that entry is the caller's next step; what it must never get here is the far side.
     const directory = root();
     const trusted = path.join(directory, 'trusted');
-    fs.mkdirSync(trusted);
+    privateDir(trusted);
     const outside = path.join(directory, 'outside');
-    fs.mkdirSync(outside);
+    privateDir(outside);
     fs.symlinkSync(outside, path.join(trusted, 'state'));
 
     expect(verifiedDirectoryPath(`${trusted}/state/`)).toEqual({
@@ -964,13 +953,13 @@ skipOnWindows('the base answer is where a `..` in the base physically arrives', 
   // with `path.dirname` and `path.join` would repair a directory nobody judged.
   const directory = root();
   const actual = path.join(directory, 'actual', 'x');
-  fs.mkdirSync(actual, { recursive: true });
+  fs.mkdirSync(actual, { recursive: true, mode: PRIVATE_DIR_MODE });
   const alias = path.join(directory, 'alias');
   fs.symlinkSync(actual, alias);
   // Where the kernel's `..` arrives is the directory the link's TARGET stands in, so the state dir is the one
   // beside `x`, NOT the one `path.join(alias, '..', 'state')` spells beside the alias.
   const state = path.join(directory, 'actual', 'state');
-  fs.mkdirSync(state);
+  privateDir(state);
 
   expect(verifiedDirectoryPath(`${alias}/../state`)).toEqual({ physical: state });
   expect(path.join(alias, '..', 'state')).not.toBe(state);

@@ -108,11 +108,14 @@ Outside a macOS app lease, a fresh `open --save-script=<path>` records the sessi
 your machine. Each response that records an action returns a `session-script` artifact, and the
 client replaces the file with it. `close` returns the final script. The client writes only to the
 path that its own `open` named. If the file already exists, `open` fails unless you pass `--force`.
-Every directory the write travels through must be one that no other local user can change; see
-[Record a replay script](replay-e2e.md#record-a-replay-script). That check reads owners, permission
-bits and link shape on your machine, so an access control list, a network mount, or a mount that
-appears over a checked directory is outside it: the file is written at mode `0600`, but that is not
-a promise that nobody else can read it. Choose a directory only you can write.
+Every directory the write travels through must be one where no other local user can replace a
+directory or create a name there. That allows a directory you or root own that is open to others
+only when it carries the sticky bit, the shape macOS `/tmp` has, and it refuses a group-writable
+one; see [Record a replay script](replay-e2e.md#record-a-replay-script). The check reads owners,
+permission bits and link shape on your machine, so a Windows path, an access control list, a
+network mount, or a mount that appears over a checked directory is outside it: the file is written
+at mode `0600`, but that is not a promise that nobody else can read it. Choose a directory only you
+can write.
 The daemon must report the `script-artifacts` capability in its `/health` response; through a
 proxy, the upstream daemon's health response must report it. Otherwise `open --save-script` is
 refused before the session starts.
@@ -128,12 +131,21 @@ recorded a version discloses it: the CLI prints a warning and carries a typed
 names why: a daemon that cannot call its own state directory private ground refuses every version it
 picks a path for with `state_chain_untrusted` — for example one whose state tree a container or a
 mounted volume left to another uid, or one whose state directory sits inside a directory other local
-users can write. That daemon still starts and answers every other command, and
-the fix is on the daemon host: make its user own the state directory and every directory above it, or point
-`AGENT_DEVICE_STATE_DIR` at a directory it owns. That check of the daemon's own directories is best
-effort, and it runs after they are created rather than before, so a state directory it refuses can
-leave an empty directory behind, beyond a link it rejected. No version is ever written into what it
-leaves: the refusal above is what stops the delivery.
+users can write. That daemon still starts and answers every other command, and the fix is on the
+daemon host: the state directory has to belong to the daemon's user, and every directory above it
+has to belong to that user or to root and keep its contents closed to everyone else — root-owned
+system directories are accepted, so this is usually a `chmod g-w` on an ancestor rather than a
+`chown` of everything. Otherwise point `AGENT_DEVICE_STATE_DIR` at a directory it owns. That check
+of the daemon's own directories never stops the daemon from starting, and it is not a check that
+runs after the fact: each directory of the chain is judged before anything is created below it, and
+only a name that is missing is created, so the recording directories it refuses are never made — no
+directory beyond a link it rejected. One thing it still makes on ground it will not vouch for is the
+daemon's own state directory, whenever the check refuses a directory anywhere on the way to it —
+above the state directory, or one of the daemon's own levels such as `sessions`. The daemon's log and
+every artifact live below there, and one that cannot be created leaves no daemon at all. It makes it
+the plain way, with no permission change to a directory the check did not accept. No version is ever
+written where the check did not stand: the
+refusal above is what stops the delivery.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
 batch steps are refused. A remote `batch` updates your file once with the recording from its
