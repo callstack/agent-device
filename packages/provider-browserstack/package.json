@@ -1,7 +1,6 @@
 {
   "name": "@agent-device/browserstack",
   "version": "0.22.0-dev",
-  "private": true,
   "type": "module",
   "description": "BrowserStack real-device cloud plugin for agent-device.",
   "files": [
