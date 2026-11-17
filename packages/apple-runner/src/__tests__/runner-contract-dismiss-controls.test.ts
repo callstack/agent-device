@@ -28,7 +28,7 @@ test('a dismiss control pressed by its identifier is selected by it', () => {
     { label: 'xmark', identifier: 'sheet-close', pressBy: 'identifier' },
   ]);
   assert.deepEqual(error.details?.dismissControls, [
-    { selector: 'id="sheet-close"', label: 'xmark', identifier: 'sheet-close' },
+    { selector: 'role=button id="sheet-close"', label: 'xmark', identifier: 'sheet-close' },
   ]);
 });
 

@@ -569,8 +569,9 @@ export type BackDismissControl = Readonly<{ selector: string; label: string; ide
 
 /**
  * The dismiss controls the runner names on a `BACK_SWIPE_NO_CHANGE` refusal, each with its selector.
- * The runner's `pressBy` names the attribute no other button shares: `identifier` becomes `id=`, and
- * `label` becomes the button role and label. Other codes, and entries that are not
+ * The runner's `pressBy` names the attribute no other button shares. Both forms carry `role=button`,
+ * which scopes the match to the buttons the runner checked, and resolves through the snapshot tree:
+ * `identifier` becomes `role=button id="…"`, and `label` becomes `role=button label="…"`. Other codes, and entries that are not
  * `{ label, identifier?, pressBy }` objects, publish nothing.
  */
 function readBackDismissControls(
@@ -591,7 +592,7 @@ function readBackDismissControls(
     const id = typeof identifier === 'string' && identifier.length > 0 ? identifier : undefined;
     const selector =
       pressBy === 'identifier' && id !== undefined
-        ? `id=${JSON.stringify(id)}`
+        ? `role=button id=${JSON.stringify(id)}`
         : pressBy === 'label' && label.length > 0
           ? `role=button label=${JSON.stringify(label)}`
           : undefined;

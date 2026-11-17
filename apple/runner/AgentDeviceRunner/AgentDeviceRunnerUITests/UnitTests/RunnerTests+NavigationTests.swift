@@ -913,26 +913,47 @@ extension RunnerTests {
     func button(_ label: String, identifier: String = "", y: CGFloat = 72) -> TopBandButton {
       TopBandButton(label: label, identifier: identifier, frame: CGRect(x: 366, y: y, width: 24, height: 24))
     }
-    func labels(_ buttons: [TopBandButton], hittable: Set<Int>? = nil) -> [String] {
-      Self.dismissControls(buttons, window: window) { hittable?.contains($0) ?? true }.map(\.label)
+    func controls(_ buttons: [TopBandButton], others: [ButtonName] = [], hittable: Set<Int>? = nil) -> [DismissControlPayload] {
+      let every = buttons.map { ButtonName(label: $0.label, identifier: $0.identifier) } + others
+      return Self.dismissControls(buttons, everyButton: every, window: window) { hittable?.contains($0) ?? true }
+    }
+    func labels(_ buttons: [TopBandButton], others: [ButtonName] = [], hittable: Set<Int>? = nil) -> [String] {
+      controls(buttons, others: others, hittable: hittable).map(\.label)
     }
     XCTAssertEqual(
-      Self.dismissControls([button("Close")], window: window) { _ in true },
-      [DismissControlPayload(label: "Close", identifier: nil, pressBy: .label)], "a lone Close in the band")
+      controls([button("Close")]), [DismissControlPayload(label: "Close", identifier: nil, pressBy: .label)],
+      "a lone Close in the band")
     XCTAssertEqual(labels([button("Cancel"), button("Title"), button("close")]), ["Cancel", "close"], "both, in tree order")
     XCTAssertEqual(labels([button("Done"), button("Save")]), [], "commit words never count")
     XCTAssertEqual(labels([button("Close", y: 400)]), [], "a Close below the band")
     XCTAssertEqual(labels([button("Close")], hittable: []), [], "an unhittable Close")
     XCTAssertEqual(labels([button("Close account")]), [], "a longer label")
     XCTAssertEqual(
-      labels([button("Cancel"), button("cancel", y: 600)]), [],
-      "a label another button shares is pressed by no selector alone")
+      labels([button("Cancel"), button(" cancel ", y: 600)]), [],
+      "a label another button reads the same as, to the selector engine, is pressed by no selector alone")
     XCTAssertEqual(
-      Self.dismissControls([button("", identifier: "xmark.circle.fill")], window: window) { _ in true },
+      controls([button("", identifier: "xmark.circle.fill")]),
       [DismissControlPayload(label: "", identifier: "xmark.circle.fill", pressBy: .identifier)],
       "an xmark icon identifier is pressed by it")
     // The system back button is back's own target, pressed or declined by its own path, so it is never listed.
     XCTAssertEqual(labels([button("Back", identifier: Self.navigationBarBackButtonIdentifier)]), [])
+  }
+
+  /// Dismiss controls come from the window back swiped on; another window's buttons are not listed,
+  /// but a press resolves against every window, so one there that shares a label makes it ambiguous.
+  func testDismissControlsComeFromTheBackWindowAndAreUniqueAcrossEveryWindow() {
+    XCTAssertEqual(Self.dismissControlRoots(resolvedWindow: "back window", searchRoots: ["app"]), ["back window"])
+    XCTAssertEqual(Self.dismissControlRoots(resolvedWindow: nil, searchRoots: ["left", "right"]), ["left", "right"])
+    let window = CGRect(x: 0, y: 0, width: 834, height: 1194)
+    let close = TopBandButton(label: "Close", identifier: "", frame: CGRect(x: 780, y: 40, width: 30, height: 30))
+    let backWindowClose = ButtonName(label: "Close", identifier: "")
+    XCTAssertEqual(
+      Self.dismissControls([close], everyButton: [backWindowClose], window: window) { _ in true }.map(\.label), ["Close"])
+    XCTAssertEqual(
+      Self.dismissControls(
+        [close], everyButton: [backWindowClose, ButtonName(label: "close", identifier: "")], window: window
+      ) { _ in true },
+      [], "a Close in a second window shares the selector")
   }
 #endif
 

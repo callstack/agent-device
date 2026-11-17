@@ -215,17 +215,17 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 A `BACK_SWIPE_NO_CHANGE` error can carry `dismissControls`, an array of `{ "label": "Close", "identifier": "…", "pressBy": "label" }`.
 The `identifier` key is absent when the control has none.
 `pressBy` is `label` when the label is the dismiss name, and `identifier` when only the identifier is.
-The runner fills it after the swipe, from one read of the buttons in the app's windows.
+The runner fills it after the swipe. It lists buttons of the window the swipe resolved (every search root when none resolved) and checks uniqueness against the buttons of every search root.
 That read runs only on this refusal and only when the tree is readable.
 Its snapshots start for up to 1 s.
 An entry is a hittable button whose snapshot frame has its center in the window's top band, which is 22% of the window height, at least 96 pt and at most 180 pt.
 Its label or identifier must be `back`, `close`, `cancel`, `xmark`, or an `xmark.` icon name, in any letter case.
 A `BackButton` is never listed.
-A button whose `pressBy` attribute another read button shares, compared without case, is not listed, because a selector would match both.
+A button whose `pressBy` attribute another button shares, compared as the selector engine does (trimmed, lowercased, whitespace collapsed), is not listed, because a selector would match both.
 The runner reads hittability only for the buttons that pass the other checks.
 The runner never presses these controls.
 With no entry, or when the read fails or hangs, the key is absent.
-The daemon publishes the list as `details.dismissControls` and adds a selector to each entry: `role=button label="…"` or `id="…"`.
+The daemon publishes the list as `details.dismissControls` and adds a selector to each entry: `role=button label="…"` or `role=button id="…"`. The `role=button` term limits the match to button elements, the set the runner checked.
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
 0.05 s pause between captures plus each capture's own time, that agree for the still span: a contact

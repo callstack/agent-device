@@ -666,31 +666,42 @@ extension RunnerTests {
     return state
   }
 
-  /// A dismiss control's label or identifier, compared without case. These words only leave a screen;
-  /// "Done", "Save", and the like may commit, so they never count.
+  /// A dismiss control's label or identifier, compared as `selectorText`. These words only leave a
+  /// screen; "Done", "Save", and the like may commit, so they never count.
   static let dismissControlWords: Set<String> = ["back", "close", "cancel"]
+
+  /// Text as the selector engine compares it (`normalizeText` in packages/selectors): trimmed,
+  /// lowercased, with each run of whitespace one space. A listed control's selector matches every
+  /// button whose label or identifier reads the same this way.
+  static func selectorText(_ text: String) -> String {
+    text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+  }
 
   /// Whether `name` is a dismiss word, or an SF Symbols xmark name such as `xmark.circle.fill`.
   static func isDismissControlName(_ name: String) -> Bool {
-    let word = name.lowercased()
+    let word = selectorText(name)
     return dismissControlWords.contains(word) || word == "xmark" || word.hasPrefix("xmark.")
   }
 
-  /// Matches the buttons `isDismissControlName` accepts, so every button that shares a dismiss
-  /// control's label or identifier is read too.
+  /// Every button whose label or identifier contains a dismiss word, a superset of the buttons a
+  /// listed control's selector matches: `selectorText` then decides.
   static let dismissControlPredicate: NSPredicate = {
     let names = dismissControlWords.sorted() + ["xmark"]
-    let clauses = names.flatMap { _ in ["label ==[c] %@", "identifier ==[c] %@"] }
-      + ["label BEGINSWITH[c] %@", "identifier BEGINSWITH[c] %@"]
-    return NSPredicate(
-      format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] } + ["xmark.", "xmark."])
+    let clauses = names.flatMap { _ in ["label CONTAINS[c] %@", "identifier CONTAINS[c] %@"] }
+    return NSPredicate(format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] })
   }()
 
-  /// One button the dismiss control read found, with its snapshot frame in the window's own space.
+  /// One button the dismiss control read found, with its snapshot frame in its window's own space.
   struct TopBandButton {
     let label: String
     let identifier: String
     let frame: CGRect
+  }
+
+  /// The button's label and identifier, the attributes a dismiss control's selector compares.
+  struct ButtonName {
+    let label: String
+    let identifier: String
   }
 
   /// The app window's top band, where a bar or header holds its controls and content does not:
@@ -703,20 +714,26 @@ extension RunnerTests {
     return candidate.midY >= window.minY && candidate.midY <= maxY
   }
 
-  /// The dismiss controls a caller may press, in tree order: the buttons in the top band of `window`
-  /// whose label, or else identifier, is a dismiss name, pressed by that attribute. A button that
-  /// shares that attribute with another button is left out, because no selector presses it alone; so
-  /// is a system back button, which back's own path presses or declines. `isHittable` is asked last,
-  /// since each answer is an XCTest query.
+  /// The roots a dismiss control is listed from: the window back swiped on when the context resolved
+  /// one, else every search root. A control in another window, such as an iPad's second scene, is
+  /// not on the screen back acted on.
+  static func dismissControlRoots<Root>(resolvedWindow: Root?, searchRoots: [Root]) -> [Root] {
+    resolvedWindow.map { [$0] } ?? searchRoots
+  }
+
+  /// The dismiss controls a caller may press, in tree order: the buttons of the back window in the top
+  /// band of `window` whose label, or else identifier, is a dismiss name, pressed by that attribute.
+  /// `everyButton` holds the buttons of every window, which the selector `press` resolves can match:
+  /// a control whose attribute another of them shares is left out, because no selector presses it
+  /// alone. A system back button is never listed: back's own path presses or declines it.
+  /// `isHittable` is asked last, since each answer is an XCTest query.
   static func dismissControls(
     _ buttons: [TopBandButton],
+    everyButton: [ButtonName],
     window: CGRect,
     isHittable: (Int) -> Bool
   ) -> [DismissControlPayload] {
-    func attribute(_ index: Int, _ pressBy: DismissControlPayload.PressBy) -> String {
-      (pressBy == .label ? buttons[index].label : buttons[index].identifier).lowercased()
-    }
-    return buttons.indices.compactMap { index in
+    buttons.indices.compactMap { index in
       let button = buttons[index]
       guard button.identifier != navigationBarBackButtonIdentifier,
         isTopNavigationControlFrame(button.frame, in: window) else { return nil }
@@ -728,17 +745,20 @@ extension RunnerTests {
       } else {
         return nil
       }
-      let shared = buttons.indices.contains { $0 != index && attribute($0, pressBy) == attribute(index, pressBy) }
-      guard !shared, isHittable(index) else { return nil }
+      func attribute(_ name: ButtonName) -> String { selectorText(pressBy == .label ? name.label : name.identifier) }
+      let text = attribute(ButtonName(label: button.label, identifier: button.identifier))
+      let matches = everyButton.filter { attribute($0) == text }
+      guard matches.count == 1, isHittable(index) else { return nil }
       return DismissControlPayload(
         label: button.label, identifier: button.identifier.isEmpty ? nil : button.identifier, pressBy: pressBy)
     }
   }
 
-  /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe. It runs
-  /// only on that refusal, so a back that navigates pays nothing for it. Nil when there are none, or
-  /// when the tree is not readable, a read fails, its 1 s budget runs out, or a query hangs: the list
-  /// is advice, and back refuses the same either way.
+  /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe: the back
+  /// window's buttons, and every root's buttons for the uniqueness check. It runs only on that
+  /// refusal, so a back that navigates pays nothing for it. Nil when there are none, or when the tree
+  /// is not readable, a read fails, its 1 s budget runs out, or a query hangs: the list is advice,
+  /// and back refuses the same either way.
   @MainActor
   private func topBandDismissControls(
     app: XCUIApplication,
@@ -749,16 +769,24 @@ extension RunnerTests {
     // Snapshot frames are in the window's own space, which a placed iPad window starts off the screen origin.
     let window = CGRect(origin: .zero, size: context.geometry.windowOnScreen.rect.size)
     let read = heldNavigationBarRead(.dismissControlLookup) { () -> [DismissControlPayload]? in
-      guard let roots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else { return nil }
-      let elements = roots.flatMap {
-        $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex
+      guard let searchRoots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else {
+        return nil
       }
+      @MainActor func matching(_ roots: [XCUIElement]) -> [XCUIElement] {
+        roots.flatMap { $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex }
+      }
+      var everyButton: [ButtonName] = []
+      for element in matching(searchRoots) {
+        guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
+        everyButton.append(ButtonName(label: snapshot.label, identifier: snapshot.identifier))
+      }
+      let elements = matching(Self.dismissControlRoots(resolvedWindow: context.resolvedWindow, searchRoots: searchRoots))
       var buttons: [TopBandButton] = []
       for element in elements {
         guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
         buttons.append(TopBandButton(label: snapshot.label, identifier: snapshot.identifier, frame: snapshot.frame))
       }
-      return Self.dismissControls(buttons, window: window) { elements[$0].isHittable }
+      return Self.dismissControls(buttons, everyButton: everyButton, window: window) { elements[$0].isHittable }
     }
     guard case .read(let controls) = read, !controls.isEmpty else { return nil }
     return controls
