@@ -4,8 +4,8 @@ Drive web apps on LG webOS TVs with [agent-device](https://agent-device.dev). Th
 the app with the webOS CLI, opens the `ares-inspect` tunnel, and drives the page over the Chrome
 DevTools Protocol: remote keys, pointer, text, snapshots, screenshots and console logs.
 
-Status: experimental. Verified on an LG 32LQ63006LA (webOS TV 22, dev build of a React Native Web
-app): `connect`, `open`, `snapshot -i`, `snapshot -s`, `tv-remote` (directions, select, back),
+Status: experimental. Verified on an LG 32LQ63006LA (webOS TV 22): `connect`, `open`,
+`snapshot -i`, `snapshot -s`, `tv-remote` (directions, select, back and the media buttons),
 `is focused`, `press @ref --settle`, `wait text`, `find`, `screenshot`, `logs`, `apps`,
 `appstate`, `close`, `disconnect`.
 
@@ -72,6 +72,7 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | --- | --- |
 | `open` / `close` | `ares-launch` / `ares-launch --close`, then the `ares-inspect` tunnel |
 | `tv-remote press up/down/left/right/select/back`, `back` | `Input.dispatchKeyEvent` with the LG remote codes (Back = 461) |
+| `tv-remote press media-play/media-pause/media-stop/media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the LG media key codes (Play = 415, Pause = 19, Stop = 413, Rewind = 412, Fast-forward = 417) |
 | `appstate` | the attached app while its page is visible |
 | `apps` | `ares-install --listfull` |
 | `logs` | console calls, exceptions and browser log entries of the attached page, one line each |
@@ -82,8 +83,10 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | `type` | `Input.insertText` into the focused element |
 | `scroll` | `mouseWheel` at the centre of the scroll container or viewport, by the requested distance |
 
-Not yet: system buttons (`home`, menu, volume, channel and media keys), `network dump`, `perf`,
-`install` and `uninstall`, recording, URLs and deep links in `open`, `power`.
+Not yet: system buttons (`home`, menu, volume and channel), `media-play-pause`, `media-next` and
+`media-previous`, `network dump`, `perf`, `install` and `uninstall`, recording, URLs and deep links
+in `open`, `power`. webOS has separate Play and Pause key codes and no play-pause toggle, so
+`media-play-pause` is refused; use `media-play` or `media-pause`.
 
 ## Known limitations
 

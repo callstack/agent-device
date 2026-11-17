@@ -147,3 +147,32 @@ test('close kills the app on the leased TV', async () => {
 
   assert.equal(calls().at(-1), `-s 192.0.2.10:26101 shell 0 was_kill ${APP_ID}`);
 });
+
+test('a remote button Tizen lacks is refused, listing the navigation, back and media buttons it accepts', async () => {
+  const { runtime } = await tizenRuntime(['192.0.2.10:26101']);
+  const allocated = await runtime.leaseLifecycle.allocate(lease('one'));
+  assert.ok(allocated);
+
+  const press = runtime.getInteractor(allocated.device)!.tvRemote!('home');
+
+  await assert.rejects(press, (error: AppError) => {
+    assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+    assert.deepEqual(error.details?.supported, [
+      'up',
+      'down',
+      'left',
+      'right',
+      'select',
+      'back',
+      'media-play-pause',
+      'media-next',
+      'media-previous',
+      'media-play',
+      'media-pause',
+      'media-stop',
+      'media-rewind',
+      'media-fast-forward',
+    ]);
+    return true;
+  });
+});

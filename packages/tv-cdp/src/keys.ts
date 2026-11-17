@@ -20,6 +20,14 @@ export const NAVIGATION_KEYS = {
   select: { key: 'Enter', code: 'Enter', keyCode: 13, text: '\r' },
 } as const satisfies RemoteKeys;
 
+export const MEDIA_KEYS = {
+  'media-play': { key: 'MediaPlay', code: 'MediaPlay', keyCode: 415 },
+  'media-pause': { key: 'MediaPause', code: 'MediaPause', keyCode: 19 },
+  'media-stop': { key: 'MediaStop', code: 'MediaStop', keyCode: 413 },
+  'media-rewind': { key: 'MediaRewind', code: 'MediaRewind', keyCode: 412 },
+  'media-fast-forward': { key: 'MediaFastForward', code: 'MediaFastForward', keyCode: 417 },
+} as const satisfies RemoteKeys;
+
 export function supportedRemoteButtons(keys: RemoteKeys): readonly TvRemoteButton[] {
   return Object.keys(keys) as TvRemoteButton[];
 }

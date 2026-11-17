@@ -2,7 +2,7 @@ import type { TvRuntimeHost } from './runtime.ts';
 import type { TvPlatform } from './tv.ts';
 
 export { listTargets, withTunnelRemoval } from './cdp.ts';
-export { NAVIGATION_KEYS, type RemoteKeys } from './keys.ts';
+export { MEDIA_KEYS, NAVIGATION_KEYS, type RemoteKeys } from './keys.ts';
 export type { TvRuntimeHost } from './runtime.ts';
 export type { PageTunnel, TvConnection } from './tv.ts';
 

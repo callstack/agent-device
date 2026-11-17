@@ -147,3 +147,30 @@ test('close stops the app with ares-launch --close', async () => {
 
   assert.deepEqual(recordedCalls(), [`ares-launch -d bedroom --close ${APP_ID}`]);
 });
+
+test('media-play-pause is refused because webOS has no play-pause key, listing the buttons it accepts', async () => {
+  const runtime = await webosRuntime();
+  const allocated = await runtime.leaseLifecycle.allocate(lease('lease-a'));
+  assert.ok(allocated);
+
+  const press = runtime.getInteractor(allocated.device)!.tvRemote!('media-play-pause');
+
+  await assert.rejects(press, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+    assert.deepEqual(error.details?.supported, [
+      'up',
+      'down',
+      'left',
+      'right',
+      'select',
+      'back',
+      'media-play',
+      'media-pause',
+      'media-stop',
+      'media-rewind',
+      'media-fast-forward',
+    ]);
+    return true;
+  });
+});

@@ -4,10 +4,10 @@ Drive web apps on Samsung Tizen TVs with [agent-device](https://agent-device.dev
 debug-launches the app over `sdb`, forwards its DevTools port, and drives the page over the Chrome
 DevTools Protocol: remote keys, pointer, text, snapshots, screenshots and console logs.
 
-Status: experimental. Verified on a Samsung Smart Monitor M7 (Tizen 9.0, packaged build of a React
-Native Web app): `connect`, `open`, `open --relaunch`, `snapshot -i`, `tv-remote` (directions,
-select, back), `back`, `is focused`, `press`, `find ... click`, `hover`, `longpress`, `fill`,
-`type`, `wait`, `scroll`, `screenshot`, `logs`, `apps`, `appstate`, `close`, `disconnect`.
+Status: experimental. Verified on a Samsung Smart Monitor M7 (Tizen 9.0): `connect`, `open`,
+`open --relaunch`, `snapshot -i`, `tv-remote` (directions, select, back and the media buttons),
+`back`, `is focused`, `press`, `find ... click`, `hover`, `longpress`, `fill`, `type`, `wait`,
+`scroll`, `screenshot`, `logs`, `apps`, `appstate`, `close`, `disconnect`.
 
 ## How it plugs in
 
@@ -77,6 +77,7 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | --- | --- |
 | `open` / `close` | `sdb shell 0 was_kill`, `sdb shell 0 debug` (prints the DevTools port), `sdb forward`, then CDP / `sdb shell 0 was_kill` |
 | `tv-remote press up/down/left/right/select/back`, `back` | `Input.dispatchKeyEvent` with the Samsung remote codes (Back = `XF86Back`, 10009) |
+| `tv-remote press media-play/media-pause/media-play-pause/media-stop/media-next/media-previous/media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the Samsung media key codes (`MediaPlay` = 415, `MediaPause` = 19, `MediaPlayPause` = 10252, `MediaStop` = 413, `MediaTrackNext` = 10233, `MediaTrackPrevious` = 10232, `MediaRewind` = 412, `MediaFastForward` = 417) |
 | `appstate` | the attached app while its page is visible |
 | `apps` | `sdb shell 0 vd_applist`: user-installed apps with their titles |
 | `logs` | console calls, exceptions and browser log entries of the attached page, one line each |
@@ -87,8 +88,8 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | `type` | `Input.insertText` into the focused element |
 | `scroll` | `mouseWheel` at the centre of the scroll container or viewport, by the requested distance |
 
-Not yet: system buttons (`home`, menu, volume, channel and media keys), `network dump`, `perf`,
-`install` and `uninstall`, recording, URLs and deep links in `open`, `power`.
+Not yet: system buttons (`home`, menu, volume and channel), `network dump`, `perf`, `install` and
+`uninstall`, recording, URLs and deep links in `open`, `power`.
 
 ## Known limitations
 

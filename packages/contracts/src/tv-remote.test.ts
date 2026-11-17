@@ -52,6 +52,9 @@ test('Android TV hardware buttons map to their KeyEvent codes', () => {
     sleep: '223',
     wake: '224',
     'media-play-pause': '85',
+    'media-play': '126',
+    'media-pause': '127',
+    'media-stop': '86',
     'media-next': '87',
     'media-previous': '88',
     'media-rewind': '89',
@@ -71,7 +74,7 @@ test('Android TV hardware buttons map to their KeyEvent codes', () => {
   for (const [button, code] of Object.entries(expected)) {
     assert.equal(toAndroidTvRemoteKeyevent(parseTvRemoteButton(button)), code);
   }
-  assert.equal(TV_REMOTE_BUTTONS.length, 30);
+  assert.equal(TV_REMOTE_BUTTONS.length, 33);
 });
 
 test('raw Android codes and named TV buttons normalize before dispatch', () => {
