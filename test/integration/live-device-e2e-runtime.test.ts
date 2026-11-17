@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { CliJsonResult } from './cli-json.ts';
+import { writeSnapshotEvidence } from './android-emulator-e2e/snapshot-evidence.ts';
 import { createLiveDeviceContext, createLiveDeviceHarness } from './live-device-e2e/runtime.ts';
 
 function fixture(options: { captureThrows?: boolean; deviceEvidence?: string } = {}) {
@@ -317,4 +318,111 @@ test('unwritable artifact output cannot replace the scenario failure', async () 
     (error: unknown) => error === failure,
   );
   assert.equal(reports(), 1);
+});
+
+test('snapshot evidence write failure preserves the successful issued result', async () => {
+  const context = createLiveDeviceContext<string>({
+    artifactRoot: mkdtempForTestSync('snapshot-observer-success-'),
+    session: 'fixture-session',
+  });
+  const result: CliJsonResult = {
+    status: 0,
+    stdout: '',
+    stderr: '',
+    json: {
+      data: {
+        androidSnapshot: { backend: 'android-helper', helperTransport: 'persistent-session' },
+      },
+    },
+  };
+  let observations = 0;
+  let issues = 0;
+  const harness = createLiveDeviceHarness<typeof context, string>({
+    behaviorsForScenario: () => [],
+    commandsForScenario: () => [],
+    commonFlags: (_context, args) => [...args],
+    runCli: async () => {
+      issues++;
+      return result;
+    },
+    writeCoverageReport: () => {},
+  });
+  const returned = await harness.runStep(context, 'original', ['snapshot', '-i', '--debug'], {
+    observeResult: (observed: CliJsonResult) => {
+      observations++;
+      writeSnapshotEvidence(
+        path.join(context.artifactDir, 'missing'),
+        'catalog',
+        context.session,
+        10,
+        20,
+        observed,
+      );
+    },
+  });
+  assert.equal(returned, result);
+  assert.equal(returned.status, 0);
+  assert.equal(observations, 1);
+  assert.equal(issues, 1);
+  assert.equal(context.stepHistory[0]?.accepted, true);
+});
+
+test('failed original snapshot evidence is written before failure collection and assertion', async () => {
+  const context = createLiveDeviceContext<string>({
+    artifactRoot: mkdtempForTestSync('snapshot-observer-failure-'),
+    session: 'fixture-session',
+  });
+  const original: CliJsonResult = {
+    status: 17,
+    stdout: '',
+    stderr: '',
+    json: {
+      data: {
+        androidSnapshot: {
+          backend: 'android-helper',
+          helperTransport: 'instrumentation',
+          nodeCount: 268,
+        },
+        warnings: ['original warning'],
+      },
+    },
+  };
+  const followup: CliJsonResult = {
+    status: 0,
+    stdout: '',
+    stderr: '',
+    json: { data: { androidSnapshot: { nodeCount: 1 } } },
+  };
+  const calls: string[] = [];
+  const evidencePath = path.join(context.artifactDir, 'snapshot-catalog.json');
+  let presentBeforeCollection = false;
+  const harness = createLiveDeviceHarness<typeof context, string>({
+    behaviorsForScenario: () => [],
+    commandsForScenario: () => [],
+    commonFlags: (_context, args) => [...args],
+    runCli: async (args) => {
+      calls.push(args[0]!);
+      if (calls.length === 1) return original;
+      presentBeforeCollection = fs.existsSync(evidencePath);
+      return followup;
+    },
+    writeCoverageReport: () => {},
+  });
+  await assert.rejects(
+    harness.runStep(context, 'original', ['snapshot', '-i', '--debug'], {
+      observeResult: (result: CliJsonResult) =>
+        writeSnapshotEvidence(context.artifactDir, 'catalog', context.session, 10, 20, result),
+    }),
+    (error: unknown) => error instanceof assert.AssertionError,
+  );
+  assert.deepEqual(calls, ['snapshot', 'screenshot', 'snapshot']);
+  assert.equal(presentBeforeCollection, true);
+  const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+  assert.equal(evidence.status, 17);
+  assert.equal(evidence.session, 'fixture-session');
+  assert.deepEqual([evidence.startedAtMs, evidence.finishedAtMs], [10, 20]);
+  assert.equal(evidence.androidSnapshot.nodeCount, 268);
+  assert.deepEqual(evidence.warnings, ['original warning']);
+  assert.equal(context.stepHistory.length, 1);
+  assert.equal(context.stepHistory[0]?.accepted, false);
 });
