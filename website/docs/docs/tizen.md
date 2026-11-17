@@ -71,7 +71,7 @@ Every command on that device goes to the plugin, never to adb.
 | --- | --- |
 | `open` / `close` | `sdb shell 0 was_kill`, `sdb shell 0 debug`, and `sdb forward`, then CDP / `sdb shell 0 was_kill` |
 | `tv-remote press up/down/left/right/select/back`, `back` | `Input.dispatchKeyEvent` with the Samsung remote codes |
-| `tv-remote press media-play-pause/media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the Samsung media key codes |
+| `tv-remote press media-play/media-pause/media-play-pause/media-stop/media-next/media-previous/media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the Samsung media key codes |
 | `appstate` | The attached app while its page is visible |
 | `apps` | `sdb shell 0 vd_applist` |
 | `logs` | Console calls, exceptions, and browser log entries of the attached page, one line each |
@@ -82,9 +82,8 @@ Every command on that device goes to the plugin, never to adb.
 | `type` | `Input.insertText` into the focused element |
 | `scroll` | `mouseWheel` at the centre of the scroll container or the viewport, by the requested distance |
 
-Not supported yet: system buttons (`home`, menu, volume, and channel), `media-next` and
-`media-previous`, `network dump`, `perf`, `install` and `uninstall`, recording, URLs and deep links
-in `open`, and `power`.
+Not supported yet: system buttons (`home`, menu, volume, and channel), `network dump`, `perf`,
+`install` and `uninstall`, recording, URLs and deep links in `open`, and `power`.
 
 ## Known limitations
 

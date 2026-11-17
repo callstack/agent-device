@@ -11,23 +11,19 @@ test('select sends Enter with text so a focused button receives a click', () => 
   assert.equal(up!.type, 'keyUp');
 });
 
-test('rewind and fast-forward send the TV media key codes 412 and 417 without text', () => {
-  const media = (key: string, keyCode: number) => ({
-    key,
-    code: key,
-    windowsVirtualKeyCode: keyCode,
-    nativeVirtualKeyCode: keyCode,
-  });
+test.each([
+  ['media-play', 'MediaPlay', 415],
+  ['media-pause', 'MediaPause', 19],
+  ['media-stop', 'MediaStop', 413],
+  ['media-rewind', 'MediaRewind', 412],
+  ['media-fast-forward', 'MediaFastForward', 417],
+] as const)('%s sends the TV media key %s with key code %d and no text', (button, key, keyCode) => {
+  const media = { key, code: key, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
 
-  const rewind = keyEvents(MEDIA_KEYS['media-rewind']);
-  const fastForward = keyEvents(MEDIA_KEYS['media-fast-forward']);
+  const events = keyEvents(MEDIA_KEYS[button]);
 
-  assert.deepEqual(rewind, [
-    { ...media('MediaRewind', 412), type: 'keyDown' },
-    { ...media('MediaRewind', 412), type: 'keyUp' },
-  ]);
-  assert.deepEqual(fastForward, [
-    { ...media('MediaFastForward', 417), type: 'keyDown' },
-    { ...media('MediaFastForward', 417), type: 'keyUp' },
+  assert.deepEqual(events, [
+    { ...media, type: 'keyDown' },
+    { ...media, type: 'keyUp' },
   ]);
 });

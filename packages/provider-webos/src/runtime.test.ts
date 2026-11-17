@@ -165,6 +165,9 @@ test('media-play-pause is refused because webOS has no play-pause key, listing t
       'right',
       'select',
       'back',
+      'media-play',
+      'media-pause',
+      'media-stop',
       'media-rewind',
       'media-fast-forward',
     ]);

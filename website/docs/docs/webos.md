@@ -71,7 +71,7 @@ plugin, never to adb.
 | --- | --- |
 | `open` / `close` | `ares-launch` / `ares-launch --close`, then the `ares-inspect` tunnel |
 | `tv-remote press up/down/left/right/select/back`, `back` | `Input.dispatchKeyEvent` with the LG remote codes |
-| `tv-remote press media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the LG media key codes |
+| `tv-remote press media-play/media-pause/media-stop/media-rewind/media-fast-forward` | `Input.dispatchKeyEvent` with the LG media key codes |
 | `appstate` | The attached app while its page is visible |
 | `apps` | `ares-install --listfull` |
 | `logs` | Console calls, exceptions, and browser log entries of the attached page, one line each |
@@ -85,7 +85,7 @@ plugin, never to adb.
 Not supported yet: system buttons (`home`, menu, volume, and channel), `media-play-pause`,
 `media-next` and `media-previous`, `network dump`, `perf`, `install` and `uninstall`, recording,
 URLs and deep links in `open`, and `power`. webOS has separate Play and Pause key codes and no
-play-pause toggle, so `media-play-pause` is refused.
+play-pause toggle, so `media-play-pause` is refused; use `media-play` or `media-pause`.
 
 ## Known limitations
 

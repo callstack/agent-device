@@ -165,6 +165,11 @@ test('a remote button Tizen lacks is refused, listing the navigation, back and m
       'select',
       'back',
       'media-play-pause',
+      'media-next',
+      'media-previous',
+      'media-play',
+      'media-pause',
+      'media-stop',
       'media-rewind',
       'media-fast-forward',
     ]);
