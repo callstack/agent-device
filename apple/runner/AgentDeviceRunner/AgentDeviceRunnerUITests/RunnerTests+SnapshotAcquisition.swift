@@ -55,7 +55,7 @@ extension RunnerTests {
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("reading snapshot viewport")
     ) {
-      try self.safeSnapshotViewport(app: app, readingOrientation: true)
+      try self.capturedSnapshotViewport(app: app, rootSnapshot: rootSnapshot)
     }
     // Use the same tree for keyboard coverage so a later dismissal cannot invalidate the band.
     let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, viewport: viewport, deadline: captureDeadline)
@@ -133,6 +133,39 @@ extension RunnerTests {
       throw axSnapshotFailure(message)
     }
     return nil
+  }
+
+  /// The viewport of a capture whose root snapshot is held. A full-screen window is read from that
+  /// snapshot: resolving `app.windows` live snapshots the whole app again for each read, which on a
+  /// heavy screen outlasts this read's slice and leaves abandoned main-thread work that refuses the
+  /// next command with `RUNNER_BUSY`. Any other window keeps the live read, because a snapshot frame
+  /// is in window content space and only a full-screen window's content space is screen space.
+  func capturedSnapshotViewport(app: XCUIApplication, rootSnapshot: XCUIElementSnapshot) throws -> SnapshotViewport {
+    if requestLitPanel == nil,
+      let frame = Self.fullScreenWindowFrame(
+        windowFrames: rootSnapshot.children.filter { $0.elementType == .window }.map(\.frame),
+        fullScreenFrame: Self.fullScreenFrame(of: app)
+      )
+    {
+      return .reported(box: frame, interfaceOrientation: capturedInterfaceOrientation(app: app))
+    }
+    return try safeSnapshotViewport(app: app, readingOrientation: true)
+  }
+
+  /// The first usable window frame of a snapshot, the window `resolveRunnerWindowElement` resolves,
+  /// when it is exactly the screen AXRuntime reports the app filling, at the origin. Nil keeps the
+  /// live read: a placed iPad window (#4399), an offset window, and a landscape window, whose frame
+  /// is the portrait screen with width and height swapped.
+  static func fullScreenWindowFrame(windowFrames: [CGRect], fullScreenFrame: CGRect) -> CGRect? {
+    guard
+      !fullScreenFrame.isNull,
+      let window = windowFrames.first(where: { !$0.isEmpty }),
+      window.origin == .zero,
+      window == fullScreenFrame
+    else {
+      return nil
+    }
+    return window
   }
 
   /// The viewport as a declared fact; a read that raises is `.missing(reason: .notProvided)` (#2891).

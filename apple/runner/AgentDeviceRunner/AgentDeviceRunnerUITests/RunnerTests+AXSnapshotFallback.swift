@@ -320,7 +320,7 @@ extension RunnerTests {
   }
 
   /// The screen's frame when AXRuntime reports `app` as the primary app filling it, else `.null`.
-  private static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
+  static func fullScreenFrame(of app: XCUIApplication) -> CGRect {
     #if os(iOS)
       return RunnerFullScreenApplicationFrame(app)
     #else

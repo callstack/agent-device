@@ -167,6 +167,50 @@ extension RunnerTests {
         )
       }
     }
+
+    /// A full-screen app's capture takes its viewport from the root snapshot it already holds. Each
+    /// live window read resolves `app.windows` against a fresh snapshot of the whole app: on a heavy
+    /// web view the list, `exists`, and `frame` reads took 7.4 s together, outlasted the viewport's
+    /// 1 s slice, and left work that refused the next tap with `RUNNER_BUSY`.
+    @MainActor
+    func testFullScreenSnapshotViewportReadsTheWindowFromTheRootSnapshot() throws {
+      app.launch()
+      defer {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+        app.terminate()
+      }
+      XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+      try XCTSkipIf(Self.fullScreenFrame(of: app).isNull, "the fixture app does not fill this device's screen")
+      let hint = CaptureHint(
+        projection: .regular,
+        depth: nil,
+        regularPresentedDepth: nil,
+        interactiveOnly: false,
+        customActions: false
+      )
+      guard
+        let frameMethod = class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+        let probeMethod = class_getInstanceMethod(
+          RunnerWindowFrameProbe.self,
+          #selector(getter: RunnerWindowFrameProbe.frame)
+        )
+      else {
+        XCTFail("unable to install the window frame probe")
+        return
+      }
+      let originalImplementation = method_getImplementation(frameMethod)
+      RunnerWindowFrameReads.begin(answering: [RunnerWindowFrameReads.usableFrame.insetBy(dx: 10, dy: 10)])
+      let probed: SnapshotTraversalContext? = try {
+        method_setImplementation(frameMethod, method_getImplementation(probeMethod))
+        defer { method_setImplementation(frameMethod, originalImplementation) }
+        return try makeSnapshotTraversalContext(app: app, hint: hint)
+      }()
+      let context = try XCTUnwrap(probed)
+
+      let window = try XCTUnwrap(context.rootSnapshot.children.first { $0.elementType == .window })
+      XCTAssertEqual(RunnerWindowFrameReads.recorded(), 0)
+      XCTAssertEqual(context.viewport.rect, window.frame)
+    }
   }
 #endif
 

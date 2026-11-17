@@ -37,6 +37,35 @@ final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
 extension RunnerTests {
   private static let containerFrame = CGRect(x: 20, y: 800, width: 360, height: 31)
 
+  /// A snapshot frame is in window content space, so only a full-screen window at the origin may stand
+  /// in for the live window read. A placed iPad window's content frame starts at the origin too, so
+  /// AXRuntime's full-screen frame is what tells the two apart.
+  func testSnapshotViewportUsesOnlyAFullScreenWindowAtTheOrigin() {
+    let screen = CGRect(x: 0, y: 0, width: 440, height: 956)
+    XCTAssertEqual(Self.fullScreenWindowFrame(windowFrames: [screen], fullScreenFrame: screen), screen)
+    XCTAssertEqual(
+      Self.fullScreenWindowFrame(windowFrames: [.zero, screen], fullScreenFrame: screen),
+      screen,
+      "an unmeasured window is skipped, as the live read skips it"
+    )
+
+    let ipadScreen = CGRect(x: 0, y: 0, width: 1032, height: 1376)
+    let liveRead: [(name: String, windows: [CGRect], fullScreen: CGRect)] = [
+      ("not full screen", [screen], .null),
+      ("placed iPad window", [CGRect(x: 0, y: 0, width: 375, height: 575)], ipadScreen),
+      ("offset window", [CGRect(x: 0, y: 20, width: 440, height: 956)], screen),
+      ("landscape window", [CGRect(x: 0, y: 0, width: 956, height: 440)], screen),
+      ("first usable window is not the screen", [CGRect(x: 0, y: 0, width: 320, height: 480), screen], screen),
+      ("no window", [], screen),
+    ]
+    for testCase in liveRead {
+      XCTAssertNil(
+        Self.fullScreenWindowFrame(windowFrames: testCase.windows, fullScreenFrame: testCase.fullScreen),
+        testCase.name
+      )
+    }
+  }
+
   @MainActor
   func testCollapsedTabCandidatePredicateMatchesLabeledCandidatesCenteredInAContainer() {
     var matched: [String] = []
