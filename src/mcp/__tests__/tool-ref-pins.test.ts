@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import type { AuditSnapshotCommandResult } from '@agent-device/contracts/capture';
 import { createToolRefPinStore } from '../tool-ref-pins.ts';
 
 function makeStore() {
@@ -479,10 +480,14 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
     'audit',
     {
       findings: [{ kind: 'missing-name', severity: 'warning', ref: '@e2', role: 'button' }],
+      guidance: {
+        'missing-name':
+          'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+      },
       checks,
       limitations: [],
       refsGeneration: 9,
-    },
+    } satisfies AuditSnapshotCommandResult,
     undefined,
     'demo',
   );
@@ -508,7 +513,12 @@ test('ref-pin store leaves pins untouched for an audit without findings', () => 
   );
   pins.mergeCommandResult(
     'audit',
-    { findings: [], checks: { snapshot: 'complete' }, limitations: [] },
+    {
+      findings: [],
+      guidance: {},
+      checks: { snapshot: 'complete' },
+      limitations: [],
+    } satisfies AuditSnapshotCommandResult,
     undefined,
     'demo',
   );

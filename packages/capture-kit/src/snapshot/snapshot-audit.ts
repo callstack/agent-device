@@ -136,14 +136,8 @@ function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership
   if (node.systemBar !== undefined || node.keyboardOwned === true) return 'system';
   if (scan.platform !== 'ios') return 'app';
   if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
-  const visited = new Set<number>();
-  let ancestor = parentOf(node, scan);
-  while (ancestor && !visited.has(ancestor.index)) {
-    if (isPersistentChromeKind(ancestor.type)) return 'platform-sized';
-    visited.add(ancestor.index);
-    ancestor = parentOf(ancestor, scan);
-  }
-  return 'app';
+  const parent = parentOf(node, scan);
+  return parent && isPersistentChromeKind(parent.type) ? 'platform-sized' : 'app';
 }
 
 function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean {

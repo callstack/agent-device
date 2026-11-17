@@ -436,10 +436,9 @@ test.each(['NavigationBar', 'Toolbar', 'TabBar'])(
     const small = { x: 0, y: 0, width: 42.2, height: 42.2 };
     const nodes = [
       node(0, { type, hittable: false }),
-      node(1, { type: 'Other', parentIndex: 0 }),
-      node(2, { parentIndex: 1, label: 'Cancel', rect: { ...small, width: 50.6 } }),
-      node(3, { parentIndex: 1, label: 'Add', rect: small }),
-      node(4, { parentIndex: 1, identifier: 'unnamed-bar-item', rect: small }),
+      node(2, { parentIndex: 0, label: 'Cancel', rect: { ...small, width: 50.6 } }),
+      node(3, { parentIndex: 0, label: 'Add', rect: small }),
+      node(4, { parentIndex: 0, identifier: 'unnamed-bar-item', rect: small }),
       node(5, { label: 'App action', rect: small }),
     ];
     expect(summarize(audit(nodes).findings)).toEqual(['missing-name @e4', 'small-target @e5']);
@@ -450,5 +449,19 @@ test.each(['NavigationBar', 'Toolbar', 'TabBar'])(
       'missing-name @e4',
       'small-target @e5',
     ]);
+  },
+);
+
+test.each(['NavigationBar', 'Toolbar', 'TabBar', 'BottomNavigationView'])(
+  'checks app content inside a %s-shaped container',
+  (type) => {
+    for (const container of ['ScrollView', 'Other', 'Button']) {
+      const result = audit([
+        node(0, { type, hittable: false }),
+        node(1, { type: container, label: 'Content', parentIndex: 0 }),
+        node(2, { label: 'Save', parentIndex: 1, rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      ]);
+      expect(summarize(result.findings), container).toEqual(['small-target @e2']);
+    }
   },
 );
