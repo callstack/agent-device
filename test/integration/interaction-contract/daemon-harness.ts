@@ -1,3 +1,4 @@
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import {
   FIRST_SCREEN_NODES,
@@ -69,6 +70,7 @@ export async function withIosContractDaemon(
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+        env: { AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('interaction-contract-claims-') },
       }),
     async (daemon) => {
       const open = await daemon.callCommand('open', [CONTRACT_APP], {
