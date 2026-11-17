@@ -6,7 +6,7 @@ import { readVersion } from '@agent-device/host-kit/version';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
-import { type EnvMap } from '@agent-device/kernel/source-value';
+import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
@@ -19,7 +19,6 @@ import {
   type ConnectProvider,
 } from './provider-policy.ts';
 import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
-import { bundledCloudWebDriverConnection } from '../../provider-webdriver.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { readMetroProfileFields } from './profile-fields.ts';
@@ -86,16 +85,13 @@ function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undef
     : undefined;
 }
 
-/** Runs a provider's connection callbacks: a bundled provider in-process, otherwise its installed plugin. */
+/** Runs a provider's connection callbacks from its installed plugin. */
 async function withProviderConnection<T>(
   provider: string,
   env: EnvMap,
   run: (connection: PluginConnectionCallbacks) => Promise<T>,
 ): Promise<T> {
-  const bundled = bundledCloudWebDriverConnection(provider, env);
-  return bundled
-    ? await run(bundled)
-    : await withPluginConnection(provider, BUILTIN_PROVIDER_IDS, env, run);
+  return await withPluginConnection(provider, BUILTIN_PROVIDER_IDS, env, run);
 }
 
 export async function resolveConnectProviderProfile(options: {
@@ -186,7 +182,7 @@ async function resolveProviderConnectionProfile(
 
 export async function verifyResolvedConnectProvider(
   resolved: ResolvedConnectProfile,
-  env: EnvMap,
+  host: HostEnvironment,
 ): Promise<ConnectVerification> {
   if (!resolved.provider) {
     return {
@@ -198,7 +194,8 @@ export async function verifyResolvedConnectProvider(
   }
   const context = {
     flags: resolved.flags,
-    env,
+    env: host.env,
+    cwd: host.cwd,
   };
   const adapter = builtinConnectAdapter(resolved.provider);
   return adapter

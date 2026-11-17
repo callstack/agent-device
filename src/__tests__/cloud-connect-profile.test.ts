@@ -11,17 +11,14 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
-import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
-import { verifyAwsDeviceFarmConnection } from '@agent-device/provider-webdriver/connection-verification';
 import {
   mkdtempForTestSync,
   bindTestCommandHost,
   createTestHostEnvironment,
   beginStdoutCapture,
 } from '@agent-device/test-kit';
-import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 bindTestCommandHost();
 
@@ -35,13 +32,6 @@ vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
   verifyLimrunConnection: vi.fn(),
 }));
 
-vi.mock('@agent-device/provider-webdriver/connection-verification', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@agent-device/provider-webdriver/connection-verification')
-  >()),
-  verifyAwsDeviceFarmConnection: vi.fn(),
-}));
-
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
@@ -49,7 +39,6 @@ afterEach(() => {
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);
 const mockedVerifyLimrunConnection = vi.mocked(verifyLimrunConnection);
-const mockedVerifyAwsDeviceFarmConnection = vi.mocked(verifyAwsDeviceFarmConnection);
 
 beforeEach(() => {
   mockedVerifyLimrunConnection.mockResolvedValue({
@@ -66,24 +55,6 @@ beforeEach(() => {
       message: 'Run apps to choose an uploaded asset before allocation.',
     },
   });
-  mockedVerifyAwsDeviceFarmConnection.mockImplementation(async (options) => ({
-    provider: 'aws-device-farm',
-    service: 'AWS Device Farm',
-    verificationMessage: 'Credentials, project, and device verified.',
-    project: { name: 'Agent Device', reference: options.projectArn },
-    device: {
-      status: 'verified',
-      name: 'iPhone 15',
-      reference: options.deviceArn,
-      platform: options.platform,
-      osVersion: '17',
-    },
-    app: {
-      status: 'missing',
-      message:
-        'No app upload is attached; AWS Device Farm does not support install after allocation.',
-    },
-  }));
 });
 
 test('connect without remote config generates one from cloud connection profile', async () => {
@@ -405,40 +376,6 @@ test('connect without remote config reports unsupported cloud profile keys', asy
   }
 });
 
-test('connect aws-device-farm generates local provider profile from flags', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-aws-');
-  const stateDir = path.join(tempRoot, '.state');
-
-  try {
-    await connectWithGeneratedProviderProfile({
-      stateDir,
-      positionals: ['aws-device-farm'],
-      flags: {
-        platform: 'ios',
-        device: 'Apple iPhone 15',
-        awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
-        awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
-        awsAppArn: 'arn:aws:devicefarm:us-west-2:123:upload:app-a',
-        awsInteractionMode: 'INTERACTIVE',
-      },
-    });
-
-    const state = readRequiredActiveState(stateDir);
-    assert.equal(state.tenant, 'aws-device-farm');
-    assert.equal(state.leaseProvider, 'aws-device-farm');
-    assert.equal(state.daemon?.baseUrl, undefined);
-    assert.match(state.remoteConfigPath, /generated\/aws-device-farm-[a-f0-9]{16}\.json$/);
-    const generated = readGeneratedConfig(state.remoteConfigPath);
-    assert.equal(generated.awsProjectArn, 'arn:aws:devicefarm:us-west-2:123:project:project-a');
-    assert.equal(generated.awsDeviceArn, 'arn:aws:devicefarm:us-west-2::device:device-a');
-    assert.equal(generated.awsAppArn, 'arn:aws:devicefarm:us-west-2:123:upload:app-a');
-    assert.equal(generated.awsRegion, 'us-west-2');
-    assert.equal(generated.awsInteractionMode, 'INTERACTIVE');
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
 test('connect output makes verified configuration, deferred device allocation, and app recovery explicit', async () => {
   const environment = { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_SESSION: 'ci' };
   const result = await runCliCapture(['connect', 'limrun', '--platform', 'android'], {
@@ -463,39 +400,6 @@ test('connect output makes verified configuration, deferred device allocation, a
   assert.match(result.stdout, /agent-device open <uploaded-asset-name>/);
   assert.doesNotMatch(result.stdout, /agent-device install/);
   assert.doesNotMatch(result.stdout, /lease pending/);
-});
-
-test('connect JSON exposes verification, device, app, live-session, and next-step state', async () => {
-  const result = await runCliCapture(
-    [
-      'connect',
-      'aws-device-farm',
-      '--session=ci',
-      '--platform',
-      'ios',
-      '--aws-project-arn',
-      'project-arn',
-      '--aws-device-arn',
-      'device-arn',
-      '--json',
-    ],
-    { stateDirPrefix: 'agent-device-connect-aws-output-' },
-  );
-
-  assert.equal(result.code, null);
-  const output = (JSON.parse(result.stdout) as { data: Record<string, any> }).data;
-  assert.equal(output.verification.status, 'verified');
-  assert.equal(output.device.name, 'iPhone 15');
-  assert.equal(output.app.status, 'missing');
-  assert.equal(output.liveSession.status, 'not-created');
-  assert.deepEqual(output.nextSteps, [
-    `agent-device connect aws-device-farm --platform ios --aws-project-arn project-arn --aws-device-arn device-arn --aws-app-arn <arn> --force --session ${output.session}`,
-    `agent-device open <bundle-id> --relaunch --session ${output.session}`,
-  ]);
-  assert.deepEqual(output.leasePreparation.nextSteps, output.nextSteps);
-  assert.deepEqual(output.notes, [
-    `After close, run agent-device artifacts --json --session ${output.session} for provider video and logs.`,
-  ]);
 });
 
 test('connect does not activate provider state when verification fails', async () => {
@@ -526,44 +430,6 @@ test('connect does not activate provider state when verification fails', async (
       },
     );
     assert.equal(readActiveConnectionState({ stateDir }), null);
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('connect aws-device-farm rejects device-feature flags it does not read', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
-
-  try {
-    await assert.rejects(
-      resolveConnectProviderProfile({
-        provider: 'aws-device-farm',
-        stateDir: path.join(tempRoot, '.state'),
-        cwd: tempRoot,
-        env: {},
-        flags: {
-          json: false,
-          help: false,
-          version: false,
-          platform: 'android',
-          device: 'Google Pixel 8',
-          providerDeviceOrientation: 'portrait',
-          providerTimezone: 'New_York',
-        },
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.code, 'INVALID_ARGS');
-        // Names every offending flag, and fires before the provider's own required-arg checks so
-        // the caller is told what is unsupported rather than what else is missing.
-        assert.equal(error.details?.provider, 'aws-device-farm');
-        assert.deepEqual(error.details?.flags, [
-          '--provider-device-orientation',
-          '--provider-timezone',
-        ]);
-        return true;
-      },
-    );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

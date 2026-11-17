@@ -1,4 +1,4 @@
-import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment, pluginHome } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +16,7 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 }));
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
+import { selectAwsDeviceFarmPlugin } from './test-utils/aws-device-farm-plugin-inventory.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
 bindTestCommandHost();
@@ -110,6 +111,8 @@ test('proxy allocation sends a fresh lease id on every attempt and keeps the id 
 });
 
 test('a non-proxy remote connection leaves the lease id to the daemon', async () => {
+  const { home, env } = pluginHome();
+  selectAwsDeviceFarmPlugin(home);
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-cloud-lease-id-',
   );
@@ -128,7 +131,7 @@ test('a non-proxy remote connection leaves the lease id to the daemon', async ()
   const requests: LeaseAllocateRequest[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
+    host: createTestHostEnvironment({ env }),
     command: 'screenshot',
     flags: {
       json: true,
