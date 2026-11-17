@@ -9,7 +9,8 @@ extension RunnerTests {
       message: "message",
       hint: "hint",
       retryableFailure: .targetAppUnavailable,
-      dismissControls: [DismissControlPayload(label: "Close", identifier: "close", pressBy: .label)]
+      dismissControls: [DismissControlPayload(label: "Close", identifier: "close", pressBy: .label)],
+      cause: "tree_unreadable"
     )
     let encoded = try JSONEncoder().encode(payload)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
