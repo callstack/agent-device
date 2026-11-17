@@ -148,6 +148,8 @@ export async function unlockAndroidOrientation(device: DeviceInfo): Promise<void
 
 const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
 const ORIENTATION_SETTLE_POLL_MS = 500;
+// Reserve a read slot above the observed 20–280 ms display reads (#4562).
+const MIN_ORIENTATION_READ_BUDGET_MS = 300;
 
 /**
  * The display rotates some time after the setting lands; on a loaded emulator that takes
@@ -163,15 +165,16 @@ async function settleAndroidOrientation(
   userRotation: string,
 ): Promise<void> {
   const deadline = Date.now() + ORIENTATION_SETTLE_TIMEOUT_MS;
-  let observed = await readAndroidDisplayRotation(device, orientation, deadline);
-  while (observed !== undefined && observed !== userRotation && Date.now() < deadline) {
+  let observed = await readAndroidDisplayRotation(device, orientation, remainingMs(deadline));
+  while (
+    observed !== undefined &&
+    observed !== userRotation &&
+    hasOrientationReadBudget(remainingMs(deadline))
+  ) {
     await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, remainingMs(deadline)));
-    // The wait can consume the rest of the budget. A read admitted at or after the deadline would
-    // run on `remainingMs`'s 1 ms floor, could never answer, and its adb timeout would replace the
-    // "did not take effect" fact below (#4562). Recheck the deadline after the wait and keep the
-    // rotation the last in-budget read reported.
-    if (Date.now() >= deadline) break;
-    observed = await readAndroidDisplayRotation(device, orientation, deadline);
+    const readBudgetMs = remainingMs(deadline);
+    if (!hasOrientationReadBudget(readBudgetMs)) break;
+    observed = await readAndroidDisplayRotation(device, orientation, readBudgetMs);
   }
   if (observed === undefined || observed === userRotation) return;
   throw new AppError(
@@ -192,12 +195,10 @@ async function settleAndroidOrientation(
 async function readAndroidDisplayRotation(
   device: DeviceInfo,
   orientation: DeviceRotation,
-  deadline: number,
+  timeoutMs: number,
 ): Promise<string | undefined> {
   try {
-    return (
-      await readAndroidDisplayRotationIndices(device, { timeoutMs: remainingMs(deadline) })
-    )[0];
+    return (await readAndroidDisplayRotationIndices(device, { timeoutMs }))[0];
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -205,6 +206,10 @@ async function readAndroidDisplayRotation(
       { hint: 'The device did not answer `dumpsys display` within the orientation budget.' },
     );
   }
+}
+
+function hasOrientationReadBudget(budgetMs: number): boolean {
+  return budgetMs >= MIN_ORIENTATION_READ_BUDGET_MS;
 }
 
 function remainingMs(deadline: number): number {

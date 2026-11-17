@@ -649,8 +649,84 @@ test('a wait that lands on the deadline ends the settle on the last rotation, no
   }
 });
 
+test('positive-cost orientation reads leave the last rotation when the next probe would be starved', async () => {
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  const probeBudgets: number[] = [];
+  let reads = 0;
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        if (args[1] !== 'dumpsys') return undefined;
+        const budget = options?.timeoutMs ?? 0;
+        probeBudgets.push(budget);
+        const cost = reads === 0 ? 50 : 100;
+        reads += 1;
+        vi.setSystemTime(Date.now() + Math.min(cost, budget));
+        if (budget < cost) return new Error(`dumpsys timed out after ${budget}ms`);
+        return '  mCurrentOrientation=0\n';
+      },
+      async ({ device }) => {
+        await withClockConsumingOrientationWait(async () => {
+          await assert.rejects(
+            setAndroidOrientation(device, 'landscape-left'),
+            (error: unknown) => {
+              assert.ok(error instanceof AppError);
+              assert.match(error.message, /did not take effect/);
+              assert.equal(error.details?.observedRotation, 0);
+              return true;
+            },
+          );
+        });
+        assert.equal(reads, 25);
+        assert.equal(probeBudgets.at(-1), 650);
+        assert.equal(Date.now(), 14_950);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+for (const remaining of [299, 300]) {
+  test(`orientation probe admission after a delayed wait with ${remaining}ms left`, async () => {
+    vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+    const probeBudgets: number[] = [];
+    orientationWait.onSleep = () => vi.setSystemTime(15_000 - remaining);
+    try {
+      await withFakeAdb(
+        (args, options) => {
+          if (args[1] !== 'dumpsys') return undefined;
+          probeBudgets.push(options?.timeoutMs ?? 0);
+          vi.setSystemTime(Date.now() + 100);
+          return `  mCurrentOrientation=${probeBudgets.length === 1 ? 0 : 1}\n`;
+        },
+        async ({ device }) => {
+          if (remaining === 300) {
+            await setAndroidOrientation(device, 'landscape-left');
+            assert.deepEqual(probeBudgets, [15_000, 300]);
+          } else {
+            await assert.rejects(
+              setAndroidOrientation(device, 'landscape-left'),
+              (error: unknown) => {
+                assert.ok(error instanceof AppError);
+                assert.match(error.message, /did not take effect/);
+                assert.equal(error.details?.observedRotation, 0);
+                return true;
+              },
+            );
+            assert.deepEqual(probeBudgets, [15_000]);
+          }
+        },
+      );
+    } finally {
+      orientationWait.onSleep = undefined;
+      vi.useRealTimers();
+    }
+  });
+}
+
 test('a display read that fails on a real budget stays a probe failure after an answered read', async () => {
-  // Deadline admission refuses only a read that would have no budget left. Here the second read is
+  // Admission rejects starved reads. Here the second read is
   // admitted at t = 500 with a real 14 500 ms budget and fails inside it, so that failure is the
   // fact — the rotation an earlier read saw must not turn it into "did not take effect".
   vi.useFakeTimers({ now: 0, toFake: ['Date'] });
