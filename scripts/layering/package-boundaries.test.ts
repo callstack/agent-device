@@ -1,7 +1,6 @@
 // R11 package-boundaries fires on every bypass and holds on the one exception.
 // Necessary for the same reason as zone-policy.test.ts: the real tree is clean,
 // so a rule that stopped matching would look exactly like a rule being obeyed.
-
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
