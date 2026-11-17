@@ -8,7 +8,7 @@ import { storePluginCandidates } from './store.ts';
 export type PluginConnectionCallbacks = Readonly<{
   resolve(context: Omit<PluginConnectionContext, 'host'>): ReturnType<PluginConnection['resolve']>;
   verify(
-    context: Omit<Pick<PluginConnectionContext, 'flags' | 'env' | 'host'>, 'host'>,
+    context: Omit<Pick<PluginConnectionContext, 'flags' | 'env' | 'cwd' | 'host'>, 'host'>,
   ): ReturnType<PluginConnection['verify']>;
 }>;
 

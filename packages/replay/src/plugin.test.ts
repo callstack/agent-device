@@ -9,7 +9,7 @@ import replayPlugin from './plugin.ts';
 test('the first-party factory uses the managed registry and preserves native script syntax', async () => {
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([{ source: 'embedder', load: replayPlugin }]),
-    {},
+    { env: {}, cwd: '/' },
     {
       adaptWebDriver: async () => {
         throw new Error('Replay cannot create providers');
@@ -65,7 +65,7 @@ test('the first-party factory uses the managed registry and preserves native scr
 });
 
 test.each(['0.23.0', '0.21.39-dev'])('the package rejects unverified core %s', (clientVersion) => {
-  const host = { ...createPluginHost({}, undefined), clientVersion };
+  const host = { ...createPluginHost({ env: {}, cwd: '/' }, undefined), clientVersion };
   expect(() => replayPlugin().setup(host)).toThrow(
     expect.objectContaining({
       details: expect.objectContaining({ reason: 'incompatible_plugin' }),
@@ -77,7 +77,10 @@ test.each(['0.21.38-dev', '0.22.0-beta.1', '0.22.0'])(
   'the package accepts declared core %s',
   (clientVersion) => {
     expect(
-      replayPlugin().setup({ ...createPluginHost({}, undefined), clientVersion }),
+      replayPlugin().setup({
+        ...createPluginHost({ env: {}, cwd: '/' }, undefined),
+        clientVersion,
+      }),
     ).toMatchObject({ execution: { create: expect.any(Function) } });
   },
 );

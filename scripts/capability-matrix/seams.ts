@@ -8,7 +8,7 @@
 import moduleHooks from 'node:module';
 import { createAgentBrowserWebProvider, withWebProvider } from '@agent-device/platform-web';
 import { createWebInteractor } from '@agent-device/platform-web/interactor';
-import type { RunHostCommand } from '@agent-device/provider-webdriver';
+import type { RunHostCommand } from '@agent-device/plugins/host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveWebNetworkTransport } from '../../src/platform-runtime-network-web-transport.ts';

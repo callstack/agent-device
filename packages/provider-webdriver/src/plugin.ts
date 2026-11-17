@@ -10,8 +10,12 @@ export type {
   CloudWebDriverRuntimeOptions,
   CloudWebDriverPlatform,
   CloudWebDriverUploadApp,
+  CloudWebDriverPrepareSession,
 } from './runtime.ts';
-export type { CloudWebDriverProviderOptions } from './provider-plugin.ts';
+
+/** The engine options a provider contributes; the host supplies `clientVersion`. */
+export type CloudWebDriverProviderOptions = Omit<CloudWebDriverRuntimeOptions, 'clientVersion'>;
+
 export type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 export {
   appFileUploadForm,
@@ -28,6 +32,7 @@ export {
   requireProviderDeviceOrientation,
   requireRequest,
   requireRequestPlatform,
+  releaseOnFailure,
   resolveHubAppReference,
   resolveLocalAppArtifact,
 } from './webdriver-utils.ts';

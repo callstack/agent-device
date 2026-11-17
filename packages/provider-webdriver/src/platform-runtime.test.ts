@@ -10,13 +10,12 @@ import {
   type CloudWebDriverCapabilityOverrides,
 } from './capabilities.ts';
 import type { CloudWebDriverPlatform } from './runtime.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 
 /** The declared map fact generation now reads. Defaults to a provider with no overrides. */
 function capabilities(
   platform: CloudWebDriverPlatform = 'android',
   overrides?: CloudWebDriverCapabilityOverrides,
-  provider: string = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  provider: string = 'aws-device-farm',
 ) {
   return createCloudWebDriverCapabilities({
     provider,
@@ -77,9 +76,9 @@ test('direct WebDriver refuses a live network dump instead of answering from ano
 test('a provider with no capture of its own states the same refusal for a live dump', async () => {
   const owner = createWebDriverPlatformRuntimeOwner({
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
-    owner: providerRuntimeOwner(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm, 'android'),
+    owner: providerRuntimeOwner('aws-device-farm', 'android'),
     ownsDevice: () => true,
-    capabilities: capabilities('android', undefined, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm),
+    capabilities: capabilities('android', undefined, 'aws-device-farm'),
   });
 
   expect(await owner.inspectFacts({ ...device, id: 'aws-device-farm:lease-one' })).toMatchObject({
