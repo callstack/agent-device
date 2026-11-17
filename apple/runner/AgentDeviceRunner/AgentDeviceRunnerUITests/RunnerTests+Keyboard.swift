@@ -279,14 +279,29 @@ extension RunnerTests {
 #if os(iOS)
   /// The keyboard and the dismiss-worded buttons outside it, such as an input accessory's `Done`, from
   /// one snapshot of the app. The keyboard's own snapshot does not hold an accessory's buttons, and the
-  /// keyboard and an accessory must be judged from one read. When the app snapshot fails, the keyboard
-  /// snapshot answers alone, so the keyboard's own dismiss key still works. `nil` only when neither read.
+  /// keyboard and an accessory must be judged from one read.
   func readKeyboardSurface(app: XCUIApplication) -> (
     surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool
   ) {
-    guard let root = safely("KEYBOARD_SURFACE_SNAPSHOT", { try? app.snapshot() }) else {
-      return (readKeyboard(app: app), false)
-    }
+    resolveKeyboardSurface(
+      appRoot: safely("KEYBOARD_SURFACE_SNAPSHOT", { try? app.snapshot() }),
+      keyboardRead: { self.readKeyboard(app: app) }
+    )
+  }
+
+  /// The surface when the app snapshot holds a keyboard with a frame. When it does not, because the read
+  /// failed or a tree too deep to serialize came back without its keyboard node, the keyboard's own read
+  /// answers instead, so its dismiss key still works, and the tree counts as unreadable: a refusal that
+  /// finds nothing there says so. Callers ask only while the keyboard is up.
+  func resolveKeyboardSurface(
+    appRoot: XCUIElementSnapshot?,
+    keyboardRead: () -> RunnerKeyboardStatus.ObservedKeyboard?
+  ) -> (surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool) {
+    if let appRoot, let surface = keyboardSurface(in: appRoot) { return (surface, true) }
+    return (keyboardRead(), false)
+  }
+
+  private func keyboardSurface(in root: XCUIElementSnapshot) -> RunnerKeyboardStatus.ObservedKeyboard? {
     var keyboard: XCUIElementSnapshot?
     var outside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
     var pending = [root]
@@ -308,12 +323,11 @@ extension RunnerTests {
         )
       }
     }
-    guard let keyboard, !keyboard.frame.isEmpty else { return (nil, true) }
-    let surface = RunnerKeyboardStatus.ObservedKeyboard(
+    guard let keyboard, !keyboard.frame.isEmpty else { return nil }
+    return RunnerKeyboardStatus.ObservedKeyboard(
       frame: keyboard.frame,
       keys: observedKeyboardKeys(in: keyboard) + outside
     )
-    return (surface, true)
   }
 #endif
 

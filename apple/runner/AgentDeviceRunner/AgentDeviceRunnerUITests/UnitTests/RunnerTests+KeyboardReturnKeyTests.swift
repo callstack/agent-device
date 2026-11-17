@@ -421,6 +421,39 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// An app snapshot that carries no keyboard node, as a tree too deep to serialize comes back, is an
+  /// unreadable tree, not a keyboard without keys: the keyboard's own read answers, its hide-keyboard key
+  /// is the control pressed, and with nothing there the tree is reported unreadable so the refusal says so.
+  @MainActor
+  func testAppSnapshotWithoutAKeyboardFallsBackToTheKeyboardsOwnRead() throws {
+    let screen = CGRect(x: 0, y: 0, width: 834, height: 1194)
+    let appWithoutKeyboard = ElementAttributesFixture(.application, screen, children: [
+      ElementAttributesFixture(.button, CGRect(x: 700, y: 40, width: 80, height: 40), label: "Done")
+    ])
+    let ownRead = RunnerKeyboardStatus.ObservedKeyboard(
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300),
+      keys: observedKeyboardKeysFixture([("Q", 87, 905, 65), ("Hide keyboard", 720, 1096, 98)])
+    )
+    let fallback = resolveKeyboardSurface(appRoot: appWithoutKeyboard, keyboardRead: { ownRead })
+    XCTAssertFalse(fallback.treeReadable)
+    XCTAssertEqual(fallback.surface.map { RunnerKeyboardStatus.dismissControls(in: $0).map(\.text) }, ["Hide keyboard"])
+
+    let nothing = resolveKeyboardSurface(appRoot: appWithoutKeyboard, keyboardRead: { nil })
+    XCTAssertNil(nothing.surface)
+    XCTAssertFalse(nothing.treeReadable)
+
+    let withKeyboard = ElementAttributesFixture(.application, screen, children: [
+      ElementAttributesFixture(.keyboard, ownRead.frame, children: [
+        ElementAttributesFixture(.key, CGRect(x: 87, y: 905, width: 65, height: 54), label: "Q")
+      ])
+    ])
+    var fellBack = false
+    let read = resolveKeyboardSurface(appRoot: withKeyboard, keyboardRead: { fellBack = true; return nil })
+    XCTAssertTrue(read.treeReadable)
+    XCTAssertFalse(fellBack)
+    XCTAssertEqual(read.surface?.frame, ownRead.frame)
+  }
+
   /// One snapshot of the keyboard answers the whole read, so the walk has to reach keys nested below
   /// the keyboard's own children, answer keys before buttons the way two per-type queries did, keep the
   /// whitespace-only space bar, and drop what carries no wording or is not a key or a button.
