@@ -26,6 +26,29 @@ test('connect names a missing provider plugin and returns installation guidance 
   assert.match(error.hint, /If a local daemon is already running/);
 });
 
+test('connect browserstack without its plugin names the package, even with credentials set', async () => {
+  const { home, env } = pluginHome();
+  const result = await runCliCapture(
+    ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
+    {
+      cwd: home,
+      env: { ...env, BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key' },
+      stateDirPrefix: 'connect-missing-browserstack-',
+    },
+  );
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.calls, []);
+  const { error } = JSON.parse(result.stdout);
+  assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+  assert.deepEqual(error.details, {
+    reason: 'plugin-not-installed',
+    provider: 'browserstack',
+    package: '@agent-device/browserstack',
+    installCommand: 'agent-device plugins add @agent-device/browserstack',
+  });
+  assert.match(error.hint, /agent-device plugins add @agent-device\/browserstack/);
+});
+
 test('connect prints installation guidance without JSON', async () => {
   const { home, env } = pluginHome();
   const result = await runCliCapture(['connect', 'testmu', '--session', 'ci'], {

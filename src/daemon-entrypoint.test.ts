@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { KNOWN_APP_ERROR_CODES } from '@agent-device/kernel/errors';
@@ -22,8 +21,6 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
   mkdtempForTestSync,
   waitForHttpOk,
   createTestHostEnvironment,
@@ -156,16 +153,6 @@ test('daemon runtime publishes dual transport metadata', async () => {
 
 test('daemon rejects unowned cloud artifacts over RPC', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-provider-');
-  const providerRequests: string[] = [];
-  const providerServer = http.createServer((_req, res) => {
-    res.setHeader('content-type', 'application/json');
-    res.end(
-      JSON.stringify({
-        automation_session: { video_url: 'https://browserstack.example/video.mp4' },
-      }),
-    );
-  });
-  const providerPort = await listenOnLoopback(providerServer);
   let runtime: DaemonRuntimeController | null = null;
 
   try {
@@ -176,9 +163,6 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
           ...process.env,
           AGENT_DEVICE_STATE_DIR: stateDir,
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-          BROWSERSTACK_USERNAME: 'user',
-          BROWSERSTACK_ACCESS_KEY: 'key',
-          BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
         },
       }),
       stderr: { write: () => {} },
@@ -198,7 +182,7 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
           session: 'default',
           command: 'artifacts',
           positionals: [],
-          flags: { provider: 'browserstack', providerSessionId: 'wd-1' },
+          flags: { provider: 'aws-device-farm', providerSessionId: 'wd-1' },
         },
       }),
     });
@@ -210,10 +194,8 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
     assert.equal(body.error?.code, -32000);
     assert.equal(body.error?.data?.code, 'UNAUTHORIZED');
     assert.deepEqual(body.error?.data?.details, { reason: 'PROVIDER_SESSION_NOT_OWNED' });
-    assert.deepEqual(providerRequests, []);
   } finally {
     await runtime?.close();
-    await closeLoopbackServer(providerServer);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

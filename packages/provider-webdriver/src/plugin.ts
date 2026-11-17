@@ -12,6 +12,7 @@ export type {
   CloudWebDriverUploadApp,
 } from './runtime.ts';
 export type { CloudWebDriverProviderOptions } from './provider-plugin.ts';
+export type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 export {
   appFileUploadForm,
   appendUrlPath,
@@ -32,3 +33,4 @@ export {
 } from './webdriver-utils.ts';
 export { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 export { buildCloudWebDriverBaseCapabilities } from './capabilities.ts';
+export { sameOsVersion } from './webdriver-utils.ts';
