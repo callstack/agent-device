@@ -39,10 +39,10 @@ extension RunnerTests {
   }
 
   /// What the point's text-input lookup can say before a coordinate gesture is dispatched: the
-  /// input it found, no input at the point, or nothing. A lookup that cannot answer is neither of the
-  /// first two, and must not be read as one of them.
+  /// input it found, with every input the point lies on, no input at the point, or nothing. A lookup
+  /// that cannot answer is neither of the first two, and must not be read as one of them.
   enum CoordinateTextInputResolution {
-    case input(TextInputAtPoint)
+    case input(TextInputAtPoint, candidates: [ResolvedTextEntryInput])
     case absent
     case unavailable
   }
@@ -59,7 +59,7 @@ extension RunnerTests {
     switch try probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
     case .matches(let inputs):
       guard let input = inputs.first, let identity = input.identity else { return .unavailable }
-      return .input(TextInputAtPoint(element: input.element, identity: identity))
+      return .input(TextInputAtPoint(element: input.element, identity: identity), candidates: inputs)
     case .absent:
       return .absent
     case .unavailable:
@@ -210,6 +210,15 @@ extension RunnerTests {
     }
     guard !shouldStop() else { return [] }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+  }
+
+  /// Whether XCTest reports `input` hittable: on screen, and covered by no other element at its hit
+  /// point. A read that records an issue or raises counts as covered.
+  func isUncoveredTextInput(_ input: ResolvedTextEntryInput) -> Bool {
+    guard case .success(let hittable) = containingTextInputProbeIssues(fallback: false, { _ in input.element.isHittable }) else {
+      return false
+    }
+    return hittable
   }
 
   /// The command's one content-vector read: the resolved window's screen origin when it is placed off

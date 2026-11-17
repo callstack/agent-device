@@ -154,6 +154,241 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testFillWithKeyboardDownTypesIntoTheSheetInputNotTheOneItCovers() throws {
+    for delayMs in [0, 80] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: delayMs)
+    }
+  }
+
+  @MainActor
+  func testFillWithKeyboardUpTypesIntoTheSheetInputNotTheOneItCovers() throws {
+    for delayMs in [0, 80] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+      app.textFields["agent-device-overlap-sheet-neighbour"].tap()
+      try XCTSkipUnless(
+        app.keyboards.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout),
+        "software keyboard is down: this simulator cannot exercise the keyboard-visible fill branch"
+      )
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: delayMs)
+    }
+  }
+
+  /// The sheet input refuses focus, so the neighbour that held it keeps it. On either channel the
+  /// fill refuses before any clear or typing, which would otherwise reach that neighbour.
+  @MainActor
+  func testFillRefusesAndKeepsTheFocusedFieldWhenTheSheetInputUnderThePointTakesNoFocus() throws {
+    for (penalized, delayMs) in [(false, 0), (true, 0), (true, 80)] {
+      let context = "penalized=\(penalized) delayMs=\(delayMs)"
+      let (foreground, background) = try launchOverlappingSheet(extra: ["--agent-device-text-entry-overlapping-sheet-refuses-focus"])
+      defer { tearDownSynthesizedReplacementField() }
+      let neighbour = app.textFields["agent-device-overlap-sheet-neighbour"]
+      neighbour.tap()
+      XCTAssertTrue(keyboardFocusConfirmed(app: app, element: neighbour), context)
+      if penalized { try penalizeOverlappingFixtureChannel() }
+      let failures = currentXCTestFailureCount()
+
+      let response = try executeWitnessEntry(foreground, text: "sheetvalue", delayMs: delayMs)
+
+      XCTAssertFalse(response.ok, context)
+      XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED", context)
+      XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
+      XCTAssertEqual(foreground.value as? String, "stale", context)
+      XCTAssertEqual(background.value as? String, "background", context)
+      XCTAssertEqual(neighbour.value as? String, "neighbour", context)
+    }
+  }
+
+  /// The popover's field covers the fill's point but not the center of the smaller field under it,
+  /// so XCTest reports both hittable and size alone picks the field under the popover. On either
+  /// channel, with or without that field focused first, the fill types into the popover's field.
+  @MainActor
+  func testFillAtAPointAPopoverCoversTypesIntoThePopoverFieldNotTheFieldUnderIt() throws {
+    for penalized in [false, true] {
+      for focusUnderFirst in [false, true] {
+        let context = "penalized=\(penalized) focusUnderFirst=\(focusUnderFirst)"
+        let (popoverField, partlyCovered, point) = try launchOverlappingPopover()
+        defer { tearDownSynthesizedReplacementField() }
+        if focusUnderFirst {
+          partlyCovered.tap()
+          XCTAssertTrue(keyboardFocusConfirmed(app: app, element: partlyCovered), context)
+        }
+        if penalized { try penalizeOverlappingFixtureChannel() }
+        try assertOverlappingPopoverFill(popoverField: popoverField, partlyCovered: partlyCovered, at: point, context: context)
+      }
+    }
+  }
+
+  /// The field under the popover holds focus and is the only input at the point XCTest reports
+  /// hittable, while the popover's field, which the tap at the point reaches, takes focus a beat
+  /// later. On either channel the fill waits for that focus and types into the popover's field, not
+  /// into the field that held focus when the tap was dispatched.
+  @MainActor
+  func testFillTypesIntoThePopoverFieldThatTakesFocusLateNotTheFieldThatHeldFocus() throws {
+    for penalized in [false, true] {
+      let context = "penalized=\(penalized)"
+      let (popoverField, partlyCovered, point) = try launchOverlappingPopover(coveredLateFocus: true)
+      defer { tearDownSynthesizedReplacementField() }
+      partlyCovered.tap()
+      XCTAssertTrue(keyboardFocusConfirmed(app: app, element: partlyCovered), context)
+      if penalized { try penalizeOverlappingFixtureChannel() }
+      try assertOverlappingPopoverFill(popoverField: popoverField, partlyCovered: partlyCovered, at: point, context: context)
+    }
+  }
+
+  /// The sheet's field already holds focus, so the tap at its center moves none. On either channel,
+  /// once no input there has taken focus, the fill types into it as the only uncovered input there.
+  @MainActor
+  func testFillTypesIntoTheFocusedSheetInputWhenTheTapMovesNoFocus() throws {
+    for penalized in [false, true] {
+      let (foreground, background) = try launchOverlappingSheet()
+      defer { tearDownSynthesizedReplacementField() }
+      foreground.tap()
+      XCTAssertTrue(keyboardFocusConfirmed(app: app, element: foreground), "penalized=\(penalized)")
+      if penalized { try penalizeOverlappingFixtureChannel() }
+      try assertOverlappingSheetFill(foreground: foreground, background: background, delayMs: 0)
+    }
+  }
+
+  /// Private synthesis clears the popover's field, which the tap at the point reached, and is gone
+  /// before the text is posted. Another lookup and tap at that point would find both fields
+  /// hittable and the popover's field already focused, so it would refuse on the emptied field; the
+  /// fallback types into the bound field instead.
+  @MainActor
+  func testFillWhoseSynthesisStopsAfterTheClearTypesIntoTheBoundPopoverField() throws {
+    let (popoverField, partlyCovered, point) = try launchOverlappingPopover()
+    defer { tearDownSynthesizedReplacementField() }
+    popoverField.tap()
+    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: popoverField))
+    try penalizeOverlappingFixtureChannel()
+    let bound = try requireTextInputAtPoint(app: app, x: popoverField.frame.midX, y: popoverField.frame.midY)
+    let failures = currentXCTestFailureCount()
+
+    let result = try typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: point,
+        prefersFocusedElement: false,
+        contentTranslation: .none,
+        inputAtRefreshPoint: bound
+      ),
+      text: "popovervalue",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestUnavailable: true,
+      synthesizer: SynthesisGoneAfterTheClear()
+    )
+
+    XCTAssertNil(result.failure)
+    XCTAssertEqual(result.textEntryRoute, "xctest-element")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
+    XCTAssertEqual(popoverField.value as? String, "popovervalue")
+    XCTAssertEqual(partlyCovered.value as? String, "background")
+  }
+
+  /// Clears through private synthesis, then answers the text post as unavailable.
+  private struct SynthesisGoneAfterTheClear: TextEntrySynthesizing {
+    func enterText(app: XCUIApplication, text: String, replacingExistingText: Bool) -> SynthesizedTextEntryAction {
+      guard replacingExistingText else { return .fallback }
+      return PrivateXCTestTextEntrySynthesizer().enterText(app: app, text: text, replacingExistingText: true)
+    }
+  }
+
+  /// The overlapping-sheet fixture, with the shape its tests depend on checked first: the sheet
+  /// input's center also lies in the input the sheet covers, which is the smaller of the two and
+  /// which XCTest reports not hittable.
+  @MainActor
+  private func launchOverlappingSheet(extra: [String] = []) throws -> (foreground: XCUIElement, background: XCUIElement) {
+    let (foreground, background) = launchOverlappingInputs(
+      ["--agent-device-text-entry-overlapping-sheet"] + extra,
+      top: "agent-device-overlap-foreground-input",
+      under: "agent-device-overlap-background-input"
+    )
+    let sheetFrame = foreground.frame
+    let coveredFrame = background.frame
+    XCTAssertTrue(coveredFrame.contains(CGPoint(x: sheetFrame.midX, y: sheetFrame.midY)))
+    XCTAssertLessThan(coveredFrame.width * coveredFrame.height, sheetFrame.width * sheetFrame.height)
+    XCTAssertFalse(background.isHittable)
+    return (foreground, background)
+  }
+
+  /// The overlapping-popover fixture, with the shape its tests depend on checked first: a point in
+  /// both fields, the partly covered field the smaller, its center outside the popover's field, and
+  /// the partly covered field hittable. The popover's field is hittable too, unless
+  /// `coveredLateFocus` lays a label over it and makes it take focus late.
+  @MainActor
+  private func launchOverlappingPopover(
+    coveredLateFocus: Bool = false
+  ) throws -> (popoverField: XCUIElement, partlyCovered: XCUIElement, point: CGPoint) {
+    let (popoverField, partlyCovered) = launchOverlappingInputs(
+      ["--agent-device-text-entry-overlapping-popover"]
+        + (coveredLateFocus ? ["--agent-device-text-entry-overlapping-popover-covered-late-focus"] : []),
+      top: "agent-device-popover-input",
+      under: "agent-device-popover-partly-covered-input"
+    )
+    let popoverFrame = popoverField.frame
+    let coveredFrame = partlyCovered.frame
+    let point = CGPoint(x: (popoverFrame.minX + coveredFrame.maxX) / 2, y: coveredFrame.midY)
+    XCTAssertTrue(popoverFrame.contains(point))
+    XCTAssertTrue(coveredFrame.contains(point))
+    XCTAssertFalse(popoverFrame.contains(CGPoint(x: coveredFrame.midX, y: coveredFrame.midY)))
+    XCTAssertLessThan(coveredFrame.width * coveredFrame.height, popoverFrame.width * popoverFrame.height)
+    XCTAssertTrue(partlyCovered.isHittable)
+    XCTAssertEqual(popoverField.isHittable, !coveredLateFocus)
+    return (popoverField, partlyCovered, point)
+  }
+
+  @MainActor
+  private func launchOverlappingInputs(_ arguments: [String], top: String, under: String) -> (top: XCUIElement, under: XCUIElement) {
+    app.launchArguments = arguments
+    app.launch()
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let topField = app.textFields[top]
+    let underField = app.textFields[under]
+    XCTAssertTrue(topField.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(underField.exists)
+    return (topField, underField)
+  }
+
+  /// Penalizes the XCTest channel for the running fixture, which routes a coordinate fill through
+  /// synthesized focus and typing.
+  @MainActor
+  private func penalizeOverlappingFixtureChannel() throws {
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    penalizeSnapshotXCTestChannel(bundleId: nil, reason: "test")
+  }
+
+  @MainActor
+  private func assertOverlappingSheetFill(foreground: XCUIElement, background: XCUIElement, delayMs: Int) throws {
+    let failures = currentXCTestFailureCount()
+    let response = try executeWitnessEntry(foreground, text: "sheetvalue", delayMs: delayMs)
+    XCTAssertTrue(response.ok, "delayMs=\(delayMs): \(String(describing: response.error))")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures), "delayMs=\(delayMs)")
+    XCTAssertEqual(foreground.value as? String, "sheetvalue", "delayMs=\(delayMs)")
+    XCTAssertEqual(background.value as? String, "background", "delayMs=\(delayMs)")
+  }
+
+  @MainActor
+  private func assertOverlappingPopoverFill(
+    popoverField: XCUIElement,
+    partlyCovered: XCUIElement,
+    at point: CGPoint,
+    context: String
+  ) throws {
+    let failures = currentXCTestFailureCount()
+    let response = try executeWitnessEntry(popoverField, text: "popovervalue", at: point)
+    XCTAssertTrue(response.ok, "\(context): \(String(describing: response.error))")
+    XCTAssertFalse(didRecordXCTestFailure(since: failures), context)
+    XCTAssertEqual(popoverField.value as? String, "popovervalue", context)
+    XCTAssertEqual(partlyCovered.value as? String, "background", context)
+  }
+
+  @MainActor
   private func launchTextEntryWitness(prefilled: Bool = false, extra: [String] = []) throws -> XCUIElement {
     app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-witness"]
       + (prefilled ? ["--agent-device-text-entry-witness-prefill"] : []) + extra
@@ -166,10 +401,17 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func executeWitnessEntry(_ field: XCUIElement, text: String, mode: String = "replace", prepared: Bool = false) throws -> Response {
-    let frame = field.frame
+  private func executeWitnessEntry(
+    _ field: XCUIElement,
+    text: String,
+    mode: String = "replace",
+    delayMs: Int = 0,
+    at point: CGPoint? = nil,
+    prepared: Bool = false
+  ) throws -> Response {
+    let aim = point ?? CGPoint(x: field.frame.midX, y: field.frame.midY)
     let command = try runnerCommandFixture(
-      #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(frame.midX),"y":\#(frame.midY)}"#
+      #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(aim.x),"y":\#(aim.y),"delayMs":\#(delayMs)}"#
     )
     if prepared {
       return try executeOnMainPrepared(command: command, activeApp: app)

@@ -1,5 +1,9 @@
 import XCTest
 
+/// The focus step tapped, but no input under the point was shown to take focus from that tap, so
+/// nothing was typed.
+struct TextEntryFocusNotConfirmed: Error {}
+
 extension RunnerTests {
   /// Books the tap as the address for the next bare `type`. `element` is a text input the caller
   /// classified BEFORE dispatching, or nil when the tap hit nothing worth typing into; that is the whole
@@ -141,8 +145,24 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true, contentTranslation: contentTranslation)
     }
 
-    let input = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
+    let candidates = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation)
+    let input = candidates.first
+    let requestedPoint = CGPoint(x: x, y: y)
 #if os(iOS)
+    // Focus the inputs already hold is not reused here: only a tap at the caller's point shows which
+    // of them that point reaches.
+    if candidates.count > 1 {
+      _ = try tapAt(app: app, x: x, y: y, context: tapContext)
+      let reached = try textInputTheTapReached(candidates: candidates, contentTranslation: contentTranslation)
+      return TextEntryTarget(
+        element: reached.read.element,
+        refreshPoint: textEntryRefreshPoint(frame: reached.read.frameOnScreen, fallbackTo: requestedPoint),
+        prefersFocusedElement: false,
+        contentTranslation: contentTranslation,
+        boundIdentity: reached.input.identity,
+        postFocusRead: reached.read
+      )
+    }
     if reusingFocusedInput, let input, let identity = input.identity, identity.isDistinguishable,
        let snapshot = input.snapshot, snapshotHasKeyboardFocus(snapshot) {
       NSLog("%@current-input-reports-keyboard-focus polls=0", TextEntryFocusEvidence.logMarker)
@@ -159,7 +179,6 @@ extension RunnerTests {
 #endif
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let target = input?.element
-    let requestedPoint = CGPoint(x: x, y: y)
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).
     let tapPoint = input?.frameOnScreen.flatMap { $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY) } ?? requestedPoint
     _ = try tapAt(app: app, x: tapPoint.x, y: tapPoint.y, context: tapContext)
@@ -195,6 +214,54 @@ extension RunnerTests {
       : (try waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
     return focusedTextEntryTarget(element, requestedPoint: requestedPoint, contentTranslation: contentTranslation)
   }
+
+#if os(iOS)
+  /// The one of `candidates`, the inputs found under the caller's point before a tap there, that the
+  /// tap reached, read again through its own handle with its identity unchanged. A sheet or popover
+  /// leaves the inputs it covers in the tree, and neither size nor `isHittable`, which tests an
+  /// input's own hit point, names the input on top at the caller's point. An input that takes
+  /// keyboard focus after the tap is the one it reached, even when that focus lands some polls
+  /// later. An input that already held focus keeps it whatever the tap hit, so it counts only when no
+  /// candidate took focus by the deadline, and only as the one candidate uncovered then. Without
+  /// either, this throws before any clear or typing is dispatched.
+  func textInputTheTapReached(
+    candidates: [ResolvedTextEntryInput],
+    contentTranslation: TextEntryContentTranslation
+  ) throws -> (input: TextInputAtPoint, read: ResolvedTextEntryInput) {
+    let heldFocusBeforeTap = candidates.map { candidate in
+      candidate.snapshot.map { snapshotHasKeyboardFocus($0) } == true
+    }
+    var stillHeld: (index: Int, input: TextInputAtPoint, read: ResolvedTextEntryInput)?
+    let deadline = Date().addingTimeInterval(TextEntryTiming.readinessTimeout)
+    var polls = 0
+    repeat {
+      polls += 1
+      stillHeld = nil
+      for (index, candidate) in candidates.enumerated() {
+        guard let identity = candidate.identity else { continue }
+        let input = TextInputAtPoint(element: candidate.element, identity: identity)
+        guard let read = textInputIfStillResolves(input, contentTranslation: contentTranslation),
+              let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) else { continue }
+        guard !heldFocusBeforeTap[index] else {
+          stillHeld = (index, input, read)
+          continue
+        }
+        NSLog("%@%@ polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, TextEntryFocusEvidence.inputReportsKeyboardFocusName, polls)
+        return (input, read)
+      }
+      sleepFor(TextEntryTiming.pollInterval)
+    } while Date() < deadline
+    if let stillHeld {
+      let uncovered = candidates.map { isUncoveredTextInput($0) }
+      if uncovered[stillHeld.index], uncovered.filter({ $0 }).count == 1 {
+        NSLog("%@%@ polls=%d overlapping=1 held=1", TextEntryFocusEvidence.logMarker, TextEntryFocusEvidence.inputReportsKeyboardFocusName, polls)
+        return (stillHeld.input, stillHeld.read)
+      }
+    }
+    NSLog("%@none polls=%d overlapping=1", TextEntryFocusEvidence.logMarker, polls)
+    throw TextEntryFocusNotConfirmed()
+  }
+#endif
 
   /// The target the focus step hands to text entry, with the read its refresh point came from.
   private func focusedTextEntryTarget(

@@ -7,7 +7,7 @@ extension RunnerTests {
   @MainActor
   func requireTextInputAtPoint(app: XCUIApplication, x: Double, y: Double) throws -> TextInputAtPoint {
     switch try coordinateTapTextInputIdentityAt(app: app, x: x, y: y, contentTranslation: liveContentTranslation(app: app)) {
-    case .input(let input):
+    case .input(let input, _):
       return input
     case .absent:
       return try XCTUnwrap(

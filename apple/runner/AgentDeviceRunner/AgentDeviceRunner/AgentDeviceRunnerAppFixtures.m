@@ -220,7 +220,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 }
 @end
 
-@interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
+@interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate, UITextFieldDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
 @property(nonatomic, strong) UILabel *navigationBackStatus;
@@ -259,6 +259,7 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 @property(nonatomic, weak) UITextField *keyboardBusyField;
 @property(nonatomic, strong) UILabel *keyboardBusyAnswer;
 @property(nonatomic, strong) NSTimer *keyboardBusyBackstop;
+@property(nonatomic, assign) BOOL popoverLateFocusGranted;
 @end
 
 // A one-time-code field that announces how many digits it holds instead of the digits, the way
@@ -658,6 +659,40 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 static const CGFloat AgentDeviceTextEntryFieldTopInset = 24;
 static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
 static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
+
+static UITextField *AgentDeviceOverlappingSheetField(NSString *identifier, NSString *text) {
+  UITextField *field = [[UITextField alloc] init];
+  field.accessibilityIdentifier = identifier;
+  field.text = text;
+  field.borderStyle = UITextBorderStyleRoundedRect;
+  field.translatesAutoresizingMaskIntoConstraints = NO;
+  return field;
+}
+
+// Long enough that a read made right after the tap still finds focus where it was, and well inside
+// the runner's 2 s wait for focus to land.
+static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
+
+// The fields with this delegate: under `--agent-device-text-entry-overlapping-sheet-refuses-focus`,
+// the sheet's field, which never takes focus; under
+// `--agent-device-text-entry-overlapping-popover-covered-late-focus`, the popover's field, which takes
+// focus a beat after the tap that asked for it, as a field whose focus goes through app code can.
+- (BOOL)textFieldShouldBeginEditing:(UITextField *)textField {
+  if (![textField.accessibilityIdentifier isEqualToString:@"agent-device-popover-input"]) {
+    return NO;
+  }
+  if (self.popoverLateFocusGranted) {
+    self.popoverLateFocusGranted = NO;
+    return YES;
+  }
+  __weak AgentDeviceRunnerFixtureViewController *weakSelf = self;
+  __weak UITextField *weakField = textField;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(AgentDevicePopoverLateFocusSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    weakSelf.popoverLateFocusGranted = YES;
+    [weakField becomeFirstResponder];
+  });
+  return NO;
+}
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   if (self.maskedDeliveryStatus != nil) {
@@ -1237,6 +1272,82 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [NSLayoutConstraint activateConstraints:@[
         [self.textEntryDigitSlots.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.textEntryDigitSlots.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+    }
+  }
+
+  // A sheet over a form, which leaves the form's field in the accessibility tree. The field the sheet
+  // covers is smaller than the sheet's field and shares its center, so a fill's point names both, and
+  // ordering by size alone picks the covered one. The sheet's second field raises the keyboard without
+  // touching either of them, and holds text that keystrokes sent to the wrong responder would change.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet"]) {
+    UITextField *background = AgentDeviceOverlappingSheetField(@"agent-device-overlap-background-input", @"background");
+    UITextField *foreground = AgentDeviceOverlappingSheetField(@"agent-device-overlap-foreground-input", @"stale");
+    UITextField *neighbour = AgentDeviceOverlappingSheetField(@"agent-device-overlap-sheet-neighbour", @"neighbour");
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-sheet-refuses-focus"]) {
+      foreground.delegate = self;
+    }
+    UIView *sheet = [[UIView alloc] init];
+    sheet.backgroundColor = UIColor.systemBackgroundColor;
+    sheet.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:background];
+    [self.view addSubview:sheet];
+    [sheet addSubview:foreground];
+    [sheet addSubview:neighbour];
+    [NSLayoutConstraint activateConstraints:@[
+      [background.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [background.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-96],
+      [background.widthAnchor constraintEqualToConstant:240],
+      [background.heightAnchor constraintEqualToConstant:34],
+      [sheet.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+      [sheet.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+      [sheet.topAnchor constraintEqualToAnchor:background.topAnchor constant:-40],
+      [sheet.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+      [foreground.centerXAnchor constraintEqualToAnchor:background.centerXAnchor],
+      [foreground.centerYAnchor constraintEqualToAnchor:background.centerYAnchor],
+      [foreground.widthAnchor constraintEqualToConstant:300],
+      [foreground.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+      [neighbour.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [neighbour.topAnchor constraintEqualToAnchor:foreground.bottomAnchor constant:AgentDeviceTextEntryNeighbourGap],
+      [neighbour.widthAnchor constraintEqualToConstant:300],
+      [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+    ]];
+  }
+
+  // A popover's field over part of a smaller form field, leaving that field's center exposed: XCTest
+  // reports both hittable, and a point in the overlap lies on both.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-popover"]) {
+    UITextField *partlyCovered = AgentDeviceOverlappingSheetField(@"agent-device-popover-partly-covered-input", @"background");
+    UITextField *popoverField = AgentDeviceOverlappingSheetField(@"agent-device-popover-input", @"stale");
+    [self.view addSubview:partlyCovered];
+    [self.view addSubview:popoverField];
+    [NSLayoutConstraint activateConstraints:@[
+      [partlyCovered.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [partlyCovered.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-96],
+      [partlyCovered.widthAnchor constraintEqualToConstant:160],
+      [partlyCovered.heightAnchor constraintEqualToConstant:34],
+      [popoverField.leadingAnchor constraintEqualToAnchor:partlyCovered.centerXAnchor constant:10],
+      [popoverField.centerYAnchor constraintEqualToAnchor:partlyCovered.centerYAnchor],
+      [popoverField.widthAnchor constraintEqualToConstant:180],
+      [popoverField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+    ]];
+    // A hint label over the whole popover field, as a custom placeholder can be: a label takes no
+    // touches, so a tap there still reaches the popover field, but XCTest's hit test meets the label at
+    // every point it tries on that field (its center, its corners, just past its edges), so only the
+    // field under the popover reads hittable. A plain view would not do: it is no accessibility
+    // element, and that hit test looks through it. The popover field also takes focus late (see its
+    // delegate above).
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-overlapping-popover-covered-late-focus"]) {
+      popoverField.delegate = self;
+      UILabel *hint = [[UILabel alloc] init];
+      hint.text = @"hint";
+      hint.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:hint];
+      [NSLayoutConstraint activateConstraints:@[
+        [hint.leadingAnchor constraintEqualToAnchor:popoverField.leadingAnchor constant:-4],
+        [hint.trailingAnchor constraintEqualToAnchor:popoverField.trailingAnchor constant:4],
+        [hint.topAnchor constraintEqualToAnchor:popoverField.topAnchor constant:-4],
+        [hint.bottomAnchor constraintEqualToAnchor:popoverField.bottomAnchor constant:4],
       ]];
     }
   }

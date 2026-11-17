@@ -2,8 +2,23 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  /// Runs a `type` command. A focus step that could not confirm its input typed nothing, so it
+  /// answers as `TEXT_INPUT_NOT_FOCUSED`.
   @MainActor
   func executeTypeCommand(activeApp: XCUIApplication, command: Command) throws -> Response {
+    do {
+      return try typeCommandResponse(activeApp: activeApp, command: command)
+    } catch is TextEntryFocusNotConfirmed {
+      return textEntryFailureResponse(.notFocused)
+    }
+  }
+
+  private func textEntryFailureResponse(_ failure: TextEntryFailure) -> Response {
+    Response(ok: false, error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint))
+  }
+
+  @MainActor
+  private func typeCommandResponse(activeApp: XCUIApplication, command: Command) throws -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
@@ -45,9 +60,11 @@ extension RunnerTests {
       // answer both refuse here, each under its own reason.
       let contentTranslation = liveContentTranslation(app: activeApp)
       let inputAtPoint: TextInputAtPoint
+      let inputsAtPoint: [ResolvedTextEntryInput]
       switch try coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
-      case .input(let input):
+      case .input(let input, let candidates):
         inputAtPoint = input
+        inputsAtPoint = candidates
       case .absent:
         return noTextInputAtPointResponse()
       case .unavailable:
@@ -56,13 +73,24 @@ extension RunnerTests {
       let context = treeContext
       switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
       case .performed:
+        // The synthesized clear and typing reach whichever input holds focus, so where the point
+        // lies on several inputs, the one the tap reached is bound before any keystroke.
+        // The read that confirmed focus is reused, as on the XCTest route.
+        let reached: (input: TextInputAtPoint, read: ResolvedTextEntryInput?)
+        if inputsAtPoint.count > 1 {
+          let confirmed = try textInputTheTapReached(candidates: inputsAtPoint, contentTranslation: contentTranslation)
+          reached = (confirmed.input, confirmed.read)
+        } else {
+          reached = (inputAtPoint, nil)
+        }
         resolvedCoordinateContext = context
         resolvedCoordinateTarget = TextEntryTarget(
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
           contentTranslation: contentTranslation,
-          inputAtRefreshPoint: inputAtPoint
+          inputAtRefreshPoint: reached.input,
+          postFocusRead: reached.read
         )
       case .xctestFallback:
         break
@@ -122,10 +150,7 @@ extension RunnerTests {
       commandId: command.commandId
     )
     if let failure = textResult.failure {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
-      )
+      return textEntryFailureResponse(failure)
     }
     if textResult.verified == false {
       return Response(
