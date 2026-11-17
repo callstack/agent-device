@@ -5,6 +5,7 @@ type ProviderPluginDeclaration = Readonly<{
 }>;
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
+  { provider: 'browserstack', package: '@agent-device/browserstack', label: 'BrowserStack' },
   { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
   { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },

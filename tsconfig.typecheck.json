@@ -5,6 +5,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tmp/tsconfig.typecheck.tsbuildinfo" },
   "references": [
+    { "path": "packages/build-config" },
     { "path": "packages/ad-replay" },
     { "path": "packages/ad-script" },
     { "path": "packages/apple-runner" },
@@ -31,6 +32,7 @@
     { "path": "packages/platform-web" },
     { "path": "packages/plugins" },
     { "path": "packages/provider-limrun" },
+    { "path": "packages/provider-browserstack" },
     { "path": "packages/provider-revyl" },
     { "path": "packages/provider-testmu" },
     { "path": "packages/provider-webos" },

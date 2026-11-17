@@ -378,8 +378,10 @@
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
     "@agent-device/testmu": "workspace:*",
+    "@agent-device/browserstack": "workspace:*",
     "@agent-device/revyl": "workspace:*",
     "@agent-device/webos": "workspace:*",
-    "@agent-device/tizen": "workspace:*"
+    "@agent-device/tizen": "workspace:*",
+    "@agent-device/build-config": "workspace:*"
   }
 }

@@ -6,6 +6,7 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>`.
 
 | Question | Owner |
 | --- | --- |
+| Shared bundler policy | `packages/build-config/src/index.ts` |
 | Command names | `packages/command-registry/src/catalog.ts` |
 | Command descriptors | `packages/command-registry/src/`: `registry.ts`, `descriptor-*.ts`, `descriptors/` |
 | Daemon request-policy predicates | `packages/daemon/src/core/daemon-command-registry.ts` |
