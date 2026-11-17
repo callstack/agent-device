@@ -377,6 +377,18 @@ The original daemon response is available in `error.details.response`.
 
 `client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/docs/snapshots#coordinates-and-viewport) for what each producer answers with.
 
+Use `observeOnly` to read an ADB-connected Android screen while preserving the foreground, session
+snapshot, and action refs. Use a client on the same daemon as any open Android session to share its
+snapshot helper. Pass its session name or select the device directly by serial.
+
+```ts
+const screen = await client.capture.snapshot({
+  platform: 'android',
+  serial: 'emulator-5554',
+  observeOnly: true,
+});
+```
+
 It also carries an optional `presentedSurface: 'presented' | 'absent' | 'unknown'` on iOS captures: whether the capture saw a modal presentation over your app's content. `'absent'` is a reading that was earned, so it is safe to act on; `'unknown'` says the capture could not tell and is not `'absent'`. The field is absent on other platforms. See [Presented surface](/docs/snapshots#presented-surface).
 
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Each page returns `endCursor`, the absolute index after the last line it covered; `nextCursor` is present only when more lines follow. To continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events, pass `endCursor` from the previous page. `endCursor` also counts lines that did not parse as events, so do not compute `cursor + events.length`. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.

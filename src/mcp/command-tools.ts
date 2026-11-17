@@ -251,7 +251,14 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const client = await createClient(deps, config.client, host, options.signal, devicePin);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
-        refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
+        const observationWithoutRefs =
+          name === 'snapshot' &&
+          commandInput.observeOnly === true &&
+          isRecord(result) &&
+          ('refsGeneration' in result === false || result.refsGeneration === undefined);
+        if (observationWithoutRefs === false) {
+          refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
+        }
         return {
           isError: false,
           ...(returnsStructuredContent(deps.structuredContent, name, config)

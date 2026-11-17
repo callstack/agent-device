@@ -49,6 +49,7 @@ type SnapshotRuntimeCommandParams = SnapshotRuntimeRouteParams & {
     sessionName: string;
     req: DaemonRequest;
     device: SessionState['device'];
+    observeAndroid: boolean;
     snapshotScope: string | undefined;
     getSession(): SessionState | undefined;
   }): Promise<{ data: DaemonResponseData; record?: SnapshotRuntimeRecord }>;
@@ -60,78 +61,79 @@ export async function dispatchSnapshotRuntimeCommand(
 ): Promise<DaemonResponse> {
   const capture = await resolveBoundSnapshotCaptureRuntime(params, params.command);
   if (!capture.ok) return capture.response;
-  const { ref, session, device, snapshotScope } = capture;
-  return await withSessionlessRunnerCleanup(
-    session,
-    device,
-    async () => {
-      const { req, logPath, sessionStore } = params;
-      const sessionName = ref?.address ?? params.sessionName;
-      const capturedQuality: CapturedSnapshotQuality = {};
-      const { runtime, sessions } = await createSnapshotRuntime({
-        createCommandSurface: params.createCommandSurface,
-        req,
+  const { ref, session, device, snapshotScope, observeAndroid } = capture;
+  const run = async (): Promise<DaemonResponse> => {
+    const { req, logPath, sessionStore } = params;
+    const sessionName = ref?.address ?? params.sessionName;
+    const capturedQuality: CapturedSnapshotQuality = {};
+    const { runtime, sessions } = await createSnapshotRuntime({
+      createCommandSurface: params.createCommandSurface,
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      ref: observeAndroid ? undefined : ref,
+      session: observeAndroid ? undefined : session,
+      device,
+      observeAndroid,
+      snapshotScope,
+      capturedQuality,
+      captureSnapshotData: capture.captureSnapshot,
+    });
+    const getSession = () => {
+      const currentRef = sessions.getRef();
+      return currentRef ? sessionStore.requireCurrent(currentRef) : undefined;
+    };
+    let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
+    try {
+      result = await params.execute({
+        runtime,
         sessionName,
+        req,
+        device,
+        observeAndroid,
+        snapshotScope,
+        getSession,
+      });
+    } catch (error) {
+      if (observeAndroid) throw error;
+      const timeoutResponse = await maybeBuildAndroidSnapshotTimeoutFailure({
+        error,
+        command: params.command,
         logPath,
-        sessionStore,
-        ref,
         session,
         device,
-        snapshotScope,
-        capturedQuality,
-        captureSnapshotData: capture.captureSnapshot,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
       });
-      const getSession = () => {
-        const currentRef = sessions.getRef();
-        return currentRef ? sessionStore.requireCurrent(currentRef) : undefined;
-      };
-      let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
-      try {
-        result = await params.execute({
-          runtime,
-          sessionName,
-          req,
-          device,
-          snapshotScope,
-          getSession,
-        });
-      } catch (error) {
-        const timeoutResponse = await maybeBuildAndroidSnapshotTimeoutFailure({
-          error,
-          command: params.command,
-          logPath,
-          session,
-          device,
-          inspectFacts: params.inspectFacts,
-          platformServices: params.platformServices,
-          bindDevice: params.bindDevice,
-        });
-        if (!timeoutResponse) throw error;
-        return timeoutResponse;
-      }
-      const current = getSession();
-      if (result.record) {
-        recordSnapshotRuntimeAction({
-          req,
-          sessionName,
-          sessionStore,
-          ref: sessions.getRef(),
-          result: result.record,
-        });
-      }
-      const data = applyRecoveredWarningLatch({
-        session: current,
-        data: result.data,
-        verdict: capturedQuality.value,
-        internalObservation: req.internal?.observationOnly === true,
+      if (!timeoutResponse) throw error;
+      return timeoutResponse;
+    }
+    if (observeAndroid) return { ok: true, data: result.data };
+    const current = getSession();
+    if (result.record) {
+      recordSnapshotRuntimeAction({
+        req,
+        sessionName,
+        sessionStore,
+        ref: sessions.getRef(),
+        result: result.record,
       });
-      return {
-        ok: true,
-        data: copySnapshotClickabilityEvidence(result.data, data),
-      };
-    },
-    params.platformResourceCleanup,
-  );
+    }
+    const data = applyRecoveredWarningLatch({
+      session: current,
+      data: result.data,
+      verdict: capturedQuality.value,
+      internalObservation: req.internal?.observationOnly === true,
+    });
+    return {
+      ok: true,
+      data: copySnapshotClickabilityEvidence(result.data, data),
+    };
+  };
+  if (observeAndroid) return await run();
+  return await withSessionlessRunnerCleanup(session, device, run, params.platformResourceCleanup);
 }
 
 async function createSnapshotRuntime(params: {
@@ -143,6 +145,7 @@ async function createSnapshotRuntime(params: {
   ref: SessionRef | undefined;
   session: SessionState | undefined;
   device: SessionState['device'];
+  observeAndroid: boolean;
   snapshotScope: string | undefined;
   capturedQuality: CapturedSnapshotQuality;
   captureSnapshotData: () => Promise<SnapshotResult>;
@@ -154,6 +157,7 @@ async function createSnapshotRuntime(params: {
     ref: params.ref,
     recordOptions: { includeSnapshot: true },
     setRecord: (record, current, ref) => {
+      if (params.observeAndroid) return;
       const snapshotRecord = assertSnapshotSessionRecord(record);
       const keepCurrentSnapshot = shouldKeepCurrentSnapshot(
         current,

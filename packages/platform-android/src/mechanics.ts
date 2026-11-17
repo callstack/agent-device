@@ -304,15 +304,12 @@ export {
 export { resetAndroidSnapshotHelperInstallCache } from './snapshot-helper-install.ts';
 export { runAndroidSnapshotHelperSessionTouchCommand } from './snapshot-helper-session.ts';
 export {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
-export {
-  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
-  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
-  snapshotAndroid,
-  type AndroidSnapshotOptions,
-} from './snapshot.ts';
+export { snapshotAndroid, type AndroidSnapshotOptions } from './snapshot.ts';
 export { screenshotAndroid, type AndroidScreenshotOptions } from './screenshot.ts';
 export {
   ANDROID_SNAPSHOT_PRESENTATION_DEFAULT_DEADLINE_MS,

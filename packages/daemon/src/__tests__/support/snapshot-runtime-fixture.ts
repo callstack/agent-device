@@ -304,11 +304,8 @@ async function dispatchFixtureSnapshot(
     snapshotIncludeHiddenContentHints: options.includeHiddenContentHints,
     surface: options.surface,
   };
-  return (await legacyDispatchCapture(
-    device,
-    'snapshot',
-    [],
-    undefined,
-    context,
-  )) as SnapshotResult;
+  return (await legacyDispatchCapture(device, 'snapshot', [], undefined, {
+    ...context,
+    snapshotObserveOnly: options.observeOnly,
+  })) as SnapshotResult;
 }

@@ -1,11 +1,17 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
-import { resetSnapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import {
+  fixtureScreenshotCaptures,
+  resetSnapshotRuntimeFixture,
+} from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import type { SessionState } from '../../core/session-state.ts';
+import { markAndroidSnapshotFreshness } from '../../core/session-snapshot-freshness.ts';
 import {
   androidCapture,
   androidDevice,
@@ -27,8 +33,20 @@ vi.mock('../../core/ios-app-session-hint.ts', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn(actual.resolveTargetDevice) };
+});
+
 import { buildIosOpenCommandHint } from '../../core/ios-app-session-hint.ts';
-import { expireRefFrame, refFrame, refFrameState, refFrameTree } from '../../core/ref-frame.ts';
+import {
+  admitRefMutation,
+  expireRefFrame,
+  refFrame,
+  refFrameState,
+  refFrameTree,
+} from '../../core/ref-frame.ts';
 
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 const providerAdmission = providerDeviceAdmissionFixture();
@@ -379,6 +397,116 @@ test('daemon-private snapshot observation advances capture state without publish
     publishedGeneration,
     publishedTree,
   });
+});
+
+test('Android observe-only snapshot by serial returns device geometry without publishing a session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  const cloudDevice = {
+    ...androidDevice,
+    id: '127.0.0.1:5555',
+    kind: 'device',
+  } satisfies SessionState['device'];
+  const selectTarget = vi.mocked(resolveTargetDevice);
+  selectTarget.mockResolvedValueOnce(cloudDevice);
+  const viewport = { width: 720, height: 1600 };
+  const rect = { x: 252, y: 824, width: 360, height: 120 };
+  legacyDispatchCapture.mockResolvedValue({
+    backend: 'android',
+    viewport,
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: '+ Add one', rect }],
+  });
+  const platformResourceCleanup = platformResourceCleanupFixture();
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'snapshot', {
+      flags: { platform: 'android', serial: cloudDevice.id, snapshotObserveOnly: true },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    platformResourceCleanup,
+  });
+
+  expect(response?.ok).toBe(true);
+  const data = response?.ok ? response.data : undefined;
+  expect(data?.viewport).toEqual(viewport);
+  expect(data?.nodes).toEqual([expect.objectContaining({ label: '+ Add one', rect })]);
+  expect(data?.nodes).toEqual([expect.not.objectContaining({ ref: expect.any(String) })]);
+  expect(data?.refsGeneration).toBeUndefined();
+  expect(sessionStore.listRefs()).toEqual([]);
+  expect(platformResourceCleanup.cleanupSessionlessExecutionHost).not.toHaveBeenCalled();
+  expect(selectTarget).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'android', serial: cloudDevice.id }),
+    expect.anything(),
+  );
+  expect(legacyDispatchCapture).toHaveBeenCalledWith(
+    cloudDevice,
+    'snapshot',
+    [],
+    undefined,
+    expect.objectContaining({ snapshotObserveOnly: true }),
+  );
+});
+
+test('Android observe-only snapshot preserves the active session snapshot and pinned refs', async () => {
+  const sessionName = 'android-observe-only';
+  const sessionStore = makeVersionedRefsScenario(sessionName);
+  const sessionRef = sessionStore.lookup(sessionName)!;
+  const session = sessionStore.requireCurrent(sessionRef);
+  session.appBundleId = 'com.example.app';
+  await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+  const published = sessionStore.requireCurrent(sessionRef);
+  markAndroidSnapshotFreshness(published, 'press');
+  const freshness = published.androidSnapshotFreshness;
+  const generation = published.snapshotGeneration;
+  const publishedFrame = refFrame(published);
+  const publishedSnapshot = published.snapshot;
+  const recordAction = vi.spyOn(sessionStore, 'recordAction');
+  legacyDispatchCapture.mockClear();
+  legacyDispatchCapture.mockResolvedValue({
+    backend: 'android',
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Observed' }],
+    quality: { state: 'sparse', backend: 'android-helper', reasonCode: 'sparse-tree' },
+  });
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotObserveOnly: true } }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  const data = response?.ok ? response.data : undefined;
+  expect(data?.nodes).toEqual([expect.objectContaining({ label: 'Observed' })]);
+  expect(data?.nodes).toEqual([expect.not.objectContaining({ ref: expect.any(String) })]);
+  expect(data?.refsGeneration).toBeUndefined();
+  expect(data?.fallbackScreenshotPath).toBeUndefined();
+  expect(fixtureScreenshotCaptures).toEqual([]);
+  expect(recordAction).not.toHaveBeenCalled();
+  const current = sessionStore.requireCurrent(sessionRef);
+  expect(current.appBundleId).toBe('com.example.app');
+  expect(current.snapshot).toBe(publishedSnapshot);
+  expect(current.snapshotGeneration).toBe(generation);
+  expect(refFrame(current)).toBe(publishedFrame);
+  expect(current.androidSnapshotFreshness).toBe(freshness);
+  expect(
+    admitRefMutation({ session: current, refBody: 'e1', mintedGeneration: generation }),
+  ).toEqual({
+    admitted: true,
+  });
+  expect(legacyDispatchCapture).toHaveBeenCalledWith(
+    androidDevice,
+    'snapshot',
+    [],
+    undefined,
+    expect.objectContaining({ appBundleId: undefined, snapshotObserveOnly: true }),
+  );
 });
 
 test('snapshot hands the interactive-only and depth flags to the device capture', async () => {

@@ -400,6 +400,73 @@ test('snapshotAndroid stops command-scoped persistent helper session after captu
   );
 });
 
+test('an observe-only snapshot installs and releases its own helper when none is running', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({ calls, spawnArgs, processes });
+  const helperAdb: AndroidAdbProvider = {
+    ...provider,
+    exec: async (args, options) => {
+      if (args.includes('--show-versioncode')) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return await provider.exec(args, options);
+    },
+    install: async (apkPath) => {
+      calls.push(['install', apkPath]);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  };
+
+  const result = await snapshotAndroid(device, { helperAdb, helperArtifact, observeOnly: true });
+
+  assert.equal(result.nodes[0]?.label, 'persistent helper snapshot 1');
+  assert.equal(result.androidSnapshot.installReason, 'missing');
+  assert.equal(result.androidSnapshot.helperTransport, 'persistent-session');
+  assert.deepEqual(
+    calls.filter((args) => args[0] === 'install'),
+    [['install', helperArtifact.apkPath]],
+  );
+  assert.equal(processes.length, 1);
+  assert.equal(processes[0]?.exitCode, 0);
+});
+
+test('observe-only snapshots preserve a borrowed daemon helper on success and cancellation', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const controller = new AbortController();
+  const cancelReason = new Error('observer canceled its read');
+  const provider = createPersistentSnapshotHelperProvider({
+    calls,
+    spawnArgs,
+    processes,
+    sessionXml: (_index, capture) => {
+      if (capture === 3) controller.abort(cancelReason);
+      return `<hierarchy><node text="capture ${capture}" bounds="[0,0][10,10]" /></hierarchy>`;
+    },
+  });
+  const options = { helperAdb: provider, helperArtifact };
+
+  await snapshotAndroid(device, { ...options, helperSessionScope: 'daemon-session' });
+  const observed = await snapshotAndroid(device, { ...options, observeOnly: true });
+  assert.equal(observed.nodes[0]?.label, 'capture 2');
+  assert.equal(observed.androidSnapshot.helperSessionReused, true);
+
+  await assert.rejects(
+    snapshotAndroid(device, { ...options, observeOnly: true, signal: controller.signal }),
+    (error: unknown) => error === cancelReason,
+  );
+  const owner = await snapshotAndroid(device, { ...options, helperSessionScope: 'daemon-session' });
+
+  assert.equal(owner.nodes[0]?.label, 'capture 4');
+  assert.equal(owner.androidSnapshot.helperSessionReused, true);
+  assert.equal(processes.length, 1);
+  assert.equal(processes[0]?.exitCode, null);
+  assert.equal(calls.some(isHelperRuntimeReset), false);
+});
+
 test('snapshotAndroid keeps daemon-session helper alive for reuse until session cleanup', async () => {
   const adbCalls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];

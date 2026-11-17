@@ -113,6 +113,7 @@ export function createAndroidInteractor(
             depth: snapshotOptions.depth,
             scope: snapshotOptions.scope,
             raw: snapshotOptions.raw,
+            observeOnly: snapshotOptions.observeOnly,
             includeHiddenContentHints: snapshotOptions.includeHiddenContentHints,
             helperSessionScope: androidHelperSessionScope(snapshotOptions.appBundleId),
             transient: snapshotOptions.transient,

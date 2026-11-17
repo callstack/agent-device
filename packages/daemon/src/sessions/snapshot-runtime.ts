@@ -24,6 +24,7 @@ export async function dispatchSnapshotViaRuntime(
       runtime: agentRuntime,
       sessionName: resolvedSessionName,
       req: request,
+      observeAndroid,
       snapshotScope,
       getSession,
     }) => {
@@ -38,6 +39,11 @@ export async function dispatchSnapshotViaRuntime(
       if (result.targetActivation) captureProof.targetActivation ??= result.targetActivation;
       const refsGeneration = publishedSnapshotGeneration(request, getSession());
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
+      if (observeAndroid) {
+        const nodes = publicNodes.map(({ ref: _ref, ...node }) => node);
+        const data = copySnapshotClickabilityEvidence(result, { ...result, nodes });
+        return { data };
+      }
       const publicResult = copySnapshotClickabilityEvidence(
         result,
         publicNodes === result.nodes ? result : { ...result, nodes: publicNodes },

@@ -7,8 +7,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE as ONE_SHOT_PHASE,
   ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE as SESSION_PHASE,
-  snapshotAndroid,
-} from '../snapshot.ts';
+} from '../snapshot-helper-runtime.ts';
+import { snapshotAndroid } from '../snapshot.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';

@@ -369,6 +369,73 @@ test('keeps a named session out of implicit workspace routing', (t) => {
   assert.equal(resolved, `cwd:${scopeId}:default`);
 });
 
+test('uses the Android observe-only serial to share a named session in the daemon', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  const implicitAddress = `cwd:${scopeId}:android`;
+  const otherDevice = { ...ANDROID_EMULATOR, id: 'emulator-5556' };
+  store.publish(implicitAddress, makeWorkspaceSession(scopeId, otherDevice));
+  store.publish('qa', { ...makeSession('qa'), sessionScope: { kind: 'named-local' } });
+  const flags = { platform: 'android', serial: ANDROID_EMULATOR.id } as const;
+
+  const observed = implicitRequest(cwd, { ...flags, snapshotObserveOnly: true }, 'snapshot');
+
+  assert.equal(resolveEffectiveSessionName(observed, store), 'qa');
+  assert.equal(
+    resolveEffectiveSessionName(implicitRequest(cwd, flags, 'snapshot'), store),
+    implicitAddress,
+  );
+  assert.equal(
+    resolveEffectiveSessionName(
+      { ...observed, flags: { ...observed.flags, session: 'chosen' }, session: 'chosen' },
+      store,
+    ),
+    'chosen',
+  );
+});
+
+test('keeps an Android observe-only serial out of another workspace session', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  const foreignScopeId = '0000000000000000';
+  store.publish(
+    `cwd:${foreignScopeId}:android`,
+    makeWorkspaceSession(foreignScopeId, ANDROID_EMULATOR),
+  );
+  const request = implicitRequest(
+    cwd,
+    { platform: 'android', serial: ANDROID_EMULATOR.id, snapshotObserveOnly: true },
+    'snapshot',
+  );
+
+  assert.equal(resolveEffectiveSessionName(request, store), `cwd:${scopeId}:android`);
+});
+
+test('routes an Android observation of another serial past the occupied default session', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  const boundAddress = `cwd:${scopeId}:default`;
+  store.publish(boundAddress, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
+  const flags = { platform: 'android', serial: 'emulator-5556' } as const;
+  const request = implicitRequest(cwd, { ...flags, snapshotObserveOnly: true }, 'snapshot');
+
+  const observationAddress = resolveEffectiveSessionName(request, store);
+
+  assert.notEqual(observationAddress, boundAddress);
+  assert.equal(store.get(observationAddress), undefined);
+  assert.equal(
+    resolveEffectiveSessionName(implicitRequest(cwd, flags, 'snapshot'), store),
+    boundAddress,
+  );
+
+  const foreignScopeId = '0000000000000000';
+  store.publish(
+    `cwd:${foreignScopeId}:android`,
+    makeWorkspaceSession(foreignScopeId, { ...ANDROID_EMULATOR, id: flags.serial }),
+  );
+  assert.equal(resolveEffectiveSessionName(request, store), observationAddress);
+});
+
 test('ignores an implicit session owned by another workspace', (t) => {
   const { cwd } = makeWorkspaceCwd(t);
   const store = makeStore(t);

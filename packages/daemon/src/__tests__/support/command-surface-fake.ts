@@ -115,6 +115,7 @@ function createForwardingCommandSurface(
           : {};
       return {
         nodes: stored.nodes as never,
+        viewport: captured?.snapshot.viewport,
         hadBaseline: session?.snapshot !== undefined,
         annotations,
       };
@@ -125,8 +126,8 @@ function createForwardingCommandSurface(
       capture: {
         ...fakeCommandSurface.capture,
         snapshot: async (captureOptions) => {
-          const { nodes, annotations } = await captureIntoSession(captureOptions);
-          return { nodes, ...annotations };
+          const { nodes, viewport, annotations } = await captureIntoSession(captureOptions);
+          return { nodes, ...(viewport ? { viewport } : {}), ...annotations };
         },
         diffSnapshot: async (captureOptions) => {
           const { hadBaseline } = await captureIntoSession(captureOptions);
