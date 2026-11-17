@@ -177,19 +177,29 @@ jobs:
           path: .tmp/native-dupes/jscpd-report.json
           if-no-files-found: ignore
 
-      - name: Check import-direction DAG
-        # Structured import-direction lint over the resolved graph. See
-        # scripts/layering/check.ts and CONTEXT.md (Architecture: folder DAG +
-        # layering lint).
-        uses: ./.github/actions/run-gate
-        with: { gate: layering }
+      # The three graph readers each parse the whole production source tree, so each one's wait
+      # was the sum of the others. They read the same tree and write nothing the other reads, so
+      # they run as one parallel group and the job pays the slowest instead of all three.
+      - parallel:
+          # Structured import-direction lint over the resolved graph. See
+          # scripts/layering/check.ts and CONTEXT.md (Architecture: folder DAG +
+          # layering lint).
+          - name: Check import-direction DAG
+            uses: ./.github/actions/run-gate
+            with: { gate: layering }
 
-      # Model tests for the dependency-graph report and its blast-radius query. The report
-      # reads the gate's model (scripts/layering/model.ts) and applies the gate's own R6
-      # counting rule, so it is not a second measurement of the R6 ratchet.
-      - name: Check the depgraph report model
-        uses: ./.github/actions/run-gate
-        with: { gate: depgraph }
+          # Model tests for the dependency-graph report and its blast-radius query. The report
+          # reads the gate's model (scripts/layering/model.ts) and applies the gate's own R6
+          # counting rule, so it is not a second measurement of the R6 ratchet.
+          - name: Check the depgraph report model
+            uses: ./.github/actions/run-gate
+            with: { gate: depgraph }
+
+          # The selector is fail-open and advisory (GitHub CI stays authoritative),
+          # so the gate only guards the derivation model.
+          - name: Check affected-selector model
+            uses: ./.github/actions/run-gate
+            with: { gate: affected-selector }
 
       # Tests for the TMPDIR redirection itself.
       #
@@ -202,12 +212,6 @@ jobs:
       - name: Check the tmpdir redirection model
         uses: ./.github/actions/run-gate
         with: { gate: tmpdir-leaks-model }
-
-      # The selector is fail-open and advisory (GitHub CI stays authoritative),
-      # so the gate only guards the derivation model.
-      - name: Check affected-selector model
-        uses: ./.github/actions/run-gate
-        with: { gate: affected-selector }
 
       # The gate-of-gates (#1429). It shares this job because it validates the
       # same artifact the selector is built on — CHECK_CATALOG's `ciJobs` — and
