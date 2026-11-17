@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/webos",
-  "version": "0.21.39-dev",
+  "version": "0.21.40-dev",
   "type": "module",
   "description": "LG webOS TV web app plugin for agent-device.",
   "files": [
