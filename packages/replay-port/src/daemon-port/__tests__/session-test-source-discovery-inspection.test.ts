@@ -68,6 +68,22 @@ test('replay-test source inspection reads declared platform, target and attempt 
   assert.deepEqual(entry?.manifest.attemptDefaults, { timeoutMs: 4000, retries: 2 });
 });
 
+test('replay-test source inspection returns shipped yaml when the entry path is not on disk', async () => {
+  const flowPath = '/client-only/missing/01-flow.yaml';
+  const yaml = 'appId: demo\nname: Remote Flow\n---\n- launchApp\n';
+
+  const [entry] = (
+    await buildReplayTestSourceDiscovery(
+      [{ entry: flowPath, files: { [flowPath]: yaml } }],
+      'maestro',
+    )
+  )();
+
+  assert.equal(entry?.path, flowPath);
+  assert.equal(entry?.sourceText, yaml);
+  assert.equal(entry?.manifest.title, 'Remote Flow');
+});
+
 test('replay-test source inspection keeps the order the caller discovered', async () => {
   const root = mkdtempForTestSync('agent-device-test-inspect-order-');
   const second = path.join(root, '02-second.ad');

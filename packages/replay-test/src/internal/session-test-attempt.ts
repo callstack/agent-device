@@ -142,7 +142,7 @@ async function runSingleReplayTestAttempt(
     attemptIndex,
   );
   const attemptArtifactsDir = path.join(context.testArtifactsDir, `attempt-${attempt}`);
-  prepareReplayTestAttemptArtifacts(entry.path, attemptArtifactsDir);
+  prepareReplayTestAttemptArtifacts(entry.path, attemptArtifactsDir, entry.sourceText);
   const attemptRequestId = buildReplayTestAttemptRequestId({
     requestId,
     suiteInvocationId,

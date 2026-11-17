@@ -6,9 +6,10 @@
  * result aggregation — is private to `internal/`.
  *
  * The scheduler is format-agnostic: it imports neither engine, and a source reaches it only as
- * a `ReplayTestManifest`. Host authority arrives as narrow capabilities on the runtime-dependency
- * half of `runReplayTestSuite`'s parameter; none of them hands over a daemon request, a session
- * store, mutable session state, or an engine.
+ * a `ReplayTestManifest` plus the opaque entry text the host already read. Host authority
+ * arrives as narrow capabilities on the runtime-dependency half of `runReplayTestSuite`'s
+ * parameter; none of them hands over a daemon request, a session store, mutable session state,
+ * or an engine.
  *
  * The parameter and result types themselves are not named here. The single caller builds the
  * bag inline and TypeScript infers both, so re-exporting the names would add surface no consumer

@@ -16,6 +16,8 @@ export type ReplayTestDiscoveryEntry =
       path: string;
       title?: string;
       manifest: ReplayTestManifest;
+      /** Opaque entry text from the inspected source. */
+      sourceText: string;
     }
   | {
       kind: 'skip';
@@ -45,8 +47,14 @@ export function discoverReplayTestEntries(params: {
   // no-match message never re-derives one from an entry shape it does not own.
   const filteredOut = { undeclared: 0, declaredOther: 0 };
   for (const source of sources) {
-    const { path: filePath, manifest } = source;
-    const run = { kind: 'run', path: filePath, title: manifest.title, manifest } as const;
+    const { path: filePath, manifest, sourceText } = source;
+    const run = {
+      kind: 'run' as const,
+      path: filePath,
+      title: manifest.title,
+      manifest,
+      sourceText,
+    };
     if (!platformFilter) {
       entries.push(run);
       continue;

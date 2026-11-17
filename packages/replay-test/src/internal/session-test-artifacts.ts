@@ -44,9 +44,10 @@ export function buildReplayTestArtifactSlug(filePath: string, cwd?: string): str
 export function prepareReplayTestAttemptArtifacts(
   filePath: string,
   attemptArtifactsDir: string,
+  sourceText: string,
 ): void {
   fs.mkdirSync(attemptArtifactsDir, { recursive: true });
-  copyReplaySourceFile(filePath, attemptArtifactsDir);
+  copyReplaySourceFile(filePath, attemptArtifactsDir, sourceText);
 }
 
 export function materializeReplayTestAttemptArtifacts(params: {
@@ -127,9 +128,16 @@ function copyReplayTestArtifacts(
   return copiedPaths;
 }
 
-function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): void {
+function copyReplaySourceFile(
+  filePath: string,
+  attemptArtifactsDir: string,
+  sourceText: string,
+): void {
   const genericReplayPath = path.join(attemptArtifactsDir, 'replay.ad');
-  fs.copyFileSync(filePath, genericReplayPath);
+  // The daemon writes the shipped text and never reads the entry path, because a remote daemon
+  // does not share the caller's disk and a daemon-side read would copy a daemon-host file into
+  // downloadable artifacts.
+  fs.writeFileSync(genericReplayPath, sourceText);
 
   // Sources that are not native `.ad` keep their original filename alongside `replay.ad`, so
   // CI artifacts point back at the flow the author wrote. This is artifact naming, not format
@@ -138,9 +146,8 @@ function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): vo
   // Keep replay.ad for existing artifact consumers, and preserve the original
   // Maestro filename so CI artifacts point back to the source flow.
   const originalReplayPath = path.join(attemptArtifactsDir, path.basename(filePath));
-  if (path.resolve(originalReplayPath) !== path.resolve(genericReplayPath)) {
-    fs.copyFileSync(filePath, originalReplayPath);
-  }
+  if (path.resolve(originalReplayPath) === path.resolve(genericReplayPath)) return;
+  fs.writeFileSync(originalReplayPath, sourceText);
 }
 
 function buildUniqueArtifactFileName(

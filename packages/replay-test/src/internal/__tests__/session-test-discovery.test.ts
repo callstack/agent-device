@@ -29,8 +29,12 @@ test('platform filter skips sources that declared no platform', () => {
   const entries = discoverReplayTestEntries({
     platformFilter: 'android',
     discoverSources: sourcesOf(
-      { path: '01-untyped.ad', manifest: unspecified },
-      { path: '02-android.ad', manifest: declared('android') },
+      { path: '01-untyped.ad', manifest: unspecified, sourceText: 'open "Demo"\n' },
+      {
+        path: '02-android.ad',
+        manifest: declared('android'),
+        sourceText: 'context platform=android\n',
+      },
     ),
   });
 
@@ -45,19 +49,50 @@ test('platform filter skips sources that declared no platform', () => {
 test('platform filter runs caller-bound sources, which take their platform from the invocation', () => {
   const entries = discoverReplayTestEntries({
     platformFilter: 'android',
-    discoverSources: sourcesOf({ path: '01-flow.yaml', manifest: callerBound }),
+    discoverSources: sourcesOf({
+      path: '01-flow.yaml',
+      manifest: callerBound,
+      sourceText: 'appId: demo\n---\n- launchApp\n',
+    }),
   });
 
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.kind, 'run');
 });
 
+test('discovery copies shipped source text onto filtered run entries', () => {
+  const flowText = 'appId: demo\n---\n- launchApp\n';
+  const nativeText = 'context platform=ios\nopen "Demo"\n';
+  const entries = discoverReplayTestEntries({
+    platformFilter: 'ios',
+    discoverSources: sourcesOf(
+      { path: '01-flow.yaml', manifest: callerBound, sourceText: flowText },
+      { path: '02-ios.ad', manifest: declared('ios'), sourceText: nativeText },
+    ),
+  });
+
+  const flow = entries.find((entry) => entry.path === '01-flow.yaml');
+  const native = entries.find((entry) => entry.path === '02-ios.ad');
+  assert.equal(flow?.kind, 'run');
+  if (flow?.kind === 'run') {
+    assert.equal(flow.sourceText, flowText);
+  }
+  assert.equal(native?.kind, 'run');
+  if (native?.kind === 'run') {
+    assert.equal(native.sourceText, nativeText);
+  }
+});
+
 test('platform filter drops declared sources that do not match, without a skip entry', () => {
   const entries = discoverReplayTestEntries({
     platformFilter: 'android',
     discoverSources: sourcesOf(
-      { path: '01-ios.ad', manifest: declared('ios') },
-      { path: '02-android.ad', manifest: declared('android') },
+      { path: '01-ios.ad', manifest: declared('ios'), sourceText: 'context platform=ios\n' },
+      {
+        path: '02-android.ad',
+        manifest: declared('android'),
+        sourceText: 'context platform=android\n',
+      },
     ),
   });
 
@@ -72,7 +107,11 @@ test('a suite that matched nothing after filtering is rejected', () => {
     () =>
       discoverReplayTestEntries({
         platformFilter: 'android',
-        discoverSources: sourcesOf({ path: '01-ios.ad', manifest: declared('ios') }),
+        discoverSources: sourcesOf({
+          path: '01-ios.ad',
+          manifest: declared('ios'),
+          sourceText: 'context platform=ios\n',
+        }),
       }),
     (error: unknown) =>
       error instanceof AppError &&
@@ -90,7 +129,11 @@ test('a suite whose only source declares no platform is told how to declare one'
     () =>
       discoverReplayTestEntries({
         platformFilter: 'android',
-        discoverSources: sourcesOf({ path: '01-untyped.ad', manifest: unspecified }),
+        discoverSources: sourcesOf({
+          path: '01-untyped.ad',
+          manifest: unspecified,
+          sourceText: 'open "Demo"\n',
+        }),
       }),
     (error: unknown) =>
       error instanceof AppError &&
@@ -108,7 +151,11 @@ test('a filter value no script can declare is not answered with declaration advi
     () =>
       discoverReplayTestEntries({
         platformFilter: 'web',
-        discoverSources: sourcesOf({ path: '01-untyped.ad', manifest: unspecified }),
+        discoverSources: sourcesOf({
+          path: '01-untyped.ad',
+          manifest: unspecified,
+          sourceText: 'open "Demo"\n',
+        }),
       }),
     (error: unknown) =>
       error instanceof AppError &&
