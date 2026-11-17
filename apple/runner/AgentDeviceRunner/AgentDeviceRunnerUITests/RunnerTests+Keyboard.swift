@@ -31,6 +31,14 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
+/// What looking for a dismiss control to tap came to: one was tapped, none exists, or none was found
+/// because the app tree could not be read and the keyboard's own read held none.
+enum KeyboardDismissTap {
+  case tapped
+  case notFound
+  case treeUnreadable
+}
+
 /// One `keyboard dismiss` attempt, plus the fact that decides how a refusal is classified:
 /// `dispatchedDismissal` says whether the runner ever dispatched a dismissal.
 struct RunnerKeyboardDismissOutcome {
@@ -41,6 +49,9 @@ struct RunnerKeyboardDismissOutcome {
   /// Whether a dismissal was dispatched — the keyboard's own control was tapped, or the tvOS remote's
   /// Menu press landed. Only its absence proves the command sent nothing.
   let dispatchedDismissal: Bool
+  /// Whether the app tree could not be read and the keyboard's own read found no dismiss control, so
+  /// the refusal can say it could not see the screen instead of claiming the keyboard has no key.
+  var treeUnreadable = false
 }
 
 /// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
@@ -237,7 +248,9 @@ extension RunnerTests {
     var pending = Array(keyboard.children.reversed())
     while let node = pending.popLast() {
       pending.append(contentsOf: node.children.reversed())
-      guard node.elementType == .key || node.elementType == .button, !node.label.isEmpty else { continue }
+      guard node.elementType == .key || node.elementType == .button,
+        !node.label.isEmpty || !node.identifier.isEmpty
+      else { continue }
       let observed = RunnerKeyboardStatus.ObservedKeyboardKey(
         text: node.label,
         frame: node.frame,
@@ -264,40 +277,43 @@ extension RunnerTests {
   }
 
 #if os(iOS)
-  /// The keyboard and the dismiss-worded controls beside it from one snapshot of the app, or `nil` when
-  /// that read fails or holds no keyboard. The keyboard's own window snapshot does not hold an input
-  /// accessory's buttons, and the keyboard and an accessory must be judged from one read.
-  func readKeyboardSurface(app: XCUIApplication) -> RunnerKeyboardStatus.ObservedKeyboard? {
-    let root = safely("KEYBOARD_SURFACE_SNAPSHOT") { try? app.snapshot() }
-    guard let root else { return nil }
+  /// The keyboard and the dismiss-worded buttons outside it, such as an input accessory's `Done`, from
+  /// one snapshot of the app. The keyboard's own snapshot does not hold an accessory's buttons, and the
+  /// keyboard and an accessory must be judged from one read. When the app snapshot fails, the keyboard
+  /// snapshot answers alone, so the keyboard's own dismiss key still works. `nil` only when neither read.
+  func readKeyboardSurface(app: XCUIApplication) -> (
+    surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool
+  ) {
+    guard let root = safely("KEYBOARD_SURFACE_SNAPSHOT", { try? app.snapshot() }) else {
+      return (readKeyboard(app: app), false)
+    }
     var keyboard: XCUIElementSnapshot?
-    var beside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
-    var pending = [(node: root, inToolbar: false)]
-    while let (node, inToolbar) = pending.popLast() {
+    var outside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var pending = [root]
+    while let node = pending.popLast() {
       if node.elementType == .keyboard, keyboard == nil {
         keyboard = node
         continue
       }
-      let insideToolbar = inToolbar || node.elementType == .toolbar
-      pending.append(contentsOf: node.children.reversed().map { (node: $0, inToolbar: insideToolbar) })
+      pending.append(contentsOf: node.children.reversed())
       let wording = RunnerKeyboardStatus.dismissLabels
       if node.elementType == .button, wording.contains(node.label) || wording.contains(node.identifier) {
-        beside.append(
+        outside.append(
           RunnerKeyboardStatus.ObservedKeyboardKey(
             text: node.label,
             frame: node.frame,
             identifier: node.identifier.isEmpty ? nil : node.identifier,
-            kind: .button,
-            container: insideToolbar ? .toolbar : .app
+            kind: .button
           )
         )
       }
     }
-    guard let keyboard, !keyboard.frame.isEmpty else { return nil }
-    return RunnerKeyboardStatus.ObservedKeyboard(
+    guard let keyboard, !keyboard.frame.isEmpty else { return (nil, true) }
+    let surface = RunnerKeyboardStatus.ObservedKeyboard(
       frame: keyboard.frame,
-      keys: observedKeyboardKeys(in: keyboard) + beside
+      keys: observedKeyboardKeys(in: keyboard) + outside
     )
+    return (surface, true)
   }
 #endif
 
@@ -328,7 +344,8 @@ extension RunnerTests {
       dispatchedDismissal: true
     )
 #else
-    if tapKeyboardDismissControl(app: app) {
+    let tap = tapKeyboardDismissControl(app: app)
+    if tap == .tapped {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
       waitForScreenshotStability(
         app: app,
@@ -357,7 +374,8 @@ extension RunnerTests {
       dismissed: false,
       visible: isKeyboardVisible(app: app),
       mechanism: nil,
-      dispatchedDismissal: false
+      dispatchedDismissal: false,
+      treeUnreadable: tap == .treeUnreadable
     )
 #endif
   }
@@ -367,7 +385,7 @@ extension RunnerTests {
   /// nothing and is the runner's own typed refusal (`KEYBOARD_DISMISS_UNAVAILABLE`, so the host
   /// publishes its `details.reason` instead of leaving callers to read the prose), while a control
   /// that was tapped and left the keys up did dispatch and keeps the generic code.
-  func keyboardDismissRefusal(dispatchedDismissal: Bool) -> ErrorPayload {
+  func keyboardDismissRefusal(dispatchedDismissal: Bool, treeUnreadable: Bool = false) -> ErrorPayload {
     if dispatchedDismissal {
       return ErrorPayload(
         code: "UNSUPPORTED_OPERATION",
@@ -377,8 +395,11 @@ extension RunnerTests {
     }
     return ErrorPayload(
       code: RunnerWireErrorCode.keyboardDismissUnavailable,
-      message: "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
-      hint: keyboardDismissRefusalHint
+      message: treeUnreadable
+        ? "Unable to dismiss the keyboard: the screen could not be read and the keyboard itself exposes no dismiss key, and background taps are never attempted"
+        : "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
+      hint: keyboardDismissRefusalHint,
+      cause: treeUnreadable ? "tree_unreadable" : nil
     )
   }
 
@@ -556,43 +577,38 @@ extension RunnerTests {
 #endif
   }
 
-  /// Taps the dismiss control `RunnerKeyboardStatus.mayDismiss` admits, and nothing else. A `Done` is
-  /// pressed only when it is proven to be an accessory button above the key rows, so a return key
-  /// labelled `Done`, which submits the focused field, is never pressed, and neither is a `Done`
-  /// when the keyboard could not be read.
+  /// Taps a dismiss control `RunnerKeyboardStatus.dismissControls` admits, and nothing else: never the
+  /// return key, which submits the focused field, and nothing at all when the keyboard cannot be read.
   ///
-  /// One snapshot of the app decides which controls are eligible, accessory buttons
-  /// included. The first eligible control that is unique by type, label and identifier in its container
-  /// (the keyboard, an input accessory toolbar, or the app), whose live lookup in that container finds
-  /// exactly one element, and that is hittable, is tapped through its live element, never through a
-  /// snapshot coordinate, a second frame read, or a position in a query. A covered or off-screen control is
-  /// passed over for the next. When none qualifies, nothing is tapped.
-  private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
+  /// One read decides which controls are candidates. Each candidate is then looked up live by type,
+  /// label and identifier, the matches kept are those near the keyboard, and the control is tapped only
+  /// when exactly one remains and it is hittable. A candidate that does not meet that is passed over
+  /// for the next; when none does, nothing is tapped. No snapshot coordinate is ever tapped.
+  private func tapKeyboardDismissControl(app: XCUIApplication) -> KeyboardDismissTap {
 #if os(iOS)
-    guard let surface = readKeyboardSurface(app: app) else {
-      return false
+    let read = readKeyboardSurface(app: app)
+    let none: KeyboardDismissTap = read.treeReadable ? .notFound : .treeUnreadable
+    guard let surface = read.surface else {
+      return none
     }
-    let element = RunnerKeyboardStatus.firstTappable(
-      in: RunnerKeyboardStatus.uniqueDismissControls(in: surface),
-      resolve: { (control: RunnerKeyboardStatus.ObservedKeyboardKey) -> XCUIElement? in
-        let lookup = RunnerKeyboardStatus.lookupFormat(of: control)
-        let scope: XCUIElementQuery
-        switch control.container {
-        case .keyboard: scope = app.keyboards.descendants(matching: control.kind == .key ? .key : .button)
-        case .toolbar: scope = app.toolbars.descendants(matching: .button)
-        case .app: scope = app.descendants(matching: .button)
-        }
-        let matches = scope.matching(NSPredicate(format: lookup.format, argumentArray: lookup.arguments))
-          .allElementsBoundByIndex
-        return matches.count == 1 ? matches[0] : nil
-      },
-      isTappable: { $0.exists && $0.isHittable }
-    )
-    guard let element else { return false }
-    element.tap()
-    return true
+    for control in RunnerKeyboardStatus.dismissControls(in: surface) {
+      let identifier = control.identifier ?? ""
+      let predicate =
+        identifier.isEmpty
+        ? NSPredicate(format: "label == %@", control.text ?? "")
+        : NSPredicate(format: "label == %@ AND identifier == %@", control.text ?? "", identifier)
+      let near = app.descendants(matching: control.kind == .key ? .key : .button)
+        .matching(predicate)
+        .allElementsBoundByIndex
+        .filter { RunnerKeyboardStatus.isNearKeyboard($0.frame, keyboardFrame: surface.frame) }
+      if near.count == 1, near[0].exists, near[0].isHittable {
+        near[0].tap()
+        return .tapped
+      }
+    }
+    return none
 #else
-    return false
+    return .notFound
 #endif
   }
 

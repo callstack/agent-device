@@ -30,17 +30,6 @@ extension RunnerKeyboardStatus {
     /// Whether the tree carries the control as a key or as a button. Only keys are character keys: a
     /// QuickType candidate or an accessory toolbar's control is a button, whatever its wording.
     var kind: Kind = .key
-    /// Where the tree holds the control: in the keyboard, in an input accessory toolbar, or elsewhere in
-    /// the app. A live lookup resolves a control inside its own container, so a `Done` in a navigation
-    /// bar is never mistaken for a `Done` in the toolbar above the keys.
-    var container: Container = .keyboard
-
-    enum Container: Equatable {
-      case keyboard
-      case toolbar
-      case app
-    }
-
     enum Kind: Equatable {
       case key
       case button
@@ -157,15 +146,13 @@ extension RunnerKeyboardStatus {
     return named ?? returnKeySlot(in: keys)
   }
 
-  /// Wording of the controls that only hide the keyboard. Neither can be a return key, so they stay
-  /// pressable even when the key rows could not be read.
+  /// Wording of the controls that only hide the keyboard. Neither can be a return key.
   static let hideKeyboardLabels = ["Hide keyboard", "Dismiss keyboard"]
-  static let doneLabel = "Done"
 
   /// The dismiss controls `keyboard dismiss` may press, in the order it tries them.
-  static let dismissLabels = hideKeyboardLabels + [doneLabel]
+  static let dismissLabels = hideKeyboardLabels + ["Done"]
 
-  /// How far above the keyboard an accessory toolbar's button can sit and still belong to it.
+  /// How far above the keyboard an accessory's button can sit and still belong to it.
   static let accessoryReach: CGFloat = 80
 
   /// True when `frame` belongs to the keyboard: it has a frame, it does not start below the keyboard,
@@ -177,88 +164,30 @@ extension RunnerKeyboardStatus {
       && keyboardFrame.minY - frame.maxY <= accessoryReach
   }
 
-  /// The one decision that `keyboard dismiss` may press a control: `label` is the dismiss wording it
-  /// matched, `frame` is its frame, `keyboardFrame` is the keyboard's, and `keys` is the snapshot's
-  /// controls, or `nil` when the snapshot read failed.
+  /// Every control `keyboard dismiss` may press, in dismiss-label order then tree order, all read from
+  /// one snapshot so no decision mixes two reads of a keyboard that may be sliding.
   ///
-  /// Either wording must belong to the keyboard (`isNearKeyboard`). A hide-keyboard control is never a
-  /// return key, so it is pressable on any read. A `Done` is pressable only when it is also proven to be
-  /// an accessory button: wholly above the first row of character keys. That covers a toolbar above the
-  /// keyboard and an input assistant band inside its frame. A `Done` inside the key rows may be the
-  /// return key, and with a failed read or no character key to anchor on nothing can prove otherwise,
-  /// so it is never pressed.
-  static func mayDismiss(
-    label: String,
-    frame: CGRect,
-    keyboardFrame: CGRect,
-    keys: [ObservedKeyboardKey]?
-  ) -> Bool {
-    guard isNearKeyboard(frame, keyboardFrame: keyboardFrame) else { return false }
-    if hideKeyboardLabels.contains(label) { return true }
-    guard label == doneLabel, let keys, let rowTop = characterKeyRowTop(in: keys) else {
-      return false
-    }
-    return frame.maxY <= rowTop
-  }
-
-  /// Every control in the snapshot that `keyboard dismiss` may press, in dismiss-label order, then
-  /// tree order. The decision reads one snapshot only, so a control's frame and the key rows it is
-  /// judged against never come from two reads of a keyboard that may be sliding.
+  /// A candidate carries dismiss wording as its label or identifier and is near the keyboard. A
+  /// hide-keyboard control is never a return key. A `Done` is pressed only when it cannot be the return
+  /// key: wholly above the keyboard, which holds an input accessory of any shape, or inside the keyboard
+  /// and above the first row of character keys, which needs that row as an anchor and so fails closed
+  /// without one. A candidate whose type, label and identifier name another control near the keyboard is
+  /// left out, because a live lookup could not tell the two apart; a same-wording button far from the
+  /// keyboard, such as a header `Done`, does not count.
   static func dismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
-    dismissLabels.flatMap { label in
-      keyboard.keys.filter { key in
-        (key.text == label || key.identifier == label)
-          && mayDismiss(label: label, frame: key.frame, keyboardFrame: keyboard.frame, keys: keyboard.keys)
+    let near = keyboard.keys.filter { isNearKeyboard($0.frame, keyboardFrame: keyboard.frame) }
+    let rowTop = characterKeyRowTop(in: keyboard.keys)
+    return dismissLabels.flatMap { label in
+      near.filter { key in
+        guard key.text == label || key.identifier == label else { return false }
+        let canBeReturnKey = !hideKeyboardLabels.contains(label)
+          && key.frame.maxY > keyboard.frame.minY && key.frame.maxY > (rowTop ?? -.infinity)
+        let identity = near.filter {
+          $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
+        }
+        return !canBeReturnKey && identity.count == 1
       }
     }
-  }
-
-  /// The dismiss controls that can be told apart from every other control of their type, in the same
-  /// order. The first one that a live lookup also resolves to a single element is the one pressed.
-  static func uniqueDismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
-    dismissControls(in: keyboard).filter { isUniqueDismissControl($0, in: keyboard.keys) }
-  }
-
-  /// The dismiss wording `key` carries, as its label or its identifier.
-  static func dismissLabel(of key: ObservedKeyboardKey) -> String? {
-    dismissLabels.first { key.text == $0 || key.identifier == $0 }
-  }
-
-  /// True when `key` is the only control in its container that has its type, label and identifier. A
-  /// control is looked up live inside its own container, never by a coordinate from a snapshot the
-  /// keyboard may have moved since, so one that cannot be told apart from another in that container is not
-  /// pressed. A toolbar `Done` beside a navigation bar's `Done` with the same identity are in different
-  /// containers, so each is unique. A toolbar `Done` and a return key labelled `done` with the
-  /// identifier `Done` differ in label and identifier, and in container.
-  static func isUniqueDismissControl(_ key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> Bool {
-    guard dismissLabel(of: key) != nil else { return false }
-    return keys.filter {
-      $0.kind == key.kind && $0.container == key.container && $0.text == key.text
-        && ($0.identifier ?? "") == (key.identifier ?? "")
-    }.count == 1
-  }
-
-  /// The first candidate, in order, whose live element resolves and can be tapped. A candidate that does
-  /// not resolve to one element, or that is covered or off screen, is passed over for the next; with
-  /// none left the answer is `nil`, which is a refusal and not a tap.
-  static func firstTappable<Element>(
-    in candidates: [ObservedKeyboardKey],
-    resolve: (ObservedKeyboardKey) -> Element?,
-    isTappable: (Element) -> Bool
-  ) -> Element? {
-    for candidate in candidates {
-      if let element = resolve(candidate), isTappable(element) { return element }
-    }
-    return nil
-  }
-
-  /// The label and identifier a live lookup of `key` must match. A control with no identifier is
-  /// looked up by label alone, so `nil` and an empty identifier are the same.
-  static func lookupFormat(of key: ObservedKeyboardKey) -> (format: String, arguments: [String]) {
-    guard let identifier = key.identifier, !identifier.isEmpty else {
-      return ("label == %@", [key.text ?? ""])
-    }
-    return ("label == %@ AND identifier == %@", [key.text ?? "", identifier])
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

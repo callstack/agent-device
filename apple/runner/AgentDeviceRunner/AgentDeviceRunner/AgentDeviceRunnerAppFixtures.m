@@ -958,8 +958,9 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   NSArray<NSString *> *launchArguments = NSProcessInfo.processInfo.arguments;
   NSUInteger doneReturnFlag = [launchArguments indexOfObject:@"--agent-device-keyboard-done-return"];
   if (doneReturnFlag != NSNotFound) {
-    BOOL withAccessory = doneReturnFlag + 1 < launchArguments.count &&
-        [launchArguments[doneReturnFlag + 1] isEqualToString:@"accessory"];
+    NSString *accessoryShape = doneReturnFlag + 1 < launchArguments.count ? launchArguments[doneReturnFlag + 1] : @"";
+    BOOL plainAccessory = [accessoryShape isEqualToString:@"plain-accessory"];
+    BOOL withAccessory = plainAccessory || [accessoryShape isEqualToString:@"accessory"];
     UITextField *field = [[UITextField alloc] init];
     field.accessibilityIdentifier = @"agent-device-keyboard-done-return-input";
     field.placeholder = @"Return key is Done";
@@ -975,7 +976,22 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
             [weakField resignFirstResponder];
           }]
         forControlEvents:UIControlEventEditingDidEndOnExit];
-    if (withAccessory) {
+    if (plainAccessory) {
+      // An accessory that is no toolbar: a plain view holding a button, as a custom or React Native
+      // input accessory is.
+      UIView *accessory = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+      accessory.backgroundColor = UIColor.systemGray5Color;
+      UIButton *accessoryDone = [UIButton buttonWithType:UIButtonTypeSystem];
+      [accessoryDone setTitle:@"Done" forState:UIControlStateNormal];
+      accessoryDone.frame = CGRectMake(240, 0, 70, 44);
+      [accessoryDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                       weakAnswer.text = @"Accessory";
+                       [weakField resignFirstResponder];
+                     }]
+              forControlEvents:UIControlEventTouchUpInside];
+      [accessory addSubview:accessoryDone];
+      field.inputAccessoryView = accessory;
+    } else if (withAccessory) {
       UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
       accessory.items = @[
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
@@ -1009,6 +1025,24 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [screenDone.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
       ]];
     }
+  }
+
+  // A text field nested far deeper than XCTest's whole-app snapshot can read, so the keyboard's own
+  // snapshot is the only read that works while its field has focus.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-keyboard-deep-tree"]) {
+    UIView *parent = self.view;
+    for (NSUInteger depth = 0; depth < 70; depth++) {
+      UIView *group = [[UIView alloc] initWithFrame:parent.bounds];
+      group.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+      group.accessibilityContainerType = UIAccessibilityContainerTypeSemanticGroup;
+      [parent addSubview:group];
+      parent = group;
+    }
+    UITextField *deepField = [[UITextField alloc] initWithFrame:CGRectMake(40, 140, 260, 44)];
+    deepField.accessibilityIdentifier = @"agent-device-keyboard-deep-input";
+    deepField.placeholder = @"Deep field";
+    deepField.borderStyle = UITextBorderStyleRoundedRect;
+    [parent addSubview:deepField];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {

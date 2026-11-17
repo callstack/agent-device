@@ -217,201 +217,114 @@ extension RunnerTests {
     )
   }
 
-  /// The dismiss decision for a control against a keyboard read, or against the keyboard's live frame
-  /// alone (`keyboard: nil`) when the snapshot read failed.
-  private func dismissAllowed(label: String, frame: CGRect, keyboard: RunnerKeyboardStatus.ObservedKeyboard?) -> Bool {
-    RunnerKeyboardStatus.mayDismiss(
-      label: label,
-      frame: frame,
-      keyboardFrame: keyboard?.frame ?? CGRect(x: 0, y: 609, width: 440, height: 240),
-      keys: keyboard?.keys
-    )
-  }
-
-  /// A keyboard read for the dismiss decision: the frame and the controls of one snapshot.
-  private func observedKeyboardFixture(
-    _ entries: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
+  /// One keyboard snapshot for the dismiss decision: a phone-sized keyboard unless `frame` says otherwise.
+  /// `outside` are dismiss-worded buttons the app tree holds beside the keyboard, such as an accessory's.
+  private func dismissSurface(
+    keys: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
+    outside: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat, identifier: String?)] = [],
     identifiers: [String: String] = [:],
-    keyboardFrame: CGRect = CGRect(x: 0, y: 609, width: 440, height: 240)
+    frame: CGRect = CGRect(x: 0, y: 609, width: 440, height: 240)
   ) -> RunnerKeyboardStatus.ObservedKeyboard {
-    var keys = observedKeyboardKeysFixture(entries)
-    keys = keys.map { key in
+    let inside = observedKeyboardKeysFixture(keys).map { key in
       RunnerKeyboardStatus.ObservedKeyboardKey(
         text: key.text,
         frame: key.frame,
         identifier: key.text.flatMap { identifiers[$0] }
       )
     }
-    return RunnerKeyboardStatus.ObservedKeyboard(frame: keyboardFrame, keys: keys)
+    let beside = outside.map {
+      RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: $0.text,
+        frame: CGRect(x: $0.x, y: $0.y, width: $0.width, height: 38),
+        identifier: $0.identifier,
+        kind: .button
+      )
+    }
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: frame, keys: inside + beside)
+  }
+
+  private func dismissControlFrames(_ surface: RunnerKeyboardStatus.ObservedKeyboard) -> [CGFloat] {
+    RunnerKeyboardStatus.dismissControls(in: surface).map(\.frame.minY)
   }
 
   /// `keyboard dismiss` never presses a `Done` that could be the return key, which submits the field:
   /// a `Done` inside the key rows is refused whether its wording is its label or only its identifier,
-  /// the iPad hide-keyboard key is pressed, and a `Done` toolbar button above the key rows is pressed
-  /// in preference to the return key beside the keys.
+  /// and the iPad hide-keyboard key is pressed.
   func testKeyboardDismissNeverPressesADoneInsideTheKeyRows() {
-    let phone = observedKeyboardFixture([
-      ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
-    ], identifiers: ["done": "Done"])
+    let phone = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)],
+      identifiers: ["done": "Done"]
+    )
     XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: phone).isEmpty)
-    XCTAssertFalse(
-      dismissAllowed(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: phone)
+
+    let pad = dismissSurface(
+      keys: [
+        ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
+        ("Hide keyboard", 720, 1096, 98),
+      ],
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300)
     )
-
-    let pad = observedKeyboardFixture([
-      ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
-      ("Hide keyboard", 720, 1096, 98),
-    ], keyboardFrame: CGRect(x: 0, y: 880, width: 834, height: 300))
-    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).first?.text, "Hide keyboard")
-
-    let withToolbar = observedKeyboardFixture([
-      ("Done", 330, 524, 63), ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
-    ], identifiers: ["done": "Done"])
-    let pressed = RunnerKeyboardStatus.dismissControls(in: withToolbar).first
-    XCTAssertEqual(pressed?.text, "Done")
-    XCTAssertEqual(pressed?.frame.minY, 524)
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.text), ["Hide keyboard"])
   }
 
-  /// A `Done` inside the keyboard's frame but above the key rows, such as an input assistant band
-  /// merged into the keyboard element, is an accessory button and is pressable; one that overlaps the
-  /// key rows is refused. A hide-keyboard key just below the keyboard's top edge is pressable wherever
-  /// it sits. Only a control wholly inside the keyboard is tapped through the keyboard's coordinate: a
-  /// toolbar above it has no valid offset there and is tapped through its own element.
-  func testKeyboardDismissAdmitsAnAccessoryDoneInsideTheKeyboardFrameAboveTheKeyRows() {
-    let keyboard = observedKeyboardFixture([
-      ("Done", 330, 612, 63), ("Q", 5, 666, 41), ("space", 108, 784, 207),
-      ("Hide keyboard", 380, 612, 50),
-    ])
-    let band = CGRect(x: 330, y: 612, width: 63, height: 40)
-    XCTAssertTrue(dismissAllowed(label: "Done", frame: band, keyboard: keyboard))
-    XCTAssertFalse(
-      dismissAllowed(
-        label: "Done",
-        frame: CGRect(x: 330, y: 640, width: 63, height: 54),
-        keyboard: keyboard
-      )
+  /// An accessory is pressed whatever view it is built from, because it is judged by where it sits:
+  /// a button wholly above the keyboard, with or without character keys to anchor on, or inside the
+  /// keyboard's frame between the prediction bar and the letter row. A same-wording `Done` far from the
+  /// keyboard, such as a header or a top toolbar, is not the keyboard's and does not make it ambiguous.
+  func testKeyboardDismissPressesAnAccessoryBesideAFarAwayDoneWithTheSameIdentity() {
+    let keys: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)] = [
+      ("Q", 5, 666, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
+    ]
+    let withHeaders = dismissSurface(
+      keys: keys,
+      outside: [("Done", 330, 60, 63, nil), ("Done", 330, 524, 63, nil), ("Done", 20, 110, 63, nil)],
+      identifiers: ["done": "Done"]
     )
-    XCTAssertTrue(
-      dismissAllowed(
-        label: "Hide keyboard",
-        frame: CGRect(x: 380, y: 612, width: 50, height: 54),
-        keyboard: keyboard
-      )
+    XCTAssertEqual(dismissControlFrames(withHeaders), [524])
+
+    let noCharacterKeys = dismissSurface(keys: [("space", 108, 784, 207)], outside: [("Done", 330, 524, 63, nil)])
+    XCTAssertEqual(dismissControlFrames(noCharacterKeys), [524])
+
+    let betweenQuickTypeAndLetters = dismissSurface(
+      keys: keys, outside: [("Done", 330, 610, 63, nil)], frame: CGRect(x: 0, y: 549, width: 440, height: 300)
     )
+    XCTAssertEqual(dismissControlFrames(betweenQuickTypeAndLetters), [610])
+    let unanchored = dismissSurface(
+      keys: [("space", 108, 784, 207)], outside: [("Done", 330, 610, 63, nil)],
+      frame: CGRect(x: 0, y: 549, width: 440, height: 300)
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: unanchored).isEmpty)
   }
 
-  /// A control is tapped by identity, so it must be the only control of its type with its dismiss
-  /// wording: a second one, or the same wording on a button against a key, is a different control.
-  func testKeyboardDismissTapsOnlyAControlItCanTellApart() {
-    let hide = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Hide keyboard", frame: CGRect(x: 720, y: 1096, width: 98, height: 54)
+  /// A key whose label is empty and whose identifier is `Hide keyboard` is still a hide-keyboard control.
+  func testKeyboardDismissPressesAnIdentifierOnlyHideKey() {
+    let pad = dismissSurface(
+      keys: [("Q", 87, 905, 65), ("", 720, 1096, 98)],
+      identifiers: ["": "Hide keyboard"],
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300)
     )
-    let twin = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Hide keyboard", frame: CGRect(x: 20, y: 1096, width: 98, height: 54)
-    )
-    let hideButton = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Hide keyboard", frame: CGRect(x: 400, y: 1096, width: 98, height: 54), kind: .button
-    )
-    let identified = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), identifier: "Done"
-    )
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide]))
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, hideButton]))
-    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, twin]))
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(identified, in: [identified, hide]))
-    // A toolbar `Done` and a return key labelled `done` with the identifier `Done` are two controls.
-    let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
-    )
-    let returnKey = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 56), identifier: "Done", kind: .button
-    )
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(toolbarDone, in: [toolbarDone, returnKey]))
-    XCTAssertNil(RunnerKeyboardStatus.dismissLabel(of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "Q", frame: .zero)))
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.identifier), ["Hide keyboard"])
   }
 
-  /// A control that cannot be told apart is skipped, not fatal: with two `Hide keyboard` keys and a
-  /// `Done` toolbar above the key rows, the unique `Done` is still pressed, and with nothing unique
-  /// left nothing is.
-  func testKeyboardDismissTriesTheNextControlWhenOneCannotBeToldApart() {
-    let twinHides = observedKeyboardFixture([
-      ("Done", 330, 524, 63), ("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98),
-      ("Hide keyboard", 20, 1096, 98),
-    ], keyboardFrame: CGRect(x: 0, y: 609, width: 834, height: 600))
-    XCTAssertEqual(
-      RunnerKeyboardStatus.dismissControls(in: twinHides).map(\.text),
-      ["Hide keyboard", "Hide keyboard", "Done"]
+  /// Two controls that cannot be told apart near the keyboard are both left out, and the next eligible
+  /// control is still pressed. A hide-keyboard control far from the keyboard is not the keyboard's.
+  func testKeyboardDismissSkipsTwinsAndKeepsTheNextControl() {
+    let pad = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98)],
+      outside: [("Done", 330, 524, 63, nil), ("Hide keyboard", 20, 40, 98, nil)],
+      frame: CGRect(x: 0, y: 609, width: 834, height: 600)
     )
-    XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: twinHides).map(\.text), ["Done"])
-
-    let onlyTwins = observedKeyboardFixture([
-      ("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98),
-    ], keyboardFrame: CGRect(x: 0, y: 609, width: 834, height: 600))
-    XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: onlyTwins).isEmpty)
-  }
-
-  /// A navigation bar's `Done` with the same label and identifier as the toolbar `Done` above the key
-  /// rows is in another container, so it does not make the toolbar `Done` ambiguous: dismiss presses
-  /// the toolbar one, which is looked up inside the toolbar alone. Two `Done` buttons in the same
-  /// container stay ambiguous and are not pressed.
-  func testKeyboardDismissPressesAToolbarDoneBesideAFarAwayDoneWithTheSameIdentity() {
-    let navigationBarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 60, width: 63, height: 38), kind: .button, container: .app
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.text), ["Done"])
+    let onlyTwins = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98)],
+      frame: CGRect(x: 0, y: 609, width: 834, height: 600)
     )
-    let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button, container: .toolbar
-    )
-    let keys =
-      [navigationBarDone, toolbarDone]
-      + observedKeyboardKeysFixture([("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)])
-    let keyboard = RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 609, width: 440, height: 240), keys: keys)
-    XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: keyboard).map(\.frame), [toolbarDone.frame])
-    XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: keyboard).map(\.container), [.toolbar])
-    // Two Done buttons in the toolbar remain ambiguous.
-    let toolbarTwin = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 20, y: 524, width: 63, height: 38), kind: .button, container: .toolbar
-    )
-    let twins = RunnerKeyboardStatus.ObservedKeyboard(frame: keyboard.frame, keys: [toolbarTwin] + keys)
-    XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: twins).isEmpty)
-  }
-
-  /// A dismiss control that resolves but is covered or off screen is passed over for the next eligible
-  /// one, and with none tappable the answer is a refusal. Missing or empty identifiers are one thing.
-  func testKeyboardDismissSkipsACoveredControlAndRefusesWhenNoneIsTappable() {
-    let covered = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Hide keyboard", frame: CGRect(x: 700, y: 1096, width: 98, height: 54)
-    )
-    let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
-    )
-    let hittable: Set<String> = ["Done"]
-    let tapped = RunnerKeyboardStatus.firstTappable(
-      in: [covered, toolbarDone], resolve: { $0.text }, isTappable: { hittable.contains($0) }
-    )
-    XCTAssertEqual(tapped, "Done")
-    XCTAssertNil(
-      RunnerKeyboardStatus.firstTappable(in: [covered, toolbarDone], resolve: { $0.text }, isTappable: { _ in false })
-    )
-    XCTAssertNil(
-      RunnerKeyboardStatus.firstTappable(in: [covered], resolve: { _ in String?.none }, isTappable: { _ in true })
-    )
-
-    let noIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero)
-    let emptyIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero, identifier: "")
-    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(noIdentifier, in: [noIdentifier, emptyIdentifier]))
-    XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: noIdentifier).format, "label == %@")
-    XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: emptyIdentifier).format, "label == %@")
-    XCTAssertEqual(
-      RunnerKeyboardStatus.lookupFormat(
-        of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "done", frame: .zero, identifier: "Done")
-      ).arguments,
-      ["done", "Done"]
-    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: onlyTwins).isEmpty)
   }
 
   /// A QuickType candidate is a button in the prediction bar above the key rows, so a one-letter one
   /// such as `I` or `A` must not pull the key-row anchor up to the bar: only keys anchor. With it
-  /// anchored on the bar, a `Done` in the key rows could look like an accessory button and be pressed.
+  /// anchored on the bar, a `Done` in the key rows could look like an accessory button.
   func testKeyboardRowAnchorIgnoresAOneLetterQuickTypeCandidate() {
     let candidate = RunnerKeyboardStatus.ObservedKeyboardKey(
       text: "I", frame: CGRect(x: 150, y: 560, width: 60, height: 40), kind: .button
@@ -421,45 +334,12 @@ extension RunnerTests {
       + observedKeyboardKeysFixture([("Q", 5, 666, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)])
     XCTAssertEqual(RunnerKeyboardStatus.characterKeyRowTop(in: keys), 666)
     let keyboard = RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 549, width: 440, height: 300), keys: keys)
-    XCTAssertFalse(
-      dismissAllowed(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: keyboard)
-    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: keyboard).isEmpty)
     XCTAssertEqual(
       RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keys),
       RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
     )
-    // With nothing but the candidate to anchor on, there is no anchor at all.
     XCTAssertNil(RunnerKeyboardStatus.characterKeyRowTop(in: [candidate]))
-  }
-
-  private func anchoredFixtureForReach() -> RunnerKeyboardStatus.ObservedKeyboard {
-    observedKeyboardFixture([("Q", 5, 616, 41)])
-  }
-
-  /// Dismiss fails closed. With the keyboard unread, or read with no character key to place a `Done`
-  /// against, or with a toolbar button too far above the keyboard to belong to it, only a hide-keyboard
-  /// control may be pressed and no `Done` is: any of them might be the return key.
-  func testKeyboardDismissFailsClosedWhenTheReturnKeyCannotBeTold() {
-    let doneFrame = CGRect(x: 330, y: 524, width: 63, height: 54)
-    XCTAssertFalse(dismissAllowed(label: "Done", frame: doneFrame, keyboard: nil))
-    let hideFrame = CGRect(x: 380, y: 789, width: 50, height: 50)
-    XCTAssertTrue(dismissAllowed(label: "Hide keyboard", frame: hideFrame, keyboard: nil))
-    XCTAssertTrue(dismissAllowed(label: "Dismiss keyboard", frame: hideFrame, keyboard: nil))
-    // An app button with a hide wording far from the keyboard is not the keyboard's, on any read.
-    let farAway = CGRect(x: 20, y: 100, width: 80, height: 40)
-    XCTAssertFalse(dismissAllowed(label: "Hide keyboard", frame: farAway, keyboard: nil))
-    XCTAssertFalse(dismissAllowed(label: "Dismiss keyboard", frame: farAway, keyboard: anchoredFixtureForReach()))
-    XCTAssertFalse(dismissAllowed(label: "Hide keyboard", frame: CGRect(x: 20, y: 900, width: 80, height: 40), keyboard: nil))
-
-    let unanchored = observedKeyboardFixture([("Done", 330, 524, 63), ("space", 108, 784, 207), ("done", 314, 784, 103)])
-    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: unanchored).isEmpty)
-    XCTAssertFalse(dismissAllowed(label: "Done", frame: doneFrame, keyboard: unanchored))
-
-    let anchored = observedKeyboardFixture([("Q", 5, 616, 41)])
-    XCTAssertTrue(dismissAllowed(label: "Done", frame: doneFrame, keyboard: anchored))
-    XCTAssertFalse(
-      dismissAllowed(label: "Done", frame: CGRect(x: 330, y: 300, width: 63, height: 54), keyboard: anchored)
-    )
   }
 
   /// An input accessory toolbar's `Next` or `Done` that the keyboard exposes beside its keys sits above

@@ -602,7 +602,13 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "keyboardDismiss produced no result"))
       }
       if result.wasVisible && !result.dismissed {
-        return Response(ok: false, error: keyboardDismissRefusal(dispatchedDismissal: result.dispatchedDismissal))
+        return Response(
+          ok: false,
+          error: keyboardDismissRefusal(
+            dispatchedDismissal: result.dispatchedDismissal,
+            treeUnreadable: result.treeUnreadable
+          )
+        )
       }
       return Response(
         ok: true,
