@@ -422,13 +422,10 @@ extension RunnerTests {
       // The return key is identified as the keyboard's own Done key, and the toolbar's Done is a
       // different control, so only the toolbar can be pressed.
       XCTAssertEqual(keyboardStatus(app: app).returnKey, "done")
-      let keys = observedKeyboardKeys(app: app)
-      let doneButtons = app.descendants(matching: .button).matching(identifier: "Done").allElementsBoundByIndex
-      XCTAssertGreaterThanOrEqual(doneButtons.count, 2)
-      XCTAssertEqual(
-        doneButtons.filter { RunnerKeyboardStatus.isReturnControl(frame: $0.frame, in: keys) }.count,
-        1
-      )
+      let keyboard = try XCTUnwrap(readKeyboard(app: app))
+      let returnControl = try XCTUnwrap(RunnerKeyboardStatus.returnControl(in: keyboard.keys))
+      let toolbarDone = RunnerKeyboardStatus.dismissControl(in: keyboard)
+      XCTAssertNotEqual(toolbarDone?.frame, returnControl.frame)
       let response = try execute(
         command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-accessory"}"#)
       )

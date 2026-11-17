@@ -239,24 +239,27 @@ extension RunnerTests {
     while let node = pending.popLast() {
       pending.append(contentsOf: node.children.reversed())
       guard node.elementType == .key || node.elementType == .button, !node.label.isEmpty else { continue }
-      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(text: node.label, frame: node.frame)
+      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: node.label,
+        frame: node.frame,
+        identifier: node.identifier.isEmpty ? nil : node.identifier
+      )
       if node.elementType == .key { keys.append(observed) } else { buttons.append(observed) }
     }
     return keys + buttons
   }
 #endif
 
-  /// The visible keyboard's controls as one snapshot read, for the lookups that must tell the return
-  /// key apart from other controls. Off iOS there is no software keyboard to read, so nothing is
-  /// observed and no control is the return key.
-  func observedKeyboardKeys(app: XCUIApplication) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
+  /// The visible keyboard as one snapshot read, or `nil` when there is none to read: the read failed or
+  /// came back empty, or the platform has no software keyboard. `nil` is not "a keyboard with no keys",
+  /// and a decision that needs the keys must not treat it as one.
+  func readKeyboard(app: XCUIApplication) -> RunnerKeyboardStatus.ObservedKeyboard? {
 #if os(iOS)
-    guard let snapshot = safely("KEYBOARD_KEYS_SNAPSHOT", { try? app.keyboards.firstMatch.snapshot() }) else {
-      return []
-    }
-    return observedKeyboardKeys(in: snapshot)
+    let snapshot = safely("KEYBOARD_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
+    guard let snapshot, !snapshot.frame.isEmpty else { return nil }
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: snapshot.frame, keys: observedKeyboardKeys(in: snapshot))
 #else
-    return []
+    return nil
 #endif
   }
 
@@ -515,44 +518,41 @@ extension RunnerTests {
 #endif
   }
 
-  /// Taps the first hittable dismiss control that is not the keyboard's return key. A return key
-  /// labelled `Done` submits the focused field, so the decision `keyboard status` reports it with
-  /// (`RunnerKeyboardStatus.isReturnControl`) excludes it here. A `Done` toolbar above the keys is a
-  /// different control and stays eligible.
+  /// Taps the dismiss control `RunnerKeyboardStatus.mayDismiss` admits, and nothing else. A `Done` is
+  /// pressed only when it is proven to be an accessory button above the key rows, so a return key
+  /// labelled `Done`, which submits the focused field, is never pressed, and neither is a `Done`
+  /// when the keyboard could not be read.
+  ///
+  /// The keyboard is read once. A control inside it is tapped at the centre its snapshot frame had,
+  /// relative to the keyboard, so the tap lands on the control that was judged. A control outside it,
+  /// such as an input accessory toolbar, comes from one query for every dismiss label and is tapped
+  /// through its own element.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(tvOS)
     return false
 #else
-    guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
+    guard visibleKeyboardFrame(app: app) != nil else {
       return false
     }
-    let keyboardKeys = observedKeyboardKeys(app: app)
-    func isEligible(_ element: XCUIElement) -> Bool {
-      element.exists && element.isHittable
-        && !RunnerKeyboardStatus.isReturnControl(frame: element.frame, in: keyboardKeys)
-    }
-    for label in ["Hide keyboard", "Dismiss keyboard", "Done"] {
-      let toolbarButtonPredicate = NSPredicate(
-        format: "label == %@ OR identifier == %@",
-        label,
-        label
+    let keyboard = readKeyboard(app: app)
+    if let keyboard, let control = RunnerKeyboardStatus.dismissControl(in: keyboard) {
+      let center = CGVector(
+        dx: (control.frame.midX - keyboard.frame.minX) / keyboard.frame.width,
+        dy: (control.frame.midY - keyboard.frame.minY) / keyboard.frame.height
       )
-      let keyboardControls =
-        app.keyboards.buttons.matching(toolbarButtonPredicate).allElementsBoundByIndex
-        + app.keyboards.keys.matching(toolbarButtonPredicate).allElementsBoundByIndex
-        + app.keyboards.toolbars.buttons.matching(toolbarButtonPredicate).allElementsBoundByIndex
-      if let hittable = keyboardControls.first(where: isEligible) {
-        hittable.tap()
-        return true
-      }
+      app.keyboards.firstMatch.coordinate(withNormalizedOffset: center).tap()
+      return true
+    }
 
-      let toolbarButtons = app.descendants(matching: .button)
-        .matching(toolbarButtonPredicate)
-        .allElementsBoundByIndex
-      if let hittable = toolbarButtons.first(where: {
-        isEligible($0) && isKeyboardAccessoryControl($0, keyboardFrame: keyboardFrame)
-      }) {
-        hittable.tap()
+    let labels = RunnerKeyboardStatus.dismissLabels
+    let predicate = NSPredicate(format: "label IN %@ OR identifier IN %@", labels, labels)
+    let accessoryButtons = app.descendants(matching: .button).matching(predicate).allElementsBoundByIndex
+    for button in accessoryButtons where button.exists && button.isHittable {
+      guard let label = labels.first(where: { $0 == button.label || $0 == button.identifier }) else {
+        continue
+      }
+      if RunnerKeyboardStatus.mayDismiss(label: label, frame: button.frame, keyboard: keyboard) {
+        button.tap()
         return true
       }
     }
@@ -588,14 +588,6 @@ extension RunnerTests {
 #else
     return false
 #endif
-  }
-
-  private func isKeyboardAccessoryControl(_ element: XCUIElement, keyboardFrame: CGRect) -> Bool {
-    let frame = element.frame
-    guard !frame.isEmpty && !keyboardFrame.isEmpty else {
-      return false
-    }
-    return frame.intersects(keyboardFrame) || abs(frame.maxY - keyboardFrame.minY) <= 80
   }
 }
 

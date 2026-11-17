@@ -217,33 +217,73 @@ extension RunnerTests {
     )
   }
 
-  /// `keyboard dismiss` never presses the return key, and it asks the same decision `keyboard status`
-  /// reports: a `Done` key in the return slot is the return key, so it is excluded, while a `Done`
-  /// toolbar above the keys and the iPad hide-keyboard key are different controls and stay eligible.
-  func testKeyboardDismissExcludesTheReturnKeyAndKeepsOtherDoneControls() {
-    let phone = observedKeyboardKeysFixture([
-      ("Q", 5, 959, 39), ("Numbers", 5, 1121, 49), (" ", 103, 1121, 197), ("Done", 301, 1121, 99),
-    ])
-    let returnKeyFrame = CGRect(x: 301, y: 1121, width: 99, height: 54)
-    let accessoryDoneFrame = CGRect(x: 330, y: 1070, width: 60, height: 44)
-    XCTAssertTrue(RunnerKeyboardStatus.isReturnControl(frame: returnKeyFrame, in: phone))
-    XCTAssertFalse(RunnerKeyboardStatus.isReturnControl(frame: accessoryDoneFrame, in: phone))
+  /// A keyboard read for the dismiss decision: the frame and the controls of one snapshot.
+  private func observedKeyboardFixture(
+    _ entries: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
+    identifiers: [String: String] = [:]
+  ) -> RunnerKeyboardStatus.ObservedKeyboard {
+    var keys = observedKeyboardKeysFixture(entries)
+    keys = keys.map { key in
+      RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: key.text,
+        frame: key.frame,
+        identifier: key.text.flatMap { identifiers[$0] }
+      )
+    }
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 609, width: 440, height: 240), keys: keys)
+  }
 
-    let pad = observedKeyboardKeysFixture([
-      ("Tab", 6, 905, 81), ("Done", 691.5, 969, 126.5), ("Next keyboard", 6, 1096, 69),
-      (" ", 212.5, 1096, 410), ("numbers", 622.5, 1096, 97.5), ("Hide keyboard", 720, 1096, 98),
-    ])
-    XCTAssertTrue(
-      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 691.5, y: 969, width: 126.5, height: 54), in: pad)
-    )
+  /// `keyboard dismiss` never presses a `Done` that could be the return key, which submits the field:
+  /// a `Done` inside the key rows is refused whether its wording is its label or only its identifier,
+  /// the iPad hide-keyboard key is pressed, and a `Done` toolbar button above the key rows is pressed
+  /// in preference to the return key beside the keys.
+  func testKeyboardDismissNeverPressesADoneInsideTheKeyRows() {
+    let phone = observedKeyboardFixture([
+      ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
+    ], identifiers: ["done": "Done"])
+    XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: phone))
     XCTAssertFalse(
-      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 720, y: 1096, width: 98, height: 54), in: pad)
+      RunnerKeyboardStatus.mayDismiss(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: phone)
+    )
+
+    let pad = observedKeyboardFixture([
+      ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
+      ("Hide keyboard", 720, 1096, 98),
+    ])
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControl(in: pad)?.text, "Hide keyboard")
+
+    let withToolbar = observedKeyboardFixture([
+      ("Done", 330, 524, 63), ("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
+    ], identifiers: ["done": "Done"])
+    let pressed = RunnerKeyboardStatus.dismissControl(in: withToolbar)
+    XCTAssertEqual(pressed?.text, "Done")
+    XCTAssertEqual(pressed?.frame.minY, 524)
+  }
+
+  /// Dismiss fails closed. With the keyboard unread, or read with no character key to place a `Done`
+  /// against, or with a toolbar button too far above the keyboard to belong to it, only a hide-keyboard
+  /// control may be pressed and no `Done` is: any of them might be the return key.
+  func testKeyboardDismissFailsClosedWhenTheReturnKeyCannotBeTold() {
+    let doneFrame = CGRect(x: 330, y: 524, width: 63, height: 54)
+    XCTAssertFalse(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: nil))
+    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Hide keyboard", frame: .zero, keyboard: nil))
+    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Dismiss keyboard", frame: .zero, keyboard: nil))
+
+    let unanchored = observedKeyboardFixture([("Done", 330, 524, 63), ("space", 108, 784, 207), ("done", 314, 784, 103)])
+    XCTAssertNil(RunnerKeyboardStatus.dismissControl(in: unanchored))
+    XCTAssertFalse(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: unanchored))
+
+    let anchored = observedKeyboardFixture([("Q", 5, 616, 41)])
+    XCTAssertTrue(RunnerKeyboardStatus.mayDismiss(label: "Done", frame: doneFrame, keyboard: anchored))
+    XCTAssertFalse(
+      RunnerKeyboardStatus.mayDismiss(label: "Done", frame: CGRect(x: 330, y: 300, width: 63, height: 54), keyboard: anchored)
     )
   }
 
   /// An input accessory toolbar's `Next` or `Done` that the keyboard exposes beside its keys sits above
-  /// the first key row, so it is never the return key: the real return key is still named, a pad whose
-  /// only `Done` is a toolbar button has no return key, and the toolbar button stays a dismiss candidate.
+  /// the first key row, so it is never the return key: the real return key is still named. With no
+  /// character key to place it against, wording alone names nothing, so a pad whose only `Done` is a
+  /// toolbar button, and a keyboard read without character keys, have no return key.
   func testKeyboardReturnControlIgnoresAnAccessoryToolbarAboveTheKeys() {
     let phone = observedKeyboardKeysFixture([
       ("Next", 20, 524, 60), ("Q", 5, 616, 41), ("W", 46, 616, 41), (" ", 108, 784, 207),
@@ -253,9 +293,6 @@ extension RunnerTests {
       RunnerKeyboardStatus.observed(visible: true, keyboardKeys: phone),
       RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
     )
-    XCTAssertFalse(
-      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 20, y: 524, width: 60, height: 54), in: phone)
-    )
 
     let pad = observedKeyboardKeysFixture([
       ("Done", 300, 524, 90), ("1", 5, 881, 132), ("2", 136, 881, 132), ("Delete", 268, 1043, 132),
@@ -264,20 +301,12 @@ extension RunnerTests {
       RunnerKeyboardStatus.observed(visible: true, keyboardKeys: pad),
       RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
-    XCTAssertFalse(
-      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 300, y: 524, width: 90, height: 54), in: pad)
-    )
-  }
 
-  /// Without an identified return key, or without a usable frame to compare, nothing is excluded: a
-  /// number pad has no return key, and a control with no frame cannot be matched to the key.
-  func testKeyboardDismissExcludesNothingWhenNoReturnKeyIsIdentified() {
-    let pad = observedKeyboardKeysFixture([("1", 5, 881, 132), ("Delete", 268, 1043, 132)])
-    XCTAssertFalse(
-      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 268, y: 1043, width: 132, height: 54), in: pad)
+    let unanchored = observedKeyboardKeysFixture([("Done", 300, 524, 90), ("space", 108, 784, 207)])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: unanchored),
+      RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
-    let phone = observedKeyboardKeysFixture([(" ", 103, 1121, 197), ("Done", 301, 1121, 99)])
-    XCTAssertFalse(RunnerKeyboardStatus.isReturnControl(frame: .zero, in: phone))
   }
 
   /// A visible keyboard with no return control this read can identify answers `unknown` with no label:
