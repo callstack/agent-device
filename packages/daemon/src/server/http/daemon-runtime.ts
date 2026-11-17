@@ -212,6 +212,10 @@ async function startDaemonRuntimeOnHost(
   // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
   // otherwise only ever created as a side effect of a per-session mkdir.
+  //
+  // Each answer is the PHYSICAL spelling of the directory it created or repaired, and `ensureSessionDir` and
+  // the script writer read that answer for themselves, so every level they build is one the walk judged —
+  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back.
   ensureDaemonStateDir(baseDir, baseDir);
   ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);

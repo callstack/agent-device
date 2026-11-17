@@ -19,7 +19,7 @@ import {
   inspectProcessLock,
   tryAcquireProcessLock,
   acquireProcessLockAcquisition,
-  untrustedDirectoryAncestry,
+  verifiedDirectoryPath,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
@@ -299,7 +299,8 @@ export function ensurePrivateDaemonStateDir(directory: string, stateBase: string
   // will stop at, which is what keeps a `~/.agent-device` linked to another disk working. What it can leave
   // beyond a rejected level is an empty directory, and no script is published on a chain the verdict refuses.
   fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
-  return { path: directory, privateChain: repairStateChain(stateBase, directory) };
+  const chain = repairStateChain(stateBase, directory);
+  return { path: chain.directory, privateChain: chain.privateChain };
 }
 
 /**
@@ -307,6 +308,11 @@ export function ensurePrivateDaemonStateDir(directory: string, stateBase: string
  * every level from the state base down to it is now a real directory this uid owns, standing 0700, reached
  * without following a link. `privateChain: false` says the repair STOPPED somewhere on that chain. It does
  * not say anything failed — startup proceeds either way — only that a script must not be written there.
+ *
+ * `path` is the VERIFIED spelling: the physical state base with this directory's own names re-attached, so a
+ * caller that writes under it builds its file names off the chain the repair judged rather than off a
+ * configuration string. It names the same entry the caller passed, and one more level under it is the shape
+ * {@link ensureDaemonStateDir} takes.
  */
 export type DaemonStateDir = Readonly<{ path: string; privateChain: boolean }>;
 
@@ -323,60 +329,97 @@ const STATE_DIR_MODE = 0o700;
 /**
  * Forces every state level from `stateBase` down to `directory` to {@link STATE_DIR_MODE}, and never throws.
  *
- * `O_NOFOLLOW` guards only the LAST name of an open, so judging the leaf alone is not enough: a `sessions`
- * left as a link to `/etc` by a user who could write a legacy state directory makes the leaf `sessions/ssh`
- * resolve to `/etc/ssh`, and a root daemon repairing that leaf would change the mode of a directory nobody
- * asked it to touch. So the chain is walked DOWN from the state base, each level judged by the `lstat` of the
- * entry under its name, and the first level that is a link, is not a directory, or belongs to another uid
- * stops the descent: that level and every level beneath it are left exactly as they are.
+ * The base is resolved ONCE, first, by {@link verifiedDirectoryPath} — the walk a script destination is
+ * judged by, not a second rule — and the physical directory it arrives on is the ONLY name anything below is
+ * built from. Three things follow from that, each one a hole a spelled base left open (ADR 0016):
  *
- * Judging DOWN is not enough either, because the descent never questions the ground the base stands on: a
- * user who can write an ancestor above it can rename the base and leave a link at its name between two of
- * this function's calls, and every level below then resolves on ground nothing judged. So the ancestry above
- * the base is asked FIRST, by {@link untrustedDirectoryAncestry} — the walk a script destination is judged
- * by, not a second rule. It is asked of the ANCESTRY only: the levels at and below the base are what this
- * repair exists to make private (ADR 0016).
+ * - the ground ABOVE the base is judged before a level is touched. `O_NOFOLLOW` guards the last name of an
+ *   open and nothing above it, so a user who can write an ancestor can rename the base and leave a link at its
+ *   name between two calls here, and every level below resolves on ground nothing judged;
+ * - the base entry is looked up under a name with NO trailing separator, because `state/` resolves THROUGH a
+ *   link at `state` — the `lstat`, the `O_NOFOLLOW` open and the `fchmod` would all land on the far side;
+ * - the levels are the chain the walk reached. A spelled base like `alias/../state` is NOT the path the
+ *   kernel takes: `..` steps back out of wherever `alias` physically is, while `path.relative` and `path.join`
+ *   would fold it away and hand the descent a different directory than the one judged.
+ *
+ * The base and the levels under it are what this repair exists to make private, so a `sessions/` left at 0775
+ * by umask 002 is repaired rather than refused; only the ANCESTRY refuses.
  *
  * Nothing here decides whether the daemon starts (ADR 0016), so no error is allowed to travel either: the
- * `lstat`, the open, the `fstat`, the `fchmod` and the closing `close` are inside one catch, and any of them
- * failing — `EACCES` on a directory this user cannot read, `ENOENT` on a name that went missing meanwhile,
- * `EIO` on a host that cannot even release the descriptor — is reported as a skipped level and stopped there.
- * Creation keeps its own failures, which come from the `mkdir` in the caller. The answer says whether the
- * WHOLE chain reached `directory` and stands private; {@link DaemonStateDir} says who reads it.
+ * ancestry walk and every `lstat`, `open`, `fstat`, `fchmod` and closing `close` below are inside one catch,
+ * and any of them failing — `EACCES` on a directory this user cannot read, `EIO` on an ancestor's `lstat`,
+ * `ENOENT` on a name that went missing meanwhile — is reported as a skipped level and stopped there. Creation
+ * keeps its own failures, which come from the `mkdir` in the caller. {@link DaemonStateDir} says who reads the
+ * answer.
  */
-function repairStateChain(stateBase: string, directory: string): boolean {
+function repairStateChain(
+  stateBase: string,
+  directory: string,
+): Readonly<{ directory: string; privateChain: boolean }> {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
-  if (process.platform === 'win32') return true;
-  const levels = stateLevelsBelow(stateBase, directory);
-  // A caller that names a directory outside the state base has no chain here to judge it from.
-  if (levels === undefined) {
-    skipStateDirMode(directory, 'not_below_state_base');
-    return false;
+  if (process.platform === 'win32') return { directory, privateChain: true };
+  let physical: string;
+  try {
+    // Asked of the base as it is spelled, and answered as the physical directory the kernel's own chain
+    // arrives at: the walk judges `..` and aliases the way resolution does, and the base's own name is
+    // re-attached unnormalized, so what follows repairs and reports THAT directory.
+    const base = verifiedDirectoryPath(stateBase);
+    if (!('physical' in base)) {
+      skipStateDirMode(base.ancestor, `state_ancestry_${base.exposure}`);
+      return { directory, privateChain: false };
+    }
+    physical = base.physical;
+  } catch (error) {
+    // The walk itself failed: `EIO` on an ancestor's `lstat`, `EACCES` on a directory above. Nothing is known
+    // about this chain, so nothing is touched, and startup is not stopped either — one skip says so.
+    skipStateDirMode(stateBase, (error as NodeJS.ErrnoException).code ?? 'state_base_unjudged');
+    return { directory, privateChain: false };
   }
-  if (!stateAncestryIsTrusted(stateBase)) return false;
+  const tail = stateTailBelow(stateBase, directory);
+  // A caller that names a directory outside the state base has no chain here to judge it from.
+  if (tail === undefined) {
+    skipStateDirMode(directory, 'not_below_state_base');
+    return { directory, privateChain: false };
+  }
+  // Every level is a name under the verified base, so the descent is the chain the walk judged, and the
+  // answer a caller writes under is that chain's own spelling rather than the configuration string.
+  const levels = [
+    physical,
+    ...tail.map((_, index) => path.join(physical, ...tail.slice(0, index + 1))),
+  ];
+  const verified = levels.at(-1)!;
   for (const level of levels) {
     try {
-      if (!repairStateLevel(level)) return false;
+      if (!repairStateLevel(level)) return { directory: verified, privateChain: false };
     } catch (error) {
       skipStateDirMode(level, (error as NodeJS.ErrnoException).code ?? 'unknown');
-      return false;
+      return { directory: verified, privateChain: false };
     }
   }
-  return true;
+  return { directory: verified, privateChain: true };
 }
 
 /**
- * Whether `stateBase` stands on ground no other local user can move, asked before a single level is touched.
- *
- * {@link untrustedDirectoryAncestry} is given the base's PARENT, so it answers about the ancestry above the
- * base and leaves the base itself to {@link repairStateLevel}, which can force its mode instead of only
- * refusing it. Where the rule refuses, nothing below is repaired and the chain is not private ground.
+ * The names from `stateBase` down to `directory`, base excluded, or `undefined` if `directory` is not below it.
+ * This is the only place a caller's spelling is compared, and it answers NAMES, never a path: {@link
+ * repairStateChain} re-attaches them to the verified physical base, so a `..`, an alias or a trailing
+ * separator in either argument cannot move a level onto ground nothing judged.
  */
-function stateAncestryIsTrusted(stateBase: string): boolean {
-  const exposure = untrustedDirectoryAncestry(path.dirname(stateBase));
-  if (exposure === undefined) return true;
-  skipStateDirMode(exposure.ancestor, `state_ancestry_${exposure.exposure}`);
-  return false;
+function stateTailBelow(stateBase: string, directory: string): readonly string[] | undefined {
+  const below = path.relative(
+    stripTrailingSeparators(stateBase),
+    stripTrailingSeparators(directory),
+  );
+  if (below === '' || below === '.') return [];
+  if (below === '..' || below.startsWith(`..${path.sep}`) || path.isAbsolute(below))
+    return undefined;
+  return below.split(path.sep);
+}
+
+/** A path with any trailing separators cut off: the name an entry is actually looked up under. */
+function stripTrailingSeparators(directory: string): string {
+  const stripped = directory.replace(/[/\\]+$/, '');
+  return stripped === '' ? directory : stripped;
 }
 
 /**
@@ -437,18 +480,6 @@ function forcePrivateStateDir(level: string): boolean {
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
-}
-
-/** Every level from `stateBase` down to `directory`, base first, or `undefined` if it is not below it. */
-function stateLevelsBelow(stateBase: string, directory: string): readonly string[] | undefined {
-  const below = path.relative(stateBase, directory);
-  if (below === '') return [stateBase];
-  if (below.startsWith('..') || path.isAbsolute(below)) return undefined;
-  const names = below.split(path.sep);
-  return [
-    stateBase,
-    ...names.map((_, index) => path.join(stateBase, ...names.slice(0, index + 1))),
-  ];
 }
 
 /**

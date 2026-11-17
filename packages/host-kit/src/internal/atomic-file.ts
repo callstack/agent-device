@@ -436,46 +436,82 @@ type WalkOutcome =
     }>;
 
 /**
- * Judges the ground `directory` STANDS ON, and `directory` itself: every directory the kernel looks one of its
- * names up in, from the root down. Asks the destination walk what a name INSIDE `directory` would resolve by,
- * and creates nothing — the probe name below it is never looked up.
+ * Judges the ground `directory` STANDS ON, and answers the PHYSICAL directory the walk arrived on. Asks the
+ * destination walk what a name INSIDE `directory` would resolve by, and creates nothing — the probe name below
+ * it is never looked up.
  *
- * A caller that CHANGES something below `directory` has to ask this first: `O_NOFOLLOW` guards the LAST name of
- * an open and nothing above it, so an ancestor another local user can write lets them rename `directory` and
- * leave a link at its name between two of that caller's calls, and every level below then resolves on ground
- * nobody judged. Where every ancestor is closed to other users nobody can make that swap, so the window is
- * closed by PERMISSIONS — as it is for a script destination, whose rule this is rather than a copy of it,
- * sticky-bit exception included (ADR 0016).
+ * A caller that CHANGES something below `directory` has to ask this first, for two reasons. `O_NOFOLLOW` guards
+ * the LAST name of an open and nothing above it, so an ancestor another local user can write lets them rename
+ * `directory` and leave a link at its name between two of that caller's calls, and every level below then
+ * resolves on ground nobody judged. And the answer is the only name a caller may build its own levels from: a
+ * spelled path is NOT the chain the kernel walks (`a/../b` steps back out of wherever `a` physically is, and a
+ * TRAILING SEPARATOR makes the last name resolve to a link's target), so a caller that appends names to its
+ * own spelling repairs, and writes into, a different directory than the one judged here. Where every ancestor
+ * is closed to other users nobody can make the rename, so the window is closed by PERMISSIONS — as it is for a
+ * script destination, whose rule this is rather than a copy of it, sticky-bit exception included (ADR 0016).
  *
- * Answers `undefined` for a chain this user may rely on: the walk ARRIVED, standing on `directory` itself,
- * having judged it. Otherwise it answers the step it could not stand on, and the way that is unsafe.
+ * Trusted: `{ physical }`, the directory as the walk reached it, with no separator on the end. Untrusted: the
+ * step it could not stand on and the way that is unsafe. A relative name is answered, not thrown: a caller
+ * that asks before it changes something needs something it can act on, and a relative name cannot be judged
+ * without putting the process's working directory into the chain.
  */
-export function untrustedDirectoryAncestry(
+export function verifiedDirectoryAncestry(
   directory: string,
-): Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> | undefined {
-  // Spelled by hand, NOT with `path.join`: join folds a `..` out of the caller's own spelling, and the kernel
-  // resolves that step against the directory physically stood in, not against the text.
-  // Refused here rather than thrown by the walk's own entry check: a caller that asks before it CHANGES
-  // something needs an answer it can act on, and a relative name cannot be judged without putting the
-  // process's working directory into the chain.
+):
+  | Readonly<{ physical: string }>
+  | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
   if (!path.isAbsolute(directory)) return { ancestor: directory, exposure: 'relative_destination' };
-  if (process.platform === 'win32') return undefined;
-  // Spelled by hand, NOT with `path.join`: join folds a `..` out of the caller's own spelling, and the kernel
-  // resolves that step against the directory physically stood in, not against the text.
-  const probed = `${directory}/${CHAIN_PROBE_NAME}`;
-  const spelled = spelledParent(probed);
-  const walked = walkSpelledParent(spelled, probed, scriptTrust());
+  if (process.platform === 'win32') return { physical: stripTrailingSeparators(directory) };
+  const spelled = stripTrailingSeparators(directory);
+  const walked = walkSpelledParent(spelled, `${spelled}/${CHAIN_PROBE_NAME}`, scriptTrust());
   if (walked.ended === 'refused') return { ancestor: walked.ancestor, exposure: walked.exposure };
-  // ARRIVED is the trusted answer. STOPPED SHORT says a name above `directory` is absent, so the walk has no
-  // judgment for the chain beyond it, and a `..` queued behind that name is its other spelling.
-  if (walked.ended === 'arrived') return undefined;
+  // ARRIVED is the trusted answer, and `deepest` is this walk's own judgment of where that spelled name
+  // physically is. STOPPED SHORT says a name above `directory` is absent, so there is no judgment for the
+  // chain beyond it, and a `..` queued behind that name is its other spelling.
+  if (walked.ended === 'arrived') return { physical: walked.deepest };
   return {
     ancestor: walked.deepest,
     exposure: walked.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
   };
 }
 
-/** The name {@link untrustedDirectoryAncestry} asks the walk about, which it never creates. */
+/**
+ * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the whole ancestry above it on
+ * the way, and answers the name every path below it has to be built from.
+ *
+ * The final name is cut off the spelling at the last separator and never normalized, then re-attached to the
+ * physical directory the walk judged for the parent. That order is the point: `alias/../state` is NOT
+ * `/state`, because `..` steps back from wherever `alias` PHYSICALLY is, while `path.dirname`, `path.join` and
+ * `path.relative` would fold the step away and hand a caller a directory nobody judged. And a trailing
+ * separator is cut BEFORE anything looks the entry up, because `state/` makes the kernel resolve through a
+ * link at `state` — which an `lstat`, an `O_NOFOLLOW` open, and a mode forced through either one would follow
+ * to the far side.
+ *
+ * The entry `directory` names is NOT followed or judged here: it is answered as a name inside a judged
+ * directory, for a caller that judges or repairs it as its own first step. Nothing is created.
+ */
+export function verifiedDirectoryPath(
+  directory: string,
+):
+  | Readonly<{ physical: string }>
+  | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
+  const spelled = stripTrailingSeparators(directory);
+  const cut = spelled.lastIndexOf('/');
+  if (cut < 0 || cut === spelled.length - 1) {
+    return { ancestor: directory, exposure: 'relative_destination' };
+  }
+  const parent = verifiedDirectoryAncestry(spelled.slice(0, cut) || '/');
+  if (!('physical' in parent)) return parent;
+  return { physical: `${parent.physical}/${spelled.slice(cut + 1)}` };
+}
+
+/** `directory` with any trailing separators cut off: the name an entry is actually looked up under. */
+function stripTrailingSeparators(directory: string): string {
+  const stripped = directory.replace(/\/+$/, '');
+  return stripped === '' ? '/' : stripped;
+}
+
+/** The name {@link verifiedDirectoryAncestry} asks the walk about, which it never creates. */
 const CHAIN_PROBE_NAME = '.agent-device-ancestry-probe';
 
 /**

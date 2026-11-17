@@ -442,6 +442,107 @@ for (const code of ['EACCES', 'ENOENT', 'EIO'] as const) {
   });
 }
 
+skipOnWindows(
+  'reports an unjudgeable base instead of throwing when the ancestry walk itself fails',
+  async () => {
+    // The ancestry walk is made of `lstat` calls too, and one of them can fail for a reason that has nothing
+    // to do with this chain: `EIO` on a dying volume, `ESTALE` on a mount that moved. Nothing here decides
+    // whether the daemon starts, so an error from the walk may not travel past it — startup would die over a
+    // mode. What has to come back instead is the ordinary skip: one diagnostic, no private ground.
+    const base = mkdtempForTestSync('agent-device-state-ancestry-errno-');
+    fs.chmodSync(base, 0o700);
+    const sessions = path.join(base, 'sessions');
+    fs.mkdirSync(sessions);
+    fs.chmodSync(sessions, 0o755);
+    // Denied ABOVE the base: this is a step of the walk, not of the descent, and the repair never gets as far
+    // as the level whose mode it would have forced.
+    denyCall('lstatSync', (argument) => String(argument) === path.dirname(base), ancestorFailure);
+
+    const { answer, skips } = await withDiagnosticsScope({ session: 'daemon' }, () => ({
+      answer: ensurePrivateDaemonStateDir(sessions, base),
+      skips: countDiagnosticEventsByPhase(SKIPPED),
+    }));
+
+    expect(answer.privateChain).toBe(false);
+    expect(skips).toBe(1);
+    // Creation is the caller's own business and went through, and the repair stopped before forcing anything.
+    expect(fs.lstatSync(sessions).isDirectory()).toBe(true);
+    expect(modeOf(sessions)).toBe(0o755);
+  },
+);
+
+skipOnWindows(
+  'refuses a state base whose name ends in a SEPARATOR, when that name is a link',
+  async () => {
+    // `AGENT_DEVICE_STATE_DIR=/trusted/state/` — a trailing slash is what a script or an expansion hands over.
+    // Resolving `state/` is the kernel following the link at `state`, so the `lstat` of the base answers a
+    // directory, the `O_NOFOLLOW` open opens the far side, and the `fchmod` that follows changes a mode nobody
+    // asked it to. The reported shape: `outside` at 0755 becomes 0700 while the daemon calls the chain private.
+    const trusted = mkdtempForTestSync('agent-device-state-trailing-slash-');
+    fs.chmodSync(trusted, 0o700);
+    const outside = path.join(trusted, 'outside');
+    fs.mkdirSync(outside);
+    fs.chmodSync(outside, 0o755);
+    const spelled = `${path.join(trusted, 'state')}/`;
+    fs.symlinkSync(outside, path.join(trusted, 'state'));
+
+    const { answer, skips } = await withDiagnosticsScope({ session: 'daemon' }, () => ({
+      answer: ensurePrivateDaemonStateDir(`${spelled}sessions`, spelled),
+      skips: countDiagnosticEventsByPhase(SKIPPED),
+    }));
+
+    expect(answer.privateChain).toBe(false);
+    expect(skips).toBe(1);
+    // The mode the directory's owner chose, not the one a repair that stepped through the link would have forced.
+    expect(modeOf(outside)).toBe(0o755);
+  },
+);
+
+skipOnWindows('repairs the chain the walk reached, not the one the base spells', async () => {
+  // The base is spelled `alias/../state`, which the kernel resolves as a step BACK out of wherever `alias`
+  // physically stands: its real base is `actual/state`. Deriving the levels with `path.relative` and
+  // `path.join` folds that step away, and the tail is then re-attached to `state` beside the ALIAS — a
+  // different tree, one the ancestry was never asked about. Here that folded name is a link out of the state
+  // tree, so a descent built from the spelling judges and forces a directory on the far side of a link nobody
+  // walked, while the real chain the daemon writes under is left alone.
+  const root = mkdtempForTestSync('agent-device-state-alias-base-');
+  fs.chmodSync(root, 0o700);
+  fs.mkdirSync(path.join(root, 'actual', 'x'), { recursive: true });
+  const alias = path.join(root, 'alias');
+  fs.symlinkSync(path.join(root, 'actual', 'x'), alias);
+  const state = path.join(root, 'actual', 'state');
+  const sessions = path.join(state, 'sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  // Left loose, the way a state dir made by an older version under a shared umask is found.
+  for (const directory of [state, sessions]) fs.chmodSync(directory, 0o755);
+  // The name the folded spelling leads to, and the directory its link leads to: the mode the old descent
+  // forced there belongs to a tree this call has nothing to do with.
+  const outside = path.join(root, 'outside');
+  const farSessions = path.join(outside, 'sessions');
+  fs.mkdirSync(farSessions, { recursive: true });
+  for (const directory of [outside, farSessions]) fs.chmodSync(directory, 0o755);
+  fs.symlinkSync(outside, path.join(root, 'state'));
+
+  const base = `${alias}/../state`;
+  const { answer, skips } = await withDiagnosticsScope({ session: 'daemon' }, () => ({
+    answer: ensurePrivateDaemonStateDir(`${base}/sessions`, base),
+    skips: countDiagnosticEventsByPhase(SKIPPED),
+  }));
+
+  // The chain the walk arrived at, repaired and reported as it is: nothing here had to be refused.
+  expect(answer.privateChain).toBe(true);
+  expect(skips).toBe(0);
+  expect(modeOf(state)).toBe(0o700);
+  expect(modeOf(sessions)).toBe(0o700);
+  // The folded spelling was never judged, so nothing on it is touched — which is the point. A descent built
+  // off the spelled base reached `state/sessions` through that link and forced its mode.
+  expect(modeOf(farSessions)).toBe(0o755);
+  expect(fs.lstatSync(path.join(root, 'state')).isSymbolicLink()).toBe(true);
+});
+
+/** The host error an ancestry walk can only answer by stopping: it cannot judge ground it could not read. */
+const ancestorFailure = Object.assign(new Error('test EIO'), { code: 'EIO' });
+
 /**
  * Makes one filesystem call answer `code` for `target`, and only for it: the path seams are asked by name,
  * the descriptor seams by the descriptor `open` returned for that name. Every other call reaches the host.

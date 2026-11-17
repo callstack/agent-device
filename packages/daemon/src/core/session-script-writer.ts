@@ -171,7 +171,8 @@ export class SessionScriptWriter {
    * is what judges it. Everything else is a path the daemon picked for itself — a default recording under
    * `sessions/`, or a remote version under `sessions/remote-scripts/`, each a fresh file in a private (0700)
    * directory. Ensuring that directory answers whether the chain from the state base is private ground, which
-   * is what the refusal below is for. Startup keeps going either way (#4565).
+   * is what the refusal below is for, and its `path` is the VERIFIED spelling of that directory — the only name
+   * a script of this daemon's is ever joined onto. Startup keeps going either way (#4565).
    */
   private resolveScriptDestination(
     session: SessionState,

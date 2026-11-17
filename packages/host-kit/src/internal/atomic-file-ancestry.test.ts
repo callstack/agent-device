@@ -14,7 +14,8 @@ import {
 import {
   confirmScriptDestination,
   prepareScriptDestination,
-  untrustedDirectoryAncestry,
+  verifiedDirectoryAncestry,
+  verifiedDirectoryPath,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -810,9 +811,10 @@ skipOnWindows(
 
 // --- the same rule, asked of a directory a caller is about to CHANGE (#4584) ---
 //
-// `untrustedDirectoryAncestry` is the walk above, over a directory instead of over a file about to be
-// written: the daemon's state repair asks it before it forces a single mode. It has to be THIS rule and not a
-// copy of it, so what it answers is pinned here, where the rule lives.
+// `verifiedDirectoryAncestry` and `verifiedDirectoryPath` are the walk above, over a directory instead of over
+// a file about to be written: the daemon's state repair asks them before it forces a single mode, and builds
+// every path below the answer from what they return. It has to be THIS rule and not a copy of it, so what it
+// answers is pinned here, where the rule lives.
 
 skipOnWindows('the standing-on judgment accepts a chain only this user can move', () => {
   const directory = root();
@@ -820,9 +822,24 @@ skipOnWindows('the standing-on judgment accepts a chain only this user can move'
   const base = path.join(home, 'agent-device');
   fs.mkdirSync(base);
 
-  expect(untrustedDirectoryAncestry(base)).toBeUndefined();
+  expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
   // The directory itself was stood on, and asking created nothing.
   expect(fs.readdirSync(home)).toEqual(['agent-device']);
+});
+
+skipOnWindows('the standing-on judgment answers the physical directory it stood on', () => {
+  // The answer is what a caller builds its own levels from, so it has to be where the kernel ARRIVED rather
+  // than the text it was handed. `..` steps back out of wherever the link physically is, and the walk reports
+  // the directory it reached through it.
+  const directory = root();
+  const actual = path.join(directory, 'actual', 'x');
+  fs.mkdirSync(actual, { recursive: true });
+  const alias = path.join(directory, 'alias');
+  fs.symlinkSync(path.join(directory, 'actual', 'x'), alias);
+
+  expect(verifiedDirectoryAncestry(`${alias}/..`)).toEqual({
+    physical: path.join(directory, 'actual'),
+  });
 });
 
 skipOnWindows('the standing-on judgment names an ancestor another user can write', () => {
@@ -831,7 +848,7 @@ skipOnWindows('the standing-on judgment names an ancestor another user can write
   const base = path.join(shared, 'agent-device');
   fs.mkdirSync(base);
 
-  expect(untrustedDirectoryAncestry(base)).toEqual({
+  expect(verifiedDirectoryAncestry(base)).toEqual({
     ancestor: shared,
     exposure: 'world_writable',
   });
@@ -846,7 +863,7 @@ skipOnWindows('the standing-on judgment passes a sticky ancestor through, as the
   const base = path.join(shared, 'agent-device');
   fs.mkdirSync(base);
 
-  expect(untrustedDirectoryAncestry(base)).toBeUndefined();
+  expect(verifiedDirectoryAncestry(base)).toEqual({ physical: base });
 });
 
 skipOnWindows('the standing-on judgment refuses a chain it cannot resolve', () => {
@@ -858,7 +875,7 @@ skipOnWindows('the standing-on judgment refuses a chain it cannot resolve', () =
   const directory = root();
   const base = path.join(directory, 'missing', 'agent-device');
 
-  expect(untrustedDirectoryAncestry(base)).toEqual({
+  expect(verifiedDirectoryAncestry(base)).toEqual({
     ancestor: directory,
     exposure: 'unreachable_parent',
   });
@@ -870,8 +887,64 @@ skipOnWindows('the standing-on judgment refuses a chain a `..` cannot resolve ei
   const directory = root();
   const base = `${directory}/missing/../agent-device`;
 
-  expect(untrustedDirectoryAncestry(base)).toEqual({
+  expect(verifiedDirectoryAncestry(base)).toEqual({
     ancestor: directory,
     exposure: 'unresolvable_parent',
   });
+});
+
+// --- `verifiedDirectoryPath`: the ONE name a caller may build levels from (#4584) ---
+
+skipOnWindows(
+  "the base answer keeps the base's own name and stops at the link that is the base",
+  () => {
+    // `AGENT_DEVICE_STATE_DIR` ends in a slash. Every one of `lstat`, `open` and `fchmod` given `state/` lands
+    // on the TARGET of a link at `state` — the kernel resolves a trailing separator by definition — so the name
+    // this answers has no separator on the end, and it is the link's own name rather than the directory behind
+    // it. Judging that entry is the caller's next step; what it must never get here is the far side.
+    const directory = root();
+    const trusted = path.join(directory, 'trusted');
+    fs.mkdirSync(trusted);
+    const outside = path.join(directory, 'outside');
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(trusted, 'state'));
+
+    expect(verifiedDirectoryPath(`${trusted}/state/`)).toEqual({
+      physical: path.join(trusted, 'state'),
+    });
+    expect(fs.lstatSync(path.join(trusted, 'state')).isSymbolicLink()).toBe(true);
+  },
+);
+
+skipOnWindows('the base answer is where a `..` in the base physically arrives', () => {
+  // The state base spelled `alias/../state` is NOT `state` beside the alias: `..` steps back out of wherever
+  // `alias` is physically, so the kernel's chain runs through the link's target. A caller that folded the step
+  // with `path.dirname` and `path.join` would repair a directory nobody judged.
+  const directory = root();
+  const actual = path.join(directory, 'actual', 'x');
+  fs.mkdirSync(actual, { recursive: true });
+  const alias = path.join(directory, 'alias');
+  fs.symlinkSync(actual, alias);
+  // Where the kernel's `..` arrives is the directory the link's TARGET stands in, so the state dir is the one
+  // beside `x`, NOT the one `path.join(alias, '..', 'state')` spells beside the alias.
+  const state = path.join(directory, 'actual', 'state');
+  fs.mkdirSync(state);
+
+  expect(verifiedDirectoryPath(`${alias}/../state`)).toEqual({ physical: state });
+  expect(path.join(alias, '..', 'state')).not.toBe(state);
+});
+
+skipOnWindows('the base answer refuses ground another user can steer, and creates nothing', () => {
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+
+  expect(verifiedDirectoryPath(path.join(shared, 'agent-device', 'state'))).toEqual({
+    ancestor: shared,
+    exposure: 'world_writable',
+  });
+  expect(verifiedDirectoryPath('state')).toEqual({
+    ancestor: 'state',
+    exposure: 'relative_destination',
+  });
+  expect(fs.readdirSync(shared)).toEqual([]);
 });
