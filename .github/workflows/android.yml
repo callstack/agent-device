@@ -56,14 +56,26 @@ jobs:
         with:
           package-helpers: 'true'
 
-      - name: Restore fixture APK
-        if: steps.impact.outputs.run != 'false'
-        id: fixture-app
-        uses: ./.github/actions/setup-fixture-app
-        with:
-          platform: android
-          install: 'false'
-          wait-for-artifact-seconds: '1800'
+      # The build and the fixture restore prepare the same emulator session and share no outputs:
+      # the build writes dist/, the repack writes .tmp/fixture-app through
+      # examples/test-app/node_modules. The build was previously the first command of the emulator
+      # script, so it held the booted emulator before the first case ran. The restore is the slower
+      # of the two, so the build costs the job nothing on the critical path.
+      - parallel:
+          - name: Build the shared CLI
+            if: steps.impact.outputs.run != 'false'
+            uses: ./.github/actions/run-gate
+            with:
+              gate: build
+
+          - name: Restore fixture APK
+            if: steps.impact.outputs.run != 'false'
+            id: fixture-app
+            uses: ./.github/actions/setup-fixture-app
+            with:
+              platform: android
+              install: 'false'
+              wait-for-artifact-seconds: '1800'
 
       - name: Report fixture cache source
         if: steps.impact.outputs.run != 'false'
@@ -90,7 +102,6 @@ jobs:
             set -eu
             ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
             test -n "$ANDROID_SERIAL"
-            pnpm gate build
             pnpm clean:daemon
             AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=smoke AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator.test.ts
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/emulator/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
