@@ -1,0 +1,42 @@
+name: Coverage Probe
+
+# TEMPORARY measurement lane for the Coverage job's wall time. Read the numbers from the Actions
+# API's per-step timings; nothing here uploads them. This lane is an experiment vehicle: it must not
+# reach main, and it is dispatch-only so no other PR's push can start it or be marked red by it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe ${{ matrix.id }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: x64-8
+            runs-on: blacksmith-8vcpu-ubuntu-2404
+          - id: x64-16
+            runs-on: blacksmith-16vcpu-ubuntu-2404
+          - id: x64-32
+            runs-on: blacksmith-32vcpu-ubuntu-2404
+    env:
+      # A loopback-dependent test fails here instead of skipping when bind is denied, as in CI.
+      AGENT_DEVICE_REQUIRE_LOOPBACK_TESTS: '1'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run coverage
+        uses: ./.github/actions/run-gate
+        with: { gate: unit-ci }
