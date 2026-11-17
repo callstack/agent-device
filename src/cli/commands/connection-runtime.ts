@@ -92,6 +92,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       mergedFlags,
       remoteConfig.resolvedPath,
       remoteConfig.profile,
+      host.env,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
@@ -109,6 +110,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       nextFlags,
       positionals: options.positionals,
       leaseLedger,
+      env: host.env,
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;
@@ -194,7 +196,8 @@ function createRemoteConnectionStateFromFlags(
   remoteConfigPath: string,
   profile: Partial<
     Pick<RemoteConnectionState, 'leaseProvider' | 'clientId' | 'deviceKey' | 'runId'>
-  > = {},
+  >,
+  env: NodeJS.ProcessEnv,
 ): RemoteConnectionState {
   const session = flags.session ?? 'default';
   const scope = sessionLeaseScope(
@@ -218,7 +221,7 @@ function createRemoteConnectionStateFromFlags(
   }
   if (
     !flags.daemonBaseUrl &&
-    connectionProviderCapabilities(profile.leaseProvider).requiresRemoteDaemon
+    connectionProviderCapabilities(profile.leaseProvider, env).requiresRemoteDaemon
   ) {
     throw new AppError(
       'INVALID_ARGS',

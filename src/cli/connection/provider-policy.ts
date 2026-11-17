@@ -1,4 +1,3 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import {
   pluginConnectionInventory,
@@ -108,13 +107,13 @@ export function unavailableConnectPluginError(
 /** Bundled and installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
-  env?: NodeJS.ProcessEnv,
+  env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities {
   if (provider === 'proxy') return remoteDaemonConnection('proxy');
   const declared =
     builtinConnectionCapabilities(provider) ??
     (provider === undefined || provider === 'cloud'
       ? undefined
-      : pluginConnectionCapabilities(provider, env ?? commandHostEnvironment().env));
+      : pluginConnectionCapabilities(provider, env));
   return declared ?? remoteDaemonConnection('remote-provider');
 }

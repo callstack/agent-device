@@ -81,7 +81,7 @@ export const connectCommand: ClientCommandHandler = async ({
     resolved,
     host,
   );
-  const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
+  const scope = readRequiredConnectScope(connectFlags, connectionMetadata, host.env);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -113,12 +113,25 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state, host);
-  const readiness = presentConnectReadiness(state, verification);
+  const readiness = presentConnectReadiness(state, verification, host.env);
 
   await writeCommandOutput(
     connectFlags,
-    serializeConnectionState({ state, runtimePreparation, readiness, previousLeaseNotice }),
-    () => renderConnectSuccess({ state, runtimePreparation, readiness, previousLeaseNotice }),
+    serializeConnectionState({
+      state,
+      runtimePreparation,
+      readiness,
+      previousLeaseNotice,
+      env: host.env,
+    }),
+    () =>
+      renderConnectSuccess({
+        state,
+        runtimePreparation,
+        readiness,
+        previousLeaseNotice,
+        env: host.env,
+      }),
   );
   return true;
 };
@@ -134,6 +147,7 @@ function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags
 function readRequiredConnectScope(
   flags: CliFlags,
   connectionMetadata: RemoteConnectionRequestMetadata | undefined,
+  env: NodeJS.ProcessEnv,
 ): { tenant: string; runId: string } {
   if (!flags.tenant) {
     throw new AppError(
@@ -149,7 +163,7 @@ function readRequiredConnectScope(
   }
   if (
     !flags.daemonBaseUrl &&
-    connectionProviderCapabilities(connectionMetadata?.leaseProvider).requiresRemoteDaemon
+    connectionProviderCapabilities(connectionMetadata?.leaseProvider, env).requiresRemoteDaemon
   ) {
     throw new AppError(
       'INVALID_ARGS',
@@ -396,19 +410,22 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     return true;
   }
   await primeProviderConnection(state.leaseProvider, host.env);
-  const leasePreparation = buildLeasePreparationNotice(state);
+  const leasePreparation = buildLeasePreparationNotice(state, undefined, host.env);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state, host);
-  await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
-    [
-      `Configured remote session "${state.session}".`,
-      `tenant=${state.tenant} runId=${state.runId} leaseId=${state.leaseId ?? 'pending'} backend=${state.leaseBackend ?? 'pending'}`,
-      `remoteConfig=${state.remoteConfigPath}`,
-      state.runtime ? 'metro=prepared' : 'metro=not-prepared',
-      leasePreparation?.message,
-      runtimePreparation?.message,
-    ]
-      .filter((line): line is string => Boolean(line))
-      .join('\n'),
+  await writeCommandOutput(
+    flags,
+    serializeConnectionState({ state, runtimePreparation, env: host.env }),
+    () =>
+      [
+        `Configured remote session "${state.session}".`,
+        `tenant=${state.tenant} runId=${state.runId} leaseId=${state.leaseId ?? 'pending'} backend=${state.leaseBackend ?? 'pending'}`,
+        `remoteConfig=${state.remoteConfigPath}`,
+        state.runtime ? 'metro=prepared' : 'metro=not-prepared',
+        leasePreparation?.message,
+        runtimePreparation?.message,
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join('\n'),
   );
   return true;
 };

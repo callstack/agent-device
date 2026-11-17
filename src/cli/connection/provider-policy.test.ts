@@ -14,7 +14,7 @@ import {
 import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 
 test('provider policy projects provider identity into semantic capabilities', () => {
-  assert.deepEqual(connectionProviderCapabilities('limrun'), {
+  assert.deepEqual(connectionProviderCapabilities('limrun', {}), {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,
@@ -30,8 +30,8 @@ test('provider policy projects provider identity into semantic capabilities', ()
     connectionProviderCapabilities('browserstack', pluginHome().env).leaseKind,
     'remote-provider',
   );
-  assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
-  assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
+  assert.equal(connectionProviderCapabilities('aws-device-farm', {}).requiresAppAttachment, true);
+  assert.equal(connectionProviderCapabilities('proxy', {}).leaseKind, 'proxy');
 });
 
 test('a manifest connection on a store package supplies no capabilities', async () => {

@@ -130,27 +130,36 @@ test('routed status uses capabilities from the supplied host store rather than t
     home,
     packageName,
     v2RegistrationSource(provider, {
-      extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { return { provider: 'browserstack', service: 'BrowserStack', verificationMessage: 'verified' }; } },`,
     }),
   );
   const f = fixture(home);
-  seedState(f);
   const capture = beginStdoutCapture();
   const sendToDaemon = vi.fn(async () => {
     throw new Error('unexpected daemon access');
   });
   try {
+    const suppliedHost = {
+      cwd: home,
+      env: {
+        AGENT_DEVICE_HOME: home,
+        AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
+        AGENT_DEVICE_SESSION: 'default',
+      },
+    };
+    await runCli(
+      ['connect', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir],
+      { sendToDaemon },
+      suppliedHost,
+    );
+    assert.equal(
+      readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' })?.leaseProvider,
+      provider,
+    );
     await runCli(
       ['connection', 'status', '--state-dir', f.stateDir],
       { sendToDaemon },
-      {
-        cwd: home,
-        env: {
-          AGENT_DEVICE_HOME: home,
-          AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
-          AGENT_DEVICE_SESSION: 'default',
-        },
-      },
+      suppliedHost,
     );
     assert.match(capture.read(), /The first device command shown below will allocate one/);
     assert.doesNotMatch(capture.read(), /install-from-source/);
