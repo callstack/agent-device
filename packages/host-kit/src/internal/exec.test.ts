@@ -522,24 +522,44 @@ test('async captured output enforces a per-stream byte limit', async () => {
   expect(separate.stderr).toHaveLength(128);
 });
 
-test('an output-limit failure retains bounded output with allowFailure enabled', async () => {
-  for (const stream of ['stdout', 'stderr'] as const) {
-    await expect(
-      runCmd(process.execPath, ['-e', `process.${stream}.write('x'.repeat(129))`], {
-        maxBuffer: 128,
-        allowFailure: true,
-      }),
-    ).rejects.toMatchObject({
-      code: 'COMMAND_FAILED',
-      details: {
-        reason: 'command_output_limit',
-        stream,
-        maxBuffer: 128,
-        [stream]: 'x'.repeat(128),
-      },
-    });
-  }
-});
+test.skipIf(process.platform === 'win32')(
+  'an output-limit failure retains bounded output with allowFailure enabled',
+  async () => {
+    for (const stream of ['stdout', 'stderr'] as const) {
+      let child: ReturnType<typeof import('node:child_process').spawn> | undefined;
+      let received = '';
+      const onChunk = (chunk: string) => {
+        received += chunk;
+        if (received.length === 128) child?.kill('SIGUSR1');
+      };
+      await expect(
+        runCmdStreaming(
+          process.execPath,
+          [
+            '-e',
+            `process.on('SIGUSR1', () => process.${stream}.write('x')); setInterval(() => {}, 1000); process.${stream}.write('x'.repeat(128));`,
+          ],
+          {
+            maxBuffer: 128,
+            allowFailure: true,
+            onSpawn: (spawned) => {
+              child = spawned;
+            },
+            ...(stream === 'stdout' ? { onStdoutChunk: onChunk } : { onStderrChunk: onChunk }),
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: {
+          reason: 'command_output_limit',
+          stream,
+          maxBuffer: 128,
+          [stream]: 'x'.repeat(128),
+        },
+      });
+    }
+  },
+);
 
 test('async output limits count raw bytes before decoding text', async () => {
   for (const stream of ['stdout', 'stderr'] as const) {
