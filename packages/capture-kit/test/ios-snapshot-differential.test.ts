@@ -9,20 +9,20 @@ import {
   compareDifferentialCases,
   runSwiftCases,
   SWIFT_RUN_TIMEOUT_MS,
-} from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.ts';
+} from '../src/ios-snapshot-engine/conformance-harness.ts';
 import {
   swiftToolchainAvailable,
   writeDifferentialFailureArtifact,
-} from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.fixtures.ts';
-import { differentialBatchArbitrary } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-generator.ts';
-import { readIosSnapshotEngineFixture } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-fixture.ts';
+} from '../src/ios-snapshot-engine/conformance-harness.fixtures.ts';
+import { differentialBatchArbitrary } from '../src/ios-snapshot-engine/conformance-generator.ts';
+import { readIosSnapshotEngineFixture } from '../src/ios-snapshot-engine/conformance-fixture.ts';
 import {
   hostRowNodes,
   runnerNodes,
   safariWebViewNodes,
   threadNodes,
   viewport as capturedViewport,
-} from '../packages/capture-kit/src/ios-snapshot-engine/runner-presentation-fixtures.ts';
+} from '../src/ios-snapshot-engine/runner-presentation-fixtures.ts';
 
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
@@ -277,6 +277,8 @@ type ActionabilityVector = Readonly<{
 
 const ACTIONABILITY_POLICY_PATH = path.resolve(
   import.meta.dirname,
+  '..',
+  '..',
   '..',
   'contracts',
   'fixtures',

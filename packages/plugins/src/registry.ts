@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
 import type {
   ReplayExecution,
@@ -180,15 +181,15 @@ export async function resolveProviderPlugins(
  */
 export async function startProviderRegistry(
   resolved: ResolvedProviderPlugins,
-  env: NodeJS.ProcessEnv,
+  host: HostEnvironment,
   policy: PluginRegistryPolicy,
   scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
   for (const slot of resolved.slots) {
     if (slot.failure !== undefined) continue;
     try {
-      if (slot.replayPlugin) await setUpReplaySlot(slot, slot.replayPlugin, env);
-      else if (slot.plugin && scope === 'all') await setUpSlot(slot, slot.plugin, env, policy);
+      if (slot.replayPlugin) await setUpReplaySlot(slot, slot.replayPlugin, host);
+      else if (slot.plugin && scope === 'all') await setUpSlot(slot, slot.plugin, host, policy);
     } catch (error) {
       slot.failure = asPluginFailure(error, PLUGIN_REASONS.setupFailed.reason);
       slot.registration = undefined;
@@ -300,9 +301,9 @@ function claimProvider(slot: Slot, claimed: Set<string>): void {
 async function setUpReplaySlot(
   slot: Slot,
   plugin: ReplayEnginePlugin,
-  env: NodeJS.ProcessEnv,
+  host: HostEnvironment,
 ): Promise<void> {
-  const result = await plugin.setup(createPluginHost(env, slot.candidate.hostOptions));
+  const result = await plugin.setup(createPluginHost(host, slot.candidate.hostOptions));
   try {
     slot.replaySetup = validateReplayEngineSetup(result, plugin.backend);
   } catch (error) {
@@ -407,25 +408,31 @@ function withConnectionHost(
   return {
     capabilities: connection.capabilities,
     resolve: (context) =>
-      connection.resolve({ ...context, host: createPluginHost(context.env, hostOptions) }),
+      connection.resolve({
+        ...context,
+        host: createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
+      }),
     verify: (context) =>
-      connection.verify({ ...context, host: createPluginHost(context.env, hostOptions) }),
+      connection.verify({
+        ...context,
+        host: createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
+      }),
   };
 }
 
 async function setUpSlot(
   slot: Slot,
   plugin: AgentDevicePlugin,
-  env: NodeJS.ProcessEnv,
+  host: HostEnvironment,
   policy: PluginRegistryPolicy,
 ): Promise<void> {
-  const host = createPluginHost(env, slot.candidate.hostOptions);
-  const result = await plugin.setup(host);
+  const pluginHost = createPluginHost(host, slot.candidate.hostOptions);
+  const result = await plugin.setup(pluginHost);
   try {
     const { runtime, platformModule } = await buildRegistration(
       plugin,
       result,
-      host.clientVersion,
+      pluginHost.clientVersion,
       policy,
     );
     const dispose = result.dispose?.bind(result);

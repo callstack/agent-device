@@ -11,7 +11,7 @@ import {
   type AwsDeviceFarmClient,
   type AwsDeviceFarmRemoteAccessSession,
 } from './aws-device-farm.ts';
-import { buildCloudWebDriverBaseCapabilities } from './runtime.ts';
+import { buildCloudWebDriverBaseCapabilities } from '@agent-device/provider-webdriver/plugin';
 
 const ARN = 'arn:aws:devicefarm:us-west-2:1:session/pending';
 
