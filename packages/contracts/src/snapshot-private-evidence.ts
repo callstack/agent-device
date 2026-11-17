@@ -3,8 +3,8 @@ import type { IosViewportEvidence } from './ios-snapshot.ts';
 
 /**
  * Capture-local clickability facts for consumers that reproduce Maestro's private
- * TreeNode semantics. This is deliberately kept outside SnapshotNode: the fact
- * is retained by object identity, never serialized into the snapshot contract.
+ * TreeNode semantics. This is deliberately kept outside the regular SnapshotNode:
+ * the fact is retained by object identity, and only raw Android nodes serialize it.
  */
 export type SnapshotClickabilityEvidence =
   | {
