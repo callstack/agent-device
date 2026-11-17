@@ -11,7 +11,9 @@ import { PRIVATE_GROUP_HOST_FILES } from './private-group.ts';
 
 /** This process's uid. Windows has none, and every test that uses it is skipped there. */
 export const currentUid = process.getuid?.() ?? -1;
-const currentGid = process.getgid?.() ?? -1;
+
+/** The group a directory gets when a test does not name one: this user's primary group. */
+export const currentGid = process.getgid?.() ?? -1;
 
 /**
  * Answers the three account files the private-group exception reads, for tests that must not depend on the

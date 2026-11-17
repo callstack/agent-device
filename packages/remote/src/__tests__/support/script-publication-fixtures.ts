@@ -102,7 +102,11 @@ export async function open(
   baseUrl: string,
   stateDir: string,
   destination: string,
-  options: { force?: boolean; respond?: (id: string) => DaemonResponse } = {},
+  options: {
+    force?: boolean;
+    /** Answers the open the way a hostile daemon would, with or without the client's own materialization. */
+    respond?: (id: string) => DaemonResponse | Promise<DaemonResponse>;
+  } = {},
 ) {
   let sent: DaemonWireRequest | undefined;
   let recordsAtSend: string[] = [];
@@ -115,7 +119,7 @@ export async function open(
     sent = next;
     recordsAtSend = records(stateDir);
     const id = next.meta?.scriptPublicationId as string;
-    const reply = options.respond?.(id);
+    const reply = await options.respond?.(id);
     if (reply) return reply;
     return answer(baseUrl, stateDir, next, {
       scriptPublicationId: id,
