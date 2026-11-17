@@ -1,5 +1,4 @@
 export { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
-export { captureAndroidSnapshotWithHelper } from './snapshot-helper-capture.ts';
 export { captureAndroidSnapshotWithHelperSession } from './snapshot-helper-session.ts';
 export {
   resetAndroidSnapshotHelperSessions,
