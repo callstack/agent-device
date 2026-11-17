@@ -214,12 +214,18 @@ async function startDaemonRuntimeOnHost(
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
   // otherwise only ever created as a side effect of a per-session mkdir.
   //
-  // Each ANSWER replaces the name it was given, and everything the runtime builds from here on is derived
-  // from it. An answer is the physical directory the ancestry walk arrived at; the name `resolveDaemonPaths`
-  // spelled is what a client addresses files BY, and the two can name the same directory differently
-  // (`alias/../state` steps out of wherever `alias` stands). Answering from the walk is what keeps the levels
-  // this startup repairs, the store it constructs, and the recordings the writer publishes on ONE chain —
-  // taking the spelled name instead writes recordings into a directory the repair never judged (ADR 0016).
+  // The ANSWER of each repair replaces the name it was given, and the runtime is built from it. An answer is
+  // the physical directory the ancestry walk arrived at, and `alias/../state` steps out of wherever `alias`
+  // physically stands, so the two spellings are different TEXT. The daemon cannot create anything from the
+  // spelled one: host-kit normalizes a destination on the way in (`path.dirname` of the lock's own path folds
+  // `alias/../state/daemon.lock/.owner.json` to `<root>/state/daemon.lock/…`), so the daemon's lock, log and
+  // registration would be written beside the ALIAS while the repair judged where the alias stands. Recording
+  // from the spelled name is the same bug one level down: recordings land where no ancestry was asked about,
+  // and that directory's mode gets forced (ADR 0016).
+  //
+  // Clients keep the spelled name and reach the same entries, because they only READ these: the kernel
+  // resolves the `..` for them. Only a process that CREATES below the state dir has to stand on the verified
+  // base, because only a creation is exposed to a caller-side normalize.
   const baseDir = ensureDaemonStateDir(daemonPaths.baseDir, daemonPaths.baseDir);
   const verifiedPaths: DaemonPaths = {
     ...daemonPaths,
@@ -560,7 +566,15 @@ async function startDaemonRuntimeOnHost(
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
   };
 
-  const acquisition = await tryAcquireDaemonRegistration(verifiedPaths);
+  // The registration CREATES the lock, the record and the log, so those go to the verified base. Its
+  // `baseDir` is a different kind of name: the owner derives the shutdown report and the startup-marker
+  // sweep from it, both clients read them back from THEIR configured base, and the helpers that spell those
+  // two names still join rather than append. Keeping one configured base there is what makes daemon and
+  // client name one file each; the recording chain never reads through it.
+  const acquisition = await tryAcquireDaemonRegistration({
+    ...verifiedPaths,
+    baseDir: daemonPaths.baseDir,
+  });
   if (acquisition.status !== 'acquired') {
     throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
       reason: 'daemon_registration_refused',
@@ -580,7 +594,9 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
-  const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
+  // The launcher names this file before any verification runs, and the client polls it by that pid from
+  // the SAME setting, so the daemon names it the same way: one text, one file, whatever the chain is.
+  const startupPhasesPath = resolveDaemonStartupPhasesPath(daemonPaths.baseDir, process.pid);
   const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
     recordDaemonStartupMarker(startupPhasesPath, phase, (error) => {
       stderr.write(`Daemon startup marker write failed: ${error.message}\n`);

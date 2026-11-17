@@ -17,6 +17,7 @@ import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
+  childPath,
   confirmScriptDestination,
   scriptAncestryReason,
   prepareScriptDestination,
@@ -662,7 +663,7 @@ function recordPath(
       ]),
     )
     .digest('hex');
-  return path.join(stateDir, 'remote-connections', 'session-scripts', `${key}.json`);
+  return childPath(stateDir, 'remote-connections', 'session-scripts', `${key}.json`);
 }
 
 function withoutTrailingSlashes(value: string): string {

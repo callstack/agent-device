@@ -1,4 +1,4 @@
-import path from 'node:path';
+import { childPath } from '@agent-device/host-kit/file';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { requireAndroidAdbHost } from './adb-host.ts';
@@ -15,11 +15,13 @@ type AndroidTestImeRecoveryMarker = Readonly<{
 }>;
 
 function pendingRecoveryDir(stateDir: string): string {
-  return path.join(stateDir, PENDING_RECOVERY_DIR);
+  // Appended, not joined: a state dir spelled through a link or a step back is not the directory
+  // folding answers, and the daemon writes its records where the kernel resolves the spelled name.
+  return childPath(stateDir, PENDING_RECOVERY_DIR);
 }
 
 function pendingRecoveryFile(stateDir: string, serial: string): string {
-  return path.join(pendingRecoveryDir(stateDir), encodeURIComponent(serial));
+  return childPath(pendingRecoveryDir(stateDir), encodeURIComponent(serial));
 }
 
 export async function writeAndroidTestImeRecoveryMarker(
@@ -85,7 +87,7 @@ export async function readAndroidTestImeRecoveryMarkers(stateDir: string): Promi
   const serials: string[] = [];
   for (const file of files) {
     try {
-      const markerPath = path.join(pendingRecoveryDir(stateDir), file);
+      const markerPath = childPath(pendingRecoveryDir(stateDir), file);
       const marker = await readAndroidTestImeRecoveryMarker(markerPath);
       // Reject torn/corrupt descriptors and prevent a crafted file name from selecting a different
       // serial than the durable record it is supposed to describe.

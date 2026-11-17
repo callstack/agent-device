@@ -1,11 +1,10 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { childPath, publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -599,5 +598,7 @@ function isPersistedDeviceLease(value: unknown): value is DeviceLease {
 }
 
 function leaseRecordPath(stateDir: string, file: string): string {
-  return path.join(stateDir, file);
+  // Appended, not joined: the state dir may be spelled through a link or a step back, and folding it
+  // would name a different directory than the daemon that verified the chain reads and writes.
+  return childPath(stateDir, file);
 }

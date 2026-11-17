@@ -8,6 +8,9 @@ export {
   publishFileSync,
   publishScriptFileSync,
   verifiedDirectoryPath,
+  childPath,
+  parentDirectoryPath,
+  withoutTrailingSeparators,
   type DurableFilePublishMode,
   type ScriptDestination,
 } from './internal/atomic-file.ts';
@@ -22,9 +25,6 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
-  childPath,
-  parentDirectoryPath,
-  withoutTrailingSeparators,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

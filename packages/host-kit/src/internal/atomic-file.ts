@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-import { parentDirectoryPath, withoutTrailingSeparators } from './path-resolution.ts';
 
 export type AtomicPublishMode = 'replace' | 'link-exclusive';
 
@@ -437,24 +436,16 @@ type WalkOutcome =
     }>;
 
 /**
- * Judges the ground `directory` STANDS ON, and answers the PHYSICAL directory the walk arrived on. Asks the
- * destination walk what a name INSIDE `directory` would resolve by, and creates nothing — the probe name below
- * it is never looked up.
+ * Judges the ground `directory` STANDS ON and answers the PHYSICAL directory the walk arrived on, by asking
+ * what a name INSIDE `directory` would resolve to. Nothing is created: the probe name is never looked up.
  *
- * A caller that CHANGES something below `directory` has to ask this first, for two reasons. `O_NOFOLLOW` guards
- * the LAST name of an open and nothing above it, so an ancestor another local user can write lets them rename
- * `directory` and leave a link at its name between two of that caller's calls, and every level below then
- * resolves on ground nobody judged. And the answer is the only name a caller may build its own levels from: a
- * spelled path is NOT the chain the kernel walks (`a/../b` steps back out of wherever `a` physically is, and a
- * TRAILING SEPARATOR makes the last name resolve to a link's target), so a caller that appends names to its
- * own spelling repairs, and writes into, a different directory than the one judged here. Where every ancestor
- * is closed to other users nobody can make the rename, so the window is closed by PERMISSIONS — as it is for a
- * script destination, whose rule this is rather than a copy of it, sticky-bit exception included (ADR 0016).
+ * A caller that CHANGES anything below `directory` has to ask this first. `O_NOFOLLOW` guards only the LAST
+ * name of an open, so an ancestor another user can write lets them rename `directory` between two of that
+ * caller's calls; and the answer is the only name a caller may build further levels from, because a spelled
+ * path is NOT the chain the kernel walks (ADR 0016).
  *
- * Trusted: `{ physical }`, the directory as the walk reached it, with no separator on the end. Untrusted: the
- * step it could not stand on and the way that is unsafe. A relative name is answered, not thrown: a caller
- * that asks before it changes something needs something it can act on, and a relative name cannot be judged
- * without putting the process's working directory into the chain.
+ * Trusted: `{ physical }`, no trailing separator. Untrusted: the step it could not stand on and why. A
+ * relative name is answered rather than thrown: judging one would put the working directory in the chain.
  */
 export function verifiedDirectoryAncestry(
   directory: string,
@@ -477,19 +468,11 @@ export function verifiedDirectoryAncestry(
 }
 
 /**
- * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the whole ancestry above it on
- * the way, and answers the name every path below it has to be built from.
- *
- * The final name is cut off the spelling at the last separator and never normalized, then re-attached to the
- * physical directory the walk judged for the parent. That order is the point: `alias/../state` is NOT
- * `/state`, because `..` steps back from wherever `alias` PHYSICALLY is, while `path.dirname`, `path.join` and
- * `path.relative` would fold the step away and hand a caller a directory nobody judged. And a trailing
- * separator is cut BEFORE anything looks the entry up, because `state/` makes the kernel resolve through a
- * link at `state` — which an `lstat`, an `O_NOFOLLOW` open, and a mode forced through either one would follow
- * to the far side.
- *
- * The entry `directory` names is NOT followed or judged here: it is answered as a name inside a judged
- * directory, for a caller that judges or repairs it as its own first step. Nothing is created.
+ * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the ancestry above it on
+ * the way, and answers the name every path below it has to be built from. The final component is CUT from the
+ * spelling and re-attached to the judged parent, never normalized: `alias/../state` is not `/state`, and a
+ * trailing separator is cut before anything looks the entry up (ADR 0016). The
+ * entry `directory` names is answered as a name inside a judged directory, not followed or created.
  */
 export function verifiedDirectoryPath(
   directory: string,
@@ -499,8 +482,7 @@ export function verifiedDirectoryPath(
   const spelled = withoutTrailingSeparators(directory);
   const parent = parentDirectoryPath(spelled);
   const name = spelled.slice((parent ?? '').length + 1);
-  // A name with no directory above it — `state`, or the root itself — cannot be judged: there is no chain to
-  // walk, and the process's working directory would have to be put into it to get one.
+  // Nothing above it to walk (`state`, or the root): judging one would put the working directory in the chain.
   if (parent === undefined || name === '')
     return { ancestor: directory, exposure: 'relative_destination' };
   const judged = verifiedDirectoryAncestry(parent);
@@ -508,32 +490,64 @@ export function verifiedDirectoryPath(
   return { physical: `${judged.physical}/${name}` };
 }
 
+/**
+ * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing
+ * separator resolves THROUGH a link at that name. The scan is an index walk from the end, not a regular
+ * expression, so no run of separators makes it reconsider a prefix. Only this platform's separator is cut (a
+ * `\` is a name character on POSIX). A root keeps one: `//` cut to `` names nothing, `C:` is drive-RELATIVE.
+ */
+export function withoutTrailingSeparators(directory: string): string {
+  const separator = path.sep;
+  let end = directory.length;
+  while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
+  if (end === directory.length) return directory;
+  if (end === 0) return directory.length === 0 ? directory : '/';
+  if (separator !== '/' && directory[end - 1] === ':') return directory.slice(0, end + 1);
+  return directory.slice(0, end);
+}
+
+/**
+ * The name `names` occupy inside `directory`, spelled so they stay WHERE `directory` stands. NOT `path.join`,
+ * which normalizes: with `alias` a link into `actual/x`, the kernel creates `alias/../state/sessions` under
+ * `actual/state/sessions` while `join` answers `state/sessions` beside the alias — two directories, one
+ * judged and one written, which is the divergence ADR 0016 names.
+ */
+export function childPath(directory: string, ...names: readonly string[]): string {
+  let spelled = withoutTrailingSeparators(directory);
+  for (const name of names)
+    spelled =
+      spelled === ''
+        ? name
+        : spelled.endsWith('/') || spelled.endsWith(path.sep)
+          ? `${spelled}${name}`
+          : `${spelled}${path.sep}${name}`;
+  return spelled;
+}
+
+/**
+ * The directory `directory` stands IN, cut at its last separator with nothing else normalized, or `undefined`
+ * when nothing stands above it. `path.dirname` would fold a surviving `..`, which is a step the kernel takes.
+ */
+export function parentDirectoryPath(directory: string): string | undefined {
+  const spelled = withoutTrailingSeparators(directory);
+  const cut = spelled.lastIndexOf('/');
+  if (cut < 0) return undefined;
+  return cut === 0 ? '/' : spelled.slice(0, cut);
+}
+
 /** The name {@link verifiedDirectoryAncestry} asks the walk about, which it never creates. */
 const CHAIN_PROBE_NAME = '.agent-device-ancestry-probe';
 
 /**
- * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the
- * first step another local user could steer. The directory it reports is where the entry gets created.
+ * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the first
+ * step another local user could steer. The directory it reports is where the entry gets created.
  *
- * No `realpath` is involved anywhere: `realpathSync` answers only with the FINAL directory, so every
- * directory stepped through can vanish from the answer, and from the judgment, whenever a link leads on
- * to another link. Each component is resolved against the directory physically reached instead:
- *
- * - `.` is skipped; `..` moves to the parent of the directory physically stood in, which is judged like
- *   any other directory. Neither one is a name that has to exist.
- * - Any other component is lstat'ed in that directory. An absent one ENDS the walk at the nearest
- *   directory the walk did reach, and the outcome says so: `ended` is `short`, `missing` is the tail
- *   below that point, and `unresolvable` is true when a `..` is queued behind that name.
- * - A directory is judged and entered. Each path is read from the host once per walk, so a `..` back over
- *   ground already crossed, or an alias of it, does not ask the host again.
- * - A symbolic link is judged itself, against the directory that physically holds it, and its target's
- *   RAW components go in front of the queue — restarting from `/` for an absolute target, continuing from
- *   the link's own directory for a relative one. Hops are counted against
- *   {@link MAX_SCRIPT_PATH_LINK_HOPS}, and crossing it is refused rather than trusted.
- * - A component that is neither a directory nor a link cannot carry a publish, and is refused.
- *
- * `parent` is the caller's own spelling, which is what both this walk and any creation it authorizes
- * resolve. `destination` appears only in refusals, which name the path the caller passed.
+ * No `realpath` is involved: it answers only with the FINAL directory, so every level stepped through can
+ * vanish from the judgment when a link leads on to another link. Each component is resolved instead against
+ * the directory physically reached — `.` skipped, `..` applied to that directory's parent, a link's RAW
+ * components queued ahead of the rest — as ADR 0016 specifies. Hops are capped at
+ * {@link MAX_SCRIPT_PATH_LINK_HOPS}; running out is a refusal, never a pass. `parent` is resolved as the
+ * caller spells it, and `destination` appears only in the refusal that names it.
  */
 function walkSpelledParent(
   parent: string,

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import { childPath } from '@agent-device/host-kit/file';
 import { resolveMetroServerUrl, type MetroReloadTargetInput } from './metro-reload-endpoints.ts';
 
 /** Reload control and the prepared device addresses that may reuse it on a fresh open. */
@@ -34,7 +35,7 @@ function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionSco
 }
 
 function metroSessionHintsPath(stateDir: string, session: string): string {
-  return path.join(stateDir, 'metro-sessions', `${safeSessionName(session)}.json`);
+  return childPath(stateDir, 'metro-sessions', `${safeSessionName(session)}.json`);
 }
 
 export function writeMetroSessionHints(

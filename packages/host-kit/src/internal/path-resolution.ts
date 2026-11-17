@@ -47,67 +47,6 @@ export function resolveUserConfigPath(env: EnvMap): string {
   return path.join(home, 'config.json');
 }
 
-/**
- * `directory` with its trailing separators cut off, which is the name an entry is actually looked up under.
- *
- * A trailing separator is not cosmetic to the kernel: `state/` is resolved THROUGH a symbolic link standing at
- * `state`, so an `lstat`, an `O_DIRECTORY | O_NOFOLLOW` open, and an `fchmod` given that name all land on the
- * far side. A caller that judges or changes an entry therefore asks about it under this spelling.
- *
- * The scan is an index walk from the end, not a regular expression, so its cost is the length of the run it
- * cuts and nothing else — no repetition in the input can make it reconsider an earlier prefix. Only this
- * platform's separator is cut: a `\` is an ordinary name character on a POSIX host, where a directory may
- * legitimately end with one, while Windows spells paths with both separators and cuts both.
- *
- * A root keeps one separator. `//` cut to the empty string would name no directory at all, and `C:\` cut to
- * `C:` names a drive-relative path that resolves against that drive's working directory.
- */
-export function withoutTrailingSeparators(directory: string): string {
-  const separator = path.sep;
-  let end = directory.length;
-  while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
-  return end === 0 && directory.length > 0 ? directory.slice(0, 1) : directory.slice(0, end);
-}
-
-/**
- * The name `name` occupies inside `directory`, spelled so it stays WHERE `directory` is.
- *
- * Deliberately NOT `path.join`, which normalizes: `join('/r/alias/../state', 'sessions')` answers
- * `/r/state/sessions`, while the kernel creates and reads that name under `/r/actual/state/sessions` — the
- * `..` steps back out of wherever the alias physically stands. Two spellings of "the same" child are worse
- * than wrong here: a repair that resolves one of them judges a directory the writer never writes into, and
- * creates and forces the mode of that one while recordings go somewhere else. Anything derived from a
- * caller-supplied state directory is appended this way; a name from {@link verifiedDirectoryPath} or
- * {@link childPath} itself needs no such care, because a physical answer has no step left to fold.
- */
-export function childPath(directory: string, ...names: readonly string[]): string {
-  let spelled = withoutTrailingSeparators(directory);
-  for (const name of names) {
-    if (spelled === '') {
-      spelled = name;
-      continue;
-    }
-    const separated = spelled.endsWith('/') || spelled.endsWith(path.sep);
-    spelled = separated ? `${spelled}${name}` : `${spelled}${path.sep}${name}`;
-  }
-  return spelled;
-}
-
-/**
- * The directory `directory` stands IN, or `undefined` when its name has no directory above it.
- *
- * This is the cut {@link verifiedDirectoryPath} resolves against: the last separator of the spelling, with
- * nothing else about it normalized. A `..` that survives this cut is a step the kernel will take, and a caller
- * that reached for `path.dirname` would be shown a different directory than the one resolution arrives at. The
- * separator is the one paths are walked with, matching {@link withoutTrailingSeparators}.
- */
-export function parentDirectoryPath(directory: string): string | undefined {
-  const spelled = withoutTrailingSeparators(directory);
-  const cut = spelled.lastIndexOf('/');
-  if (cut < 0) return undefined;
-  return cut === 0 ? '/' : spelled.slice(0, cut);
-}
-
 export function resolveDeviceClaimRoot(env: EnvMap): string {
   const override = env.AGENT_DEVICE_CLAIMS_DIR?.trim();
   if (!override) return path.join(os.homedir(), '.agent-device', 'device-claims');

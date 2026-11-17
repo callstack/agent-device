@@ -12,13 +12,62 @@ import {
   publish,
 } from './atomic-file-host.fixtures.ts';
 import {
+  childPath,
   confirmScriptDestination,
+  parentDirectoryPath,
   prepareScriptDestination,
   verifiedDirectoryAncestry,
   verifiedDirectoryPath,
+  withoutTrailingSeparators,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+
+test('withoutTrailingSeparators cuts a run of separators in linear time and keeps the root', () => {
+  // The scan is an index walk from the end, so a long run costs its own length: this is the input a
+  // polynomial regular expression would reconsider, and the reason the rule does not use one.
+  const many = '/'.repeat(200_000);
+  const started = process.hrtime.bigint();
+  expect(withoutTrailingSeparators(`${many}sessions${many}`)).toBe(`${many}sessions`);
+  expect(withoutTrailingSeparators(`${many}${many}`)).toBe('/');
+  expect(Number(process.hrtime.bigint() - started)).toBeLessThan(2_000_000_000);
+
+  expect(withoutTrailingSeparators('/')).toBe('/');
+  expect(withoutTrailingSeparators('//')).toBe('/');
+  expect(withoutTrailingSeparators('/tmp/state')).toBe('/tmp/state');
+  expect(withoutTrailingSeparators('/tmp/state//')).toBe('/tmp/state');
+  expect(withoutTrailingSeparators('state')).toBe('state');
+  expect(withoutTrailingSeparators('')).toBe('');
+  if (process.platform === 'win32') {
+    // Windows spells a drive root `C:\`, and cutting it to `C:` would name a drive-RELATIVE path.
+    expect(withoutTrailingSeparators('C:\\')).toBe('C:\\');
+    expect(withoutTrailingSeparators('C:\\state\\')).toBe(String.raw`C:\state`);
+  } else {
+    // On a POSIX host a backslash is an ordinary name character, so it is not cut.
+    expect(withoutTrailingSeparators('state\\')).toBe('state\\');
+  }
+});
+
+test('parentDirectoryPath cuts the parent without normalizing a step the kernel still has to take', () => {
+  expect(parentDirectoryPath('/r/state/sessions')).toBe('/r/state');
+  expect(parentDirectoryPath('/r/state/sessions/')).toBe('/r/state');
+  // The `..` survives: it is a step the kernel resolves against the directory physically stood in, and a
+  // caller that folded it here would be shown a different directory than the one resolution arrives at.
+  expect(parentDirectoryPath('/r/alias/../state')).toBe('/r/alias/..');
+  expect(parentDirectoryPath('/state')).toBe('/');
+  expect(parentDirectoryPath('state')).toBeUndefined();
+});
+
+test('childPath appends a name where the directory stands, and does not fold a step away', () => {
+  // `path.join` normalizes, and that is the divergence this exists to prevent: with `alias` a link to
+  // `actual/x`, the kernel creates `alias/../state/sessions` under `actual/state/sessions`, while `join`
+  // answers `state/sessions` beside the alias. A repair that judged one and a writer that used the other
+  // would each be right about a different directory.
+  expect(childPath('/r/alias/../state', 'sessions')).toBe('/r/alias/../state/sessions');
+  expect(childPath('/r/alias/../state', 'sessions')).not.toBe('/r/state/sessions');
+  expect(childPath('/r/state/', 'sessions')).toBe('/r/state/sessions');
+  expect(childPath('/r/state', 'a', 'b')).toBe(`/r/state/a${path.sep}b`);
+});
 
 /**
  * Where the rule says an entry is created, and nothing more.
