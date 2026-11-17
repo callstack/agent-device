@@ -61,7 +61,7 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "visible-to-user", Boolean.toString(node.isVisibleToUser()));
     appendDrawingOrderAttribute(xml, node);
     appendTrueAttribute(xml, "clickable", node.isClickable());
-    appendAttribute(xml, "long-clickable", Boolean.toString(node.isLongClickable()));
+    appendLongClickableAttribute(xml, node.isLongClickable());
     appendAttribute(xml, "enabled", Boolean.toString(node.isEnabled()));
     appendTrueAttribute(xml, "focusable", node.isFocusable());
     appendTrueAttribute(xml, "focused", node.isFocused());
@@ -216,6 +216,10 @@ final class AccessibilityTreeXml {
     xml.append("=\"");
     appendEscaped(xml, stringValue);
     xml.append('"');
+  }
+
+  static void appendLongClickableAttribute(StringBuilder xml, boolean longClickable) {
+    appendAttribute(xml, "long-clickable", Boolean.toString(longClickable));
   }
 
   static void appendBoundsAttribute(

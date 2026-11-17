@@ -8,6 +8,16 @@ public final class AccessibilityTreeXmlTest {
     assertBounds(
         "window-bounds", Integer.MIN_VALUE, -1, 0, Integer.MAX_VALUE,
         " window-bounds=\"[-2147483648,-1][0,2147483647]\"");
+    assertLongClickable(true, " long-clickable=\"true\"");
+    assertLongClickable(false, " long-clickable=\"false\"");
+  }
+
+  private static void assertLongClickable(boolean longClickable, String expected) {
+    StringBuilder xml = new StringBuilder();
+    AccessibilityTreeXml.appendLongClickableAttribute(xml, longClickable);
+    if (!expected.equals(xml.toString())) {
+      throw new AssertionError("Expected " + expected + ", got " + xml);
+    }
   }
 
   private static void assertBounds(
