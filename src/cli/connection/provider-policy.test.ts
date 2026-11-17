@@ -26,7 +26,7 @@ test('provider policy projects provider identity into semantic capabilities', ()
     forgetsEndedConnectionLease: true,
   });
   // BrowserStack is a plugin: without an installed one nothing declares its capabilities.
-  assert.equal(connectionProviderCapabilities('browserstack').leaseKind, 'remote-provider');
+  assert.equal(connectionProviderCapabilities('browserstack', pluginHome().env).leaseKind, 'remote-provider');
   assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
   assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
 });
