@@ -689,10 +689,17 @@ enum RetryableResponseFailure: Equatable {
 }
 
 /// A control that dismisses the screen, such as a modal's Close button. The identifier is absent when
-/// the control has none.
+/// the control has none. `pressBy` names the attribute no other button shares, which the host turns
+/// into the selector that presses it.
 struct DismissControlPayload: Codable, Equatable {
+  enum PressBy: String, Codable {
+    case label
+    case identifier
+  }
+
   let label: String
   let identifier: String?
+  let pressBy: PressBy
 }
 
 struct ErrorPayload: Codable {

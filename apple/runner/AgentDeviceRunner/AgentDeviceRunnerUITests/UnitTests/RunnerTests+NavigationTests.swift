@@ -363,7 +363,7 @@ extension RunnerTests {
       return XCTFail("a bar button titled Back must not count as the back button")
     }
     XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
-    XCTAssertEqual(payload.dismissControls, [DismissControlPayload(label: "Back", identifier: nil)])
+    XCTAssertEqual(payload.dismissControls, [DismissControlPayload(label: "Back", identifier: nil, pressBy: .label)])
     XCTAssertEqual(status.label, "Navigation root")
   }
 
@@ -906,25 +906,33 @@ extension RunnerTests {
   }
 
   /// The dismiss controls a no-change refusal names: hittable buttons in the window's top band whose
-  /// label or identifier is a dismiss name. An iPhone 17 Pro window: the band ends at 180 pt.
-  func testDismissControlCandidatesListOnlyTopBandDismissButtons() {
+  /// label or identifier is a dismiss name and no other button shares. An iPhone 17 Pro window: the band
+  /// ends at 180 pt.
+  func testDismissControlsListOnlyTopBandDismissButtons() {
     let window = CGRect(x: 0, y: 0, width: 402, height: 874)
-    func button(_ label: String, identifier: String = "", y: CGFloat = 72, hittable: Bool = true) -> TopBandButton {
-      TopBandButton(label: label, identifier: identifier, frame: CGRect(x: 366, y: y, width: 24, height: 24), isHittable: hittable)
+    func button(_ label: String, identifier: String = "", y: CGFloat = 72) -> TopBandButton {
+      TopBandButton(label: label, identifier: identifier, frame: CGRect(x: 366, y: y, width: 24, height: 24))
     }
-    XCTAssertEqual(Self.dismissControlCandidates([button("Close")], window: window), [0], "a lone Close in the band")
+    func labels(_ buttons: [TopBandButton], hittable: Set<Int>? = nil) -> [String] {
+      Self.dismissControls(buttons, window: window) { hittable?.contains($0) ?? true }.map(\.label)
+    }
     XCTAssertEqual(
-      Self.dismissControlCandidates([button("Cancel"), button("Title"), button("close")], window: window), [0, 2],
-      "both candidates are listed, in tree order")
-    XCTAssertEqual(Self.dismissControlCandidates([button("Done"), button("Save")], window: window), [], "commit words never count")
-    XCTAssertEqual(Self.dismissControlCandidates([button("Close", y: 400)], window: window), [], "a Close below the band")
-    XCTAssertEqual(Self.dismissControlCandidates([button("Close", hittable: false)], window: window), [])
+      Self.dismissControls([button("Close")], window: window) { _ in true },
+      [DismissControlPayload(label: "Close", identifier: nil, pressBy: .label)], "a lone Close in the band")
+    XCTAssertEqual(labels([button("Cancel"), button("Title"), button("close")]), ["Cancel", "close"], "both, in tree order")
+    XCTAssertEqual(labels([button("Done"), button("Save")]), [], "commit words never count")
+    XCTAssertEqual(labels([button("Close", y: 400)]), [], "a Close below the band")
+    XCTAssertEqual(labels([button("Close")], hittable: []), [], "an unhittable Close")
+    XCTAssertEqual(labels([button("Close account")]), [], "a longer label")
     XCTAssertEqual(
-      Self.dismissControlCandidates([button("", identifier: "xmark.circle.fill"), button("Close account")], window: window), [0],
-      "an xmark icon name counts, a longer label does not")
-    // The system back button is back's own target, pressed by its own path, so it is never listed.
+      labels([button("Cancel"), button("cancel", y: 600)]), [],
+      "a label another button shares is pressed by no selector alone")
     XCTAssertEqual(
-      Self.dismissControlCandidates([button("Back", identifier: Self.navigationBarBackButtonIdentifier)], window: window), [])
+      Self.dismissControls([button("", identifier: "xmark.circle.fill")], window: window) { _ in true },
+      [DismissControlPayload(label: "", identifier: "xmark.circle.fill", pressBy: .identifier)],
+      "an xmark icon identifier is pressed by it")
+    // The system back button is back's own target, pressed or declined by its own path, so it is never listed.
+    XCTAssertEqual(labels([button("Back", identifier: Self.navigationBarBackButtonIdentifier)]), [])
   }
 #endif
 

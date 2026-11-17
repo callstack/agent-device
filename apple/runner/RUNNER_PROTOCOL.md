@@ -212,17 +212,20 @@ fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. Its failure
 | `BACK_SWIPE_NO_CHANGE` | The swipe was sent and the sampled grid (48×96 grayscale cells, with the top 7 rows always left out; in portrait they hold the status bar and Dynamic Island, and in landscape the iPhone status bar is hidden and the Dynamic Island sits at a side edge, outside those rows) changed in at most 1% of the remaining cells by more than 24 of 256 levels. | The swipe |
 | `BACK_SWIPE_UNVERIFIED` | The swipe may have run, or the back button was tapped and the bar's back buttons did not change within 1 s or on one more read after it or a query on it hung; the outcome is unknown. | Possibly the swipe, or the tap |
 
-A `BACK_SWIPE_NO_CHANGE` error can carry `dismissControls`, an array of `{ "label": "Close", "identifier": "…" }`.
+A `BACK_SWIPE_NO_CHANGE` error can carry `dismissControls`, an array of `{ "label": "Close", "identifier": "…", "pressBy": "label" }`.
 The `identifier` key is absent when the control has none.
+`pressBy` is `label` when the label is the dismiss name, and `identifier` when only the identifier is.
 The runner fills it after the swipe, from one read of the buttons in the app's windows.
 That read runs only on this refusal and only when the tree is readable.
 Its snapshots start for up to 1 s.
-An entry is a hittable button whose live frame has its center in the window's top band, which is 22% of the window height, at least 96 pt and at most 180 pt.
+An entry is a hittable button whose snapshot frame has its center in the window's top band, which is 22% of the window height, at least 96 pt and at most 180 pt.
 Its label or identifier must be `back`, `close`, `cancel`, `xmark`, or an `xmark.` icon name, in any letter case.
 A `BackButton` is never listed.
+A button whose `pressBy` attribute another read button shares, compared without case, is not listed, because a selector would match both.
+The runner reads hittability only for the buttons that pass the other checks.
 The runner never presses these controls.
 With no entry, or when the read fails or hangs, the key is absent.
-The daemon publishes the list as `details.dismissControls` and adds a selector to each entry.
+The daemon publishes the list as `details.dismissControls` and adds a selector to each entry: `role=button label="…"` or `id="…"`.
 
 The swipe is first resolved up to its contact. Then the settle window is a run of samples, with a
 0.05 s pause between captures plus each capture's own time, that agree for the still span: a contact

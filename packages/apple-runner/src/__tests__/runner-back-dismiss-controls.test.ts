@@ -12,7 +12,7 @@ function backRefusal(code: string, dismissControls?: unknown) {
 }
 
 test('a back swipe that changed nothing publishes its lone dismiss control and names it in the hint', () => {
-  const error = backRefusal('BACK_SWIPE_NO_CHANGE', [{ label: 'Close' }]);
+  const error = backRefusal('BACK_SWIPE_NO_CHANGE', [{ label: 'Close', pressBy: 'label' }]);
   assert.equal(error.details?.reason, 'back_swipe_no_change');
   assert.deepEqual(error.details?.dismissControls, [
     { selector: 'role=button label="Close"', label: 'Close' },
@@ -23,9 +23,9 @@ test('a back swipe that changed nothing publishes its lone dismiss control and n
   );
 });
 
-test('a dismiss control with an identifier is selected by it', () => {
+test('a dismiss control pressed by its identifier is selected by it', () => {
   const error = backRefusal('BACK_SWIPE_NO_CHANGE', [
-    { label: 'xmark', identifier: 'sheet-close' },
+    { label: 'xmark', identifier: 'sheet-close', pressBy: 'identifier' },
   ]);
   assert.deepEqual(error.details?.dismissControls, [
     { selector: 'id="sheet-close"', label: 'xmark', identifier: 'sheet-close' },
@@ -33,16 +33,26 @@ test('a dismiss control with an identifier is selected by it', () => {
 });
 
 test('two dismiss controls are both published and the hint points at the list', () => {
-  const error = backRefusal('BACK_SWIPE_NO_CHANGE', [{ label: 'Cancel' }, { label: 'Close' }]);
-  assert.deepEqual(
-    (error.details?.dismissControls as { label: string }[]).map((control) => control.label),
-    ['Cancel', 'Close'],
-  );
+  const error = backRefusal('BACK_SWIPE_NO_CHANGE', [
+    { label: 'Cancel', pressBy: 'label' },
+    { label: 'Close', identifier: 'modal-close', pressBy: 'label' },
+  ]);
+  assert.deepEqual(error.details?.dismissControls, [
+    { selector: 'role=button label="Cancel"', label: 'Cancel' },
+    { selector: 'role=button label="Close"', label: 'Close', identifier: 'modal-close' },
+  ]);
   assert.match(String(error.details?.hint), /one of details\.dismissControls/);
 });
 
 test('without dismiss controls the refusal keeps the runner hint and publishes no list', () => {
-  for (const controls of [undefined, [], [{ identifier: 7 }], 'Close']) {
+  for (const controls of [
+    undefined,
+    [],
+    [{ identifier: 7 }],
+    'Close',
+    [{ label: 'Close' }],
+    [{ label: 'Close', pressBy: 'identifier' }],
+  ]) {
     const error = backRefusal('BACK_SWIPE_NO_CHANGE', controls);
     assert.equal(error.details?.dismissControls, undefined);
     assert.equal(error.details?.hint, RUNNER_HINT);
@@ -50,7 +60,7 @@ test('without dismiss controls the refusal keeps the runner hint and publishes n
 });
 
 test('only the no-change refusal publishes dismiss controls', () => {
-  const error = backRefusal('BACK_SWIPE_UNVERIFIED', [{ label: 'Close' }]);
+  const error = backRefusal('BACK_SWIPE_UNVERIFIED', [{ label: 'Close', pressBy: 'label' }]);
   assert.equal(error.details?.dismissControls, undefined);
   assert.equal(error.details?.hint, RUNNER_HINT);
 });

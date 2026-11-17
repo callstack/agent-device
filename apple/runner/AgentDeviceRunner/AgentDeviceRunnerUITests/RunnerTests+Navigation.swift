@@ -676,19 +676,21 @@ extension RunnerTests {
     return dismissControlWords.contains(word) || word == "xmark" || word.hasPrefix("xmark.")
   }
 
-  /// Narrows the button query to the dismiss names; `isDismissControlName` decides.
+  /// Matches the buttons `isDismissControlName` accepts, so every button that shares a dismiss
+  /// control's label or identifier is read too.
   static let dismissControlPredicate: NSPredicate = {
     let names = dismissControlWords.sorted() + ["xmark"]
-    let clauses = names.flatMap { _ in ["label BEGINSWITH[c] %@", "identifier BEGINSWITH[c] %@"] }
-    return NSPredicate(format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] })
+    let clauses = names.flatMap { _ in ["label ==[c] %@", "identifier ==[c] %@"] }
+      + ["label BEGINSWITH[c] %@", "identifier BEGINSWITH[c] %@"]
+    return NSPredicate(
+      format: clauses.joined(separator: " OR "), argumentArray: names.flatMap { [$0, $0] } + ["xmark.", "xmark."])
   }()
 
-  /// One button the dismiss control read found, with its live frame in screen points.
+  /// One button the dismiss control read found, with its snapshot frame in the window's own space.
   struct TopBandButton {
     let label: String
     let identifier: String
     let frame: CGRect
-    let isHittable: Bool
   }
 
   /// The app window's top band, where a bar or header holds its controls and content does not:
@@ -701,22 +703,42 @@ extension RunnerTests {
     return candidate.midY >= window.minY && candidate.midY <= maxY
   }
 
-  /// The dismiss controls a caller may press: the hittable buttons in the top band of `window` whose
-  /// label or identifier is a dismiss name, in tree order. The system back button is never one, since
-  /// back itself presses it.
-  static func dismissControlCandidates(_ buttons: [TopBandButton], window: CGRect) -> [Int] {
-    buttons.indices.filter { index in
+  /// The dismiss controls a caller may press, in tree order: the buttons in the top band of `window`
+  /// whose label, or else identifier, is a dismiss name, pressed by that attribute. A button that
+  /// shares that attribute with another button is left out, because no selector presses it alone; so
+  /// is a system back button, which back's own path presses or declines. `isHittable` is asked last,
+  /// since each answer is an XCTest query.
+  static func dismissControls(
+    _ buttons: [TopBandButton],
+    window: CGRect,
+    isHittable: (Int) -> Bool
+  ) -> [DismissControlPayload] {
+    func attribute(_ index: Int, _ pressBy: DismissControlPayload.PressBy) -> String {
+      (pressBy == .label ? buttons[index].label : buttons[index].identifier).lowercased()
+    }
+    return buttons.indices.compactMap { index in
       let button = buttons[index]
-      return button.isHittable && button.identifier != navigationBarBackButtonIdentifier
-        && isTopNavigationControlFrame(button.frame, in: window)
-        && (isDismissControlName(button.label) || isDismissControlName(button.identifier))
+      guard button.identifier != navigationBarBackButtonIdentifier,
+        isTopNavigationControlFrame(button.frame, in: window) else { return nil }
+      let pressBy: DismissControlPayload.PressBy
+      if isDismissControlName(button.label) {
+        pressBy = .label
+      } else if isDismissControlName(button.identifier) {
+        pressBy = .identifier
+      } else {
+        return nil
+      }
+      let shared = buttons.indices.contains { $0 != index && attribute($0, pressBy) == attribute(index, pressBy) }
+      guard !shared, isHittable(index) else { return nil }
+      return DismissControlPayload(
+        label: button.label, identifier: button.identifier.isEmpty ? nil : button.identifier, pressBy: pressBy)
     }
   }
 
   /// The dismiss controls for a `BACK_SWIPE_NO_CHANGE` refusal, read once after the swipe. It runs
   /// only on that refusal, so a back that navigates pays nothing for it. Nil when there are none, or
-  /// when the tree is not readable, a read fails, or a query hangs: the list is advice, and back
-  /// refuses the same either way.
+  /// when the tree is not readable, a read fails, its 1 s budget runs out, or a query hangs: the list
+  /// is advice, and back refuses the same either way.
   @MainActor
   private func topBandDismissControls(
     app: XCUIApplication,
@@ -724,7 +746,9 @@ extension RunnerTests {
   ) -> [DismissControlPayload]? {
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let deadlineMs = currentUptimeMs() + Self.navigationBarBackReadBudgetMs
-    let read = heldNavigationBarRead(.dismissControlLookup) { () -> [TopBandButton]? in
+    // Snapshot frames are in the window's own space, which a placed iPad window starts off the screen origin.
+    let window = CGRect(origin: .zero, size: context.geometry.windowOnScreen.rect.size)
+    let read = heldNavigationBarRead(.dismissControlLookup) { () -> [DismissControlPayload]? in
       guard let roots = try? elementSearchRoots(root: app, litDisplayID: requestLitPanel?.displayID) else { return nil }
       let elements = roots.flatMap {
         $0.descendants(matching: .button).matching(Self.dismissControlPredicate).allElementsBoundByIndex
@@ -732,16 +756,12 @@ extension RunnerTests {
       var buttons: [TopBandButton] = []
       for element in elements {
         guard currentUptimeMs() < deadlineMs, let snapshot = try? element.snapshot() else { return nil }
-        buttons.append(TopBandButton(
-          label: snapshot.label, identifier: snapshot.identifier, frame: element.frame, isHittable: element.isHittable))
+        buttons.append(TopBandButton(label: snapshot.label, identifier: snapshot.identifier, frame: snapshot.frame))
       }
-      return buttons
+      return Self.dismissControls(buttons, window: window) { elements[$0].isHittable }
     }
-    guard case .read(let buttons) = read else { return nil }
-    let controls = Self.dismissControlCandidates(buttons, window: context.geometry.windowOnScreen.rect).map {
-      DismissControlPayload(label: buttons[$0].label, identifier: buttons[$0].identifier.isEmpty ? nil : buttons[$0].identifier)
-    }
-    return controls.isEmpty ? nil : controls
+    guard case .read(let controls) = read, !controls.isEmpty else { return nil }
+    return controls
   }
 
   @MainActor

@@ -568,9 +568,10 @@ export type RunnerResponsePayload = {
 export type BackDismissControl = Readonly<{ selector: string; label: string; identifier?: string }>;
 
 /**
- * The dismiss controls the runner names on a `BACK_SWIPE_NO_CHANGE` refusal, each with its selector:
- * the identifier when the control has one, otherwise its button role and label. Other codes, and
- * entries that are not `{ label, identifier? }` objects, publish nothing.
+ * The dismiss controls the runner names on a `BACK_SWIPE_NO_CHANGE` refusal, each with its selector.
+ * The runner's `pressBy` names the attribute no other button shares: `identifier` becomes `id=`, and
+ * `label` becomes the button role and label. Other codes, and entries that are not
+ * `{ label, identifier?, pressBy }` objects, publish nothing.
  */
 function readBackDismissControls(
   runnerErrorCode: string | undefined,
@@ -581,12 +582,20 @@ function readBackDismissControls(
   if (!Array.isArray(entries)) return [];
   return entries.flatMap((entry: unknown): BackDismissControl[] => {
     if (typeof entry !== 'object' || entry === null) return [];
-    const { label, identifier } = entry as { label?: unknown; identifier?: unknown };
+    const { label, identifier, pressBy } = entry as {
+      label?: unknown;
+      identifier?: unknown;
+      pressBy?: unknown;
+    };
     if (typeof label !== 'string') return [];
     const id = typeof identifier === 'string' && identifier.length > 0 ? identifier : undefined;
-    if (id === undefined && label.length === 0) return [];
     const selector =
-      id === undefined ? `role=button label=${JSON.stringify(label)}` : `id=${JSON.stringify(id)}`;
+      pressBy === 'identifier' && id !== undefined
+        ? `id=${JSON.stringify(id)}`
+        : pressBy === 'label' && label.length > 0
+          ? `role=button label=${JSON.stringify(label)}`
+          : undefined;
+    if (selector === undefined) return [];
     return [{ selector, label, ...(id === undefined ? {} : { identifier: id }) }];
   });
 }
