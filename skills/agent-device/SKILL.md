@@ -17,6 +17,8 @@ Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <dire
 
 For exploratory QA or accessibility checks, read `agent-device help dogfood`; its platform checks run `agent-device audit`.
 
+For an accessibility review of a whole app, read `agent-device help accessibility`.
+
 Reaching an off-screen target is one command, not a scroll-and-check loop: `scroll down --until <selector>` scrolls until that element is on screen, and `scroll bottom` runs to the end of the content. Repeated bare `scroll down` calls are the slow way to find something.
 
 Copy refs byte-for-byte: `@e12`, `@e12~s4` — keep the `@` and any `~sN`. Prefer current refs, then `id`/`label`/`role` selectors; coordinates are a last resort. If snapshot reports sparse/AX-unavailable, its refs and selectors are invalid: run `agent-device screenshot`, inspect the image, use coordinates, then retry `snapshot -i` after navigating. Otherwise run `snapshot -i` only when the diff lacks the next target.

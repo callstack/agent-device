@@ -54,7 +54,7 @@ More commands (exact shapes: agent-device help <command>):
 
 Guides (agent-device help <topic>):
   workflow    full refs, selectors, waits, recovery, and platform limits
-  manual-qa / dogfood / validate / debugging / scripting / gestures
+  manual-qa / dogfood / accessibility / validate / debugging / scripting / gestures
   react-native / react-devtools / cdp / tv / web / macos / remote
   physical-device / ios-system-ui / maestro
   foldable    iPhone Duo panels, the fold command, and why refs die on a pose change

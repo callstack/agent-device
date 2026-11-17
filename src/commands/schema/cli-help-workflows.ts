@@ -199,6 +199,44 @@ React Native internals:
 } as const;
 
 export const qaReportHelpTopics = {
+  accessibility: {
+    summary: 'Whole-app accessibility review with audit and device-setting checks',
+    body: `agent-device help accessibility
+
+Use this when asked for an accessibility review, a11y audit, or a screen-reader or touch-target check of an app.
+
+Scope:
+  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, and covered controls.
+  This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance.
+
+Loop for each screen:
+  1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
+  2. Run agent-device audit, then agent-device snapshot -i. Audit captures the screen itself, so it goes first.
+  3. Record each finding with its ref, element name, and kind. Act on the pinned refs (@eN~sG) that audit prints, or on refs from that snapshot.
+  4. Capture evidence: agent-device screenshot ./a11y-output/<screen>.png --overlay-refs
+
+Coverage:
+  Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state.
+  Audit covers the visible screen only. On a long list, run agent-device scroll down 0.8, then run audit again.
+
+Checks audit cannot do:
+  Large text: run agent-device settings text-size accessibility-extra-extra-extra-large, then agent-device open <app> --relaunch. The app adopts the size only after a relaunch.
+    Then run audit and screenshot each key screen. Look for clipped, truncated, or overlapping text.
+    At the end, run agent-device settings text-size large.
+  Dark mode: run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
+    At the end, run agent-device settings appearance light.
+  Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
+    A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
+  Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
+
+Fix loop (only when the user asks to fix):
+  Change the app source, then reload (Fast Refresh, or agent-device open <app> --relaunch).
+  Run audit again on the same screen and confirm the finding is gone. Report the before and after audit output.
+
+Report:
+  Group findings by screen. For each finding, give the kind, element name, ref, screenshot path, and suggested fix.
+  List the checks you could not do.`,
+  },
   dogfood: {
     summary: 'Exploratory QA workflow with reproducible evidence',
     body: `agent-device help dogfood
@@ -220,6 +258,7 @@ Loop:
 
 Platform checks:
   On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Act on the refs from that snapshot, or on the pinned refs (@eN~sG) audit prints. Report audit's findings as accessibility findings.
+  For a whole-app accessibility review, read help accessibility.
   On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
   When the app autosaves, discards explicitly, requires the flow, or presents the surface as nondismissible, skip that probe.

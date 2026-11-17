@@ -85,6 +85,21 @@ test('usageForCommand resolves validate help topic', async () => {
   assert.match(help, /Runner reuse is authorized only by the cache metadata's content manifest/);
 });
 
+test('usageForCommand resolves accessibility help topic', async () => {
+  const help = await usageForCommand('accessibility');
+  if (help === null) throw new Error('Expected accessibility help text');
+  assert.match(help, /^agent-device \S+ — accessibility/);
+  assert.match(help, /Do not claim compliance/);
+  assert.match(help, /Audit captures the screen itself, so it goes first/);
+  assert.match(help, /agent-device settings text-size accessibility-extra-extra-extra-large/);
+  assert.match(help, /agent-device open <app> --relaunch/);
+  assert.match(help, /agent-device settings text-size large/);
+  assert.match(help, /agent-device settings appearance dark/);
+  assert.match(help, /agent-device settings appearance light/);
+  assert.match(help, /agent-device scroll down 0\.8, then run audit again/);
+  assert.match(help, /Group findings by screen/);
+});
+
 test('usageForCommand resolves dogfood help topic', async () => {
   const help = await usageForCommand('dogfood');
   if (help === null) throw new Error('Expected dogfood help text');
