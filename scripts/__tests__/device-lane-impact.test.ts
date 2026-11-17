@@ -9,7 +9,13 @@ import { selectDeviceLane } from '../device-lane-impact.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-type Step = { id?: string; name?: string; if?: string; run?: string };
+type Step = { id?: string; name?: string; if?: string; run?: string; parallel?: Step[] };
+
+// A parallel group carries steps instead of being one, so each member keeps the gate of the step
+// the group replaced.
+function flattenSteps(steps: Step[]): Step[] {
+  return steps.flatMap((step) => (step.parallel ? flattenSteps(step.parallel) : [step]));
+}
 
 function jobSteps(workflow: string, job: string): Step[] {
   const doc = parse(
@@ -17,7 +23,7 @@ function jobSteps(workflow: string, job: string): Step[] {
   ) as {
     jobs: Record<string, { steps: Step[] }>;
   };
-  return doc.jobs[job]!.steps;
+  return flattenSteps(doc.jobs[job]!.steps);
 }
 
 const LANES = {
