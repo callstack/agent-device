@@ -1,10 +1,10 @@
 import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
+import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { type RunHostCommand } from '@agent-device/provider-webdriver';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -62,19 +62,15 @@ test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', asy
 test('WebDriver session creation is not retried on transient provider failures', async () => {
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {
     server.sessionFailuresRemaining = 1;
-    const runtime = providerRuntimeFor(
-      await createBundledCloudWebDriverRuntimes({
-        env: {
-          BROWSERSTACK_USERNAME: 'user',
-          BROWSERSTACK_ACCESS_KEY: 'key',
-          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-        },
-        clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
-        runHostCommand: unexpectedHostCommand,
-      }),
-      CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    );
-    const lease = providerRegressionLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
+    const runtime = await createBrowserStackRuntime({
+      env: {
+        BROWSERSTACK_USERNAME: 'user',
+        BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      },
+      clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
+    });
+    const lease = providerRegressionLease(BROWSERSTACK_PROVIDER);
     try {
       await assert.rejects(
         () => runtime.leaseLifecycle.allocate!(lease, browserStackRegressionContext()),
@@ -233,15 +229,16 @@ test('BrowserStack iOS snapshot reaches one shared presenter and public daemon o
   await withProviderScenarioResource(
     () => ProviderRegressionServer.start('ios'),
     async (server) => {
-      const runtimes = await createBundledCloudWebDriverRuntimes({
-        env: {
-          BROWSERSTACK_USERNAME: 'user',
-          BROWSERSTACK_ACCESS_KEY: 'key',
-          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-        },
-        clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
-        runHostCommand: unexpectedHostCommand,
-      });
+      const runtimes = [
+        await createBrowserStackRuntime({
+          env: {
+            BROWSERSTACK_USERNAME: 'user',
+            BROWSERSTACK_ACCESS_KEY: 'key',
+            BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          },
+          clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
+        }),
+      ];
       const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
       const daemon = await createProviderScenarioHarness({
         ...providers,
@@ -312,17 +309,13 @@ test('BrowserStack iOS snapshot reaches one shared presenter and public daemon o
   );
 });
 
-const unexpectedHostCommand: RunHostCommand = async () => {
-  throw new Error('unexpected host command');
-};
-
 function browserStackIosFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return {
     platform: 'ios',
     tenant: 'team-a',
     runId: 'run-a',
     leaseId,
-    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    leaseProvider: BROWSERSTACK_PROVIDER,
     device: 'iPhone 15',
     providerApp: 'bs://preuploaded',
     providerOsVersion: '17.0',
@@ -338,7 +331,7 @@ function browserStackIosMeta(leaseId?: string): DaemonWireRequest['meta'] {
     runId: 'run-a',
     leaseId,
     leaseBackend: 'ios-instance',
-    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    leaseProvider: BROWSERSTACK_PROVIDER,
     deviceKey: 'webdriver-ios-a',
     clientId: 'client-a',
   };

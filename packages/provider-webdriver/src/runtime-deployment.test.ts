@@ -3,8 +3,8 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createBrowserStackUploadApp } from './browserstack.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
+import { appFileUploadForm, createHubUploadApp } from './webdriver-utils.ts';
 import { createWebDriverDeploymentRuntime } from './runtime-deployment.ts';
 import type { WebDriverProviderSession } from './runtime-session.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
@@ -134,12 +134,13 @@ test('a hosted upload refuses a directory typed before any upload request', asyn
     globalThis.fetch = fetchSpy;
     const installApp = vi.fn(async () => undefined);
     const deployment = createWebDriverDeploymentRuntime({
-      provider: 'browserstack',
-      uploadApp: createBrowserStackUploadApp({
-        clientVersion: '0.0.0-test',
-        username: 'user',
-        accessKey: 'key',
-        endpoint: 'https://upload.example.test/app',
+      provider: 'webdriver-test',
+      uploadApp: createHubUploadApp(async (appPath) => {
+        await appFileUploadForm(appPath, 'file', {
+          provider: 'webdriver-test',
+          service: 'Hub',
+        });
+        return 'hub://uploaded';
       }),
       findSessionForDevice: () => activeSession(installApp),
     });
@@ -152,8 +153,8 @@ test('a hosted upload refuses a directory typed before any upload request', asyn
       ),
     ).rejects.toMatchObject({
       code: 'INVALID_ARGS',
-      message: `BrowserStack can only upload a regular app file: ${installablePath}`,
-      details: expect.objectContaining({ provider: 'browserstack' }),
+      message: `Hub can only upload a regular app file: ${installablePath}`,
+      details: expect.objectContaining({ provider: 'webdriver-test' }),
     });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(installApp).not.toHaveBeenCalled();
