@@ -5,8 +5,6 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 
 const DAEMON_BASE_URL = 'https://agent-device.test/agent-device';
-const DEVICES_URL = 'https://api-cloud.browserstack.com/app-automate/devices.json';
-const APPS_URL = 'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100';
 const rpcLogPath = process.env.AGENT_DEVICE_TEST_RPC_LOG_PATH;
 
 if (rpcLogPath) installFixture(rpcLogPath);
@@ -19,14 +17,6 @@ function installFixture(logPath) {
 
 function createFixtureFetch(logPath) {
   const routes = [
-    route('GET', DEVICES_URL, () =>
-      jsonResponse([
-        { os: 'android', os_version: '14.0', device: 'Google Pixel 8', realMobile: true },
-      ]),
-    ),
-    route('GET', APPS_URL, () =>
-      jsonResponse([{ app_name: 'sample.apk', app_version: '1.2.3', app_url: 'bs://app-id' }]),
-    ),
     route('GET', `${DAEMON_BASE_URL}/health`, () =>
       jsonResponse({
         ok: true,
@@ -104,7 +94,7 @@ async function fetchNodeResponse(fixtureFetch, options, chunks) {
 const RPC_METHOD_RESPONSES = {
   'agent_device.lease.allocate': (params) => ({
     lease: {
-      leaseId: 'lease-bs-1',
+      leaseId: 'lease-smoke-1',
       tenantId: params.tenantId,
       runId: params.runId,
       backend: params.backend,
@@ -115,7 +105,7 @@ const RPC_METHOD_RESPONSES = {
   }),
   'agent_device.lease.release': () => ({
     released: true,
-    provider: { provider: 'browserstack', providerSessionId: 'bs-session-1' },
+    provider: { provider: 'smoke-cloud', providerSessionId: 'smoke-session-1' },
   }),
 };
 
@@ -127,11 +117,11 @@ const COMMAND_RESPONSES = {
     platform: 'android',
     target: 'mobile',
     device: 'Pixel',
-    id: 'browserstack-pixel',
-    serial: 'browserstack-pixel',
+    id: 'smoke-cloud-pixel',
+    serial: 'smoke-cloud-pixel',
   }),
   close: () => ({
-    provider: { provider: 'browserstack', providerSessionId: 'bs-session-1' },
+    provider: { provider: 'smoke-cloud', providerSessionId: 'smoke-session-1' },
   }),
 };
 

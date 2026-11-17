@@ -4,10 +4,12 @@ import { readDaemonProviderCredentials as daemonCredentialsFor } from './provide
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
+import { browserstackPluginInventory } from './__tests__/test-utils/browserstack-plugin-inventory.ts';
 import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 import { BUILTIN_PROVIDER_IDS } from './builtin-provider-ids.ts';
 
-const inventory = await builtinPluginInventory();
+// BrowserStack is an installed plugin, so its credential variables come from its own inventory entry.
+const inventory = [...(await builtinPluginInventory()), ...(await browserstackPluginInventory())];
 const providerCredentialFingerprint = (
   provider: string,
   env: EnvMap,
