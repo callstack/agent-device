@@ -20,7 +20,7 @@ import {
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { isActiveProviderDevice } from '../../core/provider-device-admission.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
-import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(),
@@ -372,4 +372,100 @@ test('an allocated proxy session keeps its emulator when multiple local devices 
   );
   expect(selected).toEqual(held);
   expect(local).not.toHaveBeenCalled();
+});
+
+// A fresh port per request: a resolved session device is pinned on its port for that request.
+const requestServices = () =>
+  daemonPlatformServicesFixture({
+    appleSessionObservation: {
+      observeRunnerSession: mockObserveRunnerSession,
+      resolveSoleForegroundApp: async () => undefined,
+    },
+  });
+
+const udidSession: SessionState = {
+  ...iosSimulatorSession,
+  device: { ...iosSimulatorSession.device, booted: true },
+};
+
+test('an explicit udid that names the session device resolves from the session without an inventory read', async () => {
+  mockObserveRunnerSession.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: true });
+
+  const device = await withMockedPlatform('darwin', async () =>
+    resolveCommandDevice({
+      session: udidSession,
+      req: requestWith({ platform: 'ios', udid: 'sim-1' }),
+      env: process.env,
+      platformServices: requestServices(),
+    }),
+  );
+
+  expect(device).toEqual({ ...udidSession.device, booted: true });
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+});
+
+test('an explicit udid for another device still reads the inventory', async () => {
+  const other = { ...udidSession.device, id: 'sim-2', name: 'iPhone 17e' };
+  mockResolveTargetDevice.mockResolvedValue(other);
+
+  const device = await withMockedPlatform('darwin', async () =>
+    resolveCommandDevice({
+      session: udidSession,
+      req: requestWith({ platform: 'ios', udid: 'sim-2' }),
+      env: process.env,
+      platformServices: requestServices(),
+    }),
+  );
+
+  expect(device).toBe(other);
+  expect(mockObserveRunnerSession).not.toHaveBeenCalled();
+  expect(mockResolveTargetDevice).toHaveBeenCalledOnce();
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { platform: 'ios', udid: 'sim-2' },
+    expect.objectContaining({ env: process.env }),
+  );
+});
+
+test('an explicit udid that names a gone session device is refused, never replaced by a same-name device', async () => {
+  mockObserveRunnerSession.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: false });
+  mockResolveTargetDevice.mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'No iOS simulator matches sim-1'),
+  );
+
+  await expect(
+    withMockedPlatform('darwin', async () =>
+      resolveCommandDevice({
+        session: udidSession,
+        req: requestWith({ platform: 'ios', udid: 'sim-1' }),
+        env: process.env,
+        platformServices: requestServices(),
+      }),
+    ),
+  ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
+  expect(mockResolveTargetDevice).toHaveBeenCalledOnce();
+});
+
+test('an explicit udid that names the session device still honors the request device pin', async () => {
+  mockObserveRunnerSession.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: true });
+  const req: DaemonRequest = {
+    ...requestWith({ platform: 'ios', udid: 'sim-1' }),
+    meta: {
+      devicePin: {
+        source: { kind: 'project', path: '/tmp/agent-device.json' },
+        selector: { udid: 'sim-9' },
+      },
+    },
+  };
+
+  await expect(
+    withMockedPlatform('darwin', async () =>
+      resolveCommandDevice({
+        session: udidSession,
+        req,
+        env: process.env,
+        platformServices: requestServices(),
+      }),
+    ),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
 });

@@ -60,14 +60,27 @@ export async function resolveCommandDevice(params: {
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
   const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
-  const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.req.flags);
-  if (!shouldUseExplicitIdentity && params.session && (!scope.leaseProvider || scope.leaseId)) {
+  const { session } = params;
+  const explicitIdentity = hasExplicitDeviceSelector(params.req.flags);
+  // An explicit selector that names the session's own device resolves from the session like an
+  // unselected request; any other selector reads the inventory and keeps its refusals.
+  if (
+    session &&
+    (!scope.leaseProvider || scope.leaseId) &&
+    (!explicitIdentity || selectorTargetsSessionDevice(params.req.flags, session))
+  ) {
     const selected = await refreshSessionDeviceIfNeeded(
-      params.session.device,
+      session.device,
       params.platformServices,
       params.env,
+      { followRename: !explicitIdentity },
     );
-    pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
+    if (explicitIdentity && params.req.meta?.devicePin) {
+      const { assertDeviceHonorsPin } =
+        await import('@agent-device/device-selection/device-selection-resolver');
+      assertDeviceHonorsPin(params.req.meta.devicePin, selected, params.req.flags);
+    }
+    pinSessionDeviceSelection(params.platformServices, session.device, selected);
     return selected;
   }
   const device = await resolveRequestTargetDevice(
@@ -102,6 +115,7 @@ export async function refreshSessionDeviceIfNeeded(
   device: DeviceInfo,
   platformServices: DaemonPlatformServices,
   env: EnvMap,
+  options: { followRename: boolean } = { followRename: true },
 ): Promise<DeviceInfo> {
   const pinned = pinnedSessionDevices.get(platformServices);
   if (pinned?.originalId === device.id) return pinned.selected;
@@ -130,7 +144,12 @@ export async function refreshSessionDeviceIfNeeded(
   try {
     return await resolveTargetDevice(exactSelector, { env });
   } catch (error) {
-    if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') {
+    // A UDID the caller named explicitly is refused when gone, never replaced by a same-name device.
+    if (
+      !options.followRename ||
+      !(error instanceof AppError) ||
+      error.code !== 'DEVICE_NOT_FOUND'
+    ) {
       throw error;
     }
   }
