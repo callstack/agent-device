@@ -277,7 +277,7 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
 }
 
 /**
- * Creates one of the daemon's own state directories, and repairs one that already exists, to 0700.
+ * Creates one of the daemon's own state directories, and forces the mode of one that exists, to 0700.
  *
  * Every directory on the chain of a script destination the daemon picks for itself — the state dir,
  * `sessions/`, `remote-scripts/` — is judged by the destination-ancestry rule on the way to a recording
@@ -286,9 +286,10 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
  * remote-delivered version. Creation carries the mode and the repair forces it, because a state dir an older
  * version created at 0775 is the same refusal.
  *
- * A level that is not a directory this process owns is REFUSED rather than repaired (#4565): a repair that
- * chmods by pathname reaches through a planted link, so a root daemon starting against a legacy writable
- * state directory would change the mode of a directory another user owns.
+ * The repair is BEST-EFFORT and never refuses (#4565): it forces the mode on a level this uid owns and
+ * changes nothing about any other, so a state directory on a mounted volume, or one another uid left at
+ * 0755, still gets a daemon that starts. A recording under ground the daemon does not own is refused by the
+ * destination walk, which is where the entry is actually created.
  *
  * Returns the path so a caller can name what it just made without a second `mkdir` of its own.
  */
@@ -322,13 +323,17 @@ function createdStateLevels(
 const STATE_DIR_MODE = 0o700;
 
 /**
- * Forces one state level to the private mode, or refuses it and changes NOTHING.
+ * Forces one existing state level to {@link STATE_DIR_MODE}, or changes nothing and says why.
  *
- * `chmod` by pathname acts on whatever the NAME resolves to, so repairing a legacy state directory that was
- * writable by others is not safe on its own: another user who could write it can leave a link at `sessions`,
- * and a root daemon asked to repair that name would change the mode of a directory they own. So the level is
- * judged by this call's own `lstat` — the ENTRY under the name — before anything is forced, and only a level
- * that is a directory, and is not already private, reaches {@link forcePrivateStateDir}.
+ * `chmod` given the NAME acts on whatever the name resolves to, so the mode is applied through a descriptor
+ * opened `O_DIRECTORY | O_NOFOLLOW` and only after that descriptor's `fstat` says this uid owns the entry: a
+ * root daemon repairing a legacy state directory another local user could write would otherwise reach through
+ * a `sessions` they left as a link, and strip access from an owner who never ran the daemon.
+ *
+ * Every case that cannot be forced is a SKIP with a diagnostic, not a refusal — a link, a name that is not a
+ * directory, a level another uid owns, and a mount that denies the open or the chmod. This function never
+ * throws for them: it decides a mode, never whether the daemon starts (ADR 0016), and the destination walk is
+ * the only thing that refuses a recording.
  */
 function repairPrivateStateDir(directory: string): void {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
@@ -336,101 +341,51 @@ function repairPrivateStateDir(directory: string): void {
   const judged = fs.lstatSync(directory, { bigint: true, throwIfNoEntry: false });
   // The name is gone by now: whatever removed it also removed the mode this call came to force.
   if (judged === undefined) return;
-  // A LINK is refused even where its target is already private: the name is what this call was handed, and
-  // a link under it was put there by whoever could write this directory.
-  if (!judged.isDirectory()) throw privateStateRefusal(directory, 'state_dir_not_a_directory');
-  // Already private, so nothing is changed and nobody's ownership has to be asked.
+  // The fast path: a level that already has the mode needs nothing, and asking nothing of the mount keeps
+  // the common start free of an open.
   if ((Number(judged.mode) & 0o777) === STATE_DIR_MODE) return;
-  forcePrivateStateDir(directory, judged);
-}
-
-/**
- * Applies {@link STATE_DIR_MODE} to the entry the name holds, through a descriptor opened on that name.
- *
- * Ownership is judged from the `lstat`, as the destination-ancestry rule judges ground: a root daemon
- * therefore repairs root-owned state and leaves a directory another user owns alone, rather than making it
- * unreachable to them. The descriptor's `fstat` must answer the entry the `lstat` judged, so the mode cannot
- * land on something put behind the name in between.
- */
-function forcePrivateStateDir(directory: string, judged: fs.BigIntStats): void {
-  if (!thisUsersEntry(judged)) throw privateStateRefusal(directory, 'state_dir_foreign_owned');
   let descriptor: number | undefined;
   try {
-    descriptor = openStateEntry(directory);
-    const opened = fs.fstatSync(descriptor, { bigint: true });
-    if (!sameStateEntry(opened, judged)) {
-      throw privateStateRefusal(directory, 'state_dir_entry_replaced');
-    }
-    if (!thisUsersEntry(opened)) {
-      throw privateStateRefusal(directory, 'state_dir_foreign_owned');
+    descriptor = fs.openSync(
+      directory,
+      fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
+    );
+    if (Number(fs.fstatSync(descriptor, { bigint: true }).uid) !== (process.getuid?.() ?? -1)) {
+      skipStateDirMode(directory, 'not owned by this user');
+      return;
     }
     fs.fchmodSync(descriptor, STATE_DIR_MODE);
   } catch (error) {
-    if (error instanceof AppError) throw error;
-    // `EACCES` says the directory does not even let THIS user open it (a state directory left at 0000): no
-    // descriptor exists to force the mode with, and startup must not fail on a host it cannot fix.
-    if (!STATE_DIR_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? ''))
-      throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_state_mode_repair_skipped',
-      data: { path: directory, error: normalizeError(error) },
-    });
+    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    skipStateDirMode(directory, (error as NodeJS.ErrnoException).code ?? 'unknown');
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 
-/** Whether an entry belongs to the user this process runs as. */
-function thisUsersEntry(stats: fs.BigIntStats): boolean {
-  return Number(stats.uid) === (process.getuid?.() ?? -1);
+/** Reports the one state level whose mode this repair will not change. */
+function skipStateDirMode(directory: string, because: string): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'daemon_state_mode_repair_skipped',
+    data: { path: directory, error: { message: `state level kept as it is: ${because}` } },
+  });
 }
 
-/** Whether a descriptor answers the same entry an `lstat` judged. */
-function sameStateEntry(opened: fs.BigIntStats, judged: fs.BigIntStats): boolean {
-  return `${opened.dev}:${opened.ino}` === `${judged.dev}:${judged.ino}`;
-}
-
-/** A repair that cannot be done now, on top of what a mode repair may never fail the daemon on. */
-const STATE_DIR_REPAIR_SKIPPED_CODES = new Set([
+/**
+ * What a mode repair may never fail the daemon on: a host that denies the chmod (`EPERM`, `EROFS`, the two
+ * spellings of an unsupported one), a name that cannot be opened as a directory (`ELOOP` for a link,
+ * `ENOTDIR`), and a directory that will not even open for this user (`EACCES`).
+ */
+const MODE_REPAIR_SKIPPED_CODES = new Set([
   'EPERM',
   'EROFS',
   'ENOTSUP',
   'EOPNOTSUPP',
   'EACCES',
+  'ELOOP',
+  'ENOTDIR',
 ]);
-
-/**
- * Opens the entry the name holds, refusing one that is not a directory the caller may enter: `O_NOFOLLOW`
- * answers `ELOOP` for a link, and `O_DIRECTORY` for anything that is not a directory.
- */
-function openStateEntry(directory: string): number {
-  try {
-    return fs.openSync(
-      directory,
-      fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
-    );
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code ?? '';
-    if (code === 'ELOOP' || code === 'ENOTDIR') {
-      throw privateStateRefusal(directory, 'state_dir_not_a_directory');
-    }
-    throw error;
-  }
-}
-
-/** A state name this call will not touch, with the shape that made it unsafe. */
-function privateStateRefusal(directory: string, reason: string): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `Refusing to repair the daemon state directory ${directory}.`,
-    {
-      reason,
-      path: directory,
-      hint: 'Restore the state directory owned by the user who runs the daemon, or point AGENT_DEVICE_STATE_DIR at one.',
-    },
-  );
-}
 
 /**
  * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
@@ -449,8 +404,6 @@ function repairStateMode(target: string, mode: number): void {
     });
   }
 }
-
-const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
 
 /** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
