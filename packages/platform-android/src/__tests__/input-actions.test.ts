@@ -549,12 +549,38 @@ function displayReporting(rotations: string[]): (args: string[]) => string | und
   };
 }
 
-test('setAndroidOrientation locks auto-rotate, sets user rotation, and returns once the display rotated', async () => {
-  await withFakeAdb(displayReporting(['0', '0', '1']), async ({ calls, device }) => {
-    await setAndroidOrientation(device, 'landscape-left');
-    assert.deepEqual(calls, [...ORIENTATION_CALLS, DISPLAY_READ, DISPLAY_READ, DISPLAY_READ]);
-  });
-});
+test.each([
+  { name: 'already rotated', rotations: ['1'], waits: [] },
+  { name: 'first poll', rotations: ['0', '1'], waits: [500] },
+  { name: 'second poll', rotations: ['0', '0', '1'], waits: [500, 500] },
+])(
+  'orientation latency: $name adds no quiet window or redundant probe',
+  async ({ rotations, waits }) => {
+    vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+    const answer = displayReporting(rotations);
+    try {
+      await withFakeAdb(
+        (args) => {
+          if (args[1] === 'dumpsys') vi.setSystemTime(Date.now() + 25);
+          return answer(args);
+        },
+        async ({ calls, device }) => {
+          await withClockConsumingOrientationWait(async (slept) => {
+            await setAndroidOrientation(device, 'landscape-left');
+            assert.deepEqual(calls, [...ORIENTATION_CALLS, ...rotations.map(() => DISPLAY_READ)]);
+            assert.deepEqual(slept, waits);
+            assert.equal(
+              Date.now(),
+              rotations.length * 25 + waits.reduce((sum, wait) => sum + wait, 0),
+            );
+          });
+        },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('setAndroidOrientation fails when the display never reports the requested rotation', async () => {
   vi.useFakeTimers({ now: 0, toFake: ['Date'] });
