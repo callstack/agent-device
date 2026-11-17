@@ -33,7 +33,7 @@ Add this rule to your agent client's project rules or custom instructions. [Set 
 Use agent-device only for app/device automation tasks.
 For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot.
 For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
-For exploratory QA, read `agent-device help dogfood`.
+For exploratory QA or accessibility checks, read `agent-device help dogfood`; its platform checks run `agent-device audit`.
 For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
 For React Native component internals (tree, props, state, hooks) and performance profiling (slow renders, rerenders, and their causes), read `agent-device help react-devtools`.
 For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or retained-object leaks, read `agent-device help cdp`.

@@ -132,6 +132,8 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Find user-visible issues from runtime behavior. Do not read app source or invent findings from code',
     '1. Identify target app/platform; ask only if missing',
     'Keep stateful commands serial within the same session',
+    'On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i',
+    'Follow Apple',
     'React Native warning/error overlays can be real findings or test blockers. Capture them, use react-native dismiss-overlay',
   ],
   validate: [

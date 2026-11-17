@@ -218,6 +218,15 @@ Loop:
   6. Close the session and reconcile the report summary.
   Keep stateful commands serial within the same session. Parallel runs can pollute text fields, focus, alerts, and navigation state.
 
+Platform checks:
+  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Act on the refs from that snapshot, or on the pinned refs (@eN~sG) audit prints. Report audit's findings as accessibility findings.
+  On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
+  Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
+  When the app autosaves, discards explicitly, requires the flow, or presents the surface as nondismissible, skip that probe.
+  Check that each destructive action confirms or offers undo, and that every swipe action is reachable another way.
+  To check a field's return key, focus the field, then run keyboard status. Compare returnKey with the field's task. Exercise each control once with press <ref-or-selector> --settle, using reversible test data.
+  Follow Apple (https://developer.apple.com/design/human-interface-guidelines/) and Material (https://m3.material.io/foundations/designing/structure) guidance for further platform conventions.
+
 Coverage:
   Navigation, forms, empty/error/loading states, offline or retry behavior, permissions, settings, accessibility labels, orientation/keyboard, and obvious performance stalls.
   React Native warning/error overlays can be real findings or test blockers. Capture them, use react-native dismiss-overlay if unrelated, re-snapshot, and report them.
