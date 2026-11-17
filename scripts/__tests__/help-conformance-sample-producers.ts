@@ -498,7 +498,8 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         } satisfies ConnectVerification;
         return renderConnectSuccess({
           state,
-          readiness: presentConnectReadiness(state, facts),
+          readiness: presentConnectReadiness(state, facts, process.env),
+          env: process.env,
         });
       } finally {
         restoreEnv('AGENT_DEVICE_HOME', previousHome);

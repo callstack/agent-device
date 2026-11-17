@@ -33,7 +33,7 @@ vi.mock('../connection/provider-policy.ts', () => ({
 
 function ttlFor(leaseProvider: string): number | undefined {
   const state = { leaseProvider } as RemoteConnectionState;
-  return connectionLeasePolicyForState(state).ttlMs(state);
+  return connectionLeasePolicyForState(state, {}).ttlMs(state, {});
 }
 
 test.each([
