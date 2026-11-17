@@ -310,6 +310,13 @@ decides which backends it tries.
   to conservative behavior there, and `androidSnapshot.occlusionScanUnavailable: true` tells you so.
 - `--raw` returns the tree as captured. It also keeps nodes Android marks invisible and stale
   application windows.
+- `--raw` nodes carry four interaction facts that default and `-i` snapshots leave out. An absent
+  field means the capture could not read it, not `false`:
+  - `clickable`: the node accepts a tap.
+  - `focusable`: keyboard or D-pad focus can land on the node.
+  - `longClickable`: the node accepts a long press. Absent when an older snapshot helper served the
+    capture.
+  - `scrollable`: the node scrolls its content.
 
 ## iOS node metadata
 

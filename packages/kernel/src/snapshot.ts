@@ -333,6 +333,10 @@ export type RawSnapshotNode = {
   /** UIKit `isUserInteractionEnabled`; absent means the producer did not read it, not false. */
   userInteractionEnabled?: boolean;
   hittable?: boolean;
+  clickable?: boolean;
+  focusable?: boolean;
+  longClickable?: boolean;
+  scrollable?: boolean;
   depth?: number;
   parentIndex?: number;
   pid?: number;

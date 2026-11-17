@@ -377,6 +377,17 @@ test('attrs digest carries both checked answers, and none for a node that cannot
   expect('checked' in plain).toBe(false);
 });
 
+test('attrs digest carries the clickability facts a raw node reports, and none it does not', () => {
+  const facts = { clickable: false, focusable: true, longClickable: false, scrollable: false };
+  const digest = getView!({ ref: 'e7', node: { ...MATCHED_NODE, ...facts } }, 'digest');
+  expect(digest.node).toEqual({ ...COMPACT_NODE, ...facts });
+  const plain = getView!({ ref: 'e7', node: MATCHED_NODE }, 'digest').node as Record<
+    string,
+    unknown
+  >;
+  for (const field of Object.keys(facts)) expect(field in plain).toBe(false);
+});
+
 test('find/get default and full return today’s shape unchanged (same reference)', () => {
   const data: DaemonResponseData = { ref: '@e7', text: 'Sign in', node: MATCHED_NODE };
   expect(findView!(data, 'default')).toBe(data);

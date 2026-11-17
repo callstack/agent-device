@@ -48,8 +48,15 @@ export function foldSnapshotRect(
 export function serializeRegularSnapshotPresentationNode(
   node: SnapshotPresentationNode,
 ): RawSnapshotNode {
+  const {
+    clickable: _clickable,
+    focusable: _focusable,
+    longClickable: _longClickable,
+    scrollable: _scrollable,
+    ...published
+  } = node.raw;
   return {
-    ...node.raw,
+    ...published,
     ...(node.effectiveRect ? { rect: node.effectiveRect } : { rect: undefined }),
     hittable:
       node.raw.hittable === true && isPositiveFiniteRect(node.effectiveRect) ? true : undefined,

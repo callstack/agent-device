@@ -61,6 +61,7 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "visible-to-user", Boolean.toString(node.isVisibleToUser()));
     appendDrawingOrderAttribute(xml, node);
     appendTrueAttribute(xml, "clickable", node.isClickable());
+    appendLongClickableAttribute(xml, node.isLongClickable());
     appendAttribute(xml, "enabled", Boolean.toString(node.isEnabled()));
     appendTrueAttribute(xml, "focusable", node.isFocusable());
     appendTrueAttribute(xml, "focused", node.isFocused());
@@ -188,8 +189,6 @@ final class AccessibilityTreeXml {
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && node.isHeading();
   }
 
-  // Declared residue (agent-device #1832): long-clickable is not serialized. Adding it is a helper
-  // protocol change (new attribute + host parser + field on the wire node).
   private static void appendDrawingOrderAttribute(StringBuilder xml, AccessibilityNodeInfo node) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
       appendAttribute(xml, "drawing-order", Integer.toString(node.getDrawingOrder()));
@@ -217,6 +216,10 @@ final class AccessibilityTreeXml {
     xml.append("=\"");
     appendEscaped(xml, stringValue);
     xml.append('"');
+  }
+
+  static void appendLongClickableAttribute(StringBuilder xml, boolean longClickable) {
+    appendAttribute(xml, "long-clickable", Boolean.toString(longClickable));
   }
 
   static void appendBoundsAttribute(
