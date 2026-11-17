@@ -580,6 +580,26 @@ test('verifyHarmonyOpenForeground fails --foreground with the unreadable reason 
   );
 });
 
+test('verifyHarmonyOpenForeground reports probe-failed without reading when the request deadline has no room left', async () => {
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'FOREGROUND'),
+    stderr: '',
+  });
+
+  // A deadline already in the past leaves the budget no room for one read:
+  // the poll answers probe-failed at once instead of outliving the request.
+  const verification = await verifyHarmonyOpenForeground(
+    openInput({ execution: { requestDeadlineAtMs: Date.now() - 1_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  assert.deepEqual(verification.timing.foregroundVerification, { state: 'probe-failed' });
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
 test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {
   vi.useFakeTimers();
   mockRunCmd.mockResolvedValue({

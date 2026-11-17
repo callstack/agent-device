@@ -359,7 +359,18 @@ export async function verifyHarmonyOpenForeground(
 ): Promise<OpenApplicationOutcome> {
   const bundleId = outcome.appBundleId ?? input.appBundleId;
   if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
-  const verification = await pollHarmonyOpenForeground(device, bundleId, { signal });
+  // The poll never outlives the request's own deadline: whatever the budget
+  // has less room for wins, and a budget with no room for one read falls to
+  // probe-failed.
+  const requestDeadlineAtMs = input.execution.requestDeadlineAtMs;
+  const pollBudgetMs =
+    requestDeadlineAtMs === undefined
+      ? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS
+      : Math.min(
+          HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
+          Math.max(0, requestDeadlineAtMs - Date.now()),
+        );
+  const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
   if (verification.state === 'probe-failed') {
     // A budget whose every read failed is a probe that never ran to an
