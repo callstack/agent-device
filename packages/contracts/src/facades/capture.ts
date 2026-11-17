@@ -1,3 +1,14 @@
+export type {
+  AuditChecks,
+  AuditContext,
+  AuditFinding,
+  AuditFindingKind,
+  AuditResult,
+  AuditSeverity,
+  AuditSizeDetail,
+  AuditSizeUnit,
+  AuditSnapshotCommandResult,
+} from '../audit.ts';
 export type { DiffSnapshotCommandResult, SnapshotDiffLine, SnapshotDiffSummary } from '../diff.ts';
 export {
   RETIRED_SCREENSHOT_MAX_SIZE,

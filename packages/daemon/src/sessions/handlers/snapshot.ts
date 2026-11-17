@@ -7,6 +7,7 @@ import {
   handleSettingsCommand,
   parseSettingsArgs,
 } from '../../execution/handlers/snapshot-settings.ts';
+import { dispatchSnapshotAuditViaRuntime } from '../snapshot-audit-runtime.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../../execution/wait-runtime.ts';
@@ -82,6 +83,28 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       platformResourceCleanup,
     });
   },
+  audit: async ({
+    req,
+    createCommandSurface,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+    platformResourceCleanup,
+  }) =>
+    await dispatchSnapshotAuditViaRuntime({
+      createCommandSurface,
+      req,
+      sessionName,
+      logPath,
+      sessionStore,
+      inspectFacts,
+      bindDevice,
+      platformServices,
+      platformResourceCleanup,
+    }),
   wait: async ({
     req,
     createCommandSurface,

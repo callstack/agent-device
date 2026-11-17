@@ -102,6 +102,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
 
   // -- snapshot-scoped reads --
   [PUBLIC_COMMANDS.diff]: () => one(),
+  [PUBLIC_COMMANDS.audit]: () => one(),
   [PUBLIC_COMMANDS.wait]: () => one(['text', 'General', '50']),
   [PUBLIC_COMMANDS.find]: () => one(['label', 'General', 'get', 'attrs']),
   [PUBLIC_COMMANDS.get]: () => one(['attrs', 'label=General']),

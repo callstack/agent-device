@@ -203,6 +203,7 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       }),
       step('snapshot-diff', C.snapshot, ['snapshot', '--diff']),
       step('diff-snapshot', C.diff, ['diff', 'snapshot']),
+      step('audit', C.audit, ['audit']),
       step('wait-text', C.wait, ['wait', 'text', 'Agent Device Tester']),
       step('wait-selector', C.wait, ['wait', 'id="gesture-canary-ready"']),
       step('wait-absent', C.wait, ['wait', 'absent', 'id="heavy-feed-title"']),

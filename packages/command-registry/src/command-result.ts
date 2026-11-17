@@ -1,4 +1,5 @@
 import type {
+  AuditSnapshotCommandResult,
   DiffSnapshotCommandResult,
   ViewportCommandResult,
 } from '@agent-device/contracts/capture';
@@ -64,6 +65,7 @@ export interface CommandResultMap {
   'action-button': ActionButtonCommandResult;
   'app-switcher': AppSwitcherCommandResult;
   appstate: AppStateCommandResult;
+  audit: AuditSnapshotCommandResult;
   back: BackCommandResult;
   boot: BootCommandResult;
   click: ClickCommandResponseData;

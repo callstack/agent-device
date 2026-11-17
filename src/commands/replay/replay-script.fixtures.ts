@@ -183,6 +183,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   'hardware-button': GENERIC_REPLAY_LINE,
   uninstall: GENERIC_REPLAY_LINE,
   viewport: GENERIC_REPLAY_LINE,
+  audit: { waived: 'audit reports one observation and is never recorded in replay scripts' },
   human_control: { waived: 'host-local control commands are never recorded in replay scripts' },
   install_source: GENERIC_REPLAY_LINE,
   lease_allocate: GENERIC_REPLAY_LINE,

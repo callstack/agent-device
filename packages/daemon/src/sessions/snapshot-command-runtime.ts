@@ -43,14 +43,15 @@ export type SnapshotRuntimeRecord =
     };
 
 type SnapshotRuntimeCommandParams = SnapshotRuntimeRouteParams & {
-  command: 'snapshot' | 'diff';
+  command: 'snapshot' | 'diff' | 'audit';
   execute(params: {
     runtime: Awaited<ReturnType<typeof createSnapshotRuntime>>['runtime'];
     sessionName: string;
     req: DaemonRequest;
+    device: SessionState['device'];
     snapshotScope: string | undefined;
     getSession(): SessionState | undefined;
-  }): Promise<{ data: DaemonResponseData; record: SnapshotRuntimeRecord }>;
+  }): Promise<{ data: DaemonResponseData; record?: SnapshotRuntimeRecord }>;
 };
 
 /** Shared snapshot/diff command construction after one request-bound capture has been admitted. */
@@ -86,7 +87,14 @@ export async function dispatchSnapshotRuntimeCommand(
       };
       let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
       try {
-        result = await params.execute({ runtime, sessionName, req, snapshotScope, getSession });
+        result = await params.execute({
+          runtime,
+          sessionName,
+          req,
+          device,
+          snapshotScope,
+          getSession,
+        });
       } catch (error) {
         const timeoutResponse = await maybeBuildAndroidSnapshotTimeoutFailure({
           error,
@@ -102,13 +110,15 @@ export async function dispatchSnapshotRuntimeCommand(
         return timeoutResponse;
       }
       const current = getSession();
-      recordSnapshotRuntimeAction({
-        req,
-        sessionName,
-        sessionStore,
-        ref: sessions.getRef(),
-        result: result.record,
-      });
+      if (result.record) {
+        recordSnapshotRuntimeAction({
+          req,
+          sessionName,
+          sessionStore,
+          ref: sessions.getRef(),
+          result: result.record,
+        });
+      }
       const data = applyRecoveredWarningLatch({
         session: current,
         data: result.data,
@@ -174,7 +184,7 @@ async function createSnapshotRuntime(params: {
       reactivateCompleteFrameIfIssuing(
         nextSession,
         keepCurrentSnapshot,
-        req.command === 'snapshot' && req.internal?.observationOnly !== true,
+        issuesCompleteRefFrame(req),
       );
       return ref ?? sessionStore.publish(sessionName, nextSession);
     },
@@ -211,6 +221,10 @@ function shouldKeepCurrentSnapshot(
 }
 
 // ADR 0014: only a snapshot command hands the client the complete ref namespace.
+function issuesCompleteRefFrame(req: DaemonRequest): boolean {
+  return req.command === 'snapshot' && req.internal?.observationOnly !== true;
+}
+
 function reactivateCompleteFrameIfIssuing(
   session: SessionState,
   keepCurrentSnapshot: boolean,

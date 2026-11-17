@@ -465,6 +465,60 @@ test('ref-pin store leaves existing pins untouched for a mutating find without r
   assert.deepEqual(pinned, { session: 'demo', ref: '@e2~s7' });
 });
 
+test('ref-pin store pins audit finding refs to the audit generation and keeps other pins', () => {
+  const pins = makeStore();
+  const checks = { snapshot: 'complete' } as const;
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e2' }, { ref: 'e37' }], truncated: false, refsGeneration: 7 },
+    undefined,
+    'demo',
+  );
+  pins.mergeCommandResult(
+    'audit',
+    {
+      findings: [{ kind: 'missing-name', severity: 'warning', ref: '@e2', role: 'button' }],
+      checks,
+      limitations: [],
+      refsGeneration: 9,
+    },
+    undefined,
+    'demo',
+  );
+
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
+    session: 'demo',
+    ref: '@e2~s9',
+  });
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
+    session: 'demo',
+    ref: '@e37~s7',
+  });
+});
+
+test('ref-pin store leaves pins untouched for an audit without findings', () => {
+  const pins = makeStore();
+
+  pins.mergeCommandResult(
+    'snapshot',
+    { nodes: [{ ref: 'e2' }], truncated: false, refsGeneration: 7 },
+    undefined,
+    'demo',
+  );
+  pins.mergeCommandResult(
+    'audit',
+    { findings: [], checks: { snapshot: 'complete' }, limitations: [] },
+    undefined,
+    'demo',
+  );
+
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
+    session: 'demo',
+    ref: '@e2~s7',
+  });
+});
+
 // --- #1638: the generic-route settle commands pin on identical terms ---
 
 test('ref-pin store merges per-ref pins from a scroll settle diff', () => {

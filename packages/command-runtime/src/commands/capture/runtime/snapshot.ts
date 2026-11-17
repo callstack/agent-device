@@ -2,6 +2,7 @@ import {
   copySnapshotClickabilityEvidence,
   publicSnapshotCaptureAnnotations,
   snapshotCaptureAnnotationsFrom,
+  type AuditSnapshotCommandResult,
   type DiffSnapshotCommandResult,
   type PublicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
@@ -40,6 +41,7 @@ import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/andro
 import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
 import { now } from '../../runtime-common.ts';
 import type {
+  AuditSnapshotCommandOptions,
   DiffSnapshotCommandOptions,
   RuntimeCommand,
   SnapshotCommandOptions,
@@ -180,6 +182,27 @@ export const diffSnapshotCommand: RuntimeCommand<
     lines: diff.lines,
     ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}),
   };
+};
+
+/**
+ * One fresh full-tree capture, audited on the captured nodes. The capture replaces the session
+ * snapshot like `snapshot` does, so the refs in the findings address the stored tree. The audit
+ * module loads on first use: no other command pays for it.
+ */
+export const auditSnapshotCommand: RuntimeCommand<
+  AuditSnapshotCommandOptions,
+  AuditSnapshotCommandResult
+> = async (runtime, options): Promise<AuditSnapshotCommandResult> => {
+  const { auditSnapshot } = await import('@agent-device/capture-kit/snapshot-audit');
+  const capture = await captureRuntimeSnapshot(runtime, options);
+  const audit = auditSnapshot(capture.snapshot.nodes, {
+    platform: runtime.backend.platform,
+    target: options.target,
+    pixelDensity: capture.annotations.androidSnapshot?.pixelDensity,
+    truncated: snapshotTruncationForResult(capture.snapshot),
+  });
+  await runtime.sessions.set(nextSnapshotSession(options.session, capture));
+  return { ...audit, ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}) };
 };
 
 async function captureRuntimeSnapshot(

@@ -468,6 +468,8 @@ export function createAgentDeviceClient(
         return normalizeScreenshotCaptureResult(data, session);
       },
       diff: async (options) => await executeCommand<CommandResult<'diff'>>('diff', options),
+      audit: async (options) =>
+        await executeCommand<CommandResult<'audit'>>('audit', options ?? {}),
     },
     interactions: {
       gesture: async (options) => await executeCommand('gesture', options),

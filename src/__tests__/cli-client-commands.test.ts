@@ -1191,6 +1191,7 @@ function createStubClient(params: {
           identifiers: { session: 'default' },
         })),
       diff: unexpectedCommandCall,
+      audit: unexpectedCommandCall,
     },
     interactions: createThrowingMethodGroup<AgentDeviceClient['interactions']>(),
     replay: createThrowingMethodGroup<AgentDeviceClient['replay']>(),

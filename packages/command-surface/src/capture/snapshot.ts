@@ -5,14 +5,26 @@ import {
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
-import { booleanField, integerField, optionField, stringField } from '../command-input.ts';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import {
+  booleanField,
+  enumSchema,
+  integerField,
+  numberSchema,
+  objectSchema,
+  optionField,
+  stringArraySchema,
+  stringField,
+  stringSchema,
+} from '../command-input.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import {
   commonInputFromFlags,
   direct,
   observationRecordInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { defineCommandFacet } from '../family/types.ts';
+import { defineCommandFacet, defineParameterlessCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const SNAPSHOT_COMMAND_NAME = 'snapshot';
@@ -84,4 +96,80 @@ export const snapshotCommandFacet = defineCommandFacet({
   cliSchema: snapshotCliSchema,
   cliReader: snapshotCliReader,
   daemonWriter: snapshotDaemonWriter,
+});
+
+const AUDIT_COMMAND_NAME = 'audit';
+
+/**
+ * This family's advertised MCP `outputSchema`, keyed by daemon command name and projected into
+ * the command map by `command-output-schemas.ts`. Non-strict: additive response fields keep
+ * validating.
+ */
+export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/audit.ts
+  audit: objectSchema(
+    {
+      findings: {
+        type: 'array',
+        items: objectSchema(
+          {
+            kind: enumSchema(['small-target', 'missing-name', 'covered-control']),
+            severity: enumSchema(['warning', 'observation']),
+            ref: stringSchema('Plain ref, usable in the frame this audit published.'),
+            rect: objectSchema(
+              {
+                x: numberSchema(),
+                y: numberSchema(),
+                width: numberSchema(),
+                height: numberSchema(),
+              },
+              ['x', 'y', 'width', 'height'],
+            ),
+            role: stringSchema(),
+            detail: objectSchema(
+              {
+                unit: enumSchema(['pt', 'dp']),
+                width: numberSchema(),
+                height: numberSchema(),
+                recommendedSize: numberSchema(),
+              },
+              ['unit', 'width', 'height', 'recommendedSize'],
+            ),
+          },
+          ['kind', 'severity', 'ref', 'role'],
+        ),
+      },
+      checks: objectSchema(
+        {
+          snapshot: enumSchema(
+            ['complete', 'partial', 'unknown'],
+            'unknown: the capture cannot report truncation, so controls may be missing.',
+          ),
+        },
+        ['snapshot'],
+      ),
+      limitations: stringArraySchema(),
+      refsGeneration: numberSchema(
+        'Present only with findings: pair each ref with it (@eN~sG) before a mutation.',
+      ),
+      warnings: stringArraySchema(),
+    },
+    ['findings', 'checks', 'limitations'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'audit'>;
+
+const auditCommandDescription =
+  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, and controls the snapshot already marks covered. Findings are review prompts, not failures, and the audit changes nothing on the device.';
+
+export const auditCommandFacet = defineParameterlessCommandFacet({
+  name: AUDIT_COMMAND_NAME,
+  effect: 'write',
+  description: auditCommandDescription,
+  text: {
+    summary: 'Report advisory accessibility findings',
+    searchHint: 'a11y lint voiceover talkback',
+    cliDetail:
+      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role.',
+  },
+  run: (client, input) => client.capture.audit(input),
 });

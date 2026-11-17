@@ -478,6 +478,20 @@ export const RAW_COMMAND_DESCRIPTORS = [
       selectUses: selectSnapshotStepUses,
     },
   },
+  {
+    name: 'audit',
+    deviceClaimPolicy: 'require-owner',
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/capture/snapshot.ts'] as const }
+      : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    recordsSessionAction: false,
+    daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    batchable: false,
+    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
+  },
   ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.captureAndSystem,
   {
     name: 'find',

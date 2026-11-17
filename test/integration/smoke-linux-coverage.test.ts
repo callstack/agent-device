@@ -120,6 +120,7 @@ test('Linux accepted-gap rows are exactly the pinned command list', () => {
     .sort();
   assert.deepEqual(acceptedCommands, [
     'artifacts',
+    'audit',
     'install',
     'install-from-source',
     'logs',

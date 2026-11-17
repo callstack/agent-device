@@ -1,6 +1,8 @@
 import type { CommandName } from '@agent-device/command-surface';
+import type { AuditSnapshotCommandResult } from '@agent-device/contracts/capture';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { dedupeInheritedSnapshotLabels } from '@agent-device/capture-kit/snapshot-label-dedup';
+import { auditCliOutput } from './audit-output.ts';
 import { formatSnapshotText } from '../output/snapshot.ts';
 import { messageOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
@@ -47,6 +49,7 @@ export const captureCliOutputFormatters = {
       scope: input.scope as string | undefined,
       depth: input.depth as number | undefined,
     }),
+  audit: async ({ result }) => auditCliOutput(result as AuditSnapshotCommandResult),
   wait: messageOutput,
   alert: messageOutput,
   // Android permission revokes append a relaunch warning (#1796); render it for humans too.

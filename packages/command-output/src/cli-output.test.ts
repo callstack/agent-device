@@ -33,6 +33,7 @@ const FORMATTER_COMMANDS = [
   'appstate',
   'artifacts',
   'audio',
+  'audit',
   'back',
   'batch',
   'boot',
@@ -100,6 +101,11 @@ async function render(name: CommandName, result: unknown, input = {}) {
 const RESPONSE_FIXTURES: Partial<Record<CommandName, unknown>> = {
   apps: ['com.example.app'],
   artifacts: { source: 'daemon', artifacts: [], message: 'No daemon artifacts.' },
+  audit: {
+    findings: [],
+    checks: { snapshot: 'complete' },
+    limitations: [],
+  },
   batch: { executed: 0, total: 0, totalDurationMs: 5, results: [] },
   capabilities: { device: { name: 'iPhone' }, availableCommands: [] },
   debug: {

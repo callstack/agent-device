@@ -2,6 +2,7 @@ import type { ScreenshotScreenMask } from '@agent-device/contracts/capture';
 import type { FileOutputRef } from '@agent-device/contracts/artifact-adapter';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SessionSurface } from '@agent-device/contracts/session';
+import type { DeviceTarget } from '@agent-device/kernel/device';
 import type { SnapshotCommandOptionFields } from '@agent-device/kernel/snapshot';
 
 export type CommandResult = Record<string, unknown>;
@@ -61,3 +62,9 @@ export type ScreenshotCommandOptions = CommandContext & {
 export type SnapshotCommandOptions = CommandContext & SnapshotCommandOptionFields;
 
 export type DiffSnapshotCommandOptions = SnapshotCommandOptions;
+
+/** `audit` always reads the whole screen, so it takes no snapshot scoping fields. */
+export type AuditSnapshotCommandOptions = CommandContext & {
+  /** Target the capture came from; absent means mobile. */
+  target?: DeviceTarget;
+};

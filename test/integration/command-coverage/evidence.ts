@@ -25,6 +25,12 @@ export const ANDROID_LIFECYCLE_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.boot, C.clipboard, C.network, C.reactNative, C.reinstall, C.shutdown, C.triggerAppEvent],
     'Provider-backed integration Android Settings flow uses scripted ADB provider',
   );
+export const ANDROID_AUDIT_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'test/integration/provider-scenarios/android-audit.test.ts',
+    [C.audit],
+    'Provider-backed integration Android audit converts captured pixels to dp before judging target size',
+  );
 export const ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'src/__tests__/install-source.test.ts',

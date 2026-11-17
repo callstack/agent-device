@@ -76,7 +76,7 @@ function mergeErrorCandidateRefPins(
  * (the coarse #1093 warning is the floor). The model never sees or types
  * suffixes.
  */
-const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as const);
+const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find', 'audit'] as const);
 
 /**
  * `--settle` (#1101) makes a response CONDITIONALLY ref-issuing: when it
@@ -150,6 +150,8 @@ function mergeCommandResult(
   if (!REF_ISSUING_TOOLS.has(name)) return;
   if (name === 'find') {
     mergeFindRefPins(refPinsByScope, scopeKey, result as CommandExecutionResult<'find'>);
+  } else if (name === 'audit') {
+    mergeAuditRefPins(refPinsByScope, scopeKey, result as CommandExecutionResult<'audit'>);
   } else {
     mergeSnapshotRefPins(refPinsByScope, scopeKey, result as CommandExecutionResult<'snapshot'>);
   }
@@ -213,6 +215,21 @@ function mergeFindRefPins(
       issued.push(match.ref.startsWith('@') ? match.ref.slice(1) : match.ref);
     }
   }
+  mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
+}
+
+/**
+ * `audit` publishes a partial frame for exactly its finding refs (ADR 0014), like a read-only
+ * `find`. A result without findings carries no generation, issues nothing, and leaves pins alone.
+ */
+function mergeAuditRefPins(
+  refPinsByScope: Map<string, Map<string, number>>,
+  scopeKey: string,
+  result: CommandExecutionResult<'audit'>,
+): void {
+  const refsGeneration = result.refsGeneration;
+  if (typeof refsGeneration !== 'number') return;
+  const issued = result.findings.map((finding) => finding.ref.replace(/^@/, ''));
   mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
 }
 
