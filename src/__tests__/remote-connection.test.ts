@@ -693,6 +693,9 @@ test.each(['install', 'uninstall'])('proxy %s allocates a lease first', async (c
 });
 
 test('artifacts command reuses the stored cloud lease without allocating', async () => {
+  const { home } = pluginHome();
+  selectAwsDeviceFarmPlugin(home);
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-cloud-artifacts-',
   );
