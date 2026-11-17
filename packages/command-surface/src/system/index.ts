@@ -723,7 +723,7 @@ const keyboardCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Inspect, press, or dismiss the device keyboard',
-    searchHint: 'ime gboard submit',
+    searchHint: 'ime gboard',
   },
   metadata: keyboardCommandMetadata,
   run: (client, input) => client.command.keyboard(input),
