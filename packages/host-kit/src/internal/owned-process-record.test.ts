@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 // The reaper stops through the shared escalation, so the double answers the two host syscalls it
 // reads: `kill(pid, signal)` for signals and liveness, and `ps` for the recorded identity.
@@ -56,6 +57,9 @@ import { createOwnedProcessRecordStore } from './owned-process-record.ts';
 import { reapOwnedProcessRecordsAtStartup } from './owned-process-reaper.ts';
 
 beforeEach(() => {
+  // The identity reader reads `/proc/<pid>/stat` before the `ps` row, so an unmocked host can answer
+  // for the fixture pid. See host-proc.fixtures.ts.
+  mockLinuxProcessStatAbsent();
   processState.alive.clear();
   processState.starts.clear();
   processState.commands.clear();
