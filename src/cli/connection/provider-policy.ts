@@ -107,7 +107,7 @@ export function unavailableConnectPluginError(
       provider,
       package: declaration.package,
       installCommand,
-      hint: `Install:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
+      hint: `${declaration.unpublished ? 'This plugin is private and not yet published. After publication, install' : 'Install'}:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
     },
   );
 }

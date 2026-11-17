@@ -1,30 +1,52 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import type { ProviderPluginHost } from 'agent-device/plugins';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { awsDeviceFarmProvider } from './aws-device-farm-provider.ts';
-import type { CloudWebDriverProviderHost } from './provider-plugin.ts';
+import awsDeviceFarm from './index.ts';
 
 const DEVICE_ARN = 'arn:aws:devicefarm:us-west-2::device:device-a';
 
-function host(env: Record<string, string | undefined> = {}): CloudWebDriverProviderHost {
+function host(env: Record<string, string | undefined> = {}): ProviderPluginHost {
   return {
     env,
+    options: {},
     clientVersion: '1.2.3',
+    createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async () => {
       throw new Error('this scenario runs no host commands');
     },
   };
 }
 
-test('the declaration reserves the provider id without environment credentials', () => {
-  assert.equal(awsDeviceFarmProvider.declaration.provider, 'aws-device-farm');
-  assert.equal(awsDeviceFarmProvider.declaration.credentialVariables, undefined);
-  assert.equal(awsDeviceFarmProvider.declaration.connection.requiresAppAttachment, true);
+test('the plugin declares its provider, capabilities, and no credential variables', () => {
+  const plugin = awsDeviceFarm();
+  assert.equal(plugin.apiVersion, 2);
+  assert.equal(plugin.provider, 'aws-device-farm');
+  // The AWS CLI credential chain has no environment fingerprint.
+  assert.deepEqual(plugin.credentials, { variables: [] });
+  assert.deepEqual(plugin.connection?.capabilities, {
+    leaseKind: 'direct-device-provider',
+    requiresAppAttachment: true,
+    requiresRemoteDaemon: false,
+    supportsArtifacts: true,
+    supportsDeferredAppSelection: false,
+    supportsDirectPortReverse: false,
+    usesCloudWebDriverLease: true,
+  });
+});
+
+test('setup builds a WebDriver descriptor for the shared engine', async () => {
+  const setup = await awsDeviceFarm().setup(host());
+  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
+  assert.equal(setup.webDriver.provider, 'aws-device-farm');
+  assert.equal(setup.webDriver.profileFields.provider, 'aws-device-farm');
 });
 
 test('lease preparation reads the connect selectors before any host command runs', async () => {
-  const { webDriver } = awsDeviceFarmProvider.create(host());
-  assert.equal(webDriver.profileFields.provider, 'aws-device-farm');
+  const setup = await awsDeviceFarm().setup(host());
+  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
+  const { webDriver } = setup;
   const lease: DeviceLease = {
     leaseId: 'lease-aws',
     tenantId: 'team-a',
@@ -56,15 +78,16 @@ test('lease preparation reads the connect selectors before any host command runs
 
 test('artifact lookup runs in the region of the session ARN, not the environment region', async () => {
   const commands: string[][] = [];
-  const { webDriver } = awsDeviceFarmProvider.create({
+  const setup = await awsDeviceFarm().setup({
     ...host({ AWS_REGION: 'eu-west-1' }),
     runHostCommand: async (command, args) => {
       commands.push([command, ...args]);
-      return { stdout: '{"artifacts":[]}', stderr: '', exitCode: 0 };
+      return { stdout: '{"artifacts":[]}' };
     },
   });
+  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
 
-  await webDriver.listArtifacts!({
+  await setup.webDriver.listArtifacts!({
     provider: 'aws-device-farm',
     providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session:project-a/session-a/00000',
   });
@@ -77,7 +100,7 @@ test('artifact lookup runs in the region of the session ARN, not the environment
 });
 
 test('the factory connects through the lazy callbacks', async () => {
-  const { connection } = awsDeviceFarmProvider.create(host({ AWS_REGION: 'eu-west-1' }));
+  const connection = awsDeviceFarm().connection!;
   const { profile } = await connection.resolve({
     flags: {
       json: false,
@@ -87,7 +110,10 @@ test('the factory connects through the lazy callbacks', async () => {
       awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
       awsDeviceArn: DEVICE_ARN,
     },
+    stateDir: '/state',
     cwd: '/',
+    env: {},
+    host: host({ AWS_REGION: 'eu-west-1' }),
   });
   assert.equal(profile.leaseProvider, 'aws-device-farm');
   assert.equal(profile.awsRegion, 'eu-west-1');

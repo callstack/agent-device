@@ -45,7 +45,7 @@ async function startStore(env: NodeJS.ProcessEnv, builtin: readonly string[] = [
     ...claimProviderIds(builtin),
     ...(await storePluginCandidates(env)),
   ]);
-  return await startProviderRegistry(resolved, env, FAKE_POLICY);
+  return await startProviderRegistry(resolved, { env, cwd: '/' }, FAKE_POLICY);
 }
 
 test('a store plugin loads its factory with the selection options and the host error constructor', async () => {

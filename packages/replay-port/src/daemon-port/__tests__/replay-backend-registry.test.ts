@@ -38,7 +38,7 @@ test('client replay absence does not evaluate unrelated provider packages', asyn
      fs.writeFileSync(${JSON.stringify(evaluated)}, 'evaluated');
      throw new Error('Unrelated provider import');`,
   );
-  await expect(openReplayBackend('maestro', env)).rejects.toMatchObject({
+  await expect(openReplayBackend('maestro', { env, cwd: '/' })).rejects.toMatchObject({
     details: {
       reason: 'plugin-not-installed',
       package: '@agent-device/maestro',
