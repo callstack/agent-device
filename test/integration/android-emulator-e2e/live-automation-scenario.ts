@@ -37,7 +37,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
     'click',
     'id="automation-continue-catalog"',
   ]);
-  await assertWaitText(context, 'Catalog');
+  await assertWaitSelector(context, 'id="catalog-title"');
   const catalogSnapshot = await runStep(context, 'capture Android catalog navigation', [
     'snapshot',
     '-i',
