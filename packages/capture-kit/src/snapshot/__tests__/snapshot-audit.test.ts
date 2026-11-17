@@ -294,6 +294,14 @@ describe('scope', () => {
     expect(result.limitations).toEqual([expect.stringContaining('truncated')]);
   });
 
+  test('audits a web radio as a control and keeps its radiogroup container out', () => {
+    const result = audit(
+      [node(1, { type: 'radiogroup' }), node(2, { type: 'radio', parentIndex: 1 })],
+      { platform: 'web', truncated: false },
+    );
+    expect(summarize(result.findings)).toEqual(['missing-name @e2']);
+  });
+
   test('keeps unknown truncation unknown instead of calling the capture complete', () => {
     const result = audit([node(1, { label: 'A' })], { platform: 'ios' });
     expect(result.checks).toEqual({ snapshot: 'unknown' });

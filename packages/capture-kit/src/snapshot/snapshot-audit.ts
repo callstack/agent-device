@@ -24,6 +24,7 @@ const GENERIC_RESOURCE_ID = /^[\w.]+:id\/[\w.-]+$/i;
 // containers such as `RadioGroup` and `TabLayout` out of the control set.
 const CONTROL_ROLES: ReadonlyArray<readonly [suffix: string, role: string]> = [
   ['radiobutton', 'radio'],
+  ['radio', 'radio'],
   ['segmentedcontrol', 'segmented-control'],
   ['button', 'button'],
   ['link', 'link'],
