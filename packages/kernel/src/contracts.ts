@@ -284,17 +284,7 @@ export function readScriptDeliveryReceipt(
   if (typeof publicationId !== 'string' || publicationId.trim() !== publicationId) return undefined;
   if (publicationId.length === 0) return undefined;
   if (version !== undefined && !isScriptVersionArtifact(version, publicationId)) return undefined;
-  if (
-    close !== undefined &&
-    (close === null ||
-      typeof close !== 'object' ||
-      Array.isArray(close) ||
-      typeof close.step !== 'number' ||
-      !Number.isSafeInteger(close.step) ||
-      close.step < 1)
-  ) {
-    return undefined;
-  }
+  if (close !== undefined && !isReceiptClose(close)) return undefined;
   if (failures !== undefined && !readsAsReceiptFailures(failures, publicationId)) return undefined;
   return {
     publicationId,
@@ -304,6 +294,12 @@ export function readScriptDeliveryReceipt(
       ? {}
       : { failures: (failures as readonly ScriptDeliveryFailure[]).slice() }),
   };
+}
+
+function isReceiptClose(close: unknown): close is { step: number } {
+  if (!close || typeof close !== 'object' || Array.isArray(close)) return false;
+  const step = (close as { step?: unknown }).step;
+  return typeof step === 'number' && Number.isSafeInteger(step) && step >= 1;
 }
 
 /**

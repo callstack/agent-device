@@ -273,20 +273,9 @@ export async function settleScriptDeliveryReceiptOfFailure(
 ): Promise<DaemonError> {
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
   if (!receipt || req.command !== 'batch') return error;
-  const steps = req.flags?.batchSteps;
-  const failedStep = error.details?.step;
-  const failedCommand = error.details?.command;
-  if (
-    !Array.isArray(steps) ||
-    typeof failedStep !== 'number' ||
-    !Number.isSafeInteger(failedStep) ||
-    failedStep < 1 ||
-    failedStep > steps.length ||
-    typeof failedCommand !== 'string' ||
-    normalizeBatchCommandName(steps[failedStep - 1]?.command) !== failedCommand ||
-    (receipt.close !== undefined && receipt.close.step >= failedStep)
-  )
-    return error;
+  const failedStep = validatedFailedBatchStep(req, error);
+  if (failedStep === undefined) return error;
+  if (receipt.close !== undefined && receipt.close.step >= failedStep) return error;
   const data: Record<string, unknown> = { ...(error.details ?? {}) };
   const settled = await settleScriptReceipt(
     { endpoint, req, stateDir, download },
@@ -302,6 +291,17 @@ export async function settleScriptDeliveryReceiptOfFailure(
   };
   if (Object.keys(disclosure).length === 0) return error;
   return { ...error, details: { ...(error.details ?? {}), ...disclosure } };
+}
+
+function validatedFailedBatchStep(req: DaemonWireRequest, error: DaemonError): number | undefined {
+  const steps = req.flags?.batchSteps;
+  const step = error.details?.step;
+  const command = error.details?.command;
+  if (!Array.isArray(steps) || typeof step !== 'number' || !Number.isSafeInteger(step)) {
+    return undefined;
+  }
+  if (step < 1 || step > steps.length || typeof command !== 'string') return undefined;
+  return normalizeBatchCommandName(steps[step - 1]?.command) === command ? step : undefined;
 }
 
 /**
