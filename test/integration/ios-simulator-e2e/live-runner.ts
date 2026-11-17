@@ -329,18 +329,14 @@ async function assertFormInput(context: LiveContext): Promise<void> {
 
   await runStep(context, 'seed email field', ['fill', 'id="field-email"', 'ada@example']);
   // Pins the exact point a truncated field value first appears, rather than inferring it from
-  // the final read. If this fails, `fill` itself lost the seed — the dismiss/refocus/type steps
+  // the final read. If this fails, `fill` itself lost the seed — the submit/refocus/type steps
   // below never ran on the wrong content in the first place.
-  const seededEmail = await runStep(context, 'read seeded email before dismiss', [
+  const seededEmail = await runStep(context, 'read seeded email before submit', [
     'get',
     'attrs',
     'id="field-email"',
   ]);
-  assertJsonContains(
-    seededEmail,
-    'ada@example',
-    'seeded email should be observable before dismiss',
-  );
+  assertJsonContains(seededEmail, 'ada@example', 'seeded email should be observable before submit');
 
   await assertWaitSelector(context, 'label="Done" visible=true');
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
@@ -365,20 +361,20 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   const hidden = await runStep(context, 'read keyboard after submit', ['keyboard', 'status']);
   assert.equal(hidden.json?.data?.visible, false, JSON.stringify(hidden.json));
   const keyboardHiddenPath = path.join(context.artifactDir, 'keyboard-hidden.png');
-  await capturePng(context, 'capture dismissed input keyboard', keyboardHiddenPath);
+  await capturePng(context, 'capture hidden input keyboard', keyboardHiddenPath);
   assertFilesDiffer(
     keyboardVisiblePath,
     keyboardHiddenPath,
-    'keyboard dismissal should change simulator pixels',
+    'hiding the keyboard should change simulator pixels',
   );
   verifyCommand(
     context,
     C.keyboard,
     'dismiss refuses a Done return key untapped, and enter hides the keyboard while before/after pixels differ',
   );
-  // Pins whether `keyboard dismiss` itself clears the field, independent of the coordinate
+  // Pins whether the keyboard hiding itself clears the field, independent of the coordinate
   // refocus + type steps that follow.
-  const emailAfterDismiss = await runStep(context, 'read email after dismiss', [
+  const emailAfterDismiss = await runStep(context, 'read email after submit', [
     'get',
     'attrs',
     'id="field-email"',
@@ -386,7 +382,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   assertJsonContains(
     emailAfterDismiss,
     'ada@example',
-    'seeded email should survive keyboard dismiss, before any refocus or further typing',
+    'seeded email should survive the keyboard hiding, before any refocus or further typing',
   );
 
   const formSnapshot = await runStep(context, 'locate email coordinates', [
@@ -416,7 +412,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   verifyBehavior(
     context,
     'text-entry-keyboard-lifecycle',
-    'fill showed the keyboard, dismissal changed pixels, and coordinate focus enabled typed text',
+    'fill showed the keyboard, enter hid it and changed pixels, and coordinate focus enabled typed text',
   );
   verifyCommand(context, C.focus, 'snapshot-derived coordinate focus directs subsequent typing');
   verifyCommand(

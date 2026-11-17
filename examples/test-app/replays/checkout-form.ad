@@ -8,7 +8,7 @@ click "label=\"Form\""
 wait "Checkout form" 5000
 fill id="field-name" "Ada Lovelace"
 fill id="field-email" "ada@example.com"
-keyboard dismiss
+keyboard enter
 wait "Checkout form" 5000
 scroll down 0.6
 click id="shipping-pickup"

@@ -114,7 +114,7 @@ jobs:
         env:
           UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
-          # The keyboard must stay expanded for keyboard dismiss to find its Done key.
+          # The keyboard must stay expanded for the form step to find the return key labelled Done.
           xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
           pnpm clean:daemon
           node bin/agent-device.mjs prepare ios-runner --platform ios --udid "$UDID" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS"

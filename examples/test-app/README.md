@@ -14,7 +14,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Home`: visible-text checks, dismissible banner, modal open/close, async loading, status badge, switch state
 - `Catalog`: search debounce, filter chips, direction-aware scroll canary, favorite toggles, cart updates, drill-in navigation
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
-- `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard dismiss, success summary
+- `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard enter (the email field's Done return key hides the keyboard), success summary
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
 - `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification

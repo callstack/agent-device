@@ -98,14 +98,23 @@ extension RunnerKeyboardStatus {
   /// slot otherwise (see `observed(visible:keyboardKeys:)`). `keyboard status` reports it and
   /// `keyboard dismiss` refuses to press it, so the two commands cannot disagree about which key is
   /// the return key.
+  ///
+  /// A control that sits wholly above the first row of character keys is an input accessory toolbar's
+  /// button, such as its `Next` or `Done`, and is never the return key even when the keyboard
+  /// exposes it beside the keys.
   static func returnControl(in keys: [ObservedKeyboardKey]) -> ObservedKeyboardKey? {
     let worded = keys.filter { key in
       !(key.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    if let named = worded.first(where: { RunnerKeyboardReturnKey.kind(of: $0.text ?? "") != .unknown }) {
-      return named
+    let firstKeyRowTop = worded
+      .filter { $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).count == 1 && !$0.frame.isEmpty }
+      .map { $0.frame.minY }
+      .min()
+    let named = worded.first { key in
+      RunnerKeyboardReturnKey.kind(of: key.text ?? "") != .unknown
+        && (firstKeyRowTop.map { key.frame.isEmpty || key.frame.maxY > $0 } ?? true)
     }
-    return returnKeySlot(in: keys)
+    return named ?? returnKeySlot(in: keys)
   }
 
   /// True when `frame` is the frame of the return key among `keys`. A control with no usable frame

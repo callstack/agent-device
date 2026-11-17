@@ -209,7 +209,7 @@ extension RunnerTests {
   /// populated here, which is what makes this a real preference rather than the only candidate.
   func testKeyboardStatusPrefersNamedWordingOverTheSlot() {
     let keys = observedKeyboardKeysFixture([
-      ("Done", 5, 959, 39), (" ", 5, 1121, 197), ("ż", 202, 1121, 198),
+      ("Q", 5, 959, 39), ("Done", 50, 1067, 39), (" ", 5, 1121, 197), ("ż", 202, 1121, 198),
     ])
     XCTAssertEqual(
       RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keys),
@@ -238,6 +238,34 @@ extension RunnerTests {
     )
     XCTAssertFalse(
       RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 720, y: 1096, width: 98, height: 54), in: pad)
+    )
+  }
+
+  /// An input accessory toolbar's `Next` or `Done` that the keyboard exposes beside its keys sits above
+  /// the first key row, so it is never the return key: the real return key is still named, a pad whose
+  /// only `Done` is a toolbar button has no return key, and the toolbar button stays a dismiss candidate.
+  func testKeyboardReturnControlIgnoresAnAccessoryToolbarAboveTheKeys() {
+    let phone = observedKeyboardKeysFixture([
+      ("Next", 20, 524, 60), ("Q", 5, 616, 41), ("W", 46, 616, 41), (" ", 108, 784, 207),
+      ("done", 314, 784, 103),
+    ])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: phone),
+      RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
+    )
+    XCTAssertFalse(
+      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 20, y: 524, width: 60, height: 54), in: phone)
+    )
+
+    let pad = observedKeyboardKeysFixture([
+      ("Done", 300, 524, 90), ("1", 5, 881, 132), ("2", 136, 881, 132), ("Delete", 268, 1043, 132),
+    ])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: pad),
+      RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
+    )
+    XCTAssertFalse(
+      RunnerKeyboardStatus.isReturnControl(frame: CGRect(x: 300, y: 524, width: 90, height: 54), in: pad)
     )
   }
 

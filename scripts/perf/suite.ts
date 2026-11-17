@@ -301,10 +301,12 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('fill-name', C.fill, ['fill', 'id="field-name"', 'Ada Lovelace']),
       step('fill-email', C.fill, ['fill', 'id="field-email"', 'ada@example']),
       step('type-suffix', C.type, ['type', '.test']),
-      step('keyboard-dismiss', C.keyboard, ['keyboard', 'dismiss'], {
+      // iOS's only Done key is the field's return key, which `keyboard dismiss` never presses, so
+      // `keyboard enter` submits the field and hides the keyboard. Android emulators type through the
+      // headless test IME, which has no Done key, so `keyboard dismiss` hides it.
+      step('keyboard-hide', C.keyboard, ['keyboard', 'enter'], {
         before: [['wait', 'label="Done" visible=true', '10000']],
-        // Android emulators type through the headless test IME, which has no Done key.
-        on: { android: { before: [] } },
+        on: { android: { args: ['keyboard', 'dismiss'], before: [] } },
       }),
       step('press-checkbox', C.press, ['press', 'id="checkbox-agree"'], {
         before: [['scroll', 'down', '--until', 'id="checkbox-agree"']],
