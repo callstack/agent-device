@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-import { privateGroupOwned } from './owner-identity.ts';
 
 /**
  * What this process may rely on when it judges ground: who it is, as the kernel answers. The rule reads no
@@ -13,39 +12,18 @@ import { privateGroupOwned } from './owner-identity.ts';
  * process may rely on, whether a directory is safe to publish inside, whether a link belongs to somebody
  * else, and whether another local user could claim the destination's entry.
  */
-export type ScriptDestinationTrust = Readonly<{
-  uid: number;
-  /** Whether this directory's group provably holds no other user (ADR 0016). */
-  privateGroup: (directory: DirectoryAuthority) => boolean;
-}>;
+export type ScriptDestinationTrust = Readonly<{ uid: number }>;
 
-/**
- * What this process may rely on when it judges ground: who it is, and a probe for whether one of its groups is
- * private to it alone. The probe is asked ONCE per walk and remembers its answer, because the account database
- * does not change while a destination is judged and a long path would otherwise read it per step.
- */
 function scriptTrust(): ScriptDestinationTrust {
-  return { uid: process.getuid?.() ?? -1, privateGroup: memoizedPrivateGroupProbe() };
-}
-
-/** Wraps {@link privateGroupOwned} so one walk reads the account files at most once. */
-function memoizedPrivateGroupProbe(): (directory: DirectoryAuthority) => boolean {
-  const answers = new Map<string, boolean>();
-  return (directory) => {
-    const key = `${directory.uid}:${directory.gid}`;
-    const known = answers.get(key);
-    if (known !== undefined) return known;
-    const answer = privateGroupOwned(directory);
-    answers.set(key, answer);
-    return answer;
-  };
+  return { uid: process.getuid?.() ?? -1 };
 }
 
 /**
  * The fields of a directory, or of a link, that the ancestry rule reads, so each decision is testable on the
- * fields of one `lstat` rather than through a filesystem.
+ * fields of one `lstat` rather than through a filesystem. The group id is deliberately absent: nothing here
+ * asks it, because no account file can say who belongs to a group (ADR 0016).
  */
-export type DirectoryAuthority = Readonly<{ uid: number; gid: number; mode: number }>;
+export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
 
 export type LinkAuthority = Readonly<{ uid: number }>;
 
@@ -72,10 +50,11 @@ export type ScriptAncestryExposure =
  * Whether this user can rely on a destination being inside `directory`, and why not if they cannot.
  *
  * Ownership first: a directory another user owns is theirs to chmod or repopulate whatever its mode says
- * today, and no race is needed. Then the mode. A group-writable directory is refused whoever owns the group —
- * proving one holds no other user means reading the host's account files, which ADR 0016 declines to do. The
- * sticky bit is the one mode exception, and sound only for PASSING THROUGH: it cannot refuse a NEW entry by
- * name, so {@link othersCreateEntriesIn} is asked separately before anything is created.
+ * today, and no race is needed. Then the mode. A group-writable directory is refused whoever owns it: the
+ * group can add the destination's name here, and no account file can say who belongs to a group, because
+ * systemd userdb serves memberships /etc/passwd and /etc/group never show (ADR 0016). The sticky bit is the
+ * one mode exception, and sound only for PASSING THROUGH: it cannot refuse a NEW entry by name, so
+ * {@link othersCreateEntriesIn} is asked separately before anything is created.
  */
 export function untrustedAncestryExposure(
   directory: DirectoryAuthority,
@@ -84,7 +63,7 @@ export function untrustedAncestryExposure(
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
   if (directory.mode & 0o1000) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020 && !trust.privateGroup(directory)) return 'shared_group_writable';
+  if (directory.mode & 0o020) return 'shared_group_writable';
   return undefined;
 }
 
@@ -99,8 +78,7 @@ export function othersCreateEntriesIn(
 ): boolean {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
-  // A group-writable directory whose group holds nobody but this user still shuts every other local user out.
-  return Boolean(directory.mode & 0o020) && !trust.privateGroup(directory);
+  return Boolean(directory.mode & 0o020);
 }
 
 /**
@@ -592,7 +570,7 @@ function standOn(
 
 /** Owner and mode of the ENTRY one `lstat` answer describes. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
-  return { uid: Number(stats.uid), gid: Number(stats.gid), mode: Number(stats.mode) };
+  return { uid: Number(stats.uid), mode: Number(stats.mode) };
 }
 
 /**

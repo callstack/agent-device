@@ -10,9 +10,6 @@ import {
   expectUntrustedReplaced,
   modeOf,
   publish,
-  seedMissingNsswitchHost,
-  seedPrivateGroupHost,
-  seedUntrustedMembershipHost,
 } from './atomic-file-host.fixtures.ts';
 import {
   confirmScriptDestination,
@@ -128,9 +125,11 @@ skipOnWindows('refuses a destination created inside a directory others can add e
 });
 
 skipOnWindows(
-  'refuses a destination under a group-writable directory whose members are unknown',
+  'refuses to pass through a group-writable directory above the directory it creates',
   () => {
-    seedUntrustedMembershipHost();
+    // The unsafe part is the level this user does NOT create: `sub` is created at 0700 and is safe, and the
+    // refusal still names `team` above it, because another member of that group can replace `sub` with one of
+    // their own before the entry is written.
     const team = directoryWith(path.join(root(), 'team'), 0o775);
     const sub = path.join(team, 'sub');
     privateDir(sub);
@@ -141,16 +140,17 @@ skipOnWindows(
 );
 
 skipOnWindows(
-  'accepts a destination under a group-writable directory whose group is this user alone',
+  'passes through a directory this user owns that only its group can read and traverse',
   () => {
-    // The stock Ubuntu home: 0775, owned by this user, its group a private group of this user. The name
-    // service here is `files`, so the account files settle the question and the save goes through (#4565).
-    seedPrivateGroupHost();
-    const team = directoryWith(path.join(root(), 'team'), 0o775);
+    // The counterpart on the mode alone: 0750 keeps the group out of WRITING, so nobody but this user can add
+    // the name `sub` here, and the walk goes on down to the destination.
+    const team = directoryWith(path.join(root(), 'team'), 0o750);
+    const sub = path.join(team, 'sub');
+    privateDir(sub);
 
-    publish(path.join(team, 'journey.ad'));
+    publish(path.join(sub, 'journey.ad'));
 
-    expect(fs.existsSync(path.join(team, 'journey.ad'))).toBe(true);
+    expect(fs.existsSync(path.join(sub, 'journey.ad'))).toBe(true);
   },
 );
 
@@ -605,52 +605,60 @@ skipOnWindows('refuses a path component that cannot carry a publish', () => {
 
 // --- a group-writable directory is refused, whoever owns the group (ADR 0016) ---
 
-skipOnWindows(
-  'refuses a group-writable 0775 directory whose group it cannot prove, with a hint',
-  () => {
-    // A host whose name service answers membership from elsewhere: the account files cannot settle whether
-    // this group holds another user, so the mode alone refuses and the hint names the fix.
-    seedUntrustedMembershipHost();
-    const home = directoryWith(path.join(root(), 'home'), 0o775);
-    let hint = '';
-    try {
-      publish(path.join(home, 'journey.ad'));
-    } catch (error) {
-      hint = String((error as AppError).details?.hint);
-    }
-
-    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
-    expect(hint).toContain(`chmod g-w ${home}`);
-    expect(fs.readdirSync(home)).toEqual([]);
-  },
-);
-
-skipOnWindows('accepts a group-writable 0775 directory on a stock Ubuntu host', () => {
-  // The same directory and mode as the case above, on the host that shape actually has: `files`, a private
-  // group, no other account claiming it. A plain Ubuntu or Debian home directory is therefore saved to.
-  seedPrivateGroupHost();
+skipOnWindows('refuses a group-writable 0775 directory this user owns, with a hint', () => {
+  // Ownership of the directory is not enough, because the GROUP can add the destination's name here first and
+  // the mode bits cannot say who belongs to it. Reading /etc/group would not settle it either: systemd userdb
+  // answers members those files never show. So the mode decides and the hint names the fix.
   const home = directoryWith(path.join(root(), 'home'), 0o775);
+  let hint = '';
+  try {
+    publish(path.join(home, 'journey.ad'));
+  } catch (error) {
+    hint = String((error as AppError).details?.hint);
+  }
+
+  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+  expect(hint).toContain(`chmod g-w ${home}`);
+  expect(fs.readdirSync(home)).toEqual([]);
+});
+
+skipOnWindows('accepts the same directory once its group write bit is removed', () => {
+  // The recovery the hint names, applied: `chmod g-w` leaves 0755, which shuts every other local user out of
+  // creating the destination's name, whatever the group holds.
+  const home = directoryWith(path.join(root(), 'home'), 0o775);
+  fs.chmodSync(home, 0o755);
 
   publish(path.join(home, 'journey.ad'));
 
   expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
-skipOnWindows('refuses a group-writable 0775 directory when no nsswitch.conf can be read', () => {
-  // A host that answers nothing: an unreadable name-service config proves nothing about membership, so the
-  // exception does not apply and the mode stands.
-  seedMissingNsswitchHost();
-  const home = directoryWith(path.join(root(), 'home'), 0o775);
+skipOnWindows('refuses a setgid group-writable directory', () => {
+  // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
+  const home = directoryWith(path.join(root(), 'home'), 0o2775);
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
 });
 
-skipOnWindows('refuses a setgid group-writable directory whose members are unknown', () => {
-  // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
-  seedUntrustedMembershipHost();
-  const home = directoryWith(path.join(root(), 'home'), 0o2775);
+/** The account databases a group-membership question would have to read, on Linux. */
+const ACCOUNT_FILES = ['/etc/passwd', '/etc/group', '/etc/nsswitch.conf'];
+
+skipOnWindows('judges a group-writable directory without reading the host account files', () => {
+  // The whole reason the mode decides: the rule asks the kernel who owns a directory and what its bits say, and
+  // reads nothing else. A test cannot accidentally reintroduce a host dependency, because the answer to these
+  // three names is a failure. It also says why one destination answers the same on a macOS laptop, a container
+  // and an Ubuntu runner with a private primary group.
+  const read: string[] = [];
+  const real = fs.readFileSync;
+  vi.spyOn(fs, 'readFileSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+    const name = String(pathname);
+    if (ACCOUNT_FILES.includes(name)) read.push(name);
+    return (real as (...args: unknown[]) => unknown)(pathname, ...rest);
+  }) as typeof fs.readFileSync);
+  const home = directoryWith(path.join(root(), 'home'), 0o775);
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+  expect(read).toEqual([]);
 });
 
 // --- a link is judged as the link it is, and its target is judged too ---

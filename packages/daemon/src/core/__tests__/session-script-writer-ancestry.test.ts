@@ -6,8 +6,6 @@ import {
   FOREIGN_UID,
   createLiveTestHostEnvironment,
   mkdtempForTestSync,
-  seedPrivateGroupHost,
-  seedUntrustedMembershipHost,
   serveHostOwnership,
 } from '@agent-device/test-kit';
 import { SessionScriptWriter } from '../session-script-writer.ts';
@@ -447,24 +445,11 @@ skipOnWindows('a recording refuses a link another local user owns on the way in'
   expect(fs.readdirSync(chosen)).toEqual([]);
 });
 
-skipOnWindows('a recording saves to a group-writable home whose group is this user alone', () => {
-  // The stock Ubuntu and Debian shape: the home directory is 0775, this user owns it, and its group is a
-  // private group carrying that user alone. The exception reads that from the host's own account files, so
-  // a plain Linux home directory is ground a recording may be saved to (#4565).
-  seedPrivateGroupHost();
-  const directory = root();
-  const home = homeDirectory(path.join(directory, 'home'), 0o775);
-
-  const result = writerFor(directory).write(recordingTo(path.join(home, 'journey.ad')));
-
-  expect(result.written).toBe(true);
-  expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toContain('open');
-});
-
-skipOnWindows('a recording refuses a group-writable home whose members cannot be proven', () => {
-  // The same directory and mode, on a host whose name service answers membership from elsewhere: nothing
-  // settles whether another user is in that group, so the mode alone refuses and the hint names the fix.
-  seedUntrustedMembershipHost();
+skipOnWindows('a recording refuses a group-writable home this user owns, and names the fix', () => {
+  // The stock Ubuntu and Debian home: 0775, owned by this user. Ownership is not the question the rule can
+  // answer here — a group-writable directory is one the group can create the destination's name in, and no
+  // account file can prove the group holds nobody else, because systemd userdb answers members /etc/group
+  // never shows. So the mode decides, on every host, and the hint names the one command that fixes it.
   const directory = root();
   const home = homeDirectory(path.join(directory, 'home'), 0o775);
 
@@ -477,6 +462,19 @@ skipOnWindows('a recording refuses a group-writable home whose members cannot be
   });
   expect(String(details.hint)).toContain(`chmod g-w ${home}`);
   expect(fs.readdirSync(home)).toEqual([]);
+});
+
+skipOnWindows('a recording saves to the same home once its group write bit is removed', () => {
+  // The recovery the refusal names, applied: `chmod g-w` leaves 0755, which shuts every other local user out of
+  // creating a name here whatever the group holds, and the save goes through.
+  const directory = root();
+  const home = homeDirectory(path.join(directory, 'home'), 0o775);
+  fs.chmodSync(home, 0o755);
+
+  const result = writerFor(directory).write(recordingTo(path.join(home, 'journey.ad')));
+
+  expect(result.written).toBe(true);
+  expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toContain('open');
 });
 
 skipOnWindows('a recording creates a missing parent at 0700 on a shared umask', () => {
