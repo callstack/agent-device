@@ -41,6 +41,9 @@ export async function primeProviderConnection(
 ): Promise<void> {
   if (provider === undefined || BUILTIN_CONNECT_PROVIDER_IDS.includes(provider)) return;
   await primePluginConnections(env, BUILTIN_PROVIDER_IDS);
+  if (pluginConnectionCapabilities(provider, env) !== undefined) return;
+  const unavailable = unavailableConnectPluginError(provider, env);
+  if (unavailable) throw unavailable;
 }
 
 export function isConnectProviderName(
@@ -104,11 +107,13 @@ export function unavailableConnectPluginError(
 /** Bundled and installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities {
   if (provider === 'proxy') return remoteDaemonConnection('proxy');
   const declared =
     builtinConnectionCapabilities(provider) ??
-    (provider === 'cloud' ? undefined : pluginConnectionCapabilities(provider, env));
+    (provider === undefined || provider === 'cloud'
+      ? undefined
+      : pluginConnectionCapabilities(provider, env));
   return declared ?? remoteDaemonConnection('remote-provider');
 }
