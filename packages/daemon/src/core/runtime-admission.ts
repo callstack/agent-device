@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import {
   runtimeSubjectFact,
   type BoundDeviceRuntime,
@@ -40,7 +41,7 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
     /** The subject every required operation must serve, such as the setting `settings` names. */
     subject?: string;
     unavailableResponse?: UnavailableRuntimeResponse;
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
   }>;
 
 export type { RuntimeAdmissionBindings };
@@ -119,7 +120,9 @@ export async function admitRuntimeUse<
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
   const runtime = await admitted.bind(request.device, request.use);
-  if (request.readiness) await ensureBoundDeviceReady(runtime, request.platformServices);
+  if (request.readinessScope) {
+    await ensureBoundDeviceReady(runtime, request.platformServices, request.readinessScope);
+  }
   return { type: 'runtime', runtime };
 }
 

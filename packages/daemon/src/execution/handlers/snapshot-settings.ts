@@ -24,6 +24,7 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import { contextFromFlags } from '../../core/context.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { createPlatformRequestScope } from '../../core/platform-request-scope.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
@@ -149,7 +150,7 @@ async function executeSettingsRead(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: !session,
+    readinessScope: session ? undefined : createPlatformRequestScope(req),
   });
   if (admission.type === 'response') return admission.response;
 
@@ -196,7 +197,7 @@ async function executeSettingsWrite(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: !session,
+    readinessScope: session ? undefined : createPlatformRequestScope(req),
   });
   if (admission.type === 'response') return admission.response;
   session = ref ? sessionStore.requireCurrent(ref) : undefined;

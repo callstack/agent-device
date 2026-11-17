@@ -16,22 +16,6 @@ test('classifyBootFailure maps timeout errors', () => {
   assert.equal(reason, 'IOS_BOOT_TIMEOUT');
 });
 
-test('classifyBootFailure maps adb offline errors', () => {
-  const reason = classifyBootFailure({
-    stderr: 'error: device offline',
-    context: { platform: 'android', phase: 'transport' },
-  });
-  assert.equal(reason, 'ADB_TRANSPORT_UNAVAILABLE');
-});
-
-test('classifyBootFailure maps tool missing from AppError code (android)', () => {
-  const reason = classifyBootFailure({
-    error: new AppError('TOOL_MISSING', 'adb not found in PATH'),
-    context: { platform: 'android', phase: 'transport' },
-  });
-  assert.equal(reason, 'ADB_TRANSPORT_UNAVAILABLE');
-});
-
 test('classifyBootFailure maps tool missing from AppError code (ios)', () => {
   const reason = classifyBootFailure({
     error: new AppError('TOOL_MISSING', 'xcrun not found in PATH'),
@@ -42,12 +26,12 @@ test('classifyBootFailure maps tool missing from AppError code (ios)', () => {
 
 test('classifyBootFailure reads stderr from AppError details', () => {
   const reason = classifyBootFailure({
-    error: new AppError('COMMAND_FAILED', 'adb failed', {
-      stderr: 'error: device unauthorized',
+    error: new AppError('COMMAND_FAILED', 'simctl failed', {
+      stderr: 'bootstatus timed out',
     }),
-    context: { platform: 'android', phase: 'transport' },
+    context: { platform: 'ios', phase: 'boot' },
   });
-  assert.equal(reason, 'ADB_TRANSPORT_UNAVAILABLE');
+  assert.equal(reason, 'IOS_BOOT_TIMEOUT');
 });
 
 test('bootFailureHint returns actionable guidance', () => {

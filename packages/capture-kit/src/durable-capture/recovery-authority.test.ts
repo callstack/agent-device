@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createAppLogLiveHandle } from '../app-log-live-handle.ts';
@@ -459,3 +460,102 @@ test('already-canceled recovery acquires no exact-owner authority', async () => 
   ).rejects.toBe(cancellation);
   expect(acquireControl).not.toHaveBeenCalled();
 });
+
+test.each(['cutoff', 'before-cutoff', 'caller-first'] as const)(
+  'delayed recovery timer delivery preserves %s evidence and authority cleanup',
+  async (scenario) => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    const cancellation = createRequestCanceledError();
+    let controlDisposed!: () => void;
+    const disposed = new Promise<void>((resolve) => {
+      controlDisposed = resolve;
+    });
+    const disposeControl = vi.fn(async () => {
+      controlDisposed();
+    });
+    const forceCleanup = vi.fn(async () => ({ status: 'cleaned' }) as const);
+    let beginReattach!: () => void;
+    const reattaching = new Promise<void>((resolve) => {
+      beginReattach = resolve;
+    });
+    let releaseReattach!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseReattach = resolve;
+    });
+    let recoverySignal: AbortSignal | undefined;
+    const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
+      displayName: 'app-log',
+      envelope,
+      scope: {
+        signal: caller.signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+      deadlineMs: 25,
+      acquireControl: async (_envelope, scope) => {
+        recoverySignal = scope.signal;
+        return {
+          reattach: async () => {
+            beginReattach();
+            await release;
+            return {
+              status: 'active' as const,
+              handle: createAppLogLiveHandle({
+                inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+                finish: async () => ({
+                  status: 'completed',
+                  alreadyCompleted: true,
+                  result: { backend: 'android', outputPath: '/tmp/app.log', completedAt: 1 },
+                }),
+                forceCleanup,
+              }),
+            };
+          },
+          cleanup: async () => ({ status: 'already-missing' as const }),
+          [Symbol.asyncDispose]: disposeControl,
+        };
+      },
+      onLateCleanupFailure: () => {},
+    }).then(
+      (authority) => ({ authority }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await reattaching;
+      if (scenario === 'caller-first') caller.abort(cancellation);
+      vi.setSystemTime(Date.now() + (scenario === 'before-cutoff' ? 24 : 25));
+      expect(recoverySignal?.aborted).toBe(scenario === 'caller-first');
+      releaseReattach();
+      const result = await acquisition;
+      if (scenario === 'before-cutoff') {
+        expect(result).toHaveProperty('authority.reattached.status', 'active');
+        expect(forceCleanup).not.toHaveBeenCalled();
+        expect(disposeControl).not.toHaveBeenCalled();
+        if ('authority' in result) {
+          if (result.authority.reattached.status === 'active')
+            await result.authority.reattached.handle[Symbol.asyncDispose]();
+          await result.authority.control[Symbol.asyncDispose]();
+        }
+      } else {
+        if (scenario === 'cutoff') {
+          expect(result).toMatchObject({
+            error: { name: 'DurableCaptureRecoveryDeadlineError', deadlineMs: 25 },
+          });
+          expect(caller.signal.aborted).toBe(false);
+        } else {
+          expect(result).toEqual({ error: cancellation });
+          expect(recoverySignal?.reason).toBe(cancellation);
+        }
+        await disposed;
+        expect(forceCleanup).toHaveBeenCalledOnce();
+        expect(disposeControl).toHaveBeenCalledOnce();
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      releaseReattach();
+      await acquisition;
+      vi.useRealTimers();
+    }
+  },
+);

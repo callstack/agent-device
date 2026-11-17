@@ -254,7 +254,8 @@ async function startRecording(
   const binding = ref ? bindSessionScreenRecording(params.sessionStore, ref) : draft!.binding;
   binding.assertAdoptable();
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);
-  if (needsReadiness) await ensureBoundDeviceReady(admission, params.platformServices);
+  if (needsReadiness)
+    await ensureBoundDeviceReady(admission, params.platformServices, params.requestScope);
   const startFact = admission.facts.screenRecordingStart;
   if (!startFact.available) return buildRecordingUnsupportedResponse(startFact);
   const runtime = await params.bindDevice(session.device, use);
@@ -544,7 +545,8 @@ function exactRecoveryControl(
       screenRecordingRecoveryUse,
       recoveryScope,
     );
-    if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
+    if (needsReadiness)
+      await ensureBoundDeviceReady(runtime, params.platformServices, recoveryScope);
     return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
   };
 }

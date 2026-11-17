@@ -32,7 +32,7 @@ function bootPropFailure(stdout: string, stderr: string) {
 function slowBootPropFailure(delayMs: number) {
   return async () => {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return { stdout: '', stderr: '', exitCode: 1 };
+    return { stdout: '', stderr: '', exitCode: 0 };
   };
 }
 
@@ -61,20 +61,122 @@ async function expectBootFailure(
   return await startedBootFailure(timeoutMs);
 }
 
-test('a boot poll against an offline device fails as an adb transport loss without retrying', async () => {
-  mockRunCmd.mockImplementation(bootPropFailure('', 'error: device offline'));
+test.each(['error: device offline', 'device offline'])(
+  'the real adb producer makes %s retry until booted',
+  async (stderr) => {
+    mockRunCmd.mockImplementationOnce(bootPropFailure('', stderr));
+    await waitForAndroidBoot('emulator-5554', 500);
+    assert.equal(mockRunCmd.mock.calls.length, 2);
+  },
+);
 
+test('unauthorized is terminal', async () => {
+  mockRunCmd.mockImplementation(bootPropFailure('', 'error: device unauthorized'));
   const failure = await expectBootFailure(500);
-
-  assert.equal(failure.code, 'COMMAND_FAILED');
   assert.equal(failure.details.reason, 'ADB_TRANSPORT_UNAVAILABLE');
-  assert.match(String(failure.details.hint), /adb devices -l/);
-  assert.equal(failure.details.serial, 'emulator-5554');
-  assert.equal(failure.details.stderr, 'error: device offline');
-  assert.equal(failure.details.exitCode, 1);
-  // shouldRetry refuses the transport loss, so exactly one poll ran.
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
+
+test('typed reason controls retry independently of wording', async () => {
+  mockRunCmd.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_offline',
+      retriable: true,
+    }),
+  );
+  await waitForAndroidBoot('emulator-5554', 500);
+  assert.equal(mockRunCmd.mock.calls.length, 2);
+  mockRunCmd.mockReset();
+  mockRunCmd.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_unauthorized',
+      adbHostRefusal: true,
+    }),
+  );
+  const failure = await expectBootFailure(500);
+  assert.equal(failure.details.reason, 'ADB_TRANSPORT_UNAVAILABLE');
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('a curated terminal offline verdict is not overridden by its host-refusal shape', async () => {
+  mockRunCmd.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'changed wording', {
+      adbFailure: 'device_offline',
+      adbHostRefusal: true,
+      retriable: false,
+    }),
+  );
+  await expectBootFailure(500);
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('offline wording without a typed failure reason does not trigger retry', async () => {
+  mockRunCmd.mockRejectedValue(new AppError('COMMAND_FAILED', 'device offline'));
+  await expectBootFailure(500);
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test.each(['0', '1'])('cancellation wins when getprop returns %s', async (stdout) => {
+  const controller = new AbortController();
+  mockRunCmd.mockImplementation(async () => {
+    controller.abort();
+    return { stdout, stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(
+    waitForAndroidBoot('emulator-5554', 500, controller.signal),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('cancellation keeps the owner reason details and wraps a reason-less abort', async () => {
+  const owned = new AbortController();
+  const ownerReason = new AppError('COMMAND_FAILED', 'canceled', {
+    reason: 'request_canceled',
+    timeoutMs: 250,
+    requestId: 'req-boot',
+  });
+  mockRunCmd.mockImplementationOnce(async () => {
+    owned.abort(ownerReason);
+    return { stdout: '0', stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, owned.signal), (error) => {
+    assert.equal(error, ownerReason);
+    return true;
+  });
+
+  const generic = new AbortController();
+  const genericReason = new Error('caller went away');
+  mockRunCmd.mockImplementationOnce(async () => {
+    generic.abort(genericReason);
+    return { stdout: '0', stderr: '', exitCode: 0 };
+  });
+  await assert.rejects(waitForAndroidBoot('emulator-5554', 500, generic.signal), (error) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'request_canceled');
+    assert.equal(error.cause, genericReason);
+    return true;
+  });
+});
+
+test.each([
+  {
+    message: 'changed command-timeout wording',
+    details: { timeoutMs: 100 },
+    reason: 'ANDROID_BOOT_TIMEOUT',
+  },
+  { message: 'adb timed out after 100ms', details: {}, reason: 'BOOT_COMMAND_FAILED' },
+])(
+  'boot timeout classification follows typed evidence: $message',
+  async ({ message, details, reason }) => {
+    mockRunCmd.mockRejectedValue(new AppError('COMMAND_FAILED', message, details));
+
+    const failure = await expectBootFailure(500);
+
+    assert.equal(failure.details.reason, reason);
+    assert.equal(mockRunCmd.mock.calls.length, 1);
+  },
+);
 
 test('a still-booting device past its deadline reports an Android boot timeout', async () => {
   // On a fake clock: each poll burns 80 ms, and the 150 ms deadline is crossed inside the

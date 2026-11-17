@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type {
   ClipboardReadInput,
@@ -13,6 +14,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { createPlatformRequestScope } from '../../core/platform-request-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,
@@ -111,6 +113,7 @@ async function resolveBoundClipboardRuntime(
   params: Readonly<{
     device: DeviceInfo;
     action: ClipboardAction;
+    requestScope: PlatformRequestScope;
     positionals: readonly string[];
   }> &
     RuntimeAdmissionBindings,
@@ -124,7 +127,7 @@ async function resolveBoundClipboardRuntime(
       inspectFacts,
       bindDevice,
       platformServices,
-      readiness: true,
+      readinessScope: params.requestScope,
     });
     if (admission.type === 'response') return { ok: false, response: admission.response };
     const runtime = admission.runtime;
@@ -137,7 +140,7 @@ async function resolveBoundClipboardRuntime(
     inspectFacts,
     bindDevice,
     platformServices,
-    readiness: true,
+    readinessScope: params.requestScope,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;
@@ -175,6 +178,7 @@ export async function handleSessionClipboardCommand(params: {
   });
   if (ref) sessionStore.requireCurrent(ref);
   const bound = await resolveBoundClipboardRuntime({
+    requestScope: createPlatformRequestScope(req),
     device,
     action,
     positionals,

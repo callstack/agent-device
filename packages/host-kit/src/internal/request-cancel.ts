@@ -15,8 +15,13 @@ type RequestCancelState = {
   requestAbortControllers: Map<string, RequestAbortController>;
 };
 
+type RequestExecutionDeadline = Readonly<{ deadlineMs: number; expire(): void }>;
+
 type RequestAbortController = AbortController & {
-  executionDeadlineMs?: number;
+  executionDeadlines?: Set<RequestExecutionDeadline>;
+  parent?: RequestAbortController;
+  deadlineRegistration?: RequestAbortRegistration;
+  executionDeadlineCancellation?: Readonly<{ timeoutMs: number; requestId: string }>;
   /**
    * The daemon's own result deadline, which the transport that admitted the request set ahead of
    * the client's: the end of the client envelope less the daemon's result margin. An attempt
@@ -97,7 +102,7 @@ export function registerRequestAbort(
   }
   const controller: RequestAbortController = new AbortController();
   const parent = parentRequestId ? requestAbortControllers().get(parentRequestId) : undefined;
-  controller.executionDeadlineMs = parent?.executionDeadlineMs;
+  controller.parent = parent;
   controller.resultDeadlineMs = parentRequestId
     ? parent?.resultDeadlineMs
     : admission?.resultDeadlineMs;
@@ -158,9 +163,51 @@ export function getRequestSignal(requestId: string | undefined): AbortSignal | u
   return requestAbortControllers().get(requestId)?.signal;
 }
 
-/** The original bounded composite cutoff, inherited by nested test attempts. */
+/** The effective execution cutoff, including live parent deadlines. */
 export function getRequestExecutionDeadlineMs(requestId: string | undefined): number | undefined {
-  return requestId ? requestAbortControllers().get(requestId)?.executionDeadlineMs : undefined;
+  const controller = requestId ? requestAbortControllers().get(requestId) : undefined;
+  return controller ? effectiveExecutionDeadline(controller)?.deadlineMs : undefined;
+}
+
+function effectiveExecutionDeadline(
+  controller: RequestAbortController,
+): RequestExecutionDeadline | undefined {
+  let earliest = controller.parent ? effectiveExecutionDeadline(controller.parent) : undefined;
+  for (const own of controller.executionDeadlines ?? []) {
+    if (!earliest || own.deadlineMs < earliest.deadlineMs) earliest = own;
+  }
+  return earliest;
+}
+
+/** Enforces the live execution cutoff through its existing owner, preserving earlier cancellation. */
+export function throwIfRequestExecutionDeadlineExceeded(requestId: string | undefined): void {
+  const controller = requestId ? requestAbortControllers().get(requestId) : undefined;
+  if (!controller) return;
+  enforceExecutionDeadline(controller);
+  controller.signal.throwIfAborted();
+}
+
+function inheritRequestCancellation(controller: RequestAbortController): boolean {
+  for (
+    let current: RequestAbortController | undefined = controller;
+    current;
+    current = current.parent
+  ) {
+    if (!current.signal.aborted) continue;
+    if (!controller.signal.aborted) {
+      controller.executionDeadlineCancellation = current.executionDeadlineCancellation;
+      controller.abort(current.signal.reason);
+    }
+    return true;
+  }
+  return false;
+}
+
+function enforceExecutionDeadline(controller: RequestAbortController): void {
+  if (inheritRequestCancellation(controller)) return;
+  const deadline = effectiveExecutionDeadline(controller);
+  if (deadline && Date.now() >= deadline.deadlineMs) deadline.expire();
+  inheritRequestCancellation(controller);
 }
 
 /** The daemon's result deadline the admitting transport set for the request, if it set one. */
@@ -242,29 +289,47 @@ export async function withRequestDeadline(
     ? undefined
     : registerRequestAbort(requestId);
   const controller = requestAbortControllers().get(requestId)!;
-  const deadlineMs = Math.min(controller.executionDeadlineMs ?? Infinity, Date.now() + timeoutMs);
-  controller.executionDeadlineMs = deadlineMs;
-  let deadlineCanceled = false;
+  if (ownedRegistration) controller.deadlineRegistration = ownedRegistration;
+  const deadlineMs = Date.now() + timeoutMs;
   const expire = () => {
     if (controller.signal.aborted) return;
-    deadlineCanceled = true;
+    controller.executionDeadlineCancellation = { timeoutMs, requestId };
     controller.abort(createRequestCanceledError({ timeoutMs, requestId }));
   };
-  const timer = setTimeout(expire, Math.max(0, deadlineMs - Date.now()));
+  const ownedDeadline = { deadlineMs, expire };
+  const deadlines = (controller.executionDeadlines ??= new Set());
+  deadlines.add(ownedDeadline);
+  const arm = (): ReturnType<typeof setTimeout> =>
+    setTimeout(
+      onTimer,
+      Math.max(0, (effectiveExecutionDeadline(controller)?.deadlineMs ?? deadlineMs) - Date.now()),
+    );
+  const onTimer = () => {
+    enforceExecutionDeadline(controller);
+    if (!controller.signal.aborted) timer = arm();
+  };
+  let timer = arm();
   try {
+    enforceExecutionDeadline(controller);
     controller.signal.throwIfAborted();
     const result = await task();
-    if (Date.now() >= deadlineMs) expire();
-    if (deadlineCanceled) return projectDeadlineResponse(result, timeoutMs);
+    enforceExecutionDeadline(controller);
+    const cancellation = controller.executionDeadlineCancellation;
+    if (cancellation) return projectDeadlineResponse(result, cancellation.timeoutMs);
     controller.signal.throwIfAborted();
     return result;
   } catch (error) {
-    if (Date.now() >= deadlineMs) expire();
-    if (deadlineCanceled) throw deadlineFailure(error, timeoutMs, requestId);
+    enforceExecutionDeadline(controller);
+    const cancellation = controller.executionDeadlineCancellation;
+    if (cancellation) throw deadlineFailure(error, cancellation.timeoutMs, cancellation.requestId);
     controller.signal.throwIfAborted();
     throw error;
   } finally {
     clearTimeout(timer);
-    clearRequestAbortRegistration(ownedRegistration);
+    deadlines.delete(ownedDeadline);
+    if (deadlines.size === 0) {
+      clearRequestAbortRegistration(controller.deadlineRegistration);
+      controller.deadlineRegistration = undefined;
+    }
   }
 }

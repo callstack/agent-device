@@ -12,6 +12,7 @@ export {
   registerRequestAbort,
   resolveRequestTrackingId,
   throwIfRequestCanceled,
+  throwIfRequestExecutionDeadlineExceeded,
   withRequestDeadline,
 } from './internal/request-cancel.ts';
 export { emitRequestProgress, withRequestProgressSink } from './internal/request-progress.ts';

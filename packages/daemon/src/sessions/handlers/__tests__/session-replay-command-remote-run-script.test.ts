@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -24,6 +25,7 @@ async function replayBundle(root: string, bundle: ReplayScriptSourceBundle, remo
   const host = createTestHostEnvironment({ cwd: root, env: {} });
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
   const response = await handleReplayCommand({
+    requestScope: platformRequestScopeFixture(),
     host,
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),

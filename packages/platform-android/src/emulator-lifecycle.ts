@@ -1,11 +1,14 @@
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { androidAdbInvocation, androidAdbSerialTarget } from './adb-transport.ts';
 import { runAndroidHostAdb } from './adb-executor.ts';
-import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import {
+  bootFailureHint,
+  type BootFailureReason,
+} from '@agent-device/provision-kit/boot-diagnostics';
 
 const ANDROID_BOOT_POLL_MS = 1_000;
 const ANDROID_BOOT_PROP_TIMEOUT_MS = 10_000;
@@ -20,7 +23,7 @@ async function readAndroidBootProp(
       androidAdbSerialTarget(serial),
       deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed']),
     ),
-    { allowFailure: true, signal, timeoutMs },
+    { signal, timeoutMs },
   );
 }
 
@@ -52,6 +55,7 @@ export async function waitForAndroidBoot(
           Math.min(remainingMs, ANDROID_BOOT_PROP_TIMEOUT_MS),
           signal,
         );
+        if (signal?.aborted) throw androidBootCancellation(signal);
         lastBootResult = result;
         if (result.stdout.trim() === '1') return;
         // exec-guard-allow: getprop exits 0 while the device is still booting;
@@ -61,6 +65,7 @@ export async function waitForAndroidBoot(
           stdout: result.stdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
+          bootObservation: 'not_ready',
         });
       },
       {
@@ -68,32 +73,50 @@ export async function waitForAndroidBoot(
         baseDelayMs: pollMs,
         maxDelayMs: pollMs,
         jitter: 0,
-        shouldRetry: (error) => {
-          const reason = classifyBootFailure({
-            error,
-            stdout: lastBootResult?.stdout,
-            stderr: lastBootResult?.stderr,
-            context: { platform: 'android', phase: 'boot' },
-          });
-          return reason !== 'ADB_TRANSPORT_UNAVAILABLE' && reason !== 'ANDROID_BOOT_TIMEOUT';
-        },
+        shouldRetry: isTransientAndroidBootFailure,
       },
       {
         deadline,
         phase: 'boot',
         signal,
-        classifyReason: (error) =>
-          classifyBootFailure({
-            error,
-            stdout: lastBootResult?.stdout,
-            stderr: lastBootResult?.stderr,
-            context: { platform: 'android', phase: 'boot' },
-          }),
+        classifyReason: (error) => androidBootFailureReason(error),
       },
     );
   } catch (error) {
+    if (signal?.aborted) throw androidBootCancellation(signal);
     throwAndroidBootFailure({ error, serial, timeoutMs, deadline, lastBootResult, timedOut });
   }
+}
+
+/** Keeps the cancellation owner's typed error, such as its deadline details. */
+function androidBootCancellation(signal: AbortSignal): AppError {
+  return signal.reason instanceof AppError
+    ? signal.reason
+    : createRequestCanceledError(undefined, signal.reason);
+}
+
+function isTransientAndroidBootFailure(error: unknown): boolean {
+  const details = asAppError(error).details;
+  return (
+    details?.bootObservation === 'not_ready' ||
+    (details?.retriable === true &&
+      (details.adbFailure === 'device_offline' || details.adbHostRefusal !== true))
+  );
+}
+
+function androidBootFailureReason(error: unknown): BootFailureReason {
+  const appError = asAppError(error);
+  if (
+    appError.code === 'TOOL_MISSING' ||
+    appError.details?.adbHostRefusal === true ||
+    appError.details?.adbFailure === 'device_unauthorized'
+  ) {
+    return 'ADB_TRANSPORT_UNAVAILABLE';
+  }
+  if (appError.details?.adbFailure === 'timeout' || isCommandTimeoutError(appError)) {
+    return 'ANDROID_BOOT_TIMEOUT';
+  }
+  return 'BOOT_COMMAND_FAILED';
 }
 
 function throwAndroidBootFailure(params: {
@@ -117,39 +140,31 @@ function throwAndroidBootFailure(params: {
 function normalizedAndroidBootFailureReason(
   params: Parameters<typeof throwAndroidBootFailure>[0],
   appError: AppError,
-): ReturnType<typeof classifyBootFailure> {
-  const classified = classifyBootFailure({
-    error: params.error,
-    stdout: params.lastBootResult?.stdout,
-    stderr: params.lastBootResult?.stderr,
-    context: { platform: 'android', phase: 'boot' },
-  });
-  return classified === 'BOOT_COMMAND_FAILED' &&
-    appError.message === 'Android device is still booting'
-    ? 'ANDROID_BOOT_TIMEOUT'
-    : classified;
+): BootFailureReason {
+  if (isTransientAndroidBootFailure(params.error) || params.timedOut) return 'ANDROID_BOOT_TIMEOUT';
+  return androidBootFailureReason(appError);
 }
 
 function buildAndroidBootFailureDetails(
   params: Parameters<typeof throwAndroidBootFailure>[0],
-  reason: ReturnType<typeof classifyBootFailure>,
+  reason: BootFailureReason,
 ) {
   return {
     serial: params.serial,
     timeoutMs: params.timeoutMs,
     elapsedMs: params.deadline.elapsedMs(),
-    reason,
     hint: bootFailureHint(reason),
     stdout: params.lastBootResult?.stdout,
     stderr: params.lastBootResult?.stderr,
     exitCode: params.lastBootResult?.exitCode,
     ...(asAppError(params.error).details ?? {}),
+    reason,
   };
 }
 
 function buildAndroidBootError(
   appError: AppError,
-  reason: ReturnType<typeof classifyBootFailure>,
+  reason: BootFailureReason,
   timedOut: boolean,
   details: ReturnType<typeof buildAndroidBootFailureDetails>,
 ): AppError {

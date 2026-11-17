@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type {
   KeyboardActionInput,
   KeyboardDismissResult,
@@ -240,11 +241,11 @@ async function executeKeyboardEnter(
 export async function resolveBoundKeyboardRuntime(
   params: {
     device: DeviceInfo;
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
   } & RuntimeAdmissionBindings & { positionals: readonly string[] },
 ): Promise<ResolvedKeyboardExecution> {
   const action = readKeyboardAction(params.positionals);
-  const { device, inspectFacts, bindDevice, platformServices, readiness } = params;
+  const { device, inspectFacts, bindDevice, platformServices, readinessScope } = params;
   if (action === 'status') {
     return await admitKeyboardAction(
       {
@@ -254,7 +255,7 @@ export async function resolveBoundKeyboardRuntime(
         inspectFacts,
         bindDevice,
         platformServices,
-        readiness,
+        readinessScope,
       },
       (runtime, context) => executeKeyboardStatus(runtime, context),
     );
@@ -268,7 +269,7 @@ export async function resolveBoundKeyboardRuntime(
         inspectFacts,
         bindDevice,
         platformServices,
-        readiness,
+        readinessScope,
       },
       (runtime, context) => executeKeyboardDismiss(runtime, context),
     );
@@ -281,7 +282,7 @@ export async function resolveBoundKeyboardRuntime(
       inspectFacts,
       bindDevice,
       platformServices,
-      readiness,
+      readinessScope,
     },
     (runtime, context) => executeKeyboardEnter(runtime, context),
   );

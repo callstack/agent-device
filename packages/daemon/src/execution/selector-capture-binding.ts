@@ -1,3 +1,4 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
@@ -52,6 +53,7 @@ export type ResolvedSelectorCapture =
 export async function resolveBoundSelectorCapture(
   params: Readonly<{
     command: SelectorCaptureCommand;
+    requestScope: PlatformRequestScope;
     device: SessionState['device'];
     session: SessionState | undefined;
     inspectFacts?: InspectDeviceRuntimeFacts;
@@ -65,7 +67,7 @@ export async function resolveBoundSelectorCapture(
       hasActiveApp: params.session?.appBundleId !== undefined,
       intent: selectorCaptureIntent(params.command),
     }),
-    readiness: !params.session,
+    readinessScope: params.session ? undefined : params.requestScope,
   });
   if (!bound.ok) return bound;
   // The read is present only when the admitted owner advertised it; its absence is not a failure

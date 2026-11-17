@@ -7,7 +7,7 @@ import {
 } from './daemon-client-entry.ts';
 import { resolveImportEdges } from './model.ts';
 
-const DAEMON_MODULE = 'packages/daemon/src/server/platform-request-scope.ts';
+const DAEMON_MODULE = 'packages/daemon/src/core/platform-request-scope.ts';
 
 /** The CLI entries and a daemon module exist as stubs, so a case fails only on what it plants. */
 function check(sources: Record<string, string>) {

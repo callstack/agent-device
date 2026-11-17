@@ -17,6 +17,7 @@ import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { markSessionSnapshotOutdated } from '../core/ref-frame.ts';
 import { SessionStore } from '../core/session-store.ts';
+import { createPlatformRequestScope } from '../core/platform-request-scope.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
@@ -148,6 +149,7 @@ export async function createBoundSelectorRuntime(
   const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
   if (!resolved.ok) return resolved;
   const bound = await resolveBoundSelectorCapture({
+    requestScope: createPlatformRequestScope(params.req),
     command: options.command,
     device: resolved.device,
     session: resolved.session,

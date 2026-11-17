@@ -1,9 +1,11 @@
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { createPlatformRequestScope } from '../../core/platform-request-scope.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { contextFromFlags } from '../../core/context.ts';
@@ -140,7 +142,7 @@ type SessionRouteRuntimeResolver = (
     host: HostEnvironment;
     device: DeviceInfo;
     positionals: string[];
-    readiness?: boolean;
+    readinessScope?: PlatformRequestScope;
     inspectFacts?: InspectDeviceRuntimeFacts;
     platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
@@ -189,7 +191,7 @@ async function runBoundSessionRoute(
         host: params.host,
         device,
         positionals,
-        readiness: true,
+        readinessScope: createPlatformRequestScope(req),
         inspectFacts,
         bindDevice,
         platformServices,

@@ -5,7 +5,10 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
  * Runs concrete local-platform readiness mechanics from the root composition layer.
  * Returns false when the platform has no readiness preparation step.
  */
-export async function ensureLocalPlatformDeviceReady(device: DeviceInfo): Promise<boolean> {
+export async function ensureLocalPlatformDeviceReady(
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Promise<boolean> {
   if (isIosFamily(device)) {
     if (device.kind === 'simulator') {
       const { ensureBootedSimulator } = await import('@agent-device/platform-apple/simulator');
@@ -22,7 +25,7 @@ export async function ensureLocalPlatformDeviceReady(device: DeviceInfo): Promis
   }
   if (device.platform === 'android') {
     const { waitForAndroidBoot } = await loadAndroidMechanics();
-    await waitForAndroidBoot(device.id);
+    await waitForAndroidBoot(device.id, undefined, signal);
     return true;
   }
   return false;

@@ -15,6 +15,7 @@ import {
 } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import {
+  platformRequestScopeFixture,
   unavailableBindDevice,
   unavailableBindExactDevice,
 } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
@@ -80,6 +81,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // the asserted path: dropping it in the handler must fail this test, since an
   // unset field reads as trusted and a remote flow would run evalScript.
   const response = await handleReplayCommand({
+    requestScope: platformRequestScopeFixture(),
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),

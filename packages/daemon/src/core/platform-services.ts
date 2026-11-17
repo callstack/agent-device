@@ -7,7 +7,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
  * Concrete local readiness for one device, answering "does this local leaf have a readiness step,
  * and did it settle?" — the boolean keeps the daemon's TTL cache honest without a platform branch.
  */
-export type EnsureLocalDeviceReady = (device: DeviceInfo) => Promise<boolean>;
+export type EnsureLocalDeviceReady = (device: DeviceInfo, signal: AbortSignal) => Promise<boolean>;
 
 /**
  * Root-composed platform services the daemon asks of the host machine for work that binds no

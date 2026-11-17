@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
@@ -16,6 +17,7 @@ test('an available plan inspects once and binds once, on the admitted device', a
   const fixture = selectorCaptureFixture();
 
   const bound = await resolveBoundSelectorCapture({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     command: 'find',
     device: ANDROID_EMULATOR,
@@ -32,6 +34,7 @@ test('an available plan inspects once and binds once, on the admitted device', a
 test('repeated captures reuse the one binding the plan was admitted for', async () => {
   const fixture = selectorCaptureFixture();
   const bound = await resolveBoundSelectorCapture({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     command: 'wait',
     device: ANDROID_EMULATOR,
@@ -54,6 +57,7 @@ test('an unavailable required operation refuses before any bind', async () => {
   });
 
   const bound = await resolveBoundSelectorCapture({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     command: 'is',
     device: ANDROID_EMULATOR,
@@ -72,6 +76,7 @@ test.each(['find', 'get', 'is'] as const)(
     const fixture = selectorCaptureFixture({ findText: { available: true } });
 
     const bound = await resolveBoundSelectorCapture({
+      requestScope: platformRequestScopeFixture(),
       platformServices: daemonPlatformServicesFixture(),
       command,
       device: ANDROID_EMULATOR,
@@ -90,6 +95,7 @@ test('wait rejects an advertised observation with no implementation', async () =
 
   await expect(
     resolveBoundSelectorCapture({
+      requestScope: platformRequestScopeFixture(),
       platformServices: daemonPlatformServicesFixture(),
       command: 'wait',
       device: ANDROID_EMULATOR,
@@ -108,6 +114,7 @@ test('a session without a tracked app selects the without-active-app plan', asyn
   });
 
   const withApp = await resolveBoundSelectorCapture({
+    requestScope: platformRequestScopeFixture(),
     platformServices: daemonPlatformServicesFixture(),
     command: 'get',
     device: IOS_SIMULATOR,
@@ -120,6 +127,7 @@ test('a session without a tracked app selects the without-active-app plan', asyn
     {},
     async () =>
       await resolveBoundSelectorCapture({
+        requestScope: platformRequestScopeFixture(),
         platformServices: daemonPlatformServicesFixture(),
         command: 'get',
         device: IOS_SIMULATOR,

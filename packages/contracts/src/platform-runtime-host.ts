@@ -211,6 +211,8 @@ export type PlatformProgressSink = Readonly<{
 /** Request-lifetime attachments; durable handles must never retain this scope. */
 export type PlatformRequestScope = Readonly<{
   signal: AbortSignal;
+  /** Enforces active execution/recovery cutoffs through their live owners, without another timer. */
+  checkDeadline?(): void;
   diagnostics: PlatformDiagnosticSink;
   progress: PlatformProgressSink;
 }>;

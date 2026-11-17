@@ -59,9 +59,10 @@ test('bound readiness preserves local behavior after the binding fence', async (
   await ensureBoundDeviceReady(
     { device: selected, owner: localRuntimeOwner('android') },
     platformServices,
+    scope,
   );
 
-  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected, platformServices);
+  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected, platformServices, scope);
 });
 
 test('bound readiness leaves provider-owned devices alone', async () => {
@@ -71,6 +72,7 @@ test('bound readiness leaves provider-owned devices alone', async () => {
       owner: providerRuntimeOwner('test', 'provider-ready'),
     },
     daemonPlatformServicesFixture(),
+    scope,
   );
 
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
@@ -99,7 +101,7 @@ test('runtime readiness follows device claim admission', async () => {
     use: appLogInspectUse,
     inspectFacts: bindings.inspectFacts,
     bindDevice: bindings.bindDevice,
-    readiness: true,
+    readinessScope: scope,
   });
 
   expect(admission.type).toBe('runtime');

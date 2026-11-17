@@ -1,3 +1,4 @@
+import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
@@ -91,7 +92,7 @@ test('sessionless capture readiness follows runtime binding', async () => {
     plan: resolveSnapshotRuntimePlan({ customActions: false, hasActiveApp: true }),
     inspectFacts: fixture.inspectFacts,
     bindDevice: recordingBind,
-    readiness: true,
+    readinessScope: platformRequestScopeFixture(),
   });
 
   expect(resolved.ok).toBe(true);

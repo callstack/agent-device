@@ -74,7 +74,7 @@ import {
   isSensitiveFillText,
   sensitiveFillPlaceholder,
 } from '@agent-device/ad-script';
-import { createPlatformRequestScope } from './platform-request-scope.ts';
+import { createPlatformRequestScope } from '../core/platform-request-scope.ts';
 import {
   parameterizeSensitiveString,
   redactFillFailureReadBack,
