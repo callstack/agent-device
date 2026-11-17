@@ -19,6 +19,7 @@ import {
   inspectProcessLock,
   tryAcquireProcessLock,
   acquireProcessLockAcquisition,
+  untrustedDirectoryAncestry,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
@@ -329,6 +330,13 @@ const STATE_DIR_MODE = 0o700;
  * entry under its name, and the first level that is a link, is not a directory, or belongs to another uid
  * stops the descent: that level and every level beneath it are left exactly as they are.
  *
+ * Judging DOWN is not enough either, because the descent never questions the ground the base stands on: a
+ * user who can write an ancestor above it can rename the base and leave a link at its name between two of
+ * this function's calls, and every level below then resolves on ground nothing judged. So the ancestry above
+ * the base is asked FIRST, by {@link untrustedDirectoryAncestry} — the walk a script destination is judged
+ * by, not a second rule. It is asked of the ANCESTRY only: the levels at and below the base are what this
+ * repair exists to make private (ADR 0016).
+ *
  * Nothing here decides whether the daemon starts (ADR 0016), so no error is allowed to travel either: the
  * `lstat`, the open, the `fstat`, the `fchmod` and the closing `close` are inside one catch, and any of them
  * failing — `EACCES` on a directory this user cannot read, `ENOENT` on a name that went missing meanwhile,
@@ -345,6 +353,7 @@ function repairStateChain(stateBase: string, directory: string): boolean {
     skipStateDirMode(directory, 'not_below_state_base');
     return false;
   }
+  if (!stateAncestryIsTrusted(stateBase)) return false;
   for (const level of levels) {
     try {
       if (!repairStateLevel(level)) return false;
@@ -354,6 +363,20 @@ function repairStateChain(stateBase: string, directory: string): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Whether `stateBase` stands on ground no other local user can move, asked before a single level is touched.
+ *
+ * {@link untrustedDirectoryAncestry} is given the base's PARENT, so it answers about the ancestry above the
+ * base and leaves the base itself to {@link repairStateLevel}, which can force its mode instead of only
+ * refusing it. Where the rule refuses, nothing below is repaired and the chain is not private ground.
+ */
+function stateAncestryIsTrusted(stateBase: string): boolean {
+  const exposure = untrustedDirectoryAncestry(path.dirname(stateBase));
+  if (exposure === undefined) return true;
+  skipStateDirMode(exposure.ancestor, `state_ancestry_${exposure.exposure}`);
+  return false;
 }
 
 /**

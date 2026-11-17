@@ -258,6 +258,129 @@ skipOnWindows('reports the level that disappeared before the repair reached it',
   expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions, base))).toBe(1);
 });
 
+skipOnWindows(
+  'refuses to repair a chain whose state base stands on ground another user can write',
+  async () => {
+    // The blocker: judging DOWN from the state base never questions the ground the base itself stands on. A
+    // local user who can write that ancestor can rename the base and leave a link at its name between two of
+    // this function's calls, and every level below then resolves on the far side of a link nothing judged.
+    // The swap is staged here at the moment the descent looks at the SECOND level, which is what the reported
+    // host did: the daemon came in with `base/sessions` and `base/sessions/remote-scripts` standing 0755, and
+    // left the ATTACKER's directories at 0700 while answering `privateChain: true`.
+    //
+    // The answer is to judge the ancestry FIRST, with the rule a script destination is walked by, so the race
+    // is not reachable at all: nothing below is opened, and the chain is not private ground.
+    const shared = mkdtempForTestSync('agent-device-state-shared-ancestor-');
+    fs.chmodSync(shared, 0o777);
+    const base = path.join(shared, 'agent-device');
+    const sessions = path.join(base, 'sessions');
+    const remote = path.join(sessions, 'remote-scripts');
+    fs.mkdirSync(sessions, { recursive: true, mode: 0o700 });
+    fs.chmodSync(base, 0o700);
+    fs.chmodSync(sessions, 0o755);
+    // Where the base's name leads once it is swapped: directories this user owns, standing 0755, exactly as a
+    // directory an attacker's link points at would.
+    const outside = path.join(shared, 'attacker');
+    const farSessions = path.join(outside, 'sessions');
+    const farRemote = path.join(farSessions, 'remote-scripts');
+    fs.mkdirSync(farRemote, { recursive: true });
+    for (const directory of [outside, farSessions, farRemote]) fs.chmodSync(directory, 0o755);
+    const coUser = swapBaseWhenDescentLooksAt(base, sessions, outside);
+
+    expect(ensurePrivateDaemonStateDir(remote, base)).toEqual({
+      path: remote,
+      privateChain: false,
+    });
+    // Said once, and named for the ground that is not this process's to rely on.
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(remote, base))).toBe(1);
+
+    // The ancestry was judged before any level was opened, so the descent never got as far as the name the
+    // swap was armed for, and the co-user never had their turn.
+    expect(coUser.swapped()).toBe(false);
+    // Nothing was forced anywhere: neither the levels under the base nor the directories its name would have
+    // led to. The far side keeping 0755 is the whole point — that mode change is the reported exposure.
+    expect(modeOf(base)).toBe(0o700);
+    expect(modeOf(sessions)).toBe(0o755);
+    expect(modeOf(outside)).toBe(0o755);
+    expect(modeOf(farSessions)).toBe(0o755);
+    expect(modeOf(farRemote)).toBe(0o755);
+    expect(fs.readdirSync(outside)).toEqual(['sessions']);
+  },
+);
+
+skipOnWindows(
+  'repairs a chain whose ancestor is open to others but carries the sticky bit',
+  async () => {
+    // The same host shape, minus the one thing that made it unsafe: macOS `/tmp` and a shared CI directory are
+    // world-writable AND sticky, and this user owns them, so nobody but an entry's owner or root can rename the
+    // state base. Repair goes ahead. This is the pin that the ancestry is judged by the destination rule and
+    // not by a stricter copy of it: that rule passes a sticky directory through, so this one does too.
+    const shared = mkdtempForTestSync('agent-device-state-sticky-ancestor-');
+    fs.chmodSync(shared, 0o1777);
+    const base = path.join(shared, 'agent-device');
+    const sessions = path.join(base, 'sessions');
+    fs.mkdirSync(sessions, { recursive: true });
+    for (const directory of [base, sessions]) fs.chmodSync(directory, 0o755);
+
+    expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
+      path: sessions,
+      privateChain: true,
+    });
+
+    expect(modeOf(base)).toBe(0o700);
+    expect(modeOf(sessions)).toBe(0o700);
+  },
+);
+
+skipOnWindows(
+  'refuses a chain whose state base belongs to the ancestor that is another user',
+  async () => {
+    // The other way an ancestor can stop this repair: the directory the base stands in belongs to somebody
+    // else, so they can move the base whenever they like. `serveHostOwnership` reports the ownership the
+    // account files of this host cannot give a test.
+    // Resolved, because the ancestry walk resolves the same names the kernel does and reports the physical
+    // directory it stands on; a fixture keyed by path has to be keyed by that name.
+    const parent = fs.realpathSync(mkdtempForTestSync('agent-device-state-foreign-ancestor-'));
+    const base = path.join(parent, 'agent-device');
+    const sessions = path.join(base, 'sessions');
+    fs.mkdirSync(sessions, { recursive: true });
+    for (const directory of [base, sessions]) fs.chmodSync(directory, 0o755);
+    serveHostOwnership({ [parent]: FOREIGN_UID });
+
+    expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
+      path: sessions,
+      privateChain: false,
+    });
+
+    // Their directory, their mode: nothing below was forced either.
+    expect(modeOf(base)).toBe(0o755);
+    expect(modeOf(sessions)).toBe(0o755);
+  },
+);
+
+/**
+ * Plays the co-user: renames `base` aside and leaves a link at its name pointing at `outside`, at the moment
+ * the descent `lstat`s `watched` — after the base itself was judged, before anything below it was opened.
+ * Answers whether that turn ever came, which it does not when the ancestry is judged first.
+ */
+function swapBaseWhenDescentLooksAt(
+  base: string,
+  watched: string,
+  outside: string,
+): Readonly<{ swapped: () => boolean }> {
+  const realLstat = originals.lstatSync;
+  let swapped = false;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((target: unknown, options?: unknown) => {
+    if (!swapped && String(target) === watched) {
+      swapped = true;
+      fs.renameSync(base, `${base}-moved`);
+      fs.symlinkSync(outside, base);
+    }
+    return realLstat(target as fs.PathLike, options as never);
+  }) as typeof fs.lstatSync);
+  return { swapped: () => swapped };
+}
+
 skipOnWindows('skips a state directory another user owns, and leaves its mode', async () => {
   // The container and shared-CI shape: `sessions/` belongs to the uid a volume was mounted with, and the
   // daemon runs as root or as somebody else. Ownership is asked of the descriptor the mode would be forced

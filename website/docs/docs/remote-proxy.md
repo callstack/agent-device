@@ -125,11 +125,15 @@ action or `close` delivers the full recording again. If `close` cannot deliver t
 the session still closes and the file keeps the version from the last action. Every result that
 recorded a version discloses it: the CLI prints a warning and carries a typed
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field. Its `cause`
-names why: a daemon that cannot call its own state directory private ground, for example one whose
-state tree a container or a mounted volume left to another uid, refuses every version it picks a
-path for with `state_chain_untrusted`. That daemon still starts and answers every other command, and
-the fix is on the daemon host: make its user own the state directory, or point
-`AGENT_DEVICE_STATE_DIR` at a directory it owns.
+names why: a daemon that cannot call its own state directory private ground refuses every version it
+picks a path for with `state_chain_untrusted` — for example one whose state tree a container or a
+mounted volume left to another uid, or one whose state directory sits inside a directory other local
+users can write. That daemon still starts and answers every other command, and
+the fix is on the daemon host: make its user own the state directory and every directory above it, or point
+`AGENT_DEVICE_STATE_DIR` at a directory it owns. That check of the daemon's own directories is best
+effort, and it runs after they are created rather than before, so a state directory it refuses can
+leave an empty directory behind, beyond a link it rejected. No version is ever written into what it
+leaves: the refusal above is what stops the delivery.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
 batch steps are refused. A remote `batch` updates your file once with the recording from its

@@ -426,7 +426,57 @@ type WalkOutcome =
       /** Whether a `..` is queued behind that name, so creating cannot resolve the chain. */
       unresolvable: boolean;
     }>
-  | Readonly<{ ended: 'refused'; reject: AppError }>;
+  | Readonly<{
+      ended: 'refused';
+      /** The step the walk could not stand on, and the way it is unsafe. */
+      ancestor: string;
+      exposure: ScriptAncestryExposure;
+      /** The same judgment, worded for a caller that is saving a script. */
+      reject: AppError;
+    }>;
+
+/**
+ * Judges the ground `directory` STANDS ON, and `directory` itself: every directory the kernel looks one of its
+ * names up in, from the root down. Asks the destination walk what a name INSIDE `directory` would resolve by,
+ * and creates nothing — the probe name below it is never looked up.
+ *
+ * A caller that CHANGES something below `directory` has to ask this first: `O_NOFOLLOW` guards the LAST name of
+ * an open and nothing above it, so an ancestor another local user can write lets them rename `directory` and
+ * leave a link at its name between two of that caller's calls, and every level below then resolves on ground
+ * nobody judged. Where every ancestor is closed to other users nobody can make that swap, so the window is
+ * closed by PERMISSIONS — as it is for a script destination, whose rule this is rather than a copy of it,
+ * sticky-bit exception included (ADR 0016).
+ *
+ * Answers `undefined` for a chain this user may rely on: the walk ARRIVED, standing on `directory` itself,
+ * having judged it. Otherwise it answers the step it could not stand on, and the way that is unsafe.
+ */
+export function untrustedDirectoryAncestry(
+  directory: string,
+): Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> | undefined {
+  // Spelled by hand, NOT with `path.join`: join folds a `..` out of the caller's own spelling, and the kernel
+  // resolves that step against the directory physically stood in, not against the text.
+  // Refused here rather than thrown by the walk's own entry check: a caller that asks before it CHANGES
+  // something needs an answer it can act on, and a relative name cannot be judged without putting the
+  // process's working directory into the chain.
+  if (!path.isAbsolute(directory)) return { ancestor: directory, exposure: 'relative_destination' };
+  if (process.platform === 'win32') return undefined;
+  // Spelled by hand, NOT with `path.join`: join folds a `..` out of the caller's own spelling, and the kernel
+  // resolves that step against the directory physically stood in, not against the text.
+  const probed = `${directory}/${CHAIN_PROBE_NAME}`;
+  const spelled = spelledParent(probed);
+  const walked = walkSpelledParent(spelled, probed, scriptTrust());
+  if (walked.ended === 'refused') return { ancestor: walked.ancestor, exposure: walked.exposure };
+  // ARRIVED is the trusted answer. STOPPED SHORT says a name above `directory` is absent, so the walk has no
+  // judgment for the chain beyond it, and a `..` queued behind that name is its other spelling.
+  if (walked.ended === 'arrived') return undefined;
+  return {
+    ancestor: walked.deepest,
+    exposure: walked.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
+  };
+}
+
+/** The name {@link untrustedDirectoryAncestry} asks the walk about, which it never creates. */
+const CHAIN_PROBE_NAME = '.agent-device-ancestry-probe';
 
 /**
  * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the
@@ -463,6 +513,8 @@ function walkSpelledParent(
     if (step.kind === 'reject') {
       return {
         ended: 'refused',
+        ancestor: step.path,
+        exposure: step.exposure,
         reject: scriptAncestryFailure(destination, step.path, step.exposure),
       };
     }

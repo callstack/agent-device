@@ -291,11 +291,12 @@ function daemonStateUntrustedFailure(scriptPath: string): AppError {
       reason: 'state_chain_untrusted',
       path: scriptPath,
       hint:
-        'A level of the daemon state chain is a symbolic link, is owned by another user, or could not be ' +
-        'judged, so the daemon cannot call it private ground. This is the shape of a bind-mounted CI volume ' +
-        'or a container image that leaves the state directory to another uid. Make the daemon own that tree ' +
-        '(chown -R the state directory to the daemon user), or point AGENT_DEVICE_STATE_DIR at a directory it ' +
-        'owns, then re-record. A recording to an explicit --save-script path is unaffected.',
+        'A level of the daemon state chain, or a directory above it, is a symbolic link, is owned by ' +
+        'another user, or is open to other users, so the daemon cannot call it private ground. This is the ' +
+        'shape of a bind-mounted CI volume, a container image that leaves the state directory to another ' +
+        'uid, or a state directory inside a shared directory anyone can write. Make the daemon own that ' +
+        'tree (chown -R the state directory to the daemon user), or point AGENT_DEVICE_STATE_DIR at a ' +
+        'directory it owns, then re-record. A recording to an explicit --save-script path is unaffected.',
     },
   );
 }

@@ -7,6 +7,7 @@ export {
   publishDurableFileSync,
   publishFileSync,
   publishScriptFileSync,
+  untrustedDirectoryAncestry,
   type DurableFilePublishMode,
   type ScriptDestination,
 } from './internal/atomic-file.ts';

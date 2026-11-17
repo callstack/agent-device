@@ -522,6 +522,30 @@ skipOnWindows.each(['sessions', 'remote-scripts'] as const)(
   },
 );
 
+skipOnWindows(
+  'a daemon-picked recording refuses state sitting under a directory another user can write',
+  () => {
+    // The accepted consequence of judging the ancestry: state that sits inside a directory other local users
+    // can write is not ground the daemon can call its own, because they can move the whole state tree out
+    // from under it. Every daemon-picked destination — the default recording here, and every remote version —
+    // is then refused with the state-chain reason, while a destination the CALLER named stays the walk's
+    // business alone (the tests above). Startup is unaffected: this refusal is the write half of the answer.
+    const stateDir = root();
+    const shared = sharedDirectory(path.join(stateDir, 'shared'), 0o777);
+    const base = path.join(shared, 'agent-device');
+
+    const result = writerFor(base).write(remoteRecording());
+
+    expect(refusal(result)).toMatchObject({ reason: 'state_chain_untrusted' });
+    // The repair never went below the shared ancestor: the state chain was created at its own private modes,
+    // and the shared directory nobody owns keeps the mode its owner chose.
+    expect(fs.lstatSync(path.join(base, 'sessions')).mode & 0o777).toBe(0o700);
+    expect(fs.lstatSync(path.join(base, 'sessions', 'remote-scripts')).mode & 0o777).toBe(0o700);
+    expect(fs.lstatSync(shared).mode & 0o777).toBe(0o777);
+    expect(scriptFilesIn(path.join(base, 'sessions', 'remote-scripts'))).toEqual([]);
+  },
+);
+
 skipOnWindows('a default recording refuses to follow a state link at `sessions` too', () => {
   // Same answer for the other daemon-picked destination: a default recording lives under `sessions/`, so a
   // skipped chain there is refused the same way, and the far-side directory gets no file.

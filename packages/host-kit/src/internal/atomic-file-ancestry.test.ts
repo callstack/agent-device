@@ -14,6 +14,7 @@ import {
 import {
   confirmScriptDestination,
   prepareScriptDestination,
+  untrustedDirectoryAncestry,
   MAX_SCRIPT_PATH_LINK_HOPS,
 } from './atomic-file.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -806,3 +807,71 @@ skipOnWindows(
     expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), work);
   },
 );
+
+// --- the same rule, asked of a directory a caller is about to CHANGE (#4584) ---
+//
+// `untrustedDirectoryAncestry` is the walk above, over a directory instead of over a file about to be
+// written: the daemon's state repair asks it before it forces a single mode. It has to be THIS rule and not a
+// copy of it, so what it answers is pinned here, where the rule lives.
+
+skipOnWindows('the standing-on judgment accepts a chain only this user can move', () => {
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  const base = path.join(home, 'agent-device');
+  fs.mkdirSync(base);
+
+  expect(untrustedDirectoryAncestry(base)).toBeUndefined();
+  // The directory itself was stood on, and asking created nothing.
+  expect(fs.readdirSync(home)).toEqual(['agent-device']);
+});
+
+skipOnWindows('the standing-on judgment names an ancestor another user can write', () => {
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const base = path.join(shared, 'agent-device');
+  fs.mkdirSync(base);
+
+  expect(untrustedDirectoryAncestry(base)).toEqual({
+    ancestor: shared,
+    exposure: 'world_writable',
+  });
+});
+
+skipOnWindows('the standing-on judgment passes a sticky ancestor through, as the walk does', () => {
+  // The one mode exception this rule carries, and the reason it cannot be restated more strictly elsewhere:
+  // the sticky bit stops anyone but an entry's owner or root from renaming that entry, which is the swap the
+  // judgment exists to rule out.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o1777);
+  const base = path.join(shared, 'agent-device');
+  fs.mkdirSync(base);
+
+  expect(untrustedDirectoryAncestry(base)).toBeUndefined();
+});
+
+skipOnWindows('the standing-on judgment refuses a chain it cannot resolve', () => {
+  // An absent name above the directory means the walk never reached it, so there is no judgment to report:
+  // the answer names the last directory it did stand on and says the rest has nowhere to be resolved from.
+  // The destination rule refuses that shape; so does this, instead of answering "trusted" about ground it
+  // never saw. A `..` behind the absent name is the same stop with a different word (`unresolvable_parent`),
+  // and the state-repair suite pins that spelling where the caller decides what to do with it.
+  const directory = root();
+  const base = path.join(directory, 'missing', 'agent-device');
+
+  expect(untrustedDirectoryAncestry(base)).toEqual({
+    ancestor: directory,
+    exposure: 'unreachable_parent',
+  });
+});
+
+skipOnWindows('the standing-on judgment refuses a chain a `..` cannot resolve either', () => {
+  // Spelled without `path.join`, which would fold the `..` away: this is the shape where the name the walk
+  // stops at is absent AND a step back is queued behind it, so creating cannot finish the resolution.
+  const directory = root();
+  const base = `${directory}/missing/../agent-device`;
+
+  expect(untrustedDirectoryAncestry(base)).toEqual({
+    ancestor: directory,
+    exposure: 'unresolvable_parent',
+  });
+});
