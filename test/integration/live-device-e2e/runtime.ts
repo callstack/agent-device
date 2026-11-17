@@ -62,6 +62,8 @@ type HarnessOptions<Context, BehaviorId extends string> = {
 };
 
 type RunStepOptions = {
+  /** Observes each issued result without changing its verdict; observer failures are ignored. */
+  observeResult?: (result: CliJsonResult) => void;
   allowFailure?: boolean;
   commonFlags?: boolean;
   expectFailure?: boolean;
@@ -251,6 +253,9 @@ export function createLiveDeviceHarness<
       step,
     });
     updateSessionState(context, args[0], result.status);
+    try {
+      stepOptions.observeResult?.(result);
+    } catch {}
     return { result, fullArgs };
   }
 
