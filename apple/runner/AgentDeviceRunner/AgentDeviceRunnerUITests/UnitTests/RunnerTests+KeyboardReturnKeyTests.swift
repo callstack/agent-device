@@ -452,6 +452,19 @@ extension RunnerTests {
     XCTAssertTrue(read.treeReadable)
     XCTAssertFalse(fellBack)
     XCTAssertEqual(read.surface?.frame, ownRead.frame)
+
+    // The refusal blames the tree only when the keyboard's own read held no candidate to try: an empty
+    // fallback does, a fallback holding a hide key the live lookup then rejects does not, and a readable
+    // tree never does.
+    XCTAssertTrue(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: false, surface: nil))
+    XCTAssertTrue(
+      RunnerKeyboardStatus.refusalIsTreeUnreadable(
+        treeReadable: false,
+        surface: RunnerKeyboardStatus.ObservedKeyboard(frame: ownRead.frame, keys: observedKeyboardKeysFixture([("Q", 87, 905, 65)]))
+      )
+    )
+    XCTAssertFalse(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: false, surface: ownRead))
+    XCTAssertFalse(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: true, surface: nil))
   }
 
   /// One snapshot of the keyboard answers the whole read, so the walk has to reach keys nested below

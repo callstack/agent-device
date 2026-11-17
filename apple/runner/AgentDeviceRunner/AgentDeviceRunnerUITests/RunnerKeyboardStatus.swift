@@ -164,6 +164,14 @@ extension RunnerKeyboardStatus {
       && keyboardFrame.minY - frame.maxY <= accessoryReach
   }
 
+  /// Whether a refusal should say the screen could not be read: the app tree was unreadable and the
+  /// keyboard's own read, the only one left, held no dismiss candidate. A fallback that held a candidate
+  /// the live lookup then rejected, as covered or ambiguous, is a keyboard whose key could not be pressed,
+  /// which is a different cause.
+  static func refusalIsTreeUnreadable(treeReadable: Bool, surface: ObservedKeyboard?) -> Bool {
+    !treeReadable && (surface.map { dismissControls(in: $0).isEmpty } ?? true)
+  }
+
   /// Every control `keyboard dismiss` may press, in dismiss-label order then tree order, all read from
   /// one snapshot so no decision mixes two reads of a keyboard that may be sliding.
   ///

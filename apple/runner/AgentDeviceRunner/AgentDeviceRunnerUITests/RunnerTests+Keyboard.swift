@@ -601,7 +601,9 @@ extension RunnerTests {
   private func tapKeyboardDismissControl(app: XCUIApplication) -> KeyboardDismissTap {
 #if os(iOS)
     let read = readKeyboardSurface(app: app)
-    let none: KeyboardDismissTap = read.treeReadable ? .notFound : .treeUnreadable
+    let none: KeyboardDismissTap =
+      RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: read.treeReadable, surface: read.surface)
+      ? .treeUnreadable : .notFound
     guard let surface = read.surface else {
       return none
     }
