@@ -79,5 +79,5 @@ function inspectReplayTestSource(
         }
       : {}),
   };
-  return { path: filePath, manifest };
+  return { path: filePath, manifest, sourceText: script };
 }

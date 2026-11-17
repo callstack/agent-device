@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
@@ -78,6 +78,45 @@ test('prepareReplayTestAttemptArtifacts preserves original Maestro flow filename
 
   assert.equal(fs.existsSync(path.join(attemptDir, 'replay.ad')), true);
   assert.equal(fs.existsSync(path.join(attemptDir, 'auth-flow.yml')), true);
+});
+
+test('prepareReplayTestAttemptArtifacts writes shipped flow text without opening a missing path', () => {
+  const root = mkdtempForTestSync('agent-device-test-artifacts-remote-source-');
+  const replayPath = path.join(root, 'missing-client', 'auth-flow.yaml');
+  const attemptDir = path.join(root, 'slug', 'attempt-1');
+  const source = 'appId: demo.app\n---\n- launchApp\n';
+  const copyFileSync = vi.spyOn(fs, 'copyFileSync');
+  const statSync = vi.spyOn(fs, 'statSync');
+
+  try {
+    prepareReplayTestAttemptArtifacts(replayPath, attemptDir, source);
+    assert.equal(
+      copyFileSync.mock.calls.some((call) => call[0] === replayPath),
+      false,
+    );
+    assert.equal(
+      statSync.mock.calls.some((call) => call[0] === replayPath),
+      false,
+    );
+  } finally {
+    copyFileSync.mockRestore();
+    statSync.mockRestore();
+  }
+
+  assert.equal(fs.readFileSync(path.join(attemptDir, 'replay.ad'), 'utf8'), source);
+  assert.equal(fs.readFileSync(path.join(attemptDir, 'auth-flow.yaml'), 'utf8'), source);
+});
+
+test('prepareReplayTestAttemptArtifacts writes only replay.ad when shipped text is a .ad entry', () => {
+  const root = mkdtempForTestSync('agent-device-test-artifacts-shipped-ad-');
+  const replayPath = path.join(root, 'missing-client', 'flow.ad');
+  const attemptDir = path.join(root, 'attempt-1');
+  const source = 'context platform=ios\nopen "Demo"\n';
+
+  prepareReplayTestAttemptArtifacts(replayPath, attemptDir, source);
+
+  assert.equal(fs.readFileSync(path.join(attemptDir, 'replay.ad'), 'utf8'), source);
+  assert.deepEqual(fs.readdirSync(attemptDir), ['replay.ad']);
 });
 
 test('materializeReplayTestAttemptArtifacts writes failure manifest and copies log artifacts', () => {

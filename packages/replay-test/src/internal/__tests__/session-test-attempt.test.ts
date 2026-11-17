@@ -70,3 +70,49 @@ test('a failed test result omits warnings when the attempt had none', async () =
   const result = await runFailedCase(FAILED_WITHOUT_WARNINGS);
   expect('warnings' in result).toBe(false);
 });
+
+test('a missing entry path runs from shipped source text', async () => {
+  const suiteArtifactsDir = mkdtempForTestSync('agent-device-test-attempt-remote-');
+  const filePath = path.join(suiteArtifactsDir, 'client-only', 'auth-flow.yaml');
+  const source = 'appId: demo.app\n---\n- launchApp\n';
+  let ran = false;
+
+  await runReplayTestCase({
+    entry: {
+      kind: 'run',
+      path: filePath,
+      manifest: { device: { platform: { kind: 'caller-bound' } } },
+      sourceText: source,
+    },
+    sessionName: 'default',
+    suiteInvocationId: 'suite-remote',
+    caseIndex: 0,
+    retries: 0,
+    suiteArtifactsDir,
+    suiteIndex: 1,
+    suiteTotal: 1,
+    runReplay: async () => {
+      ran = true;
+      return {
+        status: 'passed',
+        replayed: 1,
+        healed: 0,
+        warnings: [],
+        artifactPaths: [],
+      };
+    },
+    cleanupSession: async () => {},
+    emitProgress: () => {},
+    isCanceled: () => false,
+    emitDiagnostic: () => {},
+    bindAttemptCancellation: () => ({ cancel: () => {}, release: () => {} }),
+  });
+
+  expect(ran).toBe(true);
+  expect(
+    fs.readFileSync(
+      path.join(suiteArtifactsDir, 'auth-flow.yaml', 'attempt-1', 'replay.ad'),
+      'utf8',
+    ),
+  ).toBe(source);
+});

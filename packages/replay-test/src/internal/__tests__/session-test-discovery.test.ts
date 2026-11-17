@@ -52,6 +52,28 @@ test('platform filter runs caller-bound sources, which take their platform from 
   assert.equal(entries[0]?.kind, 'run');
 });
 
+test('discovery copies shipped source text onto filtered run entries and leaves it absent when the source has none', () => {
+  const sourceText = 'appId: demo\n---\n- launchApp\n';
+  const entries = discoverReplayTestEntries({
+    platformFilter: 'ios',
+    discoverSources: sourcesOf(
+      { path: '01-flow.yaml', manifest: callerBound, sourceText },
+      { path: '02-ios.ad', manifest: declared('ios') },
+    ),
+  });
+
+  const flow = entries.find((entry) => entry.path === '01-flow.yaml');
+  const native = entries.find((entry) => entry.path === '02-ios.ad');
+  assert.equal(flow?.kind, 'run');
+  if (flow?.kind === 'run') {
+    assert.equal(flow.sourceText, sourceText);
+  }
+  assert.equal(native?.kind, 'run');
+  if (native?.kind === 'run') {
+    assert.equal('sourceText' in native, false);
+  }
+});
+
 test('platform filter drops declared sources that do not match, without a skip entry', () => {
   const entries = discoverReplayTestEntries({
     platformFilter: 'android',

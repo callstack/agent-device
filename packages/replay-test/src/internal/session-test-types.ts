@@ -97,6 +97,12 @@ export type ReplayTestManifest = Readonly<{
 export type ReplayTestSource = Readonly<{
   path: string;
   manifest: ReplayTestManifest;
+  /**
+   * Opaque entry text the host already read. A string, including `""`, is written into the
+   * attempt directory and `path` is not opened. Absent when the host did not supply text, which
+   * keeps the local file copy.
+   */
+  sourceText?: string;
 }>;
 
 /**
