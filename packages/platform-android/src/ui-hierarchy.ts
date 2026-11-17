@@ -30,7 +30,6 @@ export type AndroidUiNodeMetadata = {
   bounds: string | null;
   rect?: Rect;
   clickable?: boolean;
-  /** Absent when the capture did not report it: a helper older than the attribute. */
   longClickable?: boolean;
   enabled?: boolean;
   visibleToUser?: boolean;

@@ -61,8 +61,6 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "visible-to-user", Boolean.toString(node.isVisibleToUser()));
     appendDrawingOrderAttribute(xml, node);
     appendTrueAttribute(xml, "clickable", node.isClickable());
-    // Both answers, like `selected` below: a helper older than this attribute reports nothing, and
-    // the host keeps that apart from a node that offers no long click.
     appendAttribute(xml, "long-clickable", Boolean.toString(node.isLongClickable()));
     appendAttribute(xml, "enabled", Boolean.toString(node.isEnabled()));
     appendTrueAttribute(xml, "focusable", node.isFocusable());

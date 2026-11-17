@@ -63,8 +63,6 @@ test('retains Android helper clickable facts from the same hierarchy projection'
     ],
   );
   assert.equal(publicSnapshot.nodes[1]?.hittable, true);
-  // The facts `hittable` folds together are published each on its own. A focusable node that is
-  // not clickable is hittable, and only the separate facts tell it from a touch target.
   assert.deepEqual(
     publicSnapshot.nodes.map((node) => [node.clickable, node.focusable, node.scrollable]),
     [
@@ -73,8 +71,6 @@ test('retains Android helper clickable facts from the same hierarchy projection'
       [false, false, true],
     ],
   );
-  // Both answers when the capture reported one, and nothing when it did not: a helper older than
-  // the attribute is not read as "offers no long click".
   assert.deepEqual(
     publicSnapshot.nodes.map((node) => node.longClickable),
     [true, false, undefined],
