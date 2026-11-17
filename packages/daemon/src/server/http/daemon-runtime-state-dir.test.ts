@@ -97,7 +97,9 @@ test.skipIf(process.platform === 'win32')(
       // Nothing was taken from the owner: the directory stands as they left it.
       expect(modeOf(sessionsDir)).toBe(0o755);
 
-      // The refusal the host DOES get is the one that names the destination, per recording.
+      // The refusal the host DOES get names the daemon's own state chain: a default recording is a path the
+      // daemon picks for itself, and it writes one only on ground it established as its own. The destination
+      // walk is what refuses a CALLER's path; here the chain never reached the walk (ADR 0016).
       const store = new SessionStore(sessionsDir, createTestHostEnvironment());
       const refused = store.writeSessionLog(
         store.publish(
@@ -108,11 +110,10 @@ test.skipIf(process.platform === 'win32')(
           }),
         ),
       );
-      expect(refusalOf(refused)).toMatchObject({
-        reason: 'script_ancestor_untrusted',
-        exposure: 'foreign_owned',
-        ancestor: sessionsDir,
-      });
+      expect(refusalOf(refused)).toMatchObject({ reason: 'state_chain_untrusted' });
+      expect(String(refusalOf(refused).path).startsWith(sessionsDir + path.sep)).toBe(true);
+      // Nothing was written under the foreign directory.
+      expect(fs.readdirSync(sessionsDir)).toEqual([]);
     } finally {
       await runtime.close();
     }

@@ -5,7 +5,10 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
-import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  ensurePrivateDaemonStateDir,
+  type DaemonStateDir,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   inferFillText,
   appendScriptSeriesFlags,
@@ -131,8 +134,14 @@ export class SessionScriptWriter {
         activePublication,
       });
       const remote =
-        session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
-      scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
+        session.scriptPublication?.kind === 'authoring' &&
+        session.scriptPublication.remoteDelivery !== undefined;
+      const destination = this.resolveScriptDestination(session, remote);
+      // A path the daemon picked for itself is written only where its own state chain is private ground.
+      scriptPath = destination.path;
+      if (destination.pickedByDaemon && !destination.privateChain) {
+        throw daemonStateUntrustedFailure(destination.path);
+      }
       // #1258: `options.force` is the caller's already-merged decision
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
@@ -160,27 +169,62 @@ export class SessionScriptWriter {
   }
 
   /**
+   * Where this write's script goes, and whether the daemon picked that path itself.
+   *
+   * A caller's `--save-script=<path>` is the caller's own destination, and the destination rule in host-kit
+   * is what judges it. Everything else is a path the daemon picked — a default recording under `sessions/`,
+   * or a remote version under `sessions/remote-scripts/` — and the daemon is the only party that knows that
+   * chain is its own. Ensuring a state level answers whether the chain from the state base is private
+   * ground; a chain that stopped at a link, a foreign level or a level it could not judge LEADS OUTSIDE the
+   * state tree, and the destination rule accepts a link standing in a parent others cannot write, so a
+   * skipped chain is refused here rather than published through. Startup keeps going either way (#4565).
+   */
+  private resolveScriptDestination(
+    session: SessionState,
+    remote: boolean,
+  ): { path: string; pickedByDaemon: boolean; privateChain: boolean } {
+    if (remote) {
+      const directory = this.remoteScriptDir();
+      return {
+        ...directory,
+        pickedByDaemon: true,
+        path: path.join(directory.path, `${crypto.randomUUID()}.ad`),
+      };
+    }
+    const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
+    if (targetPath) {
+      return {
+        path: expandSessionPath(targetPath, this.hostCwd),
+        pickedByDaemon: false,
+        privateChain: true,
+      };
+    }
+    const safeName = safeSessionName(session.name);
+    const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
+    const own = this.stateSessionsDir();
+    return {
+      ...own,
+      pickedByDaemon: true,
+      path: path.join(own.path, `${safeName}-${timestamp}.ad`),
+    };
+  }
+
+  /**
    * A remote recording's caller downloads each version once, so every version, the close-time
    * script included, gets a fresh file of its own in a private (0700) directory that only the daemon
    * user can enter. The file itself is private (0600) like every other published script, which
    * `publishScriptFileSync` decides.
    */
-  private remoteScriptPath(): string {
-    const directory = ensurePrivateDaemonStateDir(
+  private remoteScriptDir(): DaemonStateDir {
+    return ensurePrivateDaemonStateDir(
       path.join(this.sessionsDir, 'remote-scripts'),
       path.dirname(this.sessionsDir),
     );
-    return path.join(directory, `${crypto.randomUUID()}.ad`);
   }
 
-  private resolveScriptPath(session: SessionState): string {
-    const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
-    if (targetPath) {
-      return expandSessionPath(targetPath, this.hostCwd);
-    }
-    const safeName = safeSessionName(session.name);
-    const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
-    return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
+  /** The daemon's own `sessions/` directory, ensured the same way a remote version's directory is. */
+  private stateSessionsDir(): DaemonStateDir {
+    return ensurePrivateDaemonStateDir(this.sessionsDir, path.dirname(this.sessionsDir));
   }
 }
 
@@ -251,6 +295,25 @@ function toScriptWriteFailure(
       hint: subject.hint,
     },
     error,
+  );
+}
+
+/**
+ * Refusal for a script the daemon was about to write into its OWN state, on a chain the repair stopped on
+ * (ADR 0016): the chain is not private ground, so where the file would land is outside the state tree the
+ * daemon owns. This is not a repair failure and not a destination-rule failure — nothing was judged unsafe
+ * by the walk, because the walk ACCEPTS a link whose parent others cannot write. It is the daemon declining
+ * a path it picked for itself on ground it could not establish as its own.
+ */
+function daemonStateUntrustedFailure(scriptPath: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `The recording was not written: the daemon's own state directory is not private ground, so ${scriptPath} does not name a directory this daemon owns.`,
+    {
+      reason: 'state_chain_untrusted',
+      path: scriptPath,
+      hint: 'A level of the daemon state chain is a symbolic link, is owned by another user, or could not be judged. Point AGENT_DEVICE_STATE_DIR at a directory this user owns, or repair that level, then re-record.',
+    },
   );
 }
 

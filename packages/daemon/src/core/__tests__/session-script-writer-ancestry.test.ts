@@ -8,7 +8,12 @@ import {
   serveHostOwnership,
 } from '@agent-device/test-kit';
 import { SessionScriptWriter } from '../session-script-writer.ts';
-import { makeAuthoringSession } from '../../__tests__/support/session-factories.ts';
+import { SessionStore } from '../session-store.ts';
+import { remoteScriptVersionDelivery } from '../session-script-publication-capability.ts';
+import {
+  authoringPublication,
+  makeAuthoringSession,
+} from '../../__tests__/support/session-factories.ts';
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
@@ -37,6 +42,14 @@ function recordingTo(destination: string) {
       status: 'armed',
       target: { kind: 'explicit', path: destination, force: false },
     },
+    actions: [action('open')],
+  });
+}
+
+/** A remote-armed recording: the route that writes a version of its own under `remote-scripts/`. */
+function remoteRecording() {
+  return makeAuthoringSession('journey', {
+    scriptPublication: authoringPublication('armed', { remote: true }),
     actions: [action('open')],
   });
 }
@@ -478,3 +491,96 @@ skipOnWindows('a recording creates a missing parent at 0700 on a shared umask', 
   expect(fs.lstatSync(path.join(home, 'workflows')).mode & 0o777).toBe(0o700);
   expect(fs.lstatSync(path.join(home, 'workflows', 'recordings')).mode & 0o777).toBe(0o700);
 });
+
+skipOnWindows.each(['sessions', 'remote-scripts'] as const)(
+  'a remote version refuses to follow a state link at %s, and writes nothing outside the state tree',
+  (linkLevel) => {
+    // The destination rule judges ground, not ownership of a name, and it ACCEPTS a link standing in a
+    // parent others cannot write: `sessions -> outside` with `outside` at 0755 owned by this user passes the
+    // walk. For a caller's `--save-script` path that is the caller's business. For a path the DAEMON picked
+    // for itself — every remote version — a chain that the state repair stopped on at a link leads outside
+    // the state tree, and the daemon must not publish through it. Startup still starts (the repair stays
+    // best-effort); this is the write half of that answer (ADR 0016).
+    const stateDir = root();
+    const outside = path.join(stateDir, 'outside');
+    fs.mkdirSync(outside);
+    fs.chmodSync(outside, 0o755);
+    const sessions = path.join(stateDir, 'sessions');
+    const remote = path.join(sessions, 'remote-scripts');
+    const link = linkLevel === 'sessions' ? sessions : remote;
+    if (linkLevel === 'remote-scripts') fs.mkdirSync(sessions);
+    fs.symlinkSync(outside, link);
+
+    const result = writerFor(stateDir).write(remoteRecording());
+
+    expect(refusal(result)).toMatchObject({ reason: 'state_chain_untrusted' });
+    // No version was published on the far side of the link. The empty level the recursive `mkdir` may leave
+    // there is the disclosed creation behavior (#4584 review); what must not appear is the RECORDING, and
+    // the destination walk refuses any publication under that tree anyway.
+    expect(scriptFilesIn(outside)).toEqual([]);
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  },
+);
+
+skipOnWindows('a default recording refuses to follow a state link at `sessions` too', () => {
+  // Same answer for the other daemon-picked destination: a default recording lives under `sessions/`, so a
+  // skipped chain there is refused the same way, and the far-side directory gets no file.
+  const stateDir = root();
+  const outside = path.join(stateDir, 'outside');
+  fs.mkdirSync(outside);
+  fs.chmodSync(outside, 0o755);
+  fs.symlinkSync(outside, path.join(stateDir, 'sessions'));
+
+  const result = writerFor(stateDir).write(
+    makeAuthoringSession('journey', {
+      scriptPublication: authoringPublication('armed', {}),
+      actions: [action('open')],
+    }),
+  );
+
+  expect(refusal(result)).toMatchObject({ reason: 'state_chain_untrusted' });
+  expect(scriptFilesIn(outside)).toEqual([]);
+});
+
+skipOnWindows(
+  'a refused remote version is disclosed through the capability as a delivery failure',
+  () => {
+    // The capability is what a remote caller sees: the ACTION keeps its success, and the response carries
+    // `scriptDeliveryFailure` (ADR 0016). The state-chain refusal has to travel that path and not surface as
+    // a failed action or a silent success, with its typed reason as the failure's cause.
+    const stateDir = root();
+    const outside = path.join(stateDir, 'outside');
+    fs.mkdirSync(outside);
+    fs.chmodSync(outside, 0o755);
+    const sessions = path.join(stateDir, 'sessions');
+    fs.symlinkSync(outside, sessions);
+    const store = new SessionStore(sessions, createLiveTestHostEnvironment());
+    const ref = store.publish(
+      'journey',
+      makeAuthoringSession('journey', {
+        scriptPublication: authoringPublication('armed', { remote: true }),
+        actions: [action('open')],
+      }),
+    );
+    const deliver = remoteScriptVersionDelivery(store, 'journey');
+    ref.session.actions.push(action('click'));
+
+    const response = deliver({ ok: true, data: {} });
+    if (!response.ok) throw new Error('a failed version keeps the action successful');
+
+    expect(response.data?.scriptDeliveryFailure).toMatchObject({
+      reason: 'script_delivery_failed',
+      publicationId: 'publication-0001',
+      cause: 'state_chain_untrusted',
+    });
+    expect(response.data?.warnings).toHaveLength(1);
+    expect(scriptFilesIn(outside)).toEqual([]);
+  },
+);
+
+/** Every file under `directory`, at any depth: what a refused publication must not have left behind. */
+function scriptFilesIn(directory: string): string[] {
+  return fs.readdirSync(directory, { recursive: true }).filter((name) => {
+    return fs.statSync(path.join(directory, String(name))).isFile();
+  }) as string[];
+}

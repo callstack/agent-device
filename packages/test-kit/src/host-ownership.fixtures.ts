@@ -14,15 +14,21 @@ export const FOREIGN_UID = 65534;
  * privileges a test does not have — an unprivileged process cannot `chown` — and moving the CALLER's uid
  * instead decides the test by which directories the scratch tree happens to sit under.
  */
-export function serveHostOwnership(owners: Readonly<Record<string, number>>): void {
+export function serveHostOwnership(
+  owners: Readonly<Record<string, number>>,
+  moved?: Readonly<{ throughDescriptorOnly: boolean }>,
+): HostOwnershipProbe {
   // Captured before the spies are installed, so a forwarded call reaches the host and not this fixture.
   const real = {
     lstat: fs.lstatSync.bind(fs),
     stat: fs.statSync.bind(fs),
     open: fs.openSync.bind(fs),
     fstat: fs.fstatSync.bind(fs),
+    close: fs.closeSync.bind(fs),
   };
   const openedOn = new Map<number, string>();
+  const openedNames: string[] = [];
+  const closedDescriptors: number[] = [];
   // Ids come back as bigint or as numbers depending on the caller, so a moved id keeps that type.
   const reuid = <S extends { uid: number | bigint }>(stats: S, pathname: string | undefined): S => {
     const uid = pathname === undefined ? undefined : owners[pathname];
@@ -31,13 +37,19 @@ export function serveHostOwnership(owners: Readonly<Record<string, number>>): vo
       uid: typeof stats.uid === 'bigint' ? BigInt(uid) : uid,
     }) as S;
   };
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((name: never, ...rest: never[]) =>
-    reuid(real.lstat(name, ...rest), String(name))) as typeof fs.lstatSync);
-  vi.spyOn(fs, 'statSync').mockImplementation(((name: never, ...rest: never[]) =>
-    reuid(real.stat(name, ...rest), String(name))) as typeof fs.statSync);
+  // `throughDescriptorOnly` moves the id of the DESCRIPTOR an open reached and nothing else: the shape of
+  // a name swapped for a foreign entry between the `lstat` and the open, so only what a descriptor answers
+  // sees it, and the name still answers this process's own id.
+  if (moved?.throughDescriptorOnly !== true) {
+    vi.spyOn(fs, 'lstatSync').mockImplementation(((name: never, ...rest: never[]) =>
+      reuid(real.lstat(name, ...rest), String(name))) as typeof fs.lstatSync);
+    vi.spyOn(fs, 'statSync').mockImplementation(((name: never, ...rest: never[]) =>
+      reuid(real.stat(name, ...rest), String(name))) as typeof fs.statSync);
+  }
   vi.spyOn(fs, 'openSync').mockImplementation(((name: never, ...rest: never[]) => {
     const descriptor = Reflect.apply(real.open, fs, [name, ...rest]) as number;
     openedOn.set(descriptor, String(name));
+    openedNames.push(String(name));
     return descriptor;
   }) as typeof fs.openSync);
   vi.spyOn(fs, 'fstatSync').mockImplementation(((fd: never, ...rest: never[]) =>
@@ -45,4 +57,24 @@ export function serveHostOwnership(owners: Readonly<Record<string, number>>): vo
       Reflect.apply(real.fstat, fs, [fd, ...rest]) as fs.Stats,
       typeof fd === 'number' ? openedOn.get(fd) : undefined,
     )) as typeof fs.fstatSync);
+  vi.spyOn(fs, 'closeSync').mockImplementation(((fd: never, ...rest: never[]) => {
+    if (typeof fd === 'number') closedDescriptors.push(fd);
+    return Reflect.apply(real.close, fs, [fd, ...rest]) as void;
+  }) as typeof fs.closeSync);
+  return {
+    openedNames: () => [...openedNames],
+    closedDescriptors: () => [...closedDescriptors],
+    descriptorFor: (target: string) => [...openedOn].find(([, name]) => name === target)?.[0],
+  };
 }
+
+/**
+ * What {@link serveHostOwnership} also watched, for a rule that has to answer about a DESCRIPTOR rather than
+ * a name: which names were opened, in order, and which descriptors were closed. A caller proves a descent
+ * stopped by the names that were NOT opened, and proves a descriptor did not leak by finding it closed.
+ */
+export type HostOwnershipProbe = Readonly<{
+  openedNames: () => readonly string[];
+  closedDescriptors: () => readonly number[];
+  descriptorFor: (target: string) => number | undefined;
+}>;

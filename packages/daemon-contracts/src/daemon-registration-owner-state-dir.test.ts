@@ -50,11 +50,41 @@ skipOnWindows('repairs the state chain it owns, whatever mode its levels were cr
   // How the daemon actually calls it: startup ensures `sessions/` from the state base, the remote writer
   // ensures `remote-scripts/`, and each call repairs the chain down to the level it was asked for.
   ensurePrivateDaemonStateDir(sessions, base);
-  expect(ensurePrivateDaemonStateDir(remote, base)).toBe(remote);
+  const answer = ensurePrivateDaemonStateDir(remote, base);
+  expect(answer).toEqual({ path: remote, privateChain: true });
 
   for (const directory of [base, sessions, remote]) {
     expect(modeOf(directory)).toBe(0o700);
   }
+});
+
+skipOnWindows('answers that a chain it stopped on is not private ground', async () => {
+  // Startup reads this answer and starts anyway; a caller that WRITES under the directory reads the same
+  // answer and refuses. A chain that stopped at a link leads to ground outside the state tree, and the
+  // destination rule accepts a link whose parent others cannot write, so the walk would have published
+  // there. Only a chain that reached its level at 0700 answers `privateChain: true`.
+  const base = mkdtempForTestSync('agent-device-state-verdict-');
+  fs.chmodSync(base, 0o755);
+  const sessions = path.join(base, 'sessions');
+  fs.mkdirSync(sessions);
+  fs.chmodSync(sessions, 0o775);
+
+  expect(ensurePrivateDaemonStateDir(sessions, base)).toEqual({
+    path: sessions,
+    privateChain: true,
+  });
+
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(outside);
+  const planted = path.join(sessions, 'remote-scripts');
+  fs.symlinkSync(outside, planted);
+  expect(ensurePrivateDaemonStateDir(planted, base)).toEqual({
+    path: planted,
+    privateChain: false,
+  });
+
+  // A level the chain stopped at is not private either, and neither is one below it.
+  expect(ensurePrivateDaemonStateDir(path.join(planted, 'session'), base).privateChain).toBe(false);
 });
 
 skipOnWindows('asks nothing of a chain that already stands private', () => {
@@ -150,6 +180,44 @@ skipOnWindows('repairs above a planted link and stops below it', async () => {
   expect(modeOf(outside)).toBe(0o777);
   expect(fs.readdirSync(outside)).toEqual([]);
 });
+
+skipOnWindows(
+  'skips a directory whose opened descriptor is foreign-owned although lstat reported this UID',
+  async () => {
+    // The name can be swapped between the `lstat` and the open, so the ownership that counts is the one the
+    // DESCRIPTOR answers: the entry the `fchmod` would change. Two things are pinned here — the check itself
+    // (a descriptor whose uid is foreign is not forced), and that a rejection there STOPS THE DESCENT, so a
+    // child beneath the rejected level is never opened or forced either. `lstat` says this uid owns both.
+    const base = mkdtempForTestSync('agent-device-state-descriptor-foreign-');
+    // The base already stands private, so `sessions` is the only level with anything to force.
+    fs.chmodSync(base, 0o700);
+    const sessions = path.join(base, 'sessions');
+    const child = path.join(sessions, 'ssh');
+    fs.mkdirSync(child, { recursive: true });
+    for (const directory of [sessions, child]) fs.chmodSync(directory, 0o755);
+    // The fixture owns these mocks (it must map a descriptor back to the name it reached), so it also
+    // reports what was opened and closed. A level that is FORCEs mode opens and closes; a level that is
+    // merely judged does neither. So `openedNames` naming only `sessions` says the child below it was never
+    // reached, and the descriptor `sessions` opened being closed says it did not leak.
+    const probe = serveHostOwnership({ [sessions]: FOREIGN_UID }, { throughDescriptorOnly: true });
+    const fchmod = vi.spyOn(fs, 'fchmodSync');
+
+    // Asked for the CHILD, so the descent is what the rejection has to stop: the chain is base → sessions →
+    // ssh, and `sessions` is where the descriptor is refused. Without the stop, the child (this uid's, 0755)
+    // would be opened and forced next.
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(child, base))).toBe(1);
+
+    // Nothing was forced anywhere on that chain, and both levels keep the owner's mode.
+    expect(fchmod).not.toHaveBeenCalled();
+    expect(modeOf(sessions)).toBe(0o755);
+    expect(modeOf(child)).toBe(0o755);
+    // Only the rejected level was opened, and its descriptor was closed.
+    expect(probe.openedNames()).toEqual([sessions]);
+    const descriptor = probe.descriptorFor(sessions);
+    expect(typeof descriptor).toBe('number');
+    expect(probe.closedDescriptors()).toContain(descriptor);
+  },
+);
 
 skipOnWindows('skips a state directory another user owns, and leaves its mode', async () => {
   // The container and shared-CI shape: `sessions/` belongs to the uid a volume was mounted with, and the

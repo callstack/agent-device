@@ -305,11 +305,16 @@ export function remoteScriptVersionDelivery(
       return withRemoteScriptVersion(response, stamped, { path: result.path });
     }
     if (!result.error) return response;
-    // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response.
+    // The daemon diagnostic keeps the cause; its daemon-host path stays out of the response. The typed
+    // reason goes along as the failure's cause, so a client can tell a refused state chain from a full
+    // disk without reading prose (ADR 0016).
     return withRemoteScriptVersion(response, delivery, {
       failure: {
         message: 'The action succeeded, but the daemon could not write the remote recording.',
         hint: 'The --save-script file keeps the previous version. The next recorded action or close delivers the full recording again.',
+        ...(typeof result.error.details?.reason === 'string'
+          ? { cause: result.error.details.reason }
+          : {}),
       },
     });
   };

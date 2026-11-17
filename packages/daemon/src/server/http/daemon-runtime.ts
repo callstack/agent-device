@@ -84,7 +84,7 @@ import {
   resolveDaemonCodeSignature,
 } from './server-lifecycle.ts';
 import {
-  ensurePrivateDaemonStateDir,
+  ensureDaemonStateDir,
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
   type DaemonRegistrationOwner,
@@ -212,8 +212,8 @@ async function startDaemonRuntimeOnHost(
   // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
   // otherwise only ever created as a side effect of a per-session mkdir.
-  ensurePrivateDaemonStateDir(baseDir, baseDir);
-  ensurePrivateDaemonStateDir(sessionsDir, baseDir);
+  ensureDaemonStateDir(baseDir, baseDir);
+  ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs

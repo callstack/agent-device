@@ -287,22 +287,40 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
  *
  * The repair is BEST-EFFORT and never refuses (#4565): it forces the mode on a level this uid owns and
  * changes nothing about any other, so a state directory on a mounted volume, or one another uid left at
- * 0755, still gets a daemon that starts. The destination walk is what refuses a recording under ground this
- * daemon does not own. Returns the path, so a caller can name what it made without a second `mkdir`.
+ * 0755, still gets a daemon that starts. It answers {@link DaemonStateDir} — the path, and whether the
+ * chain is private ground — because a caller that WRITES under the directory needs that second answer: a
+ * chain the repair stopped on leads outside the state tree, and the destination rule accepts a link whose
+ * parent others cannot write. Startup ignores the answer; the script writer refuses on it (ADR 0016).
  *
  * `stateBase` is the daemon's state directory that the levels below it are judged from: a level is repaired
  * only when every level above it, down from that base, is one this process may judge. {@link
  * repairStateChain} says why the whole chain has to be judged rather than the leaf alone.
  */
-export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): string {
+export function ensurePrivateDaemonStateDir(directory: string, stateBase: string): DaemonStateDir {
   // Creation is one recursive `mkdir`: it creates the whole tail, while the repair below judges every level
   // it reached. Creating one level at a time would have to decide what to do when the BASE is a link, which
   // is the shape of a `~/.agent-device` on another disk, and refusing to create there would break a host the
   // operator pointed at that disk. What creation can leave on ground the chain rejects is an empty
   // directory, and the destination walk refuses any recording under it.
   fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
-  repairStateChain(stateBase, directory);
-  return directory;
+  return { path: directory, privateChain: repairStateChain(stateBase, directory) };
+}
+
+/**
+ * What {@link ensurePrivateDaemonStateDir} leaves behind: the directory it created or repaired, and whether
+ * every level from the state base down to it is now a real directory this uid owns, standing 0700, reached
+ * without following a link. `privateChain: false` says the repair STOPPED somewhere on that chain. It does
+ * not say anything failed — startup proceeds either way — only that a script must not be written there.
+ */
+export type DaemonStateDir = Readonly<{ path: string; privateChain: boolean }>;
+
+/**
+ * {@link ensurePrivateDaemonStateDir} for a caller that only names the directory it made — startup, or a
+ * tombstone written beside a session — and writes no script under it. Such a caller has nothing to refuse
+ * on, so it takes the path and leaves the verdict unread.
+ */
+export function ensureDaemonStateDir(directory: string, stateBase: string): string {
+  return ensurePrivateDaemonStateDir(directory, stateBase).path;
 }
 
 const STATE_DIR_MODE = 0o700;
@@ -322,28 +340,34 @@ const STATE_DIR_MODE = 0o700;
  * failing — `EACCES` on a directory this user cannot read, `ENOENT` on a name that went missing meanwhile,
  * `EIO` on a host that cannot even release the descriptor — is reported as a skipped level and stopped there.
  * Creation keeps its own failures, which come from the `mkdir` above.
+ *
+ * The answer is whether the WHOLE chain reached `directory` and stands private. A caller that only forces
+ * modes ignores it; a caller that writes under the directory (ADR 0016) refuses, because a chain that
+ * stopped at a link leads to ground outside the state tree that the destination rule has no reason to reject.
  */
-function repairStateChain(stateBase: string, directory: string): void {
+function repairStateChain(stateBase: string, directory: string): boolean {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
-  if (process.platform === 'win32') return;
+  if (process.platform === 'win32') return true;
   const levels = stateLevelsBelow(stateBase, directory);
   // A caller that names a directory outside the state base has no chain here to judge it from.
   if (levels === undefined) {
     skipStateDirMode(directory, 'not_below_state_base');
-    return;
+    return false;
   }
   for (const level of levels) {
     try {
-      if (!repairStateLevel(level)) return;
+      if (!repairStateLevel(level)) return false;
     } catch (error) {
       skipStateDirMode(level, (error as NodeJS.ErrnoException).code ?? 'unknown');
-      return;
+      return false;
     }
   }
+  return true;
 }
 
 /**
- * Forces one level, and reports whether the descent may go on beneath it.
+ * Forces one level, and reports whether the chain is intact THROUGH it — the descent may go on beneath it,
+ * and the level counts as private ground.
  *
  * `chmod` given the NAME acts on whatever the name resolves to, so the mode goes through a descriptor opened
  * `O_DIRECTORY | O_NOFOLLOW`, and only after that descriptor's `fstat` says this uid owns the entry — the
@@ -369,12 +393,16 @@ function repairStateLevel(level: string): boolean {
   // The fast path: a level that already has the mode needs nothing, and asking nothing of the mount keeps
   // the common start free of an open.
   if ((Number(judged.mode) & 0o777) === STATE_DIR_MODE) return true;
-  forcePrivateStateDir(level);
-  return true;
+  return forcePrivateStateDir(level);
 }
 
-/** Forces one level whose ownership passed, through a descriptor that cannot follow a link. */
-function forcePrivateStateDir(level: string): void {
+/**
+ * Forces one level whose `lstat` passed, through a descriptor that cannot follow a link, and reports whether
+ * the entry that open REACHED is this process's to keep private. The `lstat` said so a moment ago, and only
+ * the descriptor says what the `fchmod` changed: a name swapped for a link between the two calls is caught
+ * here, and a level caught there is NOT private ground, whatever its `lstat` claimed.
+ */
+function forcePrivateStateDir(level: string): boolean {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(
@@ -385,9 +413,10 @@ function forcePrivateStateDir(level: string): void {
     // between the `lstat` above and this open, and only the descriptor says what the `fchmod` will change.
     if (Number(fs.fstatSync(descriptor, { bigint: true }).uid) !== (process.getuid?.() ?? -1)) {
       skipStateDirMode(level, 'foreign_owned');
-      return;
+      return false;
     }
     fs.fchmodSync(descriptor, STATE_DIR_MODE);
+    return true;
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
@@ -468,7 +497,7 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  ensurePrivateDaemonStateDir(input.paths.baseDir, input.paths.baseDir);
+  ensureDaemonStateDir(input.paths.baseDir, input.paths.baseDir);
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
     repairStateMode(input.paths.logPath, 0o600);
