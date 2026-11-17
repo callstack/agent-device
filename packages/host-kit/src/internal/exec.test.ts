@@ -585,6 +585,54 @@ test('async output limits count raw bytes before decoding text', async () => {
   expect(binary.stdoutBuffer).toEqual(Buffer.from([0xff]));
 });
 
+test.skipIf(process.platform === 'win32').each([false, true])(
+  'deadline retries an unsuccessful output-limit kill (allowFailure=%s)',
+  async (allowFailure) => {
+    let child: ReturnType<typeof import('node:child_process').spawn> | undefined;
+    let forceCleanup: (() => void) | undefined;
+    let attempts = 0;
+    let received = '';
+    const cleanup = setTimeout(() => forceCleanup?.(), 2_000);
+    try {
+      const result = runCmdStreaming(
+        process.execPath,
+        [
+          '-e',
+          "process.on('SIGUSR1', () => process.stdout.write('x')); setInterval(() => {}, 1000); process.stdout.write('x'.repeat(128));",
+        ],
+        {
+          maxBuffer: 128,
+          timeoutMs: 1_000,
+          allowFailure,
+          onSpawn: (spawned) => {
+            child = spawned;
+            const kill = spawned.kill.bind(spawned);
+            forceCleanup = () => {
+              if (spawned.exitCode === null && spawned.signalCode === null) kill('SIGKILL');
+            };
+            spawned.kill = (signal) => {
+              if (signal === 'SIGKILL' && ++attempts === 1) return false;
+              return kill(signal);
+            };
+          },
+          onStdoutChunk: (chunk) => {
+            received += chunk;
+            if (received.length === 128) child?.kill('SIGUSR1');
+          },
+        },
+      );
+      await expect(result).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'command_output_limit', stream: 'stdout', stdout: 'x'.repeat(128) },
+      });
+      assert.equal(attempts, 2);
+    } finally {
+      clearTimeout(cleanup);
+      forceCleanup?.();
+    }
+  },
+);
+
 test('bounded text output preserves multibyte characters across pipe chunks', async () => {
   const expected = '\u20AC'.repeat(50_000);
   for (const stream of ['stdout', 'stderr'] as const) {

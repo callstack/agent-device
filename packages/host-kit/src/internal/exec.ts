@@ -308,9 +308,8 @@ function runSpawnedCommand(
     const { settlement, abort } = bindCommandLifecycle(child, options, execTrace, settle);
     timeoutHandle = timeoutMs
       ? setTimeout(() => {
-          if (exceededStream) return;
           execTrace.emit('deadline');
-          didTimeout = true;
+          didTimeout = exceededStream === undefined;
           settlement.requestKill();
         }, timeoutMs)
       : null;
