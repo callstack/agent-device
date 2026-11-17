@@ -138,7 +138,7 @@ export const faq = [
   },
   {
     q: 'Can I build my own agent or QA product on it?',
-    a: 'Yes. The typed Node.js client is a public surface over the same runtime, with AI SDK tools and an Eve integration on top. TesterArmy e2e and T3 Code build on it.',
+    a: 'Yes. The typed Node.js client is a public surface over the same runtime, with AI SDK tools and an Eve integration on top. e2e and T3 Code build on it.',
   },
   {
     q: 'Can several agents share one machine?',
@@ -330,16 +330,15 @@ export const adopters: Adopter[] = [
     featured: true,
   },
   {
-    name: 'TesterArmy',
-    logo: { src: '/logos/testerarmy.png', mode: 'mono' },
-    project: 'e2e',
+    name: 'e2e',
+    logo: { src: '/logos/e2e.svg', mode: 'mono' },
     how: 'The mobile engine of the e2e testing agent, `@e2e-dev/mobile`, runs on agent-device.',
     sources: [
       {
         text: 'packages/mobile',
-        href: 'https://github.com/tester-army/e2e/blob/main/packages/mobile/package.json',
+        href: 'https://github.com/e2e-inc/e2e/blob/main/packages/mobile/package.json',
       },
-      { text: 'e2e.tester.army', href: 'https://e2e.tester.army' },
+      { text: 'e2e.com', href: 'https://e2e.com' },
     ],
     featured: true,
   },
@@ -596,7 +595,7 @@ wait "Order summary" 5000`,
   },
 
   /** The stories under "Who uses it", by adopter name. */
-  stories: ['Expo', 'Expensify', 'T3 Code', 'TesterArmy'],
+  stories: ['Expo', 'Expensify', 'T3 Code', 'e2e'],
 
   /**
    * Watch and learn: talks on closing the loop with agents. Titles and channels as YouTube lists

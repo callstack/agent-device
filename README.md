@@ -23,11 +23,8 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
 
 <p>
   agent-device powers mobile automation in
-  <a href="https://e2e.tester.army/?utm_source=github&utm_medium=organic&utm_campaign=agent-device-readme-202610&utm_content=readme-powered-by">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/e2e-logo-dark.png">
-      <img src="docs/assets/e2e-logo-light.png" width="24" height="24" align="middle" alt="">
-    </picture>
+  <a href="https://e2e.com/?utm_source=github&utm_medium=organic&utm_campaign=agent-device-readme-202610&utm_content=readme-powered-by">
+    <img src="docs/assets/e2e-favicon.svg" width="24" height="24" align="middle" alt="">
     e2e</a>
   and
   <a href="https://github.com/pingdotgg/t3code">
@@ -187,7 +184,7 @@ Yes. The typed Node.js client is a public surface over that same runtime, so an 
 
 ### How is it different from Appium, Detox, or Maestro?
 
-With `agent-device`, an agent reads app state and chooses each command at run time. For stable, repeatable test suites, use [e2e](https://e2e.tester.army/), a TypeScript testing framework for web and mobile apps. `agent-device` can also save its runs as `.ad` scripts or export them as strict Maestro YAML.
+With `agent-device`, an agent reads app state and chooses each command at run time. For stable, repeatable test suites, use [e2e](https://e2e.com/), a TypeScript testing framework for web and mobile apps. `agent-device` can also save its runs as `.ad` scripts or export them as strict Maestro YAML.
 
 ### Can agent-device run in CI?
 
