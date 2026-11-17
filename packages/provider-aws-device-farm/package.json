@@ -1,7 +1,6 @@
 {
   "name": "@agent-device/aws-device-farm",
   "version": "0.22.0-dev",
-  "private": true,
   "type": "module",
   "description": "AWS Device Farm real-device plugin for agent-device.",
   "files": [

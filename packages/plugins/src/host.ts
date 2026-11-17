@@ -10,10 +10,12 @@ export type RunHostCommand = (
 ) => Promise<HostCommandResult>;
 
 export type ProviderPluginHost = Readonly<{
+  /** Host-supplied command environment. Include PATH, HOME and provider inputs when needed. */
   env: Readonly<Record<string, string | undefined>>;
   options: Readonly<Record<string, unknown>>;
   clientVersion: string;
   createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
+  /** Runs in the supplied host cwd/env; ambient process values are not added. */
   runHostCommand: RunHostCommand;
 }>;
 
