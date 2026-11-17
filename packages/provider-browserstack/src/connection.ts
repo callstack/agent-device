@@ -1,5 +1,4 @@
-import type { ProviderPluginHost } from 'agent-device/plugins';
-import type { CliFlags } from '@agent-device/contracts/command';
+import type { PluginConnection, ProviderPluginHost } from 'agent-device/plugins';
 import {
   rejectRefusedProviderProfileFields,
   requireResolvedProfilePlatform,
@@ -19,9 +18,11 @@ import { verifyBrowserStackConnection } from './browserstack-connection-verifica
 const SERVICE = 'BrowserStack';
 
 /** The `connect browserstack` callbacks, loaded only when the CLI runs them. */
-export function createBrowserStackConnection(host: ProviderPluginHost) {
+export function createBrowserStackConnection(
+  host: ProviderPluginHost,
+): Pick<PluginConnection, 'resolve' | 'verify'> {
   return {
-    resolve: ({ flags, cwd }: { flags: CliFlags; cwd: string }) => {
+    resolve: ({ flags, cwd }) => {
       rejectRefusedProviderProfileFields(flags, BROWSERSTACK_PROFILE_FIELDS);
       requireBrowserStackCredentials(host.env, `connect ${PROVIDER}`);
       const platform = requireConnectPlatform(flags, PROVIDER);
@@ -56,7 +57,7 @@ export function createBrowserStackConnection(host: ProviderPluginHost) {
         extraFlags: { providerApp },
       };
     },
-    verify: async ({ flags }: { flags: CliFlags }) =>
+    verify: async ({ flags }) =>
       await verifyBrowserStackConnection(
         {
           ...requireBrowserStackCredentials(host.env, `connect ${PROVIDER}`),

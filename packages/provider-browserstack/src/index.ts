@@ -1,5 +1,6 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { HOSTED_WEBDRIVER_CONNECTION } from '@agent-device/provider-webdriver/providers';
+import { BROWSERSTACK_CREDENTIAL_VARIABLES } from './providers.ts';
 
 export type BrowserStackOptions = {
   /** Each supplied key replaces its environment variable; omitted keys use the environment. */
@@ -28,16 +29,20 @@ function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
           // A key the caller left out falls back to the environment instead of shadowing it.
           env: {
             ...host.env,
-            ...(credentials.username ? { BROWSERSTACK_USERNAME: credentials.username } : {}),
-            ...(credentials.accessKey ? { BROWSERSTACK_ACCESS_KEY: credentials.accessKey } : {}),
+            ...(credentials.username !== undefined
+              ? { [BROWSERSTACK_CREDENTIAL_VARIABLES.username]: credentials.username }
+              : {}),
+            ...(credentials.accessKey !== undefined
+              ? { [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]: credentials.accessKey }
+              : {}),
           },
         }
       : host;
   // Only the variables the options do not supply come from the environment, so only those are
   // part of the credential fingerprint.
   const environmentVariables = [
-    ...(credentials?.username ? [] : ['BROWSERSTACK_USERNAME']),
-    ...(credentials?.accessKey ? [] : ['BROWSERSTACK_ACCESS_KEY']),
+    ...(credentials?.username !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.username]),
+    ...(credentials?.accessKey !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]),
   ];
   return {
     apiVersion: 2,
