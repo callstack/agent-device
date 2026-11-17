@@ -245,6 +245,7 @@ export default defineConfig({
             // The Android failed-step evidence reader: it replays adb output through the probe
             // seam, so the crash/process/activity selectors need no emulator to be pinned.
             'test/integration/android-emulator-e2e/device-evidence.test.ts',
+            'test/integration/android-emulator-e2e/live-automation-scenario.test.ts',
             'test/integration/android-emulator-e2e/live-ime-window.test.ts',
             // The Home/Recents surface-transition wait (#4710): replays scripted captures through
             // the capture seam under fake timers, so the deadline and delayed change need no emulator.
