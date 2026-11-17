@@ -10,6 +10,7 @@ import {
   acquireProcessLock,
   publishFileSync,
   resolveUserConfigPath,
+  withProcessLock,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginCandidate } from './registry.ts';
@@ -304,33 +305,85 @@ async function installInProject(project: string, env: NodeJS.ProcessEnv, artifac
   );
 }
 
+type PluginStage = { home: string; installation: string; project: string };
+type SelectionMutation<T> =
+  | {
+      kind: 'install';
+      apply: (selections: Record<string, PluginSelection>, stage: PluginStage) => Promise<T>;
+    }
+  | { kind: 'remove'; apply: (selections: Record<string, PluginSelection>) => Promise<T> };
+
+async function transactSelection<T>(
+  env: NodeJS.ProcessEnv,
+  mutation: SelectionMutation<T>,
+): Promise<T> {
+  const configPath = resolveUserConfigPath(env);
+  fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  const home = fs.realpathSync(path.dirname(configPath));
+  return withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: path.join(home, 'plugins.lock'),
+        owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
+        description: 'plugin installation',
+      }),
+    task: async () => {
+      const config = readPluginConfig(env);
+      const selections = { ...config.plugins };
+      let stage: PluginStage | undefined;
+      try {
+        let result: T;
+        if (mutation.kind === 'install') {
+          const installation = crypto.randomUUID();
+          stage = { home, installation, project: path.join(home, 'plugins', installation) };
+          result = await mutation.apply(selections, stage);
+        } else {
+          result = await mutation.apply(selections);
+        }
+        publishFileSync({
+          destination: configPath,
+          contents: `${JSON.stringify({ ...config, plugins: selections }, null, 2)}\n`,
+          mode: 0o600,
+        });
+        return result;
+      } catch (error) {
+        if (stage) {
+          try {
+            fs.rmSync(stage.project, { recursive: true, force: true });
+          } catch (cleanupError) {
+            throw new AppError(
+              'COMMAND_FAILED',
+              'Plugin installation and staging cleanup failed',
+              {
+                reason: 'plugin_cleanup_failed',
+                installationError: normalizeError(error),
+                cleanupError: normalizeError(cleanupError),
+              },
+              error,
+            );
+          }
+        }
+        throw error;
+      }
+    },
+  });
+}
+
 async function stagePlugin(
-  home: string,
+  stage: PluginStage,
   name: string,
   version: string | undefined,
   env: NodeJS.ProcessEnv,
 ) {
-  const installation = crypto.randomUUID();
-  const project = path.join(home, 'plugins', installation);
-  fs.mkdirSync(project, { recursive: true, mode: 0o700 });
-  try {
-    fs.writeFileSync(
-      path.join(project, 'package.json'),
-      JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
-    );
-    await installInProject(project, env);
-    const staged = await describeInstallation(
-      name,
-      installationDirectory(home, name, installation),
-      {
-        installation,
-      },
-    );
-    return { installation, project, entry: staged.entry };
-  } catch (error) {
-    fs.rmSync(project, { recursive: true, force: true });
-    throw error;
-  }
+  fs.mkdirSync(stage.project, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(
+    path.join(stage.project, 'package.json'),
+    JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
+  );
+  await installInProject(stage.project, env);
+  await describeInstallation(name, installationDirectory(stage.home, name, stage.installation), {
+    installation: stage.installation,
+  });
 }
 
 /**
@@ -345,49 +398,39 @@ export async function changePlugin(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const { name, version } = parsePluginRequest(action, input);
-  const configPath = resolveUserConfigPath(env);
-  const home = path.dirname(configPath);
-  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-  const release = await acquireProcessLock({
-    lockDirPath: path.join(home, 'plugins.lock'),
-    owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
-    description: 'plugin installation',
-  });
-  let staged: Awaited<ReturnType<typeof stagePlugin>> | undefined;
-  try {
-    const config = readPluginConfig(env);
-    const selections = { ...config.plugins };
-    const previous = Object.hasOwn(selections, name) ? selections[name] : undefined;
-    if (action !== 'add' && !Object.hasOwn(selections, name))
-      throw new AppError('INVALID_ARGS', `Plugin is not installed: ${name}`);
-    if (action !== 'remove' && previous?.artifact)
-      throw new AppError(
-        'INVALID_ARGS',
-        `Artifact plugin cannot be updated from the registry: ${name}`,
-        { reason: 'artifact_update_requires_remove' },
-      );
-    if (action === 'remove') delete selections[name];
-    else {
+  if (action === 'remove') {
+    await transactSelection(env, {
+      kind: 'remove',
+      apply: async (selections) => {
+        if (!Object.hasOwn(selections, name))
+          throw new AppError('INVALID_ARGS', `Plugin is not installed: ${name}`);
+        delete selections[name];
+      },
+    });
+    return;
+  }
+  await transactSelection(env, {
+    kind: 'install',
+    apply: async (selections, stage) => {
+      const previous = Object.hasOwn(selections, name) ? selections[name] : undefined;
+      if (action === 'update' && !Object.hasOwn(selections, name))
+        throw new AppError('INVALID_ARGS', `Plugin is not installed: ${name}`);
+      if (previous?.artifact)
+        throw new AppError(
+          'INVALID_ARGS',
+          `Artifact plugin cannot be updated from the registry: ${name}`,
+          { reason: 'artifact_update_requires_remove' },
+        );
       const requested =
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
-      staged = await stagePlugin(home, name, requested, env);
+      await stagePlugin(stage, name, requested, env);
       selections[name] = {
-        installation: staged.installation,
+        installation: stage.installation,
         version: requested,
         ...(isRecord(previous?.options) ? { options: previous.options } : {}),
       };
-    }
-    publishFileSync({
-      destination: configPath,
-      contents: `${JSON.stringify({ ...config, plugins: selections }, null, 2)}\n`,
-      mode: 0o600,
-    });
-  } catch (error) {
-    if (staged) fs.rmSync(staged.project, { recursive: true, force: true });
-    throw error;
-  } finally {
-    await release();
-  }
+    },
+  });
 }
 
 /** Install immutable local package bytes through the managed store. */
@@ -399,86 +442,54 @@ export async function addPluginArtifact(
     throw new AppError('INVALID_ARGS', 'Expected a local .tgz path and an absolute host cwd');
   const bytes = fs.readFileSync(path.resolve(host.cwd, input));
   const integrity = `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`;
-  const configPath = resolveUserConfigPath(host.env);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
-  const home = fs.realpathSync(path.dirname(configPath));
-  const release = await acquireProcessLock({
-    lockDirPath: path.join(home, 'plugins.lock'),
-    owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
-    description: 'plugin installation',
+  return transactSelection(host.env, {
+    kind: 'install',
+    apply: async (selections, { home, installation, project }) => {
+      fs.mkdirSync(project, { recursive: true, mode: 0o700 });
+      const artifact = path.join(project, 'artifact.tgz');
+      fs.writeFileSync(artifact, bytes, { mode: 0o600, flag: 'wx' });
+      fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ private: true }));
+      await installInProject(project, host.env, artifact);
+      const lock = JSON.parse(fs.readFileSync(path.join(project, 'package-lock.json'), 'utf8'));
+      const names = Object.keys(lock.packages?.['']?.dependencies ?? {});
+      if (names.length !== 1 || !isPackageName(names[0]!))
+        throw new AppError('INVALID_ARGS', 'Artifact has an invalid package name', {
+          reason: 'invalid_plugin',
+        });
+      const name = names[0]!;
+      if (lock.packages?.[`node_modules/${name}`]?.integrity !== integrity)
+        throw new AppError('INVALID_ARGS', 'Artifact contents changed during installation', {
+          reason: 'artifact_integrity_mismatch',
+        });
+      const directory = installationDirectory(home, name, installation);
+      const root = fs.realpathSync(project);
+      const actualDirectory = fs.realpathSync(directory);
+      if (!actualDirectory.startsWith(`${root}${path.sep}`))
+        throw new AppError('INVALID_ARGS', 'Artifact package escaped its installation', {
+          reason: 'invalid_plugin',
+        });
+      const manifestPath = fs.realpathSync(path.join(directory, 'package.json'));
+      if (!manifestPath.startsWith(`${actualDirectory}${path.sep}`))
+        throw new AppError('INVALID_ARGS', 'Artifact manifest escaped its package', {
+          reason: 'invalid_plugin',
+        });
+      const { readPackageJson } = await import('./discovery.ts');
+      const manifest = readPackageJson(directory);
+      if (manifest.name !== name || !isExactVersion(manifest.version))
+        throw new AppError('INVALID_ARGS', `Invalid artifact package identity: ${name}`, {
+          reason: 'invalid_plugin',
+        });
+      const selection: PluginSelection = {
+        installation,
+        artifact: { integrity, version: manifest.version },
+      };
+      await describeInstallation(name, directory, selection);
+      if (Object.hasOwn(selections, name))
+        throw new AppError('INVALID_ARGS', `Plugin is already installed: ${name}`, {
+          reason: 'plugin_already_installed',
+        });
+      selections[name] = selection;
+      return { name, version: manifest.version, installation, integrity };
+    },
   });
-  const installation = crypto.randomUUID();
-  const project = path.join(home, 'plugins', installation);
-  try {
-    fs.mkdirSync(project, { recursive: true, mode: 0o700 });
-    const artifact = path.join(project, 'artifact.tgz');
-    fs.writeFileSync(artifact, bytes, { mode: 0o600, flag: 'wx' });
-    fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ private: true }));
-    await installInProject(project, host.env, artifact);
-    const lock = JSON.parse(fs.readFileSync(path.join(project, 'package-lock.json'), 'utf8'));
-    const names = Object.keys(lock.packages?.['']?.dependencies ?? {});
-    if (names.length !== 1 || !isPackageName(names[0]!))
-      throw new AppError('INVALID_ARGS', 'Artifact has an invalid package name', {
-        reason: 'invalid_plugin',
-      });
-    const name = names[0]!;
-    if (lock.packages?.[`node_modules/${name}`]?.integrity !== integrity)
-      throw new AppError('INVALID_ARGS', 'Artifact contents changed during installation', {
-        reason: 'artifact_integrity_mismatch',
-      });
-    const directory = installationDirectory(home, name, installation);
-    const root = fs.realpathSync(project);
-    const actualDirectory = fs.realpathSync(directory);
-    if (!actualDirectory.startsWith(`${root}${path.sep}`))
-      throw new AppError('INVALID_ARGS', 'Artifact package escaped its installation', {
-        reason: 'invalid_plugin',
-      });
-    const manifestPath = fs.realpathSync(path.join(directory, 'package.json'));
-    if (!manifestPath.startsWith(`${actualDirectory}${path.sep}`))
-      throw new AppError('INVALID_ARGS', 'Artifact manifest escaped its package', {
-        reason: 'invalid_plugin',
-      });
-    const { readPackageJson } = await import('./discovery.ts');
-    const manifest = readPackageJson(directory);
-    if (manifest.name !== name || !isExactVersion(manifest.version))
-      throw new AppError('INVALID_ARGS', `Invalid artifact package identity: ${name}`, {
-        reason: 'invalid_plugin',
-      });
-    const selection: PluginSelection = {
-      installation,
-      artifact: { integrity, version: manifest.version },
-    };
-    await describeInstallation(name, directory, selection);
-    const config = readPluginConfig(host.env);
-    const selections = { ...config.plugins };
-    if (Object.hasOwn(selections, name))
-      throw new AppError('INVALID_ARGS', `Plugin is already installed: ${name}`, {
-        reason: 'plugin_already_installed',
-      });
-    selections[name] = selection;
-    publishFileSync({
-      destination: configPath,
-      contents: `${JSON.stringify({ ...config, plugins: selections }, null, 2)}\n`,
-      mode: 0o600,
-    });
-    return { name, version: manifest.version, installation, integrity };
-  } catch (error) {
-    try {
-      fs.rmSync(project, { recursive: true, force: true });
-    } catch (cleanupError) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Plugin artifact installation and staging cleanup failed',
-        {
-          reason: 'artifact_cleanup_failed',
-          installationError: normalizeError(error),
-          cleanupError: normalizeError(cleanupError),
-        },
-        error,
-      );
-    }
-    throw error;
-  } finally {
-    await release();
-  }
 }

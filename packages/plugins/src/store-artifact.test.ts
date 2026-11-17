@@ -301,7 +301,7 @@ test('failed staging cleanup reports both failures and releases the live store l
   assert.equal(attempt.status, 'acquired', 'the still-live host must not retain the lock');
   assert.ok(failure instanceof AppError);
   assert.equal(failure.code, 'COMMAND_FAILED');
-  assert.equal(failure.details?.reason, 'artifact_cleanup_failed');
+  assert.equal(failure.details?.reason, 'plugin_cleanup_failed');
   assert.deepEqual(
     (({ code, message }) => ({ code, message }))(
       failure.details?.installationError as { code: string; message: string },
@@ -332,5 +332,21 @@ test('successful staging cleanup preserves the original installation error', asy
     assert.deepEqual(fs.readdirSync(path.join(home, 'plugins')), []);
   } finally {
     run.mockRestore();
+  }
+});
+
+test('malformed configuration fails before artifact staging', async () => {
+  const root = mkdtempForTestSync('plugin-artifact-invalid-config-');
+  const archive = path.join(root, 'invalid.tgz');
+  fs.writeFileSync(archive, 'not a valid archive');
+  const { home, env } = pluginHome();
+  fs.writeFileSync(path.join(home, 'config.json'), '{');
+  const spy = vi.spyOn(command, 'runCmd');
+  try {
+    await assert.rejects(addPluginArtifact(archive, { cwd: root, env }), { code: 'INVALID_ARGS' });
+    assert.equal(spy.mock.calls.length, 0);
+    assert.equal(fs.existsSync(path.join(home, 'plugins')), false);
+  } finally {
+    spy.mockRestore();
   }
 });
