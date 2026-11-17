@@ -7,8 +7,7 @@
 // cannot silently drift from the converter.
 
 import fc from 'fast-check';
-import { encodeValidationCase } from './validation-case.ts';
-import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
+import { ACCEPT, SAFE_VALUES, encodeValidationCase } from './validation-values.ts';
 
 // ---------------------------------------------------------------------------------------------
 
@@ -49,6 +48,8 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- scrollUntilVisible:', '    element:', `        text: ${text}`],
     () => ['- repeat:', '    times: 2', '    commands:', '      - back'],
     () => ['- runFlow: other.yaml'],
+    () => ['- retry:', '    maxRetries: 2', '    commands:', '      - back'],
+    () => ['- runScript: checks.js'],
     () => ['- setPermissions:', '    permissions:', '      camera: allow'],
     () => ['- setPermissions:', '    permissions:', '      all: deny'],
     () => ['- launchApp:', '    appId: com.example.app', '    permissions:', '      camera: allow'],
@@ -91,6 +92,11 @@ const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
     code: 'INVALID_ARGS',
     lines: (salt) =>
       salt % 2 === 0 ? ['- inputText:'] : ['- extendedWaitUntil:', '    timeout: 500'],
+  },
+  {
+    name: 'bad-retry-max-retries',
+    code: 'INVALID_ARGS',
+    lines: () => ['- retry:', '    maxRetries: invalid', '    commands:', '      - back'],
   },
   { name: 'bad-press-key', code: 'INVALID_ARGS', lines: () => ['- pressKey: sleep'] },
   { name: 'scroll-options', code: 'INVALID_ARGS', lines: () => ['- scroll:', '    direction: UP'] },
