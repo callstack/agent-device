@@ -272,7 +272,6 @@ test('a package vi.mock route into root src is an R11 escape, and a sibling rout
   assert.deepEqual(kernelViolations(true, "vi.mock('./exec.ts', () => ({}));"), []);
 });
 
-// This `src/utils` path is another in-memory arbitrary parser fixture, not a live repository path.
 test('a package relative escape is R11-owned, compiled or not', () => {
   // #3289 maintainer review restored this branch after a planted `tsc -b` run showed the
   // compiler covers NEITHER package escape for a REFERENCED sibling:
