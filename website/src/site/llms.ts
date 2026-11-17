@@ -36,7 +36,7 @@ export const llmsDetails = `agent-device is the agent's hands, eyes, and evidenc
 - Reproduce bugs and collect bounded screenshots, recordings, logs, network, trace, or performance evidence.
 - Turn a successful exploratory flow into a deterministic \`.ad\` replay.
 
-For stable, repeatable test suites, use [e2e](https://e2e.tester.army/), a TypeScript testing framework for web and mobile apps. Use agent-device when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
+For stable, repeatable test suites, use [e2e](https://e2e.com/), a TypeScript testing framework for web and mobile apps. Use agent-device when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
 
 ## How agents should approach it
 
