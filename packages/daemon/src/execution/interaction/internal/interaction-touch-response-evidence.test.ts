@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -76,7 +75,6 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -136,7 +134,6 @@ test('press @ref without --verify never includes an evidence field', async () =>
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -196,7 +193,6 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -267,7 +263,6 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -315,7 +310,6 @@ test('fill @ref without --verify never includes an evidence field', async () => 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -367,7 +361,6 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
 
   mockFillPoint.mockResolvedValue({ filled: true });
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
   legacyDispatchCapture,
@@ -79,7 +78,6 @@ test('get text prefers underlying value for text surfaces and avoids recording g
   );
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -132,7 +130,6 @@ test('get text uses backend read expansion when the resolved node has a rect', a
   );
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -180,7 +177,6 @@ test('get text answers from the captured tree when the bound owner advertises no
   elementReadFixtureState.readTextAtPointAvailable = false;
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -224,7 +220,6 @@ test('an eligible direct iOS selector cannot operate before admission', async ()
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -285,7 +280,6 @@ test('get text simple iOS id selector resolves through the bound capture, not a 
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -366,7 +360,6 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

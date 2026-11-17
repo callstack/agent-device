@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
@@ -93,7 +92,6 @@ test('settings rejects unsupported iOS physical devices', async () => {
   );
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['wifi', 'on'] }),
@@ -116,7 +114,6 @@ test('settings clear-app-state dispatches explicit app id without an active app 
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -141,7 +138,6 @@ test('settings clear-app-state rejects missing app id when no app session is bou
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['clear-app-state'] }),
@@ -166,7 +162,6 @@ test('settings reset-keychain dispatches without an app id or active app session
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -190,7 +185,6 @@ test('settings reset-keychain rejects an extra app argument instead of dropping 
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -214,7 +208,6 @@ test('settings text-size reads the category the owner holds without mutating any
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size'] }),
@@ -240,7 +233,6 @@ test('settings bluetooth on an iOS simulator is refused at admission, before dis
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['bluetooth', 'on'] }),
@@ -267,7 +259,6 @@ test('settings on the macOS host refuses a setting it does not serve, read and w
 
   for (const positionals of [['text-size'], ['text-size', 'large'], ['wifi', 'on']]) {
     const response = await handleSnapshotCommands({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: snapshotRequest(sessionName, 'settings', { positionals }),
@@ -297,7 +288,6 @@ test('settings text-size applies a ladder category through the write leg', async
   sessionStore.publish(sessionName, session);
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -332,7 +322,6 @@ test('settings text-size refuses an Apple leaf with no content size before it ex
 
   for (const positionals of [['text-size'], ['text-size', 'large']]) {
     const response = await handleSnapshotCommands({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: snapshotRequest(sessionName, 'settings', { positionals }),
@@ -358,7 +347,6 @@ test('settings text-size refuses an off-ladder category with the whole ladder', 
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size', 'gigantic'] }),
@@ -383,7 +371,6 @@ test('settings text-size refuses an off-ladder category with the whole ladder', 
 test('settings usage hint documents canonical faceid states', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest('default', 'settings'),
@@ -411,7 +398,6 @@ test('settings permission grant targets an explicit app with no session app boun
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -443,7 +429,6 @@ test('settings permission grant keeps the session app when no app is named', asy
   );
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -469,7 +454,6 @@ test('settings permission grant prefers an explicit app over the session app', a
   );
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -491,7 +475,6 @@ test('settings location on targets an explicit app on an iOS simulator', async (
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -517,7 +500,6 @@ test('settings Android permission grant targets an explicit app with no session 
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -545,7 +527,6 @@ test('settings Android location on refuses a named app before reaching the owner
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -580,7 +561,6 @@ test('settings iOS location 1 targets an explicit app over the session app', asy
   );
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -606,7 +586,6 @@ test('settings Android location true refuses a named app before reaching the own
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -632,7 +611,6 @@ test('settings Android location 0 refuses a named app before reaching the owner'
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -660,7 +638,6 @@ test('settings iOS location set refuses a named app before reaching the owner', 
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {
@@ -689,7 +666,6 @@ test('settings mobile-data reaches the Android owner as an on/off mutation', asy
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', { positionals: ['mobile-data', 'off'] }),
@@ -710,7 +686,6 @@ test.each(['mobile-data', 'bluetooth'])(
     sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
     const response = await handleSnapshotCommands({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: snapshotRequest(sessionName, 'settings', {
@@ -738,7 +713,6 @@ test('settings macOS permission grant refuses a named app before reaching the ow
   sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'settings', {

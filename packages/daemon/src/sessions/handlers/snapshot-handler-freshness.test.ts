@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import fs from 'node:fs';
 import { test, expect, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -97,7 +96,6 @@ test('snapshot timeout captures Android screenshot evidence with overlay refs', 
   const sessionStore = makeAndroidTimeoutEvidenceSession(sessionName);
   mockAndroidTimeoutEvidenceDispatch();
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: forwardingCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
@@ -131,7 +129,6 @@ test('snapshot automatically retries stale Android trees after recent navigation
     );
 
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: forwardingCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
@@ -161,7 +158,6 @@ test.each([
     );
 
     const response = await handleSnapshotCommands({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: forwardingCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: snapshotRequest(sessionName, route, {

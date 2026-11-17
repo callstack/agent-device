@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   legacyDispatchCapture,
@@ -78,7 +77,6 @@ async function runClick(
     });
   }
   return await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 'test',
@@ -582,7 +580,6 @@ test('corroborates a tap when the request carries no flags and the baseline used
   // mirrors the raw daemon/JSON-RPC production boundary, which can omit the
   // key entirely. CLI and batch paths always materialize a flags object.
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 'test',
@@ -843,7 +840,6 @@ test('corroborated runtime taps retain target evidence through save and replay',
     sessionStore: replayStore,
     invoke: async (req) => {
       const response = await handleInteractionCommands({
-        requestScope: platformRequestScopeFixture(),
         createCommandSurface: touchCreateCommandSurface,
         req,
         sessionName: replaySessionName,
@@ -878,7 +874,6 @@ test('a tap corroborates against its admitted snapshot after a same-lifetime rec
     return {};
   });
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: { token: 'test', session: name, command: 'click', positionals: ['104', '222'], flags: {} },
     sessionName: name,

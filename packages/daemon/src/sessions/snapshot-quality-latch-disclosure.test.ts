@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
@@ -219,7 +218,6 @@ function seedCapture(verdict: SnapshotQualityVerdict, label = 'Continue') {
 
 async function dispatchPublicSnapshot(input: ReturnType<typeof scenario>) {
   return await dispatchSnapshotViaRuntime({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: { command: 'snapshot', positionals: [], token: 't', session: input.sessionName },
     sessionName: input.sessionName,
@@ -248,7 +246,6 @@ test('an internally armed penalty warns once on the first public deferred snapsh
   // resolution) rendered nothing; without the latch the deferred suppression
   // would hide the warning from the user entirely.
   const internal = await dispatchSnapshotViaRuntime({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'snapshot',
@@ -321,7 +318,6 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
   });
 
   const diff = await dispatchSnapshotDiffViaRuntime({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'diff',

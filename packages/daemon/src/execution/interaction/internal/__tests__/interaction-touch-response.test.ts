@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -129,7 +128,6 @@ test.each([false, true])('selector-touch observation after retirement=%s', async
   }
   const payloads = await buildTargetedTouchResponsePayloads({
     params: {
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       req: { token: 't', command: 'press', positionals: ['@e1'], session: 'default' },
       sessionName: address,
@@ -201,7 +199,6 @@ test.each([
       async () => {
         const payloads = await buildTargetedTouchResponsePayloads({
           params: {
-            requestScope: platformRequestScopeFixture(),
             createCommandSurface: testCreateCommandSurface,
             req: {
               token: 't',
@@ -273,7 +270,6 @@ test('an already retired coordinate touch skips its frame probe without a warnin
     async () => {
       const payloads = await buildTargetedTouchResponsePayloads({
         params: {
-          requestScope: platformRequestScopeFixture(),
           createCommandSurface: testCreateCommandSurface,
           req: { token: 't', command: 'click', positionals: ['1', '2'], session: ref.address },
           sessionName: ref.address,

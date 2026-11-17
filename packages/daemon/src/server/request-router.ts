@@ -1,4 +1,3 @@
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { LeaseEndReason } from '../sessions/lease-lifecycle.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
@@ -75,7 +74,7 @@ import {
   isSensitiveFillText,
   sensitiveFillPlaceholder,
 } from '@agent-device/ad-script';
-import { createPlatformRequestScope } from './platform-request-scope.ts';
+import { createPlatformRequestScope } from '../core/platform-request-scope.ts';
 import {
   parameterizeSensitiveString,
   redactFillFailureReadBack,
@@ -441,7 +440,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     if (handlerResponse) return handlerResponse;
 
     return await dispatchGenericForLockedScope({
-      requestScope,
       lockedScope,
       logPath: lockedScope.logPath,
       sessionStore,
@@ -654,7 +652,6 @@ function redactSensitiveFillResponse(req: DaemonRequest, response: DaemonRespons
 }
 
 async function dispatchGenericForLockedScope(params: {
-  requestScope: PlatformRequestScope;
   lockedScope: LockedRequestScope;
   logPath: string;
   sessionStore: SessionStore;
@@ -692,7 +689,6 @@ async function dispatchGenericForLockedScope(params: {
 
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
-    requestScope: params.requestScope,
     req: lockedScope.req,
     ref,
     sessionName: lockedScope.sessionName,

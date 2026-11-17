@@ -1,4 +1,3 @@
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -23,7 +22,6 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 type SnapshotCommandParams = {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -38,7 +36,6 @@ type SnapshotCommandHandler = (params: SnapshotCommandParams) => Promise<DaemonR
 const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   snapshot: async ({
     req,
-    requestScope,
     createCommandSurface,
     sessionName,
     logPath,
@@ -51,7 +48,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     await dispatchSnapshotViaRuntime({
       createCommandSurface,
       req,
-      requestScope,
       sessionName,
       logPath,
       sessionStore,
@@ -62,7 +58,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     }),
   diff: async ({
     req,
-    requestScope,
     createCommandSurface,
     sessionName,
     logPath,
@@ -78,7 +73,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     return await dispatchSnapshotDiffViaRuntime({
       createCommandSurface,
       req,
-      requestScope,
       sessionName,
       logPath,
       sessionStore,
@@ -90,7 +84,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   },
   wait: async ({
     req,
-    requestScope,
     createCommandSurface,
     sessionName,
     logPath,
@@ -103,7 +96,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     await dispatchWaitViaRuntime({
       createCommandSurface,
       req,
-      requestScope,
       sessionName,
       logPath,
       sessionStore,
@@ -114,7 +106,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     }),
   alert: async ({
     req,
-    requestScope,
     sessionName,
     logPath,
     sessionStore,
@@ -130,7 +121,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       async () => {
         return await handleAlertCommand({
           req,
-          requestScope,
           logPath,
           sessionStore,
           ref,
@@ -145,7 +135,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   },
   settings: async ({
     req,
-    requestScope,
     sessionName,
     logPath,
     sessionStore,
@@ -163,7 +152,6 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       async () => {
         return await handleSettingsCommand({
           req,
-          requestScope,
           logPath,
           sessionStore,
           ref,

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -201,7 +200,6 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   const findNodes = session.snapshot.nodes;
   const findNode = findNodes[0]!;
   const internal = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

@@ -195,7 +195,6 @@ test.each(['rebuild', 'retire'] as const)(
       const address = 'cwd:sleep-wait:default';
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
-        requestScope: platformRequestScopeFixture(),
         createCommandSurface: testCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: waitRequest(['100']),
@@ -252,7 +251,6 @@ async function runWait(
   }
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: waitRequest(positionals, flags),
@@ -303,7 +301,6 @@ test('canceling a duration wait preserves the request reason without constructin
     const reason = createRequestCanceledError();
     const createCommandSurface = vi.fn(testCreateCommandSurface);
     const running = dispatchWaitViaRuntime({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: waitRequest(['10000']),

@@ -14,6 +14,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { createPlatformRequestScope } from '../../core/platform-request-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,
@@ -148,7 +149,6 @@ async function resolveBoundClipboardRuntime(
 
 export async function handleSessionClipboardCommand(params: {
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -178,7 +178,7 @@ export async function handleSessionClipboardCommand(params: {
   });
   if (ref) sessionStore.requireCurrent(ref);
   const bound = await resolveBoundClipboardRuntime({
-    requestScope: params.requestScope,
+    requestScope: createPlatformRequestScope(req),
     device,
     action,
     positionals,

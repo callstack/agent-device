@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
@@ -173,7 +172,6 @@ async function dispatchSnapshot(
   flags: Record<string, unknown> = {},
 ) {
   const response = await handleSnapshotCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'snapshot',

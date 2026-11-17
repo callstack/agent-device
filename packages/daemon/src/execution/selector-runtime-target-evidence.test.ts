@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   DaemonGetResult,
@@ -123,7 +122,6 @@ async function runCommand(
   positionals: string[],
 ) {
   return await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: selectorReadSurface,
     req: { token: 't', session: sessionName, command, positionals, flags: {} },
     sessionName,

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -142,7 +141,6 @@ async function press({
   };
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     req: { token: 't', session: session.name, command, positionals, flags },
     sessionName: session.name,
@@ -194,7 +192,6 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   const session = makeSession('dispatch-disclosure-swipe');
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -229,7 +226,6 @@ async function gestureDragRefusedBeforeDispatch(): Promise<unknown> {
   expireRefFrame(session);
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -289,7 +285,6 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
     openApp,
   };
   const response = await routeInteraction({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -348,7 +343,6 @@ async function pressThenForegroundReadRefused(): Promise<unknown> {
     },
   };
   const response = await routeInteraction({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     req: { token: 't', session: session.name, command: 'press', positionals: ['50', '40'] },
     sessionName: session.name,
@@ -456,7 +450,6 @@ test('a plain Error a backend throws reaches the wire with dispatched unknown', 
   }) as unknown as typeof bindings.bindDevice;
   await assert.rejects(
     routeInteraction({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface,
       req: { token: 't', session: session.name, command: 'press', positionals: ['@e1'], flags: {} },
       sessionName: session.name,

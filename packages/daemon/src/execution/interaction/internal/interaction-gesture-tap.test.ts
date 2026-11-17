@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   makeIosSession,
@@ -61,7 +60,6 @@ async function runGesture(
   });
   sessionStore.publish('tap', session);
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: async (config) => {
       const surface = await touchCreateCommandSurface(config);
       return { ...surface, interactions: { ...surface.interactions, gesture: perform } };

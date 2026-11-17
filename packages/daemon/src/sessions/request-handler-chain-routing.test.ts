@@ -22,7 +22,6 @@ import { handleInteractionCommands } from '../execution/interaction/index.ts';
 import { createRequestRuntimeBindings } from '../core/request-runtime-binding.ts';
 import { createRequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
 import {
-  platformRequestScopeFixture,
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableDeviceRuntimeGateway,
@@ -310,7 +309,6 @@ test('duration-less coordinate swipe routes one fling plan through one runtime b
   });
   let bindCount = 0;
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: commandSurface,
     platformServices: daemonPlatformServicesFixture(),
     inspectFacts: async (device) => await gestureInspectFacts(device),

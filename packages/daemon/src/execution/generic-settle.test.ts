@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
@@ -252,7 +251,6 @@ async function dispatchGeneric(params: {
     ...(params.flags ? { flags: params.flags } : {}),
   };
   return await dispatchGenericCommand({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: testCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,
@@ -567,7 +565,6 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
   mockCommandDispatch([AFTER_NODES]);
   await expect(
     dispatchGenericCommand({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {

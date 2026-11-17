@@ -18,6 +18,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { contextFromFlags } from '../../core/context.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { createPlatformRequestScope } from '../../core/platform-request-scope.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
@@ -35,7 +36,6 @@ import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   logPath: string;
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
@@ -105,7 +105,7 @@ export async function handleAlertCommand(
   const action = readAlertAction(req.positionals?.[0]);
   const timeoutMs = alertTimeoutMs(action, req.positionals?.[1]);
   const bound = await resolveBoundAlertRuntime({
-    requestScope: params.requestScope,
+    requestScope: createPlatformRequestScope(req),
     device,
     action,
     session,

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
@@ -192,7 +191,6 @@ test('interaction runtime inherits the registered daemon request signal', async 
 
   try {
     const runtime = await createInteractionRuntime({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: settlingSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -297,7 +295,6 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
   mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES, AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -362,7 +359,6 @@ test('held touch settle publishes refs into the current record of its scoped lif
     };
   });
   const running = handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -438,7 +434,6 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -476,7 +471,6 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   );
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -519,7 +513,6 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -586,7 +579,6 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
 
   const startedAt = Date.now();
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -618,7 +610,6 @@ test('bare timeout without --settle stays compatible', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const compatible = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -645,7 +636,6 @@ test('settle-specific tuning flags without --settle are rejected', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',
@@ -672,7 +662,6 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
   mockCommandDispatch({ snapshots: [AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: settlingSurface,
     req: {
       token: 't',

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, beforeEach } from 'vitest';
@@ -48,7 +47,6 @@ async function runCommand(
   createCommandSurface = createTouchCommandSurface(),
 ) {
   return await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags },
     sessionName,

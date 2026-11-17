@@ -130,7 +130,6 @@ test('open routes only its lifecycle input through its owner', async () => {
       'logPath',
       'platformServices',
       'reconcileOrphanedDeviceClaim',
-      'requestScope',
       'req',
       'sessionName',
       'sessionStore',

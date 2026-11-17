@@ -1,4 +1,3 @@
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
@@ -38,7 +37,6 @@ import type {
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   ref: SessionRef;
   sessionName: string;
   logPath: string;
@@ -70,7 +68,6 @@ export async function dispatchGenericCommand(params: {
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
   const settlePlan = await planGenericSettleObservation({
-    requestScope: params.requestScope,
     sessionRef,
     req,
     session,
@@ -228,7 +225,6 @@ async function planGenericSettleObservation(params: {
   createCommandSurface: CreateDaemonCommandSurface;
   sessionRef: SessionRef | undefined;
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   session: SessionState;
   sessionName: string;
   logPath: string;

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -43,9 +42,7 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
   };
 
   const platformServices = daemonPlatformServicesFixture();
-  const requestScope = platformRequestScopeFixture();
   await handleSnapshotCommands({
-    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     platformServices,
     req,
@@ -58,7 +55,6 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
 
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledOnce();
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledWith({
-    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     req,
     sessionName: 'snapshot-route',
@@ -86,9 +82,7 @@ test('diff route forwards the request runtime facts and binding seams exactly on
   };
 
   const platformServices = daemonPlatformServicesFixture();
-  const requestScope = platformRequestScopeFixture();
   await handleSnapshotCommands({
-    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     platformServices,
     req,
@@ -101,7 +95,6 @@ test('diff route forwards the request runtime facts and binding seams exactly on
 
   expect(dispatchSnapshotDiffViaRuntime).toHaveBeenCalledOnce();
   expect(dispatchSnapshotDiffViaRuntime).toHaveBeenCalledWith({
-    requestScope,
     createCommandSurface: fakeCreateCommandSurface,
     req,
     sessionName: 'diff-route',

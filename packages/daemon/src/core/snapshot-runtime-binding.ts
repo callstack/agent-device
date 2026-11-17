@@ -22,6 +22,7 @@ import {
 } from './request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
+import { createPlatformRequestScope } from './platform-request-scope.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import {
@@ -51,7 +52,6 @@ export type SnapshotRuntimeRouteParams = {
   /** Builds the command surface this request's snapshot runtime executes through. */
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
-  requestScope: PlatformRequestScope;
   sessionName: string;
   sessionRef?: SessionRef;
   logPath: string;
@@ -198,7 +198,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
-    readinessScope: session ? undefined : params.requestScope,
+    readinessScope: session ? undefined : createPlatformRequestScope(req),
   });
   if (!bound.ok) return bound;
 

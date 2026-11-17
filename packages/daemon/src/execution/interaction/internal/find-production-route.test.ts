@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { FillCommandResult, PressCommandResult } from '@agent-device/contracts/interaction';
@@ -108,7 +107,6 @@ async function runFindThroughHandler(positionals: string[], forwarded: Forwarded
       invokeCalls.push(req);
       return (
         (await handleInteractionCommands({
-          requestScope: platformRequestScopeFixture(),
           createCommandSurface,
           req,
           sessionName,

@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
@@ -43,7 +42,6 @@ test('press coordinates dispatches press and records as press', async () => {
   sessionStore.publish(sessionName, storedSession);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -87,7 +85,6 @@ test.each([
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals: [...positionals], flags: {} },
     sessionName,
@@ -107,7 +104,6 @@ test('click rejects macOS desktop surface interactions until helper routing exis
   sessionStore.publish(sessionName, makeMacOsDesktopSession(sessionName));
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -135,7 +131,6 @@ test('fill rejects macOS menubar surface interactions until helper routing exist
   sessionStore.publish(sessionName, makeMacOsMenubarSession(sessionName));
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -178,7 +173,6 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -225,7 +219,6 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
   };
   sessionStore.publish(sessionName, session);
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -253,7 +246,6 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
   expect(hoverAction?.result).not.toHaveProperty('y');
 
   const typeResponse = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -289,7 +281,6 @@ test('a mistargeted type @ref is refused before binding and keeps the ref frame 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -326,7 +317,6 @@ test('click @ref on web records the ref result without fabricated coordinates', 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -372,7 +362,6 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -400,7 +389,6 @@ test('hover is refused by capability on touch platforms before any dispatch', as
   sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

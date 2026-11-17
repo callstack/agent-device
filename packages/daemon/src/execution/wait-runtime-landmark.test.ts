@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 /**
  * #1349 (ADR 0012 decision 3 extension): the wait dispatch seam.
  *
@@ -100,7 +99,6 @@ async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {
   );
   sessionStore.publish('default', session);
   const response = await dispatchWaitViaRuntime({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: waitCreateCommandSurface,
     req: options.req ?? waitReq(),
     sessionName: 'default',

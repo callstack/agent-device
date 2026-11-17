@@ -8,6 +8,7 @@ import { parseWaitPositionals } from '@agent-device/command-registry/wait-positi
 import type { WaitParsed } from '@agent-device/command-registry/wait-positionals';
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
+import { createPlatformRequestScope } from '../core/platform-request-scope.ts';
 import { parseVersionedRefPositional } from './ref-positionals.ts';
 import { resolveRefStalenessWarning } from './session-snapshot.ts';
 import {
@@ -57,7 +58,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   if (parsed.kind === 'sleep') return await executeDurationWait(params, parsed.durationMs);
   const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
   const bound = await resolveBoundSelectorCapture({
-    requestScope: params.requestScope,
+    requestScope: createPlatformRequestScope(req),
     command: 'wait',
     device,
     session,

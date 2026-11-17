@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type {
   Interactor,
@@ -95,7 +94,6 @@ test('daemon press --settle pins private-ax on emitted snapshot runner requests'
   );
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: pinningSurface,
     req: {
       token: 't',

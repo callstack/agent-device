@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
@@ -56,7 +55,6 @@ test('ordinary click uses canonical capture even when the owner binds selector t
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -115,7 +113,6 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -164,7 +161,6 @@ test('click simple iOS selector forwards Maestro non-hittable coordinate fallbac
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
@@ -231,7 +227,6 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   });
 
   const response = await handleInteractionCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',

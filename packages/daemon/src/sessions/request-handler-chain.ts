@@ -218,7 +218,6 @@ async function runSnapshotHandler(
     params.req.command,
     'snapshot',
     await handleSnapshotCommands({
-      requestScope: params.requestScope,
       req: params.req,
       sessionName: params.sessionName,
       logPath: params.logPath,
@@ -240,7 +239,6 @@ async function runReactNativeHandler(
     params.req.command,
     'react-native',
     await handleReactNativeCommands({
-      requestScope: params.requestScope,
       req: params.req,
       createCommandSurface: params.createCommandSurface,
       sessionName: params.sessionName,
@@ -289,7 +287,6 @@ async function runFindHandler(
     params.req.command,
     'find',
     await handleFindCommands({
-      requestScope: params.requestScope,
       req: params.req,
       sessionName: params.sessionName,
       logPath: params.logPath,
@@ -311,7 +308,6 @@ async function runInteractionHandler(
     params.req.command,
     'interaction',
     await handleInteractionCommands({
-      requestScope: params.requestScope,
       req: params.req,
       sessionName: params.sessionName,
       logPath: params.logPath,

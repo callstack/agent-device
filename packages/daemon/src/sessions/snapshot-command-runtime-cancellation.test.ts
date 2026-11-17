@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { afterEach, expect, test } from 'vitest';
 import { makeAndroidSession } from '../__tests__/support/session-factories.ts';
@@ -75,14 +74,12 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
       const running =
         command === 'snapshot'
           ? dispatchSnapshotViaRuntime({
-              requestScope: platformRequestScopeFixture(),
               createCommandSurface: testCreateCommandSurface,
               ...input,
               ...snapshotRuntimeFixture(requestId),
               platformServices: daemonPlatformServicesFixture(),
             })
           : dispatchSnapshotDiffViaRuntime({
-              requestScope: platformRequestScopeFixture(),
               createCommandSurface: testCreateCommandSurface,
               ...input,
               ...snapshotRuntimeFixture(requestId),
@@ -120,7 +117,6 @@ for (const change of ['unchanged', 'rebuild', 'replace'] as const) {
       };
     });
     const running = dispatchSnapshotViaRuntime({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       req: { command: 'snapshot', positionals: [], token: 't', session: address },
       sessionName: address,
@@ -177,7 +173,6 @@ test('a composed snapshot refuses its supplied retired lifetime before facts or 
   captureMock.mockResolvedValue({ nodes: [], truncated: false, backend: 'uiautomator' });
   await expect(
     dispatchSnapshotViaRuntime({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: testCreateCommandSurface,
       req: { command: 'snapshot', positionals: [], token: 't', session: 'default' },
       sessionName: address,

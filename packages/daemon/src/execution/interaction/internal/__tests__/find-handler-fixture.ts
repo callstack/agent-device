@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
@@ -24,7 +23,6 @@ export function invokeFindHandler(params: {
 }) {
   const { sessionName, sessionStore, positionals, flags, createCommandSurface } = params;
   return handleFindCommands({
-    requestScope: platformRequestScopeFixture(),
     createCommandSurface: createCommandSurface ?? fakeCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'find', positionals, flags: flags ?? {} },
     sessionName,

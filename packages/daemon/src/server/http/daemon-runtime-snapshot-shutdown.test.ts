@@ -1,4 +1,3 @@
-import { platformRequestScopeFixture } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import {
@@ -59,7 +58,6 @@ for (const initialSession of ['published', 'draft'] as const) {
       await releaseCleanup.promise;
     });
     const running = dispatchSnapshotViaRuntime({
-      requestScope: platformRequestScopeFixture(),
       createCommandSurface: forwardingCreateCommandSurface,
       req: {
         command: 'snapshot',

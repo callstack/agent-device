@@ -1,4 +1,4 @@
-import { createPlatformRequestScope } from '../../../server/platform-request-scope.ts';
+import { createPlatformRequestScope } from '../../../core/platform-request-scope.ts';
 import { handleSessionCommands as handleProductionSessionCommands } from '../../../sessions/handlers/session.ts';
 import type { SessionCommandInput } from '../../../sessions/handlers/session-command-input.ts';
 import type {
