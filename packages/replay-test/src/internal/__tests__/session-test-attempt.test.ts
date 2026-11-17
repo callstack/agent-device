@@ -29,12 +29,14 @@ const FAILED_WITHOUT_WARNINGS: ReplayTestAttemptOutcome = {
 function makeEntry(): ReplayTestRunEntry {
   const root = mkdtempForTestSync('agent-device-test-attempt-');
   const filePath = path.join(root, '01-flow.ad');
-  fs.writeFileSync(filePath, 'context platform=ios\nopen "Demo"\n');
+  const sourceText = 'context platform=ios\nopen "Demo"\n';
+  fs.writeFileSync(filePath, sourceText);
   return {
     kind: 'run',
     path: filePath,
     title: 'flow',
     manifest: { device: { platform: { kind: 'declared', value: 'ios' } } },
+    sourceText,
   };
 }
 

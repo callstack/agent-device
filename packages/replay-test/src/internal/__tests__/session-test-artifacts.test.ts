@@ -44,10 +44,9 @@ test('materializeReplayTestAttemptArtifacts writes replay and result manifests f
   const replayPath = path.join(root, 'flow.ad');
   const screenshotPath = path.join(root, 'capture.png');
   const attemptDir = path.join(root, 'attempt-1');
-  fs.writeFileSync(replayPath, 'context platform=ios\nopen "Demo"\n');
   fs.writeFileSync(screenshotPath, 'png');
 
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(replayPath, attemptDir, 'context platform=ios\nopen "Demo"\n');
   materializeReplayTestAttemptArtifacts({
     outcome: passedOutcome({ replayed: 4, healed: 1, artifactPaths: [screenshotPath] }),
     filePath: replayPath,
@@ -72,9 +71,12 @@ test('prepareReplayTestAttemptArtifacts preserves original Maestro flow filename
   const root = mkdtempForTestSync('agent-device-test-artifacts-maestro-');
   const replayPath = path.join(root, 'auth-flow.yml');
   const attemptDir = path.join(root, 'attempt-1');
-  fs.writeFileSync(replayPath, 'appId: demo.app\n---\n- assertVisible: Welcome\n');
 
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(
+    replayPath,
+    attemptDir,
+    'appId: demo.app\n---\n- assertVisible: Welcome\n',
+  );
 
   assert.equal(fs.existsSync(path.join(attemptDir, 'replay.ad')), true);
   assert.equal(fs.existsSync(path.join(attemptDir, 'auth-flow.yml')), true);
@@ -125,11 +127,14 @@ test('materializeReplayTestAttemptArtifacts writes failure manifest and copies l
   const screenshotPath = path.join(root, 'capture.png');
   const logPath = path.join(root, 'daemon.log');
   const attemptDir = path.join(root, 'attempt-2');
-  fs.writeFileSync(replayPath, 'context platform=android\nopen "Demo"\n');
   fs.writeFileSync(screenshotPath, 'png');
   fs.writeFileSync(logPath, 'log');
 
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(
+    replayPath,
+    attemptDir,
+    'context platform=android\nopen "Demo"\n',
+  );
   materializeReplayTestAttemptArtifacts({
     outcome: {
       status: 'failed',
@@ -178,7 +183,6 @@ test.each([
   const root = mkdtempForTestSync('agent-device-artifact-collisions-');
   const replayPath = path.join(root, 'flow.ad');
   const attemptDir = path.join(root, 'attempt-1');
-  fs.writeFileSync(replayPath, 'context platform=android\nopen demo.app\n');
   const artifactPaths = names.map((name, index) => {
     const dir = path.join(root, String(index));
     fs.mkdirSync(dir);
@@ -187,7 +191,11 @@ test.each([
     return artifactPath;
   });
 
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(
+    replayPath,
+    attemptDir,
+    'context platform=android\nopen demo.app\n',
+  );
   materializeReplayTestAttemptArtifacts({
     outcome: passedOutcome({ artifactPaths }),
     filePath: replayPath,
@@ -209,7 +217,6 @@ test('materialization preserves replay sources and diagnostics named after attem
   const replayPath = path.join(root, 'flow.yml');
   const attemptDir = path.join(root, 'attempt-1');
   const source = 'appId: demo.app\n---\n- assertVisible: Welcome\n';
-  fs.writeFileSync(replayPath, source);
   const names = ['replay.ad', 'flow.yml', 'result.txt', 'failure.txt'];
   const artifactPaths = names.map((name) => {
     const dir = path.join(root, 'diagnostics', name);
@@ -219,7 +226,7 @@ test('materialization preserves replay sources and diagnostics named after attem
     return artifactPath;
   });
 
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(replayPath, attemptDir, source);
   materializeReplayTestAttemptArtifacts({
     outcome: {
       status: 'failed',
@@ -259,9 +266,12 @@ test.each([false, true])(
     const attemptDir = path.join(root, 'attempt-1');
     const externalTrace = path.join(root, 'replay-timing.ndjson');
     const localTrace = path.join(attemptDir, 'replay-timing.ndjson');
-    fs.writeFileSync(replayPath, 'context platform=android\nopen demo.app\n');
     fs.writeFileSync(externalTrace, 'external trace');
-    prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+    prepareReplayTestAttemptArtifacts(
+      replayPath,
+      attemptDir,
+      'context platform=android\nopen demo.app\n',
+    );
     fs.writeFileSync(localTrace, 'attempt trace');
     const artifactPaths = localFirst ? [localTrace, externalTrace] : [externalTrace, localTrace];
 
@@ -295,9 +305,12 @@ test('materialization copies a log listed in both the outcome and error only onc
   const replayPath = path.join(root, 'flow.ad');
   const logPath = path.join(root, 'daemon.log');
   const attemptDir = path.join(root, 'attempt-1');
-  fs.writeFileSync(replayPath, 'context platform=android\nopen demo.app\n');
   fs.writeFileSync(logPath, 'diagnostic log');
-  prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+  prepareReplayTestAttemptArtifacts(
+    replayPath,
+    attemptDir,
+    'context platform=android\nopen demo.app\n',
+  );
 
   materializeReplayTestAttemptArtifacts({
     outcome: {
@@ -328,8 +341,11 @@ test.each(['result.txt', 'failure.txt', 'RESULT.TXT'])(
     const root = mkdtempForTestSync('agent-device-artifact-in-place-manifest-');
     const replayPath = path.join(root, 'flow.ad');
     const attemptDir = path.join(root, 'attempt-1');
-    fs.writeFileSync(replayPath, 'context platform=android\nopen demo.app\n');
-    prepareReplayTestAttemptArtifacts(replayPath, attemptDir);
+    prepareReplayTestAttemptArtifacts(
+      replayPath,
+      attemptDir,
+      'context platform=android\nopen demo.app\n',
+    );
     const diagnosticPath = path.join(attemptDir, name);
     fs.writeFileSync(diagnosticPath, 'diagnostic contents');
 

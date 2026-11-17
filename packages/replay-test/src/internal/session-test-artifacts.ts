@@ -44,7 +44,7 @@ export function buildReplayTestArtifactSlug(filePath: string, cwd?: string): str
 export function prepareReplayTestAttemptArtifacts(
   filePath: string,
   attemptArtifactsDir: string,
-  sourceText?: string,
+  sourceText: string,
 ): void {
   fs.mkdirSync(attemptArtifactsDir, { recursive: true });
   copyReplaySourceFile(filePath, attemptArtifactsDir, sourceText);
@@ -131,17 +131,13 @@ function copyReplayTestArtifacts(
 function copyReplaySourceFile(
   filePath: string,
   attemptArtifactsDir: string,
-  sourceText?: string,
+  sourceText: string,
 ): void {
   const genericReplayPath = path.join(attemptArtifactsDir, 'replay.ad');
-  // Shipped entry text is the source of truth. A remote daemon does not share the caller's
-  // disk, so a string — including "" — is written and the caller path is not opened. Omitted
-  // text keeps the local copy.
-  if (typeof sourceText === 'string') {
-    fs.writeFileSync(genericReplayPath, sourceText);
-  } else {
-    fs.copyFileSync(filePath, genericReplayPath);
-  }
+  // The daemon writes the shipped text and never reads the entry path, because a remote daemon
+  // does not share the caller's disk and a daemon-side read would copy a daemon-host file into
+  // downloadable artifacts.
+  fs.writeFileSync(genericReplayPath, sourceText);
 
   // Sources that are not native `.ad` keep their original filename alongside `replay.ad`, so
   // CI artifacts point back at the flow the author wrote. This is artifact naming, not format
@@ -151,11 +147,7 @@ function copyReplaySourceFile(
   // Maestro filename so CI artifacts point back to the source flow.
   const originalReplayPath = path.join(attemptArtifactsDir, path.basename(filePath));
   if (path.resolve(originalReplayPath) === path.resolve(genericReplayPath)) return;
-  if (typeof sourceText === 'string') {
-    fs.writeFileSync(originalReplayPath, sourceText);
-    return;
-  }
-  fs.copyFileSync(filePath, originalReplayPath);
+  fs.writeFileSync(originalReplayPath, sourceText);
 }
 
 function buildUniqueArtifactFileName(

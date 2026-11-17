@@ -16,8 +16,8 @@ export type ReplayTestDiscoveryEntry =
       path: string;
       title?: string;
       manifest: ReplayTestManifest;
-      /** Opaque entry text from the inspected source. Absent when that source has none. */
-      sourceText?: string;
+      /** Opaque entry text from the inspected source. */
+      sourceText: string;
     }
   | {
       kind: 'skip';
@@ -53,7 +53,7 @@ export function discoverReplayTestEntries(params: {
       path: filePath,
       title: manifest.title,
       manifest,
-      ...(sourceText !== undefined ? { sourceText } : {}),
+      sourceText,
     };
     if (!platformFilter) {
       entries.push(run);
