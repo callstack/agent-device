@@ -1,6 +1,9 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 
-/** Normalized attributes carried unchanged into the public node, independent of presentation. */
+/**
+ * Normalized attributes carried unchanged into the public node, independent of presentation.
+ * The regular projection leaves out `clickable`, `focusable`, `longClickable` and `scrollable`.
+ */
 type AndroidPassiveNodeFacts = Pick<
   RawSnapshotNode,
   | 'contentDescription'
