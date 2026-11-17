@@ -102,3 +102,23 @@ test('a daemon health payload without an upstream link or host arch parses as be
     },
   );
 });
+
+test.each(['daemon', 'upstream'] as const)(
+  'released protocol-2 %s cannot silently omit batch receipt delivery',
+  async (link) => {
+    const payload =
+      link === 'upstream' ? proxyHealth(2) : { ...DAEMON_LINK, rpcProtocolVersion: 2 };
+    await withHealthServer(payload, async (baseUrl) => {
+      await assert.rejects(
+        readRemoteDaemonHealth({ baseUrl, token: 't', pid: 0 }),
+        (error: unknown) => {
+          const failure = error as { code?: string; details?: Record<string, unknown> };
+          assert.equal(failure.code, 'COMMAND_FAILED');
+          assert.equal(failure.details?.remoteRpcProtocolVersion, 2);
+          assert.equal(failure.details?.supportedRpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
+          return true;
+        },
+      );
+    });
+  },
+);

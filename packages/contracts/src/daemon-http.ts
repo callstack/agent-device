@@ -123,7 +123,7 @@ export function buildDaemonHttpLeaseHeaders(leaseId: string | undefined): Record
 // Enforced, not just documented: `test/wire-compat/` digests the declarations
 // that cross this boundary and fails when one changes shape without a bump or
 // an acknowledged-compatible entry (#1432).
-export const DAEMON_RPC_PROTOCOL_VERSION = 2;
+export const DAEMON_RPC_PROTOCOL_VERSION = 3;
 
 /**
  * The largest serialized daemon request, in UTF-8 bytes, that any transport reads: the socket
