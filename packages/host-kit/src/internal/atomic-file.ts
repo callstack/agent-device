@@ -98,6 +98,8 @@ export function publishFileSync(options: {
   mode?: number;
   preserveExistingMode?: boolean;
   publish?: AtomicPublishMode;
+  /** The asked-for mode is MADE exact on the sibling instead of paid for with the umask. */
+  exactMode?: boolean;
 }): void {
   withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
     const existing = options.preserveExistingMode
@@ -110,9 +112,12 @@ export function publishFileSync(options: {
       ...(mode === undefined ? {} : { mode }),
     };
     fs.writeFileSync(temporaryPath, options.contents, writeOptions);
-    // A file CREATE ANDs its mode with the umask, so the mode is SAID on the temporary sibling and then made
-    // good on, before the entry exists: no reader ever sees a wider file than the caller asked for.
-    if (mode !== undefined) fs.chmodSync(temporaryPath, mode);
+    // A file CREATE ANDs its mode with the umask, so a mode that has to be EXACT is SAID on the temporary
+    // sibling before the entry exists and no reader sees a wider file. Preserving an existing mode is always
+    // exact. An asked-for mode is NOT, which is what a generic caller has always relied on: with `mode` 0600
+    // under umask 0200 it gets 0400, and only {@link publishScriptFileSync} asks for the exact number.
+    const exactMode = preservedMode ?? (options.exactMode ? mode : undefined);
+    if (exactMode !== undefined) fs.chmodSync(temporaryPath, exactMode);
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
     } else {
@@ -124,7 +129,8 @@ export function publishFileSync(options: {
 /**
  * Publishes a session script, and nothing else: {@link publishFileSync} at {@link SCRIPT_FILE_MODE}, with the
  * destination-ancestry rule asked through {@link prepareScriptDestination}. A recording is a transcript of what
- * someone did here, so it is private.
+ * someone did here, so it is private, and the mode is asked EXACT: the umask of a shared checkout would
+ * otherwise widen it away from what the rule publishes everywhere else.
  */
 export function publishScriptFileSync(options: {
   destination: string;
@@ -140,6 +146,7 @@ export function publishScriptFileSync(options: {
     contents: options.contents,
     mode: SCRIPT_FILE_MODE,
     publish: options.publish,
+    exactMode: true,
   });
 }
 
@@ -200,24 +207,14 @@ function scriptDestination(destination: string, create: boolean): ScriptDestinat
     return { directory: spelled, identity: 'windows' };
   }
   const trust = scriptTrust();
-  let walked = walkSpelledParent(spelled, destination, trust, create);
-  if (create && walked.ended === 'short' && !walked.unresolvable) {
-    createMissingLevels(destination, walked.deepest, walked.missing, trust);
-    walked = walkSpelledParent(spelled, destination, trust, false);
+  // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
+  // walk the missing directories are this call's own to create, and asking it before creation would refuse
+  // `mkdir -p <sticky shared>/recordings`, where those levels are 0700 of this call's own (ADR 0016).
+  const arrived = walkSpelledParent(spelled, destination, trust, create);
+  if (othersCreateEntriesIn(arrived.authority, trust)) {
+    throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  if (walked.ended === 'short') {
-    throw scriptAncestryFailure(
-      destination,
-      walked.deepest,
-      walked.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
-    );
-  }
-  // Only now is the CREATION question asked, because below the first walk the missing directories are this
-  // call's own to create: where others could add this entry too, one of them can add it first (ADR 0016).
-  if (othersCreateEntriesIn(walked.authority, trust)) {
-    throw scriptAncestryFailure(destination, walked.deepest, 'shared_parent');
-  }
-  return { directory: walked.deepest, identity: walked.identity };
+  return { directory: arrived.deepest, identity: arrived.identity };
 }
 
 /**
@@ -351,53 +348,54 @@ type WalkState = Readonly<{
   hops: number;
 }>;
 
-/** Where a walk ended: ARRIVED at the directory the entry is created in, or SHORT of it with the tail below. */
-type WalkOutcome =
-  | Readonly<{
-      ended: 'arrived';
-      /** The PHYSICAL directory the entry is created in. */
-      deepest: string;
-      authority: DirectoryAuthority;
-      /** That directory's identity, as this walk's `lstat` of it answered. */
-      identity: string;
-    }>
-  | Readonly<{
-      ended: 'short';
-      /** The nearest directory the walk did judge; the destination's name is absent below it. */
-      deepest: string;
-      /** The spelled names below `deepest`, the first of them absent. */
-      missing: readonly string[];
-      /** Whether a `..` is queued behind that name, so creating cannot resolve the chain. */
-      unresolvable: boolean;
-    }>;
+/**
+ * The ground a walk answered: the PHYSICAL directory the entry is created in, with the authority and identity
+ * it was judged under, so the caller never asks the host about ground the walk already read.
+ */
+type WalkGround = Readonly<{
+  deepest: string;
+  authority: DirectoryAuthority;
+  /** That directory's identity, as this walk's `lstat` of it answered. */
+  identity: string;
+}>;
+
+/** The tail a walk stopped below: the nearest judged directory and the spelled names absent beneath it. */
+type ShortTail = Readonly<{
+  /** The nearest directory the walk did judge; the destination's name is absent below it. */
+  deepest: string;
+  /** The spelled names below `deepest`, the first of them absent. */
+  missing: readonly string[];
+  /** Whether a `..` is queued behind that name, so creating cannot resolve the chain. */
+  unresolvable: boolean;
+}>;
 
 /**
  * Walks the spelled parent exactly as the kernel resolves a path — the resolution ADR 0016 describes: no
  * `realpath`, `..` applied to the directory physically stood in, a link's raw components queued ahead of the
  * rest, hops capped at {@link MAX_SCRIPT_PATH_LINK_HOPS}. It throws at the first step another local user could
  * steer; `destination` appears only in the refusal that names it.
+ *
+ * A caller that creates gets the ANSWER FOR THE COMPLETED CHAIN: the walk stops at the first absent name, makes
+ * that tail inside the directory it judged, and judges the chain again from the root, because creating is the
+ * one moment ground below this call's feet changes. Anything still short then is a refusal.
  */
 function walkSpelledParent(
   parent: string,
   destination: string,
   trust: ScriptDestinationTrust,
   create: boolean,
-): WalkOutcome {
+): WalkGround {
   const refuse = (ancestor: string, exposure: ScriptAncestryExposure): never => {
     throw scriptAncestryFailure(destination, ancestor, exposure);
   };
   let state = standOn('/', pathComponents(parent), trust, 0, refuse);
+  let created = false;
   // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
   for (;;) {
     const [component, ...rest] = state.queue;
     // The only ending that ARRIVES: an empty queue, every name the parent spelled resolved and judged.
     if (component === undefined) {
-      return {
-        ended: 'arrived',
-        deepest: state.deepest,
-        authority: state.authority,
-        identity: state.identity,
-      };
+      return { deepest: state.deepest, authority: state.authority, identity: state.identity };
     }
     // `..` is the parent of the directory PHYSICALLY stood in, not of the spelling: where `work` is a link,
     // `.../work/../x` steps back from the link's target and lands beside it.
@@ -407,14 +405,20 @@ function walkSpelledParent(
     }
     const step = stepIntoEntry(state, component, rest, trust, refuse);
     if (step.ended === 'short') {
-      // Nothing below here exists yet, so the walk stops at the ground it judged and reports the tail under
-      // it: a caller that creates makes that tail, a caller that creates nothing has no answer.
-      if (create) return step;
-      throw scriptAncestryFailure(
-        destination,
-        step.deepest,
-        step.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
-      );
+      const { deepest, missing, unresolvable } = step;
+      // Nothing stands below here. A caller that creates makes that tail and is judged again; a step back out
+      // of a directory that is not there is something no amount of creating resolves.
+      if (!create || created || unresolvable) {
+        throw scriptAncestryFailure(
+          destination,
+          deepest,
+          unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
+        );
+      }
+      createMissingLevels(destination, deepest, missing, trust);
+      created = true;
+      state = standOn('/', pathComponents(parent), trust, 0, refuse);
+      continue;
     }
     state = step.state;
   }
@@ -423,12 +427,7 @@ function walkSpelledParent(
 /** Where one named entry leaves the walk: standing on a judged directory, or short of the chain. */
 type EntryStep =
   | Readonly<{ ended: 'stand'; state: WalkState }>
-  | Readonly<{
-      ended: 'short';
-      deepest: string;
-      missing: readonly string[];
-      unresolvable: boolean;
-    }>;
+  | (ShortTail & Readonly<{ ended: 'short' }>);
 
 /**
  * Resolves one named entry inside the directory the walk stands in, judged by this call's own `lstat` of the

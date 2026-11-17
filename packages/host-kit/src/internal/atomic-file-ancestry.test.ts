@@ -96,10 +96,28 @@ skipOnWindows('publishes the script at 0600 under a umask that takes an OWNER bi
   // `CREATE` answers the mode ANDed with the umask, so a host at 0277 leaves this recording 0400: the write
   // succeeds and nothing is a red flag, yet the owner's own tools cannot read the transcript they saved. A umask
   // that reaches into the owner bits is the one a mode on `writeFile` cannot survive. The rule says the mode.
+  // 0200 is the same hole one bit narrower, and it is the umask a group-writable home directory carries.
   const workflows = path.join(root(), 'workflows');
   privateDir(workflows);
   const destination = path.join(workflows, 'journey.ad');
   const previous = process.umask(0o0277);
+  try {
+    publish(destination);
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(modeOf(destination)).toBe(0o600);
+});
+
+skipOnWindows('publishes the script at 0600 under the group-only umask 0200', () => {
+  // The narrowest umask that still reaches the owner bits, and the one a shared machine tends to carry. What
+  // {@link publishFileSync} answers for a generic caller under this umask is 0400 (see atomic-file.test.ts):
+  // the script route is the one that asks for the exact mode, and this is where that difference lives.
+  const workflows = path.join(root(), 'workflows');
+  privateDir(workflows);
+  const destination = path.join(workflows, 'journey.ad');
+  const previous = process.umask(0o0200);
   try {
     publish(destination);
   } finally {

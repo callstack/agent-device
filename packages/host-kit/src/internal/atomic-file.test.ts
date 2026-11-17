@@ -72,6 +72,34 @@ describe('publishFileSync', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('new bytes');
   });
 
+  test.skipIf(process.platform === 'win32')('pays an asked-for mode with the umask', () => {
+    // A generic caller gets `mode` ANDed with the umask, because that is what a CREATE answers and it is what
+    // every caller of this function has had since the function existed: 0600 under umask 0200 is 0400. Only
+    // `exactMode` asks for the number, and only the script publisher does.
+    const target = destination('umask-priced.png');
+    const previousUmask = process.umask(0o0200);
+    try {
+      publishFileSync({ destination: target, contents: 'bytes', mode: 0o600 });
+      expect(fs.statSync(target).mode & 0o777).toBe(0o400);
+    } finally {
+      process.umask(previousUmask);
+    }
+  });
+
+  test.skipIf(process.platform === 'win32')(
+    'makes the mode exact when the caller asks for the number',
+    () => {
+      const target = destination('exact-mode.png');
+      const previousUmask = process.umask(0o0200);
+      try {
+        publishFileSync({ destination: target, contents: 'bytes', mode: 0o600, exactMode: true });
+        expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+      } finally {
+        process.umask(previousUmask);
+      }
+    },
+  );
+
   test('a failed permission update leaves the existing destination unchanged', () => {
     const target = destination('permission-update-failed.png');
     fs.writeFileSync(target, 'old bytes');

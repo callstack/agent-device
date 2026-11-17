@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
+import { isAtomicPublishTemporaryPath } from '@agent-device/host-kit/file';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export type FilesystemErrno = 'EIO' | 'ENOSPC' | 'EMFILE';
@@ -120,12 +121,17 @@ function installFilesystemFault(options: {
  * sibling unmatched.
  */
 export function isPublishTemporarySiblingOf(value: unknown, targetPath: string): boolean {
-  if (typeof value !== 'string' || !value.endsWith('.tmp')) return false;
-  const name = path.basename(value);
-  const prefix = `.${path.basename(targetPath)}.`;
-  if (!name.startsWith(prefix) || name.length <= prefix.length + 1) return false;
-  const directory = path.dirname(value);
+  if (typeof value !== 'string') return false;
+  // The NAME half is host-kit's, and it is asked with the value's own directory as the destination's, so only
+  // the shape is judged. What is left is the question host-kit cannot answer: is that directory the one
+  // `targetPath` stands in?
+  const named = isAtomicPublishTemporaryPath(
+    value,
+    path.join(path.dirname(value), path.basename(targetPath)),
+  );
+  if (!named) return false;
   const spelled = path.dirname(targetPath);
+  const directory = path.dirname(value);
   if (directory === spelled) return true;
   const expected = statOrNull(spelled);
   const seen = statOrNull(directory);

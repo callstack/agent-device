@@ -14,6 +14,7 @@
 // Receipt cases send a real `batch`, because the client reads `scriptDeliveryReceipt` only on that command:
 // a receipt on any other command is never parsed, and the case would pass without reaching the validator.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -56,47 +57,39 @@ const SERVED_HOSTILE_NAMES = HOSTILE_NAMES.filter((name) => name !== '..');
 const PLAN = [{ command: 'wait', input: {} }];
 
 /**
- * The entries the client's own script route creates: its record-directory chain and the hashed record files
- * inside it. A record name is a digest of the client's own publication identity, so it is bounded; a stray
- * entry the response named in that directory does not match this and is reported.
+ * One world. The client works in `root`, which is planted DEEP inside the watched tree `outer`, and the depth
+ * is the point: `../../../../tmp/evil` from `root` lands INSIDE `outer`, where the snapshot sees it, instead of
+ * in the system's own scratch directory, where nothing is watching and an escaped write would go unnoticed.
  */
-function clientStateEntries(name: string, kind: string): boolean {
-  const recordDir = 'state/remote-connections/session-scripts';
-  if (name === 'state' || name === `${recordDir}` || name === 'state/remote-connections') {
-    return kind === 'dir';
-  }
-  if (!name.startsWith(`${recordDir}/`) || kind !== 'file') return false;
-  // A record name is a digest of the client's OWN publication identity, so one file with this shape is
-  // accounted for; a name a response put there does not match and is reported.
-  return /^[0-9a-f]{64}\.json$/.test(name.slice(recordDir.length + 1));
-}
-
-function world() {
-  const root = fs.realpathSync(mkdtempForTestSync('script-hostile-'));
+function scratchWorld() {
+  const outer = fs.realpathSync(mkdtempForTestSync('script-hostile-'));
+  const root = path.join(outer, 'one', 'two', 'scratch');
+  fs.mkdirSync(root, { recursive: true });
+  const stateDir = path.join(root, 'state');
+  const destination = path.join(root, 'caller', 'journey.ad');
+  // Names are spelled from the WATCHED root, because that is what the snapshots are keyed by.
+  const rel = (absolute: string) => path.relative(outer, absolute).split(path.sep).join('/');
   return {
+    outer,
     root,
-    stateDir: path.join(root, 'state'),
-    destination: path.join(root, 'caller', 'journey.ad'),
+    stateDir,
+    destination,
+    rel,
+    /** The record directory, spelled from the watched root. */
+    recordDir: rel(path.join(stateDir, 'remote-connections', 'session-scripts')),
   };
 }
 
-/** Every name under `root`, recursively, each with the kind of entry it is. */
+type World = ReturnType<typeof scratchWorld>;
+
+/** Every entry under `root`, each described by what it IS: a directory, a link with its raw target, or bytes. */
 function snapshotTree(root: string): Map<string, string> {
   const found = new Map<string, string>();
   if (!fs.existsSync(root)) return found;
   const walk = (directory: string, prefix: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const name = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
-      found.set(
-        name,
-        entry.isDirectory()
-          ? 'dir'
-          : entry.isSymbolicLink()
-            ? 'link'
-            : entry.isFile()
-              ? 'file'
-              : 'other',
-      );
+      found.set(name, describeEntry(path.join(directory, entry.name), entry));
       if (entry.isDirectory()) walk(path.join(directory, entry.name), name);
     }
   };
@@ -104,64 +97,106 @@ function snapshotTree(root: string): Map<string, string> {
   return found;
 }
 
+function describeEntry(pathname: string, entry: fs.Dirent): string {
+  if (entry.isDirectory()) return 'dir';
+  if (entry.isSymbolicLink()) return `link:${fs.readlinkSync(pathname)}`;
+  if (!entry.isFile()) return 'other';
+  return bytesOf(fs.readFileSync(pathname));
+}
+
+/** The state a file with these contents is reported with, so a case can NAME the bytes it expects. */
+function bytesOf(contents: string | Uint8Array): string {
+  return `bytes:${crypto.createHash('sha256').update(contents).digest('hex')}`;
+}
+
 /**
- * Names that appeared under `root` since `before`, EVERY subtree included: the `state` and `caller` trees
- * belong to the client, so a steered write can add an entry there and excluding either whole would hide
- * exactly what these cases look for. `allowed` is the caller's own account of what the interaction legitimately
- * produced; anything else is reported with its kind.
+ * Entries of the watched tree whose state differs between `before` and now, in EITHER direction: a name that
+ * appeared, one that vanished, and one whose bytes, kind or link target CHANGED. `allowed` names what the
+ * interaction is entitled to produce — `name=state` for an entry that must carry exactly those bytes, or a bare
+ * `name` for one whose contents another assertion pins. Anything else is reported with both states. The watch
+ * covers `state` and `caller` like every other subtree, because the client owns them and that is where a
+ * steered write lands.
  */
-function namesThatAppeared(
-  root: string,
+function entriesThatMoved(
+  world: World,
   before: Map<string, string>,
-  allowed: (name: string, kind: string) => boolean = () => false,
+  allowed: ReadonlySet<string> = new Set(),
 ): string[] {
-  return [...snapshotTree(root)]
-    .filter(([name, kind]) => before.get(name) !== kind && !allowed(name, kind))
-    .map(([name, kind]) => `${name} (${kind})`);
+  const after = snapshotTree(world.outer);
+  const moved: string[] = [];
+  for (const name of new Set([...before.keys(), ...after.keys()])) {
+    const was = before.get(name);
+    const now = after.get(name);
+    if (was === now) continue;
+    if (now !== undefined && (allowed.has(name) || allowed.has(`${name}=${now}`))) continue;
+    moved.push(`${name}: was ${was ?? 'absent'}, now ${now ?? 'absent'}`);
+  }
+  return moved;
 }
 
-/** Allows the client's record files and one destination, with the directories that carry it. */
-function clientsOwn(root: string, destination: string) {
-  const ground = clientsOwnGround(root, destination);
-  const file = path.relative(root, destination).split(path.sep).join('/');
-  return (name: string, kind: string) => ground(name, kind) || name === file;
-}
-
-/** Allows the client's record files and the DIRECTORIES that carry its destination, not the file itself. */
-function clientsOwnGround(root: string, destination: string) {
-  const parts = path.relative(root, destination).split(path.sep).join('/').split('/');
-  const chain = new Set(parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('/')));
-  return (name: string, kind: string) =>
-    clientStateEntries(name, kind) || (kind === 'dir' && chain.has(name));
+/** The directories that carry `name`, each as `name=dir`, spelled from the watched root. */
+function chainOf(name: string): string[] {
+  const parts = name.split('/');
+  return parts.slice(0, -1).map((_, index) => `${parts.slice(0, index + 1).join('/')}=dir`);
 }
 
 /**
- * The paths a hostile name would resolve to OUTSIDE the scratch root, which the tree snapshot cannot see.
- * A name resolving to an ANCESTOR of the root (`..`, `../..`) is left out: that directory stood here before
- * the daemon was ever asked, so its existence proves nothing about this interaction.
+ * The ground one publication may prepare: the record directory and the chain that carries it, plus the chain
+ * that carries the destination it chose for itself. No FILE, at any name, is on this list, and neither is the
+ * destination's own name as a directory.
  */
-function escapeTargets(root: string, names: readonly string[]): string[] {
+function preparedGround(world: World): Set<string> {
+  return new Set([
+    ...chainOf(world.recordDir),
+    `${world.recordDir}=dir`,
+    ...chainOf(world.rel(world.destination)),
+  ]);
+}
+
+/** The record files this client owns, by EXACT name, whose fields `recordsAsWritten` pins. */
+function ownRecordFiles(world: World): string[] {
+  return recordNames(world).map((name) => `${world.recordDir}/${name}`);
+}
+
+/** The record names this client has written, sorted, spelled relative to the watched root only as a name. */
+function recordNames(world: World): string[] {
+  return records(world.stateDir).sort();
+}
+
+/**
+ * What each record the client wrote SAYS, in full: its exact name and every field of the record. A second
+ * record of the same hash SHAPE, a destination moved, a revision that did not move, or a staging directory
+ * left listed all fail the caller's `toEqual`.
+ */
+function recordsAsWritten(world: World): Array<Record<string, unknown>> {
+  return recordNames(world).map((name) => ({
+    name,
+    ...JSON.parse(
+      fs.readFileSync(
+        path.join(world.stateDir, 'remote-connections', 'session-scripts', name),
+        'utf8',
+      ),
+    ),
+  }));
+}
+
+/**
+ * The paths a hostile name would resolve to OUTSIDE the watched tree, which no snapshot can see: the absolute
+ * name, and the ones that climb above it. A name resolving to an ANCESTOR is left out — that directory stood
+ * here before the daemon was ever asked, so its existence proves nothing, and nothing new may appear inside it
+ * anyway, which the snapshot of the watched tree does cover.
+ */
+function escapeTargets(world: World, names: readonly string[]): string[] {
   return names
-    .map((name) => path.resolve(root, name))
+    .map((name) => path.resolve(world.root, name))
     .filter((target) => {
-      if (target === root || target.startsWith(root + path.sep)) return false;
-      return !root.startsWith(target + path.sep);
+      if (target === world.root || target.startsWith(world.root + path.sep)) return false;
+      return !world.root.startsWith(target + path.sep);
     });
 }
 
-function nothingEscaped(root: string, names: readonly string[]): boolean {
-  return escapeTargets(root, names).every((target) => !fs.existsSync(target));
-}
-
-/** The destination each of the client's own records names, which a response must never be able to change. */
-function recordedDestinations(stateDir: string): string[] {
-  return records(stateDir).map((name) => {
-    const record = JSON.parse(
-      fs.readFileSync(path.join(stateDir, 'remote-connections', 'session-scripts', name), 'utf8'),
-    ) as { destination?: unknown };
-    if (typeof record.destination !== 'string') throw new Error('a record names no destination');
-    return record.destination;
-  });
+function nothingEscaped(world: World, names: readonly string[]): string[] {
+  return escapeTargets(world, names).filter((target) => fs.existsSync(target));
 }
 
 skipOnWindows(
@@ -171,81 +206,79 @@ skipOnWindows(
     // hostile here in the way that matters: the second id is ANOTHER publication this same client owns, so a
     // client that skipped the match would take this batch answer's bytes and write them into that other
     // recording's destination — one caller's response steering a write into a different publication's file.
-    const { root, stateDir, destination } = world();
-    const other = path.join(root, 'caller', 'other.ad');
+    const world = scratchWorld();
+    const other = path.join(world.root, 'caller', 'other.ad');
     const baseUrl = await artifactServer({
       v1: { body: 'open Demo\n' },
-      v2: { body: 'click Demo\n' },
       v9: { body: 'type Demo evil\n' },
     });
-    const first = await open(baseUrl, stateDir, destination);
-    const second = await open(baseUrl, stateDir, other, {
-      respond: (id) =>
-        answer(baseUrl, stateDir, request('open'), {
-          scriptPublicationId: id,
-          artifacts: [{ ...script('v1', 1, id), artifactId: 'v1' }],
-        }),
-    });
+    const first = await open(baseUrl, world.stateDir, world.destination);
+    const second = await open(baseUrl, world.stateDir, other);
     expect(first.response.ok && second.response.ok).toBe(true);
+    const recordsAtStart = recordsAsWritten(world);
     expect(fs.readFileSync(other, 'utf8')).toBe('open Demo\n');
-    const recordNamesAtStart = records(stateDir);
 
-    for (const hostile of HOSTILE_NAMES) {
-      const before = snapshotTree(root);
-      const response = await answer(baseUrl, stateDir, batch(PLAN), {
-        scriptDeliveryReceipt: {
-          publicationId: first.id,
-          version: { ...script('v9', 2, second.id), artifactId: 'v9' },
-        },
-      });
+    // ONE send: nothing about the answer depends on a hostile string. It names two publication ids this
+    // client owns and the contract compares THOSE, so asking the same question seven times would add nothing
+    // the first send cannot already fail on.
+    const before = snapshotTree(world.outer);
+    const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
+      scriptDeliveryReceipt: {
+        publicationId: first.id,
+        version: { ...script('v9', 2, second.id), artifactId: 'v9' },
+      },
+    });
 
-      expect(response.ok, hostile).toBe(true);
-      // Neither recording moved: the batch's own destination keeps its bytes, and the version carrying the
-      // OTHER publication's id is refused rather than published into it.
-      expect(fs.readFileSync(destination, 'utf8'), hostile).toBe('open Demo\n');
-      expect(fs.readFileSync(other, 'utf8'), hostile).toBe('open Demo\n');
-      const data = response.ok ? (response.data as Record<string, unknown>) : {};
-      expect(data.savedScript, hostile).toBeUndefined();
-      expect(namesThatAppeared(root, before), hostile).toEqual([]);
-      expect(records(stateDir), hostile).toEqual(recordNamesAtStart);
-      expect(nothingEscaped(root, [hostile]), hostile).toBe(true);
-    }
+    expect(response.ok).toBe(true);
+    // Neither recording moved, and the whole watched tree is byte-for-byte what it was: no new record, no
+    // record rewritten, no staging directory, nothing anywhere the receipt could have named.
+    expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
+    expect(fs.readFileSync(other, 'utf8')).toBe('open Demo\n');
+    const data = response.ok ? (response.data as Record<string, unknown>) : {};
+    expect(data.savedScript).toBeUndefined();
+    expect(entriesThatMoved(world, before)).toEqual([]);
+    expect(recordsAsWritten(world)).toEqual(recordsAtStart);
+    expect(nothingEscaped(world, HOSTILE_NAMES)).toEqual([]);
   },
 );
 
 skipOnWindows(
-  'a receipt naming a publication this client never opened is dropped and disclosed',
+  'a receipt naming a publication this client never opened is dropped and writes nothing',
   async () => {
     // The receipt's own `publicationId` is the daemon's claim about which recording it is delivering. When no
-    // record of this client matches it, nothing is honored: the answer is disclosed as an unreadable receipt,
-    // and no destination is touched. HOSTILE_NAMES covers the shapes that would otherwise become a path, and
-    // the whole tree is asked, `state` included, because that is where a trusted id would be written.
-    const { root, stateDir, destination } = world();
+    // record of this client matches it, nothing is honored: the version is DROPPED, and the dropped id does not
+    // become a record, a published file, or a failure this client takes for its own. HOSTILE_NAMES covers the
+    // shapes that would otherwise become a path.
+    const world = scratchWorld();
     const baseUrl = await artifactServer({
       v1: { body: 'open Demo\n' },
       v2: { body: 'click Demo\n' },
     });
-    const opened = await open(baseUrl, stateDir, destination);
+    const opened = await open(baseUrl, world.stateDir, world.destination);
     expect(opened.response.ok).toBe(true);
-    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
-    const recordNamesAtStart = records(stateDir);
+    const recordsAtStart = recordsAsWritten(world);
+    expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
 
     for (const hostile of HOSTILE_NAMES) {
-      const before = snapshotTree(root);
-      const response = await answer(baseUrl, stateDir, batch(PLAN), {
+      const before = snapshotTree(world.outer);
+      const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
         scriptDeliveryReceipt: { publicationId: hostile, version: script('v2', 2, hostile) },
       });
 
       expect(response.ok, hostile).toBe(true);
-      expect(fs.readFileSync(destination, 'utf8'), hostile).toBe('open Demo\n');
-      // Nothing the hostile id named came into being, and the client's own record is untouched.
-      expect(namesThatAppeared(root, before, clientsOwn(root, destination)), hostile).toEqual([]);
-      expect(records(stateDir), hostile).toEqual(recordNamesAtStart);
-      expect(nothingEscaped(root, [hostile]), hostile).toBe(true);
+      const data = response.ok ? (response.data as Record<string, unknown>) : {};
+      expect(data.savedScript, hostile).toBeUndefined();
+      // Nothing the client opened is claimed by an id it never opened. A hostile name past the receipt's own
+      // string budget makes the WHOLE receipt unreadable, and that is disclosed — as the receipt's own shape
+      // problem, naming no publication. What must never appear is a failure carrying THIS hostile id, because
+      // that would send the caller to fix a recording it does not own.
+      const failure = data.scriptDeliveryFailure as { publicationId?: unknown } | undefined;
+      expect(failure?.publicationId ?? '', hostile).toBe('');
+      expect(fs.readFileSync(world.destination, 'utf8'), hostile).toBe('open Demo\n');
+      expect(entriesThatMoved(world, before), hostile).toEqual([]);
+      expect(recordsAsWritten(world), hostile).toEqual(recordsAtStart);
+      expect(nothingEscaped(world, [hostile]), hostile).toEqual([]);
     }
-
-    expect(records(stateDir)).toHaveLength(1);
-    expect(records(stateDir)[0]).toMatch(/^[0-9a-f]{64}\.json$/);
   },
 );
 
@@ -253,30 +286,48 @@ skipOnWindows(
   'a valid matching batch receipt publishes the recorded destination through the same seam',
   async () => {
     // The counterpart the hostile receipt cases need to mean anything: a receipt that DOES match this client's
-    // own publication publishes through the very code path they exercise. Without it, their "nothing was
-    // written" result could come from the receipt never being honored rather than from the fields being refused.
-    const { root, stateDir, destination } = world();
+    // own publication publishes through the very code path they exercise. Without it, their "nothing moved"
+    // result could come from the receipt never being honored rather than from the fields being refused.
+    const world = scratchWorld();
     const baseUrl = await artifactServer({
       v1: { body: 'open Demo\n' },
       v2: { body: 'click Demo\n' },
     });
-    const opened = await open(baseUrl, stateDir, destination);
+    const opened = await open(baseUrl, world.stateDir, world.destination);
     const publicationId = opened.id;
 
-    const before = snapshotTree(root);
-    const response = await answer(baseUrl, stateDir, batch(PLAN), {
-      scriptDeliveryReceipt: {
-        publicationId,
-        version: script('v2', 2, publicationId),
-      },
+    const before = snapshotTree(world.outer);
+    const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
+      scriptDeliveryReceipt: { publicationId, version: script('v2', 2, publicationId) },
     });
 
     expect(response.ok).toBe(true);
-    // The bytes arrived, at the destination THIS client recorded, and the tree gained no entry at all: the
-    // destination already stood there, and no staging directory or extra record was left behind.
-    expect(fs.readFileSync(destination, 'utf8')).toBe('click Demo\n');
-    expect(namesThatAppeared(root, before)).toEqual([]);
-    expect(recordedDestinations(stateDir)).toEqual([destination]);
+    // The bytes arrived, at the destination THIS client recorded, and they are exactly the version's bytes. The
+    // record file is the only other entry allowed to move, and only to the fields pinned below: so no staging
+    // directory, no second record, and no entry anywhere the receipt could have named.
+    expect(fs.readFileSync(world.destination, 'utf8')).toBe('click Demo\n');
+    expect(
+      entriesThatMoved(
+        world,
+        before,
+        new Set([
+          ...ownRecordFiles(world),
+          `${world.rel(world.destination)}=${bytesOf('click Demo\n')}`,
+        ]),
+      ),
+    ).toEqual([]);
+    // Revision 2, and the staging list EMPTY: the publication released the directory it staged in, and this
+    // assertion is what proves no staging directory is still named there.
+    expect(recordsAsWritten(world)).toEqual([
+      {
+        name: recordNames(world)[0],
+        destination: world.destination,
+        force: false,
+        revision: 2,
+        staging: [],
+      },
+    ]);
+    expect(nothingEscaped(world, HOSTILE_NAMES)).toEqual([]);
   },
 );
 
@@ -287,17 +338,17 @@ skipOnWindows(
     // answers one shaped like a path still gets its bytes written to the destination this client recorded,
     // and no file appears anywhere near the name the daemon supplied.
     //
-    // Each name gets its OWN world: one publication, its own destination, its own scratch root. A shared
+    // Each name gets its OWN world: one publication, its own destination, its own watched tree. A shared
     // destination would let a later iteration fail with `script_target_exists` on a file an earlier one
-    // legitimately wrote, and a dropped delivery would hide among those expected failures. Here every case
-    // must name the path, carry the bytes, and carry no failure, or this case fails.
+    // legitimately wrote, and a dropped delivery would hide among those expected failures. Here every name
+    // must produce this exact tree, name the path, carry the bytes, and carry no failure, or it fails.
     for (const hostile of SERVED_HOSTILE_NAMES) {
-      const { root, stateDir, destination } = world();
+      const world = scratchWorld();
       const baseUrl = await artifactServer({ [hostile]: { body: 'open Demo\n' } });
 
-      const { response } = await open(baseUrl, stateDir, destination, {
+      const { response } = await open(baseUrl, world.stateDir, world.destination, {
         respond: (id) =>
-          answer(baseUrl, stateDir, request('open'), {
+          answer(baseUrl, world.stateDir, request('open'), {
             scriptPublicationId: id,
             artifacts: [{ ...script(hostile, 1, id) }],
           }),
@@ -308,14 +359,34 @@ skipOnWindows(
       // destination. A client that wrote somewhere the response steered it to fails here, and so does one
       // that dropped the delivery: no path, and a failure it had no reason to report.
       const data = response.ok ? (response.data as Record<string, unknown>) : {};
-      expect(data.savedScript, hostile).toBe(destination);
+      expect(data.savedScript, hostile).toBe(world.destination);
       expect(data.scriptDeliveryFailure, hostile).toBeUndefined();
-      expect(fs.readFileSync(destination, 'utf8'), hostile).toBe('open Demo\n');
-      expect(namesThatAppeared(root, new Map(), clientsOwn(root, destination)), hostile).toEqual(
-        [],
-      );
-      expect(recordedDestinations(stateDir), hostile).toEqual([destination]);
-      expect(nothingEscaped(root, [hostile]), hostile).toBe(true);
+      // The whole tree, from an empty one: the record chain, the destination's ground, the destination at the
+      // version's bytes, and the one record file this publication owns. `recordsAsWritten` below proves that
+      // file is ONE record and what it says, so its name is exact even though its contents are allowed here.
+      expect(
+        entriesThatMoved(
+          world,
+          new Map(),
+          new Set([
+            ...preparedGround(world),
+            ...ownRecordFiles(world),
+            `${world.rel(world.destination)}=${bytesOf('open Demo\n')}`,
+          ]),
+        ),
+        hostile,
+      ).toEqual([]);
+      // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing staged.
+      expect(recordsAsWritten(world), hostile).toEqual([
+        {
+          name: recordNames(world)[0],
+          destination: world.destination,
+          force: false,
+          revision: 1,
+          staging: [],
+        },
+      ]);
+      expect(nothingEscaped(world, [hostile]), hostile).toEqual([]);
     }
   },
 );
@@ -326,12 +397,12 @@ skipOnWindows(
     // `..` is the id whose download URL collapses to the server's root, so the daemon's own answer carries no
     // bytes. The client keeps the command successful and DISCLOSES the failure: what it must not do is report
     // success with a path, or publish anything outside the record chain it owns.
-    const { root, stateDir, destination } = world();
+    const world = scratchWorld();
     const baseUrl = await artifactServer({ '..': { body: 'open Demo\n' } });
 
-    const { response } = await open(baseUrl, stateDir, destination, {
+    const { response } = await open(baseUrl, world.stateDir, world.destination, {
       respond: (id) =>
-        answer(baseUrl, stateDir, request('open'), {
+        answer(baseUrl, world.stateDir, request('open'), {
           scriptPublicationId: id,
           artifacts: [{ ...script('..', 1, id) }],
         }),
@@ -342,9 +413,16 @@ skipOnWindows(
     expect(data.savedScript).toBeUndefined();
     expect(data.scriptDeliveryFailure).toBeDefined();
     // The client may prepare the ground for the destination it chose for itself, and it did, but no script
-    // entry was created there and nothing else appeared anywhere in the tree.
-    expect(fs.existsSync(destination)).toBe(false);
-    expect(namesThatAppeared(root, new Map(), clientsOwnGround(root, destination))).toEqual([]);
+    // entry was created there and nothing else appeared anywhere in the watched tree.
+    expect(fs.existsSync(world.destination)).toBe(false);
+    expect(
+      entriesThatMoved(
+        world,
+        new Map(),
+        new Set([...preparedGround(world), ...ownRecordFiles(world)]),
+      ),
+    ).toEqual([]);
+    expect(nothingEscaped(world, ['..'])).toEqual([]);
   },
 );
 
@@ -354,22 +432,31 @@ skipOnWindows(
     // `fileName` is the one artifact field a response uses to NAME a file, and the script route never reads
     // it: a `session-script` artifact is delivered to the destination this client recorded for itself, so a
     // daemon that answers a name instead of a path gets its bytes written in the client's own words.
-    const { root, stateDir, destination } = world();
+    const world = scratchWorld();
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
 
-    const opened = await open(baseUrl, stateDir, destination, {
+    const opened = await open(baseUrl, world.stateDir, world.destination, {
       respond: (id) =>
-        answer(baseUrl, stateDir, request('open'), {
+        answer(baseUrl, world.stateDir, request('open'), {
           scriptPublicationId: id,
           artifacts: [{ ...script('v1', 1, id), fileName: '../../../../tmp/evil.ad' }],
         }),
     });
 
     expect(opened.response.ok).toBe(true);
-    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
-    expect(recordedDestinations(stateDir)).toEqual([destination]);
-    expect(namesThatAppeared(root, new Map(), clientsOwn(root, destination))).toEqual([]);
-    expect(fs.existsSync(path.join(root, 'tmp'))).toBe(false);
+    expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
+    expect(
+      entriesThatMoved(
+        world,
+        new Map(),
+        new Set([
+          ...preparedGround(world),
+          ...ownRecordFiles(world),
+          `${world.rel(world.destination)}=${bytesOf('open Demo\n')}`,
+        ]),
+      ),
+    ).toEqual([]);
+    expect(nothingEscaped(world, ['../../../../tmp/evil.ad'])).toEqual([]);
   },
 );
 
@@ -377,22 +464,24 @@ skipOnWindows(
   'a hostile failure text on a batch receipt is disclosed as prose and never opened or created',
   async () => {
     // A delivery failure carries a `message` and a `hint` the daemon writes, and the client shows them. They
-    // have to stay strings: a path-shaped one is not a place the client is allowed to act on. This runs on a
-    // batch, the only command whose receipt is read, so the failure really travels the disclosure path.
-    const { root, stateDir, destination } = world();
+    // have to stay strings: a path-shaped one is not a place the client is allowed to act on. Both are spelled
+    // so that acting on either would land INSIDE the watched tree and be reported, or above it and be caught by
+    // the escape check. This runs on a batch, the only command whose receipt is read.
+    const world = scratchWorld();
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
-    const publicationId = (await open(baseUrl, stateDir, destination)).id;
+    const publicationId = (await open(baseUrl, world.stateDir, world.destination)).id;
+    const recordsAtStart = recordsAsWritten(world);
 
-    const before = snapshotTree(root);
-    const response = await answer(baseUrl, stateDir, batch(PLAN), {
+    const before = snapshotTree(world.outer);
+    const response = await answer(baseUrl, world.stateDir, batch(PLAN), {
       scriptDeliveryReceipt: {
         publicationId,
         failures: [
           {
             publicationId,
             reason: 'script_delivery_failed',
-            message: '../../../../etc/passwd',
-            hint: '/absolute/path/that/does/not/exist',
+            message: '../../../../tmp/etc/passwd',
+            hint: '../two/scratch/pwned.ad',
           },
         ],
       },
@@ -401,9 +490,10 @@ skipOnWindows(
     expect(response.ok).toBe(true);
     // The prose reached the caller, and the text named no path it was allowed to touch.
     const data = response.ok ? (response.data as Record<string, unknown>) : {};
-    expect(JSON.stringify(data.scriptDeliveryFailure)).toContain('../../../../etc/passwd');
-    expect(namesThatAppeared(root, before, clientsOwn(root, destination))).toEqual([]);
-    expect(recordedDestinations(stateDir)).toEqual([destination]);
-    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+    expect(JSON.stringify(data.scriptDeliveryFailure)).toContain('../../../../tmp/etc/passwd');
+    expect(entriesThatMoved(world, before)).toEqual([]);
+    expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
+    expect(recordsAsWritten(world)).toEqual(recordsAtStart);
+    expect(nothingEscaped(world, ['../../../../tmp/etc/passwd'])).toEqual([]);
   },
 );
