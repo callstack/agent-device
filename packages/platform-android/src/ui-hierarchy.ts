@@ -30,6 +30,8 @@ export type AndroidUiNodeMetadata = {
   bounds: string | null;
   rect?: Rect;
   clickable?: boolean;
+  /** Absent when the capture did not report it: a helper older than the attribute. */
+  longClickable?: boolean;
   enabled?: boolean;
   visibleToUser?: boolean;
   drawingOrder?: number;
@@ -166,6 +168,7 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     className: getAttr('class'),
     bounds: getAttr('bounds'),
     clickable: boolAttr('clickable'),
+    ...optionalBoolAttr('longClickable', 'long-clickable'),
     enabled: boolAttr('enabled'),
     focusable: boolAttr('focusable'),
     focused: boolAttr('focused'),
@@ -350,6 +353,7 @@ function normalizeAndroidUiHierarchyNode(
       focused: attrs.focused,
       visibleToUser: attrs.visibleToUser,
       clickable: attrs.clickable === true,
+      longClickable: attrs.longClickable,
       focusable: attrs.focusable === true,
       scrollable: attrs.scrollable,
       canScrollForward: attrs.canScrollForward,

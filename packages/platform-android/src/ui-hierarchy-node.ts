@@ -37,6 +37,8 @@ export type AndroidUiHierarchy = {
   // encodings of one control opposite answers.
   clickable: boolean;
   focusable: boolean;
+  /** Whether the node offers a long click. Absent when the capture did not report it. */
+  longClickable?: boolean;
   depth: number;
   parentIndex?: number;
   scrollable?: boolean;

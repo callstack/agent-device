@@ -42,9 +42,9 @@ afterEach(() => {
 test('retains Android helper clickable facts from the same hierarchy projection', () => {
   const built = buildUiHierarchySnapshot(
     parseUiHierarchyTree(`<hierarchy>
-      <node resource-id="true-node" bounds="[0,0][20,20]" clickable="true" />
-      <node resource-id="false-node" bounds="[0,20][20,40]" clickable="false" focusable="true" />
-      <node resource-id="absent-node" bounds="[0,40][20,60]" />
+      <node resource-id="true-node" bounds="[0,0][20,20]" clickable="true" long-clickable="true" />
+      <node resource-id="false-node" bounds="[0,20][20,40]" clickable="false" long-clickable="false" focusable="true" />
+      <node resource-id="absent-node" bounds="[0,40][20,60]" scrollable="true" />
     </hierarchy>`),
     undefined,
     { raw: true },
@@ -63,11 +63,27 @@ test('retains Android helper clickable facts from the same hierarchy projection'
     ],
   );
   assert.equal(publicSnapshot.nodes[1]?.hittable, true);
-  assert.equal('clickable' in (publicSnapshot.nodes[1] ?? {}), false);
+  // The facts `hittable` folds together are published each on its own. A focusable node that is
+  // not clickable is hittable, and only the separate facts tell it from a touch target.
+  assert.deepEqual(
+    publicSnapshot.nodes.map((node) => [node.clickable, node.focusable, node.scrollable]),
+    [
+      [true, false, false],
+      [false, true, false],
+      [false, false, true],
+    ],
+  );
+  // Both answers when the capture reported one, and nothing when it did not: a helper older than
+  // the attribute is not read as "offers no long click".
+  assert.deepEqual(
+    publicSnapshot.nodes.map((node) => node.longClickable),
+    [true, false, undefined],
+  );
+  assert.equal('longClickable' in (publicSnapshot.nodes[2] ?? {}), false);
   assert.equal(readSnapshotClickabilityEvidence(publicSnapshot), undefined);
 });
 
-test('snapshotAndroid captures the hierarchy once and retains clickability off-wire', async () => {
+test('snapshotAndroid captures the hierarchy once and publishes the clickability it retains', async () => {
   let hierarchyCaptures = 0;
   const helperAdb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {
@@ -119,7 +135,10 @@ test('snapshotAndroid captures the hierarchy once and retains clickability off-w
       [2, 2],
     ],
   );
-  assert.equal(JSON.stringify(result).includes('clickable'), false);
+  assert.deepEqual(
+    result.nodes.map((node) => node.clickable),
+    [false, true, false],
+  );
   assert.equal(JSON.stringify(result).includes('sourceIndexByNodeIndex'), false);
 });
 

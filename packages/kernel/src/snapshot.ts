@@ -333,6 +333,19 @@ export type RawSnapshotNode = {
   /** UIKit `isUserInteractionEnabled`; absent means the producer did not read it, not false. */
   userInteractionEnabled?: boolean;
   hittable?: boolean;
+  /**
+   * Android accessibility facts behind `hittable`, each on its own: `hittable` answers "can an
+   * agent drive this node" and folds a touch target and a focus target into one, while a reader
+   * that audits what an accessibility service is offered needs them apart. `clickable` is what a
+   * screen reader activates, `focusable` is what input focus can land on, `longClickable` is what
+   * it offers a long press on, and `scrollable` is a container announced as one. Absent means the
+   * producer did not read the fact, not false; `longClickable` is absent on a capture from an
+   * Android helper older than the attribute.
+   */
+  clickable?: boolean;
+  focusable?: boolean;
+  longClickable?: boolean;
+  scrollable?: boolean;
   depth?: number;
   parentIndex?: number;
   pid?: number;
