@@ -103,6 +103,9 @@ export type RunnerCommand = {
     | 'volumeDown'
     | 'keyboardDismiss'
     | 'keyboardReturn'
+    // Reads the software keyboard and the focused field's return key. A read: it reports what is on
+    // screen, and presses nothing.
+    | 'keyboardStatus'
     | 'alert'
     | 'sequence'
     | 'recordStart'

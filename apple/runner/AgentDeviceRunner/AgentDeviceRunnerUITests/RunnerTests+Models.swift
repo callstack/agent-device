@@ -26,6 +26,7 @@ enum CommandType: String, Codable, CaseIterable {
   case volumeDown
   case keyboardDismiss
   case keyboardReturn
+  case keyboardStatus
   case alert
   case sequence
   case gesture
@@ -300,7 +301,7 @@ extension Command {
          .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return .interaction
 
-    case .findText, .readText, .gestureViewport:
+    case .findText, .readText, .gestureViewport, .keyboardStatus:
       return .appRead(retainsJournalResponseJson: true)
 
     case .snapshot:
@@ -536,6 +537,12 @@ struct DataPayload: Codable {
   var wasVisible: Bool?
   var dismissed: Bool?
   var keyboardDismissMechanism: String?
+  /// The kind of return key the visible keyboard offers, on a `keyboard status` answer. Absent when
+  /// the keyboard is hidden, which is not the same claim as a key this read could not name.
+  var keyboardReturnKey: String?
+  /// The wording that return key carries, verbatim, so a localized or an app's custom key stays
+  /// readable. Absent when the key carries none, or there is no key to read.
+  var keyboardReturnKeyLabel: String?
   var orientation: String?
   var gestureFallback: String?
   var gestureFallbackMessage: String?

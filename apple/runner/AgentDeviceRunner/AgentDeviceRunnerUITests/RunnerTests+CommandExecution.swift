@@ -636,6 +636,23 @@ extension RunnerTests {
           wasVisible: result.wasVisible
         )
       )
+    case .keyboardStatus:
+      var status: RunnerKeyboardStatus?
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
+        status = keyboardStatus(app: activeApp)
+      }
+      guard let result = status else {
+        return Response(ok: false, error: ErrorPayload(message: "keyboardStatus produced no result"))
+      }
+      return Response(
+        ok: true,
+        data: DataPayload(
+          message: "keyboardStatus",
+          visible: result.visible,
+          keyboardReturnKey: result.returnKey,
+          keyboardReturnKeyLabel: result.returnKeyLabel
+        )
+      )
     case .alert:
       let action = (command.action ?? "get").lowercased()
       let deadline = alertDeadline ?? Date().addingTimeInterval(

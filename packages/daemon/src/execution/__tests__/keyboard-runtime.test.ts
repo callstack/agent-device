@@ -58,7 +58,7 @@ const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf' as const,
-  hint: 'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
+  hint: 'keyboard status is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
 });
 
 function runtimeHarness(
@@ -114,6 +114,8 @@ test('android status admits keyboardStatusUse and reports the platform-shaped st
     focusedPackage: 'com.example.app',
     focusedResourceId: 'com.example.app:id/field',
     inputOwner: 'app',
+    returnKey: 'search',
+    returnKeyLabel: 'Search the store',
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
@@ -137,6 +139,100 @@ test('android status admits keyboardStatusUse and reports the platform-shaped st
     focusedPackage: 'com.example.app',
     focusedResourceId: 'com.example.app:id/field',
     inputOwner: 'app',
+    returnKey: 'search',
+    returnKeyLabel: 'Search the store',
+  });
+});
+
+// The Apple runner answers with its own `keyboard` shape: two fields, and the wire platform follows
+// the kind that came back rather than a second guess from the device.
+test("iOS status reports the runner's keyboard shape and its return key", async () => {
+  const harness = runtimeHarness(iosDevice, 'apple', {
+    unsupported: unavailable,
+    status: available,
+    dismiss: available,
+    enter: available,
+  });
+  harness.keyboardStatus.mockResolvedValue({
+    kind: 'keyboard',
+    visible: true,
+    returnKey: 'done',
+    returnKeyLabel: 'Done',
+  });
+
+  const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: iosDevice,
+    positionals: ['status'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(await resolved.execute({})).toEqual({
+    platform: 'ios',
+    action: 'status',
+    visible: true,
+    returnKey: 'done',
+    returnKeyLabel: 'Done',
+  });
+});
+
+// A visible keyboard whose owner reads visibility alone (a WebDriver session's probe) names no kind.
+// The wire still has to answer the question, so it publishes `unknown` rather than silence: an
+// omitted `returnKey` means there was no visible keyboard, which is a different claim.
+test('a visible keyboard whose owner names no return key publishes unknown', async () => {
+  const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
+    status: available,
+    dismiss: available,
+    enter: available,
+  });
+  harness.keyboardStatus.mockResolvedValue({ kind: 'ime-probe', visible: true });
+
+  const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: androidDevice,
+    positionals: ['status'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  const result = await resolved.execute({});
+  expect(result).toMatchObject({ visible: true, returnKey: 'unknown' });
+  // A label belongs to a named key, so the fallback never carries one.
+  expect(result).not.toHaveProperty('returnKeyLabel');
+});
+
+// Closest negative: a hidden keyboard has no return key, so both fields stay off the wire even
+// though the owner's own reading could still see the last editor's action.
+test('status reports no return key while the keyboard is hidden', async () => {
+  const harness = runtimeHarness(iosDevice, 'apple', {
+    unsupported: unavailable,
+    status: available,
+    dismiss: available,
+    enter: available,
+  });
+  harness.keyboardStatus.mockResolvedValue({ kind: 'keyboard', visible: false });
+
+  const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: iosDevice,
+    positionals: ['status'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(await resolved.execute({})).toEqual({
+    platform: 'ios',
+    action: 'status',
+    visible: false,
+    returnKey: undefined,
   });
 });
 
@@ -180,8 +276,8 @@ test('`return` is an alias for `enter`', async () => {
   expect(harness.bindDevice).toHaveBeenCalledWith(androidDevice, keyboardEnterUse);
 });
 
-test('android status is refused on iOS with the retired in-handler hint', async () => {
-  const harness = runtimeHarness(iosDevice, 'apple', {
+test("status is refused on HarmonyOS with this owner's leaf hint", async () => {
+  const harness = runtimeHarness(harmonyDevice, 'harmonyos', {
     unsupported: unavailable,
     dismiss: available,
     enter: available,
@@ -189,7 +285,7 @@ test('android status is refused on iOS with the retired in-handler hint', async 
 
   const resolved = await resolveBoundKeyboardRuntime({
     platformServices: daemonPlatformServicesFixture(),
-    device: iosDevice,
+    device: harmonyDevice,
     positionals: ['status'],
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,

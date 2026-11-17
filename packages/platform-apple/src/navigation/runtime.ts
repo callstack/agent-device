@@ -123,21 +123,24 @@ const keyboardCellUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
-const keyboardStatusUnsupported = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
-} as const);
-/** Apple never had a live keyboard status read: every eligible cell still refuses `status`/`get`
- * with the retired in-handler hint. */
+/**
+ * `dismiss` and `enter` press the software keyboard, which every handheld Apple leaf has, so both
+ * read `orientation`'s eligibility: unavailable on tvOS, macOS and watchOS, available on iOS and
+ * visionOS, where the keyboard exists even though the runner reads it differently.
+ */
+function appleKeyboardFact(device: DeviceInfo): RuntimeOperationFact {
+  return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
+}
+/**
+ * `status` is the one leg the runner can only serve on iOS and iPadOS: it answers from the key
+ * elements `observedKeyboardKeys(app:)` reads, and that read is `#if os(iOS)` code which queries
+ * `app.keyboards` and answers nothing elsewhere. On visionOS the same guard makes the visibility read
+ * answer `nil`, so a caller would get "keyboard hidden" for a keyboard that may be up. visionOS hears
+ * the same refusal as the leaves with no keyboard at all.
+ */
 function appleKeyboardStatusFact(device: DeviceInfo): RuntimeOperationFact {
-  return appleMobileInputEligible(device) ? keyboardStatusUnsupported : keyboardCellUnavailable;
-}
-function appleKeyboardDismissFact(device: DeviceInfo): RuntimeOperationFact {
-  return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
-}
-function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
-  return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
+  if (!appleMobileInputEligible(device)) return keyboardCellUnavailable;
+  return isHandheldAppleDevice(device) ? available : keyboardCellUnavailable;
 }
 
 /** Every system button this owner knows is named below; the family denial covers none today. */
@@ -222,8 +225,8 @@ export function appleNavigationFacts(device: DeviceInfo) {
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),
-      dismiss: appleKeyboardDismissFact(device),
-      enter: appleKeyboardEnterFact(device),
+      dismiss: appleKeyboardFact(device),
+      enter: appleKeyboardFact(device),
     }),
   });
 }

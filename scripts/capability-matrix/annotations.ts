@@ -163,22 +163,8 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         label: 'Keyboard dismiss, enter, and status',
         commands: ['keyboard'],
         link: docs('commands', 'keyboard'),
+        note: "`status` reports the focused field's return key on a visible keyboard. It does not claim the key can be named: only Android can report `none`, and the Apple runner reports `unknown` for a key whose wording names no action it knows.",
         cells: {
-          'limrun-ios': {
-            text: 'Dismiss and enter; status unsupported',
-            admits: ['keyboardDismiss', 'keyboardEnter'],
-            refuses: ['keyboardStatus'],
-          },
-          'ios-sim': {
-            text: 'Dismiss and enter; status unsupported',
-            admits: ['keyboardDismiss', 'keyboardEnter'],
-            refuses: ['keyboardStatus'],
-          },
-          'ios-device': {
-            text: 'Dismiss and enter; status unsupported',
-            admits: ['keyboardDismiss', 'keyboardEnter'],
-            refuses: ['keyboardStatus'],
-          },
           'harmonyos-emulator': {
             text: 'Dismiss and enter; status unsupported',
             admits: ['keyboardDismiss', 'keyboardEnter'],

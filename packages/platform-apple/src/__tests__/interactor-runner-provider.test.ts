@@ -84,6 +84,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
   tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
+  keyboardStatus: { invoke: (i) => i.keyboardStatus!(), runnerCommand: 'keyboardStatus' },
   writeClipboard: { invoke: (i) => i.writeClipboard!('hi'), runnerCommand: 'pasteboardWrite' },
   // R59: same reading as `readTextAtPoint` — the macOS-helper branch is reachable only for a
   // local desktop surface, which a provider-owned mobile device never carries, so every

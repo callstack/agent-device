@@ -18,6 +18,7 @@ import {
   isFallbackAndroidInputMethodResource,
   readAndroidActiveInputMethodPackage,
 } from '@agent-device/contracts/android-input-ownership';
+import type { KeyboardReturnKey } from '@agent-device/contracts/keyboard';
 
 const ANDROID_INPUT_TYPE_CLASS_MASK = 0x0000000f;
 const ANDROID_INPUT_TYPE_CLASS_TEXT = 0x00000001;
@@ -30,6 +31,10 @@ const ANDROID_TEXT_VARIATION_WEB_EMAIL_ADDRESS = 0x000000d0;
 const ANDROID_TEXT_VARIATION_PASSWORD = 0x00000080;
 const ANDROID_TEXT_VARIATION_WEB_PASSWORD = 0x000000e0;
 const ANDROID_TEXT_VARIATION_VISIBLE_PASSWORD = 0x00000090;
+/** `EditorInfo.IME_MASK_ACTION`: the bits of `imeOptions` that name the return key's action. */
+const ANDROID_IME_MASK_ACTION = 0x000000ff;
+/** `EditorInfo.IME_FLAG_NO_ENTER_ACTION`: the action stays off the enter key, which is then enter. */
+const ANDROID_IME_FLAG_NO_ENTER_ACTION = 0x40000000;
 const ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS = 2;
 const ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS = 120;
 const ANDROID_KEYCODE_ESCAPE = '111';
@@ -72,6 +77,17 @@ type AndroidKeyboardType =
   | 'datetime'
   | 'unknown';
 
+/** `EditorInfo.IME_ACTION_*`: the action one masked bit pattern names. */
+const ANDROID_IME_RETURN_KEY_BY_ACTION: ReadonlyMap<number, KeyboardReturnKey> = new Map([
+  [0x01, 'none'],
+  [0x02, 'go'],
+  [0x03, 'search'],
+  [0x04, 'send'],
+  [0x05, 'next'],
+  [0x06, 'done'],
+  [0x07, 'previous'],
+]);
+
 export type AndroidKeyboardState = {
   visible: boolean;
   inputType?: string;
@@ -80,6 +96,11 @@ export type AndroidKeyboardState = {
   focusedPackage?: string;
   focusedResourceId?: string;
   inputOwner: AndroidInputOwner;
+  /** What the current editor's return key offers; absent when the keyboard is not visible. */
+  returnKey?: KeyboardReturnKey;
+  /** The editor's own custom action label, with its surrounding whitespace trimmed; absent when the
+   *  editor names none. */
+  returnKeyLabel?: string;
 };
 
 export type AndroidKeyboardDismissResult = AndroidKeyboardState & {
@@ -182,6 +203,9 @@ function parseAndroidKeyboardState(stdout: string): AndroidKeyboardState {
     focusedResourceId,
     inputMethodPackage,
   );
+  // The return key belongs to the visible keyboard: a hidden one keeps the editor's attributes in
+  // its dump while nothing is being typed into, so its action would not be what any key offers.
+  const returnKeyFacts = visible === true ? parseAndroidReturnKey(stdout) : {};
 
   return {
     visible: visible ?? false,
@@ -191,7 +215,53 @@ function parseAndroidKeyboardState(stdout: string): AndroidKeyboardState {
     focusedPackage,
     focusedResourceId,
     inputOwner,
+    ...returnKeyFacts,
   };
+}
+
+/**
+ * What the current editor's `imeOptions` say its return key does, read from the same
+ * `dumpsys input_method` output the rest of this state comes from.
+ *
+ * `IME_FLAG_NO_ENTER_ACTION` outranks the action bits: it asks the IME to keep the action off the
+ * enter key, so the key the user presses is enter whatever the action is. Otherwise the masked
+ * action names the key, and an app's custom `actionLabel` is reported beside it as the wording the
+ * key shows. An unspecified action is the IME's own choice, so it answers `unknown` rather than
+ * guessing which key a given IME offers. No `imeOptions` to read is also `unknown`: the keyboard is
+ * up, but this read cannot say what its key does.
+ */
+function parseAndroidReturnKey(
+  stdout: string,
+): Readonly<{ returnKey?: KeyboardReturnKey; returnKeyLabel?: string }> {
+  const rawImeOptions = parseLastDumpsysValue(stdout, /\bimeOptions=0x([0-9a-fA-F]+)\b/gi);
+  const imeOptions = rawImeOptions ? Number.parseInt(rawImeOptions, 16) >>> 0 : Number.NaN;
+  const actionLabel = parseLastDumpsysActionLabel(stdout);
+  if (Number.isNaN(imeOptions)) {
+    return actionLabel
+      ? { returnKey: 'unknown', returnKeyLabel: actionLabel }
+      : { returnKey: 'unknown' };
+  }
+  if ((imeOptions & ANDROID_IME_FLAG_NO_ENTER_ACTION) !== 0) {
+    return { returnKey: 'enter' };
+  }
+  const action = imeOptions & ANDROID_IME_MASK_ACTION;
+  const returnKey = ANDROID_IME_RETURN_KEY_BY_ACTION.get(action) ?? 'unknown';
+  return actionLabel ? { returnKey, returnKeyLabel: actionLabel } : { returnKey };
+}
+
+/**
+ * The editor's own `actionLabel`, with its surrounding whitespace trimmed. `EditorInfo.toString()`
+ * writes one space-separated `key=value` run, so the label — which can hold spaces and commas, such
+ * as `Submit, then Continue` — ends at the next `key=value` field or at the line. A comma only ends
+ * it when a field name follows, which is how a brace-delimited dump separates its own fields.
+ */
+function parseLastDumpsysActionLabel(stdout: string): string | undefined {
+  let label: string | undefined;
+  for (const match of stdout.matchAll(/\bactionLabel=([^\n]*?)(?=\s+\w+=|,\s*\w+=|[}\]]|\s*$)/g)) {
+    const value = match[1]?.trim();
+    if (value && value !== 'null') label = value;
+  }
+  return label;
 }
 
 function parseLegacyImeWindowVisibility(stdout: string): boolean | null {

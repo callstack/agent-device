@@ -540,32 +540,21 @@ function expectNavigationAndKeyboardFacts(
   expectOperationAvailability(binding, 'appSwitcher', springboard);
 
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
-  // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.
+  // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS. `status` is
+  // the narrower leg: the runner answers it from the keyboard's own key elements, an iOS-only read,
+  // so visionOS is refused there even though it can press the keyboard.
   const mobileInputEligible =
     device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
   expectOperationAvailability(binding, 'setOrientation', mobileInputEligible);
   expectOperationAvailability(binding, 'unlockOrientation', false);
   expectOperationAvailability(binding, 'keyboardDismiss', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardEnter', mobileInputEligible);
-
-  expectKeyboardStatusFact(binding, mobileInputEligible);
+  expectOperationAvailability(
+    binding,
+    'keyboardStatus',
+    mobileInputEligible && device.appleOs !== 'visionos',
+  );
   expectTvRemoteFact(binding, device);
-}
-
-/** Apple never had a live keyboard status read: every eligible leaf still refuses status/get with
- * the retired in-handler hint; ineligible leaves fall through the outer cell instead. */
-function expectKeyboardStatusFact(
-  binding: DeviceBinding<PlatformRuntimeOperations>,
-  mobileInputEligible: boolean,
-): void {
-  expect(binding.facts.operations.keyboardStatus.available).toBe(false);
-  if (mobileInputEligible) {
-    expect(binding.facts.operations.keyboardStatus).toHaveProperty(
-      'hint',
-      expect.stringContaining('keyboard status/get is currently supported only on Android'),
-    );
-  }
-  expect(binding.operations.keyboardStatus).toBeUndefined();
 }
 
 /** tv-remote is available only for tvOS, which drives navigation through XCUIRemote presses. */

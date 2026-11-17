@@ -416,10 +416,21 @@ test('keyboard command usage is documented', async () => {
   const help = await usageForCommand('keyboard');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /keyboard \[status\|get\|dismiss\|enter\|return\]/);
+  assert.match(help, /Report or act on the device keyboard/);
+});
+
+// `keyboard status`'s own output vocabulary, so a caller reading help knows what `returnKey` can say
+// and which platform can establish that a field offers no key. The complete list, `none` and
+// `unknown` included: dropping either from the description must fail here.
+test('usageForCommand documents the keyboard return key read', async () => {
+  const help = await usageForCommand('keyboard');
+  assert.equal(help === null, false);
   assert.match(
-    help,
-    /Inspect Android keyboard visibility\/type or press\/dismiss the device keyboard/,
+    help ?? '',
+    /`returnKey` is go, search, send, next, done, previous, join, route, continue, enter, none, or unknown/,
   );
+  assert.match(help ?? '', /`returnKeyLabel` is the wording that return key itself shows/);
+  assert.match(help ?? '', /only Android can establish/);
 });
 
 test('orientation command usage is documented', async () => {

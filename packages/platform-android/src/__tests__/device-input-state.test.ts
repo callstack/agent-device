@@ -43,8 +43,144 @@ test('getAndroidKeyboardStatusWithAdb exposes active input method package', asyn
       focusedPackage: undefined,
       focusedResourceId: undefined,
       inputOwner: 'unknown',
+      // Visible with no `imeOptions` to read: the keyboard is up, so this read cannot say what its
+      // return key does, which is `unknown` rather than a guessed action.
+      returnKey: 'unknown',
     });
   });
+});
+
+// Each `EditorInfo.IME_ACTION_*` the current editor declares, and the kind `keyboard status`
+// reports for it. An unspecified action is the IME's own choice, so it stays `unknown`.
+test('getAndroidKeyboardState reports the current editor action as the return key', async () => {
+  const cases: readonly [imeOptions: string, returnKey: string][] = [
+    ['0x00000002', 'go'],
+    ['0x00000003', 'search'],
+    ['0x00000004', 'send'],
+    ['0x00000005', 'next'],
+    ['0x00000006', 'done'],
+    ['0x00000007', 'previous'],
+    ['0x00000001', 'none'],
+    ['0x00000000', 'unknown'],
+  ];
+  for (const [imeOptions, returnKey] of cases) {
+    await withFakeAdb(
+      (args) =>
+        args.join(' ') === 'shell dumpsys input_method'
+          ? [
+              'mInputShown=true mIsInputViewShown=true',
+              `inputType=0x1 imeOptions=${imeOptions} privateImeOptions=null`,
+            ].join('\n')
+          : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+      async ({ device }) => {
+        const state = await getAndroidKeyboardState(device);
+        assert.equal(state.returnKey, returnKey, imeOptions);
+        assert.equal(state.returnKeyLabel, undefined, imeOptions);
+      },
+    );
+  }
+});
+
+// Action bits beyond `IME_MASK_ACTION` are flags, not action. The only one `keyboard status` reads
+// is `IME_FLAG_NO_ENTER_ACTION`, which asks the IME to keep the action off the enter key — so the
+// key the user presses is enter, whatever action the editor declared.
+test('getAndroidKeyboardState reports enter when the editor withholds the action from the key', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'inputType=0x1 imeOptions=0x60000006',
+            'actionLabel=Send Message privateKey=null',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+    async ({ device }) => {
+      const state = await getAndroidKeyboardState(device);
+      assert.equal(state.returnKey, 'enter');
+      // The withheld action's own label is not what the key shows, so it is not reported either.
+      assert.equal(state.returnKeyLabel, undefined);
+    },
+  );
+});
+
+// An app's `actionLabel` is the wording its key shows. The kind stays the declared action's: the
+// label is evidence about the key's wording, not a second claim about what it does.
+test('getAndroidKeyboardState reports a custom action label beside its action kind', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'inputType=0x1 imeOptions=0x00000004',
+            'actionLabel=Send Message privateKey=null',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+    async ({ device }) => {
+      const state = await getAndroidKeyboardState(device);
+      assert.equal(state.returnKey, 'send');
+      assert.equal(state.returnKeyLabel, 'Send Message');
+    },
+  );
+});
+
+// An app's `actionLabel` can hold a comma. Only a comma that opens another `key=value` field ends
+// the label, so a label that spells out two actions keeps both words.
+test('getAndroidKeyboardState keeps commas inside a custom action label', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'inputType=0x1 imeOptions=0x00000005',
+            'actionLabel=Next, then Send privateKey=null',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+    async ({ device }) => {
+      const state = await getAndroidKeyboardState(device);
+      assert.equal(state.returnKey, 'next');
+      assert.equal(state.returnKeyLabel, 'Next, then Send');
+    },
+  );
+});
+
+// The other dump shape, where `EditorInfo.toString()` wraps the editor in braces, so the label ends
+// at `}` rather than at another named field. A comma inside the label survives there too.
+test('getAndroidKeyboardState keeps a comma in an action label a brace-delimited dump carries', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=true mIsInputViewShown=true',
+            'inputType=0x1 imeOptions=0x00000004',
+            'editorInfo=EditorInfo{imeOptions=0x4, actionLabel=Save, now}',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+    async ({ device }) => {
+      const state = await getAndroidKeyboardState(device);
+      assert.equal(state.returnKey, 'send');
+      assert.equal(state.returnKeyLabel, 'Save, now');
+    },
+  );
+});
+
+// Closest negative: a hidden keyboard keeps its last editor's attributes in the dump. Nothing is
+// being typed into, so no key offers anything, and both fields stay out of the state.
+test('getAndroidKeyboardState reports no return key while the keyboard is hidden', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell dumpsys input_method'
+        ? [
+            'mInputShown=false mIsInputViewShown=false',
+            'inputType=0x1 imeOptions=0x00000003 actionLabel=Go',
+          ].join('\n')
+        : { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 },
+    async ({ device }) => {
+      const state = await getAndroidKeyboardState(device);
+      assert.equal(state.visible, false);
+      assert.equal('returnKey' in state, false);
+      assert.equal('returnKeyLabel' in state, false);
+    },
+  );
 });
 
 test('getAndroidKeyboardStatusWithAdb classifies tolerated adb failures with actionable hints', async () => {

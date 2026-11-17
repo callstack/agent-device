@@ -75,7 +75,7 @@ What a **Yes** does not claim:
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | No | No |
-| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Dismiss and enter; status unsupported | Dismiss and enter; status unsupported | Yes | Yes | Dismiss and enter; status unsupported | Dismiss and enter; status unsupported |
+| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Yes | Yes | Yes | Dismiss and enter; status unsupported | Dismiss and enter; status unsupported |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes | Yes | Yes |
 
 ### Interact with the app: TV targets
@@ -117,7 +117,7 @@ What a **Yes** does not claim:
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | No | No | No | No | Yes | Yes | No | No |
-| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Dismiss only; status and enter unsupported | Yes | Dismiss only; status and enter unsupported | Dismiss and enter; status unsupported | Yes | No | No |
+| [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Dismiss only; status and enter unsupported | Yes | Dismiss only; status and enter unsupported | Yes | Yes | No | No |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
 What a **Yes** does not claim:
@@ -125,6 +125,7 @@ What a **Yes** does not claim:
 - **Tap, press, and fill**: Android types non-ASCII text through the test input method: automatically on emulators, and on physical devices only with `open --test-ime`.
 - **Type into the focused field**: Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.
 - **Gesture plans and swipes**: Multi-touch plans are part of `gesture` where the target runs them; a plan using an operation the target lacks fails at that step.
+- **Keyboard dismiss, enter, and status**: `status` reports the focused field's return key on a visible keyboard. It does not claim the key can be named: only Android can report `none`, and the Apple runner reports `unknown` for a key whose wording names no action it knows.
 - **React Native overlay dismissal**: The command runs wherever tapping runs; it answers `detected: false` on a surface with no React Native overlay. Only iOS and Android apps present dismissable development overlays.
 
 ## Apps and devices

@@ -51,7 +51,8 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_REASON = 'tap_keyboard_occludes_target
  * stance `scroll-gesture.ts` takes for the surface it refuses to swipe.
  *
  * The verdict is read from the tree the command measured against, and no owner re-probes the
- * keyboard to confirm it: `keyboard status`/`get` are Android-only, and #1542's double-check
+ * keyboard to confirm it: `keyboard status`/`get` answer only what a visible keyboard's return key
+ * offers, and #1542's double-check
  * confirms the target's own live rect, which a covering keyboard leaves intact. So the hint names
  * the re-measurement instead of pretending the refusal already has it.
  */

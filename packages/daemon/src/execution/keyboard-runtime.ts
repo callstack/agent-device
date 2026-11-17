@@ -77,6 +77,7 @@ const KEYBOARD_STATUS_PLATFORM_LABEL: Record<
   'android' | 'harmonyos' | 'ios'
 > = {
   'ime-probe': 'android',
+  keyboard: 'ios',
 };
 
 const KEYBOARD_DISMISS_PLATFORM_LABEL: Record<
@@ -139,22 +140,40 @@ async function admitKeyboardAction<
   return { ok: true, execute: (context) => execute(runtime, context) };
 }
 
-/** `keyboard status` — Android-only; every other owner refuses. */
+/**
+ * `keyboard status`.
+ *
+ * The return key is projected so the wire contract holds for every owner: the two owners that read
+ * a key name it, and a visible keyboard whose owner reads visibility alone (`keyboardStatus` on a
+ * WebDriver session answers only that) publishes `unknown` rather than silence — an omitted
+ * `returnKey` means there was no visible keyboard to report one for.
+ */
 function executeKeyboardStatus(
   runtime: BoundDeviceRuntime<typeof keyboardStatusUse>,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
-  return runtime.operations.keyboardStatus(keyboardActionInput(context)).then((state) => ({
-    platform: KEYBOARD_STATUS_PLATFORM_LABEL[state.kind],
-    action: 'status',
-    visible: state.visible,
-    inputType: state.inputType,
-    type: state.type,
-    inputMethodPackage: state.inputMethodPackage,
-    focusedPackage: state.focusedPackage,
-    focusedResourceId: state.focusedResourceId,
-    inputOwner: state.inputOwner,
-  }));
+  return runtime.operations.keyboardStatus(keyboardActionInput(context)).then((state) => {
+    const returnKey = state.returnKey ?? (state.visible === true ? 'unknown' : undefined);
+    const base = {
+      platform: KEYBOARD_STATUS_PLATFORM_LABEL[state.kind],
+      action: 'status',
+      visible: state.visible,
+      returnKey,
+      ...(state.returnKeyLabel === undefined || returnKey === undefined
+        ? {}
+        : { returnKeyLabel: state.returnKeyLabel }),
+    };
+    if (state.kind === 'keyboard') return base;
+    return {
+      ...base,
+      inputType: state.inputType,
+      type: state.type,
+      inputMethodPackage: state.inputMethodPackage,
+      focusedPackage: state.focusedPackage,
+      focusedResourceId: state.focusedResourceId,
+      inputOwner: state.inputOwner,
+    };
+  });
 }
 
 /** `keyboard dismiss`. */

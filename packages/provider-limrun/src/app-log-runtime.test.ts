@@ -421,16 +421,11 @@ function expectLimrunNavigationAndKeyboardFacts(
       ? 'tv-remote is supported only on Android TV targets.'
       : 'tv-remote is supported only on tvOS devices.',
   });
-  if (!isAndroid) {
-    expect(binding.facts.operations.keyboardStatus).toMatchObject({
-      reason: 'unsupported-platform-leaf',
-      hint: 'keyboard status/get is currently supported only on Android; use keyboard dismiss or enter on iOS',
-    });
-  }
+  // Limrun iOS rides the shared Apple runner facts, so all three keyboard legs answer there, as they
+  // do on any other mobile Apple leaf.
   for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
-    const available = isAndroid || operation !== 'keyboardStatus';
-    expect(binding.facts.operations[operation].available).toBe(available);
-    expect(binding.operations[operation]).toBeTypeOf(available ? 'function' : 'undefined');
+    expect(binding.facts.operations[operation].available).toBe(true);
+    expect(binding.operations[operation]).toBeTypeOf('function');
   }
 }
 

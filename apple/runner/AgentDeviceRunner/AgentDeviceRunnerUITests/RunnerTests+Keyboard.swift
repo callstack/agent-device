@@ -201,6 +201,45 @@ extension RunnerTests {
     return visibleKeyboardFrame(app: app) != nil
   }
 
+  /// What `keyboard status` answers with: the keyboard's visibility and, when it is up, the return
+  /// key the focused field offers. It reads the keyboard's own key elements rather than looking a
+  /// control up by English name, so a localized keyboard (a return key reading `szukaj`) is reported
+  /// with its own wording instead of a label-less `unknown`. `RunnerKeyboardStatus` decides which
+  /// observed control is the return key, through the same `kind(of:)` rule `keyboard enter` probes
+  /// with, so the two commands can never disagree about the wording they can name.
+  func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus {
+    guard isKeyboardVisible(app: app) else {
+      return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
+    }
+    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: observedKeyboardKeys(app: app))
+  }
+
+  /// Every control the visible keyboard exposes with its wording and frame. The keyboard is another
+  /// process, so every element read is a round trip: one pass over its keys and one over its buttons
+  /// is what a read can afford, and it is the same two queries a snapshot's keyboard band makes. An
+  /// element that answers no wording at all is dropped; wording that is only whitespace is kept,
+  /// because that is how the accessibility tree carries the space bar and the positional rule anchors
+  /// the return key's slot on it. Off iOS nothing is queried and nothing is reported, so a caller must
+  /// not read the empty answer as a keyboard with no return key; `keyboard status` is not advertised
+  /// there.
+  func observedKeyboardKeys(app: XCUIApplication) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
+#if os(iOS)
+    let keyboard = app.keyboards.firstMatch
+    let elements: [XCUIElement] =
+      safely("KEYBOARD_STATUS_KEYS", [XCUIElement]()) { keyboard.keys.allElementsBoundByIndex }
+      + safely("KEYBOARD_STATUS_BUTTONS", [XCUIElement]()) { keyboard.buttons.allElementsBoundByIndex }
+    return elements.compactMap { element in
+      guard let label = safely("KEYBOARD_STATUS_KEY_LABEL", { element.label }), !label.isEmpty else {
+        return nil
+      }
+      let frame = safely("KEYBOARD_STATUS_KEY_FRAME", CGRect.zero) { element.frame }
+      return RunnerKeyboardStatus.ObservedKeyboardKey(text: label, frame: frame)
+    }
+#else
+    return []
+#endif
+  }
+
   func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
     let keyboard = app.keyboards.firstMatch
     let wasVisible = isKeyboardVisible(app: app)

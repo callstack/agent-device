@@ -20,19 +20,36 @@ function appStateCliOutput(result: AppStateCommandResult): CliOutput {
 
 // fallow-ignore-next-line complexity
 function keyboardCliOutput(result: KeyboardCommandResult): CliOutput {
-  if (result.platform === 'android' && result.action === 'status') {
+  if (result.action === 'status') {
     const lines = [
       `Keyboard visible: ${result.visible === true ? 'yes' : 'no'}`,
-      `Input type: ${result.type ?? result.inputType ?? 'unknown'}`,
-      `Input owner: ${result.inputOwner ?? 'unknown'}`,
+      ...keyboardReturnKeyLines(result),
     ];
-    if (result.inputMethodPackage) lines.push(`Input method: ${result.inputMethodPackage}`);
-    if (result.focusedPackage) lines.push(`Focused package: ${result.focusedPackage}`);
-    if (result.focusedResourceId) lines.push(`Focused resource: ${result.focusedResourceId}`);
-    lines.push(`Next action: ${androidKeyboardNextAction(result.visible, result.inputOwner)}`);
+    if (result.platform === 'android') {
+      lines.push(
+        `Input type: ${result.type ?? result.inputType ?? 'unknown'}`,
+        `Input owner: ${result.inputOwner ?? 'unknown'}`,
+      );
+      if (result.inputMethodPackage) lines.push(`Input method: ${result.inputMethodPackage}`);
+      if (result.focusedPackage) lines.push(`Focused package: ${result.focusedPackage}`);
+      if (result.focusedResourceId) lines.push(`Focused resource: ${result.focusedResourceId}`);
+      lines.push(`Next action: ${androidKeyboardNextAction(result.visible, result.inputOwner)}`);
+    }
     return { data: result, text: lines.join('\n') };
   }
   return messageCliOutput(result);
+}
+
+/**
+ * The return key `status` answers with, on a visible keyboard only: the kind, and the key's own
+ * wording where the platform reads it. A hidden keyboard reports neither, so nothing is printed.
+ */
+function keyboardReturnKeyLines(result: KeyboardCommandResult): string[] {
+  if (result.visible !== true || result.returnKey === undefined) return [];
+  return [
+    `Return key: ${result.returnKey}`,
+    ...(result.returnKeyLabel ? [`Return key label: ${result.returnKeyLabel}`] : []),
+  ];
 }
 
 function clipboardCliOutput(result: ClipboardCommandResult): CliOutput {

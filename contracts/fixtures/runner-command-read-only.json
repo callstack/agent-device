@@ -85,6 +85,12 @@
   },
   {
     "command": {
+      "command": "keyboardStatus"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
       "command": "longPress"
     },
     "readOnly": false

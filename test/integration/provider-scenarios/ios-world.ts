@@ -186,6 +186,18 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       request: { command: 'keyboardDismiss', appBundleId: 'com.apple.Preferences' },
       result: { dismissed: true },
     },
+    {
+      command: 'ios.runner.keyboardStatus',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      request: { command: 'keyboardStatus', appBundleId: 'com.apple.Preferences' },
+      result: {
+        message: 'keyboardStatus',
+        visible: true,
+        keyboardReturnKey: 'search',
+        keyboardReturnKeyLabel: 'Search',
+      },
+    },
   ]);
   let clipboardText = '';
   const scriptedRunner = createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner');
