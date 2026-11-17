@@ -16,6 +16,10 @@ type AndroidPassiveNodeFacts = Pick<
   | 'placeholder'
   | 'selectionStart'
   | 'selectionEnd'
+  | 'clickable'
+  | 'focusable'
+  | 'longClickable'
+  | 'scrollable'
 >;
 
 /**
@@ -37,7 +41,6 @@ export type AndroidUiHierarchy = {
   // encodings of one control opposite answers.
   clickable: boolean;
   focusable: boolean;
-  longClickable?: boolean;
   depth: number;
   parentIndex?: number;
   scrollable?: boolean;

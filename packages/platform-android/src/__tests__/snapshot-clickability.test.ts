@@ -75,8 +75,44 @@ test('retains Android helper clickable facts from the same hierarchy projection'
     publicSnapshot.nodes.map((node) => node.longClickable),
     [true, false, undefined],
   );
-  assert.equal('longClickable' in (publicSnapshot.nodes[2] ?? {}), false);
+  assert.equal(JSON.stringify(publicSnapshot.nodes[2]).includes('longClickable'), false);
   assert.equal(readSnapshotClickabilityEvidence(publicSnapshot), undefined);
+});
+
+test('the regular projection keeps the clickability facts off the node', () => {
+  const built = buildUiHierarchySnapshot(
+    parseUiHierarchyTree(`<hierarchy>
+      <node class="android.widget.ScrollView" resource-id="list" bounds="[0,0][100,100]" scrollable="true">
+        <node class="android.widget.Button" resource-id="visible-row" text="Visible" bounds="[0,0][100,40]" clickable="true" long-clickable="false" focusable="true" />
+        <node class="android.widget.Button" resource-id="clipped-row" text="Clipped" bounds="[0,200][100,240]" clickable="true" long-clickable="true" />
+      </node>
+    </hierarchy>`),
+    undefined,
+    {},
+  );
+  const evidence = buildAndroidSnapshotClickabilityEvidence(built);
+  if (evidence.kind !== 'exact') throw new Error('Android evidence must be exact');
+
+  assert.deepEqual(
+    built.nodes.map((node) => [node.identifier, node.hittable]),
+    [
+      ['list', undefined],
+      ['visible-row', true],
+    ],
+  );
+  assert.deepEqual(
+    built.nodes.map((node) =>
+      ['clickable', 'focusable', 'longClickable', 'scrollable'].filter((key) => key in node),
+    ),
+    [[], []],
+  );
+  assert.deepEqual(
+    [...evidence.clickableByNodeIndex.entries()],
+    [
+      [0, false],
+      [1, true],
+    ],
+  );
 });
 
 test('snapshotAndroid captures the hierarchy once and publishes the clickability it retains', async () => {
