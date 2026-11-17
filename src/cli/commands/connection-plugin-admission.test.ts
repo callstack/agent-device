@@ -70,39 +70,41 @@ function seedState(f: ReturnType<typeof fixture>, leaseProvider = provider) {
 }
 
 test.each(['missing', 'failed'] as const)(
-  'routed profile, status and materialization reject a %s vetted plugin before dispatch',
+  'routed %s vetted plugin fails before capability-based actions',
   async (kind) => {
     const { home, env } = pluginHome();
     if (kind === 'failed')
       selectV2Plugin(home, packageName, 'throw new Error("registration failed")');
     const f = fixture(home);
     const opts = { cwd: home, env: { ...env, AGENT_DEVICE_SESSION: 'default' } };
+    const expected = kind === 'missing' ? 'plugin-not-installed' : 'plugin-unavailable';
     const connect = await runCliCapture(
       ['connect', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir, '--json'],
       opts,
     );
-    const expected = kind === 'missing' ? 'plugin-not-installed' : 'plugin-unavailable';
-    assert.equal(connect.code, 1);
-    assert.equal(JSON.parse(connect.stdout).error.details.reason, expected);
-    assert.deepEqual(connect.calls, []);
-    assert.equal(readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' }), null);
     seedState(f);
-    for (const argv of [
+    const status = await runCliCapture(
       ['connection', 'status', '--state-dir', f.stateDir, '--json'],
-      ['snapshot', '--state-dir', f.stateDir, '--json'],
-    ]) {
-      const result = await runCliCapture(argv, opts);
-      assert.equal(result.code, 1);
-      assert.equal(JSON.parse(result.stdout).error.details.reason, expected);
-      assert.deepEqual(result.calls, []);
-      assert.doesNotMatch(result.stdout, /install-from-source|leaseId.*pending/);
-    }
+      opts,
+    );
+    const snapshot = await runCliCapture(
+      ['snapshot', '--remote-config', f.remoteConfigPath, '--state-dir', f.stateDir, '--json'],
+      opts,
+    );
     const disconnected = await runCliCapture(
       ['disconnect', '--state-dir', f.stateDir, '--json'],
       opts,
     );
     assert.equal(disconnected.code, null);
     assert.equal(readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' }), null);
+    for (const result of [connect, status, snapshot]) {
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(result.code, 1, result.stdout);
+      assert.equal(parsed.error?.code, 'UNSUPPORTED_OPERATION', result.stdout);
+      assert.equal(parsed.error?.details?.reason, expected, result.stdout);
+      assert.deepEqual(result.calls, []);
+      assert.doesNotMatch(result.stdout, /install-from-source|leaseId.*pending/);
+    }
   },
 );
 
