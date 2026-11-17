@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { StringDecoder } from 'node:string_decoder';
 import {
   AppError,
   createRequestCanceledError,
@@ -17,7 +18,12 @@ import type {
   ExecDetachedExit,
   ExecDetachedProcess,
 } from './exec-types.ts';
-import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
+import {
+  commandSettlementReason,
+  createExecTraceContext,
+  normalizeTimeoutMs,
+  type ExecSettlementReason,
+} from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type {
@@ -32,6 +38,8 @@ export type {
  * attributed to a host.
  */
 const HOST_COMMAND_REASONS = {
+  // A subprocess exceeded the maximum output the host buffers.
+  outputLimit: { reason: 'command_output_limit' },
   // A command needed the host environment and no `withCommandHost` scope wrapped the call.
   hostEnvironmentUnscoped: { reason: 'host_environment_unscoped' },
   // `xcrun` reported that the tool a command asked for is not in the selected developer dir.
@@ -62,7 +70,7 @@ export type ExecOptions = {
   timeoutMs?: number;
   detached?: boolean;
   signal?: AbortSignal;
-  /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */
+  /** Max captured bytes per stream for runCmd and runCmdSync. runCmd is unlimited when omitted. */
   maxBuffer?: number;
   /**
    * How a deadline or a cancelled request stops the child. Without this it is SIGKILL at
@@ -99,7 +107,7 @@ type ExecDetachedOptions = ExecOptions & {
  * `signal`; a caller that kills the child directly still waits for the streams to
  * drain, exactly as before.
  */
-export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
+export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs' | 'maxBuffer'> & {
   /**
    * Capture stdout/stderr into the wait result when the child has piped stdio.
    * Set false when the caller owns, ignores, or forwards the streams.
@@ -247,6 +255,8 @@ function runSpawnedCommand(
     const stdoutChunks: Buffer[] | undefined =
       options.binaryStdout && options.captureOutput !== false ? [] : undefined;
     let stderr = '';
+    const outputBytes = { stdout: 0, stderr: 0 };
+    let exceededStream: 'stdout' | 'stderr' | undefined;
     let didTimeout = false;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
     let timeoutHandle: NodeJS.Timeout | null = null;
@@ -264,15 +274,29 @@ function runSpawnedCommand(
       if (finish(reason)) reject(error);
     }
     function settle(code: number | null): void {
-      const finalReason = abort.didAbort
-        ? 'abort'
-        : didTimeout
-          ? 'timeout'
-          : (code ?? 1) !== 0 && !options.allowFailure
-            ? 'exit_failure'
-            : 'success';
+      const finalReason = commandSettlementReason({
+        didAbort: abort.didAbort,
+        exceededStream,
+        didTimeout,
+        code,
+        allowFailure: options.allowFailure,
+      });
       if (!finish(finalReason)) return;
       const finalExitCode = code ?? 1;
+      if (!abort.didAbort && exceededStream && !didTimeout) {
+        reject(
+          new AppError('COMMAND_FAILED', `${executable} exceeded its output limit`, {
+            cmd,
+            args,
+            reason: HOST_COMMAND_REASONS.outputLimit.reason,
+            stream: exceededStream,
+            maxBuffer: options.maxBuffer,
+            stdout,
+            stderr,
+          }),
+        );
+        return;
+      }
       if (!abort.didAbort && didTimeout && timeoutMs) {
         reject(createTimeoutError(executable, cmd, args, timeoutMs, finalExitCode, stdout, stderr));
         return;
@@ -303,24 +327,17 @@ function runSpawnedCommand(
     // A deadline that fires after the child exited on its own still has to settle: the
     // group kill that would have ended the pipe holder can no longer run through a child
     // Node already reaped.
-    const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options),
-      settle,
-    });
-    const abort = watchCommandAbort(options, () => {
-      execTrace.emit('abort');
-      settlement.requestKill();
-    });
+    const { settlement, abort } = bindCommandLifecycle(child, options, execTrace, settle);
     timeoutHandle = timeoutMs
       ? setTimeout(() => {
           execTrace.emit('deadline');
-          didTimeout = true;
+          didTimeout = exceededStream === undefined;
           settlement.requestKill();
         }, timeoutMs)
       : null;
 
-    if (!options.binaryStdout) child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     void writeChildStdin(child, options.stdin).catch((error: unknown) => {
       if (abort.didAbort || didTimeout) return;
@@ -329,39 +346,53 @@ function runSpawnedCommand(
       killProcessTree(child, options);
     });
 
-    child.stdout.on('data', (chunk) => {
+    function acceptOutput(stream: 'stdout' | 'stderr', chunk: string | Buffer): boolean {
+      if (exceededStream) return false;
+      if (options.captureOutput === false || options.maxBuffer === undefined) return true;
+      outputBytes[stream] += Buffer.byteLength(chunk);
+      if (outputBytes[stream] <= options.maxBuffer) return true;
+      exceededStream = stream;
+      settlement.requestKill();
+      return false;
+    }
+
+    function appendText(stream: 'stdout' | 'stderr', text: string): void {
+      if (!text) return;
+      if (options.captureOutput !== false) {
+        if (stream === 'stdout') stdout += text;
+        else stderr += text;
+      }
+      if (stream === 'stdout') options.onStdoutChunk?.(text);
+      else options.onStderrChunk?.(text);
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (!acceptOutput('stdout', chunk)) return;
       if (options.binaryStdout) {
         stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         return;
       }
-      const text = String(chunk);
-      if (options.captureOutput !== false) stdout += text;
-      options.onStdoutChunk?.(text);
+      appendText('stdout', stdoutDecoder.write(chunk));
     });
 
-    child.stderr.on('data', (chunk) => {
-      const text = String(chunk);
-      if (options.captureOutput !== false) stderr += text;
-      options.onStderrChunk?.(text);
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (!acceptOutput('stderr', chunk)) return;
+      appendText('stderr', stderrDecoder.write(chunk));
+    });
+    child.stdout.on('end', () => {
+      if (!options.binaryStdout && !exceededStream) appendText('stdout', stdoutDecoder.end());
+    });
+    child.stderr.on('end', () => {
+      if (!exceededStream) appendText('stderr', stderrDecoder.end());
     });
 
     child.on('error', (err) => {
       execTrace.emit('error');
       fail(spawnRejectionError(abort, executable, cmd, args, err), 'spawn_error');
     });
-
-    child.once('exit', (code, signal) => {
-      execTrace.emit('exit', { exitCode: code, signal });
-      settlement.recordExit(code);
-    });
-    child.once('close', (code, signal) => {
-      execTrace.emit('close', { exitCode: code, signal });
-      settle(code);
-    });
   });
 }
 
-/** Returns the result with `signal` added when a signal terminated the process. */
 function execResult(ended: { signalCode: string | null }, result: ExecResult): ExecResult {
   return ended.signalCode ? { ...result, signal: ended.signalCode } : result;
 }
@@ -602,25 +633,10 @@ export function runCmdBackground(
       }
       resolve({ stdout, stderr, exitCode: finalExitCode });
     }
-    const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options),
-      settle,
-    });
-    const abort = watchCommandAbort(options, () => {
-      execTrace.emit('abort');
-      settlement.requestKill();
-    });
+    const { abort } = bindCommandLifecycle(child, options, execTrace, settle);
     child.on('error', (err) => {
       execTrace.emit('error');
       if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
-    });
-    child.once('exit', (code, signal) => {
-      execTrace.emit('exit', { exitCode: code, signal });
-      settlement.recordExit(code);
-    });
-    child.once('close', (code, signal) => {
-      execTrace.emit('close', { exitCode: code, signal });
-      settle(code);
     });
   });
 
@@ -885,17 +901,36 @@ async function isFilePath(filePath: string): Promise<boolean> {
   }
 }
 
-function normalizeTimeoutMs(value: number | undefined): number | undefined {
-  if (!Number.isFinite(value)) return undefined;
-  const timeout = Math.floor(value as number);
-  if (timeout <= 0) return undefined;
-  return timeout;
-}
-
 /**
  * A killed command settles when its direct child exits: descendants can keep inherited pipes
  * open indefinitely. Both kill/exit orderings must settle once without waiting for `close`.
  */
+
+function bindCommandLifecycle(
+  child: ReturnType<typeof spawn>,
+  options: Pick<ExecOptions, 'detached' | 'signal' | 'kill'>,
+  trace: ReturnType<typeof createExecTraceContext>,
+  settle: (code: number | null) => void,
+) {
+  const settlement = createCommandKillSettlement({
+    killProcessTree: () => killProcessTree(child, options),
+    settle,
+  });
+  const abort = watchCommandAbort(options, () => {
+    trace.emit('abort');
+    settlement.requestKill();
+  });
+  child.once('exit', (code, signal) => {
+    trace.emit('exit', { exitCode: code, signal });
+    settlement.recordExit(code);
+  });
+  child.once('close', (code, signal) => {
+    trace.emit('close', { exitCode: code, signal });
+    settle(code);
+  });
+  return { settlement, abort };
+}
+
 type CommandKillSettlement = {
   /** Signals the command's process tree, then settles the command if its child is gone. */
   readonly requestKill: () => void;
