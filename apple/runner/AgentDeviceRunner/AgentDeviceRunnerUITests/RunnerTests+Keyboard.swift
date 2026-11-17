@@ -207,38 +207,44 @@ extension RunnerTests {
   /// with its own wording instead of a label-less `unknown`. `RunnerKeyboardStatus` decides which
   /// observed control is the return key, through the same `kind(of:)` rule `keyboard enter` probes
   /// with, so the two commands can never disagree about the wording they can name.
+  ///
+  /// The keyboard is another process, so every element read is a round trip. One snapshot of the
+  /// keyboard carries its visibility, its frame, and every key's wording and frame, so the whole read
+  /// is one round trip instead of one per key.
   func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus {
+#if os(iOS)
+    let snapshot = safely("KEYBOARD_STATUS_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
+    guard let snapshot, !snapshot.frame.isEmpty else {
+      return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
+    }
+    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: observedKeyboardKeys(in: snapshot))
+#else
     guard isKeyboardVisible(app: app) else {
       return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
     }
-    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: observedKeyboardKeys(app: app))
-  }
-
-  /// Every control the visible keyboard exposes with its wording and frame. The keyboard is another
-  /// process, so every element read is a round trip: one pass over its keys and one over its buttons
-  /// is what a read can afford, and it is the same two queries a snapshot's keyboard band makes. An
-  /// element that answers no wording at all is dropped; wording that is only whitespace is kept,
-  /// because that is how the accessibility tree carries the space bar and the positional rule anchors
-  /// the return key's slot on it. Off iOS nothing is queried and nothing is reported, so a caller must
-  /// not read the empty answer as a keyboard with no return key; `keyboard status` is not advertised
-  /// there.
-  func observedKeyboardKeys(app: XCUIApplication) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
-#if os(iOS)
-    let keyboard = app.keyboards.firstMatch
-    let elements: [XCUIElement] =
-      safely("KEYBOARD_STATUS_KEYS", [XCUIElement]()) { keyboard.keys.allElementsBoundByIndex }
-      + safely("KEYBOARD_STATUS_BUTTONS", [XCUIElement]()) { keyboard.buttons.allElementsBoundByIndex }
-    return elements.compactMap { element in
-      guard let label = safely("KEYBOARD_STATUS_KEY_LABEL", { element.label }), !label.isEmpty else {
-        return nil
-      }
-      let frame = safely("KEYBOARD_STATUS_KEY_FRAME", CGRect.zero) { element.frame }
-      return RunnerKeyboardStatus.ObservedKeyboardKey(text: label, frame: frame)
-    }
-#else
-    return []
+    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: [])
 #endif
   }
+
+#if os(iOS)
+  /// Every key, then every button, the keyboard snapshot holds, in tree order, with its wording and
+  /// frame. An element that answers no wording at all is dropped; wording that is only whitespace is
+  /// kept, because that is how the accessibility tree carries the space bar and the positional rule
+  /// anchors the return key's slot on it. Keys come before buttons so the first control whose wording
+  /// names a return kind is the same one a per-type query would reach first.
+  func observedKeyboardKeys(in keyboard: XCUIElementSnapshot) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
+    var keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var buttons: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var pending = Array(keyboard.children.reversed())
+    while let node = pending.popLast() {
+      pending.append(contentsOf: node.children.reversed())
+      guard node.elementType == .key || node.elementType == .button, !node.label.isEmpty else { continue }
+      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(text: node.label, frame: node.frame)
+      if node.elementType == .key { keys.append(observed) } else { buttons.append(observed) }
+    }
+    return keys + buttons
+  }
+#endif
 
   func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
     let keyboard = app.keyboards.firstMatch

@@ -133,7 +133,7 @@ function appleKeyboardFact(device: DeviceInfo): RuntimeOperationFact {
 }
 /**
  * `status` is the one leg the runner can only serve on iOS and iPadOS: it answers from the key
- * elements `observedKeyboardKeys(app:)` reads, and that read is `#if os(iOS)` code which queries
+ * elements `observedKeyboardKeys(in:)` reads, and that read is `#if os(iOS)` code which queries
  * `app.keyboards` and answers nothing elsewhere. On visionOS the same guard makes the visibility read
  * answer `nil`, so a caller would get "keyboard hidden" for a keyboard that may be up. visionOS hears
  * the same refusal as the leaves with no keyboard at all.
