@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import * as command from '@agent-device/host-kit/command';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
+import * as pluginStore from '@agent-device/plugins/store';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import {
   pluginHome,
@@ -66,6 +69,11 @@ test('plugin schema exposes operator help and preserves scoped npm package specs
   const help = await usageForCommand('plugins');
   assert.ok(help);
   assert.match(help, /plugins list \[--state-dir <path>\]\|add/);
+  assert.match(help, /add <package\[@version\]\|path\.tgz>/);
+  assert.deepEqual(parseRawArgs(['plugins', 'add', './plugin.tgz', '--json']).positionals, [
+    'add',
+    './plugin.tgz',
+  ]);
 });
 
 test('plugins list reports the running daemon inventory next to the store selections', async () => {
@@ -183,4 +191,221 @@ test('plugins list says when the daemon record cannot be used instead of hiding 
   const text = await listPluginsAsText(home, stateDir);
   assert.match(text, /No provider plugins installed\./);
   assert.match(text, /daemon record for .* is invalid, so its providers are unknown/);
+});
+
+test.each(['relative', 'absolute'])(
+  'plugins add installs a %s archive without loading the factory',
+  async (form) => {
+    const { home } = pluginHome();
+    vi.stubEnv('AGENT_DEVICE_HOME', home);
+    vi.stubEnv('AGENT_DEVICE_STATE_DIR', path.join(home, 'state'));
+    vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
+    const source = path.join(home, 'source');
+    fs.mkdirSync(source);
+    const marker = path.join(home, 'executed');
+    fs.writeFileSync(
+      path.join(source, 'package.json'),
+      JSON.stringify({
+        name: 'cli-artifact',
+        version: '1.0.0',
+        type: 'module',
+        exports: { './agent-device': './plugin.mjs' },
+        scripts: { preinstall: 'node sentinel.cjs' },
+      }),
+    );
+    fs.writeFileSync(
+      path.join(source, 'sentinel.cjs'),
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'script')`,
+    );
+    fs.writeFileSync(
+      path.join(source, 'plugin.mjs'),
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'factory'); export default () => ({});`,
+    );
+    const packedResult = runCmdSync(
+      'npm',
+      ['pack', '--ignore-scripts', '--json', '--pack-destination', home],
+      { cwd: source },
+    );
+    assert.equal(packedResult.exitCode, 0, packedResult.stderr);
+    const packed = JSON.parse(packedResult.stdout);
+    const archive = path.join(home, packed[0].filename);
+    const capture = beginStdoutCapture();
+    try {
+      const input = form === 'relative' ? `./${path.basename(archive)}` : archive;
+      await runCli(
+        ['plugins', 'add', input, '--json'],
+        { sendToDaemon: vi.fn() },
+        {
+          cwd: home,
+          env: {
+            ...process.env,
+            AGENT_DEVICE_HOME: home,
+            AGENT_DEVICE_STATE_DIR: path.join(home, 'state'),
+            AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
+          },
+        },
+      );
+      const { data } = JSON.parse(capture.read());
+      assert.equal(data.artifact.name, 'cli-artifact');
+      assert.equal(data.artifact.version, '1.0.0');
+      assert.match(data.artifact.integrity, /^sha512-/);
+      assert.equal(data.artifact.compatibility, 'unchecked');
+      assert.equal('plugins' in data, false);
+      assert.equal(data.restartRequired, true);
+      assert.equal(fs.existsSync(marker), false);
+    } finally {
+      capture.restore();
+    }
+  },
+);
+
+test.each([
+  [false, './fixture.tgz'],
+  [true, '../fixture.tgz'],
+  [true, path.resolve('/fixture.tgz')],
+] as const)(
+  'artifact receipt uses the executing CLI host (json=%s, input=%s)',
+  async (json, input) => {
+    const { home, env } = pluginHome();
+    const cwd = path.join(home, 'workspace');
+    const stateDir = path.join(home, 'state');
+    fs.mkdirSync(cwd);
+    fs.mkdirSync(stateDir);
+    fs.writeFileSync(path.join(stateDir, 'daemon.json'), '{invalid');
+    const host = {
+      cwd,
+      env: {
+        ...env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
+      },
+    };
+    const artifact = {
+      name: 'cli-artifact',
+      version: '1.0.0',
+      installation: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      integrity: `sha512-${Buffer.alloc(64).toString('base64')}`,
+    };
+    const install = vi.spyOn(pluginStore, 'addPluginArtifact').mockResolvedValue(artifact);
+    const sendToDaemon = vi.fn(async () => {
+      throw new Error('unexpected daemon access');
+    });
+    const capture = beginStdoutCapture();
+    try {
+      await runCli(['plugins', 'add', input, ...(json ? ['--json'] : [])], { sendToDaemon }, host);
+      assert.equal(install.mock.calls.length, 1);
+      assert.equal(install.mock.calls[0]?.[0], input);
+      const installedHost = install.mock.calls[0]![1];
+      assert.equal(installedHost.cwd, cwd);
+      assert.deepEqual(Object.keys(installedHost.env).sort(), Object.keys(host.env).sort());
+      for (const [key, value] of Object.entries(host.env))
+        assert.equal(installedHost.env[key], value);
+      assert.equal(sendToDaemon.mock.calls.length, 0);
+      const output = capture.read();
+      if (json) {
+        const { data } = JSON.parse(output);
+        assert.deepEqual(data.artifact, { ...artifact, compatibility: 'unchecked' });
+        assert.equal('plugins' in data, false);
+        assert.equal(data.daemonRecord, 'invalid');
+      } else {
+        assert.match(output, /compatibility unchecked/i);
+        assert.match(output, /plugins list/);
+      }
+    } finally {
+      capture.restore();
+    }
+  },
+);
+
+test.each(['@example/provider@1.2.3', 'plugin.tgz'])(
+  'plugins add routes npm selector %s to the registry manager',
+  async (selector) => {
+    const { home, env } = pluginHome();
+    const host = { cwd: home, env: { ...env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' } };
+    const change = vi.spyOn(pluginStore, 'changePlugin').mockResolvedValue();
+    const artifact = vi.spyOn(pluginStore, 'addPluginArtifact');
+    const capture = beginStdoutCapture();
+    try {
+      await runCli(['plugins', 'add', selector, '--json'], { sendToDaemon: vi.fn() }, host);
+      assert.equal(change.mock.calls.length, 1);
+      assert.equal(change.mock.calls[0]?.[0], 'add');
+      assert.equal(change.mock.calls[0]?.[1], selector);
+      assert.equal(artifact.mock.calls.length, 0);
+      assert.deepEqual(JSON.parse(capture.read()).data.plugins, []);
+    } finally {
+      capture.restore();
+    }
+  },
+);
+
+test.each([
+  './missing.tgz',
+  '../missing.tgz',
+  './invalid.zip',
+  './directory',
+  './directory.tgz',
+  'https://example.test/plugin.tgz',
+  'file:./plugin.tgz',
+])('plugins add rejects %s without a registry install', async (input) => {
+  const { home, env } = pluginHome();
+  fs.mkdirSync(path.join(home, 'directory'));
+  fs.mkdirSync(path.join(home, 'directory.tgz'));
+  const host = { cwd: home, env: { ...env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' } };
+  const registry = vi.spyOn(pluginStore, 'changePlugin');
+  const npm = vi.spyOn(command, 'runCmd');
+  const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('test exit');
+  });
+  const capture = beginStdoutCapture();
+  try {
+    await assert.rejects(
+      runCli(['plugins', 'add', input, '--json'], { sendToDaemon: vi.fn() }, host),
+      /test exit/,
+    );
+    assert.equal(JSON.parse(capture.read()).success, false);
+    assert.equal(npm.mock.calls.length, 0);
+    if (input.startsWith('./') || input.startsWith('../'))
+      assert.equal(registry.mock.calls.length, 0);
+  } finally {
+    capture.restore();
+    exit.mockRestore();
+  }
+});
+
+test('plugins add installs a scoped pinned registry selector through the store', async () => {
+  const { home, env } = pluginHome();
+  const host = { cwd: home, env: { ...env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' } };
+  const npm = vi.spyOn(command, 'runCmd').mockImplementation(async (_program, _args, options) => {
+    const project = options!.cwd!;
+    const manifest = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
+    assert.deepEqual(manifest.dependencies, { '@example/provider': '1.2.3' });
+    const directory = path.join(project, 'node_modules', '@example/provider');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'package.json'),
+      JSON.stringify({
+        name: '@example/provider',
+        version: '1.2.3',
+        type: 'module',
+        exports: { './agent-device': './plugin.mjs' },
+      }),
+    );
+    fs.writeFileSync(path.join(directory, 'plugin.mjs'), v2RegistrationSource('example'));
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  const capture = beginStdoutCapture();
+  try {
+    await runCli(
+      ['plugins', 'add', '@example/provider@1.2.3', '--json'],
+      { sendToDaemon: vi.fn() },
+      host,
+    );
+    assert.equal(npm.mock.calls.length, 1);
+    const { data } = JSON.parse(capture.read());
+    assert.equal(data.plugins[0].name, '@example/provider');
+    assert.equal(data.plugins[0].version, '1.2.3');
+    assert.equal(data.plugins[0].compatible, true);
+  } finally {
+    capture.restore();
+  }
 });
