@@ -272,13 +272,14 @@ extension RunnerTests {
     guard let root else { return nil }
     var keyboard: XCUIElementSnapshot?
     var beside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
-    var pending = [root]
-    while let node = pending.popLast() {
+    var pending = [(node: root, inToolbar: false)]
+    while let (node, inToolbar) = pending.popLast() {
       if node.elementType == .keyboard, keyboard == nil {
         keyboard = node
         continue
       }
-      pending.append(contentsOf: node.children.reversed())
+      let insideToolbar = inToolbar || node.elementType == .toolbar
+      pending.append(contentsOf: node.children.reversed().map { (node: $0, inToolbar: insideToolbar) })
       let wording = RunnerKeyboardStatus.dismissLabels
       if node.elementType == .button, wording.contains(node.label) || wording.contains(node.identifier) {
         beside.append(
@@ -286,7 +287,8 @@ extension RunnerTests {
             text: node.label,
             frame: node.frame,
             identifier: node.identifier.isEmpty ? nil : node.identifier,
-            kind: .button
+            kind: .button,
+            container: insideToolbar ? .toolbar : .app
           )
         )
       }
@@ -560,11 +562,11 @@ extension RunnerTests {
   /// when the keyboard could not be read.
   ///
   /// One snapshot of the app decides which controls are eligible, accessory buttons
-  /// included. The first eligible control that is unique by type, label and identifier among the controls
-  /// near the keyboard, and whose live lookup finds as many elements as the snapshot holds with that
-  /// identity so the control can be taken by its position among them, and that is hittable, is tapped through its live element, never through a
-  /// snapshot coordinate or a second frame read. A covered or off-screen control is passed over for the
-  /// next. When none qualifies, nothing is tapped.
+  /// included. The first eligible control that is unique by type, label and identifier in its container
+  /// (the keyboard, an input accessory toolbar, or the app), whose live lookup in that container finds
+  /// exactly one element, and that is hittable, is tapped through its live element, never through a
+  /// snapshot coordinate, a second frame read, or a position in a query. A covered or off-screen control is
+  /// passed over for the next. When none qualifies, nothing is tapped.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(iOS)
     guard let surface = readKeyboardSurface(app: app) else {
@@ -574,15 +576,15 @@ extension RunnerTests {
       in: RunnerKeyboardStatus.uniqueDismissControls(in: surface),
       resolve: { (control: RunnerKeyboardStatus.ObservedKeyboardKey) -> XCUIElement? in
         let lookup = RunnerKeyboardStatus.lookupFormat(of: control)
-        let matches = app.descendants(matching: control.kind == .key ? .key : .button)
-          .matching(NSPredicate(format: lookup.format, argumentArray: lookup.arguments))
-          .allElementsBoundByIndex
-        guard let position = RunnerKeyboardStatus.identityPosition(of: control, in: surface.keys),
-          matches.count == position.count
-        else {
-          return nil
+        let scope: XCUIElementQuery
+        switch control.container {
+        case .keyboard: scope = app.keyboards.descendants(matching: control.kind == .key ? .key : .button)
+        case .toolbar: scope = app.toolbars.descendants(matching: .button)
+        case .app: scope = app.descendants(matching: .button)
         }
-        return matches[position.index]
+        let matches = scope.matching(NSPredicate(format: lookup.format, argumentArray: lookup.arguments))
+          .allElementsBoundByIndex
+        return matches.count == 1 ? matches[0] : nil
       },
       isTappable: { $0.exists && $0.isHittable }
     )

@@ -315,13 +315,10 @@ extension RunnerTests {
     let identified = RunnerKeyboardStatus.ObservedKeyboardKey(
       text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), identifier: "Done"
     )
-    let keyboardFrame = CGRect(x: 0, y: 880, width: 834, height: 300)
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide], keyboardFrame: keyboardFrame))
-    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, hideButton], keyboardFrame: keyboardFrame))
-    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, twin], keyboardFrame: keyboardFrame))
-    XCTAssertTrue(
-      RunnerKeyboardStatus.isUniqueDismissControl(identified, in: [identified, hide], keyboardFrame: CGRect(x: 0, y: 609, width: 440, height: 240))
-    )
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide]))
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, hideButton]))
+    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, twin]))
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(identified, in: [identified, hide]))
     // A toolbar `Done` and a return key labelled `done` with the identifier `Done` are two controls.
     let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
       text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
@@ -329,9 +326,7 @@ extension RunnerTests {
     let returnKey = RunnerKeyboardStatus.ObservedKeyboardKey(
       text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 56), identifier: "Done", kind: .button
     )
-    XCTAssertTrue(
-      RunnerKeyboardStatus.isUniqueDismissControl(toolbarDone, in: [toolbarDone, returnKey], keyboardFrame: CGRect(x: 0, y: 609, width: 440, height: 240))
-    )
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(toolbarDone, in: [toolbarDone, returnKey]))
     XCTAssertNil(RunnerKeyboardStatus.dismissLabel(of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "Q", frame: .zero)))
   }
 
@@ -355,29 +350,28 @@ extension RunnerTests {
     XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: onlyTwins).isEmpty)
   }
 
-  /// A navigation bar's `Done` far from the keyboard, with the same label and identifier as the toolbar
-  /// `Done` above the key rows, does not make the toolbar `Done` ambiguous: dismiss presses the toolbar
-  /// one. The live lookup finds both, so the toolbar is taken by its position among them.
+  /// A navigation bar's `Done` with the same label and identifier as the toolbar `Done` above the key
+  /// rows is in another container, so it does not make the toolbar `Done` ambiguous: dismiss presses
+  /// the toolbar one, which is looked up inside the toolbar alone. Two `Done` buttons in the same
+  /// container stay ambiguous and are not pressed.
   func testKeyboardDismissPressesAToolbarDoneBesideAFarAwayDoneWithTheSameIdentity() {
     let navigationBarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 60, width: 63, height: 38), kind: .button
+      text: "Done", frame: CGRect(x: 330, y: 60, width: 63, height: 38), kind: .button, container: .app
     )
     let toolbarDone = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button
+      text: "Done", frame: CGRect(x: 330, y: 524, width: 63, height: 38), kind: .button, container: .toolbar
     )
     let keys =
       [navigationBarDone, toolbarDone]
       + observedKeyboardKeysFixture([("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)])
     let keyboard = RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 609, width: 440, height: 240), keys: keys)
     XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: keyboard).map(\.frame), [toolbarDone.frame])
-    let position = RunnerKeyboardStatus.identityPosition(of: toolbarDone, in: keys)
-    XCTAssertEqual(position?.index, 1)
-    XCTAssertEqual(position?.count, 2)
-    // Two Done buttons both near the keyboard remain ambiguous.
-    let nearTwin = RunnerKeyboardStatus.ObservedKeyboardKey(
-      text: "Done", frame: CGRect(x: 20, y: 524, width: 63, height: 38), kind: .button
+    XCTAssertEqual(RunnerKeyboardStatus.uniqueDismissControls(in: keyboard).map(\.container), [.toolbar])
+    // Two Done buttons in the toolbar remain ambiguous.
+    let toolbarTwin = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Done", frame: CGRect(x: 20, y: 524, width: 63, height: 38), kind: .button, container: .toolbar
     )
-    let twins = RunnerKeyboardStatus.ObservedKeyboard(frame: keyboard.frame, keys: [nearTwin, toolbarDone] + keys.dropFirst(2))
+    let twins = RunnerKeyboardStatus.ObservedKeyboard(frame: keyboard.frame, keys: [toolbarTwin] + keys)
     XCTAssertTrue(RunnerKeyboardStatus.uniqueDismissControls(in: twins).isEmpty)
   }
 
@@ -404,11 +398,7 @@ extension RunnerTests {
 
     let noIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero)
     let emptyIdentifier = RunnerKeyboardStatus.ObservedKeyboardKey(text: "Done", frame: .zero, identifier: "")
-    XCTAssertFalse(
-      RunnerKeyboardStatus.isUniqueDismissControl(
-        noIdentifier, in: [noIdentifier, emptyIdentifier], keyboardFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
-      )
-    )
+    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(noIdentifier, in: [noIdentifier, emptyIdentifier]))
     XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: noIdentifier).format, "label == %@")
     XCTAssertEqual(RunnerKeyboardStatus.lookupFormat(of: emptyIdentifier).format, "label == %@")
     XCTAssertEqual(
