@@ -5,11 +5,17 @@ import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-invent
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { browserstackPluginInventory } from './__tests__/test-utils/browserstack-plugin-inventory.ts';
+import { awsDeviceFarmPluginInventory } from './__tests__/test-utils/aws-device-farm-plugin-inventory.ts';
 import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 import { BUILTIN_PROVIDER_IDS } from './builtin-provider-ids.ts';
 
-// BrowserStack is an installed plugin, so its credential variables come from its own inventory entry.
-const inventory = [...(await builtinPluginInventory()), ...(await browserstackPluginInventory())];
+// BrowserStack and AWS Device Farm are installed plugins, so their credential variables come
+// from their own inventory entries.
+const inventory = [
+  ...(await builtinPluginInventory()),
+  ...(await browserstackPluginInventory()),
+  ...(await awsDeviceFarmPluginInventory()),
+];
 const providerCredentialFingerprint = (
   provider: string,
   env: EnvMap,
@@ -197,14 +203,21 @@ test('a plugin provider without declared credential variables has no fingerprint
 });
 
 test('a plugin declaration never adds a fingerprint to a bundled provider', async () => {
-  const { env: home } = pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'aws-device-farm');
+  const { env: home } = pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'limrun');
   const inventory = await storeInventory(home);
   const env = { ...home, AWS_ACCESS_KEY_ID: 'id' };
-  expect(providerCredentialFingerprint('aws-device-farm', env, undefined, inventory)).toBe(
+  expect(providerCredentialFingerprint('limrun', env, undefined, inventory)).toBe(undefined);
+  // The built-in's own answer is unchanged by the store package that claims its id.
+  expect(providerCredentialFingerprint('limrun', env)).toBe(undefined);
+});
+
+test('an installed AWS Device Farm plugin declares no credential variables', async () => {
+  const env = { AWS_ACCESS_KEY_ID: 'id', AWS_SECRET_ACCESS_KEY: 'secret' };
+  // The package answers through the AWS CLI credential chain, so nothing is hashed.
+  expect(providerCredentialFingerprint('aws-device-farm', env)).toBe(undefined);
+  expect(readDaemonProviderCredentials(env, '/state').fingerprint('aws-device-farm')).toBe(
     undefined,
   );
-  // The built-in's own answer is unchanged by the store package that claims its id.
-  expect(providerCredentialFingerprint('aws-device-farm', env)).toBe(undefined);
 });
 
 test('a store plugin declares per-backend credential variables in code', async () => {

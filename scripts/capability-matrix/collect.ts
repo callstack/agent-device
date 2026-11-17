@@ -16,12 +16,11 @@ import { runtimeModule as webRuntimeModule } from '@agent-device/platform-web';
 import { runtimeModule as vegaRuntimeModule } from '@agent-device/platform-vega';
 import { runtimeModule as harmonyosRuntimeModule } from '@agent-device/platform-harmonyos';
 import { runtimeModule as linuxRuntimeModule } from '@agent-device/platform-linux';
-import { BUNDLED_CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
-import type { RunHostCommand } from '@agent-device/provider-webdriver';
+import { createPluginHost, type RunHostCommand } from '@agent-device/plugins/host';
 import testmuPlugin from '@agent-device/testmu';
 import browserstackPlugin from '@agent-device/browserstack';
+import awsDeviceFarmPlugin from '@agent-device/aws-device-farm';
 import revylPlugin from '@agent-device/revyl';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
@@ -113,49 +112,32 @@ async function loadLocalRuntimes(host: PlatformRuntimeHost): Promise<LocalRuntim
   return { apple, android: androidRuntime, web, vega, harmonyos, linux };
 }
 
-const CLOUD_WEBDRIVER_PLUGIN_PROVIDERS: Readonly<Record<string, string>> = {
-  [CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm]: 'aws-device-farm',
-};
-
 /** The plugin packages whose factory setup() builds the WebDriver the matrix asks for. */
 const CLOUD_WEBDRIVER_PLUGINS: Readonly<Record<string, typeof testmuPlugin | undefined>> = {
   testmu: testmuPlugin,
   browserstack: browserstackPlugin,
+  'aws-device-farm': awsDeviceFarmPlugin,
 };
 
-/** The provider's WebDriver options, from the bundled registration or the plugin package. */
+/** The provider's WebDriver options, from the plugin package the target names. */
 async function cloudWebDriverOptions(
   plugin: string,
   runHostCommand: RunHostCommand,
 ): Promise<Record<string, unknown>> {
   const factory = CLOUD_WEBDRIVER_PLUGINS[plugin];
-  if (factory) {
-    // The package's default export is the plugin factory; the WebDriver is what its setup() builds.
-    const plugin_ = factory();
-    if (!plugin_.setup)
-      throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
-    const created = (await plugin_.setup({
-      env: PROVIDER_ENV,
-      clientVersion: '0.0.0',
-    } as never)) as {
-      webDriver: Record<string, unknown>;
-    };
-    return created.webDriver;
-  }
-  const providerName = CLOUD_WEBDRIVER_PLUGIN_PROVIDERS[plugin];
-  if (!providerName) throw new Error(`Unknown cloud WebDriver plugin "${plugin}".`);
-  const registration = BUNDLED_CLOUD_WEBDRIVER_PROVIDERS.find(
-    (candidate) => candidate.declaration.provider === providerName,
-  );
-  if (!registration) {
-    throw new Error(`No bundled cloud WebDriver registration for plugin "${plugin}".`);
-  }
-  const created = await registration.create({
-    env: PROVIDER_ENV,
+  if (!factory) throw new Error(`Unknown cloud WebDriver plugin "${plugin}".`);
+  // The package's default export is the plugin factory; the WebDriver is what its setup() builds.
+  const plugin_ = factory();
+  if (!plugin_.setup)
+    throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
+  const created = (await plugin_.setup({
+    ...createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined),
     clientVersion: '0.0.0',
     runHostCommand,
-  } as never);
-  return created.webDriver as unknown as Record<string, unknown>;
+  })) as {
+    webDriver: Record<string, unknown>;
+  };
+  return created.webDriver;
 }
 
 function cloudLease(target: Target & { readonly kind: 'cloud-webdriver' }): DeviceLease {

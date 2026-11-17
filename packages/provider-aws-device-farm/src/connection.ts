@@ -1,35 +1,29 @@
+import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { CliFlags } from '@agent-device/contracts/command';
 import {
   rejectRefusedProviderProfileFields,
   requireResolvedProfilePlatform,
   requireResolvedProfileValue,
 } from '@agent-device/contracts/provider-profile-fields';
+import { requireConnectPlatform } from '@agent-device/provider-webdriver/plugin';
 import {
-  AWS_DEVICE_FARM_PROFILE_FIELDS,
   readAwsDeviceFarmRegionFromArn,
   readAwsDeviceFarmSelectorFromEnv,
   requireAwsDeviceFarmSelector,
 } from './aws-device-farm.ts';
-import { verifyAwsDeviceFarmConnection } from './connection-verification.ts';
-import type {
-  CloudWebDriverConnection,
-  CloudWebDriverConnectionContext,
-  CloudWebDriverConnectProfileResolution,
-  CloudWebDriverProviderHost,
-} from './provider-plugin.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
-import { requireConnectPlatform } from './webdriver-utils.ts';
+import { AWS_DEVICE_FARM_PROFILE_FIELDS } from './profile-fields.ts';
+import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
+import { AWS_DEVICE_FARM_PROVIDER } from './providers.ts';
 
-const PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
+const PROVIDER = AWS_DEVICE_FARM_PROVIDER;
 const SERVICE = 'AWS Device Farm';
 const CONSUMER = `connect ${PROVIDER}`;
 
 /** The `connect aws-device-farm` callbacks, loaded only when the CLI runs them. */
-export function createAwsDeviceFarmConnection(host: CloudWebDriverProviderHost): {
-  resolve(context: CloudWebDriverConnectionContext): CloudWebDriverConnectProfileResolution;
-} & CloudWebDriverConnection {
+export function createAwsDeviceFarmConnection(host: ProviderPluginHost) {
   const { env } = host;
   return {
-    resolve: ({ flags }): CloudWebDriverConnectProfileResolution => {
+    resolve: ({ flags }: { flags: CliFlags; cwd: string }) => {
       rejectRefusedProviderProfileFields(flags, AWS_DEVICE_FARM_PROFILE_FIELDS);
       const platform = requireConnectPlatform(flags, PROVIDER);
       const awsProjectArn = requireAwsDeviceFarmSelector(
@@ -60,7 +54,7 @@ export function createAwsDeviceFarmConnection(host: CloudWebDriverProviderHost):
         },
       };
     },
-    verify: async ({ flags }) =>
+    verify: async ({ flags }: { flags: CliFlags }) =>
       await verifyAwsDeviceFarmConnection(
         {
           platform: requireResolvedProfilePlatform(flags.platform, SERVICE),
@@ -75,7 +69,8 @@ export function createAwsDeviceFarmConnection(host: CloudWebDriverProviderHost):
           appArn: flags.awsAppArn,
           region: flags.awsRegion,
         },
-        host.runHostCommand,
+        // The plugin drives `aws devicefarm ...` through the host-command capability.
+        (command, args) => host.runHostCommand(command, args),
       ),
   };
 }

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { test } from 'node:test';
 import { deviceLaneLeaf, deviceLanesFor, isDeviceLaneSurface, isUnitTest } from './device-lanes.ts';
 import { selectChecks, type CheckId } from './model.ts';
+import { selectMacosSmoke } from '../apple-ci-impact.ts';
 
 const IOS: readonly CheckId[] = ['replay-ios', 'replay-ios-device'];
 
@@ -205,4 +206,12 @@ test('a tooling change beside an Android-only change still fails open to the ful
     assert.ok(plan.checks.includes('swift-runner-ios'), tooling);
     assert.ok(plan.checks.includes('replay-ios'), tooling);
   }
+});
+
+test('the moved differential test selects its macOS lane in a test-only PR', () => {
+  const changedFiles = ['packages/capture-kit/test/ios-snapshot-differential.test.ts'];
+  const selected = selectChecks({ changedFiles });
+  assert.equal(selected.failOpen, false);
+  assert.ok(selected.checks.includes('ios-snapshot-differential'));
+  assert.equal(selectMacosSmoke('pull_request', changedFiles).run, true);
 });

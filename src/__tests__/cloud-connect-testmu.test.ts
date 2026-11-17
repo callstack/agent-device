@@ -279,15 +279,7 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
 
   try {
     for (const [provider, flags, env] of [
-      [
-        'aws-device-farm',
-        {
-          ...base,
-          awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project/p',
-          awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device/d',
-        },
-        {},
-      ],
+      ['limrun', { ...base, tenant: 'team-a', runId: 'run-a' }, { LIMRUN_API_KEY: 'lim_test_key' }],
     ] as const) {
       await assert.rejects(
         resolveConnectProviderProfile({
