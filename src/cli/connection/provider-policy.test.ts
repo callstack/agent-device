@@ -25,9 +25,8 @@ test('provider policy projects provider identity into semantic capabilities', ()
     holdsCloudDevice: true,
     forgetsEndedConnectionLease: true,
   });
-  const browserStack = connectionProviderCapabilities('browserstack');
-  assert.equal(browserStack.supportsArtifacts, true);
-  assert.equal(browserStack.usesCloudWebDriverLease, true);
+  // BrowserStack is a plugin: without an installed one nothing declares its capabilities.
+  assert.equal(connectionProviderCapabilities('browserstack').leaseKind, 'remote-provider');
   assert.equal(connectionProviderCapabilities('aws-device-farm').requiresAppAttachment, true);
   assert.equal(connectionProviderCapabilities('proxy').leaseKind, 'proxy');
 });
@@ -96,8 +95,8 @@ test('a store plugin that fails to load is named where an unknown connect provid
 
 test('a plugin that fails to load supplies no connection name even after priming', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'dup', v2RegistrationSource('browserstack'));
-  await primePluginConnections(env, ['browserstack']);
+  selectV2Plugin(home, 'dup', v2RegistrationSource('aws-device-farm'));
+  await primePluginConnections(env, ['aws-device-farm']);
   // The built-in claimed the id first, so the store package registers nothing.
   expect(pluginConnectionNames(env)).toEqual([]);
   expect(pluginLoadFailures(env).map(({ package: name, error }) => [name, error.reason])).toEqual([

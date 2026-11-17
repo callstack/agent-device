@@ -4,14 +4,57 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
 import { formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import './support/provider-disconnect-fetch.mjs';
+
+const PROVIDER = 'smoke-cloud';
+
+/**
+ * A hosted provider arrives as an installed plugin, so this flow installs a minimal one: the point
+ * is the built CLI's connect, open, and disconnect ordering, not a particular provider's API.
+ */
+const PROVIDER_PLUGIN_SOURCE = `export default () => ({
+  apiVersion: 2,
+  provider: ${JSON.stringify(PROVIDER)},
+  credentials: { variables: [] },
+  connection: {
+    capabilities: {
+      leaseKind: 'direct-device-provider',
+      requiresAppAttachment: false,
+      requiresRemoteDaemon: false,
+      supportsArtifacts: true,
+      supportsDeferredAppSelection: false,
+      supportsDirectPortReverse: false,
+      usesCloudWebDriverLease: true,
+    },
+    resolve: ({ flags }) => ({
+      profile: {
+        leaseProvider: ${JSON.stringify(PROVIDER)},
+        platform: flags.platform,
+        device: flags.device,
+        providerOsVersion: flags.providerOsVersion,
+        providerApp: flags.providerApp,
+      },
+    }),
+    verify: async ({ flags }) => ({
+      provider: ${JSON.stringify(PROVIDER)},
+      service: 'Smoke Cloud',
+      verificationMessage: 'Credentials, device, and uploaded app verified.',
+      device: { status: 'verified', name: flags.device, platform: flags.platform, osVersion: flags.providerOsVersion },
+      app: { status: 'verified', reference: flags.providerApp },
+    }),
+  },
+  setup: async () => {
+    throw new Error('The smoke daemon is remote and sets up no provider runtime.');
+  },
+});`;
 
 test('built CLI provider flow closes its named session before disconnect cleanup', async (t) => {
   const fixture = createProviderDaemonFixture(t);
   const env = createProviderEnv(fixture);
-  await assertUnnamedRefused(fixture, env, browserStackConnectArgs(fixture));
-  const activeSession = await connectBrowserStackProvider(fixture, env);
+  await assertUnnamedRefused(fixture, env, providerConnectArgs(fixture));
+  const activeSession = await connectProvider(fixture, env);
   await assertUnnamedRefused(fixture, env, ['open', 'Demo']);
   await openProviderApp(fixture, env, activeSession);
   await disconnectProviderSession(fixture, env, activeSession);
@@ -45,10 +88,11 @@ function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
   const fetchFixtureUrl = pathToFileURL(
     path.join(import.meta.dirname, 'support/provider-disconnect-fetch.mjs'),
   ).href;
+  const { home, env: pluginEnv } = pluginHome();
+  selectV2Plugin(home, '@agent-device/smoke-cloud', PROVIDER_PLUGIN_SOURCE);
   return {
     ...process.env,
-    BROWSERSTACK_USERNAME: 'browser-user',
-    BROWSERSTACK_ACCESS_KEY: 'browser-key',
+    ...pluginEnv,
     AGENT_DEVICE_TEST_RPC_LOG_PATH: fixture.rpcLogPath,
     // Generated connection state never persists the daemon bearer token
     // (ADR 0007), so commands after `connect` must resolve it from the
@@ -69,11 +113,11 @@ function readRpcRequests(fixture: ProviderDaemonFixture): any[] {
     .map((line) => JSON.parse(line));
 }
 
-async function connectBrowserStackProvider(
+async function connectProvider(
   fixture: ProviderDaemonFixture,
   env: NodeJS.ProcessEnv,
 ): Promise<string> {
-  const connectArgs = [...browserStackConnectArgs(fixture), '--session', 'bs-smoke'];
+  const connectArgs = [...providerConnectArgs(fixture), '--session', 'provider-smoke'];
   const connectResult = await runBuiltCliJson(connectArgs, env);
 
   assert.equal(connectResult.status, 0, formatResultDebug('connect', connectArgs, connectResult));
@@ -83,14 +127,14 @@ async function connectBrowserStackProvider(
     formatResultDebug('connect', connectArgs, connectResult),
   );
   const activeSession = connectResult.json?.data?.session;
-  assert.equal(activeSession, 'bs-smoke');
+  assert.equal(activeSession, 'provider-smoke');
   return activeSession;
 }
 
-function browserStackConnectArgs(fixture: ProviderDaemonFixture): string[] {
+function providerConnectArgs(fixture: ProviderDaemonFixture): string[] {
   return [
     'connect',
-    'browserstack',
+    PROVIDER,
     '--platform',
     'android',
     '--device',
@@ -183,8 +227,8 @@ function assertProviderDisconnectRpc(rpcRequests: any[], activeSession: string):
 
   const releaseRpc = rpcRequests.find((request) => request.method === 'agent_device.lease.release');
   assert.equal(releaseRpc?.params?.session, activeSession);
-  assert.equal(releaseRpc?.params?.leaseId, 'lease-bs-1');
-  assert.equal(releaseRpc?.params?.leaseProvider, 'browserstack');
+  assert.equal(releaseRpc?.params?.leaseId, 'lease-smoke-1');
+  assert.equal(releaseRpc?.params?.leaseProvider, PROVIDER);
 }
 
 async function assertNoActiveConnection(

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
+import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -23,9 +23,8 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
-const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
+const WEBDRIVER_PROVIDER = BROWSERSTACK_PROVIDER;
 const CLIENT_VERSION = '0.20.3-test';
 /** One transparent pixel: enough for a driver answer to be real base64 PNG. */
 const TINY_PNG_BASE64 =
@@ -309,19 +308,18 @@ async function waitForLeaseExpiry(server: FakeWebDriverServer): Promise<void> {
 
 async function createCloudWebDriverWorld(params: { leaseTtlMs?: number } = {}) {
   const server = await FakeWebDriverServer.start();
-  const runtimes = await createBundledCloudWebDriverRuntimes({
-    env: {
-      BROWSERSTACK_USERNAME: 'browser-user',
-      BROWSERSTACK_ACCESS_KEY: 'browser-key',
-      BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-      BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
-      BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
-    },
-    clientVersion: CLIENT_VERSION,
-    runHostCommand: async () => {
-      throw new Error('BrowserStack scenario must not run host commands');
-    },
-  });
+  const runtimes = [
+    await createBrowserStackRuntime({
+      env: {
+        BROWSERSTACK_USERNAME: 'browser-user',
+        BROWSERSTACK_ACCESS_KEY: 'browser-key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
+        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+      },
+      clientVersion: CLIENT_VERSION,
+    }),
+  ];
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const providerModules = runtimes.map((runtime) =>
     Object.freeze({ runtime, module: runtime.platformRuntimeModule }),

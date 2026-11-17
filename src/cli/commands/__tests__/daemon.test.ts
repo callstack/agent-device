@@ -320,7 +320,7 @@ test('daemon status reads the daemon record without stopping or contacting the d
     version: '0.21.30',
     plugins: [
       {
-        provider: 'browserstack',
+        provider: 'aws-device-farm',
         source: 'builtin',
         state: 'active',
         credentials: { variables: [], byBackend: {} },
@@ -354,7 +354,7 @@ test('daemon status reads the daemon record without stopping or contacting the d
     );
     const render = mocks.writeCommandOutput.mock.calls[0]![2] as () => string;
     expect(render()).toContain('testmu [store] @agent-device/testmu@1.0.0 - failed: bad plugin');
-    expect(render()).toContain('browserstack [builtin] builtin - active');
+    expect(render()).toContain('aws-device-farm [builtin] builtin - active');
     // A host-owned pid changes what a stop may do to it, so status says who owns it.
     expect(render()).toContain('pid 321, host-owned');
   } finally {
