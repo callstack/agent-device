@@ -20,6 +20,7 @@ import {
   runStep,
   verifyBehavior,
   verifyCommand,
+  captureDiagnosticSnapshot,
 } from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
 import { waitForSnapshotDiffLines } from './live-snapshot-transition.ts';
@@ -89,10 +90,11 @@ export async function assertAutomationSystem(
     'id="automation-continue-catalog"',
   ]);
   await assertWaitSelector(context, 'id="catalog-title"');
-  const catalogSnapshot = await runStep(context, 'capture Android catalog navigation', [
-    'snapshot',
-    '-i',
-  ]);
+  const catalogSnapshot = await captureDiagnosticSnapshot(
+    context,
+    'catalog',
+    'capture Android catalog navigation',
+  );
   assertPersistentAndroidHelper(catalogSnapshot, { reused: true });
   const settingsTab = (
     catalogSnapshot.json?.data?.nodes as { label?: unknown; ref?: unknown }[] | undefined
