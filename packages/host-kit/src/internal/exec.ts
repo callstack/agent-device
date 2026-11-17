@@ -269,6 +269,8 @@ function runSpawnedCommand(
             reason: 'command_output_limit',
             stream: exceededStream,
             maxBuffer: options.maxBuffer,
+            stdout,
+            stderr,
           }),
         );
         return;
