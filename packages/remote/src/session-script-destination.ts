@@ -412,9 +412,8 @@ async function publishScriptVersion(
   try {
     // host-kit owns the creation sequence (#4565): walk, refuse before anything is created, create what
     // is missing at 0700 inside the judged directory, judge the completed chain. A destination this route
-    // is going to refuse therefore leaves no directories behind in the shared ground it names. The ANSWER
-    // is what staging is allocated in, so this route walks a destination once per version rather than
-    // walking it again for the sake of being told the same directory.
+    // refuses therefore leaves no directories behind in the shared ground it names, and the answer is where
+    // staging goes, so this route is not walked twice to be told the same directory.
     const prepared = prepareScriptDestination(record.destination);
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
     staging = allocated?.staging;
@@ -431,8 +430,7 @@ async function publishScriptVersion(
       revision: revision as number,
       staging,
       staged,
-      // The directory host-kit answered when staging was allocated, so the publish can confirm the ground
-      // one time before the rename, through the same call that refuses it.
+      // What host-kit answered when staging was allocated, for the one confirmation before the rename.
       prepared: allocated.prepared,
       pending,
     };
@@ -452,14 +450,12 @@ async function publishScriptVersion(
 }
 
 /**
- * Creates a staging directory beside the destination and lists it in the record before any script
- * bytes reach it, and reports the confirmed destination so the publish can confirm it once more.
+ * Creates a staging directory beside the destination and lists it in the record before any script bytes
+ * reach it, and reports the prepared destination the publish confirms before its rename.
  *
- * Staging sits in the directory the ancestry walk JUDGED — the `prepareScriptDestination` answer, not
- * `path.dirname` of the spelled destination. Where a `..` or a link in the destination leads elsewhere, the
- * spelled parent is a directory nobody judged, and a staging directory in it is one another local user can
- * populate before the rename does. The answer is used as it stands: nobody the rule accepted can move it
- * before this call, and the check the route owes comes after the download, at {@link confirmScriptDestination}.
+ * Staging sits in the directory the walk JUDGED — its answer, not `path.dirname` of the spelled destination:
+ * where a `..` or a link leads elsewhere, the spelled parent is ground nobody judged, and a directory in it
+ * is one another local user can populate before the rename does.
  */
 function allocateStaging(
   file: string,

@@ -1,10 +1,12 @@
 // Startup, not the first `open`, is what makes the daemon's own state chain private. Both are on the chain
 // of every recording the daemon picks a path for, and the destination-ancestry rule refuses a group-writable
 // directory on it (ADR 0016), so a state directory an older release left at 0775 has to be forced before a
-// session is ever created.
+// session is ever created. What startup may NOT do is refuse a level whose mode it may not force: that
+// decision belongs to the walk, per recording, and a host whose state it does not own still gets a daemon.
 // (https://github.com/callstack/agent-device/pull/4584)
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
   createTestHostEnvironment,
@@ -12,8 +14,11 @@ import {
   mkdtempForTestSync,
   serveHostOwnership,
 } from '@agent-device/test-kit';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   authoringPublication,
@@ -66,27 +71,82 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'startup refuses state it may not force private, instead of changing another user files',
+  'startup starts on state another user owns, warns, and refuses only the recording under it',
   async () => {
-    // A `sessions` left owned by a different uid — the shape a machine sees when one user ran the daemon as
-    // root — is refused with its mode intact. Forcing it would take a directory away from its owner.
-    const stateDir = mkdtempForTestSync('agent-device-startup-state-foreign-');
+    // A `sessions/` owned by a different uid at 0755 — a container whose volume belongs to the uid the mount
+    // came with, or a machine where one user ran the daemon as root — logged `daemon_state_mode_repair_skipped`
+    // and started. Refusing to start here would fail EVERY command over a mode, and the daemon takes nothing
+    // it does not own either way: the walk is what refuses a recording under that tree, with its own reason.
+    const stateDir = fs.realpathSync(mkdtempForTestSync('agent-device-startup-state-foreign-'));
     const { sessionsDir } = resolveDaemonPaths(stateDir);
     fs.mkdirSync(sessionsDir, { mode: 0o755 });
-    fs.chmodSync(sessionsDir, 0o775);
+    fs.chmodSync(sessionsDir, 0o755);
     serveHostOwnership({ [sessionsDir]: FOREIGN_UID });
 
-    const started = startDaemonRuntime({
-      host: hostFor(stateDir),
-      ...silent,
-      composeDeps: daemonRuntimeDepsFixture({}),
-    });
+    // The scope is only there to see the warning; the runtime is closed inside it, so nothing outlives it.
+    const { runtime, skipped } = await withDiagnosticsScope({ session: 'daemon' }, async () => ({
+      runtime: await startDaemonRuntime({
+        host: hostFor(stateDir),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture({}),
+      }),
+      skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
+    }));
+    try {
+      expect(skipped).toBe(1);
+      // Nothing was taken from the owner: the directory stands as they left it.
+      expect(modeOf(sessionsDir)).toBe(0o755);
 
-    expect(detailsOf(await started.catch((error: unknown) => error))).toMatchObject({
-      reason: 'state_dir_foreign_owned',
-      path: sessionsDir,
-    });
-    expect(modeOf(sessionsDir)).toBe(0o775);
+      // The refusal the host DOES get is the one that names the destination, per recording.
+      const store = new SessionStore(sessionsDir, createTestHostEnvironment());
+      const refused = store.writeSessionLog(
+        store.publish(
+          'journey',
+          makeAuthoringSession('journey', {
+            scriptPublication: authoringPublication('armed', {}),
+            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+          }),
+        ),
+      );
+      expect(refusalOf(refused)).toMatchObject({
+        reason: 'script_ancestor_untrusted',
+        exposure: 'foreign_owned',
+        ancestor: sessionsDir,
+      });
+    } finally {
+      await runtime.close();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'startup starts when the state directory is a link, and leaves where it leads alone',
+  async () => {
+    // The other setup that must keep starting: `~/.agent-device` linked to another disk. The repair will not
+    // force a mode through a name that resolves somewhere else, so it skips that level with a warning — and
+    // the daemon still uses the state where the link points, exactly as it did before this rule existed.
+    const target = mkdtempForTestSync('agent-device-startup-state-target-');
+    const parent = mkdtempForTestSync('agent-device-startup-state-link-');
+    const linked = path.join(parent, 'state');
+    fs.symlinkSync(target, linked);
+
+    const { runtime, skipped } = await withDiagnosticsScope({ session: 'daemon' }, async () => ({
+      runtime: await startDaemonRuntime({
+        host: hostFor(linked),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture({}),
+      }),
+      skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
+    }));
+    try {
+      // The repair skipped the levels it could not reach by descriptor, and changed nothing else: the link is
+      // still a link and the state appeared under the directory it points at.
+      expect(skipped).toBeGreaterThanOrEqual(1);
+      expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
+      expect(fs.existsSync(path.join(target, 'sessions'))).toBe(true);
+    } finally {
+      await runtime.close();
+    }
   },
 );
 
@@ -105,7 +165,9 @@ function modeOf(target: string): number {
   return Number(fs.lstatSync(target).mode & 0o777);
 }
 
-/** The typed details of the startup failure, so a refusal is read by its reason and never by its text. */
-function detailsOf(error: unknown): Record<string, unknown> | undefined {
-  return error instanceof AppError ? (error.details as Record<string, unknown>) : undefined;
+/** Why a recording was not saved, from the typed reason the writer returned it in. */
+function refusalOf(result: ReturnType<SessionStore['writeSessionLog']>): Record<string, unknown> {
+  expect(result.written).toBe(false);
+  if (result.written || !result.error) throw new Error('expected a refused recording');
+  return result.error.details as Record<string, unknown>;
 }

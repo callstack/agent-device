@@ -282,22 +282,19 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
  * Every directory on the chain of a script destination the daemon picks for itself — the state dir,
  * `sessions/`, `remote-scripts/` — is judged by the destination-ancestry rule on the way to a recording
  * (ADR 0016), and that rule refuses a group-writable directory. A mode-less `mkdir` under the shared-checkout
- * umask 002 creates `sessions/` at 0775, so the daemon would refuse its own default recordings and every
- * remote-delivered version. Creation carries the mode and the repair forces it, because a state dir an older
- * version created at 0775 is the same refusal.
+ * umask 002 creates `sessions/` at 0775, so creation carries the mode and the repair forces it for a level
+ * an older version already left loose.
  *
  * The repair is BEST-EFFORT and never refuses (#4565): it forces the mode on a level this uid owns and
  * changes nothing about any other, so a state directory on a mounted volume, or one another uid left at
- * 0755, still gets a daemon that starts. A recording under ground the daemon does not own is refused by the
- * destination walk, which is where the entry is actually created.
- *
- * Returns the path so a caller can name what it just made without a second `mkdir` of its own.
+ * 0755, still gets a daemon that starts. The destination walk is what refuses a recording under ground this
+ * daemon does not own. Returns the path, so a caller can name what it made without a second `mkdir`.
  */
 export function ensurePrivateDaemonStateDir(directory: string): string {
   const firstCreated = fs.mkdirSync(directory, { recursive: true, mode: STATE_DIR_MODE });
   // `mkdir` reports the FIRST directory it made, and everything from there down is this call's to force
-  // private. Repairing only the leaf would leave the level ABOVE a session directory, `sessions/`, at the
-  // 0775 a umask-002 creation gives it, which is the directory every recording is walked through.
+  // private. Repairing only the leaf would leave `sessions/` at the 0775 a umask-002 creation gives it, and
+  // every recording is walked through that directory.
   for (const level of createdStateLevels(firstCreated, directory)) {
     repairPrivateStateDir(level);
   }
@@ -325,15 +322,14 @@ const STATE_DIR_MODE = 0o700;
 /**
  * Forces one existing state level to {@link STATE_DIR_MODE}, or changes nothing and says why.
  *
- * `chmod` given the NAME acts on whatever the name resolves to, so the mode is applied through a descriptor
- * opened `O_DIRECTORY | O_NOFOLLOW` and only after that descriptor's `fstat` says this uid owns the entry: a
- * root daemon repairing a legacy state directory another local user could write would otherwise reach through
- * a `sessions` they left as a link, and strip access from an owner who never ran the daemon.
+ * `chmod` given the NAME acts on whatever the name resolves to, so the mode goes through a descriptor opened
+ * `O_DIRECTORY | O_NOFOLLOW`, and only after that descriptor's `fstat` says this uid owns the entry: a root
+ * daemon repairing a legacy state directory another local user could write would otherwise reach through a
+ * `sessions` they left as a link, and strip access from an owner who never ran the daemon.
  *
- * Every case that cannot be forced is a SKIP with a diagnostic, not a refusal — a link, a name that is not a
- * directory, a level another uid owns, and a mount that denies the open or the chmod. This function never
- * throws for them: it decides a mode, never whether the daemon starts (ADR 0016), and the destination walk is
- * the only thing that refuses a recording.
+ * A link, a name that is not a directory, a level another uid owns and a mount that denies the open or the
+ * chmod are all a SKIP with a diagnostic, never a refusal: this decides a mode, not whether the daemon
+ * starts (ADR 0016).
  */
 function repairPrivateStateDir(directory: string): void {
   // Windows answers access from an ACL, and `chmod` there only toggles the read-only bit.
@@ -373,9 +369,9 @@ function skipStateDirMode(directory: string, because: string): void {
 }
 
 /**
- * What a mode repair may never fail the daemon on: a host that denies the chmod (`EPERM`, `EROFS`, the two
- * spellings of an unsupported one), a name that cannot be opened as a directory (`ELOOP` for a link,
- * `ENOTDIR`), and a directory that will not even open for this user (`EACCES`).
+ * What a mode repair may never fail the daemon on: a host that denies the chmod (`EPERM`, `EROFS`, and the
+ * two spellings of an unsupported one), a name that cannot open as a directory (`ELOOP`, `ENOTDIR`), and a
+ * directory that will not open for this user at all (`EACCES`).
  */
 const MODE_REPAIR_SKIPPED_CODES = new Set([
   'EPERM',

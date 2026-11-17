@@ -120,19 +120,13 @@ const SCRIPT_DIR_MODE = 0o700;
  * Readies a script destination and reports the PHYSICAL directory to create the entry in (#4565).
  *
  * One call owns the sequence, because the ORDER is what makes "a refused destination leaves no directories
- * behind" true: the chain is WALKED, a refused destination is refused BEFORE anything is created, what is
+ * behind" true: the chain is walked, a refused destination is refused BEFORE anything is created, what is
  * missing is created at {@link SCRIPT_DIR_MODE} inside the judged directory, and the completed chain is
- * WALKED AGAIN before the answer. A caller never hands its own `mkdir` to a path this rule has not stopped.
- *
- * The second walk asks the CREATION question — whether other local users could add the destination's own
- * name inside the directory the walk ended in. The first walk does not, because below it the missing
- * directories are this call's own to create at 0700, which is what keeps
+ * walked AGAIN before the answer. Only the second walk asks the CREATION question — whether other local
+ * users could add the destination's own name where the entry lands — because below the first walk the
+ * missing directories are this call's own to create at 0700, which is what keeps
  * `mkdir -p <sticky shared>/recordings` acceptable. {@link createMissingLevels} says why each level is
  * created on its own, and why a `..` queued behind an absent name is refused by the FIRST walk.
- *
- * The answer carries the judged directory's identity, so a caller that stages bytes there can confirm the
- * ground one time before it renames, without asking the host about ground this call already judged, and
- * never runs a `mkdir` of its own.
  *
  * On Windows access is an ACL rather than a mode, so the walk is a no-op and the parent is the answer — but
  * the destination still has to be absolute first, on every platform.
@@ -145,28 +139,24 @@ export function prepareScriptDestination(destination: string): ScriptDestination
   }
   const trust = scriptTrust();
   const walked = walkSpelledParent(spelled, destination, trust);
-  if (walked.reject !== undefined) throw walked.reject;
-  if (walked.unresolvable) {
-    throw scriptAncestryFailure(destination, walked.deepest, 'unresolvable_parent');
+  if (walked.ended === 'refused') throw walked.reject;
+  // A walk that stopped short at an absent name creates that tail inside the directory it judged, and asks
+  // the completed chain again. A short walk with a `..` queued behind the absent name creates nothing: no
+  // amount of creating resolves a step back out of a directory that is not there.
+  if (walked.ended === 'short' && !walked.unresolvable) {
+    createMissingLevels(destination, walked.deepest, walked.missing, trust);
+    return publishableDestination(
+      destination,
+      walkSpelledParent(spelled, destination, trust),
+      trust,
+    );
   }
-  // Where the chain already stands, this walk judged the directory the entry is created in and there is
-  // nothing to create, so it is also the answer. Only a walk that stopped short creates and walks again.
-  if (walked.arrived) return publishableDestination(destination, walked, trust);
-  // A walk that stopped short always judged the directory it stopped in, so it has an identity to create
-  // under. Anything else that did not arrive refused ground, and creates nothing.
-  if (walked.identity === undefined) {
-    throw scriptAncestryFailure(destination, walked.deepest, 'unreachable_parent');
-  }
-  createMissingLevels(destination, walked.deepest, walked.missing, trust);
-  return publishableDestination(destination, walkSpelledParent(spelled, destination, trust), trust);
+  return publishableDestination(destination, walked, trust);
 }
 
 /**
- * Where a script entry is created: the PHYSICAL directory the rule judged, and that directory's identity.
- *
- * `identity` is `dev:ino` as the walk's own `lstat` answered it. It is what
- * {@link confirmScriptDestination} compares for a caller that stages bytes for a later rename, so the one
- * check a caller owes is one this host-kit makes rather than one it writes itself.
+ * Where a script entry is created: the PHYSICAL directory the rule judged, and that directory's identity as
+ * the walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
@@ -302,17 +292,12 @@ function statOrNull(pathname: string): fs.Stats | undefined {
 /**
  * Confirms a destination host-kit ANSWERED earlier, and reports the directory to create the entry in.
  *
- * One call, for the one check a caller that stages bytes owes: a download, a long upload or any other wait
- * can run between the walk that judged the directory and the rename that creates the entry, so the chain is
- * asked again before the entry is made. Every `parent_replaced` refusal is built by
- * {@link scriptAncestryFailure}, which is why no caller writes one: the shape a caller would copy is the
- * host-kit answer's reason, exposure, ancestor and hint, and a route that hand-rolls them drifts from the
- * rule that produced them.
- *
- * A walk that now answers a DIFFERENT directory than the answer named — an ancestor pointed at a link
- * meanwhile — is the swap this catches, and the version is refused rather than renamed into ground nobody
- * judged. Nothing here re-judges ground the walk already owns: the ownership rule is what excludes anyone
- * who could move a judged directory in the first place (ADR 0016).
+ * One call, for the one check a caller that stages bytes owes: a download or a long upload can run between
+ * the walk that judged the directory and the rename that creates the entry, so the chain is asked again
+ * before the entry is made, and an ancestor pointed at a link meanwhile is caught. Every `parent_replaced`
+ * refusal comes from {@link scriptAncestryFailure} — the reason, exposure, ancestor and hint a route would
+ * have to copy, and would drift from. Nothing re-judges ground the walk already owns: the ownership rule is
+ * what excludes anyone who could move a judged directory in the first place (ADR 0016).
  */
 export function confirmScriptDestination(destination: string, prepared: ScriptDestination): string {
   const current = scriptDestination(destination);
@@ -323,13 +308,12 @@ export function confirmScriptDestination(destination: string, prepared: ScriptDe
 }
 
 /**
- * Walks a destination that has to stand as it is, creating nothing, and judges the answer.
- *
- * Refuses a destination unless every directory the kernel looks a name up in is one no other non-root local
- * user can change (#4565). {@link prepareScriptDestination} is the same rule for a caller that also needs the
- * missing tail created; everything written there about how the walk judges ground, and about the window being
- * closed by PERMISSIONS rather than by timing, applies here too. Because nothing is created, a walk that
- * stopped short at an absent name has no answer to give and refuses as `unreachable_parent`.
+ * Walks a destination that has to stand as it is, creating nothing, and judges the answer: refuses unless
+ * every directory the kernel looks a name up in is one no other non-root local user can change (#4565).
+ * {@link prepareScriptDestination} is the same rule for a caller that also needs the missing tail created,
+ * and everything written there about how ground is judged, and about the window being closed by PERMISSIONS
+ * rather than by timing, applies here too. Because nothing is created, a walk that stopped short at an
+ * absent name has no answer to give and refuses as `unreachable_parent`.
  */
 function scriptDestination(destination: string): ScriptDestination {
   const spelled = spelledParent(destination);
@@ -338,10 +322,7 @@ function scriptDestination(destination: string): ScriptDestination {
   }
   const trust = scriptTrust();
   const walk = walkSpelledParent(spelled, destination, trust);
-  if (walk.reject !== undefined) throw walk.reject;
-  if (walk.unresolvable) {
-    throw scriptAncestryFailure(destination, walk.deepest, 'unresolvable_parent');
-  }
+  if (walk.ended === 'refused') throw walk.reject;
   return publishableDestination(destination, walk, trust);
 }
 
@@ -349,17 +330,23 @@ function scriptDestination(destination: string): ScriptDestination {
  * Judges a finished walk and answers where the entry is created, with the identity THIS walk read so a
  * caller that stages bytes beside it can confirm the ground one time before its rename.
  *
- * A walk that stopped short has no answer for a publisher: the name it stopped at is not a directory the
- * entry can be created in, and the nearest ancestor it did reach is a file under a name nobody asked for.
+ * Only an ARRIVED walk has that answer. A walk that stopped short at an absent name has no directory to
+ * report: the name it stopped at is not one the entry can be created in, and the nearest ancestor it did
+ * reach is a file under a name nobody asked for. A `..` queued behind that absent name says creating could
+ * not resolve the chain either, which is the reason the caller that creates gets instead.
  */
 function publishableDestination(
   destination: string,
   walk: WalkOutcome,
   trust: ScriptDestinationTrust,
 ): ScriptDestination {
-  if (walk.reject !== undefined) throw walk.reject;
-  if (!walk.arrived) {
-    throw scriptAncestryFailure(destination, walk.deepest, 'unreachable_parent');
+  if (walk.ended === 'refused') throw walk.reject;
+  if (walk.ended === 'short') {
+    throw scriptAncestryFailure(
+      destination,
+      walk.deepest,
+      walk.unresolvable ? 'unresolvable_parent' : 'unreachable_parent',
+    );
   }
   // Where other local users can add entries here, one of them can add this entry first and the
   // recording is theirs.
@@ -403,8 +390,6 @@ type WalkStep =
   | Readonly<{
       kind: 'short';
       deepest: string;
-      authority: DirectoryAuthority;
-      identity: string;
       /** The spelled names below the judged directory, the first of them absent. */
       missing: readonly string[];
       /** Whether a `..` is queued behind the name that stopped the walk. */
@@ -413,41 +398,35 @@ type WalkStep =
   | Readonly<{ kind: 'stand'; state: WalkState }>;
 
 /**
- * Where a walk ended. Only a walk that ARRIVED reached the directory the entry is created in, and it
- * carries that directory together with the authority and identity it was judged under, so the caller never
- * asks the host again about ground the walk has already read. Every other ending reports how far the walk
- * got, which is what a caller that creates needs in order to create below judged ground only.
+ * Where a walk ended. Only a walk that ARRIVED reached the directory the entry is created in, and it carries
+ * that directory together with the authority and identity it was judged under, so the caller never asks the
+ * host again about ground the walk has already read. A walk that stopped SHORT reports the nearest directory
+ * it did judge and the spelled tail below it, which is what a caller that creates needs in order to create
+ * below judged ground only. A walk that REFUSED carries the failure it stopped on.
  *
- * A walk that did not arrive stopped at a name that does not exist, and the nearest ancestor it did reach is
- * NOT where the entry belongs: publishing there writes a file the caller never named. `unresolvable` says a
- * `..` is queued behind that absent name, so creating cannot finish the resolution.
+ * A walk that stopped short has no answer for a publisher: the name it stopped at is not a directory the
+ * entry can be created in, and publishing under the nearest ancestor writes a file nobody named. Its
+ * `unresolvable` says a `..` is queued behind that name, so creating cannot finish the resolution either.
  */
 type WalkOutcome =
   | Readonly<{
-      arrived: true;
+      ended: 'arrived';
       /** The PHYSICAL directory the entry is created in. */
       deepest: string;
       authority: DirectoryAuthority;
       /** That directory's identity, as this walk's `lstat` of it answered. */
       identity: string;
-      reject?: undefined;
-      unresolvable?: undefined;
-      missing?: undefined;
     }>
   | Readonly<{
-      arrived: false;
-      /** The nearest directory the walk did judge, or `/` when it refused before judging one. */
+      ended: 'short';
+      /** The nearest directory the walk did judge; the destination's name is absent below it. */
       deepest: string;
-      /** That directory's identity as the walk judged it, when it judged one. */
-      identity: string | undefined;
-      /** The step that made the chain unsafe, when an existing step refused rather than went missing. */
-      reject: AppError | undefined;
-      /** Whether a `..` is queued behind the absent name, so creating cannot resolve the chain. */
-      unresolvable: boolean;
       /** The spelled names below `deepest`, the first of them absent. */
       missing: readonly string[];
-      authority?: undefined;
-    }>;
+      /** Whether a `..` is queued behind that name, so creating cannot resolve the chain. */
+      unresolvable: boolean;
+    }>
+  | Readonly<{ ended: 'refused'; reject: AppError }>;
 
 /**
  * Walks the spelled parent exactly as the kernel resolves a path, judging every step, and refuses at the
@@ -460,7 +439,7 @@ type WalkOutcome =
  * - `.` is skipped; `..` moves to the parent of the directory physically stood in, which is judged like
  *   any other directory. Neither one is a name that has to exist.
  * - Any other component is lstat'ed in that directory. An absent one ENDS the walk at the nearest
- *   directory the walk did reach, and the outcome says so: `arrived` is false, `missing` is the tail
+ *   directory the walk did reach, and the outcome says so: `ended` is `short`, `missing` is the tail
  *   below that point, and `unresolvable` is true when a `..` is queued behind that name.
  * - A directory is judged and entered. Each path is read from the host once per walk, so a `..` back over
  *   ground already crossed, or an alias of it, does not ask the host again.
@@ -482,48 +461,32 @@ function walkSpelledParent(
   // Every step consumes a component, and every link hop counts against a fixed limit, so this ends.
   for (;;) {
     if (step.kind === 'reject') {
-      return refused(scriptAncestryFailure(destination, step.path, step.exposure));
+      return {
+        ended: 'refused',
+        reject: scriptAncestryFailure(destination, step.path, step.exposure),
+      };
     }
-    if (step.kind === 'short') return stoppedShort(step);
+    if (step.kind === 'short') {
+      return {
+        ended: 'short',
+        deepest: step.deepest,
+        missing: step.missing,
+        unresolvable: step.behindUpwardStep,
+      };
+    }
     const { state } = step;
     const [component, ...rest] = state.queue;
-    // The only exit that ARRIVES: an empty queue, every name the parent spelled resolved and judged.
-    if (component === undefined) return arrived(state);
+    // The only ending that ARRIVES: an empty queue, every name the parent spelled resolved and judged.
+    if (component === undefined) {
+      return {
+        ended: 'arrived',
+        deepest: state.deepest,
+        authority: state.authority,
+        identity: state.identity,
+      };
+    }
     step = stepThrough(state, component, rest, trust);
   }
-}
-
-/** The one outcome that owns the answer: the judged directory the entry is created in. */
-function arrived(state: WalkState): WalkOutcome {
-  return {
-    arrived: true,
-    deepest: state.deepest,
-    authority: state.authority,
-    identity: state.identity,
-  };
-}
-
-/** A walk that refused has no directory to report, because none of them is established as the entry's. */
-function refused(reject: AppError): WalkOutcome {
-  return {
-    arrived: false,
-    deepest: '/',
-    identity: undefined,
-    reject,
-    unresolvable: false,
-    missing: [],
-  };
-}
-
-function stoppedShort(step: Extract<WalkStep, { kind: 'short' }>): WalkOutcome {
-  return {
-    arrived: false,
-    deepest: step.deepest,
-    identity: step.identity,
-    reject: undefined,
-    unresolvable: step.behindUpwardStep,
-    missing: step.missing,
-  };
 }
 
 /** The first state: the root, with every component of the parent still to resolve. */
@@ -617,8 +580,6 @@ function stepIntoEntry(
     return {
       kind: 'short',
       deepest: state.deepest,
-      authority: state.authority,
-      identity: state.identity,
       missing: [component, ...rest],
       behindUpwardStep: rest.includes('..'),
     };
@@ -913,8 +874,9 @@ function createMissingLevel(
   const exposure = untrustedAncestryExposure(authority, trust);
   if (exposure) throw scriptAncestryFailure(destination, level, exposure);
   if (created) {
-    // The creation carries the mode, and this forces it: `mkdir` ANDs it with the umask, so under the
-    // shared-checkout 002 the level would stand 0775 and the walk that follows would refuse it.
+    // `mkdir` ANDs its mode with the umask, and a umask can take an OWNER bit away: umask 200 would leave
+    // this level 0500, where this call could not create the name below it. One `chmod` makes the level the
+    // mode this rule creates, whatever the host's umask is.
     fs.chmodSync(level, SCRIPT_DIR_MODE);
     return level;
   }

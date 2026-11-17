@@ -8,7 +8,10 @@ import {
   serveHostOwnership,
 } from '@agent-device/test-kit';
 import { ensurePrivateDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { SessionStore } from '../session-store.ts';
 import {
   authoringPublication,
@@ -180,11 +183,14 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'refuses to repair a `sessions` directory another user owns, and changes nothing there',
-  () => {
+  'skips a `sessions` directory another user owns, and changes nothing there',
+  async () => {
     // Repair is what fixes a host the daemon did not create, so the repair is itself the dangerous step: a
     // `chmod` given the NAME acts on whatever that name answers. Simulated root ownership (state an older
     // release left owned by another uid) makes this process foreign to `sessions/`, as it is on that host.
+    // The mode is therefore applied through an `O_NOFOLLOW` descriptor whose `fstat` says whose entry it is,
+    // and a foreign one is left as its owner set it — the daemon still starts, and the destination walk is
+    // what refuses a recording under that tree.
     const root = mkdtempForTestSync('agent-device-foreign-state-');
     fs.chmodSync(root, 0o755);
     const sessions = path.join(root, 'sessions');
@@ -192,10 +198,7 @@ test.skipIf(process.platform === 'win32')(
     fs.chmodSync(sessions, 0o775);
     serveHostOwnership({ [sessions]: FOREIGN_UID });
 
-    expect(refusalOf(() => ensurePrivateDaemonStateDir(sessions))).toMatchObject({
-      reason: 'state_dir_foreign_owned',
-      path: sessions,
-    });
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions))).toBe(1);
 
     // Nothing was touched: the owner's directory keeps the mode they set for it.
     expect(fs.lstatSync(sessions).mode & 0o777).toBe(0o775);
@@ -203,12 +206,12 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'refuses a planted `sessions` link under state another user can write, and leaves where it leads alone',
-  () => {
+  'skips a planted `sessions` link under state another user can write, and leaves where it leads alone',
+  async () => {
     // The shape of the blocker: `sessions` is writable by another local user, they leave a link at that
     // name, and a root daemon forcing its own state private is handed the name. Repairing it by pathname
     // travels through the link and changes the mode of the attacker's directory — as root, with privileges.
-    // The ENTRY under the name is what gets judged instead, so the link itself is the refusal.
+    // The mode comes from a descriptor that cannot follow a link, so this call reports the level and starts.
     const root = mkdtempForTestSync('agent-device-planted-state-');
     fs.chmodSync(root, 0o777);
     const planted = path.join(root, 'attacker');
@@ -217,10 +220,7 @@ test.skipIf(process.platform === 'win32')(
     const sessions = path.join(root, 'sessions');
     fs.symlinkSync(planted, sessions);
 
-    expect(refusalOf(() => ensurePrivateDaemonStateDir(sessions))).toMatchObject({
-      reason: 'state_dir_not_a_directory',
-      path: sessions,
-    });
+    expect(await skipCountFor(() => ensurePrivateDaemonStateDir(sessions))).toBe(1);
 
     expect(fs.lstatSync(planted).mode & 0o777).toBe(0o777);
     expect(fs.readdirSync(planted)).toEqual([]);
@@ -233,12 +233,13 @@ function refusal(result: object): string {
   return JSON.stringify(result);
 }
 
-/** The typed details of the refusal a state repair answered with. */
-function refusalOf(run: () => void): Record<string, unknown> | undefined {
-  try {
-    run();
-  } catch (error) {
-    return (error as AppError).details as Record<string, unknown>;
-  }
-  throw new Error('a state directory this process may not repair was repaired');
+/**
+ * Runs one state repair inside its own diagnostics scope and reports how often it said it skipped a level.
+ * No `logPath`, so the events are tallied and written nowhere.
+ */
+async function skipCountFor(repair: () => unknown): Promise<number> {
+  return await withDiagnosticsScope({ session: 'daemon' }, () => {
+    expect(repair()).toBeDefined();
+    return countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']);
+  });
 }
