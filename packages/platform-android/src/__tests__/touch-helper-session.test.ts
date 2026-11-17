@@ -727,10 +727,11 @@ test('input actions reuse the live automation socket without adb input calls', a
       await pressAndroidEnter(device);
     },
   );
+  // Outside a request deadline, each command gets the host's input cap less its answer margin.
   assert.deepEqual(inputs, [
-    { kind: 'tap', x: 12, y: 34 },
-    { kind: 'key', keyCode: 4 },
-    { kind: 'key', keyCode: 66 },
+    { kind: 'tap', x: 12, y: 34, budgetMs: 40_000 },
+    { kind: 'key', keyCode: 4, budgetMs: 40_000 },
+    { kind: 'key', keyCode: 66, budgetMs: 40_000 },
   ]);
   assert.equal(
     adbCalls.some((args) => args.includes('input')),

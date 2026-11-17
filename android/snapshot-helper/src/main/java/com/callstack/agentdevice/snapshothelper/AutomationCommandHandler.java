@@ -57,59 +57,165 @@ final class AutomationCommandHandler {
     boolean attempted;
   }
 
+  /**
+   * The budget of a host that sends none: a provider-supplied helper can be newer than its host, and
+   * an older host waits 30 s for input, less the 5 s answer margin. It never affords a retry.
+   */
+  private static final long OLDER_HOST_BUDGET_MS = 25_000;
+
+  /** The framework's accessibility interaction timeout, AccessibilityInteractionClient. */
+  private static final long TEXT_ENTRY_RESERVE_MS = 5_000;
+
+  /** The command deadline left too little time for the next step, so it was not started. */
+  static final class InputBudgetExhausted extends IllegalStateException {
+    InputBudgetExhausted(String message) {
+      super(message);
+    }
+  }
+
+  /** Refuses text entry the deadline cannot fit, after a focus tap that may have used the budget. */
+  static void requireTextEntryTime(long deadline, long now) {
+    if (deadline - now < TEXT_ENTRY_RESERVE_MS) {
+      throw new InputBudgetExhausted("Fill text was not entered: too little time left after focus");
+    }
+  }
+
   private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
+    // The host's remaining time for this command bounds every retry decision.
+    long deadline =
+        SystemClock.uptimeMillis() + input.optLong("budgetMs", OLDER_HOST_BUDGET_MS);
     switch (input.getString("kind")) {
       case "tap":
-        tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch);
+        tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch, deadline);
         return;
       case "key":
-        key(automation, input.getInt("keyCode"), dispatch);
+        key(automation, input.getInt("keyCode"), dispatch, deadline);
         return;
       case "fill":
-        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"), dispatch);
+        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"), dispatch,
+            deadline);
         return;
       default:
         throw new IllegalArgumentException("Unknown input kind");
     }
   }
 
-  private static void tap(UiAutomation automation, double x, double y, InputDispatch dispatch) {
+  private static void tap(
+      UiAutomation automation, double x, double y, InputDispatch dispatch, long deadline) {
     if (Double.isNaN(x) || Double.isInfinite(x) || Double.isNaN(y) || Double.isInfinite(y)
         || x < 0 || y < 0) {
       throw new IllegalArgumentException("Invalid tap coordinates");
     }
-    long down = SystemClock.uptimeMillis();
-    touch(automation, down, MotionEvent.ACTION_DOWN, (float) x, (float) y, dispatch);
-    touch(automation, down, MotionEvent.ACTION_UP, (float) x, (float) y, dispatch);
+    dispatch.attempted = true;
+    PressSequence.requireDispatched(PressSequence.run(new TouchPress(automation, (float) x, (float) y), deadline), "Touch");
   }
 
-  private static void touch(UiAutomation automation, long down, int action, float x, float y, InputDispatch dispatch) {
-    MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0);
-    event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-    try {
-      dispatch.attempted = true;
-      if (!automation.injectInputEvent(event, true)) {
-        throw new IllegalStateException("Touch injection was refused");
-      }
-    } finally {
-      event.recycle();
-    }
-  }
-
-  private static void key(UiAutomation automation, int code, InputDispatch dispatch) {
+  private static void key(UiAutomation automation, int code, InputDispatch dispatch, long deadline) {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
-    long down = SystemClock.uptimeMillis();
-    for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
-      KeyEvent event = new KeyEvent(down, SystemClock.uptimeMillis(), action, code, 0, 0,
-          KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
-      dispatch.attempted = true;
-      if (!automation.injectInputEvent(event, true)) {
-        throw new IllegalStateException("Key injection was refused");
+    dispatch.attempted = true;
+    PressSequence.requireDispatched(PressSequence.run(new KeyPress(automation, code), deadline), "Key");
+  }
+
+  private abstract static class Press implements PressSequence.Injections {
+    final UiAutomation automation;
+
+    Press(UiAutomation automation) {
+      this.automation = automation;
+    }
+
+    @Override
+    public long now() {
+      return SystemClock.uptimeMillis();
+    }
+
+    @Override
+    public boolean skipsAnimationWait() {
+      return UiAutomationInputDispatcher.skipsAnimationWait();
+    }
+
+    @Override
+    public boolean awaitAnimations() {
+      return UiAutomationInputDispatcher.awaitAnimations(automation);
+    }
+  }
+
+  private static final class TouchPress extends Press {
+    private final float x;
+    private final float y;
+
+    TouchPress(UiAutomation automation, float x, float y) {
+      super(automation);
+      this.x = x;
+      this.y = y;
+    }
+
+    @Override
+    public boolean start(long downTime) {
+      return inject(MotionEvent.ACTION_DOWN, downTime, 0, true);
+    }
+
+    @Override
+    public boolean end(long downTime) {
+      return inject(MotionEvent.ACTION_UP, downTime, 0, true);
+    }
+
+    /** Not awaited: a window that received a timed-out DOWN may not finish handling the cancel. */
+    @Override
+    public void releaseRefusedStart(long downTime) {
+      inject(MotionEvent.ACTION_CANCEL, downTime, MotionEvent.FLAG_CANCELED, false);
+    }
+
+    private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
+      MotionEvent event = TouchEvents.obtain(
+          downTime, SystemClock.uptimeMillis(), action, new float[] {x}, new float[] {y}, flags);
+      try {
+        return UiAutomationInputDispatcher.inject(automation, event, waitForDispatch);
+      } finally {
+        event.recycle();
       }
     }
   }
 
-  private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch) {
+  private static final class KeyPress extends Press {
+    private final int code;
+
+    KeyPress(UiAutomation automation, int code) {
+      super(automation);
+      this.code = code;
+    }
+
+    @Override
+    public boolean start(long downTime) {
+      return inject(KeyEvent.ACTION_DOWN, downTime, 0, true);
+    }
+
+    @Override
+    public boolean end(long downTime) {
+      return inject(KeyEvent.ACTION_UP, downTime, 0, true);
+    }
+
+    /**
+     * Android releases an interrupted key with an ACTION_UP that carries FLAG_CANCELED; receivers
+     * take no action on a canceled up. Not awaited, like the touch cancel.
+     */
+    @Override
+    public void releaseRefusedStart(long downTime) {
+      inject(KeyEvent.ACTION_UP, downTime, KeyEvent.FLAG_CANCELED, false);
+    }
+
+    private boolean inject(int action, long downTime, int flags, boolean waitForDispatch) {
+      return UiAutomationInputDispatcher.inject(
+          automation, event(action, downTime, flags), waitForDispatch);
+    }
+
+    private KeyEvent event(int action, long downTime, int flags) {
+      return new KeyEvent(downTime, SystemClock.uptimeMillis(), action, code, 0, 0,
+          KeyCharacterMap.VIRTUAL_KEYBOARD, 0, flags, InputDevice.SOURCE_KEYBOARD);
+    }
+  }
+
+  private static void fill(
+      UiAutomation automation, int x, int y, String text, InputDispatch dispatch, long deadline) {
     AccessibilityNodeInfo target = null;
     try {
       for (AccessibilityWindowInfo window : automation.getWindows()) {
@@ -134,7 +240,8 @@ final class AutomationCommandHandler {
         }
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
-      tap(automation, x, y, dispatch);
+      tap(automation, x, y, dispatch, deadline);
+      requireTextEntryTime(deadline, SystemClock.uptimeMillis());
       if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");
