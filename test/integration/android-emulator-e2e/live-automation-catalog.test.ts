@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { writeSnapshotEvidence } from './snapshot-evidence.ts';
 import { test, vi } from 'vitest';
 import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
@@ -10,6 +14,7 @@ import type { LiveContext } from './live-harness.ts';
 
 const harness = vi.hoisted(() => ({
   runStep: vi.fn(),
+  captureDiagnosticSnapshot: vi.fn(),
   verifyCommand: vi.fn(),
   verifyBehavior: vi.fn(),
 }));
@@ -94,5 +99,43 @@ test('catalog readiness waits until the automation screen has changed', async ()
     if (args[0] === 'click' && args[1]?.startsWith('@')) throw done;
     return result({});
   });
+  harness.captureDiagnosticSnapshot.mockImplementation((context, _name, step) =>
+    harness.runStep(context, step, ['snapshot', '-i', '--debug']),
+  );
   await assert.rejects(assertAutomationSystem({} as LiveContext), (error) => error === done);
+});
+
+test('retains bounded original helper evidence with request correlation', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'android-snapshot-evidence-'));
+  try {
+    writeSnapshotEvidence(dir, 'catalog', 'fixture', 100, 200, {
+      status: 0,
+      stdout: '',
+      stderr: '',
+      json: {
+        data: {
+          androidSnapshot: {
+            backend: 'android-helper',
+            helperTransport: 'instrumentation',
+            nodeCount: 268,
+            foregroundWindowPackage: 'token=secret',
+            unexpected: 'private',
+          },
+          warnings: Array(100).fill('token=secret ' + 'x'.repeat(1000)),
+          nodes: [{ label: 'private tree' }],
+        },
+      },
+    });
+    const content = fs.readFileSync(path.join(dir, 'snapshot-catalog.json'), 'utf8');
+    const evidence = JSON.parse(content);
+    assert.equal(evidence.session, 'fixture');
+    assert.deepEqual([evidence.startedAtMs, evidence.finishedAtMs], [100, 200]);
+    assert.equal(evidence.androidSnapshot.helperTransport, 'instrumentation');
+    assert.equal(evidence.androidSnapshot.nodeCount, 268);
+    assert.equal(evidence.warnings.length, 20);
+    assert.ok(!content.includes('secret') && !content.includes('private'));
+    assert.ok(content.length < 10_000);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
