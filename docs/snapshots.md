@@ -209,6 +209,8 @@ snapshot was taken on instead of guessing it from the largest rect.
 - iOS reports the app window, so iPad Split View and a foldable panel do not inflate it.
 - Android and Apple TV report the measured screen. Android reports it under `--raw` too, since the
   raw rects are measured on the same screen.
+- The Tizen and webOS TV plugins report the page's layout viewport in CSS pixels, which is not the
+  screenshot size: a webOS app at 1280x720 fills only the top-left 1280x720 of a 1920x1080 capture.
 - It is absent when the capture measured no box: a macOS capture, whose rects are absolute in window
   space; a web or Linux capture, which reads a tree without reading a screen; and `--raw` on an Apple
   target.
