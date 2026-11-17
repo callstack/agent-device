@@ -35,9 +35,15 @@ export function SettleLabScreen() {
     }, ms);
     timers.current.push(handle);
   };
+  // A new run first clears whatever an unfinished run left on screen, since that run's stale
+  // completion will never clear it.
   const nextRun = () => {
     latestRun.current += 1;
     setRun(latestRun.current);
+    opacity.stopAnimation();
+    setOverlayVisible(false);
+    setStage('none');
+    setToast(null);
     return latestRun.current;
   };
 
@@ -70,8 +76,6 @@ export function SettleLabScreen() {
         label="Fade overlay"
         onPress={() => {
           const id = nextRun();
-          // One fade at a time: the stopped fade completes as stale, and the latest-run guard drops it.
-          opacity.stopAnimation();
           opacity.setValue(1);
           setOverlayVisible(true);
           Animated.timing(opacity, {
