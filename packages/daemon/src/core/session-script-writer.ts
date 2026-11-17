@@ -1,6 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import crypto from 'node:crypto';
-import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -19,7 +18,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishScriptFileSync } from '@agent-device/host-kit/file';
+import { childPath, parentDirectoryPath, publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -178,16 +177,18 @@ export class SessionScriptWriter {
     session: SessionState,
     remote: boolean,
   ): { path: string; pickedByDaemon: boolean; privateChain: boolean } {
-    const stateBase = path.dirname(this.sessionsDir);
+    // `parentDirectoryPath` and `childPath` rather than `path.dirname` and `path.join`: this directory is the
+    // verified answer startup handed down, and a fold would spend the walk that judged it.
+    const stateBase = parentDirectoryPath(this.sessionsDir) ?? this.sessionsDir;
     if (remote) {
       const directory = ensurePrivateDaemonStateDir(
-        path.join(this.sessionsDir, 'remote-scripts'),
+        childPath(this.sessionsDir, 'remote-scripts'),
         stateBase,
       );
       return {
         ...directory,
         pickedByDaemon: true,
-        path: path.join(directory.path, `${crypto.randomUUID()}.ad`),
+        path: childPath(directory.path, `${crypto.randomUUID()}.ad`),
       };
     }
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
@@ -204,7 +205,7 @@ export class SessionScriptWriter {
     return {
       ...own,
       pickedByDaemon: true,
-      path: path.join(own.path, `${safeName}-${timestamp}.ad`),
+      path: childPath(own.path, `${safeName}-${timestamp}.ad`),
     };
   }
 }

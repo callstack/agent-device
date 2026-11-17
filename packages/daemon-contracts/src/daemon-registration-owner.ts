@@ -20,6 +20,7 @@ import {
   tryAcquireProcessLock,
   acquireProcessLockAcquisition,
   verifiedDirectoryPath,
+  withoutTrailingSeparators,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
@@ -407,19 +408,13 @@ function repairStateChain(
  */
 function stateTailBelow(stateBase: string, directory: string): readonly string[] | undefined {
   const below = path.relative(
-    stripTrailingSeparators(stateBase),
-    stripTrailingSeparators(directory),
+    withoutTrailingSeparators(stateBase),
+    withoutTrailingSeparators(directory),
   );
   if (below === '' || below === '.') return [];
   if (below === '..' || below.startsWith(`..${path.sep}`) || path.isAbsolute(below))
     return undefined;
   return below.split(path.sep);
-}
-
-/** A path with any trailing separators cut off: the name an entry is actually looked up under. */
-function stripTrailingSeparators(directory: string): string {
-  const stripped = directory.replace(/[/\\]+$/, '');
-  return stripped === '' ? directory : stripped;
 }
 
 /**

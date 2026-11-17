@@ -25,6 +25,7 @@ import {
   makeAuthoringSession,
 } from '../../__tests__/support/session-factories.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import type { DaemonRuntimeDepsInput } from './daemon-runtime-deps.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 
 const silent = { stderr: { write: () => {} }, stdout: { write: () => {} } };
@@ -149,6 +150,92 @@ test.skipIf(process.platform === 'win32')(
       expect(skipped).toBeGreaterThanOrEqual(1);
       expect(fs.lstatSync(linked).isSymbolicLink()).toBe(true);
       expect(fs.existsSync(path.join(target, 'sessions'))).toBe(true);
+    } finally {
+      await runtime.close();
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'startup builds the runtime on the state chain it verified, not the one the setting spells',
+  async () => {
+    // `AGENT_DEVICE_STATE_DIR=<root>/alias/../state`, with `alias` a link into `actual/x`. The kernel resolves
+    // that base to `<root>/actual/state`, and it creates under there; `path.join` and `path.resolve` fold the
+    // step away and answer `<root>/state`, which is a DIFFERENT directory that happens to exist here. Startup
+    // verified the first chain, so the runtime, its store and every recording the daemon picks a path for have
+    // to be built on it. Building them on the folded name instead published recordings into a directory no
+    // ancestry was ever asked about, and forced its mode from 0755 to 0700 while the chain startup repaired
+    // stood elsewhere (ADR 0016).
+    const root = mkdtempForTestSync('agent-device-startup-state-alias-');
+    // `actual/x` exists, and `actual` (one step above where the link lands) is where the kernel's `..`
+    // arrives — so the state base has to be there before the walk can stand on it.
+    fs.mkdirSync(path.join(root, 'actual', 'x'), { recursive: true });
+    fs.symlinkSync(path.join(root, 'actual', 'x'), path.join(root, 'alias'));
+    const verifiedBase = path.join(root, 'actual', 'state');
+    const foldedBase = path.join(root, 'state');
+    // The folded name already stands, the way a previous run that folded left it: owned by this user, and open.
+    fs.mkdirSync(path.join(foldedBase, 'sessions'), { recursive: true });
+    fs.chmodSync(foldedBase, 0o755);
+
+    // The composition input is the real construction: it is what the server passes to the root's factory, and
+    // `resolveSessionDir` is the store the server built there.
+    let composed: DaemonRuntimeDepsInput | undefined;
+    const { runtime, skipped } = await withDiagnosticsScope({ session: 'daemon' }, async () => ({
+      runtime: await startDaemonRuntime({
+        host: hostFor(`${path.join(root, 'alias')}/../state`),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture((input) => {
+          composed = input;
+          return {};
+        }),
+      }),
+      skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
+    }));
+    try {
+      const input = composed!;
+      expect(input.baseDir).toBe(verifiedBase);
+      expect(input.sessionsDir).toBe(path.join(verifiedBase, 'sessions'));
+      expect(input.resolveSessionDir('journey')).toBe(
+        path.join(verifiedBase, 'sessions', 'journey'),
+      );
+      // Startup repaired what it verified: the chain it reached stands private, and nothing was skipped —
+      // every level was reachable by descriptor.
+      expect(skipped).toBe(0);
+      expect(modeOf(verifiedBase)).toBe(0o700);
+      expect(modeOf(path.join(verifiedBase, 'sessions'))).toBe(0o700);
+
+      // The recording the daemon picks a path for itself lands on that chain, through the store the server
+      // constructed.
+      const store = new SessionStore(input.sessionsDir, createTestHostEnvironment());
+      const written = store.writeSessionLog(
+        store.publish(
+          'journey',
+          makeAuthoringSession('journey', {
+            scriptPublication: authoringPublication('armed', {}),
+            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+          }),
+        ),
+      );
+      if (!written.written) throw new Error(`recording refused: ${JSON.stringify(written)}`);
+      expect(path.dirname(written.path)).toBe(path.join(verifiedBase, 'sessions'));
+      expect(written.path.startsWith(path.join(verifiedBase, 'sessions') + path.sep)).toBe(true);
+      const version = store.writeRemoteScriptVersion(
+        store.publish(
+          'download',
+          makeAuthoringSession('download', {
+            scriptPublication: authoringPublication('armed', { remote: true }),
+            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+          }),
+        ),
+      );
+      if (!version.written) throw new Error(`remote version refused: ${JSON.stringify(version)}`);
+      expect(path.dirname(version.path)).toBe(
+        path.join(verifiedBase, 'sessions', 'remote-scripts'),
+      );
+
+      // The folded directory is the proof: nobody judged it, so nobody changed it or wrote in it.
+      expect(modeOf(foldedBase)).toBe(0o755);
+      expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
     } finally {
       await runtime.close();
     }

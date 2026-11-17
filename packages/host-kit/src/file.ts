@@ -22,6 +22,9 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
+  childPath,
+  parentDirectoryPath,
+  withoutTrailingSeparators,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

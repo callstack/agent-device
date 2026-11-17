@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
+import { parentDirectoryPath, withoutTrailingSeparators } from './path-resolution.ts';
 
 export type AtomicPublishMode = 'replace' | 'link-exclusive';
 
@@ -461,8 +462,8 @@ export function verifiedDirectoryAncestry(
   | Readonly<{ physical: string }>
   | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
   if (!path.isAbsolute(directory)) return { ancestor: directory, exposure: 'relative_destination' };
-  if (process.platform === 'win32') return { physical: stripTrailingSeparators(directory) };
-  const spelled = stripTrailingSeparators(directory);
+  if (process.platform === 'win32') return { physical: withoutTrailingSeparators(directory) };
+  const spelled = withoutTrailingSeparators(directory);
   const walked = walkSpelledParent(spelled, `${spelled}/${CHAIN_PROBE_NAME}`, scriptTrust());
   if (walked.ended === 'refused') return { ancestor: walked.ancestor, exposure: walked.exposure };
   // ARRIVED is the trusted answer, and `deepest` is this walk's own judgment of where that spelled name
@@ -495,20 +496,16 @@ export function verifiedDirectoryPath(
 ):
   | Readonly<{ physical: string }>
   | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  const spelled = stripTrailingSeparators(directory);
-  const cut = spelled.lastIndexOf('/');
-  if (cut < 0 || cut === spelled.length - 1) {
+  const spelled = withoutTrailingSeparators(directory);
+  const parent = parentDirectoryPath(spelled);
+  const name = spelled.slice((parent ?? '').length + 1);
+  // A name with no directory above it — `state`, or the root itself — cannot be judged: there is no chain to
+  // walk, and the process's working directory would have to be put into it to get one.
+  if (parent === undefined || name === '')
     return { ancestor: directory, exposure: 'relative_destination' };
-  }
-  const parent = verifiedDirectoryAncestry(spelled.slice(0, cut) || '/');
-  if (!('physical' in parent)) return parent;
-  return { physical: `${parent.physical}/${spelled.slice(cut + 1)}` };
-}
-
-/** `directory` with any trailing separators cut off: the name an entry is actually looked up under. */
-function stripTrailingSeparators(directory: string): string {
-  const stripped = directory.replace(/\/+$/, '');
-  return stripped === '' ? '/' : stripped;
+  const judged = verifiedDirectoryAncestry(parent);
+  if (!('physical' in judged)) return judged;
+  return { physical: `${judged.physical}/${name}` };
 }
 
 /** The name {@link verifiedDirectoryAncestry} asks the walk about, which it never creates. */

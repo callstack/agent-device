@@ -11,9 +11,11 @@ import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
+  type DaemonPaths,
   resolveDaemonServerMode,
   type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
+import { childPath } from '@agent-device/host-kit/file';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import { installProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 import {
@@ -207,17 +209,28 @@ async function startDaemonRuntimeOnHost(
     flushDaemonStartupDiagnostics,
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
-  const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   // The daemon's own state dirs are on the chain of every recording it picks a path for, and a
   // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
   // otherwise only ever created as a side effect of a per-session mkdir.
   //
-  // Each answer is the PHYSICAL spelling of the directory it created or repaired, and `ensureSessionDir` and
-  // the script writer read that answer for themselves, so every level they build is one the walk judged —
-  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back.
-  ensureDaemonStateDir(baseDir, baseDir);
-  ensureDaemonStateDir(sessionsDir, baseDir);
+  // Each ANSWER replaces the name it was given, and everything the runtime builds from here on is derived
+  // from it. An answer is the physical directory the ancestry walk arrived at; the name `resolveDaemonPaths`
+  // spelled is what a client addresses files BY, and the two can name the same directory differently
+  // (`alias/../state` steps out of wherever `alias` stands). Answering from the walk is what keeps the levels
+  // this startup repairs, the store it constructs, and the recordings the writer publishes on ONE chain —
+  // taking the spelled name instead writes recordings into a directory the repair never judged (ADR 0016).
+  const baseDir = ensureDaemonStateDir(daemonPaths.baseDir, daemonPaths.baseDir);
+  const verifiedPaths: DaemonPaths = {
+    ...daemonPaths,
+    baseDir,
+    infoPath: childPath(baseDir, 'daemon.json'),
+    lockPath: childPath(baseDir, 'daemon.lock'),
+    logPath: childPath(baseDir, 'daemon.log'),
+    allocationsDir: childPath(baseDir, 'allocations'),
+    sessionsDir: ensureDaemonStateDir(childPath(baseDir, 'sessions'), baseDir),
+  };
+  const { infoPath, logPath, sessionsDir } = verifiedPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -547,7 +560,7 @@ async function startDaemonRuntimeOnHost(
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
   };
 
-  const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
+  const acquisition = await tryAcquireDaemonRegistration(verifiedPaths);
   if (acquisition.status !== 'acquired') {
     throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
       reason: 'daemon_registration_refused',
