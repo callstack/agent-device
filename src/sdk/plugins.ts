@@ -34,3 +34,5 @@ export type {
   ReplayExecutionPlugin,
   ReplayExecutionResolver,
 } from '@agent-device/contracts/replay-execution';
+
+export { addPluginArtifact } from '@agent-device/plugins/store';

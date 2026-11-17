@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
+import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   changePlugin,
   listPlugins,
@@ -316,4 +319,111 @@ test('equivalent nested option key order keeps the daemon selection current', as
       return true;
     },
   );
+});
+
+test.each([
+  ['1.2.3-01', false],
+  ['1.2.3-rc.01', false],
+  ['1.2.3-00', false],
+  ['1.2.3-0', true],
+  ['1.2.3-01a', true],
+  ['1.2.3-1a.0+001', true],
+  ['1.2.3+01', true],
+] as const)('artifact selection validates exact SemVer %s', async (version, valid) => {
+  const { home, env } = pluginHome();
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'), { manifest: { version } });
+  const config = readPluginConfig(env);
+  config.plugins.example.artifact = {
+    version,
+    integrity: `sha512-${Buffer.alloc(64).toString('base64')}`,
+  };
+  fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
+  const [entry] = await listPlugins(env, []);
+  assert.equal(entry?.compatible, valid);
+  if (valid) assert.equal(entry?.version, version);
+  assert.equal(vi.mocked(runCmd).mock.calls.length, 0);
+});
+
+test('registry staging cleanup failure reports both errors and releases the store lock', async () => {
+  const { home, env } = pluginHome();
+  const plugins = path.join(fs.realpathSync(home), 'plugins');
+  const installError = new AppError('INVALID_ARGS', 'registry install failed');
+  const cleanupError = new Error('registry cleanup failed');
+  vi.mocked(runCmd).mockRejectedValue(installError);
+  const rm = fs.rmSync.bind(fs);
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+    if (typeof target === 'string' && path.dirname(target) === plugins) throw cleanupError;
+    return rm(target, options);
+  });
+  let failure: unknown;
+  try {
+    await changePlugin('add', packageName, env);
+  } catch (error) {
+    failure = error;
+  } finally {
+    spy.mockRestore();
+  }
+  const attempt = tryAcquireProcessLock({
+    lockDirPath: path.join(fs.realpathSync(home), 'plugins.lock'),
+    owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
+  });
+  if (attempt.status === 'acquired') await attempt.acquisition.release();
+  assert.equal(attempt.status, 'acquired');
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.code, 'COMMAND_FAILED');
+  assert.ok(failure.details);
+  assert.equal(failure.details.reason, 'plugin_cleanup_failed');
+  assert.equal(
+    (failure.details.installationError as { message: string }).message,
+    installError.message,
+  );
+  assert.equal((failure.details.cleanupError as { message: string }).message, cleanupError.message);
+  assert.equal(failure.cause, installError);
+});
+
+test('removal does not create or remove a staging project', async () => {
+  const { home, env } = pluginHome();
+  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  const before = fs.readdirSync(path.join(home, 'plugins'));
+  const spy = vi.spyOn(fs, 'rmSync');
+  try {
+    await changePlugin('remove', 'example', env);
+    assert.deepEqual(fs.readdirSync(path.join(home, 'plugins')), before);
+    assert.equal(
+      spy.mock.calls.filter(
+        ([target]) =>
+          typeof target === 'string' &&
+          path.dirname(target) === path.join(fs.realpathSync(home), 'plugins'),
+      ).length,
+      0,
+    );
+    assert.deepEqual(readPluginConfig(env).plugins, {});
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a release failure after publication preserves the selected installation', async () => {
+  const { home, env } = pluginHome();
+  installFixture();
+  const lock = path.join(fs.realpathSync(home), 'plugins.lock');
+  const rmdir = fs.rmdirSync.bind(fs);
+  const spy = vi.spyOn(fs, 'rmdirSync').mockImplementation((target, options) => {
+    if (target === lock) throw new Error('release failed');
+    return rmdir(target, options);
+  });
+  try {
+    await assert.rejects(
+      changePlugin('add', packageName, env),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.details?.ownerReleaseUnverified === true,
+    );
+    const [selected] = installedPlugins(env);
+    assert.ok(selected);
+    assert.ok(fs.existsSync(path.join(selected.directory, 'package.json')));
+  } finally {
+    spy.mockRestore();
+  }
 });
