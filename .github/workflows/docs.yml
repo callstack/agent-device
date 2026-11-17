@@ -54,6 +54,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One job, one checkout and install: every gate below is an independent read of the tree, and
+  # the command-reference gate used to start its own runner and install the same graph again.
   check:
     name: Prose, internal links, and heading anchors
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -64,6 +66,13 @@ jobs:
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
+
+      # ci.yml ignores docs paths, so a docs-only PR never reaches the unit lane that carries the
+      # command-reference coverage gate. Documenting a retired command, or dropping a public
+      # command's docs, fails here instead.
+      - name: Check command reference doc coverage
+        uses: ./.github/actions/run-gate
+        with: { gate: command-docs }
 
       # Reads the Markdown sources only, so it fails before the site build.
       - name: Check docs prose
@@ -85,21 +94,3 @@ jobs:
       - name: Check docs links
         uses: ./.github/actions/run-gate
         with: { gate: docs-links }
-
-  # ci.yml ignores docs paths, so a docs-only PR never reaches the unit lane that carries the
-  # command-reference coverage gate. Documenting a retired command, or dropping a public
-  # command's docs, fails here instead.
-  command-docs:
-    name: Command reference doc coverage
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
-
-      - name: Setup Node and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Check command reference doc coverage
-        uses: ./.github/actions/run-gate
-        with: { gate: command-docs }
