@@ -119,13 +119,19 @@ recorded a version discloses it: the CLI prints a warning and carries a typed
 `scriptDeliveryFailure` in `--json`, and the SDK and MCP results carry the same field.
 
 Remote `session save-script`, `close --save-script`, `replay --save-script`, and `--save-script` in
-batch steps are refused. A `batch` whose steps would close the recording is refused before any step
-runs; run `close` on its own after the batch. A batch delivers no script versions from its steps
-([#4595](https://github.com/callstack/agent-device/issues/4595)).
+batch steps are refused. A remote `batch` updates your file once with the recording from its
+completed steps, including the final script when a step closes the session. If a step fails, the
+batch keeps that error and delivers the recording from earlier completed steps. Delivery failures
+add `scriptDeliveryFailure` and a warning, and your file may keep its previous version.
 
 Direct RPC callers send `saveScript: true` with a random `meta.scriptPublicationId` of 16 to 64
 letters, digits, or hyphens. Each script artifact carries that `scriptPublicationId` and a
-`scriptRevision` that grows with each version. Download the artifacts by ID and keep the newest.
+`scriptRevision` that grows with each version. For a single command, download the artifacts by ID
+and keep the newest. For a batch, read `scriptDeliveryReceipt` from `data` on success or
+`error.details` on failure: it names the `publicationId`, the optional newest full-script `version`,
+the optional `close.step` (a 1-based position in your submitted plan), and any typed `failures`.
+Download only that version, validate the close against your plan, and report the failures; do not
+derive delivery from step results.
 
 Remote requests ignore `meta.cwd`. They refuse host tooling paths and `--launch-console`
 with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
@@ -357,7 +363,7 @@ checks `upstream.leaseBackends` for `macos-app` before handing out a macOS app l
 daemons omit it.
 
 ```json
-{"ok":true,"service":"agent-device-proxy","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}
+{"ok":true,"service":"agent-device-proxy","version":"0.21.39-dev","rpcProtocolVersion":3,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.39-dev","rpcProtocolVersion":3,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}
 ```
 
 ## Clean up
