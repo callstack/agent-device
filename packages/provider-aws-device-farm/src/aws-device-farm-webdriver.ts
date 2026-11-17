@@ -1,6 +1,12 @@
+import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import {
+  readFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from '@agent-device/provider-webdriver/plugin';
 import {
   AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
-  AWS_DEVICE_FARM_PROFILE_FIELDS,
   createAwsCliDeviceFarmClient,
   createAwsDeviceFarmPrepareSession,
   listAwsDeviceFarmCloudArtifacts,
@@ -9,32 +15,20 @@ import {
   readAwsDeviceFarmSelectorFromEnv,
   requireAwsDeviceFarmSelector,
 } from './aws-device-farm.ts';
-import type {
-  BundledCloudWebDriverProvider,
-  CloudWebDriverConnection,
-  CloudWebDriverProviderHost,
-  CloudWebDriverProviderOptions,
-  CloudWebDriverProviderRegistration,
-} from './provider-plugin.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS, cloudWebDriverProviderDeclaration } from './providers.ts';
-import { readFlag, requireRequest, requireRequestPlatform } from './webdriver-utils.ts';
+import { AWS_DEVICE_FARM_PROFILE_FIELDS } from './profile-fields.ts';
+import { AWS_DEVICE_FARM_PROVIDER } from './providers.ts';
 
-const PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
 const SERVICE = 'AWS Device Farm';
 
-export const awsDeviceFarmProvider: BundledCloudWebDriverProvider = {
-  declaration: cloudWebDriverProviderDeclaration(PROVIDER)!,
-  create: createAwsDeviceFarmProvider,
-};
-
-function createAwsDeviceFarmProvider(
-  host: CloudWebDriverProviderHost,
-): CloudWebDriverProviderRegistration {
-  const { env, runHostCommand } = host;
+/** The AWS Device Farm WebDriver descriptor the host drives through its shared engine. */
+export function createAwsDeviceFarmWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
+  const { env } = host;
+  const runHostCommand = (command: string, args: readonly string[]) =>
+    host.runHostCommand(command, args);
   const client = (region: string | undefined) =>
     createAwsCliDeviceFarmClient({ runHostCommand, region });
-  const webDriver: CloudWebDriverProviderOptions = {
-    provider: PROVIDER,
+  const webDriver: WebDriverPluginOptions = {
+    provider: AWS_DEVICE_FARM_PROVIDER,
     profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
     endpoint: 'http://127.0.0.1/',
     platform: 'android',
@@ -71,11 +65,5 @@ function createAwsDeviceFarmProvider(
       })({ lease, req, base });
     },
   };
-  const connect = async () =>
-    (await import('./aws-device-farm-connection.ts')).createAwsDeviceFarmConnection(host);
-  const connection: CloudWebDriverConnection = {
-    resolve: async (context) => (await connect()).resolve(context),
-    verify: async (context) => await (await connect()).verify(context),
-  };
-  return { webDriver, connection };
+  return webDriver;
 }

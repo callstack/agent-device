@@ -19,7 +19,7 @@ async function fixture(storeEnv?: NodeJS.ProcessEnv) {
   const discover = vi.fn(async () => []);
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([]),
-    {},
+    { env: {}, cwd: '/' },
     {
       assertReplaySelectionCurrent: storeEnv ? createPluginSelectionGuard([], storeEnv) : undefined,
       adaptWebDriver: async () => {

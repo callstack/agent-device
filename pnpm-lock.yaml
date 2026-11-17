@@ -30,12 +30,12 @@ importers:
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:packages/apple-runner
+      '@agent-device/aws-device-farm':
+        specifier: workspace:*
+        version: link:packages/provider-aws-device-farm
       '@agent-device/browserstack':
         specifier: workspace:*
         version: link:packages/provider-browserstack
-      '@agent-device/build-config':
-        specifier: workspace:*
-        version: link:packages/build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:packages/capture-kit
@@ -872,6 +872,24 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+
+  packages/provider-aws-device-farm:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provider-webdriver':
+        specifier: workspace:*
+        version: link:../provider-webdriver
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/provider-browserstack:
     devDependencies:

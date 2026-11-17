@@ -32,7 +32,7 @@ export async function loadReplayScriptSourceBundle(
     await import('@agent-device/replay-port/replay-backend-registry')
   ).withReplayBackend(
     backendId,
-    params.hostEnv,
+    { env: params.hostEnv, cwd: params.cwd },
     (backend) =>
       backend.collectSourceFiles({
         entryPath: entry,

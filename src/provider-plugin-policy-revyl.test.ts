@@ -51,7 +51,11 @@ test('a Revyl device the shutdown could not stop is named in the message and hin
   const resolved = await resolveProviderPlugins([
     { source: 'embedder', provider: 'revyl', load: () => revyl({ apiKey: 'test-key', apiUrl }) },
   ]);
-  const registry = await startProviderRegistry(resolved, {}, PROVIDER_PLUGIN_POLICY);
+  const registry = await startProviderRegistry(
+    resolved,
+    { env: {}, cwd: '/' },
+    PROVIDER_PLUGIN_POLICY,
+  );
   const runtime = registry.registrations[0]!.runtime;
   const lease: DeviceLease = {
     leaseId: 'lease-1',

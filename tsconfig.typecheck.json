@@ -32,6 +32,7 @@
     { "path": "packages/platform-web" },
     { "path": "packages/plugins" },
     { "path": "packages/provider-limrun" },
+    { "path": "packages/provider-aws-device-farm" },
     { "path": "packages/provider-browserstack" },
     { "path": "packages/provider-revyl" },
     { "path": "packages/provider-testmu" },

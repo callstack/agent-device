@@ -66,6 +66,7 @@
     { "path": "../../packages/provider-limrun" },
     { "path": "../../packages/provider-revyl" },
     { "path": "../../packages/provider-testmu" },
+    { "path": "../../packages/provider-aws-device-farm" },
     { "path": "../../packages/provider-browserstack" },
     { "path": "../../packages/provider-webos" },
     { "path": "../../packages/provider-tizen" },

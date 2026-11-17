@@ -18,7 +18,7 @@ import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 
 let inspectMaestroFlow: ReplayBackend['inspectSource'];
 async function prepareMaestro(): Promise<() => Promise<void>> {
-  const scope = await openReplayBackend('maestro', process.env);
+  const scope = await openReplayBackend('maestro', { env: process.env, cwd: process.cwd() });
   inspectMaestroFlow = scope.backend.inspectSource;
   return async () => {
     await scope.close();
