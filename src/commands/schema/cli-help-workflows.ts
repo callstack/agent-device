@@ -220,11 +220,11 @@ Coverage:
   Audit covers the visible screen only. On a long list, run agent-device scroll down 0.8, then run audit again.
 
 Checks audit cannot do:
-  Large text: run agent-device settings text-size accessibility-extra-extra-extra-large, then agent-device open <app> --relaunch. The app adopts the size only after a relaunch.
+  Large text: first run agent-device settings text-size to record the current size. Then run agent-device settings text-size accessibility-extra-extra-extra-large, then agent-device open <app> --relaunch. The app adopts the size only after a relaunch.
     Then run audit and screenshot each key screen. Look for clipped, truncated, or overlapping text.
-    At the end, run agent-device settings text-size large.
-  Dark mode: run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
-    At the end, run agent-device settings appearance light.
+    At the end, set the recorded size again with agent-device settings text-size <recorded-size>.
+  Dark mode: first note the current mode from a screenshot. Then run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
+    At the end, set the noted mode again with agent-device settings appearance <light|dark>.
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
     A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.

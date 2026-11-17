@@ -167,7 +167,11 @@ export const CASES = [
         test: ({ joined }) => (joined.match(/\bagent-device\s+audit\b/gi) ?? []).length >= 2,
       },
       { id: 'changesTextSize', pattern: /\bagent-device\s+settings\s+text-size\s+accessibility-/i },
-      { id: 'relaunchesAfterTextSize', pattern: /\bagent-device\s+open\s+[^\n]*--relaunch\b/i },
+      {
+        id: 'relaunchesAfterTextSize',
+        pattern:
+          /\bsettings\s+text-size\s+accessibility-[\s\S]*\bagent-device\s+open\s+[^\n]*--relaunch\b/i,
+      },
     ],
   },
   {

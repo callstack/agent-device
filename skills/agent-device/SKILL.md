@@ -15,7 +15,7 @@ That starts the session and returns the initial interactive snapshot with `@refs
 
 Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <direction> --settle`, or `back --settle`; continue from the printed diff, verify the named expectation with a read-only command (`wait text "..."`, `is`, or `get`; bare `find` clicks, so check with `find text "..." exists`), then run `agent-device close`, or `agent-device close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running.
 
-For exploratory QA or accessibility checks, read `agent-device help dogfood`; its platform checks run `agent-device audit`.
+For exploratory QA, read `agent-device help dogfood`; its platform checks run `agent-device audit`.
 
 For an accessibility review of a whole app, read `agent-device help accessibility`.
 

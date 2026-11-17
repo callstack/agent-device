@@ -141,7 +141,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance',
     '2. Run agent-device audit, then agent-device snapshot -i',
     'Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state',
-    'Large text: run agent-device settings text-size accessibility-extra-extra-extra-large',
+    'Large text: first run agent-device settings text-size to record the current size.',
   ],
   validate: [
     'Prove the changed behavior through public agent-device surfaces. Do not validate against stale dist output',
