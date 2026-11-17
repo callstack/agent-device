@@ -4,9 +4,12 @@ import {
   type ScreenshotCropReason,
 } from '@agent-device/contracts/capture';
 import type { SessionSurface } from '@agent-device/contracts/session';
+import type { SnapshotProducer } from '@agent-device/contracts/snapshot-producers';
+import type { SnapshotCaptureScale, SnapshotViewportSize } from '@agent-device/kernel/snapshot';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { validateSelectorExpression } from '@agent-device/selectors';
+import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 
 /**
  * The `--crop-on` target policy: which device capture frame the crop is accepted on, and the
@@ -18,6 +21,7 @@ type CropTarget =
   | 'ios-simulator'
   | 'android-emulator'
   | 'android-device'
+  | 'provider-android-tv'
   | 'macos-app-window'
   | 'ios-physical'
   | 'ios-physical-xctest'
@@ -48,6 +52,7 @@ export const SCREENSHOT_CROP_TARGET_CELLS: readonly CropTargetCell[] = [
   { target: 'ios-simulator', status: 'accepted' },
   { target: 'android-emulator', status: 'accepted' },
   { target: 'android-device', status: 'rejected', rejectionReason: PENDING },
+  { target: 'provider-android-tv', status: 'accepted' },
   { target: 'macos-app-window', status: 'rejected', rejectionReason: PENDING },
   { target: 'ios-physical', status: 'accepted' },
   { target: 'ios-physical-xctest', status: 'rejected', rejectionReason: PENDING },
@@ -69,7 +74,7 @@ export function classifyScreenshotCropTarget(
     case 'apple':
       return classifyAppleCropTarget(device, surface);
     case 'android':
-      return device.kind === 'device' ? 'android-device' : 'android-emulator';
+      return classifyAndroidCropTarget(device);
     case 'harmonyos':
       return 'harmonyos';
     case 'vega':
@@ -79,6 +84,14 @@ export function classifyScreenshotCropTarget(
     case 'web':
       return 'web';
   }
+}
+
+function classifyAndroidCropTarget(device: DeviceInfo): CropTarget {
+  // A TV web app plugin serves its TV as an Android TV device it owns: the frame is the app page.
+  if (device.target === 'tv' && device.kind === 'device' && isActiveProviderDevice(device)) {
+    return 'provider-android-tv';
+  }
+  return device.kind === 'device' ? 'android-device' : 'android-emulator';
 }
 
 function classifyAppleCropTarget(
@@ -167,5 +180,31 @@ export function assertScreenshotCropCapture(
     facts.iosPhysicalCaptureBackend !== 'coredevice'
   ) {
     throw cropRefusal('ios-physical-non-coredevice-capture', PENDING);
+  }
+}
+
+/**
+ * Provider TV crop evidence covers the TV web app plugins' page tree, not any provider tree. The
+ * crop places that tree's rects in the capture by the page's viewport and capture scale, so a page
+ * missing either cannot be cropped: a zoomed page would crop the wrong region.
+ */
+export function assertScreenshotCropSnapshot(
+  device: DeviceInfo,
+  snapshot: Readonly<{
+    producer?: SnapshotProducer;
+    captureScale?: SnapshotCaptureScale;
+    viewport?: SnapshotViewportSize;
+  }>,
+): void {
+  if (classifyScreenshotCropTarget(device, undefined) !== 'provider-android-tv') return;
+  if (snapshot.producer !== 'cdp-dom') {
+    throw cropRefusal('provider-android-tv-non-cdp-snapshot', PENDING);
+  }
+  if (snapshot.captureScale === undefined || snapshot.viewport === undefined) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'the TV page published no capture scale or viewport, so --crop-on cannot place its rects in the capture: its browser has no visualViewport, or the visual viewport is panned',
+      { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+    );
   }
 }

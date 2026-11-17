@@ -1,4 +1,4 @@
-import type { Rect, SnapshotViewportSize } from './snapshot.ts';
+import type { Rect, SnapshotCaptureScale, SnapshotViewportSize } from './snapshot.ts';
 
 /**
  * CoreGraphics' `CGRectInfinite`, spelled in the four doubles Apple builds it from. This is what a
@@ -61,6 +61,18 @@ export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewpor
   if (!isPositiveFiniteRect(box)) return undefined;
   if (reportsFailedReadExtents(box.width, box.height)) return undefined;
   return { width: box.width, height: box.height } as SnapshotViewportSize;
+}
+
+/**
+ * The ONE construction path for the capture scale a snapshot publishes: a positive finite reading
+ * becomes the scale, and anything else is the absence that means unknown, never a zero or infinite
+ * magnification.
+ */
+export function snapshotCaptureScaleFrom(
+  value: number | null | undefined,
+): SnapshotCaptureScale | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return value as SnapshotCaptureScale;
 }
 
 /**

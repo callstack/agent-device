@@ -4,17 +4,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { snapshotCaptureScaleFrom } from '@agent-device/kernel/rect';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   intersectScreenshotRect,
   projectSnapshotRectToScreenshot,
+  resolveScreenshotFrame,
   resolveScreenshotRectSpace,
   resolveSnapshotBounds,
   type ScreenshotRectSpace,
 } from './snapshot-rect-projection.ts';
 
 // Golden geometry table for `screenshot --crop-on`: the numbers are the live
-// evidence baseline (iOS simulator 402/1206, iOS physical 390/1170, Android 1080, macOS 586/1172),
+// evidence baseline (iOS simulator 402/1206, iOS physical 390/1170, Android 1080, macOS 586/1172,
+// webOS and Tizen TV pages 1920 at capture scale 1 and 1.5),
 // so a projection-law change that moves any accepted cell's crop box turns this
 // red before the pixel-identity cross-check could ever notice.
 
@@ -22,6 +25,7 @@ type FixtureCase = {
   name: string;
   space: ScreenshotRectSpace;
   bounds: Rect | null;
+  captureScale?: number;
   rect: Rect;
   image: { width: number; height: number };
   expectedProjection: Rect;
@@ -50,6 +54,7 @@ test('the crop projection law agrees with every golden geometry case', () => {
       fixture.rect,
       fixture.image.width,
       fixture.image.height,
+      snapshotCaptureScaleFrom(fixture.captureScale),
     );
     assert.deepEqual(projected, fixture.expectedProjection, fixture.name);
     const intersection = intersectScreenshotRect(
@@ -59,6 +64,29 @@ test('the crop projection law agrees with every golden geometry case', () => {
     );
     assert.deepEqual(intersection, fixture.expectedIntersection, fixture.name);
   }
+});
+
+test('resolveScreenshotFrame is the page at its capture scale, else the whole image', () => {
+  const image = { width: 1920, height: 1080 };
+  const page = (width: number, height: number) => ({ width, height });
+  const scale = (value: number) => snapshotCaptureScaleFrom(value);
+
+  assert.deepEqual(resolveScreenshotFrame(image, { viewport: page(1280, 720) }), image);
+  assert.deepEqual(
+    resolveScreenshotFrame(image, { viewport: page(1280, 720), captureScale: scale(1) }),
+    {
+      width: 1280,
+      height: 720,
+    },
+  );
+  assert.deepEqual(
+    resolveScreenshotFrame(image, { viewport: page(1280, 720), captureScale: scale(1.5) }),
+    image,
+  );
+  assert.deepEqual(
+    resolveScreenshotFrame(image, { viewport: page(1281, 721), captureScale: scale(1.5) }),
+    image,
+  );
 });
 
 test('resolveScreenshotRectSpace maps each accepted backend to its projection space and refuses the rest', () => {

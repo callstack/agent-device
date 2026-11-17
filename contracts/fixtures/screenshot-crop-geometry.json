@@ -36,6 +36,26 @@
     "expectedIntersection": { "x": 210, "y": 678, "width": 436, "height": 71 }
   },
   {
+    "name": "webOS app at 1280x720: CSS px rects land 1:1 in the top-left of the 1920x1080 capture",
+    "space": "device-pixels",
+    "bounds": null,
+    "captureScale": 1,
+    "rect": { "x": 200, "y": 300, "width": 400, "height": 240 },
+    "image": { "width": 1920, "height": 1080 },
+    "expectedProjection": { "x": 200, "y": 300, "width": 400, "height": 240 },
+    "expectedIntersection": { "x": 200, "y": 300, "width": 400, "height": 240 }
+  },
+  {
+    "name": "Tizen page with a 1280 meta viewport: CSS px rects scale by the 1.5 capture scale",
+    "space": "device-pixels",
+    "bounds": null,
+    "captureScale": 1.5,
+    "rect": { "x": 200, "y": 300, "width": 400, "height": 240 },
+    "image": { "width": 1920, "height": 1080 },
+    "expectedProjection": { "x": 300, "y": 450, "width": 600, "height": 360 },
+    "expectedIntersection": { "x": 300, "y": 450, "width": 600, "height": 360 }
+  },
+  {
     "name": "macOS app window: non-zero-origin bounds shift the rect before the 2x scale",
     "space": "viewport-points",
     "bounds": { "x": 898, "y": 74, "width": 586, "height": 488 },

@@ -9,6 +9,7 @@ import { cropPngFile } from '@agent-device/capture-kit/png-crop';
 import {
   intersectScreenshotRect,
   projectSnapshotRectToScreenshot,
+  resolveScreenshotFrame,
   resolveScreenshotRectSpace,
   resolveSnapshotBounds,
 } from '@agent-device/capture-kit/snapshot-rect-projection';
@@ -19,6 +20,7 @@ import type { DaemonCommandContext } from '../core/context.ts';
 import { captureSnapshotData } from '../core/snapshot-capture.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 import type { BoundScreenshotRuntime } from './screenshot-runtime-binding.ts';
+import { assertScreenshotCropSnapshot } from './screenshot-crop-target.ts';
 import type { SessionState } from '../core/session-state.ts';
 
 export type ScreenshotCropOutcome = Readonly<{ partialIntersection: boolean }>;
@@ -65,6 +67,7 @@ export async function cropScreenshotToSelector(params: {
       }),
   });
   const snapshot = buildSnapshotState(snapshotData, flags);
+  assertScreenshotCropSnapshot(device, snapshotData);
 
   if (snapshot.snapshotQuality?.state === 'sparse') {
     throw new AppError(
@@ -82,8 +85,10 @@ export async function cropScreenshotToSelector(params: {
     node.rect!,
     image.width,
     image.height,
+    snapshotData.captureScale,
   );
-  const box = intersectScreenshotRect(projected, image.width, image.height);
+  const frame = resolveScreenshotFrame(image, snapshotData);
+  const box = intersectScreenshotRect(projected, frame.width, frame.height);
   if (box === null) {
     throw new AppError(
       'COMMAND_FAILED',

@@ -9,6 +9,7 @@ import {
   isRectVisibleInViewport,
   pickLargestRect,
   readSnapshotViewportSize,
+  snapshotCaptureScaleFrom,
   snapshotViewportSizeFrom,
   unionRects,
 } from './rect.ts';
@@ -67,6 +68,13 @@ test('the sentinel would survive any check that only looks at components and ext
 // #3182: the viewport a response publishes has exactly one construction path and exactly one wire
 // re-read, and both answer a box they cannot accept with absence. A zero the producer answered with
 // has to become "unknown", never a claim that the screen has no width.
+test('snapshotCaptureScaleFrom publishes only a positive finite scale', () => {
+  assert.equal(snapshotCaptureScaleFrom(1.5), 1.5);
+  for (const value of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(snapshotCaptureScaleFrom(value), undefined, String(value));
+  }
+});
+
 test('snapshotViewportSizeFrom publishes only a box the rect guard accepts (#3182)', () => {
   assert.deepEqual(snapshotViewportSizeFrom({ x: 12, y: -40, width: 390, height: 844 }), {
     width: 390,
