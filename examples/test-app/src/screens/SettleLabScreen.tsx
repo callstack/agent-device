@@ -22,20 +22,23 @@ export function SettleLabScreen() {
   const [toast, setToast] = useState<string | null>(null);
   const opacity = useRef(new Animated.Value(1)).current;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // The newest run owns the screen: an older run's completion never clears a newer run's state or
+  // publishes its stale id, so every final screen names the run that produced it.
+  const latestRun = useRef(0);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const later = (ms: number, effect: () => void) => {
+  const later = (ms: number, id: number, effect: () => void) => {
     const handle = setTimeout(() => {
       timers.current = timers.current.filter((pending) => pending !== handle);
-      effect();
+      if (latestRun.current === id) effect();
     }, ms);
     timers.current.push(handle);
   };
   const nextRun = () => {
-    const next = run + 1;
-    setRun(next);
-    return next;
+    latestRun.current += 1;
+    setRun(latestRun.current);
+    return latestRun.current;
   };
 
   return (
@@ -58,7 +61,7 @@ export function SettleLabScreen() {
           label={`Delay ${delayMs}`}
           onPress={() => {
             const id = nextRun();
-            later(delayMs, () => setStatus(`Delayed ${delayMs} done ${id}`));
+            later(delayMs, id, () => setStatus(`Delayed ${delayMs} done ${id}`));
           }}
         />
       ))}
@@ -74,6 +77,7 @@ export function SettleLabScreen() {
             duration: FADE_MS,
             useNativeDriver: true,
           }).start(() => {
+            if (latestRun.current !== id) return;
             setOverlayVisible(false);
             setStatus(`Overlay gone ${id}`);
           });
@@ -85,7 +89,7 @@ export function SettleLabScreen() {
         onPress={() => {
           const id = nextRun();
           setStage('spinner');
-          later(STAGE_MS, () => {
+          later(STAGE_MS, id, () => {
             setStage('none');
             setStatus(`Stage done ${id}`);
           });
@@ -97,7 +101,7 @@ export function SettleLabScreen() {
         onPress={() => {
           const id = nextRun();
           setStage('plain');
-          later(STAGE_MS, () => {
+          later(STAGE_MS, id, () => {
             setStage('none');
             setStatus(`Stage done ${id}`);
           });
@@ -109,7 +113,7 @@ export function SettleLabScreen() {
         onPress={() => {
           const id = nextRun();
           setToast('Saving');
-          later(NAVIGATE_AFTER_TOAST_MS, () => {
+          later(NAVIGATE_AFTER_TOAST_MS, id, () => {
             setToast(null);
             router.push({ pathname: '/settle-lab-result', params: { run: String(id) } });
           });
