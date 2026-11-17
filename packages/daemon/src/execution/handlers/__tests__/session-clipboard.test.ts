@@ -256,10 +256,31 @@ test('clipboard write with no text argument reports how to clear instead', async
   ).rejects.toThrow('clipboard write requires text (use "" to clear clipboard)');
 });
 
+const iosSimulator: DeviceInfo = {
+  id: 'clipboard-runtime-sim-1',
+  name: 'iPhone',
+  platform: 'apple',
+  kind: 'simulator',
+  target: 'mobile',
+  booted: true,
+};
+
+async function onDarwin<T>(task: () => Promise<T>): Promise<T> {
+  const original = process.platform;
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  try {
+    return await task();
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original, configurable: true });
+  }
+}
+
 for (const action of ['read', 'write'] as const) {
-  test(`clipboard ${action} refuses retirement during device resolution before binding`, async () => {
+  const positionals = action === 'read' ? ['read'] : ['write', 'text'];
+
+  test(`clipboard ${action} refuses retirement during an inventory read before binding`, async () => {
     const spies = harness({ read: available, write: available });
-    const input = request(action === 'read' ? ['read'] : ['write', 'text']);
+    const input = request(positionals);
     const ref = input.sessionStore.lookup(input.sessionName)!;
     mockResolveTargetDevice.mockImplementationOnce(async () => {
       input.sessionStore.retire(ref);
@@ -270,13 +291,49 @@ for (const action of ['read', 'write'] as const) {
       handleSessionClipboardCommand({
         platformServices: daemonPlatformServicesFixture(),
         ...input,
-        req: { ...input.req, flags: { platform: 'android', serial: androidDevice.id } },
+        req: { ...input.req, flags: { platform: 'android', serial: 'clipboard-other-5556' } },
         ...spies,
       }),
     ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+    expect(mockResolveTargetDevice).toHaveBeenCalledOnce();
     expect(spies.inspectFacts).not.toHaveBeenCalled();
     expect(spies.bindDevice).not.toHaveBeenCalled();
     expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+    expect(spies.readClipboard).not.toHaveBeenCalled();
+    expect(spies.writeClipboard).not.toHaveBeenCalled();
+  });
+
+  test(`clipboard ${action} refuses retirement during session resolution of a matching explicit selector before binding`, async () => {
+    const spies = harness({ read: available, write: available }, iosSimulator);
+    const input = request(positionals);
+    const sessionName = input.sessionName;
+    input.sessionStore.retire(input.sessionStore.lookup(sessionName)!);
+    const ref = input.sessionStore.publish(sessionName, makeSession(sessionName, iosSimulator));
+    const observeRunnerSession = vi.fn(async () => {
+      input.sessionStore.retire(ref);
+      input.sessionStore.publish(sessionName, makeSession(sessionName, iosSimulator));
+      return { sessionId: `${iosSimulator.id}:1:1`, alive: true };
+    });
+    await expect(
+      onDarwin(() =>
+        handleSessionClipboardCommand({
+          platformServices: daemonPlatformServicesFixture({
+            appleSessionObservation: {
+              observeRunnerSession,
+              resolveSoleForegroundApp: async () => undefined,
+            },
+          }),
+          ...input,
+          sessionStore: input.sessionStore,
+          req: { ...input.req, flags: { platform: 'ios', udid: iosSimulator.id } },
+          ...spies,
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+    expect(observeRunnerSession).toHaveBeenCalledOnce();
+    expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+    expect(spies.inspectFacts).not.toHaveBeenCalled();
+    expect(spies.bindDevice).not.toHaveBeenCalled();
     expect(spies.readClipboard).not.toHaveBeenCalled();
     expect(spies.writeClipboard).not.toHaveBeenCalled();
   });
