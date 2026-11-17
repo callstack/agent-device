@@ -224,7 +224,7 @@ Platform checks:
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
   When the app autosaves, discards explicitly, requires the flow, or presents the surface as nondismissible, skip that probe.
   Check that each destructive action confirms or offers undo, and that every swipe action is reachable another way.
-  Check each field's return key against its task, for example in a screenshot with the keyboard up. Exercise each control once with press <ref-or-selector> --settle, using reversible test data.
+  To check a field's return key, focus the field, then run keyboard status. Compare returnKey with the field's task. Exercise each control once with press <ref-or-selector> --settle, using reversible test data.
   Follow Apple (https://developer.apple.com/design/human-interface-guidelines/) and Material (https://m3.material.io/foundations/designing/structure) guidance for further platform conventions.
 
 Coverage:
