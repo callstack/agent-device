@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 import { compareVersions } from '@agent-device/host-kit/version';
-import { childPath } from '@agent-device/host-kit/file';
 
 const PACKAGE_NAME = 'agent-device';
 const UPDATE_CHECK_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -39,7 +38,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   if (!shouldEnableUpgradeNotifier(options)) return;
 
   const now = Date.now();
-  const cachePath = childPath(options.stateDir, UPDATE_CHECK_CACHE_FILE);
+  const cachePath = path.join(options.stateDir, UPDATE_CHECK_CACHE_FILE);
   const cache = readUpdateCheckCache(cachePath);
 
   if (shouldShowUpgradeNotice(cache, options.currentVersion)) {

@@ -38,14 +38,8 @@ test('withoutTrailingSeparators cuts a run of separators in linear time and keep
   expect(withoutTrailingSeparators('/tmp/state//')).toBe('/tmp/state');
   expect(withoutTrailingSeparators('state')).toBe('state');
   expect(withoutTrailingSeparators('')).toBe('');
-  if (process.platform === 'win32') {
-    // Windows spells a drive root `C:\`, and cutting it to `C:` would name a drive-RELATIVE path.
-    expect(withoutTrailingSeparators('C:\\')).toBe('C:\\');
-    expect(withoutTrailingSeparators('C:\\state\\')).toBe(String.raw`C:\state`);
-  } else {
-    // On a POSIX host a backslash is an ordinary name character, so it is not cut.
-    expect(withoutTrailingSeparators('state\\')).toBe('state\\');
-  }
+  // What counts as a separator is the platform's, so those cases are in `atomic-file-path-shape.test.ts`,
+  // which names the platform it asks about instead of the one it runs on.
 });
 
 test('parentDirectoryPath cuts the parent without normalizing a step the kernel still has to take', () => {
@@ -66,7 +60,6 @@ test('childPath appends a name where the directory stands, and does not fold a s
   expect(childPath('/r/alias/../state', 'sessions')).toBe('/r/alias/../state/sessions');
   expect(childPath('/r/alias/../state', 'sessions')).not.toBe('/r/state/sessions');
   expect(childPath('/r/state/', 'sessions')).toBe('/r/state/sessions');
-  expect(childPath('/r/state', 'a', 'b')).toBe(`/r/state/a${path.sep}b`);
 });
 
 /**

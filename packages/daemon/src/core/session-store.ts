@@ -5,8 +5,8 @@ import {
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
 import { ensureDaemonStateDir } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { childPath, parentDirectoryPath } from '@agent-device/host-kit/file';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { devicesOverlap } from '@agent-device/kernel/device';
@@ -74,10 +74,12 @@ export class SessionStore {
    */
   readonly host: HostEnvironment;
 
-  constructor(sessionsDir: string, host: HostEnvironment) {
+  constructor(sessionsDir: string, host: HostEnvironment, stateBase?: string) {
     this.sessionsDir = sessionsDir;
     this.host = host;
-    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd);
+    // Carried for the two destinations this store's writer picks itself (ADR 0016); every other name the
+    // store builds stays on `sessionsDir` as the daemon's path owner spelled it.
+    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd, stateBase);
   }
 
   /**
@@ -506,7 +508,7 @@ export class SessionStore {
   defaultTracePath(session: SessionState): string {
     const safeName = safeSessionName(session.name);
     const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
-    return childPath(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
+    return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 
   resolveSessionDir(sessionName: string): string {
@@ -517,9 +519,7 @@ export class SessionStore {
   // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
   // session-lifecycle/internal/session-close.ts.
   resolveDaemonStateDir(): string {
-    // CUT, not `path.dirname`: `this.sessionsDir` may be the verified answer startup handed down, whose
-    // physical name is what the ancestry walk judged, and dirname would spend a step of that chain.
-    return parentDirectoryPath(this.sessionsDir) ?? this.sessionsDir;
+    return path.dirname(this.sessionsDir);
   }
 
   // The daemon-paths owner creates and repairs each level (ADR 0016): under the shared-checkout umask a

@@ -9,7 +9,6 @@ export {
   publishScriptFileSync,
   verifiedDirectoryPath,
   childPath,
-  parentDirectoryPath,
   withoutTrailingSeparators,
   type DurableFilePublishMode,
   type ScriptDestination,

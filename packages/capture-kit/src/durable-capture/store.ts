@@ -4,11 +4,7 @@ import type {
   DurableEnvelopeDecodeOutcome,
   DurableResourceEnvelope,
 } from '@agent-device/contracts/durable-resource-envelope';
-import {
-  childPath,
-  openVerifiedFileForRead,
-  publishDurableFileSync,
-} from '@agent-device/host-kit/file';
+import { openVerifiedFileForRead, publishDurableFileSync } from '@agent-device/host-kit/file';
 import { decodeDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 
 export type DurableCaptureResourceRecord<K extends string> =
@@ -73,14 +69,11 @@ export function createDurableCaptureResourceStore<K extends string>(
       } catch {
         return [];
       }
-      return (
-        entries
-          .filter((entry) => entry.isDirectory())
-          // Appended: `sessionsDir` may be the verified chain, and a fold would re-read another tree.
-          .map((entry) => resolvePath(childPath(sessionsDir, entry.name)))
-          .filter(pathEntryExistsWithoutFollowing)
-          .sort()
-      );
+      return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => resolvePath(path.join(sessionsDir, entry.name)))
+        .filter(pathEntryExistsWithoutFollowing)
+        .sort();
     },
   });
 }

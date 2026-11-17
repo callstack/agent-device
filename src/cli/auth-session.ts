@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readCloudJsonResponse } from './cloud-response.ts';
-import { childPath } from '@agent-device/host-kit/file';
 
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
@@ -314,7 +313,7 @@ export function removeCliSession(options: { stateDir: string }): boolean {
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
-  return childPath(stateDir, 'auth', 'cli-session.json');
+  return path.join(stateDir, 'auth', 'cli-session.json');
 }
 
 export function summarizeCliSession(options: { stateDir: string; now?: () => number }): {

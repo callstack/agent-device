@@ -3,7 +3,6 @@ import path from 'node:path';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { childPath } from '@agent-device/host-kit/file';
 
 /** Path to session-scoped platform subprocess output, such as Apple runner xcodebuild logs. */
 export function resolveSessionRunnerLogPath(sessionDir: string): string {
@@ -53,9 +52,7 @@ export function resolveRemoteRequestDiagnosticsPath(
   ref: DiagnosticsRecordRef,
 ): string {
   return resolveSessionRequestLogPath(
-    // Appended, not joined: see `childPath`. A folded `remote-diagnostics` would land client diagnostics for
-    // one state dir inside a different directory than the daemon writes its own beside.
-    resolveSessionDir(childPath(stateDir, 'remote-diagnostics'), ref.session),
+    resolveSessionDir(path.join(stateDir, 'remote-diagnostics'), ref.session),
     ref.requestId,
   );
 }
@@ -73,18 +70,15 @@ export function resolveSessionDir(sessionsDir: string, sessionName: string): str
       `Invalid session name ${JSON.stringify(sessionName)}: a session name cannot be empty, ".", or "..".`,
     );
   }
-  // Appended, not joined, for the same reason every name below a state dir is: `safeSessionName` cannot
-  // produce a separator or a step, and `path.join` would still normalize a `..` carried in `sessionsDir`
-  // itself — which for a verified directory is exactly the name the ancestry walk arrived at.
-  return childPath(sessionsDir, safeSessionName(sessionName));
+  return path.join(sessionsDir, safeSessionName(sessionName));
 }
 
 export function resolveSessionAppLogPath(sessionsDir: string, address: string): string {
-  return childPath(resolveSessionDir(sessionsDir, address), 'app.log');
+  return path.join(resolveSessionDir(sessionsDir, address), 'app.log');
 }
 
 export function resolveSessionAppLogPidPath(sessionsDir: string, address: string): string {
-  return childPath(resolveSessionDir(sessionsDir, address), 'app-log.pid');
+  return path.join(resolveSessionDir(sessionsDir, address), 'app-log.pid');
 }
 
 type ManagedSessionArtifactPath = Readonly<{

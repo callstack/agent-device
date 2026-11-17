@@ -468,71 +468,71 @@ export function verifiedDirectoryAncestry(
 }
 
 /**
- * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the ancestry above it on
- * the way, and answers the name every path below it has to be built from. The final component is CUT from the
- * spelling and re-attached to the judged parent, never normalized: `alias/../state` is not `/state`, and a
- * trailing separator is cut before anything looks the entry up (ADR 0016). The
- * entry `directory` names is answered as a name inside a judged directory, not followed or created.
+ * Resolves `directory` ONCE to the physical path the kernel takes to it, judging the ancestry above it, and
+ * answers the name every path below it has to be built from. The last component is CUT and re-attached to the
+ * judged parent, never normalized: `alias/../state` is not `/state`, because `..` steps back from wherever
+ * `alias` PHYSICALLY stands, and `state/` resolves THROUGH a link at `state` (ADR 0016).
  */
 export function verifiedDirectoryPath(
   directory: string,
+  windows = winHost(),
 ):
   | Readonly<{ physical: string }>
   | Readonly<{ ancestor: string; exposure: ScriptAncestryExposure }> {
-  const spelled = withoutTrailingSeparators(directory);
-  const parent = parentDirectoryPath(spelled);
-  const name = spelled.slice((parent ?? '').length + 1);
-  // Nothing above it to walk (`state`, or the root): judging one would put the working directory in the chain.
+  const spelled = withoutTrailingSeparators(directory, windows);
+  // CUT at BOTH ends by the platform's rule. Slicing at `dirname`'s length spends the name's first character
+  // when its parent is a root: `/state` answered `//tate`, and every real child of a root was then refused.
+  const name = (windows ? path.win32 : path.posix).basename(spelled);
+  const parent = parentDirectoryPath(spelled, windows);
+  // Nothing above it to walk: judging `state` would put the working directory in the chain.
   if (parent === undefined || name === '')
     return { ancestor: directory, exposure: 'relative_destination' };
   const judged = verifiedDirectoryAncestry(parent);
   if (!('physical' in judged)) return judged;
-  return { physical: `${judged.physical}/${name}` };
+  return { physical: childPath(judged.physical, name, windows) };
 }
 
+const winHost = () => process.platform === 'win32'; // read per call: a test moves the platform
+
 /**
- * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing
- * separator resolves THROUGH a link at that name. The scan is an index walk from the end, not a regular
- * expression, so no run of separators makes it reconsider a prefix. Only this platform's separator is cut (a
- * `\` is a name character on POSIX). A root keeps one: `//` cut to `` names nothing, `C:` is drive-RELATIVE.
+ * `directory` with its trailing separators cut off: the name an entry is looked up under, since a trailing one
+ * resolves THROUGH a link at that name. A linear walk, not a regular expression. A root keeps one: `C:` cut
+ * from `C:\` is drive-RELATIVE, so the two spellings name other ground.
  */
-export function withoutTrailingSeparators(directory: string): string {
-  const separator = path.sep;
+export function withoutTrailingSeparators(directory: string, windows = winHost()): string {
+  const separator = windows ? '\\' : '/';
   let end = directory.length;
   while (end > 0 && (directory[end - 1] === '/' || directory[end - 1] === separator)) end -= 1;
-  if (end === directory.length) return directory;
   if (end === 0) return directory.length === 0 ? directory : '/';
-  if (separator !== '/' && directory[end - 1] === ':') return directory.slice(0, end + 1);
+  if (windows && directory[end - 1] === ':') return directory.slice(0, end + 1);
   return directory.slice(0, end);
 }
 
 /**
- * The name `names` occupy inside `directory`, spelled so they stay WHERE `directory` stands. NOT `path.join`,
- * which normalizes: with `alias` a link into `actual/x`, the kernel creates `alias/../state/sessions` under
- * `actual/state/sessions` while `join` answers `state/sessions` beside the alias — two directories, one
- * judged and one written, which is the divergence ADR 0016 names.
+ * The name `name` occupies inside `directory`, spelled so it stays WHERE `directory` stands. NOT `path.join`,
+ * which normalizes: appending keeps the step in `alias/../state`, `join` answers `state` beside the alias.
  */
-export function childPath(directory: string, ...names: readonly string[]): string {
-  let spelled = withoutTrailingSeparators(directory);
-  for (const name of names)
-    spelled =
-      spelled === ''
-        ? name
-        : spelled.endsWith('/') || spelled.endsWith(path.sep)
-          ? `${spelled}${name}`
-          : `${spelled}${path.sep}${name}`;
-  return spelled;
+export function childPath(directory: string, name: string, windows = winHost()): string {
+  const spelled = withoutTrailingSeparators(directory, windows);
+  const separator = windows ? '\\' : '/';
+  // A root keeps its one separator, so the name is already attached, and so is a name with nothing above it.
+  return spelled === '' || spelled.endsWith('/') || spelled.endsWith(separator)
+    ? `${spelled}${name}`
+    : `${spelled}${separator}${name}`;
 }
 
 /**
- * The directory `directory` stands IN, cut at its last separator with nothing else normalized, or `undefined`
- * when nothing stands above it. `path.dirname` would fold a surviving `..`, which is a step the kernel takes.
+ * The directory `directory` stands IN, or `undefined` when nothing stands above it. Asks the platform: Windows
+ * reads `/` AND `\\` as separators, `C:\state` stands in `C:\`, `\\\\srv\\share` in nothing, `C:` alone is
+ * drive-RELATIVE. `dirname` is safe: it cuts one separator without folding a surviving `..`.
  */
-export function parentDirectoryPath(directory: string): string | undefined {
-  const spelled = withoutTrailingSeparators(directory);
-  const cut = spelled.lastIndexOf('/');
-  if (cut < 0) return undefined;
-  return cut === 0 ? '/' : spelled.slice(0, cut);
+export function parentDirectoryPath(directory: string, windows = winHost()): string | undefined {
+  const platform = windows ? path.win32 : path.posix;
+  const spelled = withoutTrailingSeparators(directory, windows);
+  // `dirname('/a//b')` and a share root keep a separator on the end.
+  const parent = withoutTrailingSeparators(platform.dirname(spelled), windows);
+  // A root is its own parent, and `dirname` answers `.` for a bare name: neither is a base to build under.
+  return parent === spelled || parent === '.' ? undefined : parent;
 }
 
 /** The name {@link verifiedDirectoryAncestry} asks the walk about, which it never creates. */

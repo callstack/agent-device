@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
-import { childPath, publishFileSync } from '@agent-device/host-kit/file';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { targetAppId, type InspectorSession } from './metro-inspector.ts';
 import {
   callRuntime,
@@ -98,7 +98,7 @@ function parseProfileArgs(args: string[]): ProfileArgs {
 }
 
 function savedProfilePath(options: ReactDevtoolsCommandOptions): string {
-  return childPath(options.stateDir, 'react-profiles', `${safeSessionName(options.session)}.json`);
+  return path.join(options.stateDir, 'react-profiles', `${safeSessionName(options.session)}.json`);
 }
 
 function writeSavedProfile(

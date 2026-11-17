@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { childPath, expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -41,19 +41,14 @@ export function resolveDaemonPaths(
   stateDir: string | undefined,
   options: ResolveDaemonPathsOptions = {},
 ): DaemonPaths {
-  // Every name below is APPENDED, never `path.join`ed: joining normalizes, and a state dir spelled through an
-  // alias and a step back would put `sessions/`, `daemon.json` and the log somewhere other than where the
-  // kernel creates, reads and repairs them. Appending keeps one spelling that both this process and the
-  // daemon it resolves agree on, and leaves normalization to the one place that resolves the base for real
-  // (`verifiedDirectoryPath`, which the state repair runs).
   const baseDir = resolveStateDir(stateDir, options);
   return {
     baseDir,
-    infoPath: childPath(baseDir, 'daemon.json'),
-    lockPath: childPath(baseDir, 'daemon.lock'),
-    logPath: childPath(baseDir, 'daemon.log'),
-    allocationsDir: childPath(baseDir, 'allocations'),
-    sessionsDir: childPath(baseDir, 'sessions'),
+    infoPath: path.join(baseDir, 'daemon.json'),
+    lockPath: path.join(baseDir, 'daemon.lock'),
+    logPath: path.join(baseDir, 'daemon.log'),
+    allocationsDir: path.join(baseDir, 'allocations'),
+    sessionsDir: path.join(baseDir, 'sessions'),
   };
 }
 

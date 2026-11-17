@@ -11,11 +11,9 @@ import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
-  type DaemonPaths,
   resolveDaemonServerMode,
   type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { childPath } from '@agent-device/host-kit/file';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import { installProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 import {
@@ -209,34 +207,17 @@ async function startDaemonRuntimeOnHost(
     flushDaemonStartupDiagnostics,
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
+  const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   // The daemon's own state dirs are on the chain of every recording it picks a path for, and a
   // destination under a group-writable directory is refused (ADR 0016). Both are created and forced to 0700
   // here, because a state dir an older version made under umask 002 stands at 0775 and `sessions/` is
   // otherwise only ever created as a side effect of a per-session mkdir.
   //
-  // The ANSWER of each repair replaces the name it was given, and the runtime is built from it. An answer is
-  // the physical directory the ancestry walk arrived at, and `alias/../state` steps out of wherever `alias`
-  // physically stands, so the two spellings are different TEXT. The daemon cannot create anything from the
-  // spelled one: host-kit normalizes a destination on the way in (`path.dirname` of the lock's own path folds
-  // `alias/../state/daemon.lock/.owner.json` to `<root>/state/daemon.lock/…`), so the daemon's lock, log and
-  // registration would be written beside the ALIAS while the repair judged where the alias stands. Recording
-  // from the spelled name is the same bug one level down: recordings land where no ancestry was asked about,
-  // and that directory's mode gets forced (ADR 0016).
-  //
-  // Clients keep the spelled name and reach the same entries, because they only READ these: the kernel
-  // resolves the `..` for them. Only a process that CREATES below the state dir has to stand on the verified
-  // base, because only a creation is exposed to a caller-side normalize.
-  const baseDir = ensureDaemonStateDir(daemonPaths.baseDir, daemonPaths.baseDir);
-  const verifiedPaths: DaemonPaths = {
-    ...daemonPaths,
-    baseDir,
-    infoPath: childPath(baseDir, 'daemon.json'),
-    lockPath: childPath(baseDir, 'daemon.lock'),
-    logPath: childPath(baseDir, 'daemon.log'),
-    allocationsDir: childPath(baseDir, 'allocations'),
-    sessionsDir: ensureDaemonStateDir(childPath(baseDir, 'sessions'), baseDir),
-  };
-  const { infoPath, logPath, sessionsDir } = verifiedPaths;
+  // Each answer is the PHYSICAL spelling of the directory it created or repaired, and `ensureSessionDir` and
+  // the script writer read that answer for themselves, so every level they build is one the walk judged —
+  // whether `AGENT_DEVICE_STATE_DIR` was spelled through a link or with a step back.
+  ensureDaemonStateDir(baseDir, baseDir);
+  ensureDaemonStateDir(sessionsDir, baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -249,7 +230,10 @@ async function startDaemonRuntimeOnHost(
     ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
     : undefined;
 
-  const sessionStore = new SessionStore(sessionsDir, host);
+  // `baseDir` travels with `sessionsDir` because the two are not one spelling: `resolveDaemonPaths` keeps the
+  // base as the setting spells it and builds `sessionsDir` with `path.join`, which folds a step out of it. The
+  // state repair reads the first and writes the second, so the store has to be told which one is the base.
+  const sessionStore = new SessionStore(sessionsDir, host, baseDir);
   const deps = await options.composeDeps({
     host,
     baseDir,
@@ -566,15 +550,7 @@ async function startDaemonRuntimeOnHost(
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
   };
 
-  // The registration CREATES the lock, the record and the log, so those go to the verified base. Its
-  // `baseDir` is a different kind of name: the owner derives the shutdown report and the startup-marker
-  // sweep from it, both clients read them back from THEIR configured base, and the helpers that spell those
-  // two names still join rather than append. Keeping one configured base there is what makes daemon and
-  // client name one file each; the recording chain never reads through it.
-  const acquisition = await tryAcquireDaemonRegistration({
-    ...verifiedPaths,
-    baseDir: daemonPaths.baseDir,
-  });
+  const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
   if (acquisition.status !== 'acquired') {
     throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
       reason: 'daemon_registration_refused',
@@ -594,9 +570,7 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
-  // The launcher names this file before any verification runs, and the client polls it by that pid from
-  // the SAME setting, so the daemon names it the same way: one text, one file, whatever the chain is.
-  const startupPhasesPath = resolveDaemonStartupPhasesPath(daemonPaths.baseDir, process.pid);
+  const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
   const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
     recordDaemonStartupMarker(startupPhasesPath, phase, (error) => {
       stderr.write(`Daemon startup marker write failed: ${error.message}\n`);

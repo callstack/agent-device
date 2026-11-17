@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { childPath } from '@agent-device/host-kit/file';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { isRemoteConfigReferenced } from '@agent-device/remote/remote-connection-state';
 import type {
@@ -21,7 +20,7 @@ export function writeGeneratedRemoteConfig(options: {
   profile: RemoteConfigProfile;
 }): string {
   const normalized = normalizeJson(stripGeneratedProfileSecrets(options.profile));
-  const configDir = childPath(options.stateDir, 'remote-connections', 'generated');
+  const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const configPath = path.join(
     configDir,
@@ -41,7 +40,7 @@ export function removeGeneratedRemoteConfigIfUnused(options: {
   stateDir: string;
   remoteConfigPath: string;
 }): void {
-  const configDir = childPath(options.stateDir, 'remote-connections', 'generated');
+  const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
   if (path.dirname(path.resolve(options.remoteConfigPath)) !== path.resolve(configDir)) return;
   if (isRemoteConfigReferenced(options)) return;
   fs.rmSync(options.remoteConfigPath, { force: true });

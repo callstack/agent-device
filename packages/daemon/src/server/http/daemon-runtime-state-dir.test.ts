@@ -157,32 +157,37 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'startup builds the runtime on the state chain it verified, not the one the setting spells',
+  'startup keeps the state chain it verified for the scripts it picks, and nothing else',
   async () => {
     // `AGENT_DEVICE_STATE_DIR=<root>/alias/../state`, with `alias` a link into `actual/x`. The kernel resolves
-    // that base to `<root>/actual/state`, and it creates under there; `path.join` and `path.resolve` fold the
-    // step away and answer `<root>/state`, which is a DIFFERENT directory that happens to exist here. Startup
-    // verified the first chain, so the runtime, its store and every recording the daemon picks a path for have
-    // to be built on it. Building them on the folded name instead published recordings into a directory no
-    // ancestry was ever asked about, and forced its mode from 0755 to 0700 while the chain startup repaired
-    // stood elsewhere (ADR 0016).
+    // that base to `<root>/actual/state`, and creates under there; `path.join` folds the step away and answers
+    // `<root>/state`, a DIFFERENT directory that happens to exist here. Two things follow, and they are not the
+    // same demand:
+    //
+    // - The runtime, its store, the lock, the registration and the tombstones keep the name the setting spells,
+    //   as they have always done. A client reads those entries by the same setting and the same rule, and the
+    //   kernel resolves the step for it, so one spelling is one entry. Answering them with the verified name
+    //   would move them out of what every client can name.
+    // - The two destinations the DAEMON picks for itself — a default recording, and a remote version — are
+    //   CREATED below that base, so they go where the walk arrived and only if that chain is private ground.
     const root = mkdtempForTestSync('agent-device-startup-state-alias-');
     // `actual/x` exists, and `actual` (one step above where the link lands) is where the kernel's `..`
     // arrives — so the state base has to be there before the walk can stand on it.
     fs.mkdirSync(path.join(root, 'actual', 'x'), { recursive: true });
     fs.symlinkSync(path.join(root, 'actual', 'x'), path.join(root, 'alias'));
+    // Spelled by hand: `path.join` would fold the step here, and the setting has to carry it to the daemon.
+    const configuredBase = `${root}/alias/../state`;
     const verifiedBase = path.join(root, 'actual', 'state');
     const foldedBase = path.join(root, 'state');
     // The folded name already stands, the way a previous run that folded left it: owned by this user, and open.
     fs.mkdirSync(path.join(foldedBase, 'sessions'), { recursive: true });
     fs.chmodSync(foldedBase, 0o755);
 
-    // The composition input is the real construction: it is what the server passes to the root's factory, and
-    // `resolveSessionDir` is the store the server built there.
+    // The composition input is the real construction: it is what the server passes to the root's factory.
     let composed: DaemonRuntimeDepsInput | undefined;
     const { runtime, skipped } = await withDiagnosticsScope({ session: 'daemon' }, async () => ({
       runtime: await startDaemonRuntime({
-        host: hostFor(`${path.join(root, 'alias')}/../state`),
+        host: hostFor(configuredBase),
         ...silent,
         composeDeps: daemonRuntimeDepsFixture((input) => {
           composed = input;
@@ -192,48 +197,48 @@ test.skipIf(process.platform === 'win32')(
       skipped: countDiagnosticEventsByPhase(['daemon_state_mode_repair_skipped']),
     }));
     try {
+      // Everything a CLIENT names too — the base, the sessions dir, and behind them the lock, the registration
+      // and the tombstones — keeps the spelling the setting gave, exactly as on main. A client reads those
+      // entries by the same setting with the same rule, and the kernel resolves the step for it, so one
+      // spelling is one entry. Rebinding them to the verified chain would move them out of what a client can
+      // name. `baseDir` is the spelled text; `sessionsDir` is what `path.join` has always made of it.
       const input = composed!;
-      expect(input.baseDir).toBe(verifiedBase);
-      expect(input.sessionsDir).toBe(path.join(verifiedBase, 'sessions'));
-      expect(input.resolveSessionDir('journey')).toBe(
-        path.join(verifiedBase, 'sessions', 'journey'),
-      );
-      // Startup repaired what it verified: the chain it reached stands private, and nothing was skipped —
-      // every level was reachable by descriptor.
-      expect(skipped).toBe(0);
+      expect(input.baseDir).toBe(`${root}/alias/../state`);
+      expect(input.sessionsDir).toBe(path.join(foldedBase, 'sessions'));
+      // Startup repaired the base it verified: the chain the kernel arrives at stands private.
       expect(modeOf(verifiedBase)).toBe(0o700);
-      expect(modeOf(path.join(verifiedBase, 'sessions'))).toBe(0o700);
+      // Exactly one level is skipped, and it is the honest one: startup also ensures `sessions/` under the name
+      // the setting spells, and that name is the FOLDED text, so the repair of the verified chain stops at a
+      // level that spelled name never creates. Narrowing to the two script destinations leaves that as it is;
+      // the writer asks for the same chain again, for the directories it creates itself.
+      expect(skipped).toBe(1);
 
-      // The recording the daemon picks a path for itself lands on that chain, through the store the server
-      // constructed.
-      const store = new SessionStore(input.sessionsDir, createTestHostEnvironment());
-      const written = store.writeSessionLog(
-        store.publish(
-          'journey',
-          makeAuthoringSession('journey', {
-            scriptPublication: authoringPublication('armed', {}),
-            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
-          }),
-        ),
-      );
+      const store = new SessionStore(input.sessionsDir, createTestHostEnvironment(), input.baseDir);
+      const record = (name: string, extra: Parameters<typeof authoringPublication>[1]) =>
+        store.writeSessionLog(
+          store.publish(
+            name,
+            makeAuthoringSession(name, {
+              scriptPublication: authoringPublication('armed', extra),
+              actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
+            }),
+          ),
+        );
+
+      // The default recording: a directory this daemon creates for itself, so it stands on the chain judged
+      // from the base, and not on the folded text `path.join` made of the same setting.
+      const written = record('journey', {});
       if (!written.written) throw new Error(`recording refused: ${JSON.stringify(written)}`);
       expect(path.dirname(written.path)).toBe(path.join(verifiedBase, 'sessions'));
-      expect(written.path.startsWith(path.join(verifiedBase, 'sessions') + path.sep)).toBe(true);
-      const version = store.writeRemoteScriptVersion(
-        store.publish(
-          'download',
-          makeAuthoringSession('download', {
-            scriptPublication: authoringPublication('armed', { remote: true }),
-            actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
-          }),
-        ),
-      );
+      // The remote version, in the directory the same answer names for it.
+      const version = record('download', { remote: true });
       if (!version.written) throw new Error(`remote version refused: ${JSON.stringify(version)}`);
       expect(path.dirname(version.path)).toBe(
         path.join(verifiedBase, 'sessions', 'remote-scripts'),
       );
+      expect(modeOf(path.join(verifiedBase, 'sessions'))).toBe(0o700);
 
-      // The folded directory is the proof: nobody judged it, so nobody changed it or wrote in it.
+      // The folded directory is the proof: nobody judged it, so nobody wrote in it or changed its mode.
       expect(modeOf(foldedBase)).toBe(0o755);
       expect(fs.readdirSync(path.join(foldedBase, 'sessions'))).toEqual([]);
     } finally {

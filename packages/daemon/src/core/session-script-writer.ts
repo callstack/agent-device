@@ -1,5 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -18,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { childPath, parentDirectoryPath, publishScriptFileSync } from '@agent-device/host-kit/file';
+import { childPath, publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -110,13 +111,22 @@ function isPublicationWriteBlocked(session: SessionState): boolean {
 }
 
 export class SessionScriptWriter {
-  private readonly sessionsDir: string;
   /** The runtime host's working directory, the base every recorded script target resolves against. */
   private readonly hostCwd: string;
+  /** The directory this store's sessions live in, spelled the way the path owner spells it. */
+  private readonly sessionsDir: string;
+  /** The state base that directory hangs off, as the daemon's path owner spells that base. */
+  private readonly stateBase: string;
 
-  constructor(sessionsDir: string, hostCwd: string) {
-    this.sessionsDir = sessionsDir;
+  /**
+   * `stateBase` is the state directory `sessionsDir` was built from, and the default is that directory's own
+   * parent. The daemon passes it explicitly because the two are NOT the same text once the setting names the
+   * state dir through a link and a step back — see {@link resolveScriptDestination}.
+   */
+  constructor(sessionsDir: string, hostCwd: string, stateBase = path.dirname(sessionsDir)) {
     this.hostCwd = hostCwd;
+    this.sessionsDir = sessionsDir;
+    this.stateBase = stateBase;
   }
 
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -177,18 +187,20 @@ export class SessionScriptWriter {
     session: SessionState,
     remote: boolean,
   ): { path: string; pickedByDaemon: boolean; privateChain: boolean } {
-    // `parentDirectoryPath` and `childPath` rather than `path.dirname` and `path.join`: this directory is the
-    // verified answer startup handed down, and a fold would spend the walk that judged it.
-    const stateBase = parentDirectoryPath(this.sessionsDir) ?? this.sessionsDir;
+    // Re-spelled below the base, not used as the store handed it over. The daemon's path owner keeps the
+    // setting's own text for the base and builds `sessionsDir` with `path.join`, which folds a `..` out of
+    // it, so the folded name is NOT the chain the walk judges — and only the chain gets created and judged.
+    // A caller that names no base gets its own parent, so this answers the directory it was given.
+    const sessionsDir = childPath(this.stateBase, path.basename(this.sessionsDir));
     if (remote) {
       const directory = ensurePrivateDaemonStateDir(
-        childPath(this.sessionsDir, 'remote-scripts'),
-        stateBase,
+        childPath(sessionsDir, 'remote-scripts'),
+        this.stateBase,
       );
       return {
         ...directory,
         pickedByDaemon: true,
-        path: childPath(directory.path, `${crypto.randomUUID()}.ad`),
+        path: path.join(directory.path, `${crypto.randomUUID()}.ad`),
       };
     }
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
@@ -201,11 +213,11 @@ export class SessionScriptWriter {
     }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
-    const own = ensurePrivateDaemonStateDir(this.sessionsDir, stateBase);
+    const own = ensurePrivateDaemonStateDir(sessionsDir, this.stateBase);
     return {
       ...own,
       pickedByDaemon: true,
-      path: childPath(own.path, `${safeName}-${timestamp}.ad`),
+      path: path.join(own.path, `${safeName}-${timestamp}.ad`),
     };
   }
 }

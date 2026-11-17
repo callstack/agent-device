@@ -14,7 +14,7 @@ import {
   type DeviceTarget,
   type PublicPlatform,
 } from '@agent-device/kernel/device';
-import { childPath, publishFileSync } from '@agent-device/host-kit/file';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
@@ -293,9 +293,7 @@ export function isRemoteConfigReferenced(options: {
   stateDir: string;
   remoteConfigPath: string;
 }): boolean {
-  // Appended, not joined: this is the read half of the record tree `resolveRemoteConnectionsPath`
-  // writes, and a folded read of an appended tree would find no directory and answer 'no references'.
-  const recordsDir = childPath(options.stateDir, 'remote-connections');
+  const recordsDir = path.join(options.stateDir, 'remote-connections');
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(recordsDir, { withFileTypes: true });
@@ -519,9 +517,7 @@ function remoteConnectionStatePath(options: { stateDir: string; session: string 
 }
 
 function activeConnectionStatePath(stateDir: string): string {
-  // Appended, not joined: the state dir may be spelled through a link or a step back, and folding it
-  // would name a different directory than the daemon that verified the chain reads and writes.
-  return childPath(stateDir, 'remote-connections', '.active-session.json');
+  return path.join(stateDir, 'remote-connections', '.active-session.json');
 }
 
 export function readActiveConnectionState(options: {
