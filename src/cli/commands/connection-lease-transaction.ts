@@ -114,15 +114,17 @@ export async function acquireConnectionLease(options: {
   nextFlags: CliFlags;
   positionals?: string[];
   leaseLedger: LeaseLedger;
+  env: NodeJS.ProcessEnv;
 }): Promise<{ state: RemoteConnectionState; changed: boolean }> {
   const { command, client, state, nextFlags, leaseLedger } = options;
   const deferredAppSelection = connectionProviderCapabilities(
     state.leaseProvider,
+    options.env,
   ).supportsDeferredAppSelection;
   const initialApp =
     deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
   if (deferredAppSelection) delete nextFlags.providerApp;
-  const leasePolicy = connectionLeasePolicyForState(state);
+  const leasePolicy = connectionLeasePolicyForState(state, options.env);
   let nextState = state;
   let changed = false;
   if (leasePolicy.shouldAllocate(command)) {
@@ -135,6 +137,7 @@ export async function acquireConnectionLease(options: {
       initialApp,
       policy: leasePolicy,
       leaseLedger,
+      env: options.env,
     });
     nextState = materialized.state;
     changed = materialized.changed;
@@ -184,6 +187,7 @@ async function materializeLeaseForCommand(options: {
   initialApp?: string;
   policy: ConnectionLeasePolicy;
   leaseLedger: LeaseLedger;
+  env: NodeJS.ProcessEnv;
 }): Promise<{ state: RemoteConnectionState; changed: boolean }> {
   const { command, client, state, nextFlags, policy, leaseLedger } = options;
   const preliminaryLeaseBackend = state.leaseBackend ?? resolveRequestedLeaseBackend(nextFlags);
@@ -218,6 +222,7 @@ async function materializeLeaseForCommand(options: {
     options.initialApp,
     resolvedLeaseState.allocateBySpec,
     leaseLedger,
+    options.env,
   );
   if (resolvedLeaseState.allocateBySpec) {
     const bound = await bindLeaseNamedDevice({
@@ -237,6 +242,7 @@ async function materializeLeaseForCommand(options: {
           options.initialApp,
           undefined,
           leaseLedger,
+          options.env,
         ),
     });
     nextState = bound.state;
@@ -357,6 +363,7 @@ async function allocateOrReuseLease(
   initialApp: string | undefined,
   allocateBySpec: boolean | undefined,
   leaseLedger: LeaseLedger,
+  env: NodeJS.ProcessEnv,
 ): Promise<{ lease: Lease; acquired: boolean }> {
   const connection = buildRemoteConnectionRequestMetadata(state);
   if (state.leaseId && state.leaseBackend === leaseBackend) {
@@ -365,7 +372,7 @@ async function allocateOrReuseLease(
       runId: state.runId,
       leaseBackend,
       ...connection,
-      ttlMs: policy.ttlMs(state),
+      ttlMs: policy.ttlMs(state, env),
     });
     if (existing) return { lease: existing, acquired: false };
   }
@@ -386,7 +393,7 @@ async function allocateOrReuseLease(
     leaseBackend,
     ...connection,
     ...(allocateBySpec ? { deviceKey: undefined } : {}),
-    ttlMs: policy.ttlMs(state),
+    ttlMs: policy.ttlMs(state, env),
     ...providerFlags,
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
