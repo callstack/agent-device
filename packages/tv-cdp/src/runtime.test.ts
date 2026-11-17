@@ -26,6 +26,8 @@ const FRAME = Buffer.from('png frame');
 const CAPTURE: SnapshotCapture = {
   title: 'Example',
   truncated: false,
+  viewport: VIEWPORT,
+  pageScale: 1,
   // The DOM walk gives every node it keeps a rect.
   nodes: [
     { index: 0, depth: 0, type: 'main', label: 'Home' },
@@ -103,6 +105,7 @@ async function fakePage() {
   let running = true;
   let loaded = true;
   let visibility = 'visible';
+  let pageScale: number | null = 1;
   let readinessChecks = 0;
   const evaluated = (expression: string) => {
     if (expression.includes('readyState')) {
@@ -111,7 +114,7 @@ async function fakePage() {
     }
     if (expression === '({ width: innerWidth, height: innerHeight })') return VIEWPORT;
     if (expression === 'document.visibilityState') return visibility;
-    return CAPTURE;
+    return { ...CAPTURE, pageScale };
   };
   const answer = (method: string, params: Record<string, unknown>) => {
     if (method === 'Page.captureScreenshot') return { data: FRAME.toString('base64') };
@@ -160,6 +163,9 @@ async function fakePage() {
     },
     hide: () => {
       visibility = 'hidden';
+    },
+    zoom: (scale: number | null) => {
+      pageScale = scale;
     },
     readinessChecks: () => readinessChecks,
     close: async () => {
@@ -462,8 +468,10 @@ test('filling an empty value selects the field contents and deletes them with Ba
   assert.deepEqual(steps, ['select', 'keyDown Backspace', 'keyUp Backspace']);
 });
 
-async function capturedNodes(options: Readonly<{ scope?: string; interactiveOnly?: boolean }>) {
-  const { runtime, device } = await openedTv();
+async function captureThroughBinding(
+  { runtime, device }: Awaited<ReturnType<typeof openedTv>>,
+  options: Readonly<{ scope?: string; interactiveOnly?: boolean }> = {},
+) {
   const operations = bindProviderSnapshotInteractor({
     device,
     signal: new AbortController().signal,
@@ -471,7 +479,11 @@ async function capturedNodes(options: Readonly<{ scope?: string; interactiveOnly
   });
   const result = await operations.captureSnapshot({ options });
   assert.ok('nodes' in result);
-  return result.nodes ?? [];
+  return result;
+}
+
+async function capturedNodes(options: Readonly<{ scope?: string; interactiveOnly?: boolean }>) {
+  return (await captureThroughBinding(await openedTv(), options)).nodes ?? [];
 }
 
 async function capturedLabels(options: Readonly<{ scope?: string; interactiveOnly?: boolean }>) {
@@ -480,6 +492,27 @@ async function capturedLabels(options: Readonly<{ scope?: string; interactiveOnl
 
 test('a scoped capture through the provider snapshot binding returns only that subtree', async () => {
   assert.deepEqual(await capturedLabels({ scope: 'Settings' }), ['Settings', 'Sound']);
+});
+
+test('a capture publishes the page scale its screenshots magnify rects by, and its viewport', async () => {
+  const opened = await openedTv();
+  opened.page.zoom(1.5);
+
+  const result = await captureThroughBinding(opened);
+
+  assert.deepEqual(
+    { captureScale: result.captureScale, viewport: result.viewport },
+    { captureScale: 1.5, viewport: VIEWPORT },
+  );
+});
+
+test('a capture from a page without visualViewport publishes no capture scale', async () => {
+  const opened = await openedTv();
+  opened.page.zoom(null);
+
+  const result = await captureThroughBinding(opened);
+
+  assert.equal('captureScale' in result, false);
 });
 
 test('an interactive-only capture drops text-only nodes and keeps the ancestors of controls', async () => {

@@ -6,8 +6,8 @@ DevTools Protocol: remote keys, pointer, text, snapshots, screenshots and consol
 
 Status: experimental. Verified on an LG 32LQ63006LA (webOS TV 22): `connect`, `open`,
 `snapshot -i`, `snapshot -s`, `tv-remote` (directions, select, back and the media buttons),
-`is focused`, `press @ref --settle`, `wait text`, `find`, `screenshot`, `logs`, `apps`,
-`appstate`, `close`, `disconnect`.
+`is focused`, `press @ref --settle`, `wait text`, `find`, `screenshot`, `screenshot --crop-on`,
+`logs`, `apps`, `appstate`, `close`, `disconnect`.
 
 ## How it plugs in
 
@@ -77,7 +77,7 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | `apps` | `ares-install --listfull` |
 | `logs` | console calls, exceptions and browser log entries of the attached page, one line each |
 | `snapshot`, `find`, `is`, `get`, `wait` | DOM walk over `Runtime.evaluate`: visible interactive, labelled or text nodes, focus from `document.activeElement`; `-s`, `-d` and `-i` apply to the walk. A control whose centre hit-tests to another element is marked `[covered]` |
-| `screenshot` | `Page.captureScreenshot` |
+| `screenshot` | `Page.captureScreenshot`; `--crop-on <selector>` crops it to the frame of the node the selector resolves in a snapshot taken on the same screen |
 | `click`, `press <x> <y>`, `longpress`, `hover` | `Input.dispatchMouseEvent` (Magic Remote pointer), ending each move with a small wiggle that wakes the cursor |
 | `fill` | pointer press on the field, select its contents, then `Input.insertText`, or Backspace for an empty value |
 | `type` | `Input.insertText` into the focused element |
@@ -111,10 +111,14 @@ in `open`, `power`. webOS has separate Play and Pause key codes and no play-paus
   rather than an error. `open --relaunch` closes the app first, for a cold start.
 - **A second DevTools client on the same page hung in testing.** Close Chrome DevTools and other
   inspector clients attached to the app before a session.
-- **Snapshots are DOM-derived.** Labels come from `aria-label`, `alt`, `title` or own text;
-  rects are CSS px, which match screenshot pixels only at `devicePixelRatio` 1 (1080p apps).
-  The walk does not enter iframes or shadow roots, so overlays rendered there (for example a
-  dev-server error overlay) appear in screenshots but not in snapshots.
+- **Snapshots are DOM-derived.** Labels come from `aria-label`, `alt`, `title` or own text; rects
+  are CSS px, and the screenshot holds the page at CSS px whatever its `devicePixelRatio`: on a
+  1920x1080 TV, an app at `"resolution": "1280x720"` reports 1.5 yet fills only the top-left
+  1280x720 of the capture. `screenshot --crop-on` scales rects by the page's `visualViewport.scale`,
+  which is 1 because webOS ignores the meta viewport, and clips the crop to the page. It refuses a
+  page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
+  enter iframes or shadow roots, so overlays rendered there (for example a dev-server error overlay)
+  appear in screenshots but not in snapshots.
 - **`click`, `press`, `fill` and `focus` refuse a control marked `[covered]`.** A tap at its
   centre would land on the element on top, such as a card's own pressable area. `snapshot -i`
   still lists it, and `tv-remote` reaches it through focus.

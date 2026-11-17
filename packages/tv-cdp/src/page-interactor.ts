@@ -12,6 +12,7 @@ import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import { snapshotCaptureScaleFrom, snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 import { connectCdp, listTargets, withTunnelRemoval } from './cdp.ts';
@@ -329,6 +330,8 @@ export function createPageInteractor(
     },
     async snapshot(options = {}) {
       const capture = await page().evaluate<SnapshotCapture>(SNAPSHOT_EXPRESSION);
+      const captureScale = snapshotCaptureScaleFrom(capture.pageScale);
+      const viewport = snapshotViewportSizeFrom({ x: 0, y: 0, ...capture.viewport });
       return shapeDesktopSurfaceSnapshot(
         stampSnapshotIdentity(
           {
@@ -339,6 +342,10 @@ export function createPageInteractor(
             truncated: capture.truncated,
             appName: capture.title,
             appBundleId: session.appId,
+            // Page.captureScreenshot magnifies CSS px by the page scale and not by
+            // devicePixelRatio: webOS reports 1.5 for a 1280x720 app yet captures it unscaled.
+            ...(captureScale ? { captureScale } : {}),
+            ...(viewport ? { viewport } : {}),
           },
           { backend: 'android', producer: 'cdp-dom' },
         ),

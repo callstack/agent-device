@@ -119,7 +119,16 @@ export const SNAPSHOT_EXPRESSION = `(function () {
   }
 
   if (document.body) walk(document.body, -1, 0, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }, false);
-  return { nodes: nodes, covers: covers, truncated: truncated, title: document.title };
+  var visual = window.visualViewport;
+  var pageScale = visual && visual.offsetLeft === 0 && visual.offsetTop === 0 ? visual.scale : null;
+  return {
+    nodes: nodes,
+    covers: covers,
+    truncated: truncated,
+    title: document.title,
+    viewport: { width: innerWidth, height: innerHeight },
+    pageScale: pageScale
+  };
 })()`;
 
 export type SnapshotCapture = Readonly<{
@@ -128,4 +137,11 @@ export type SnapshotCapture = Readonly<{
   covers: Readonly<Record<number, true | CoveringNodeEvidence>>;
   truncated: boolean;
   title: string;
+  /** The layout viewport, the box the rects are measured in. */
+  viewport: Readonly<{ width: number; height: number }>;
+  /**
+   * `visualViewport.scale`, or null where the page's Chromium predates the API or the visual
+   * viewport is panned away from the layout viewport's origin.
+   */
+  pageScale: number | null;
 }>;

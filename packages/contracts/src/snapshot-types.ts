@@ -5,6 +5,7 @@ import type {
   SnapshotQualityNote,
   IosSnapshotObservation,
   ScreenshotOverlayRef,
+  SnapshotCaptureScale,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -37,6 +38,8 @@ export type InteractorSnapshotCapture = {
    * producer measured no box; see {@link SnapshotViewportSize} for what each producer measures.
    */
   viewport?: SnapshotViewportSize;
+  /** See {@link SnapshotCaptureScale}. Absent means the producer published no scale. */
+  captureScale?: SnapshotCaptureScale;
   analysis?: { rawNodeCount: number; maxDepth: number };
   androidSnapshot?: AndroidSnapshotBackendMetadata;
   freshness?: {

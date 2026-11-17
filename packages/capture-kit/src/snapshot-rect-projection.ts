@@ -6,13 +6,13 @@ import {
   normalizeType,
 } from '@agent-device/contracts/snapshot';
 import { intersectRects, isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotCaptureScale, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * The space a snapshot's rects are expressed in, as far as the captured image is concerned:
- * `device-pixels` rects land 1:1 on the PNG (Android), `viewport-points` rects must be shifted
- * by the viewport bounds and scaled to the image (Apple, where 1x/2x/3x captures all share the
- * points-space tree).
+ * `device-pixels` rects land on the PNG at the producer's capture scale, 1:1 unless it published
+ * one (Android; a TV app page's CSS px), `viewport-points` rects must be shifted by the viewport
+ * bounds and scaled to the image (Apple, where 1x/2x/3x captures all share the points-space tree).
  */
 export type ScreenshotRectSpace = 'device-pixels' | 'viewport-points';
 
@@ -40,7 +40,8 @@ export function resolveScreenshotRectSpace(backend: string | undefined): Screens
 /**
  * Where a snapshot rect falls in the captured image: the space-specific law only, with NO
  * clamping. Callers decide what out-of-image means — the overlay clamps to a 1px box, the crop
- * intersects and refuses the empty case.
+ * intersects and refuses the empty case. `captureScale` is the producer's published scale, which
+ * only `device-pixels` rects obey.
  */
 export function projectSnapshotRectToScreenshot(
   space: ScreenshotRectSpace,
@@ -48,10 +49,18 @@ export function projectSnapshotRectToScreenshot(
   rect: Rect,
   imageWidth: number,
   imageHeight: number,
+  captureScale?: SnapshotCaptureScale,
 ): Rect {
-  if (space === 'device-pixels' || bounds === null) {
-    return roundRect(rect);
+  if (space === 'device-pixels') {
+    const scale = captureScale ?? 1;
+    return {
+      x: Math.round(rect.x * scale),
+      y: Math.round(rect.y * scale),
+      width: Math.round(rect.width * scale),
+      height: Math.round(rect.height * scale),
+    };
   }
+  if (bounds === null) return roundRect(rect);
   const scaleX = imageWidth / bounds.width;
   const scaleY = imageHeight / bounds.height;
   return {
@@ -59,6 +68,27 @@ export function projectSnapshotRectToScreenshot(
     y: Math.round((rect.y - bounds.y) * scaleY),
     width: Math.round(rect.width * scaleX),
     height: Math.round(rect.height * scaleY),
+  };
+}
+
+/**
+ * The top-left part of the image a page fills when its producer published a capture scale: the
+ * viewport at that scale. A webOS app at 1280x720 fills 1280x720 of a 1920x1080 capture, and the
+ * rest is not the page. Without a capture scale the whole image is the frame.
+ */
+export function resolveScreenshotFrame(
+  image: Readonly<{ width: number; height: number }>,
+  page: Readonly<{
+    viewport?: Readonly<{ width: number; height: number }>;
+    captureScale?: SnapshotCaptureScale;
+  }>,
+): { width: number; height: number } {
+  if (page.captureScale === undefined || page.viewport === undefined) {
+    return { width: image.width, height: image.height };
+  }
+  return {
+    width: Math.min(image.width, Math.round(page.viewport.width * page.captureScale)),
+    height: Math.min(image.height, Math.round(page.viewport.height * page.captureScale)),
   };
 }
 

@@ -1,6 +1,7 @@
 import {
   ANDROID_DEVICE,
   ANDROID_EMULATOR,
+  ANDROID_TV_DEVICE,
   IOS_DEVICE,
   IOS_SIMULATOR,
   IPADOS_SIMULATOR,
@@ -16,10 +17,14 @@ import {
   type SessionSurface,
 } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { expect, test } from 'vitest';
+import { snapshotCaptureScaleFrom, snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import { afterEach, expect, test } from 'vitest';
+import { makeProviderRuntimeOwning } from '../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
+import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import {
   SCREENSHOT_CROP_TARGET_CELLS,
   assertScreenshotCropPolicy,
+  assertScreenshotCropSnapshot,
   classifyScreenshotCropTarget,
 } from '../screenshot-crop-target.ts';
 
@@ -38,11 +43,26 @@ const IOS_DEVICE_XCTEST: DeviceInfo = {
   ...IOS_DEVICE,
   iosPhysicalDeviceBackend: 'xctest',
 };
+const PROVIDER_TV: DeviceInfo = {
+  platform: 'android',
+  id: 'tizen:192.0.2.10:26101',
+  name: '192.0.2.10',
+  kind: 'device',
+  target: 'tv',
+  booted: true,
+};
+const TV_PROVIDER_RUNTIME = makeProviderRuntimeOwning(PROVIDER_TV, 'tizen');
+const providerAdmission = providerDeviceAdmissionFixture([TV_PROVIDER_RUNTIME]);
+
+afterEach(() => {
+  providerAdmission.setActive([TV_PROVIDER_RUNTIME]);
+});
 
 /** The cells with live pixel-identity evidence; every other cell stays rejected. */
 const ACCEPTED_CROP_TARGETS: readonly CropTargetDevice['target'][] = [
   'ios-simulator',
   'android-emulator',
+  'provider-android-tv',
   'ios-physical',
 ];
 
@@ -51,6 +71,7 @@ const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'ios-simulator', device: IOS_SIMULATOR, surface: undefined },
   { target: 'android-emulator', device: ANDROID_EMULATOR, surface: undefined },
   { target: 'android-device', device: ANDROID_DEVICE, surface: undefined },
+  { target: 'provider-android-tv', device: PROVIDER_TV, surface: undefined },
   { target: 'macos-app-window', device: MACOS_DEVICE, surface: 'app' },
   { target: 'ios-physical', device: IOS_DEVICE, surface: undefined },
   { target: 'ios-physical-xctest', device: IOS_DEVICE_XCTEST, surface: undefined },
@@ -89,6 +110,63 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
       });
     }
   }
+});
+
+test('an Android TV is in the provider TV cell only while a provider runtime owns it', () => {
+  expect(classifyScreenshotCropTarget(PROVIDER_TV, undefined)).toBe('provider-android-tv');
+  expect(classifyScreenshotCropTarget(ANDROID_TV_DEVICE, undefined)).toBe('android-device');
+  providerAdmission.setActive([]);
+  expect(classifyScreenshotCropTarget(PROVIDER_TV, undefined)).toBe('android-device');
+});
+
+test('a provider-owned phone stays in the Android device cell', () => {
+  providerAdmission.setActive([makeProviderRuntimeOwning(ANDROID_DEVICE)]);
+  expect(classifyScreenshotCropTarget(ANDROID_DEVICE, undefined)).toBe('android-device');
+});
+
+test('a provider-owned Android TV emulator stays in the Android emulator cell', () => {
+  const tvEmulator: DeviceInfo = { ...PROVIDER_TV, kind: 'emulator' };
+  providerAdmission.setActive([makeProviderRuntimeOwning(tvEmulator)]);
+  expect(classifyScreenshotCropTarget(tvEmulator, undefined)).toBe('android-emulator');
+});
+
+const TV_PAGE = {
+  producer: 'cdp-dom',
+  captureScale: snapshotCaptureScaleFrom(1.5),
+  viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1280, height: 720 }),
+} as const;
+
+test('a provider TV crop is accepted only on the page tree the TV plugins capture', () => {
+  expect(() => assertScreenshotCropSnapshot(PROVIDER_TV, TV_PAGE)).not.toThrow();
+  expect(() =>
+    assertScreenshotCropSnapshot(ANDROID_EMULATOR, { producer: 'android-uiautomator' }),
+  ).not.toThrow();
+  expect(() =>
+    assertScreenshotCropSnapshot(PROVIDER_TV, { ...TV_PAGE, producer: 'android-uiautomator' }),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'UNSUPPORTED_OPERATION',
+      message:
+        'screenshot --crop-on is not accepted on provider-android-tv-non-cdp-snapshot targets',
+      details: {
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+      },
+    }),
+  );
+});
+
+test('a provider TV crop fails on a page that published no capture scale or no viewport', () => {
+  const unreadable = expect.objectContaining({
+    code: 'COMMAND_FAILED',
+    details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+  });
+  expect(() =>
+    assertScreenshotCropSnapshot(PROVIDER_TV, { ...TV_PAGE, captureScale: undefined }),
+  ).toThrow(unreadable);
+  expect(() =>
+    assertScreenshotCropSnapshot(PROVIDER_TV, { ...TV_PAGE, viewport: undefined }),
+  ).toThrow(unreadable);
 });
 
 test('a physical iPad has its own cell, and an iPad simulator stays in the simulator cell', () => {
@@ -248,7 +326,7 @@ test('a matrix-rejected target is refused with the pending-evidence reason', () 
 });
 
 test('an accepted target with a valid selector passes the policy', () => {
-  for (const device of [IOS_SIMULATOR, ANDROID_EMULATOR]) {
+  for (const device of [IOS_SIMULATOR, ANDROID_EMULATOR, PROVIDER_TV]) {
     expect(() =>
       assertScreenshotCropPolicy({ device, surface: undefined, ...POLICY_BASE }),
     ).not.toThrow();

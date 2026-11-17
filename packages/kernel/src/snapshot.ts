@@ -426,7 +426,9 @@ export type PresentedSurface = 'presented' | 'absent' | 'unknown';
  * It is the box of the surface the producer read, which is not always the physical panel. iOS
  * reports the app window in the app's orientation space (ADR 0004), which is smaller than the panel
  * under iPad Split View and is never the foldable panel `fold` reports (ADR 0025); Android and the
- * Apple TV runner report the screen the bounds were measured on. A producer that has no box of its
+ * Apple TV runner report the screen the bounds were measured on. The Tizen and webOS TV plugins
+ * report the page's layout viewport in CSS px, which is not the screenshot size: a webOS app at
+ * 1280x720 fills only the top-left 1280x720 of a 1920x1080 capture. A producer that has no box of its
  * own to answer with leaves the field off: the macOS desktop, whose rects are absolute in window
  * space and answer to no single frame, and the web and Linux backends, which read a tree without
  * reading a screen. A consumer that needs a *gesture* band inside those bounds still reads `keyboard`
@@ -448,6 +450,21 @@ export type SnapshotViewportSize = {
 export declare const SNAPSHOT_VIEWPORT_SIZE_BRAND: unique symbol;
 export type SnapshotViewportSizeBrand = {
   readonly [SNAPSHOT_VIEWPORT_SIZE_BRAND]: 'validated';
+};
+
+/**
+ * Screenshot pixels per rect unit, published by a producer whose own screenshots magnify its rects:
+ * a TV app page's `visualViewport.scale`, which a meta viewport sets and which the page's
+ * `devicePixelRatio` does not predict. Positive and finite by construction:
+ * `snapshotCaptureScaleFrom` from `@agent-device/kernel/rect` is the sole construction path, and the
+ * brand keeps a plain number from standing in for one.
+ */
+export type SnapshotCaptureScale = number & SnapshotCaptureScaleBrand;
+
+/** @internal Exported only so `kernel/rect` can mint values of {@link SnapshotCaptureScale}. */
+export declare const SNAPSHOT_CAPTURE_SCALE_BRAND: unique symbol;
+export type SnapshotCaptureScaleBrand = {
+  readonly [SNAPSHOT_CAPTURE_SCALE_BRAND]: 'validated';
 };
 
 export type SnapshotNode = RawSnapshotNode & {

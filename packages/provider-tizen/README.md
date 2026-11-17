@@ -7,7 +7,8 @@ DevTools Protocol: remote keys, pointer, text, snapshots, screenshots and consol
 Status: experimental. Verified on a Samsung Smart Monitor M7 (Tizen 9.0): `connect`, `open`,
 `open --relaunch`, `snapshot -i`, `tv-remote` (directions, select, back and the media buttons),
 `back`, `is focused`, `press`, `find ... click`, `hover`, `longpress`, `fill`, `type`, `wait`,
-`scroll`, `screenshot`, `logs`, `apps`, `appstate`, `close`, `disconnect`.
+`scroll`, `screenshot`, `screenshot --crop-on`, `logs`, `apps`, `appstate`, `close`,
+`disconnect`.
 
 ## How it plugs in
 
@@ -82,7 +83,7 @@ The TV is a leased device, so every command from `connect` to `disconnect` names
 | `apps` | `sdb shell 0 vd_applist`: user-installed apps with their titles |
 | `logs` | console calls, exceptions and browser log entries of the attached page, one line each |
 | `snapshot`, `find`, `is`, `get`, `wait` | DOM walk over `Runtime.evaluate`: visible interactive, labelled or text nodes, focus from `document.activeElement`; `-s`, `-d` and `-i` apply to the walk |
-| `screenshot` | `Page.captureScreenshot` |
+| `screenshot` | `Page.captureScreenshot`; `--crop-on <selector>` crops it to the frame of the node the selector resolves in a snapshot taken on the same screen |
 | `click`, `press <x> <y>`, `longpress`, `hover` | `Input.dispatchMouseEvent` |
 | `fill` | pointer press on the field, select its contents, then `Input.insertText`, or Backspace for an empty value |
 | `type` | `Input.insertText` into the focused element |
@@ -115,9 +116,11 @@ Not yet: system buttons (`home`, menu, volume and channel), `network dump`, `per
   in them show as `Object`. Messages logged after the attach show their properties.
 - **A second DevTools client on the same page can hang the session.** Close Chrome DevTools and
   other inspector clients attached to the app before a session.
-- **Snapshots are DOM-derived.** Labels come from `aria-label`, `alt`, `title` or own text;
-  rects are CSS px, which match screenshot pixels only at `devicePixelRatio` 1 (1080p apps).
-  The walk does not enter iframes or shadow roots. `is text` on an input compares its label, not
-  its value; the value is in `snapshot --raw`.
+- **Snapshots are DOM-derived.** Labels come from `aria-label`, `alt`, `title` or own text; rects
+  are CSS px. The screenshot magnifies them by the page's `visualViewport.scale`: a `width=1280`
+  meta viewport on a 1920x1080 TV gives 1.5. `screenshot --crop-on` applies that scale, and refuses
+  a page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
+  enter iframes or shadow roots. `is text` on an input compares its label, not its value; the value
+  is in `snapshot --raw`.
 - **System overlays are outside the page.** The Samsung menu, on-screen keyboard and other system
   layers never appear in `screenshot` or `snapshot`.

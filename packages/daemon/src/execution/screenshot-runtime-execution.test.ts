@@ -9,6 +9,8 @@ import {
   bindLocalScreenshotInteractor,
   defaultCaptureOnly,
 } from '@agent-device/contracts/screenshot-runtime';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { snapshotCaptureScaleFrom, snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   ANDROID_EMULATOR,
@@ -17,6 +19,8 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
+import { makeProviderRuntimeOwning } from '../__tests__/support/handlers/snapshot-handler.fixtures.ts';
+import { providerDeviceAdmissionFixture } from '../__tests__/support/provider-device-admission-fixture.ts';
 import { contextFromFlags } from '../core/context.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
@@ -618,6 +622,114 @@ test('a partial crop surfaces its warning once in the result record and annotate
   // The crop plan binds the snapshot for the crop alone: no overlay refs, no republished tree.
   expect(result).not.toHaveProperty('overlayRefs');
   expect(session.snapshot).toBeUndefined();
+});
+
+const PROVIDER_TV: DeviceInfo = {
+  platform: 'android',
+  id: 'webos:192.0.2.20:9922',
+  name: 'living-room',
+  kind: 'device',
+  target: 'tv',
+  booted: true,
+};
+providerDeviceAdmissionFixture([makeProviderRuntimeOwning(PROVIDER_TV, 'webos')]);
+
+const TV_PAGE_TREE: RawSnapshotNode[] = [
+  { index: 0, depth: 0, type: 'main', label: 'Home', rect: { x: 0, y: 0, width: 60, height: 40 } },
+  {
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'button',
+    label: 'Save',
+    hittable: true,
+    rect: { x: 10, y: 10, width: 40, height: 20 },
+  },
+  {
+    index: 2,
+    depth: 1,
+    parentIndex: 0,
+    type: 'button',
+    label: 'Tile',
+    hittable: true,
+    rect: { x: 1200, y: 100, width: 300, height: 200 },
+  },
+];
+
+async function cropProviderTv(page: {
+  producer?: 'cdp-dom' | 'android-uiautomator';
+  captureScale: number;
+  viewport: { width: number; height: number };
+  cropOn?: string;
+}) {
+  const { producer = 'cdp-dom', cropOn = 'label="Save"' } = page;
+  const captureScale = snapshotCaptureScaleFrom(page.captureScale);
+  const viewport = snapshotViewportSizeFrom({ x: 0, y: 0, ...page.viewport });
+  const fixture = screenshotRuntimeFixture({
+    onCapture: ({ outPath }) => writeSolidPng(outPath, 1920, 1080),
+    snapshotResult: () => ({
+      nodes: TV_PAGE_TREE,
+      backend: 'android',
+      producer,
+      captureScale,
+      viewport,
+    }),
+  });
+  const session = makeSession('tv', { device: PROVIDER_TV });
+  const outPath = path.join(mkdtempForTestSync('provider-tv-crop'), 'tv.png');
+  const req = screenshotRequest({
+    positionals: [outPath],
+    flags: { screenshotCropOn: cropOn },
+  });
+  const resolved = await resolveScreenshotGenericExecution({
+    hostCwd: process.cwd(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  return await executeResult(resolved, session, req);
+}
+
+const PAGE_720 = { width: 1280, height: 720 };
+
+test('a provider TV crop cuts the CSS px frame 1:1 from a capture larger than the page', async () => {
+  const result = await cropProviderTv({ captureScale: 1, viewport: PAGE_720 });
+
+  expect(result).toMatchObject({ width: 40, height: 20 });
+});
+
+test("a provider TV crop magnifies the CSS px frame by the page's capture scale", async () => {
+  const result = await cropProviderTv({ captureScale: 1.5, viewport: PAGE_720 });
+
+  expect(result).toMatchObject({ width: 60, height: 30 });
+});
+
+test('a provider TV crop clips a node at the page edge to the page, not to the larger capture', async () => {
+  const result = await cropProviderTv({
+    captureScale: 1,
+    viewport: PAGE_720,
+    cropOn: 'label="Tile"',
+  });
+
+  expect(result).toMatchObject({ width: 80, height: 200 });
+  expect(result.warnings).toEqual([
+    expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}:`)),
+  ]);
+});
+
+test('a provider TV crop is refused on a tree the TV plugins did not capture', async () => {
+  await expect(
+    cropProviderTv({ producer: 'android-uiautomator', captureScale: 1, viewport: PAGE_720 }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: {
+      reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+      rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+    },
+  });
 });
 
 test('the crop plan is refused up front when the target cannot capture a tree', async () => {

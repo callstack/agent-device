@@ -32,7 +32,7 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /crop the capture to the frame of the selector/);
   assert.match(
     help,
-    /currently iOS simulators, Android emulators, and CoreDevice physical iPhones/,
+    /currently iOS simulators, Android emulators, CoreDevice physical iPhones, and Samsung Tizen and LG webOS TV apps/,
   );
 });
 

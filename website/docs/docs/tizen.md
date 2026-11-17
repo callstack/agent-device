@@ -76,7 +76,7 @@ Every command on that device goes to the plugin, never to adb.
 | `apps` | `sdb shell 0 vd_applist` |
 | `logs` | Console calls, exceptions, and browser log entries of the attached page, one line each |
 | `snapshot`, `find`, `is`, `get`, `wait` | A DOM walk over `Runtime.evaluate`: visible interactive, labelled, or text nodes, with focus from `document.activeElement`. `-s`, `-d`, and `-i` apply to the walk. |
-| `screenshot` | `Page.captureScreenshot` |
+| `screenshot` | `Page.captureScreenshot`. `--crop-on <selector>` crops the capture to the frame of the node that the selector resolves in a snapshot taken on the same screen. |
 | `click`, `press <x> <y>`, `longpress`, `hover` | `Input.dispatchMouseEvent` |
 | `fill` | Pointer press on the field, select its contents, then `Input.insertText`, or Backspace for an empty value |
 | `type` | `Input.insertText` into the focused element |
@@ -105,6 +105,8 @@ Not supported yet: system buttons (`home`, menu, volume, and channel), `network 
 - Console messages logged before the attach are replayed without object previews.
 - A second DevTools client on the same page can hang the session. Close Chrome DevTools and other
   inspector clients attached to the app first.
-- Snapshots are read from the DOM. Labels come from `aria-label`, `alt`, `title`, or own text.
-  Rects are CSS pixels, which match screenshot pixels only at `devicePixelRatio` 1. The walk does
-  not enter iframes or shadow roots.
+- Snapshots are read from the DOM. Labels come from `aria-label`, `alt`, `title`, or own text. Rects
+  are CSS pixels. The screenshot magnifies them by the page's `visualViewport.scale`: a `width=1280`
+  meta viewport on a 1920x1080 TV gives 1.5. `screenshot --crop-on` applies that scale, and refuses
+  a page whose browser has no `visualViewport` or whose visual viewport is panned. The walk does not
+  enter iframes or shadow roots.
