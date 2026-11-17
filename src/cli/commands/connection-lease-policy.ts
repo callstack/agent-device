@@ -19,8 +19,11 @@ const leaseDeferredCommands = new Set([
   'session',
   'shutdown',
 ]);
-function remoteLeaseTtlMs(state: RemoteConnectionState): number | undefined {
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+function remoteLeaseTtlMs(
+  state: RemoteConnectionState,
+  env: NodeJS.ProcessEnv,
+): number | undefined {
+  const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   return capabilities.leaseKind === 'proxy' ||
     capabilities.usesCloudWebDriverLease ||
     capabilities.holdsCloudDevice === true
@@ -30,7 +33,7 @@ function remoteLeaseTtlMs(state: RemoteConnectionState): number | undefined {
 
 export type ConnectionLeasePolicy = {
   shouldAllocate(command: string): boolean;
-  ttlMs(state: RemoteConnectionState): number | undefined;
+  ttlMs(state: RemoteConnectionState, env: NodeJS.ProcessEnv): number | undefined;
   /** The id this client names a new lease with; without it the daemon mints one. */
   newLeaseId?(): string;
   resolveLeaseState(options: {
@@ -42,9 +45,12 @@ export type ConnectionLeasePolicy = {
   }): Promise<ResolvedLeaseState>;
 };
 
-export function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
+export function connectionLeasePolicyForState(
+  state: RemoteConnectionState,
+  env: NodeJS.ProcessEnv,
+): ConnectionLeasePolicy {
   if (state.leaseBackend === 'macos-app') return MACOS_APP_CONNECTION_LEASE_POLICY;
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
+  const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   if (capabilities.leaseKind === 'proxy') {
     return PROXY_CONNECTION_LEASE_POLICY;
   }
