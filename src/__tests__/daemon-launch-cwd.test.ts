@@ -81,17 +81,13 @@ test.for(['EPERM', 'EROFS'])(
       // Each path is asked for the mode in the one way that is safe for it: the state DIRECTORY through a
       // descriptor opened on the entry the repair judged, so the mode cannot travel through a planted link,
       // and the log FILE by its name.
+      //
+      // The descriptor route is the POSIX rule, and it is the one Windows has no part in: `chmod` there only
+      // toggles the read-only bit, so the state chain is created at its mode and never forced through an open
+      // (#4584 review). The log's `chmod` is asked on every platform.
       assert.deepEqual(
         fchmod.mock.calls.map(([, mode]) => mode),
-        [0o700],
-      );
-      assert.deepEqual(
-        chmod.mock.calls.map(([target]) => target),
-        [paths.logPath],
-      );
-      assert.deepEqual(
-        fchmod.mock.calls.map(([, mode]) => mode),
-        [0o700],
+        process.platform === 'win32' ? [] : [0o700],
       );
       assert.deepEqual(
         chmod.mock.calls.map(([target]) => target),

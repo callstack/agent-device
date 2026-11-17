@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -17,6 +17,12 @@ import {
   authoringPublication,
   makeAuthoringSession,
 } from '../../__tests__/support/session-factories.ts';
+
+afterEach(() => {
+  // Every case below installs `fs` spies to serve a host this process does not have, and a later file run on the
+  // same worker would read the previous fixture's filesystem without one.
+  vi.restoreAllMocks();
+});
 
 test('teardown of an armed ordinary recording whose script write fails still retires the session', () => {
   const root = mkdtempForTestSync('agent-device-teardown-script-failure-');

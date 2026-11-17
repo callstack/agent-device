@@ -1,9 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { FOREIGN_UID, mkdtempForTestSync, serveHostOwnership } from '@agent-device/test-kit';
 import { artifactServer, open } from './support/script-publication-fixtures.ts';
+
+afterEach(() => {
+  // These cases spy on `fs` to serve an ownership shape the host does not have; a later file on the same worker
+  // would otherwise keep answering that fixture.
+  vi.restoreAllMocks();
+});
 
 // Where a remote recording is allowed to CREATE its file. The daemon answers, the version downloads, and
 // the bytes land wherever the destination's own spelling resolves to, so the ground a destination names is

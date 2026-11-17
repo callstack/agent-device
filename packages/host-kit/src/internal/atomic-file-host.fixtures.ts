@@ -12,8 +12,17 @@ import { publishScriptFileSync } from './atomic-file.ts';
 export const currentUid = process.getuid?.() ?? -1;
 const currentGid = process.getgid?.() ?? -1;
 
-/** Some other local user, not this one and not root. */
-export const FOREIGN_UID = 65534;
+/**
+ * Some other local user: not the one running the suite, and not root.
+ *
+ * Ownership is judged against this process's own uid, so naming a fixed id only makes an entry foreign while the
+ * suite stands somewhere else: CI runs a suite as `nobody` (65534), and there a hard-coded 65534 makes every
+ * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all. The same rule
+ * is written in `@agent-device/test-kit`'s `host-ownership.fixtures.ts`; a package's tests may not reach
+ * test-kit, and one package may not publish test support to another (R83), so each keeps its own copy — change
+ * both together.
+ */
+export const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 
 /** A scratch root, spelled the way the kernel spells it, so a link's answer and a test's agree. */
 export function ancestryRoot(): string {
