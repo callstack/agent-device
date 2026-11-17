@@ -201,18 +201,6 @@ extension RunnerKeyboardStatus {
     )
   }
 
-  /// The first control in the snapshot that `keyboard dismiss` may press, in dismiss-label order.
-  static func dismissControl(in keyboard: ObservedKeyboard) -> ObservedKeyboardKey? {
-    for label in dismissLabels {
-      let match = keyboard.keys.first { key in
-        (key.text == label || key.identifier == label)
-          && mayDismiss(label: label, frame: key.frame, keyboard: keyboard)
-      }
-      if let match { return match }
-    }
-    return nil
-  }
-
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to
   /// anchor the slot on, or when the space bar's right neighbour is not also its row's trailing worded
   /// control. One positional test, both halves, and no wording list: see `observed(visible:keyboardKeys:)`
