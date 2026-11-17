@@ -300,24 +300,49 @@ extension RunnerTests {
     )
   }
 
-  /// A control is tapped through the keyboard's coordinate only when its frame lies inside the
-  /// keyboard, so the normalized offset stays within 0...1. A toolbar above the keyboard, or one that
-  /// only overlaps its edge, has no such offset.
-  func testKeyboardDismissTapsThroughTheKeyboardCoordinateOnlyInsideItsFrame() {
-    let keyboardFrame = CGRect(x: 0, y: 609, width: 440, height: 240)
-    let inside = RunnerKeyboardStatus.normalizedCenter(
-      of: CGRect(x: 380, y: 789, width: 50, height: 50),
-      in: keyboardFrame
+  /// A control is tapped by identity, so it must be the only control of its type with its dismiss
+  /// wording: a second one, or the same wording on a button against a key, is a different control.
+  func testKeyboardDismissTapsOnlyAControlItCanTellApart() {
+    let hide = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Hide keyboard", frame: CGRect(x: 720, y: 1096, width: 98, height: 54)
     )
-    XCTAssertEqual(inside?.dx ?? -1, (405 - 0) / 440, accuracy: 0.0001)
-    XCTAssertEqual(inside?.dy ?? -1, (814 - 609) / 240, accuracy: 0.0001)
-    XCTAssertNil(
-      RunnerKeyboardStatus.normalizedCenter(of: CGRect(x: 330, y: 524, width: 63, height: 54), in: keyboardFrame)
+    let twin = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Hide keyboard", frame: CGRect(x: 20, y: 1096, width: 98, height: 54)
     )
-    XCTAssertNil(
-      RunnerKeyboardStatus.normalizedCenter(of: CGRect(x: 330, y: 590, width: 63, height: 54), in: keyboardFrame)
+    let hideButton = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "Hide keyboard", frame: CGRect(x: 400, y: 1096, width: 98, height: 54), kind: .button
     )
-    XCTAssertNil(RunnerKeyboardStatus.normalizedCenter(of: .zero, in: keyboardFrame))
+    let identified = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), identifier: "Done"
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide]))
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, hideButton]))
+    XCTAssertFalse(RunnerKeyboardStatus.isUniqueDismissControl(hide, in: [hide, twin]))
+    XCTAssertTrue(RunnerKeyboardStatus.isUniqueDismissControl(identified, in: [identified, hide]))
+    XCTAssertNil(RunnerKeyboardStatus.dismissLabel(of: RunnerKeyboardStatus.ObservedKeyboardKey(text: "Q", frame: .zero)))
+  }
+
+  /// A QuickType candidate is a button in the prediction bar above the key rows, so a one-letter one
+  /// such as `I` or `A` must not pull the key-row anchor up to the bar: only keys anchor. With it
+  /// anchored on the bar, a `Done` in the key rows could look like an accessory button and be pressed.
+  func testKeyboardRowAnchorIgnoresAOneLetterQuickTypeCandidate() {
+    let candidate = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "I", frame: CGRect(x: 150, y: 560, width: 60, height: 40), kind: .button
+    )
+    let keys =
+      [candidate]
+      + observedKeyboardKeysFixture([("Q", 5, 666, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)])
+    XCTAssertEqual(RunnerKeyboardStatus.characterKeyRowTop(in: keys), 666)
+    let keyboard = RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 549, width: 440, height: 300), keys: keys)
+    XCTAssertFalse(
+      dismissAllowed(label: "Done", frame: CGRect(x: 314, y: 784, width: 103, height: 54), keyboard: keyboard)
+    )
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keys),
+      RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
+    )
+    // With nothing but the candidate to anchor on, there is no anchor at all.
+    XCTAssertNil(RunnerKeyboardStatus.characterKeyRowTop(in: [candidate]))
   }
 
   private func anchoredFixtureForReach() -> RunnerKeyboardStatus.ObservedKeyboard {

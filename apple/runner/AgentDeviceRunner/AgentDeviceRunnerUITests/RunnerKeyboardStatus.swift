@@ -27,6 +27,14 @@ extension RunnerKeyboardStatus {
     /// The control's accessibility identifier, where the read carries it. A return key can show
     /// `done` as its label and `Done` as its identifier, so dismiss matches either.
     var identifier: String? = nil
+    /// Whether the tree carries the control as a key or as a button. Only keys are character keys: a
+    /// QuickType candidate or an accessory toolbar's control is a button, whatever its wording.
+    var kind: Kind = .key
+
+    enum Kind: Equatable {
+      case key
+      case button
+    }
   }
 
   /// One keyboard snapshot: its frame and every key's wording and frame, taken together so a decision
@@ -104,13 +112,18 @@ extension RunnerKeyboardStatus {
     return observed(visible: true, returnControlText: returnControl(in: keyboardKeys)?.text)
   }
 
-  /// The top edge of the first row of character keys: the highest single-character control. It
-  /// anchors where the key rows start, so a control wholly above it is an input accessory's, not a key.
-  /// `nil` when no character key was read with wording and a frame, and then nothing can be placed
-  /// relative to the key rows.
+  /// The top edge of the first row of character keys: the highest single-character control of key type.
+  /// It anchors where the key rows start, so a control wholly above it is an input accessory's, not a
+  /// key. A button never anchors, however short its wording: a QuickType candidate such as `I` or `A`
+  /// is a button above the key rows and would pull the anchor up to the prediction bar. `nil` when no
+  /// character key was read with wording and a frame, and then nothing can be placed relative to the
+  /// key rows.
   static func characterKeyRowTop(in keys: [ObservedKeyboardKey]) -> CGFloat? {
     keys
-      .filter { $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).count == 1 && !$0.frame.isEmpty }
+      .filter {
+        $0.kind == .key && $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
+          && !$0.frame.isEmpty
+      }
       .map { $0.frame.minY }
       .min()
   }
@@ -188,17 +201,17 @@ extension RunnerKeyboardStatus {
     return nil
   }
 
-  /// Where `frame`'s centre falls in `keyboardFrame`, as the normalized offset a coordinate on the
-  /// keyboard element takes, or `nil` when the frame is not wholly inside the keyboard. A control
-  /// outside the keyboard, such as a toolbar above it, would need an offset outside 0...1, which taps
-  /// whatever lies there through the keyboard's coordinate space, so it must be tapped through its own
-  /// element instead.
-  static func normalizedCenter(of frame: CGRect, in keyboardFrame: CGRect) -> CGVector? {
-    guard !frame.isEmpty, !keyboardFrame.isEmpty, keyboardFrame.contains(frame) else { return nil }
-    return CGVector(
-      dx: (frame.midX - keyboardFrame.minX) / keyboardFrame.width,
-      dy: (frame.midY - keyboardFrame.minY) / keyboardFrame.height
-    )
+  /// The dismiss wording `key` carries, as its label or its identifier.
+  static func dismissLabel(of key: ObservedKeyboardKey) -> String? {
+    dismissLabels.first { key.text == $0 || key.identifier == $0 }
+  }
+
+  /// True when `key` is the only control of its type in `keys` that carries its dismiss wording. A
+  /// control is tapped by that identity, never by a coordinate from a snapshot the keyboard may have
+  /// moved since, so one that cannot be told apart from another is not pressed.
+  static func isUniqueDismissControl(_ key: ObservedKeyboardKey, in keys: [ObservedKeyboardKey]) -> Bool {
+    guard let label = dismissLabel(of: key) else { return false }
+    return keys.filter { $0.kind == key.kind && ($0.text == label || $0.identifier == label) }.count == 1
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

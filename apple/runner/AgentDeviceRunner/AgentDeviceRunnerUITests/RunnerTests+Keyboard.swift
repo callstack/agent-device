@@ -241,7 +241,8 @@ extension RunnerTests {
       let observed = RunnerKeyboardStatus.ObservedKeyboardKey(
         text: node.label,
         frame: node.frame,
-        identifier: node.identifier.isEmpty ? nil : node.identifier
+        identifier: node.identifier.isEmpty ? nil : node.identifier,
+        kind: node.elementType == .key ? .key : .button
       )
       if node.elementType == .key { keys.append(observed) } else { buttons.append(observed) }
     }
@@ -522,11 +523,12 @@ extension RunnerTests {
   /// labelled `Done`, which submits the focused field, is never pressed, and neither is a `Done`
   /// when the keyboard could not be read.
   ///
-  /// The keyboard is read once. A control inside it is tapped at the centre its snapshot frame had,
-  /// relative to the keyboard, so the tap lands on the control that was judged. A control the snapshot
-  /// holds but that lies outside the keyboard's frame, and any control outside the keyboard such as an
-  /// input accessory toolbar, comes from one query for every dismiss label and is tapped through its
-  /// own element.
+  /// The keyboard is read once. The control it judged is tapped by identity: its wording and type must
+  /// be unique among the keyboard's controls, in the snapshot and in one targeted live query, and the
+  /// live element is tapped. Otherwise nothing is tapped, because a coordinate from a snapshot can land
+  /// on another key once the keyboard has moved. A control outside the keyboard, such as an input
+  /// accessory toolbar, comes from one query for every dismiss label and is tapped through its own
+  /// element.
   private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
 #if os(tvOS)
     return false
@@ -536,11 +538,19 @@ extension RunnerTests {
     }
     let keyboard = readKeyboard(app: app)
     let keyboardFrame = keyboard?.frame ?? liveKeyboardFrame
-    if let keyboard,
-      let control = RunnerKeyboardStatus.dismissControl(in: keyboard),
-      let center = RunnerKeyboardStatus.normalizedCenter(of: control.frame, in: keyboard.frame)
-    {
-      app.keyboards.firstMatch.coordinate(withNormalizedOffset: center).tap()
+    if let keyboard, let control = RunnerKeyboardStatus.dismissControl(in: keyboard) {
+      guard RunnerKeyboardStatus.isUniqueDismissControl(control, in: keyboard.keys),
+        let label = RunnerKeyboardStatus.dismissLabel(of: control)
+      else {
+        return false
+      }
+      let predicate = NSPredicate(format: "label == %@ OR identifier == %@", label, label)
+      let matches = app.keyboards.firstMatch
+        .descendants(matching: control.kind == .key ? .key : .button)
+        .matching(predicate)
+        .allElementsBoundByIndex
+      guard matches.count == 1 else { return false }
+      matches[0].tap()
       return true
     }
 
