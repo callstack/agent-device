@@ -25,14 +25,14 @@ test('packed core excludes the engine and the managed plugin works without works
     );
     const pluginTarball = path.join(scratch, 'maestro.tgz');
     run('pnpm', ['pack', '--out', pluginTarball], path.join(root, 'packages/maestro'));
+    const integrity = `sha512-${crypto
+      .createHash('sha512')
+      .update(fs.readFileSync(pluginTarball))
+      .digest('base64')}`;
     const consumer = path.join(scratch, 'consumer');
     const home = path.join(scratch, 'home');
-    const installation = crypto.randomUUID();
-    const store = path.join(home, 'plugins', installation);
-    for (const directory of [consumer, store]) {
-      fs.mkdirSync(directory, { recursive: true });
-      fs.writeFileSync(path.join(directory, 'package.json'), '{"private":true,"type":"module"}');
-    }
+    fs.mkdirSync(consumer, { recursive: true });
+    fs.writeFileSync(path.join(consumer, 'package.json'), '{"private":true,"type":"module"}');
     run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', coreTarball], consumer);
     const core = path.join(consumer, 'node_modules/agent-device');
     const cli = path.join(core, 'bin/agent-device.mjs');
@@ -73,13 +73,34 @@ test('packed core excludes the engine and the managed plugin works without works
     );
     assert.match(missing, /plugin-not-installed/);
     assert.match(missing, /agent-device plugins add @agent-device\/maestro/);
-    run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', pluginTarball], store);
-    fs.writeFileSync(
-      path.join(home, 'config.json'),
-      JSON.stringify({ plugins: { '@agent-device/maestro': { installation } } }),
+    const added = JSON.parse(
+      run(process.execPath, [cli, 'plugins', 'add', pluginTarball, '--json'], consumer, env),
     );
+    assert.equal(added.success, true);
+    const { artifact } = added.data;
+    assert.equal(artifact.name, '@agent-device/maestro');
+    assert.equal(artifact.integrity, integrity);
+    assert.equal(artifact.compatibility, 'unchecked');
+    assert.match(artifact.installation, /^[a-f0-9-]{36}$/);
+    assert.equal(added.data.restartRequired, true);
+    const listed = JSON.parse(
+      run(process.execPath, [cli, 'plugins', 'list', '--json'], consumer, env),
+    );
+    assert.equal(listed.success, true);
+    assert.deepEqual(listed.data.plugins, [
+      {
+        name: '@agent-device/maestro',
+        installation: artifact.installation,
+        integrity: artifact.integrity,
+        version: artifact.version,
+        backend: 'maestro',
+        compatible: true,
+      },
+    ]);
+    const store = path.join(home, 'plugins', artifact.installation);
     const plugin = path.join(store, 'node_modules/@agent-device/maestro');
     const manifest = JSON.parse(fs.readFileSync(path.join(plugin, 'package.json'), 'utf8'));
+    assert.equal(manifest.version, artifact.version);
     const exported = JSON.parse(
       run(process.execPath, [cli, 'replay', 'export', script, '--json'], consumer, env),
     );
