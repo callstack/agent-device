@@ -86,8 +86,8 @@ jobs:
           gate: build
       # The canary records the frontmost app before anything can take focus. It stays ahead of the
       # group because one of its members starts the simulator boot, which can raise the Simulator
-      # app. When it fails, the baseline file is never written, so the phase's own focus assertion
-      # fails too rather than passing against a stale baseline.
+      # app. A host that cannot hand focus to Finder is not a usable automation host, so the iOS
+      # phase below requires its success: it no longer fails the phase by running inside it.
       - name: Establish host focus canary
         id: host-focus-canary
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
@@ -180,7 +180,7 @@ jobs:
           AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
           AGENT_DEVICE_XCUITEST_ARCHS: arm64
           AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-simulator.outcome == 'success' && steps.ios-runner-build.outcome == 'success' && steps.fixture-app.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.host-focus-canary.outcome == 'success' && steps.ios-simulator.outcome == 'success' && steps.ios-runner-build.outcome == 'success' && steps.fixture-app.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
       - name: Clean the iOS host
         id: ios-cleanup
         if: ${{ always() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
@@ -203,9 +203,9 @@ jobs:
           XCTEST_LANE: host
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
       - name: Diagnose the Apple host after a phase failure
-        # The boot, runner build, and fixture restore can now fail outside the phase, where the
-        # phase's own outcome reads as skipped rather than failed.
-        if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure' || steps.ios-simulator.outcome == 'failure' || steps.ios-runner-build.outcome == 'failure' || steps.fixture-app.outcome == 'failure') }}
+        # The canary, boot, runner build, and fixture restore can now fail outside the phase, where
+        # the phase's own outcome reads as skipped rather than failed.
+        if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure' || steps.host-focus-canary.outcome == 'failure' || steps.ios-simulator.outcome == 'failure' || steps.ios-runner-build.outcome == 'failure' || steps.fixture-app.outcome == 'failure') }}
         continue-on-error: true
         shell: bash
         run: |
@@ -230,14 +230,14 @@ jobs:
           MACOS_OUTCOME: ${{ steps.macos.outcome }}
           IOS_CLEANUP_OUTCOME: ${{ steps.ios-cleanup.outcome }}
           MACOS_CLEANUP_OUTCOME: ${{ steps.macos-cleanup.outcome }}
-          IOS_SETUP_OUTCOMES: 'boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}'
+          IOS_SETUP_OUTCOMES: 'canary=${{ steps.host-focus-canary.outcome }} boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}'
         shell: bash
         run: |
           set -euo pipefail
           printf "### Apple smoke phases\n\n| Phase | Outcome |\n| --- | --- |\n| iOS | %s |\n| macOS | %s |\n" "$IOS_OUTCOME" "$MACOS_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
-          # The device-free setup steps run as background steps, so a member that failed shows up
-          # below only as a skipped phase. Name them so the skip has a cause.
-          printf 'iOS device-free setup: %s\n' "$IOS_SETUP_OUTCOMES" >> "$GITHUB_STEP_SUMMARY"
+          # A step hoisted out of the phase shows up below only as a skipped phase. Name them so the
+          # skip has a cause.
+          printf 'iOS setup outside the phase: %s\n' "$IOS_SETUP_OUTCOMES" >> "$GITHUB_STEP_SUMMARY"
           if [ "$IOS_SELECTED" = false ]; then
             test "$IOS_OUTCOME" = skipped
             test "$IOS_CLEANUP_OUTCOME" = skipped

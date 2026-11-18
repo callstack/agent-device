@@ -324,9 +324,9 @@ test.each([
     MACOS_OUTCOME: '${{ steps.macos.outcome }}',
     IOS_CLEANUP_OUTCOME: '${{ steps.ios-cleanup.outcome }}',
     MACOS_CLEANUP_OUTCOME: '${{ steps.macos-cleanup.outcome }}',
-    // A background step that fails leaves the phase skipped, so the summary names the members.
+    // A hoisted step that fails leaves the phase skipped, so the summary names them.
     IOS_SETUP_OUTCOMES:
-      'boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}',
+      'canary=${{ steps.host-focus-canary.outcome }} boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}',
   });
   const result = spawnSync('/bin/bash', ['-c', guard.run!], {
     env: {
@@ -337,7 +337,7 @@ test.each([
       MACOS_OUTCOME: 'success',
       IOS_CLEANUP_OUTCOME: 'success',
       MACOS_CLEANUP_OUTCOME: 'success',
-      IOS_SETUP_OUTCOMES: 'boot=success runner=success fixture=success',
+      IOS_SETUP_OUTCOMES: 'canary=success boot=success runner=success fixture=success',
       ...overrides,
       GITHUB_STEP_SUMMARY: path.join(mkdtempForTestSync('apple-smoke-status-'), 'summary.md'),
     },
@@ -706,9 +706,10 @@ test('device-free iOS setup overlaps as one group and readiness stays mandatory 
   expect(steps[wait]!['continue-on-error']).not.toBe(true);
 });
 
-// The group's outputs cross into the phase as inputs, and a group member that failed would leave
-// the phase running on empty paths: `!cancelled()` does not see a sibling's failure.
-test('the iOS phase requires every device-free setup member to have succeeded', () => {
+// The group's outputs cross into the phase as inputs, and a setup step that failed would leave the
+// phase running on empty paths: `!cancelled()` does not see a sibling's failure. The canary moved
+// out of the phase too, so a host that cannot hand focus to Finder must stop the phase here.
+test('the iOS phase requires every hoisted setup step to have succeeded', () => {
   const ios = appleJob().steps.find((step) => step.id === 'ios')!;
   expect(ios.with).toEqual(
     expect.objectContaining({
@@ -719,8 +720,27 @@ test('the iOS phase requires every device-free setup member to have succeeded', 
       'fixture-source': '${{ steps.fixture-app.outputs.source }}',
     }),
   );
-  for (const member of ['ios-simulator', 'ios-runner-build', 'fixture-app']) {
+  for (const member of ['host-focus-canary', 'ios-simulator', 'ios-runner-build', 'fixture-app']) {
     expect(ios.if).toContain(`steps.${member}.outcome == 'success'`);
+  }
+});
+
+// Each hoisted step can now fail where the phase reads as skipped, so the host diagnostic still has
+// to fire for all of them.
+test('a failed iOS setup step still captures the host diagnostic', () => {
+  const diagnose = appleJob().steps.find(
+    (step) => step.name === 'Diagnose the Apple host after a phase failure',
+  )!;
+  for (const member of [
+    'ios',
+    'macos',
+    'ios-cleanup',
+    'host-focus-canary',
+    'ios-simulator',
+    'ios-runner-build',
+    'fixture-app',
+  ]) {
+    expect(diagnose.if).toContain(`steps.${member}.outcome == 'failure'`);
   }
 });
 
