@@ -47,6 +47,17 @@ export function readOptionalNumber(
  */
 export const ANDROID_SHELL_TEXT_UNSUPPORTED_REASON = 'android_shell_text_unsupported' as const;
 
+/**
+ * Typed reasons for the Android test-IME broadcast channel's truthful-outcome failures (#4520).
+ * The channel's acknowledgement proves attempted dispatch only; these reasons distinguish "no
+ * acknowledgement evidence at all" (result=0 / unparseable — a pre-ack helper or no receiver, which
+ * are indistinguishable and therefore both refused) from a receiver-reported rejection. Result data
+ * carries codes and lengths only, never user text.
+ */
+export const ANDROID_IME_HELPER_NO_ACK_REASON = 'android_ime_helper_no_ack' as const;
+export const ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON =
+  'android_ime_helper_dispatch_rejected' as const;
+
 /** Resolves a batch step command with the same whitespace and case rules on both peers. */
 export function normalizeBatchCommandName(command: unknown): string {
   return typeof command === 'string' ? command.trim().toLowerCase() : '';

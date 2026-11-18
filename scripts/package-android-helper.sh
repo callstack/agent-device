@@ -97,7 +97,7 @@ NODE
   ime)
     node - "$VERSION" "$APK_BASENAME" "$SHA256" "$PACKAGE_NAME" "$VERSION_CODE" > "$MANIFEST_PATH" <<'NODE'
 const [version, assetName, sha256, packageName, versionCode] = process.argv.slice(2);
-console.log(JSON.stringify({ name: 'android-ime-helper', version, assetName, sha256, packageName, versionCode: Number(versionCode), serviceComponent: `${packageName}/.TestInputMethodService`, broadcastProtocol: 'android-ime-helper-v1' }, null, 2));
+console.log(JSON.stringify({ name: 'android-ime-helper', version, assetName, sha256, packageName, versionCode: Number(versionCode), serviceComponent: `${packageName}/.TestInputMethodService`, broadcastProtocol: 'android-ime-helper-v2' }, null, 2));
 NODE
     ;;
 esac

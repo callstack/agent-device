@@ -69,13 +69,36 @@ Every extra is still treated as untrusted input: bounded length, defensive base6
 whole handler is wrapped so a malformed broadcast can never crash the IME process and strand a
 field without an active input method.
 
+- `ACTION_PROBE` -- capability probe; a v2 receiver answers `result=100, data="android-ime-helper-v2"`.
 - `ACTION_INPUT_TEXT_B64` (`--es text <base64 utf-8>`) -- commit decoded text at the cursor.
 - `ACTION_INPUT_TEXT` (`--es text <string>`) -- commit text directly (subject to `adb shell`'s own
   tokenization; prefer the base64 variant for anything with spaces or non-ASCII).
 - `ACTION_CLEAR_TEXT` -- select-all and commit an empty string.
 
-An optional `--es protocol android-ime-helper-v1` extra is a defensive sanity check (not a
-security boundary): if present and it doesn't match, the broadcast is dropped and logged.
+Protocol `android-ime-helper-v2` makes every known action answer with an **ordered result**
+(`goAsync()` + `setResult(...)`), so `am broadcast` blocks until the receiver finishes and prints
+`Broadcast completed: result=<code>, data="..."`. The finite code set is all non-zero — `0` is what
+the transport prints when no receiver answered, so it is never a valid ack:
+
+| code | meaning |
+| --- | --- |
+| 1 | committed: `commitText` returned true — attempted dispatch, NOT final field content |
+| 2 | `commitText` returned false |
+| 3 | no current input connection (no focused editor) |
+| 4 | rejected payload (too large / malformed base64 / empty / unknown action) |
+| 5 | protocol mismatch |
+| 100 | probe ok (data carries the protocol id) |
+
+Result data and log lines carry **codes and lengths only** (`utf16=<n>`), never user text. An ack
+proves receiver acceptance and the attempted length/`commitText` return; editors may transform
+text, so final field content stays owned by fill's single read-back. The declared per-broadcast
+bound is a base64 extra of at most 64_000 chars (48_000 UTF-8 bytes decoded) — measured on-device
+(Pixel 7, API 36): up to 64_000 chars are delivered and committed, and the adb-shell channel itself
+breaks between 65_000 and 66_000 chars. Payloads above the bound are rejected with code 4, never
+silently truncated; the host chunks larger texts on code-point boundaries below the bound.
+
+An optional `--es protocol android-ime-helper-v2` extra is a defensive sanity check (not a
+security boundary): if present and it doesn't match, the broadcast is rejected with code 5.
 
 ## Restore hygiene
 

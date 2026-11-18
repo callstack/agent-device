@@ -30,10 +30,12 @@ import {
 } from './fill-verification.ts';
 import {
   canAndroidImeHelperCommitText,
-  clearAndroidImeHelperText,
+  chunkAndroidImeHelperText,
+  clearAndroidImeHelperTextCommitted,
+  getAndroidImeHelperDeviceKey,
   isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
-  sendAndroidImeHelperText,
+  sendAndroidImeHelperTextCommitted,
 } from './ime-helper.ts';
 import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
@@ -283,12 +285,31 @@ async function typeAndroidImeHelper(
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
+  const deviceKey = getAndroidImeHelperDeviceKey(device);
+  let dispatchedChunks = 0;
   await sendAndroidTextSteps(
     device,
     planAndroidTextSteps(text, delayMs > 0 ? 1 : Infinity, delayMs),
     {
       delayMs,
-      sendChunk: async (chunk) => await sendAndroidImeHelperText(adb, packageName, chunk),
+      sendChunk: async (chunk) => {
+        // Each line fragment is split into code-point-safe chunks within the helper's declared
+        // per-broadcast byte bound, and every chunk must ack as committed with a matching
+        // attempted UTF-16 length. A dropped, rejected or truncated dispatch fails the type
+        // truthfully instead of reporting success — the ack is attempted dispatch only, never
+        // final field content (fill keeps the single read-back owner).
+        for (const piece of chunkAndroidImeHelperText(chunk)) {
+          try {
+            await sendAndroidImeHelperTextCommitted(adb, packageName, deviceKey, piece);
+            dispatchedChunks += 1;
+          } catch (error) {
+            if (error instanceof AppError) {
+              error.details = { ...error.details, dispatchedChunks };
+            }
+            throw error;
+          }
+        }
+      },
     },
   );
   emitAndroidTextDiagnostic('type', 'test-ime', text);
@@ -315,10 +336,15 @@ async function fillAndroidImeHelper(
   const adb = resolveAndroidAdbExecutor(device);
   let dispatchedSteps = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
-    await clearAndroidImeHelperText(adb, packageName);
+    const deviceKey = getAndroidImeHelperDeviceKey(device);
+    await clearAndroidImeHelperTextCommitted(adb, packageName, deviceKey);
     dispatchedSteps += 1;
     if (text) {
-      await sendAndroidImeHelperText(adb, packageName, text);
+      // Dispatched in code-point-safe chunks within the helper's declared byte bound; every chunk
+      // must ack as committed. Field content stays owned by the single read-back below.
+      for (const piece of chunkAndroidImeHelperText(text)) {
+        await sendAndroidImeHelperTextCommitted(adb, packageName, deviceKey, piece);
+      }
       dispatchedSteps += 1;
     }
     return await verifyAndroidFilledText(device, x, y, text, helper);

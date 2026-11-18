@@ -15,7 +15,10 @@ import {
   isAndroidTestImeActive,
   resetAndroidTestImeActivationCacheForTests,
 } from './ime-state.ts';
-import { resetAndroidImeHelperInstallCache } from './ime-helper.ts';
+import {
+  resetAndroidImeHelperAckCacheForTests,
+  resetAndroidImeHelperInstallCache,
+} from './ime-helper.ts';
 
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const STATE_DIR = '/state';
@@ -30,7 +33,7 @@ const ARTIFACT: AndroidImeHelperArtifact = {
     packageName: 'com.callstack.agentdevice.imehelper',
     versionCode: 1,
     serviceComponent: HELPER_SERVICE,
-    broadcastProtocol: 'android-ime-helper-v1',
+    broadcastProtocol: 'android-ime-helper-v2',
   },
 };
 
@@ -59,6 +62,7 @@ let host: AndroidAdbHostStub;
 beforeEach(async () => {
   resetAndroidTestImeActivationCacheForTests();
   resetAndroidImeHelperInstallCache();
+  resetAndroidImeHelperAckCacheForTests();
   host = activationHost();
   state = { settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]) };
   await activateWith(state);
@@ -203,7 +207,25 @@ test('a confirmed rebind whose device record stays set is retried at the next en
   await withDeviceAdb(
     async (args) => {
       calls.push(`${args[1]} ${args[2]}`);
-      return args[1] === 'am' ? { exitCode: 0, stdout: '', stderr: '' } : await deviceAdb(args);
+      if (args[1] === 'am') {
+        const action = args[args.indexOf('-a') + 1];
+        if (action === 'com.callstack.agentdevice.imehelper.ACTION_PROBE') {
+          return {
+            exitCode: 0,
+            stdout:
+              'Broadcast completed: result=100, data="android-ime-helper-v2", extras: Bundle[mParcelledData.dataSize=124]\n',
+            stderr: '',
+          };
+        }
+        const payload = args[args.indexOf('text') + 1] ?? '';
+        const utf16 = Buffer.from(payload, 'base64').toString('utf8').length;
+        return {
+          exitCode: 0,
+          stdout: `Broadcast completed: result=1, data="utf16=${utf16}"\n`,
+          stderr: '',
+        };
+      }
+      return await deviceAdb(args);
     },
     async () => await typeAndroid(DEVICE, 'Jane'),
   );

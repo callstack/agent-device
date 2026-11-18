@@ -19,7 +19,7 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
       packageName: PACKAGE,
       versionCode: 1,
       serviceComponent: 'com.callstack.agentdevice.imehelper/.TestInputMethodService',
-      broadcastProtocol: 'android-ime-helper-v1' as const,
+      broadcastProtocol: 'android-ime-helper-v2' as const,
     },
   });
   return {
@@ -52,6 +52,7 @@ import {
 } from '../ime-lifecycle.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from '../ime-device.fixtures.ts';
 import { getAndroidTestImeOwnership } from '../ime-state.ts';
+import { resetAndroidImeHelperAckCacheForTests } from '../ime-helper.ts';
 import {
   readAndroidTestImeRecoveryMarkers,
   writeAndroidTestImeRecoveryMarker,
@@ -59,7 +60,54 @@ import {
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();
+  resetAndroidImeHelperAckCacheForTests();
 });
+
+const PROBE_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_PROBE';
+const CLEAR_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
+const INPUT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
+
+/**
+ * Answers `am broadcast` calls the way the v2 helper does on-device: the capability probe with
+ * result=100, text/clear dispatches with result=1 and the attempted UTF-16 length — codes and
+ * lengths only, never text. Mutates `state.currentText` like a focused field would.
+ */
+function imeBroadcastAck(
+  args: readonly string[],
+  state: { currentText: string },
+): { exitCode: number; stdout: string; stderr: string } {
+  const action = args[args.indexOf('-a') + 1];
+  if (action === PROBE_ACTION) {
+    return {
+      exitCode: 0,
+      stdout:
+        'Broadcast completed: result=100, data="android-ime-helper-v2", extras: Bundle[mParcelledData.dataSize=116]\n',
+      stderr: '',
+    };
+  }
+  if (action === CLEAR_ACTION) {
+    state.currentText = '';
+    return { exitCode: 0, stdout: 'Broadcast completed: result=1, data="utf16=0"\n', stderr: '' };
+  }
+  if (action === INPUT_ACTION) {
+    const text = decodeBroadcastText(args);
+    state.currentText += text;
+    return {
+      exitCode: 0,
+      stdout: `Broadcast completed: result=1, data="utf16=${text.length}"\n`,
+      stderr: '',
+    };
+  }
+  return { exitCode: 0, stdout: 'Broadcast completed: result=0\n', stderr: '' };
+}
+
+/** Broadcast calls that carried a text/clear action (the probe excluded). */
+function dispatchBroadcasts(calls: readonly (readonly string[])[]): readonly (readonly string[])[] {
+  return calls.filter(
+    (args) =>
+      args[1] === 'am' && args[2] === 'broadcast' && args[args.indexOf('-a') + 1] !== PROBE_ACTION,
+  );
+}
 
 // Non-ASCII text now round-trips via the test IME broadcast channel instead of COMMAND_FAILED.
 
@@ -69,6 +117,9 @@ test('typeAndroid routes non-ASCII text through the test IME broadcast channel w
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        return imeBroadcastAck(args, { currentText: '' });
+      }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
     { serial: ANDROID_EMULATOR.id },
@@ -79,17 +130,18 @@ test('typeAndroid routes non-ASCII text through the test IME broadcast channel w
   );
 
   const broadcastCalls = calls.filter((args) => args[0] === 'shell' && args[1] === 'am');
-  assert.ok(broadcastCalls.length > 0, 'expected at least one am broadcast call');
-  assert.ok(broadcastCalls.every((args) => args[3] === '-p' && args[4] === PACKAGE));
   assert.ok(
-    broadcastCalls.some((args) =>
-      args.includes('com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64'),
-    ),
+    broadcastCalls.some((args) => args.includes(PROBE_ACTION)),
+    'the ack-capability probe must precede any text dispatch',
   );
-  const textIndex = broadcastCalls[0]?.indexOf('text') ?? -1;
+  assert.ok(broadcastCalls.every((args) => args[3] === '-p' && args[4] === PACKAGE));
+  const dispatches = dispatchBroadcasts(calls);
+  assert.equal(dispatches.length, 1);
+  assert.ok(dispatches[0]?.includes(INPUT_ACTION));
+  const textIndex = dispatches[0]?.indexOf('text') ?? -1;
   const decoded =
     textIndex >= 0
-      ? Buffer.from(broadcastCalls[0]?.[textIndex + 1] ?? '', 'base64').toString('utf8')
+      ? Buffer.from(dispatches[0]?.[textIndex + 1] ?? '', 'base64').toString('utf8')
       : '';
   assert.equal(decoded, '你好世界 😀');
 
@@ -104,23 +156,16 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   let currentText = '';
   const calls: (readonly string[])[] = [];
+  const state = { currentText };
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
       if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
-        const action = args[args.indexOf('-a') + 1];
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-          currentText = '';
-        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          const textIndex = args.indexOf('text');
-          const payload = textIndex >= 0 ? args[textIndex + 1] : undefined;
-          currentText += Buffer.from(payload ?? '', 'base64').toString('utf8');
-        }
-        return { exitCode: 0, stdout: '', stderr: '' };
+        return imeBroadcastAck(args, state);
       }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
-    captureXml: () => androidInputXml({ text: currentText }),
+    captureXml: () => androidInputXml({ text: state.currentText }),
   });
 
   await withAndroidAdbProvider(
@@ -130,6 +175,7 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
       await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Café ☕ 🎉 你好');
     },
   );
+  currentText = state.currentText;
 
   assert.equal(currentText, 'Café ☕ 🎉 你好');
   assert.equal(
@@ -153,6 +199,8 @@ test('typeAndroid batches ASCII text when the device is already on the helper IM
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
+      if (args[1] === 'am' && args[2] === 'broadcast')
+        return imeBroadcastAck(args, { currentText: '' });
       return {
         exitCode: 0,
         stdout: args.join(' ') === 'shell dumpsys input_method' ? helperImeInputMethodDump() : '',
@@ -165,7 +213,7 @@ test('typeAndroid batches ASCII text when the device is already on the helper IM
     },
   );
 
-  const broadcasts = calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast');
+  const broadcasts = dispatchBroadcasts(calls);
   assert.equal(broadcasts.length, 1, 'the whole string should land in one broadcast');
   assert.deepEqual(broadcasts[0]?.slice(3, 5), ['-p', PACKAGE]);
   const textIndex = broadcasts[0]?.indexOf('text') ?? -1;
@@ -181,20 +229,13 @@ test('typeAndroid batches ASCII text when the device is already on the helper IM
 });
 
 test('fillAndroid batches ASCII text when the device is already on the helper IME', async () => {
-  let currentText = 'stale value';
+  const state = { currentText: 'stale value' };
   const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
       if (args[1] === 'am' && args[2] === 'broadcast') {
-        const action = args[args.indexOf('-a') + 1];
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-          currentText = '';
-        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          const textIndex = args.indexOf('text');
-          currentText += Buffer.from(args[textIndex + 1] ?? '', 'base64').toString('utf8');
-        }
-        return { exitCode: 0, stdout: '', stderr: '' };
+        return imeBroadcastAck(args, state);
       }
       return {
         exitCode: 0,
@@ -202,7 +243,7 @@ test('fillAndroid batches ASCII text when the device is already on the helper IM
         stderr: '',
       };
     },
-    captureXml: () => androidInputXml({ text: currentText }),
+    captureXml: () => androidInputXml({ text: state.currentText }),
   });
 
   await withAndroidAdbProvider(
@@ -213,7 +254,7 @@ test('fillAndroid batches ASCII text when the device is already on the helper IM
     },
   );
 
-  assert.equal(currentText, 'filed the expense');
+  assert.equal(state.currentText, 'filed the expense');
   assert.equal(
     calls.filter((args) => args[1] === 'input' && args[2] === 'text').length,
     0,
@@ -294,7 +335,7 @@ test.each([
 
 test('fillAndroid re-focuses the target when the first helper attempt fails verification', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  let currentText = 'stale value';
+  const state = { currentText: 'stale value' };
   let commits = 0;
   const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
@@ -302,21 +343,15 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
       calls.push(args);
       if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
       if (args[1] === 'am' && args[2] === 'broadcast') {
-        const action = args[args.indexOf('-a') + 1];
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-          currentText = '';
-        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          commits += 1;
-          currentText += decodeBroadcastText(args);
-        }
-        return { exitCode: 0, stdout: '', stderr: '' };
+        if (args[args.indexOf('-a') + 1] === INPUT_ACTION) commits += 1;
+        return imeBroadcastAck(args, state);
       }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
     // The first commit never lands in the tree — the not-yet-bound InputConnection case the helper
     // retry exists for — so every verification sample keeps showing the stale value until the
     // second attempt's commit.
-    captureXml: () => androidInputXml({ text: commits >= 2 ? currentText : 'stale value' }),
+    captureXml: () => androidInputXml({ text: commits >= 2 ? state.currentText : 'stale value' }),
   });
 
   await withAndroidAdbProvider(
@@ -327,7 +362,7 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
     },
   );
 
-  assert.equal(currentText, 'filed the expense');
+  assert.equal(state.currentText, 'filed the expense');
   assert.deepEqual(
     calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
     ['disable', 'enable', 'set'],
@@ -351,24 +386,31 @@ test.each([true, false])(
   async (hintShowing) => {
     setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
     let rebound = false;
-    let currentText = 'old name';
+    const state = { currentText: 'old name' };
     const calls: (readonly string[])[] = [];
     const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
       exec: async (args) => {
         calls.push(args);
         if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
         if (args[1] === 'ime' && args[2] === 'set') rebound = true;
-        const action = args[args.indexOf('-a') + 1];
-        // The clear lands, then the session goes stale and drops the commit until the rebind.
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') currentText = '';
-        if (rebound && action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          currentText += decodeBroadcastText(args);
+        if (args[1] === 'am' && args[2] === 'broadcast') {
+          const action = args[args.indexOf('-a') + 1];
+          // The clear lands, then the session goes stale and drops the commit until the rebind.
+          if (action === INPUT_ACTION && !rebound) {
+            const text = decodeBroadcastText(args);
+            return {
+              exitCode: 0,
+              stdout: `Broadcast completed: result=1, data="utf16=${text.length}"\n`,
+              stderr: '',
+            };
+          }
+          return imeBroadcastAck(args, state);
         }
         return { exitCode: 0, stdout: '', stderr: '' };
       },
       captureXml: () =>
-        currentText
-          ? androidInputXml({ text: currentText })
+        state.currentText
+          ? androidInputXml({ text: state.currentText })
           : hintShowing
             ? `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`
             : androidInputXml({ text: '' }),
@@ -381,7 +423,7 @@ test.each([true, false])(
     );
 
     assert.equal(result, undefined, 'a verified fill, not unconfirmed evidence');
-    assert.equal(currentText, 'Jane');
+    assert.equal(state.currentText, 'Jane');
     assert.deepEqual(
       calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
       ['disable', 'enable', 'set'],
@@ -408,7 +450,10 @@ test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       if (args[1] === 'settings' || args[1] === 'ime') return await deviceAdb(args);
-      if (args.includes('com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64')) commits += 1;
+      if (args[1] === 'am' && args[2] === 'broadcast') {
+        if (args.includes(INPUT_ACTION)) commits += 1;
+        return imeBroadcastAck(args, { currentText: '' });
+      }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
     captureXml: () =>
@@ -492,6 +537,9 @@ test('typeAndroid broadcasts Unicode text when the helper IME is active with an 
     await withAndroidAdbProvider(
       async (args) => {
         calls.push(args);
+        if (args[1] === 'am' && args[2] === 'broadcast') {
+          return imeBroadcastAck(args, { currentText: '' });
+        }
         return {
           exitCode: 0,
           stdout: args.join(' ') === 'shell dumpsys input_method' ? helperImeInputMethodDump() : '',
@@ -505,7 +553,7 @@ test('typeAndroid broadcasts Unicode text when the helper IME is active with an 
     );
   });
 
-  const broadcasts = calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast');
+  const broadcasts = dispatchBroadcasts(calls);
   assert.equal(broadcasts.length, 1, 'the whole Unicode string should land in one broadcast');
   assert.deepEqual(broadcasts[0]?.slice(3, 5), ['-p', PACKAGE]);
   assert.equal(decodeBroadcastText(broadcasts[0]), '你好世界 😀');
@@ -518,19 +566,13 @@ test('typeAndroid broadcasts Unicode text when the helper IME is active with an 
 });
 
 test('fillAndroid broadcasts Unicode text when the helper IME is active with an empty cache', async () => {
-  let currentText = 'stale value';
+  const state = { currentText: 'stale value' };
   const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
       if (args[1] === 'am' && args[2] === 'broadcast') {
-        const action = args[args.indexOf('-a') + 1];
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-          currentText = '';
-        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          currentText += decodeBroadcastText(args);
-        }
-        return { exitCode: 0, stdout: '', stderr: '' };
+        return imeBroadcastAck(args, state);
       }
       return {
         exitCode: 0,
@@ -538,7 +580,7 @@ test('fillAndroid broadcasts Unicode text when the helper IME is active with an 
         stderr: '',
       };
     },
-    captureXml: () => androidInputXml({ text: currentText }),
+    captureXml: () => androidInputXml({ text: state.currentText }),
   });
 
   const diagnostics = await captureTextInjectionDiagnostics(async () => {
@@ -551,7 +593,7 @@ test('fillAndroid broadcasts Unicode text when the helper IME is active with an 
     );
   });
 
-  assert.equal(currentText, 'Café ☕ 🎉 你好');
+  assert.equal(state.currentText, 'Café ☕ 🎉 你好');
   assert.equal(
     calls.filter((args) => args[1] === 'input' && args[2] === 'text').length,
     0,
@@ -588,6 +630,114 @@ test('a third-party active IME keeps ASCII text on the chunked shell path', asyn
 
   assert.equal(calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast').length, 0);
   assert.equal(calls.filter((args) => args[1] === 'input' && args[2] === 'text').length, 3);
+});
+
+test('typeAndroid splits oversized text into code-point-safe acked chunks instead of truncating', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const state = { currentText: '' };
+  const calls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    async (args) => {
+      calls.push(args);
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        return imeBroadcastAck(args, state);
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      // 50_000 ASCII chars exceed the helper's declared 48_000-byte per-broadcast bound.
+      await typeAndroid(ANDROID_EMULATOR, 'q'.repeat(50_000) + '😀');
+    },
+  );
+
+  const dispatches = dispatchBroadcasts(calls);
+  assert.equal(
+    dispatches.length,
+    2,
+    'oversized text is dispatched as ordered chunks, not truncated',
+  );
+  const chunkLengths = dispatches.map((args) =>
+    Buffer.byteLength(decodeBroadcastText(args), 'utf8'),
+  );
+  assert.deepEqual(
+    chunkLengths,
+    [48_000, 2_004],
+    'first chunk fills the byte bound; the emoji stays whole',
+  );
+  assert.equal(state.currentText, 'q'.repeat(50_000) + '😀');
+});
+
+test('typeAndroid reports a partial dispatch truthfully when a later chunk is rejected', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const state = { currentText: '' };
+  let dispatches = 0;
+  await withAndroidAdbProvider(
+    async (args) => {
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        const action = args[args.indexOf('-a') + 1];
+        if (action === INPUT_ACTION) {
+          dispatches += 1;
+          // The second chunk's editor reports no input connection.
+          if (dispatches === 2) {
+            return {
+              exitCode: 0,
+              stdout: 'Broadcast completed: result=3, data="no-input-connection"\n',
+              stderr: '',
+            };
+          }
+          return imeBroadcastAck(args, state);
+        }
+        return imeBroadcastAck(args, state);
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(typeAndroid(ANDROID_EMULATOR, 'q'.repeat(50_000)), (error: AppError) => {
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.failureReason, 'android_ime_helper_dispatch_rejected');
+        assert.equal(error.details?.dispatchKind, 'no-input-connection');
+        assert.equal(
+          error.details?.dispatchedChunks,
+          1,
+          'partial-dispatch evidence: the first chunk was already dispatched',
+        );
+        return true;
+      });
+    },
+  );
+  assert.equal(dispatches, 2, 'the series stopped at the rejected chunk');
+  assert.equal(state.currentText, 'q'.repeat(48_000), 'only the first chunk landed');
+});
+
+test('typeAndroid refuses to report success when the running helper never acknowledges', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const calls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    async (args) => {
+      calls.push(args);
+      // A pre-ack (v1) helper or a dead receiver: result=0 for everything.
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        return { exitCode: 0, stdout: 'Broadcast completed: result=0\n', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(
+        typeAndroid(ANDROID_EMULATOR, 'hello'),
+        (error: AppError) =>
+          error.code === 'COMMAND_FAILED' &&
+          error.details?.failureReason === 'android_ime_helper_no_ack',
+      );
+    },
+  );
+  assert.equal(
+    calls.filter((args) => args.includes(INPUT_ACTION)).length,
+    0,
+    'no text is dispatched once the ack capability is refused',
+  );
 });
 
 test('typeAndroid sends KEYCODE_DEL keyevents instead of broadcasting backspaces through the test IME', async () => {
