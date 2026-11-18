@@ -530,6 +530,21 @@ test.each(['NavigationBar', 'Toolbar', 'TabBar', 'BottomNavigationView'])(
   },
 );
 
+test.each([{ type: 'HomeToolbarView' }, { type: 'Other', role: 'BottomTabBar' }])(
+  'checks the size of controls in the custom iOS bar %j',
+  (container) => {
+    const result = audit([
+      node(0, { ...container, hittable: false }),
+      node(1, {
+        parentIndex: 0,
+        label: 'Save',
+        rect: { x: 0, y: 0, width: 24, height: 24 },
+      }),
+    ]);
+    expect(summarize(result.findings)).toEqual(['small-target @e1']);
+  },
+);
+
 test.each([{ role: 'UITabBar' }, { subrole: 'UIToolbar' }, { subrole: 'AXToolbar' }])(
   'recognizes a direct bar item through its parent class %j',
   (barClass) => {

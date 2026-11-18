@@ -37,11 +37,16 @@ export function snapshotBarKind(
   return SNAPSHOT_BAR_KINDS.find(([fragment]) => normalized.includes(fragment))?.[1];
 }
 
-/** Reads bar identity, including bottom navigation, from the captured type, role, and subrole. */
-export function isSnapshotBarNode(
+/** Identifies native iOS bars whose direct items use platform sizing. */
+export function isNativeIosSnapshotBarNode(
   node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
 ): boolean {
-  return snapshotBarKind(node) !== undefined;
+  return [node.type, node.role, node.subrole].some((value) => {
+    const name = normalizeType(value ?? '').replace(/^ui/, '');
+    return SNAPSHOT_BAR_KINDS.some(
+      ([fragment, kind]) => kind !== 'bottom-navigation' && name === fragment,
+    );
+  });
 }
 
 export function snapshotNodeKindIncludesAny(

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import {
   androidFieldValue,
   isFillableType,
-  isSnapshotBarNode,
+  isNativeIosSnapshotBarNode,
   snapshotBarKind,
 } from './snapshot-text.ts';
 
@@ -57,11 +57,11 @@ test.each([
   },
 ])('snapshotBarKind reads $name', ({ node, kind }) => {
   expect(snapshotBarKind(node)).toBe(kind);
-  expect(isSnapshotBarNode(node)).toBe(true);
+  expect(isNativeIosSnapshotBarNode(node)).toBe(kind !== 'bottom-navigation');
 });
 
 test('a non-bar node reads no bar kind', () => {
   const node = { type: 'Button', role: 'UIButton' };
   expect(snapshotBarKind(node)).toBeUndefined();
-  expect(isSnapshotBarNode(node)).toBe(false);
+  expect(isNativeIosSnapshotBarNode(node)).toBe(false);
 });

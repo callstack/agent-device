@@ -6,7 +6,7 @@ import type {
   AuditResult,
   AuditSizeUnit,
 } from '@agent-device/contracts/capture';
-import { isSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
+import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
@@ -137,7 +137,7 @@ function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership
   if (scan.platform !== 'ios') return 'app';
   if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
   const parent = parentOf(node, scan);
-  return parent && isSnapshotBarNode(parent) ? 'platform-sized' : 'app';
+  return parent && isNativeIosSnapshotBarNode(parent) ? 'platform-sized' : 'app';
 }
 
 function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean {
