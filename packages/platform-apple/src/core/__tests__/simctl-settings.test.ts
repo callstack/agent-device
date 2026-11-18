@@ -113,7 +113,6 @@ test('location set sends one latitude,longitude argument and returns the coordin
 
 test.for([
   { options: { permissionTarget: 'calendar' }, service: 'calendar' },
-  { options: { permissionTarget: 'all' }, service: 'all' },
   { options: { permissionTarget: 'camera' }, service: 'camera' },
   { options: { permissionTarget: 'photos', permissionMode: 'limited' }, service: 'photos-add' },
 ])(
@@ -133,6 +132,131 @@ test.for([
     expect(argvs(runSimctl)).toEqual([['privacy', 'SIM-1', 'grant', service, 'com.example.app']]);
   },
 );
+
+// Every target but the narrower ones that share a row (contacts-limited, location).
+const EVERY_SERVICE = [
+  'calendar',
+  'camera',
+  'contacts',
+  'location-always',
+  'media-library',
+  'microphone',
+  'motion',
+  'notifications',
+  'photos',
+  'reminders',
+  'siri',
+];
+
+function refusal(wording: string): AppError {
+  return new AppError('COMMAND_FAILED', 'simctl exited with code 1', {
+    stderr: `${wording}\nOperation not permitted`,
+  });
+}
+
+// A revoke also takes back limited photo access, a service of its own.
+const EVERY_REVOKED_SERVICE = [...EVERY_SERVICE, 'photos-add'];
+
+test.for([
+  { state: 'grant', action: 'grant', wording: 'Failed to grant access', services: EVERY_SERVICE },
+  {
+    state: 'deny',
+    action: 'revoke',
+    wording: 'Failed to revoke access',
+    services: EVERY_REVOKED_SERVICE,
+  },
+])(
+  '$state all changes each service in turn and skips the one the runtime refuses',
+  async ({ state, action, wording, services }) => {
+    // The simulator records `all` as one kTCCServiceAll row that iOS does not consult.
+    const runSimctl = recordingRunner(
+      services.map((service) =>
+        service === 'notifications' ? refusal(wording) : { stdout: '', stderr: '' },
+      ),
+    );
+
+    const result = await applySimctlSetting(
+      request(runSimctl, {
+        setting: 'permission',
+        state,
+        appBundleId: 'com.example.app',
+        options: { permissionTarget: 'all' },
+      }),
+    );
+
+    expect(argvs(runSimctl)).toEqual(
+      services.map((service) => ['privacy', 'SIM-1', action, service, 'com.example.app']),
+    );
+    expect(result).toEqual({
+      permission: 'all',
+      permissions: services.filter((service) => service !== 'notifications'),
+      warnings: ['Skipped notifications: this iOS runtime does not let simctl privacy change it.'],
+    });
+  },
+);
+
+test('reset all stays one simctl call, which clears every service', async () => {
+  const runSimctl = recordingRunner();
+
+  const result = await applySimctlSetting(
+    request(runSimctl, {
+      setting: 'permission',
+      state: 'reset',
+      appBundleId: 'com.example.app',
+      options: { permissionTarget: 'all' },
+    }),
+  );
+
+  expect(argvs(runSimctl)).toEqual([['privacy', 'SIM-1', 'reset', 'all', 'com.example.app']]);
+  expect(result).toBeUndefined();
+});
+
+test('grant all fails as unsupported only when the runtime refuses every service', async () => {
+  const refused = refusal('Failed to grant access');
+  const runSimctl = recordingRunner(EVERY_SERVICE.map(() => refused));
+
+  await expect(
+    applySimctlSetting(
+      request(runSimctl, {
+        setting: 'permission',
+        state: 'grant',
+        appBundleId: 'com.example.app',
+        options: { permissionTarget: 'all' },
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message:
+      'iOS simulator does not support setting all permission via simctl privacy on this runtime.',
+    details: { hint: expect.stringContaining('refused every privacy service') },
+    cause: refused,
+  });
+  expect(runSimctl).toHaveBeenCalledTimes(EVERY_SERVICE.length);
+});
+
+test('grant all stops at a failure that is not a refusal', async () => {
+  const failed = new AppError('COMMAND_FAILED', 'simctl exited with code 2', {
+    stderr: 'Invalid device: booted',
+  });
+  const runSimctl = recordingRunner([{ stdout: '', stderr: '' }, failed]);
+
+  await expect(
+    applySimctlSetting(
+      request(runSimctl, {
+        setting: 'permission',
+        state: 'grant',
+        appBundleId: 'com.example.app',
+        options: { permissionTarget: 'all' },
+      }),
+    ),
+  ).rejects.toBe(failed);
+  expect(argvs(runSimctl)).toEqual([
+    ['privacy', 'SIM-1', 'grant', 'calendar', 'com.example.app'],
+    ['privacy', 'SIM-1', 'grant', 'camera', 'com.example.app'],
+  ]);
+  // The error names what had already changed, beside what the failure itself reported.
+  expect(failed.details).toEqual({ stderr: 'Invalid device: booted', permissions: ['calendar'] });
+});
 
 test('a privacy service the runtime refuses is unsupported; other failures pass through', async () => {
   const refused = new AppError('COMMAND_FAILED', 'simctl exited with code 1', {
@@ -188,6 +312,13 @@ test('a refused privacy service reports the device id the caller names, not the 
 test.for([
   { state: 'deny', action: 'revoke', target: 'notifications', wording: 'Failed to revoke access' },
   { state: 'grant', action: 'grant', target: 'calendar', wording: 'Failed to set access' },
+  {
+    state: 'grant',
+    action: 'grant',
+    target: 'notifications',
+    wording:
+      'Underlying error (domain=NSPOSIXErrorDomain, code=1):\n\tFailed to create TCC authorization record',
+  },
 ])(
   '$state $target refused as $wording is unsupported, with no capability probe',
   async ({ state, action, target, wording }) => {
