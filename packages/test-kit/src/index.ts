@@ -123,7 +123,6 @@ export {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from './runtime-operation-facts.ts';
 export { createTestRuntimeStateHandle, type TestRuntimeStateHandle } from './runtime-state.ts';
-export { FOREIGN_UID, serveHostOwnership } from './host-ownership.fixtures.ts';
 export { buildNodes } from './snapshot-builders.ts';
 export {
   bottomTabsRealCaptureFixture,

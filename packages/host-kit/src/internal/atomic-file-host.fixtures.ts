@@ -19,10 +19,7 @@ export const currentGid = process.getgid?.() ?? -1;
  *
  * Ownership is judged against this process's own uid, so naming a fixed id only makes an entry foreign while the
  * suite stands somewhere else: CI runs a suite as `nobody` (65534), and there a hard-coded 65534 makes every
- * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all. The same rule
- * is written in `@agent-device/test-kit`'s `host-ownership.fixtures.ts`; a package's tests may not reach
- * test-kit, and one package may not publish test support to another (R83), so each keeps its own copy — change
- * both together.
+ * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all.
  */
 export const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 
