@@ -229,13 +229,19 @@ function readLinuxProcessStat(pid: number): { state: string; startTime: string }
   }
 }
 
-/** C-locale pin for lstart-bearing ps reads, applied as a final `envOverrides` word so `TZ` survives. */
-const PS_LSTART_ENV_OVERRIDES: NodeJS.ProcessEnv = { LC_ALL: 'C' };
+/**
+ * Locale and clock pin for lstart-bearing ps reads, applied as a final `envOverrides` word so it
+ * wins over any captured host or request `TZ` without replacing the rest of the child env. With
+ * `TZ=UTC` the ps child renders lstart on the UTC clock no matter which zone the reader or the
+ * bound request inherited, so the output is parsed as UTC and the token has no local-zone or DST
+ * dependence.
+ */
+const PS_LSTART_ENV_OVERRIDES: NodeJS.ProcessEnv = { LC_ALL: 'C', TZ: 'UTC' };
 
 /** ps read options without lstart: failure is unknown evidence; the caller's locale stays in charge. */
 const psReadOptions = (timeoutMs: number): ExecOptions => ({ allowFailure: true, timeoutMs });
 
-/** ps read options carrying lstart: C locale pinned over the effective child env, never replacing it. */
+/** ps read options carrying lstart: C locale and UTC clock pinned over the effective child env. */
 const psLstartReadOptions = (timeoutMs: number): ExecOptions => ({
   allowFailure: true,
   timeoutMs,
@@ -274,19 +280,23 @@ export function processStartTimesDiffer(
   return left !== right;
 }
 
-/** Canonicalize a pinned C-form lstart, rendered in the reader's zone, to a zone-independent token. */
+/**
+ * Canonicalize a pinned C-form lstart to a zone-independent token. The probe pins `TZ=UTC`, so the
+ * wall-clock fields are UTC and are parsed with `Date.UTC` — never the reader's local zone, which
+ * could differ from the zone the ps child inherited and which folds ambiguous times at DST.
+ */
 function canonicalPosixBirthToken(lstart: string): string | null {
   const match = PS_START_TIME_FIELDS.exec(lstart.trim());
   const month = match === null ? -1 : PS_MONTHS.indexOf(match[2]!);
   if (match === null || month < 0) return null;
-  const startedAtMs = new Date(
+  const startedAtMs = Date.UTC(
     Number(match[7]),
     month,
     Number(match[3]),
     Number(match[4]),
     Number(match[5]),
     Number(match[6]),
-  ).getTime();
+  );
   return Number.isFinite(startedAtMs) ? `${POSIX_BIRTH_TOKEN_PREFIX}${startedAtMs}` : null;
 }
 

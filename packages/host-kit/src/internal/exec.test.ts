@@ -325,8 +325,8 @@ const PRINT_TZ_AND_LOCALE = [
 ];
 
 test('envOverrides are the final word over the bound host environment, keeping TZ under a locale pin', async () => {
-  // A `ps -o lstart` read pins LC_ALL=C this way: the pin must not replace the effective child
-  // environment, because TZ picks the zone lstart renders in.
+  // Overrides merge over the effective child env instead of replacing it, so an `LC_ALL=C` pin
+  // alone still lets `TZ` through; the lstart probe itself pins `TZ=UTC` on top (host-process).
   const host = hostWith({ TZ: 'Pacific/Kiritimati' });
   const [pinned, requestEnvOverridden] = await Promise.all([
     withCommandHost({ host, requestEnv: undefined }, async () =>

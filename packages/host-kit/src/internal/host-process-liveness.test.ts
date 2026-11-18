@@ -29,9 +29,9 @@ function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
 }
 
-/** The canonical token a pinned C-form lstart parses to, in the reader's zone. */
+/** The canonical token a pinned C-form lstart parses to: the probe pins TZ=UTC, so parse as UTC. */
 function posixToken(y: number, mo: number, d: number, h: number, mi: number, s: number): string {
-  return `posix:${new Date(y, mo, d, h, mi, s).getTime()}`;
+  return `posix:${Date.UTC(y, mo, d, h, mi, s)}`;
 }
 
 /** Answers the two batched identity reads: state and start time, and the command line. */
@@ -379,16 +379,17 @@ test.skipIf(process.platform !== 'linux')(
   },
 );
 
-/** The `-o` value of a ps call: `lstart=`-bearing reads pin the locale, the others must not. */
+/** The `-o` value of a ps call: `lstart=`-bearing reads pin locale and clock, the others must not. */
 function psFieldOf(args: readonly string[]): string {
   return args.find((arg) => arg.endsWith('=')) ?? '';
 }
 
-test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep the caller locale', async () => {
+test('only lstart-bearing ps reads pin LC_ALL=C and TZ=UTC; command and state reads keep the caller env', async () => {
   // BSD/macOS ps escapes non-ASCII argv bytes under LC_ALL=C, so a pinned command read would
   // disagree byte-for-byte with the unpinned listHostProcesses scan and break managed-process
-  // ownership for non-ASCII paths. The rule: every read whose output carries lstart is pinned,
-  // and no command-text read is.
+  // ownership for non-ASCII paths. The rule: every read whose output carries lstart pins the C
+  // locale and the UTC clock (so the output never depends on the zone the ps child inherited),
+  // and no command-text read is pinned.
   const utf8Command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
   const escapeLikeCLocalePs = (text: string) =>
     text.replaceAll(/[^\u0020-\u007E]/g, (ch) => `M-C${ch}`);
@@ -437,10 +438,10 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   for (const call of calls) {
     const field = psFieldOf(call[1] ?? []);
     if (field.includes('lstart=')) {
-      assert.equal(
-        call[2]?.envOverrides?.LC_ALL,
-        'C',
-        `lstart-bearing read (${field}) must pin LC_ALL=C`,
+      assert.deepEqual(
+        call[2]?.envOverrides,
+        { LC_ALL: 'C', TZ: 'UTC' },
+        `lstart-bearing read (${field}) must pin LC_ALL=C and TZ=UTC over the inherited env`,
       );
       assert.equal(call[2]?.env, undefined, 'the pin must be an override, not a whole env');
     } else {
@@ -459,6 +460,33 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   }
   assert.ok(sawCommandRead, 'the pid=,command= batch read must have run');
 });
+
+test.runIf(process.platform !== 'win32')(
+  'a C-form lstart read canonicalizes on the UTC clock whatever zone the reader process runs in',
+  () => {
+    mockRunCmdSync.mockImplementation((_cmd: string, args: readonly string[]) => ({
+      stdout:
+        String(args[3]) === 'lstart='
+          ? 'Mon Aug 10 20:00:00 2026\n'
+          : '4242 Ss   Mon Aug 10 20:00:00 2026\n',
+      stderr: '',
+      exitCode: 0,
+    }));
+    const baseline = readHostProcessIdentityObservations([4242]).get(4242)?.startTime;
+    assert.equal(baseline, posixToken(2026, 7, 10, 20, 0, 0));
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      // The probe pins TZ=UTC for the ps child and the parser reads the fields as UTC, so the
+      // reader's own zone must not move the token.
+      assert.equal(readHostProcessIdentityObservations([4242]).get(4242)?.startTime, baseline);
+      assert.equal(readProcessStartTime(4242), baseline);
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  },
+);
 
 test('only two start times in the same provenanced format prove different lifetimes', () => {
   const cForm = 'Tue Nov 17 19:42:27 2026';
