@@ -1,24 +1,13 @@
 # Web Backend
 
-Web automation uses a managed `agent-browser` backend as an implementation detail.
+Web automation uses a managed `agent-browser` backend, an implementation detail.
 
-- Runtime web commands resolve the backend only from the state-dir managed install at `tools/agent-browser/<version>`.
-- Normal `--platform web` commands do not install the managed backend on first use.
-  If the backend is missing, they fail with a setup hint.
-- Before first web automation or in CI/sandbox bootstrap steps, use `agent-device web setup`.
-- To run the backend health check, use `agent-device web doctor`.
+- Web commands resolve the backend only from the state-dir install at `tools/agent-browser/<version>`.
+- `--platform web` commands never install the backend. If it is missing, they fail with a setup hint.
+- Before first web use or in CI/sandbox bootstrap, run `agent-device web setup`.
+- For a backend health check, run `agent-device web doctor`.
 - Only `runManagedAgentBrowser` executes the backend.
-  It spawns the declared `bin` entry with the current Node runtime, never the `.bin` shim.
+  Its `spawnManagedAgentBrowser` runs the declared `bin` entry under the current Node, never the `.bin` shim or a shell (quoting hazards).
 
-Do not document direct `agent-browser` commands as agent-device features.
-Web `network dump` is the narrow exception.
-It adapts `agent-browser network requests` to the existing agent-device network evidence shape.
-Until an explicit agent-device command design exists for them, exclude these features from the minimal web surface:
-
-- Browser-specific network routing/interception/HAR.
-- CDP.
-- React web.
-- Tabs.
-- Downloads.
-- Auth vaults.
-- Profiling.
+Do not document direct `agent-browser` commands as agent-device features, except web `network dump`, which adapts `agent-browser network requests` to the network evidence shape.
+Until an agent-device command design exists for them, exclude from the web surface: browser network routing, interception, and HAR; CDP; React web; tabs; downloads; auth vaults; and profiling.

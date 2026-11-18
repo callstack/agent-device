@@ -5,7 +5,7 @@ For default-set capture, run `xcrun devicectl device info displays --device <udi
 For scoped capture or rotation, run `xcrun simctl --set <set> spawn <udid> ~/.agent-device/fold-helper/<key>/fold-helper panels`.
 For default-set rotation, omit `--set <set>`.
 
-- Panels: the list shows each integrated panel with `backlightState`. Only the lit panel permits capture.
+- Panels: the list shows each integrated panel's `backlightState`. Only the lit panel permits capture.
   A dark-panel capture exits 0 with a black PNG.
 - Input routing: after each pose change, verify a fresh control.
   A successful synthesis acknowledgement does not prove a hit.
@@ -13,18 +13,15 @@ For default-set rotation, omit `--set <set>`.
   The resolved app window owns gesture coordinates and its target screen.
 - Pose: `agent-device fold closed|half-open|open` sends private HID inside the simulator.
   The same helper reads the hinge back in `hinge` mode.
-  After a fold, take another snapshot. Folds invalidate refs and coordinates.
+  After a fold, snapshot again; folds invalidate refs and coordinates.
   Verify locally with Device Hub stopped and the simulator booted through `simctl boot`.
-  Test both sets (`--ios-simulator-device-set`):
-  - All three poses.
-  - Capture of the active panel.
-  - An app interaction.
-  Until GHA supports the runtime, Duo coverage remains local.
-  After a fresh boot, a closed hinge can keep the inner panel lit for more than 30 seconds.
+  In both sets (`--ios-simulator-device-set`), test all three poses, active-panel capture, and an app interaction.
+  Until GHA supports the runtime, Duo coverage stays local.
+  After a fresh boot, a closed hinge can keep the inner panel lit for over 30 seconds.
   Panel power cannot separate `half-open` from `open`.
 - Touch overlays export at the captured track size.
   The compositor checks its output size and non-black content against the raw capture.
-  If that check fails, `record stop` keeps the raw file. It reports `overlayWarning`.
+  If that check fails, `record stop` keeps the raw file and reports `overlayWarning`.
   `record start --hide-touches` is only for the fastest raw capture.
 - To launch on iOS 27.0/27.1, iOS 27 SDK apps need UIScene lifecycle.
 - The iOS 27.1 runtime (24A94425) accepts only the iPhone Duo device type.

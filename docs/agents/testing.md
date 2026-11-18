@@ -3,9 +3,8 @@
 ## Run checks
 
 1. During edits, run the focused test or `pnpm check:quick`.
-2. Before you push, commit the change.
-   Run `pnpm check:affected --run --head <commit>`.
-3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
+2. Before you push, commit, then run `pnpm check:affected --run --head <commit>`.
+3. For a broad refactor or a requested full gate, run `pnpm check`.
 
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
@@ -16,31 +15,29 @@ Avoid subprocess-heavy tests beside a broad gate.
 The runner stops at failure.
 Its receipt records refs, checkout state, commands, exits, skips, and results.
 
-For a plan, run `pnpm check:affected`.
-For reasons, add `--verbose`.
+For a plan, run `pnpm check:affected`. For reasons, add `--verbose`.
 For JSON, run `pnpm --silent check:affected --json`.
-With `--run --json`, stdout contains the receipt and stderr contains progress.
+With `--run --json`, stdout carries the receipt and stderr carries progress.
 When head is `HEAD`, planning and execution include working-tree changes.
 
 `pnpm check` runs every `localRunnable` catalog check except `vitest-related`.
 It skips each non-`localRunnable` check, naming its CI lane.
 
-Only a passed receipt with `exactCommit: true` proves validation at the named commit.
+Only a passed receipt with `exactCommit: true` proves validation at its commit.
 A dirty-tree pass is local feedback.
 Detected checkout changes invalidate the run.
-Initial/final checks detect persistent changes.
-They do not sandbox the checkout.
+Initial and final checks detect persistent changes but do not sandbox the checkout.
 During validation, stop all edits.
 
 ## Interpret selection
 
-For package manifest or TypeScript config changes, retain full selection.
-`FAIL-OPEN` means the selector could not safely narrow the set.
+For manifest or TypeScript config changes, keep full selection.
+`FAIL-OPEN` means the selector could not narrow the set safely.
 Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
 
 Read required-check status on the PR.
-GitHub owns full coverage, native builds, device lanes, provider integration, and compatibility that uses history.
+GitHub owns full coverage, native builds, device lanes, provider integration, and history-based compatibility.
 On a narrowed plan, related tests replace only provider integration.
 For skipped-check owners, read `results[].reason`.
 Until source-read ownership is complete, keep #4050's full-unit production fallback.
@@ -61,9 +58,9 @@ Never call a failing gate passed.
 
 Match failures by check, location, diagnostic code, and assertion.
 
-Until a named owner or issue accepts the blocker, the implementing agent owns diagnosis.
+The implementing agent owns diagnosis until a named owner or issue accepts the blocker.
 Do not loop on an unchanged failure.
 Do not widen timeouts. Do not mask exit codes.
 Do not claim CI authority as a local pass.
 Only if its log shows an infrastructure fault, rerun failed CI once.
-If the same failure occurs twice, treat it as a finding.
+Treat a repeated failure as a finding.

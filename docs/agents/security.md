@@ -3,36 +3,41 @@
 ## Trust boundaries
 
 - The CLI client trusts its caller for destinations on its machine.
-- The local daemon trusts its state directory and the paths that it chooses.
+- The local daemon trusts its state directory and chosen paths.
 - The client trusts a remote daemon for data and validated identifiers, not for paths.
 - Nobody trusts the network or other local users.
-- Give a daemon that runs as root only its caller.s authority.
+- A daemon that runs as root has only its caller's filesystem authority.
 - Out of scope: the same uid, root as an adversary, ACLs, mount changes, and untrusted filesystems.
 
-## Rules
+## Implemented today
+
+Only the caller-named `--save-script` destination on POSIX follows the directory rules below (ADR 0016, `packages/host-kit/src/internal/atomic-file.ts`).
+Its relative and `~/` input is folded lexically first. On Windows, the directory ACL decides.
+The remote client binds each publication ID to the endpoint, tenant, and session in a local record (`packages/remote/src/session-script-destination.ts`).
+
+## Rules for new or migrated write sites
 
 - Authorize a destination on the machine that writes it.
   Authentication gives identity, not filesystem authority.
-- Accept from a peer only data, validated identifiers, or one entry name under a root that the writer authorized.
+- For a privileged writer, judge each directory against the caller's uid.
+- Accept from a peer only data, an identifier bound to a local record, or one entry name under a root the writer authorized.
 - Before filesystem work, validate a single-entry name: type, NUL, empty, `.`, `..`, separators, and platform rules.
 - For an input with a known dialect, use `path.posix` or `path.win32`.
 - Do not fold a path that the kernel resolves with `path.join`, `path.resolve`, or `path.normalize`.
-  The kernel applies `..` from the directory a link leads to.
-- Before you create below a directory, establish authority over each directory on the route.
-  Resolve each link from its physical parent.
-  Refuse foreign owners and group- or world-writable ground that is not sticky.
-  Never create the entry in sticky shared ground.
-  Judge again a level that appears concurrently.
-- Do not use recursive `mkdir` through ground that others control.
-- Carry the judged parent into staging and commit. After async work, check its identity again.
+- Before you create below a directory, judge each directory on the route from one `lstat`.
+  Apply `..` physically. Resolve an absolute link target from `/`, a relative one from the link's directory.
+  Refuse foreign owners and group- or world-writable directories that are not sticky.
+  In a sticky shared directory, accept only links this user or root owns, and never create the entry.
+  Create missing directories at 0700, one at a time. Judge one that appears concurrently.
+- Carry the judged parent into staging and commit. After async work, re-check its identity.
 - Choose the final-entry operation: exclusive create, a link for no-clobber, a same-filesystem rename for replace, or a verified descriptor for append.
 - Create entries at the restrictive mode. Use `chmod` only before an entry is published.
 - Bound remote bytes as they arrive. Clean up only what the operation created.
-- If delivery fails, keep the previous file and the action result.
+- If delivery fails before commit, keep the previous file.
+- Disclose each delivery failure with a typed reason, and keep the action result where the delivery contract requires it.
 
-## Destination classes
+## Destination classes: the #4669 proposal
 
-Caller output, daemon state, client state, private scratch, and a peer-named entry under a local root.
-Issue #4669 owns moving every write site to one class.
-`packages/host-kit/src/internal/atomic-file.ts` owns the caller-output walk (ADR 0016).
+Issue #4669 proposes five classes: caller output, daemon state, client state, private scratch, and a peer-named entry under a local root.
+It owns admission, overwrite, mode, and Windows behavior for each class.
 Prior art: `openat2(RESOLVE_BENEATH)` and Go `os.Root`. ADR 0016 permits absolute caller destinations, so compare how each establishes directory authority.

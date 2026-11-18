@@ -5,7 +5,7 @@ The daemon owns sessions. Registry declarations route commands to platform runti
 
 ## Task routing
 
-Read each applicable row. Follow other links only when they apply.
+Read each applicable row. Follow other links only as needed.
 
 | When the task involves | Read |
 | --- | --- |
@@ -18,12 +18,12 @@ Read each applicable row. Follow other links only when they apply.
 | Test audits or deletions | `docs/agents/test-audit.md` |
 | Mutation experiments or base comparisons | `docs/agents/test-experiments.md` |
 | Gate selection, fuzzing, or mutation harnesses | `docs/agents/gates.md` |
-| Selector capture, polling, interaction fast paths, replay | `docs/agents/selector-capture.md` |
+| Selector capture, polling, snapshot cache, interaction fast paths, replay | `docs/agents/selector-capture.md` |
 | A new or changed CLI flag | `docs/agents/cli-flags.md` |
 | A PR to open or update | `docs/agents/pull-requests.md` |
 | A change to review | `docs/agents/review.md` |
-| Trust boundaries, untrusted paths, or security review | `docs/agents/security.md` |
-| Device-facing changes or manual device runs | `docs/agents/device-verification.md` |
+| Trust boundaries, untrusted paths, security review | `docs/agents/security.md` |
+| Device-facing or Apple runner changes, manual device runs | `docs/agents/device-verification.md` |
 | Issues, PRDs, or triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
@@ -34,19 +34,19 @@ The versioned CLI help owns command semantics. To drive an app, start with the s
 
 ## Working rules
 
-- Keep edits in the requested command family or module group. Examine other platforms only when the task needs it.
+- Keep edits in the requested command family or module group. Examine other platforms only as the task needs.
 - Fix a recurring failure at the owning type, registry, or construction path. Do not rebuild another owner's state.
 - Use typed reasons and details for behavior. Do not match error text.
 - Add compatibility or fallback behavior only on explicit request or approval. During a migration, remove superseded paths.
-- Encode invariants in names, types, and boundaries. Write comments only for public APIs, tool directives, or constraints that code cannot show.
+- Encode invariants in names, types, and boundaries. Write comments only for public APIs, tool directives, or constraints code cannot show.
 - Resolve a gate failure at the reported invariant. Do not suppress it. Do not add an allowlist to get a pass.
 - Use `@agent-device/selectors` to parse and match selectors. For other shared owners, see `docs/agents/code-ownership.md`.
 - Keep skills as routing cards. Keep `CONTEXT.md` a glossary only. When behavior changes, update the owning help and user docs.
 
 ## Worktree setup
 
-- Use `pnpm`. Use OXC to lint and format. Run `pnpm format` on the full repository.
-- In a new worktree, run `pnpm install --frozen-lockfile && pnpm build` before you test.
+- Use `pnpm`. Use OXC to lint and format. Run `pnpm format` on the whole repository.
+- In a new worktree, run `pnpm install --frozen-lockfile && pnpm build` before testing.
 - Do not change other worktrees, devices, sessions, dirty files, or experiments. Do not use `git stash`; all worktrees share it.
 - Do not copy `.env` into a worktree. For host credentials, source the main checkout's file by absolute path.
 - Give each parallel worker different files and devices. `pnpm check:affected --run`, `pnpm check`, and heavy `pnpm gate` ids share one lock.
@@ -54,7 +54,7 @@ The versioned CLI help owns command semantics. To drive an app, start with the s
 - When you rename a file, move its Fallow baseline entry. Do not regenerate unrelated baselines.
 
 The validation lock reclaims provably dead owners. An unknown owner blocks.
-If the wait times out, report the printed owner and lock state. Do not remove the lock manually.
+On a wait timeout, report the printed owner and lock state. Do not remove the lock manually.
 
 ## Agent docs
 
