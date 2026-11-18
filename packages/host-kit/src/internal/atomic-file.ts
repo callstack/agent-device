@@ -41,6 +41,7 @@ export type ScriptAncestryExposure =
   | 'not_a_directory'
   | 'entry_appeared'
   | 'relative_destination'
+  | 'unnamed_entry'
   | 'unresolvable_parent'
   | 'unreachable_parent'
   | 'parent_replaced';
@@ -144,12 +145,10 @@ export function publishScriptFileSync(options: {
   contents: string;
   publish?: AtomicPublishMode;
 }): void {
-  // The entry is spelled FROM the directory the rule judged, never from the caller's spelling: a `..` or a
-  // link sends the entry elsewhere, and a temporary sibling beside that spelling is one another local user
-  // can reach (ADR 0016). Spelling it here puts the sibling where the entry lands, on its own.
-  const judged = prepareScriptDestination(options.destination).directory;
+  // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
+  // elsewhere, and a temporary sibling beside that spelling is one another local user can reach (ADR 0016).
   publishFileSync({
-    destination: path.join(judged, path.basename(options.destination)),
+    destination: prepareScriptDestination(options.destination).entry,
     contents: options.contents,
     mode: SCRIPT_FILE_MODE,
     publish: options.publish,
@@ -214,11 +213,12 @@ function scriptDestination(
   create: boolean,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
+  const name = finalEntryName(destination);
   const spelled = spelledParent(destination);
   if (process.platform === 'win32') {
     // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
     if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
-    return { directory: spelled, identity: 'windows' };
+    return authorizedEntry(spelled, 'windows', name);
   }
   const trust = scriptTrust(options);
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
@@ -228,16 +228,47 @@ function scriptDestination(
   if (othersCreateEntriesIn(arrived.authority, trust)) {
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  return { directory: arrived.deepest, identity: arrived.identity };
+  return authorizedEntry(arrived.deepest, arrived.identity, name);
+}
+
+function authorizedEntry(
+  directory: string,
+  identity: string | undefined,
+  name: string,
+): ScriptDestination {
+  return { directory, identity, name, entry: path.join(directory, name) };
 }
 
 /**
- * Where a script entry is created: the PHYSICAL directory the rule judged, and that directory's identity as
- * the walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename.
+ * The name the entry is created under, judged before anything touches the filesystem. A trailing separator
+ * names the same entry it always has; a name that is not one entry would make the joined entry a different
+ * directory from the one the walk judged (ADR 0016).
+ */
+function finalEntryName(destination: string): string {
+  const name = path.basename(destination);
+  if (
+    name === '' ||
+    name === '.' ||
+    name === '..' ||
+    destination.includes('\0') ||
+    name.includes('/') ||
+    name.includes(path.sep)
+  ) {
+    throw scriptAncestryFailure(destination, path.dirname(destination), 'unnamed_entry');
+  }
+  return name;
+}
+
+/**
+ * The entry a script is created as: the PHYSICAL directory the rule judged, that directory's identity as the
+ * walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename — and the
+ * validated name. `entry` is the one path a publisher creates.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
   identity: string | undefined;
+  name: string;
+  entry: string;
 }>;
 
 export type DurableFilePublishMode = 'replace' | 'link-exclusive';
@@ -328,15 +359,19 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
 }
 
 /**
- * Confirms a destination host-kit ANSWERED earlier, and reports the directory to create the entry in. The one
- * check a caller that stages bytes owes, for the reason ADR 0016 states.
+ * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
+ * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
+ * the same directory under the same name.
  */
-export function confirmScriptDestination(destination: string, prepared: ScriptDestination): string {
+export function confirmScriptDestination(
+  destination: string,
+  prepared: ScriptDestination,
+): ScriptDestination {
   const current = scriptDestination(destination, false);
-  if (current.identity !== prepared.identity) {
+  if (current.identity !== prepared.identity || current.name !== prepared.name) {
     throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
   }
-  return current.directory;
+  return current;
 }
 
 /**
@@ -575,6 +610,8 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   not_a_directory: 'a directory was expected there, and something else stands in the way.',
   entry_appeared:
     'a directory the script path needs was missing when the path was checked and appeared before this save could create it.',
+  unnamed_entry:
+    'the script path has to end in one file name, not `.`, `..`, nothing at all, or a name holding a NUL or a separator.',
   relative_destination:
     'the script path has to be absolute, so the directories it names are the ones that get checked.',
   unresolvable_parent:

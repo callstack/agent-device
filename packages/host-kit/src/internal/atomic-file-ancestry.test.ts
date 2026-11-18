@@ -867,7 +867,7 @@ skipOnWindows(
     const destination = path.join(staged, 'journey.ad');
     const prepared = prepareScriptDestination(destination);
 
-    expect(confirmScriptDestination(destination, prepared)).toBe(staged);
+    expect(confirmScriptDestination(destination, prepared).entry).toBe(destination);
   },
 );
 

@@ -300,7 +300,13 @@ test('refuses a destination that is not absolute on every platform, and creates 
   // The confirm call refuses from the same check, before its platform branch: on Windows no walk runs at
   // all, so a relative name cannot be left to the walk to catch.
   expectUntrusted(
-    () => confirmScriptDestination(relative, { directory: relative, identity: undefined }),
+    () =>
+      confirmScriptDestination(relative, {
+        directory: relative,
+        identity: undefined,
+        name: 'journey.ad',
+        entry: relative,
+      }),
     'relative_destination',
     path.join('recordings'),
   );

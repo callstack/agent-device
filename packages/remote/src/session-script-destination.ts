@@ -557,17 +557,14 @@ function publishStaged(
   }
   if (revision <= current.revision) return current.destination;
   // Confirmed here, under the record lock and right before the entry is created, because the download ran in
-  // between (ADR 0016).
-  const judged = confirmScriptDestination(current.destination, prepared);
+  // between. The entry is the one host-kit authorized, never the destination's own spelling (ADR 0016).
+  const { entry } = confirmScriptDestination(current.destination, prepared);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
   pending.named = true;
   const exclusive = current.revision === 0 && !current.force;
-  // The entry is spelled FROM that answer, never through the destination's own spelling, as the local
-  // publisher does (ADR 0016).
-  const entry = path.join(judged, path.basename(current.destination));
   try {
     if (exclusive) fs.linkSync(staged, entry);
     else fs.renameSync(staged, entry);
