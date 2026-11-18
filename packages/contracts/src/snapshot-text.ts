@@ -21,7 +21,7 @@ const SNAPSHOT_BAR_KINDS = [
   ['navigationbar', 'navigation-bar'],
 ] as const;
 
-export type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
+type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
 
 /** Reads the bar kind from the captured type, role, and subrole, or nothing for a non-bar node. */
 export function snapshotBarKind(
