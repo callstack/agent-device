@@ -10,7 +10,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
     runCmd: vi.fn(async (cmd: string, args: string[]) => {
-      if (cmd === 'xcrun') {
+      if (cmd === '/usr/bin/xcrun') {
         const outputPath = args[args.indexOf('-o') + 1]!;
         fs.writeFileSync(outputPath, 'compiled');
         fs.chmodSync(outputPath, 0o755);
@@ -38,7 +38,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { waitForPlayableVideo } from '../video.ts';
 
 function helperScriptArgs(): string[] {
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   return (helperCall?.[1] as string[] | undefined) ?? [];
 }
 
@@ -79,9 +79,9 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
 
   const compileCalls = mockRunCmd.mock.calls.filter(([cmd, args]) => {
-    return cmd === 'xcrun' && args[0] === 'swiftc';
+    return cmd === '/usr/bin/xcrun' && args[0] === 'swiftc';
   });
-  const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun');
+  const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== '/usr/bin/xcrun');
 
   expect(compileCalls).toHaveLength(1);
   expect(helperCalls).toHaveLength(2);
@@ -204,8 +204,8 @@ test('overlay hands the helper what is left of its budget, inside the record req
     deadline: startRecordingOverlayBudget(),
   });
 
-  const compileCall = mockRunCmd.mock.calls.find(([cmd]) => cmd === 'xcrun');
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const compileCall = mockRunCmd.mock.calls.find(([cmd]) => cmd === '/usr/bin/xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   const args = helperScriptArgs();
   const exportMs = Number(args[args.indexOf('--timeout-ms') + 1]);
   expect(exportMs).toBeGreaterThan(0);
@@ -228,7 +228,7 @@ test('overlay hands the helper only what the finalization left of the budget', a
 
   await overlayRecordingTouches({ host: createTestHost(), videoPath, telemetryPath, deadline });
 
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   expect(helperCall?.[2]?.timeoutMs).toBe(OVERLAY_BUDGET_MS - spentMs);
 });
 
@@ -258,7 +258,7 @@ test('overlay leaves the video as recorded when compiling the helper spent its b
     code: 'COMMAND_FAILED',
     message: 'Failed to add touch overlays to the recording',
   });
-  expect(mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun')).toHaveLength(0);
+  expect(mockRunCmd.mock.calls.filter(([cmd]) => cmd !== '/usr/bin/xcrun')).toHaveLength(0);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
 });
 

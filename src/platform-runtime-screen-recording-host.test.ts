@@ -201,7 +201,7 @@ test.for(['COMMAND_FAILED', 'TOOL_MISSING'])(
     }
     expect(runCmd).toHaveBeenCalledTimes(2);
     expect(runCmd).toHaveBeenCalledWith(
-      'xcrun',
+      '/usr/bin/xcrun',
       expect.arrayContaining(['swiftc']),
       expect.any(Object),
     );

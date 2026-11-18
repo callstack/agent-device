@@ -271,7 +271,7 @@ export async function createProviderScenarioHarness(
         await withCommandExecutorOverride(
           (command, args) => {
             if (
-              command !== 'xcrun' ||
+              command !== '/usr/bin/xcrun' ||
               args[0] !== 'swiftc' ||
               !args.some((arg) => path.basename(arg).startsWith('video-validator-'))
             )

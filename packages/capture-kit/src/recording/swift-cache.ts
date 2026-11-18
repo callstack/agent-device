@@ -19,6 +19,13 @@ const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
 // SIGKILL or SIGTERM leaves them compiling with no parent.
 const SWIFTC_STOP = { signal: 'SIGINT', graceMs: 2_000 } as const;
+// The compiler is launched by absolute path with a fixed PATH: an inherited PATH entry another user can write
+// would otherwise choose the `xcrun` that runs as this user.
+const XCRUN = '/usr/bin/xcrun';
+const COMPILER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+// Inherited overrides that would choose another loader, SDK or toolchain; the helpers build against the default
+// macOS SDK.
+const COMPILER_ENV_OVERRIDES = /^(DYLD_.*|SDKROOT|TOOLCHAINS)$/;
 const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
 
 /**
@@ -153,7 +160,8 @@ function judgeOwnedDirectory(directory: string): string {
       // No command is built from the path: a pasted, unquoted path with a space would name another directory.
       hint:
         'Point AGENT_DEVICE_SWIFT_CACHE_DIR at a new directory that only you can write. agent-device never ' +
-        `deletes the refused directory; remove it yourself once you no longer need it: ${directory}. ` +
+        `deletes the refused directory; remove it yourself once you no longer need it: ${directory}. Do not ` +
+        'chmod it: that clears this refusal but keeps whatever was written while it was open. ' +
         'Only owner and mode bits are checked, not ACLs: keeping ACLs on the cache directory closed is your ' +
         'responsibility.',
     });
@@ -313,6 +321,51 @@ export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   };
 }
 
+/**
+ * The environment the compiler runs with: the cache's own home and module cache, a fixed PATH, no inherited
+ * loader, SDK or toolchain override, and this compile's private staging directory as every temp directory, so
+ * no intermediate lands where another user could replace it mid-build.
+ */
+function swiftCompilerEnv(env: NodeJS.ProcessEnv, stagingDirectory: string): NodeJS.ProcessEnv {
+  const inherited = Object.entries(buildSwiftToolEnv(env)).filter(
+    ([name]) => !COMPILER_ENV_OVERRIDES.test(name),
+  );
+  const developerDir = env.DEVELOPER_DIR?.trim();
+  if (developerDir) refuseUntrustedDeveloperDir(developerDir);
+  return {
+    ...Object.fromEntries(inherited),
+    PATH: COMPILER_PATH,
+    TMPDIR: stagingDirectory,
+    TEMP: stagingDirectory,
+    TMP: stagingDirectory,
+  };
+}
+
+/**
+ * Refuses a `DEVELOPER_DIR` that is not an absolute, real directory owned by root or this uid that the group and
+ * others cannot write. Only that directory is judged, not its ancestry: `/Applications` is admin-group-writable on
+ * a stock macOS install, and holds a normal Xcode.
+ */
+function refuseUntrustedDeveloperDir(developerDir: string): void {
+  const stats = path.isAbsolute(developerDir)
+    ? fs.lstatSync(developerDir, { throwIfNoEntry: false })
+    : undefined;
+  const owner = stats !== undefined && (stats.uid === 0 || stats.uid === process.getuid?.());
+  if (stats?.isDirectory() && owner && (stats.mode & 0o022) === 0) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Refusing to compile Swift helpers with DEVELOPER_DIR=${developerDir}: it is not a directory only root or this user can change.`,
+    {
+      reason: SWIFT_CACHE_UNTRUSTED_REASON,
+      exposure: 'untrusted_developer_dir',
+      ancestor: developerDir,
+      hint:
+        'Unset DEVELOPER_DIR so the selected Xcode is used, or point it at an Xcode Developer directory, given ' +
+        'as an absolute path, that root or you own and only its owner can write.',
+    },
+  );
+}
+
 export async function compileSwiftSourceFile(params: {
   host: HostEnvironment;
   sourcePath: string;
@@ -406,11 +459,11 @@ async function ensureSwiftExecutable(params: {
             'paths' in params.source
               ? params.source.paths
               : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
-          await runCmd('xcrun', ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
+          await runCmd(XCRUN, ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
             timeoutMs,
             signal: params.signal,
             kill: SWIFTC_STOP,
-            env: buildSwiftToolEnv(params.host.env),
+            env: swiftCompilerEnv(params.host.env, tempDir),
           });
           publishableExecutable(tempExecutablePath);
           fs.renameSync(tempExecutablePath, entryIn(confirmSwiftCacheDirectory(bin)));

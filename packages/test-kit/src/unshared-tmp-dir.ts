@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 /**
  * The run's own directory under the checkout's ignored `.tmp/`, for state a sticky shared directory such as
  * `/tmp` must not hold: the Swift helper cache refuses one anywhere in its chain. The Vitest global setup names
@@ -27,9 +24,4 @@ export function requireUnsharedTestRunDir(test: SkippableTest): string {
     process.env.AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE ?? 'no checkout-local directory was named';
   if (process.env.CI) throw new Error(`This test needs a private checkout ancestry: ${reason}`);
   return test.skip(`checkout ancestry not private; Swift cache tests skipped: ${reason}`);
-}
-
-/** A fresh directory in {@link requireUnsharedTestRunDir}, as its physical path, which the Swift cache compares. */
-export function mkdtempUnsharedForTestSync(prefix: string, test: SkippableTest): string {
-  return fs.realpathSync(fs.mkdtempSync(path.join(requireUnsharedTestRunDir(test), prefix)));
 }

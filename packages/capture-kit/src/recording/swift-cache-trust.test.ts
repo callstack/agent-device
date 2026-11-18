@@ -583,3 +583,95 @@ test('a group-writable ancestor whose path holds a space and a quote is named ex
   );
   expect(mockRunCmd).not.toHaveBeenCalled();
 });
+
+/** The compiler launch the cache made: its executable, the staging directory of its output, and its env. */
+function compilerLaunch() {
+  const [cmd, args, options] = mockRunCmd.mock.calls[0]!;
+  const outputPath = args[args.indexOf('-o') + 1]!;
+  return { cmd, staging: path.dirname(outputPath), env: options?.env ?? {} };
+}
+
+test('the compiler gets this compile private staging directory as every temp directory, not an inherited shared one', async () => {
+  const sharedTmp = path.join(tmpDir, 'shared-tmp');
+  fs.mkdirSync(sharedTmp);
+  fs.chmodSync(sharedTmp, 0o1777);
+
+  await compile({
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
+    TMPDIR: sharedTmp,
+    TEMP: sharedTmp,
+    TMP: sharedTmp,
+  });
+
+  const { staging, env } = compilerLaunch();
+  expect(path.dirname(staging)).toBe(binDir);
+  expect({ TMPDIR: env.TMPDIR, TEMP: env.TEMP, TMP: env.TMP }).toEqual({
+    TMPDIR: staging,
+    TEMP: staging,
+    TMP: staging,
+  });
+});
+
+test('the compiler is /usr/bin/xcrun with a fixed PATH and no inherited loader, SDK or toolchain override', async () => {
+  await compile({
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
+    PATH: `${path.join(tmpDir, 'planted-bin')}:/usr/bin`,
+    DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
+    DYLD_LIBRARY_PATH: '/tmp/planted',
+    SDKROOT: '/tmp/planted.sdk',
+    TOOLCHAINS: 'planted',
+    KEPT: 'yes',
+  });
+
+  const { cmd, env } = compilerLaunch();
+  expect(cmd).toBe('/usr/bin/xcrun');
+  expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+  expect(Object.keys(env).filter((name) => /^(DYLD_|SDKROOT$|TOOLCHAINS$)/.test(name))).toEqual([]);
+  expect(env.KEPT).toBe('yes');
+});
+
+test.each([
+  [
+    'a directory others can write',
+    () => {
+      const open = path.join(tmpDir, 'open-developer');
+      fs.mkdirSync(open);
+      fs.chmodSync(open, 0o777);
+      return open;
+    },
+  ],
+  [
+    'a relative path, even to a private directory',
+    () => {
+      const developer = path.join(tmpDir, 'relative-developer');
+      fs.mkdirSync(developer, { mode: 0o755 });
+      return path.relative(process.cwd(), developer);
+    },
+  ],
+  ['a missing directory', () => path.join(tmpDir, 'no-such-developer')],
+])(
+  'a DEVELOPER_DIR that is %s is refused before the compiler runs',
+  async (_kind, developerDir) => {
+    const dir = developerDir();
+
+    await expect(
+      compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: dir }),
+    ).rejects.toMatchObject(
+      untrusted({
+        exposure: 'untrusted_developer_dir',
+        ancestor: dir,
+        hint: expect.stringContaining('DEVELOPER_DIR'),
+      }),
+    );
+    expect(mockRunCmd).not.toHaveBeenCalled();
+  },
+);
+
+test('a DEVELOPER_DIR only this user can write reaches the compiler', async () => {
+  const developerDir = path.join(tmpDir, 'Developer');
+  fs.mkdirSync(developerDir, { mode: 0o755 });
+
+  await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: developerDir });
+
+  expect(compilerLaunch().env.DEVELOPER_DIR).toBe(developerDir);
+});

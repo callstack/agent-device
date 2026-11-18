@@ -132,7 +132,6 @@ export {
 export { makeTempWorkspace } from './temp-workspace.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
 export {
-  mkdtempUnsharedForTestSync,
   requireUnsharedTestRunDir,
   type SkippableTest,
   unsharedTestRunDir,
