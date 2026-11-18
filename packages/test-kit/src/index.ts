@@ -130,7 +130,8 @@ export {
   recordArticleEvidence,
 } from './target-classification-fixtures.ts';
 export { makeTempWorkspace } from './temp-workspace.ts';
-export { mkdtempForTest, mkdtempForTestSync, mkdtempUnsharedForTestSync } from './tmp-dir.ts';
+export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
+export { mkdtempUnsharedForTestSync } from './unshared-tmp-dir.ts';
 export {
   STUBBED_APPLE_TOOLCHAIN,
   stubbedAppleDeveloperDir,
