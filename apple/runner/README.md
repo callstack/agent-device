@@ -131,6 +131,12 @@ Probe work that outlives its slice belongs to the capture that started it, so th
 Every bounded main-thread dispatch that outlives its slice counts as occupying the main thread.
 Thus, if a viewport read takes too long, the plan skips the sweep instead of queueing it.
 
+The tree tier reads the viewport after the root snapshot.
+A live window read resolves `app.windows` again, and each resolution snapshots the whole app.
+On a heavy web view, the list, `exists`, and `frame` reads took 7.4 s together.
+Thus, when AXRuntime reports the target as the primary app that fills the screen, the viewport is the root snapshot's first usable window, if that window is exactly the screen frame at the origin.
+Any other window keeps the live read, because a snapshot frame is in window content space (see Screen space).
+
 Private-AX fallback keeps the viewport authority it acquired.
 When a penalty suppresses the XCTest viewport read, its root-derived box does not establish a screen origin.
 Exception: AXRuntime can report the target as the primary app that fills the screen. If the root is that screen frame at the origin, the box is `reported`.

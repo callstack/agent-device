@@ -136,20 +136,6 @@ extension RunnerTests {
         "the fixture must leave two live windows, or no candidate is left behind the answer"
       )
 
-      guard
-        let frameMethod = class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
-        let probeMethod = class_getInstanceMethod(
-          RunnerWindowFrameProbe.self,
-          #selector(getter: RunnerWindowFrameProbe.frame)
-        )
-      else {
-        XCTFail("unable to install the window frame probe")
-        return
-      }
-      let originalImplementation = method_getImplementation(frameMethod)
-      method_setImplementation(frameMethod, method_getImplementation(probeMethod))
-      defer { method_setImplementation(frameMethod, originalImplementation) }
-
       let cases: [(name: String, frames: [CGRect], hasWindow: Bool, reads: Int)] = [
         ("first usable window", [RunnerWindowFrameReads.usableFrame], true, 1),
         ("empty first window", [.zero, RunnerWindowFrameReads.usableFrame], true, 2),
@@ -157,7 +143,7 @@ extension RunnerTests {
       ]
       for testCase in cases {
         RunnerWindowFrameReads.begin(answering: testCase.frames)
-        let resolved = try resolveRunnerWindow(app: app)
+        let resolved = try withWindowFrameProbe { try resolveRunnerWindow(app: app) }
         XCTAssertEqual(resolved.window != nil, testCase.hasWindow, testCase.name)
         XCTAssertEqual(RunnerWindowFrameReads.recorded(), testCase.reads, testCase.name)
         XCTAssertEqual(
@@ -166,6 +152,60 @@ extension RunnerTests {
           testCase.name
         )
       }
+    }
+
+    /// Runs `body` with `-[XCUIElement frame]` answered by `RunnerWindowFrameProbe`, then restores XCTest.
+    private func withWindowFrameProbe<Result>(_ body: () throws -> Result) throws -> Result {
+      let frameMethod = try XCTUnwrap(
+        class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+        "unable to install the window frame probe"
+      )
+      let probeMethod = try XCTUnwrap(
+        class_getInstanceMethod(RunnerWindowFrameProbe.self, #selector(getter: RunnerWindowFrameProbe.frame)),
+        "unable to install the window frame probe"
+      )
+      let originalImplementation = method_setImplementation(frameMethod, method_getImplementation(probeMethod))
+      defer { method_setImplementation(frameMethod, originalImplementation) }
+      return try body()
+    }
+
+    /// A full-screen app's capture takes its viewport from the root snapshot it already holds. Each
+    /// live window read resolves `app.windows` against a fresh snapshot of the whole app: on a heavy
+    /// web view the list, `exists`, and `frame` reads took 7.4 s together, outlasted the viewport's
+    /// 1 s slice, and left work that refused the next tap with `RUNNER_BUSY`.
+    @MainActor
+    func testFullScreenSnapshotViewportReadsTheWindowFromTheRootSnapshot() throws {
+      app.launch()
+      defer {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+        app.terminate()
+      }
+      XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+      let appWindows = app.windows.allElementsBoundByIndex.filter(\.exists).map(\.frame)
+      let fullScreenWindow = Self.fullScreenWindowFrame(windowFrames: appWindows, fullScreenFrame: Self.fullScreenFrame(of: app))
+      // An iPad can place the fixture's window, which keeps the live read; an iPhone app always fills
+      // the screen, so there a nil predicate is a failure, not a skip.
+      try XCTSkipIf(
+        fullScreenWindow == nil && UIDevice.current.userInterfaceIdiom == .pad,
+        "the fixture app's window is not the full screen at the origin on this iPad"
+      )
+      _ = try XCTUnwrap(fullScreenWindow, "the fixture app's window is not the full screen at the origin")
+      let hint = CaptureHint(
+        projection: .regular,
+        depth: nil,
+        regularPresentedDepth: nil,
+        interactiveOnly: false,
+        customActions: false
+      )
+      RunnerWindowFrameReads.begin(answering: [RunnerWindowFrameReads.usableFrame.insetBy(dx: 10, dy: 10)])
+      let context = try XCTUnwrap(try withWindowFrameProbe { try makeSnapshotTraversalContext(app: app, hint: hint) })
+
+      let window = try XCTUnwrap(context.rootSnapshot.children.first { $0.elementType == .window })
+      XCTAssertEqual(RunnerWindowFrameReads.recorded(), 0)
+      XCTAssertEqual(
+        context.viewport,
+        .reported(box: window.frame, interfaceOrientation: capturedInterfaceOrientation(app: app))
+      )
     }
   }
 #endif
