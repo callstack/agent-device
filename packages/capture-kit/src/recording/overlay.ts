@@ -3,11 +3,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  runSwiftHelper,
-  compileSwiftSourceFile,
-  resolveRecordingScriptPath,
-} from './swift-cache.ts';
+import { runSwiftHelper, compileSwiftSources } from './swift-cache.ts';
 import { waitForPlayableVideo } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
@@ -44,30 +40,23 @@ export function startRecordingOverlayBudget(): Deadline {
  */
 const HELPER_EXIT_GRACE_MS = 5_000;
 
-function getOverlayScriptPath(): string {
-  return resolveRecordingScriptPath('recording-overlay.swift');
-}
-
-function getExportSupportScriptPath(): string {
-  return resolveRecordingScriptPath('RecordingExportSupport.swift');
-}
-
 async function exportProcessedVideo(params: {
   host: HostEnvironment;
   videoPath: string;
-  scriptPath: string;
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
 }): Promise<void> {
-  const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
+  const { host, videoPath, scriptArgs, commandDescription, deadline } = params;
   const outputPath = temporarySiblingVideoPath(videoPath);
   let exportOverran = false;
   try {
-    const executablePath = await compileSwiftSourceFile({
+    // The shipped sources, loaded only when a recording is composited.
+    const { RECORDING_OVERLAY_SOURCES } = await import('./recording-swift-sources.ts');
+    const executablePath = await compileSwiftSources({
       host,
-      sourcePath: scriptPath,
-      extraSourcePaths: [getExportSupportScriptPath()],
+      cacheName: 'recording-overlay',
+      sources: RECORDING_OVERLAY_SOURCES,
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
     });
@@ -122,7 +111,7 @@ async function exportProcessedVideo(params: {
       {
         ...cause.details,
         videoPath,
-        script: scriptPath,
+        script: 'recording-overlay.swift',
       },
       cause,
     );
@@ -157,7 +146,6 @@ export async function overlayRecordingTouches(params: {
   await exportProcessedVideo({
     host: params.host,
     videoPath,
-    scriptPath: getOverlayScriptPath(),
     scriptArgs: [
       '--events',
       telemetryPath,

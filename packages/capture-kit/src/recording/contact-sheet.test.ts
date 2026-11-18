@@ -25,7 +25,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 vi.mock(import('./swift-cache.ts'), async (importOriginal) => ({
   ...(await importOriginal<typeof import('./swift-cache.ts')>()),
-  compileSwiftSourceFile: vi.fn(async () => '/cached/bin/recording-frames'),
+  compileSwiftSources: vi.fn(async () => '/cached/bin/recording-frames'),
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';

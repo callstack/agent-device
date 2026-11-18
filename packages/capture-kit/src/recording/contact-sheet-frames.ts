@@ -12,14 +12,8 @@ import {
   errorMessage,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import {
-  runSwiftHelper,
-  compileSwiftSourceFile,
-  resolveRecordingScriptPath,
-} from './swift-cache.ts';
+import { runSwiftHelper, compileSwiftSources } from './swift-cache.ts';
 
-const FRAMES_SCRIPT = 'recording-frames.swift';
-const SHARED_SUPPORT_SCRIPT = 'RecordingExportSupport.swift';
 const EXTRACTION_TIMEOUT_MS = 90_000;
 const COMPILATION_TIMEOUT_MS = 120_000;
 
@@ -266,10 +260,11 @@ async function compileDecoder(input: {
   signal?: AbortSignal;
 }): Promise<string> {
   try {
-    return await compileSwiftSourceFile({
+    // The shipped sources, loaded only when a contact sheet is built.
+    const { RECORDING_FRAMES_SOURCES } = await import('./recording-swift-sources.ts');
+    return await compileSwiftSources({
       host: input.host,
-      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT),
-      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT)],
+      sources: RECORDING_FRAMES_SOURCES,
       cacheName: 'recording-frames',
       timeoutMs: COMPILATION_TIMEOUT_MS,
     });

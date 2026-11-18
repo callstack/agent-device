@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 
@@ -17,11 +16,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
-import {
-  compileSwiftSourceFile,
-  compileSwiftSourceText,
-  resolveRecordingScriptPath,
-} from './swift-cache.ts';
+import { compileSwiftSources, compileSwiftSourceText } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -38,13 +33,11 @@ afterEach(() => {
   tmpDir = '';
 });
 
-test('compileSwiftSourceFile compiles to a unique temp executable before publishing cache entry', async () => {
-  const sourcePath = writeSourceFile('print("hello")');
-
-  const executablePath = await compileSwiftSourceFile({
+test('compileSwiftSources compiles to a unique temp executable before publishing cache entry', async () => {
+  const executablePath = await compileSwiftSources({
     host: createTestHost(),
     cacheName: 'recording-helper',
-    sourcePath,
+    sources: [embedded('print("hello")')],
   });
 
   const compileCall = mockRunCmd.mock.calls[0]!;
@@ -57,59 +50,46 @@ test('compileSwiftSourceFile compiles to a unique temp executable before publish
   expect(fs.existsSync(outputPath)).toBe(false);
 });
 
-test('concurrent file-backed helper compiles for the same cache key reuse the winning executable', async () => {
-  const sourcePath = writeSourceFile();
-
+test('concurrent embedded-source helper compiles for the same cache key reuse the winning executable', async () => {
   await expectConcurrentCacheReuse(() =>
-    compileSwiftSourceFile({ host: createTestHost(), sourcePath, cacheName: 'recording-overlay' }),
+    compileSwiftSources({
+      host: createTestHost(),
+      sources: [embedded()],
+      cacheName: 'recording-overlay',
+    }),
   );
 });
 
-test('extra source paths participate in the cache key and reach the compiler', async () => {
-  const sourcePath = writeSourceFile();
-  const supportPath = path.join(tmpDir, 'RecordingExportSupport.swift');
-  fs.writeFileSync(supportPath, 'enum Support {}');
-  const changedSupportPath = path.join(tmpDir, 'OtherSupport.swift');
-  fs.writeFileSync(changedSupportPath, 'enum OtherSupport {}');
+test('every embedded source participates in the cache key and reaches the compiler, staged in order', async () => {
+  const support = embedded('enum Support {}', 'RecordingExportSupport.swift');
+  // Same file name, different bytes: the key follows what is compiled, not what it is called.
+  const changedSupport = embedded('enum OtherSupport {}', 'RecordingExportSupport.swift');
+  const compile = (sources: { fileName: string; text: string }[]) =>
+    compileSwiftSources({ host: createTestHost(), sources, cacheName: 'recording-overlay' });
 
   const [withSupport, withSupportAgain, withChangedSupport] = await Promise.all([
-    compileSwiftSourceFile({
-      host: createTestHost(),
-      sourcePath,
-      extraSourcePaths: [supportPath],
-      cacheName: 'recording-overlay',
-    }),
-    compileSwiftSourceFile({
-      host: createTestHost(),
-      sourcePath,
-      extraSourcePaths: [supportPath],
-      cacheName: 'recording-overlay',
-    }),
-    compileSwiftSourceFile({
-      host: createTestHost(),
-      sourcePath,
-      extraSourcePaths: [changedSupportPath],
-      cacheName: 'recording-overlay',
-    }),
+    compile([embedded(), support]),
+    compile([embedded(), support]),
+    compile([embedded(), changedSupport]),
   ]);
 
   expect(withSupportAgain).toBe(withSupport);
   expect(withChangedSupport).not.toBe(withSupport);
-  const compiledPaths = mockRunCmd.mock.calls.map((call) =>
-    call[1].slice(0, call[1].indexOf('-o')),
-  );
-  expect(compiledPaths).toContainEqual(['--sdk', 'macosx', 'swiftc', sourcePath, supportPath]);
-  expect(compiledPaths).toContainEqual([
-    '--sdk',
-    'macosx',
-    'swiftc',
-    sourcePath,
-    changedSupportPath,
-  ]);
+  const staged = mockRunCmd.mock.calls.map(([, args]) => {
+    const sourcePaths = args.slice(3, args.indexOf('-o'));
+    // Each staged source sits in that compile's private staging directory, beside its output.
+    expect(
+      sourcePaths.every(
+        (sourcePath) => path.dirname(sourcePath) === path.dirname(args[args.indexOf('-o') + 1]!),
+      ),
+    ).toBe(true);
+    return sourcePaths.map((sourcePath) => path.basename(sourcePath));
+  });
+  expect(staged).toContainEqual(['recording-overlay.swift', 'RecordingExportSupport.swift']);
 });
 
 test('cache locks with a proven dead owner are recovered before compiling', async () => {
-  const { sourcePath, executablePath, lockDir } = await createBlockedCacheEntry();
+  const { sources, executablePath, lockDir } = await createBlockedCacheEntry();
   fs.writeFileSync(
     path.join(lockDir, 'owner.json'),
     JSON.stringify({
@@ -120,9 +100,9 @@ test('cache locks with a proven dead owner are recovered before compiling', asyn
   );
 
   await expect(
-    compileSwiftSourceFile({
+    compileSwiftSources({
       host: createTestHost(),
-      sourcePath,
+      sources,
       cacheName: 'recording-overlay',
       timeoutMs: 100,
     }),
@@ -133,14 +113,14 @@ test('cache locks with a proven dead owner are recovered before compiling', asyn
 });
 
 test('an ownerless cache lock is retained with verified-recovery guidance regardless of age', async () => {
-  const { sourcePath, lockDir } = await createBlockedCacheEntry();
+  const { sources, lockDir } = await createBlockedCacheEntry();
   const old = new Date(Date.now() - 60_000);
   fs.utimesSync(lockDir, old, old);
 
   await expect(
-    compileSwiftSourceFile({
+    compileSwiftSources({
       host: createTestHost(),
-      sourcePath,
+      sources,
       cacheName: 'recording-overlay',
       timeoutMs: 1,
     }),
@@ -247,7 +227,6 @@ test('compileSwiftSourceText falls back to swift-helper when the cache name sani
 });
 
 test('a compile that failed is reported over a cache lock that could not be given back', async () => {
-  const sourcePath = writeSourceFile();
   const buildFailure = new Error('swiftc: error: build failed');
   let lockDir = '';
   mockRunCmd.mockImplementationOnce(async (_cmd: string, args: readonly string[]) => {
@@ -266,30 +245,32 @@ test('a compile that failed is reported over a cache lock that could not be give
   });
 
   await expect(
-    compileSwiftSourceFile({ host: createTestHost(), sourcePath, cacheName: 'recording-overlay' }),
+    compileSwiftSources({
+      host: createTestHost(),
+      sources: [embedded()],
+      cacheName: 'recording-overlay',
+    }),
   ).rejects.toBe(buildFailure);
   // The release really could not verify itself: the lock is still standing.
   expect(fs.existsSync(lockDir)).toBe(true);
 });
 
-function writeSourceFile(source = 'print("recording")'): string {
-  const sourcePath = path.join(tmpDir, 'recording-overlay.swift');
-  fs.writeFileSync(sourcePath, source);
-  return sourcePath;
+function embedded(text = 'print("recording")', fileName = 'recording-overlay.swift') {
+  return { fileName, text };
 }
 
 async function createBlockedCacheEntry() {
-  const sourcePath = writeSourceFile();
-  const executablePath = await compileSwiftSourceFile({
+  const sources = [embedded()];
+  const executablePath = await compileSwiftSources({
     host: createTestHost(),
-    sourcePath,
+    sources,
     cacheName: 'recording-overlay',
   });
   const lockDir = `${executablePath}.lock`;
   fs.rmSync(executablePath);
   fs.mkdirSync(lockDir);
   vi.clearAllMocks();
-  return { executablePath, lockDir, sourcePath };
+  return { executablePath, lockDir, sources };
 }
 
 async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promise<void> {
@@ -334,76 +315,6 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
   expect(fs.readFileSync(firstExecutable, 'utf8')).toBe('compiled once');
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
 }
-
-const RECORDING_SCRIPTS = 'apple/runner/AgentDeviceRunner/RecordingScripts';
-
-/** A directory with a package.json naming `name`, as an installed or checked-out package root. */
-function packageRoot(directory: string, name = 'agent-device'): string {
-  fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name }));
-  return directory;
-}
-
-function plantScript(directory: string, source: string): string {
-  const scriptPath = path.join(directory, RECORDING_SCRIPTS, 'recording-overlay.swift');
-  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
-  fs.writeFileSync(scriptPath, source);
-  return scriptPath;
-}
-
-test('a published install compiles its packaged script, never a competing one above the package', () => {
-  const installed = packageRoot(path.join(tmpDir, 'node_modules', 'agent-device'));
-  const packaged = plantScript(path.join(installed, 'dist'), 'print("packaged")\n');
-  // Where the old search climbed to from dist/src, outside the package.
-  plantScript(path.join(tmpDir, 'node_modules'), 'print("planted")\n');
-  plantScript(tmpDir, 'print("planted")\n');
-
-  expect(
-    resolveRecordingScriptPath('recording-overlay.swift', path.join(installed, 'dist', 'src')),
-  ).toBe(packaged);
-});
-
-test('a script found only outside the package is refused, not compiled', () => {
-  const installed = packageRoot(path.join(tmpDir, 'node_modules', 'agent-device'));
-  const planted = plantScript(path.join(tmpDir, 'node_modules'), 'print("planted")\n');
-
-  expect(() =>
-    resolveRecordingScriptPath('recording-overlay.swift', path.join(installed, 'dist', 'src')),
-  ).toThrow(
-    expect.objectContaining({
-      code: 'COMMAND_FAILED',
-      details: expect.objectContaining({
-        reason: 'recording_script_missing',
-        packageRoot: installed,
-        searchedPaths: expect.not.arrayContaining([planted]),
-      }),
-    }),
-  );
-});
-
-test('a checkout resolves its source script past the workspace package that holds this module', () => {
-  const checkout = packageRoot(path.join(tmpDir, 'checkout'));
-  const source = plantScript(checkout, 'print("source")\n');
-  const moduleDir = path.join(checkout, 'packages', 'capture-kit', 'src', 'recording');
-  packageRoot(path.join(checkout, 'packages', 'capture-kit'), '@agent-device/capture-kit');
-  fs.mkdirSync(moduleDir, { recursive: true });
-
-  expect(resolveRecordingScriptPath('recording-overlay.swift', moduleDir)).toBe(source);
-});
-
-test('a module outside any agent-device package resolves no script at all', () => {
-  // Outside this checkout too: the test scratch above sits inside the agent-device repository.
-  const outside = mkdtempForTestSync('agent-device-stray-module-');
-  const stray = path.join(outside, 'dist', 'src');
-  fs.mkdirSync(stray, { recursive: true });
-  plantScript(outside, 'print("planted")\n');
-
-  expect(() => resolveRecordingScriptPath('recording-overlay.swift', stray)).toThrow(
-    expect.objectContaining({
-      details: expect.objectContaining({ reason: 'recording_script_missing', searchedPaths: [] }),
-    }),
-  );
-});
 
 test('the cache root and tool environment come from the host it is given, not the process', async () => {
   const hostCacheDir = path.join(tmpDir, 'host-cache');

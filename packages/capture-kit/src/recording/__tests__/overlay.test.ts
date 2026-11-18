@@ -371,3 +371,41 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
   expect(fs.readdirSync(tmpDir).filter((name) => name.includes('agent-device-'))).toEqual([]);
 });
+
+test('the overlay compiles its shipped source, never one planted at the checkout path of an installed package', async () => {
+  // An installed agent-device package whose top-level checkout path another user could write, used as the
+  // host's working directory: neither location is a source the overlay may compile.
+  const installed = path.join(tmpDir, 'node_modules', 'agent-device');
+  const planted = path.join(
+    installed,
+    'apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
+  );
+  fs.mkdirSync(path.dirname(planted), { recursive: true });
+  fs.writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: 'agent-device' }));
+  fs.writeFileSync(planted, 'print("planted")\n');
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const compiled: Record<string, string> = {};
+  const defaultRunCmd = mockRunCmd.getMockImplementation()!;
+  mockRunCmd.mockImplementationOnce(async (cmd, args, options) => {
+    // The bytes the compiler would read, while the staging directory still exists.
+    for (const sourcePath of args.slice(3, args.indexOf('-o'))) {
+      compiled[path.basename(sourcePath)] = fs.readFileSync(sourcePath, 'utf8');
+    }
+    return await defaultRunCmd(cmd, args, options);
+  });
+
+  await overlayRecordingTouches({
+    host: { ...createTestHost(), cwd: installed },
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
+
+  const { RECORDING_OVERLAY_SOURCES } = await import('../recording-swift-sources.ts');
+  expect(compiled).toEqual(
+    Object.fromEntries(RECORDING_OVERLAY_SOURCES.map(({ fileName, text }) => [fileName, text])),
+  );
+});

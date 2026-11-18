@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -34,9 +33,6 @@ const COMPILER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
 const COMPILER_ARGS = ['--sdk', 'macosx', 'swiftc'] as const;
 // The admin group on macOS, which may write /Applications itself on a stock install.
 const MACOS_ADMIN_GID = 80;
-const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
-const AGENT_DEVICE_PACKAGE_NAME = 'agent-device';
-const RECORDING_SCRIPT_MISSING_REASON = 'recording_script_missing';
 
 /**
  * The layout version. Each version lives in its own directory under the cache root, so nothing an earlier
@@ -270,59 +266,6 @@ function untrustedSwiftCache(
 }
 
 /**
- * The installation root this module belongs to: the nearest directory at or above `moduleDir` whose package.json
- * names the agent-device package. The search stops there, so nothing above the package is ever a candidate.
- */
-function agentDevicePackageRoot(moduleDir: string): string | undefined {
-  for (let directory = moduleDir; ; directory = path.dirname(directory)) {
-    if (packageNameAt(directory) === AGENT_DEVICE_PACKAGE_NAME) return directory;
-    if (directory === path.dirname(directory)) return undefined;
-  }
-}
-
-function packageNameAt(directory: string): unknown {
-  try {
-    return (
-      JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')) as {
-        name?: unknown;
-      }
-    ).name;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Resolves one recording helper script from this module's own installation only: the checkout's source path, or
- * the packaged `dist/` copy inside the package. The source is compiled and run as this user, so it is never looked
- * for above the package root or in a working directory, where another local user could have planted one.
- */
-export function resolveRecordingScriptPath(
-  scriptName: string,
-  moduleDir = path.dirname(fileURLToPath(import.meta.url)),
-): string {
-  const root = agentDevicePackageRoot(moduleDir);
-  const candidates =
-    root === undefined
-      ? []
-      : [
-          path.join(root, RECORDING_SCRIPT_SUBDIRECTORY, scriptName),
-          path.join(root, 'dist', RECORDING_SCRIPT_SUBDIRECTORY, scriptName),
-        ];
-  const found = candidates.find((candidate) =>
-    fs.statSync(candidate, { throwIfNoEntry: false })?.isFile(),
-  );
-  if (found !== undefined) return found;
-  throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    reason: RECORDING_SCRIPT_MISSING_REASON,
-    hint: `Ensure ${RECORDING_SCRIPT_SUBDIRECTORY} is present in this checkout or bundled under dist/${RECORDING_SCRIPT_SUBDIRECTORY} in the agent-device package.`,
-    scriptName,
-    packageRoot: root,
-    searchedPaths: candidates,
-  });
-}
-
-/**
  * The environment a compiled helper runs with, constructed rather than inherited: the cache's own home and module
  * cache, a fixed PATH and the host's locale. No other inherited variable reaches a helper, so no loader variable
  * (`DYLD_*`) can make a private, unchanged binary load someone else's code, on a cache hit or a fresh compile.
@@ -447,36 +390,30 @@ function untrustedLevelFrom(directory: string): string | undefined {
   }
 }
 
-export async function compileSwiftSourceFile(params: {
+/** A Swift source compiled into a helper, under the file name the compiler is given. */
+export type EmbeddedSwiftSource = Readonly<{ fileName: string; text: string }>;
+
+/**
+ * Compiles a helper from sources shipped inside the JavaScript build, in the order given. The cache key is
+ * derived from those bytes, and the compiler reads them from this compile's private staging directory, so no
+ * source found on disk, or a different version of it, is ever what gets compiled.
+ */
+export async function compileSwiftSources(params: {
   host: HostEnvironment;
-  sourcePath: string;
-  /** Additional compilation units (shared helpers) compiled into the same executable. */
-  extraSourcePaths?: string[];
-  cacheName?: string;
+  cacheName: string;
+  sources: readonly EmbeddedSwiftSource[];
   timeoutMs?: number;
 }): Promise<string> {
-  const sourcePaths = [params.sourcePath, ...(params.extraSourcePaths ?? [])];
-  const sources = sourcePaths.map((sourcePath) => ({
-    sourcePath,
-    stat: fs.statSync(sourcePath),
-    source: fs.readFileSync(sourcePath),
-  }));
-  const cacheName = sanitizeCacheName(
-    params.cacheName ?? path.basename(params.sourcePath, path.extname(params.sourcePath)),
-  );
+  const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([
     SWIFT_CACHE_VERSION,
     process.platform,
     process.arch,
-    ...sources.flatMap(({ sourcePath, stat, source }) => [
-      path.resolve(sourcePath),
-      stat.size,
-      source,
-    ]),
+    ...params.sources.flatMap(({ fileName, text }) => [fileName, text]),
   ]);
   return await ensureSwiftExecutable({
     host: params.host,
-    source: { paths: sourcePaths },
+    sources: params.sources,
     entryName: `${cacheName}-${key}`,
     timeoutMs: params.timeoutMs,
   });
@@ -494,7 +431,7 @@ export async function compileSwiftSourceText(params: {
   const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
   return await ensureSwiftExecutable({
     host: params.host,
-    source: { text: params.source, fileName: `${cacheName}-${key}.swift` },
+    sources: [{ fileName: `${cacheName}-${key}.swift`, text: params.source }],
     entryName: `${cacheName}-${key}`,
     timeoutMs: params.timeoutMs,
     signal: params.signal,
@@ -508,7 +445,7 @@ export async function compileSwiftSourceText(params: {
  */
 async function ensureSwiftExecutable(params: {
   host: HostEnvironment;
-  source: Readonly<{ paths: string[] }> | Readonly<{ text: string; fileName: string }>;
+  sources: readonly EmbeddedSwiftSource[];
   entryName: string;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -536,10 +473,9 @@ async function ensureSwiftExecutable(params: {
         try {
           // Source text is written inside this compile's own private directory, so no name another process
           // can reach stands between the text and the compiler.
-          const sourcePaths =
-            'paths' in params.source
-              ? params.source.paths
-              : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
+          const sourcePaths = params.sources.map(({ fileName, text }) =>
+            writeSourceText(tempDir, fileName, text),
+          );
           const env = swiftCompilerEnv(
             params.host.env,
             tempDir,

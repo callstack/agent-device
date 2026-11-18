@@ -19,7 +19,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 vi.mock(import('./swift-cache.ts'), async (importOriginal) => ({
   ...(await importOriginal<typeof import('./swift-cache.ts')>()),
-  compileSwiftSourceFile: vi.fn(async () => '/cached/bin/recording-frames'),
+  compileSwiftSources: vi.fn(async () => '/cached/bin/recording-frames'),
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
@@ -92,6 +92,13 @@ describe('extractRecordingFrames', () => {
       timesMs: [0, 250],
     });
 
+    // The decoder compiles the sources shipped inside the build, never a file found on disk.
+    const { compileSwiftSources } = await import('./swift-cache.ts');
+    const { RECORDING_FRAMES_SOURCES } = await import('./recording-swift-sources.ts');
+    expect(vi.mocked(compileSwiftSources).mock.calls.at(-1)?.[0]).toMatchObject({
+      cacheName: 'recording-frames',
+      sources: RECORDING_FRAMES_SOURCES,
+    });
     const [, args, options] = mockRunCmd.mock.calls[0]!;
     // Launched with the constructed helper environment: its fixed PATH, never the host's.
     expect(options?.env?.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
@@ -237,8 +244,8 @@ describe('extractRecordingFrames', () => {
   });
 
   test('keeps the extraction reason when the decoder cannot be built', async () => {
-    const { compileSwiftSourceFile } = await import('./swift-cache.ts');
-    vi.mocked(compileSwiftSourceFile).mockRejectedValueOnce(new Error('swiftc died'));
+    const { compileSwiftSources } = await import('./swift-cache.ts');
+    vi.mocked(compileSwiftSources).mockRejectedValueOnce(new Error('swiftc died'));
 
     expect(
       await reasonOf(() =>
