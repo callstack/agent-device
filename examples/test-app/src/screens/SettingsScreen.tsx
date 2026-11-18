@@ -19,6 +19,7 @@ export interface SettingsScreenProps {
   onConfirmReset: () => void;
   onLoadDiagnostics: () => void;
   onOpenAccessorySetup: () => void;
+  onOpenAuthSessionLab: () => void;
   onOpenAutomationLab: () => void;
   onOpenHeavyFeed: () => void;
   onOpenInertSurface: () => void;
@@ -107,6 +108,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open accessory setup lab"
           onPress={props.onOpenAccessorySetup}
           testID="open-accessory-setup-lab"
+        />
+      </SectionCard>
+
+      <SectionCard
+        subtitle="Present the out-of-process ASWebAuthenticationSession sign-in sheet and drive it in place."
+        title="Sign-in sheet"
+      >
+        <ActionButton
+          label="Open sign-in sheet lab"
+          onPress={props.onOpenAuthSessionLab}
+          testID="open-auth-session-lab"
         />
       </SectionCard>
 

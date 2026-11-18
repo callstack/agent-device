@@ -1,0 +1,49 @@
+appId: com.callstack.agentdevicelab
+name: Sign-in sheet
+# Reads a real ASWebAuthenticationSession sheet, which iOS hosts out of process in
+# com.apple.SafariViewService, while the app stays the foreground owner underneath it (#2449). The
+# page comes from the fixture identity provider in src/auth-idp-fixture.ts, started by the lane script
+# (`pnpm test-app:maestro:auth:ios`). It holds fixture values only, so no credential is involved.
+#
+# These assertions match the sheet's own page, which is what the runner's in-place read of the hosted
+# surface has to keep producing (#2438). When that read regresses, or the sheet is not served, the
+# first assertion below fails with the sheet's title missing.
+#
+# This flow reads the sheet and stops. Driving it further, with inputText or a submit, lands on the
+# intermittent capture refusals #4593 reports; see examples/test-app/README.md for that sequence and
+# the step-level signatures observed on iOS 27.0.
+env:
+  # How long to wait for the sheet's page to serve the form.
+  AUTH_SHEET_TIMEOUT: '20000'
+onFlowStart:
+  - launchApp:
+      clearState: true
+  - assertVisible: Agent Device Tester
+---
+# Reaching the fixture screen: the Settings tab, then the lab's own entry.
+- tapOn:
+    text: Settings
+- scrollUntilVisible:
+    element:
+      id: open-auth-session-lab
+- tapOn:
+    id: open-auth-session-lab
+- assertVisible: Sign-in sheet lab
+- assertVisible:
+    id: auth-session-open
+# Opening the sheet. iOS presents it over the app, in its own process, so from here on a capture reads
+# the sheet's surface rather than the app's and no app row can be asserted.
+- tapOn:
+    id: auth-session-open
+# The sheet's page is served by the fixture identity provider. This is the assertion that fails when
+# the sheet is not served, so it carries the lane's timeout: an unserved sheet must fail here.
+- extendedWaitUntil:
+    visible: Fixture sign-in
+    timeout: ${AUTH_SHEET_TIMEOUT}
+# The hosted page's own controls, read in place. The form fields belong to the sheet, not the app.
+- assertVisible:
+    text: Email
+- assertVisible:
+    text: Password
+- assertVisible:
+    text: LOGIN

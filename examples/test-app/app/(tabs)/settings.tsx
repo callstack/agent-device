@@ -18,6 +18,7 @@ export default function SettingsRoute() {
         onConfirmReset={state.resetLabState}
         onLoadDiagnostics={state.loadDiagnostics}
         onOpenAccessorySetup={() => router.push('/accessory-setup')}
+        onOpenAuthSessionLab={() => router.push('/auth-session-lab')}
         onOpenAutomationLab={() => router.push('/automation')}
         onOpenHeavyFeed={() => router.push('/heavy-feed')}
         onOpenInertSurface={() => router.push('/inert')}
