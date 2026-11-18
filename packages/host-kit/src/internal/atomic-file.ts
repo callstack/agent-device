@@ -347,8 +347,11 @@ function windowsEntryName(normalized: string, rules: path.PlatformPath): string 
   if (/^\\\\\?\\/.test(normalized) && !/^\\\\\?\\(?:[A-Z]:\\|UNC\\)/i.test(normalized))
     return undefined;
   if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
-  // A share named `pipe` is the named-pipe namespace, ordinary or extended, and opens a pipe, not a file.
-  if (/^\\\\(?:\?\\UNC\\)?[^\\]+\\pipe(?:\\|$)/i.test(normalized)) return undefined;
+  // An IPC share, ordinary or extended, opens a named pipe or a mailslot, not a file: `pipe`, `IPC$` (the SMB
+  // named-pipe share) and `mailslot`. The same names below an ordinary share are ordinary directories.
+  if (/^\\\\(?:\?\\UNC\\)?[^\\]+\\(?:pipe|IPC\$|mailslot)(?:\\|$)/i.test(normalized)) {
+    return undefined;
+  }
   const { base } = rules.parse(normalized);
   if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
   // Microsoft's naming rules: no reserved character or control character, no trailing dot or space, and no

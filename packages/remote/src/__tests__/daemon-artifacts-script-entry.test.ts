@@ -710,22 +710,40 @@ function onDigestRead(call: number, change: () => void) {
 
 test.skipIf(process.platform === 'win32').each([
   {
-    name: 'the entry is replaced, with the committed bytes, after the open',
+    // Swapping the PARENT leaves the open file's own metadata untouched, so only the pathname re-stat sees it.
+    name: 'parent directory is swapped for one holding identical bytes after the open',
     call: 1,
     change: (destination: string) => {
-      fs.writeFileSync(`${destination}.new`, 'v1\n');
-      fs.renameSync(`${destination}.new`, destination);
+      const parent = path.dirname(destination);
+      fs.renameSync(parent, `${parent}-old`);
+      fs.mkdirSync(parent, { mode: 0o700 });
+      fs.writeFileSync(destination, 'v1\n');
+    },
+  },
+  {
+    // A parent that became a regular file answers ENOTDIR to the re-stat: no committed file stands there.
+    name: 'parent directory becomes a regular file after the open',
+    call: 1,
+    change: (destination: string) => {
+      const parent = path.dirname(destination);
+      fs.renameSync(parent, `${parent}-old`);
+      fs.writeFileSync(parent, 'not a directory\n');
     },
   },
   {
     name: 'the file is rewritten in place at the same length after its bytes were read',
     call: 2,
-    change: (destination: string) => fs.writeFileSync(destination, 'v9\n'),
+    change: (destination: string) => {
+      fs.writeFileSync(destination, 'v9\n');
+      // An explicit, different mtime, so detection never rides on whether the write landed in a new tick.
+      const past = new Date('2001-01-01T00:00:00Z');
+      fs.utimesSync(destination, past, past);
+    },
   },
 ])('a repeat whose $name discloses the change', async ({ call, change }) => {
   // The descriptor still hashes to the committed digest; only the entry that stands there now counts.
   const { stateDir, directory } = caller();
-  const destination = path.join(directory, 'journey.ad');
+  const destination = path.join(directory, 'output', 'journey.ad');
   const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
   const { id } = await open(baseUrl, stateDir, destination);
   const spy = onDigestRead(call, () => change(destination));
@@ -769,3 +787,51 @@ test.skipIf(process.platform === 'win32')(
     expect(fs.lstatSync(path.join(directory, 'linked')).isSymbolicLink()).toBe(true);
   },
 );
+
+test('re-offering a version an interrupted commit already put in place needs no download', async () => {
+  // Version 2 renamed into place, and its revision was never recorded. The daemon offers it again after its
+  // artifact expired: the bytes on disk are verified instead of fetched.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  interruptNextCommit();
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+  delete served.v2;
+
+  const reoffered = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(reoffered).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(reoffered.ok && reoffered.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+});
+
+test('a version an interrupted commit never put in place is downloaded even after its directory is gone', async () => {
+  // The record names version 1 as being published, but nothing reached the entry and the output directory is
+  // gone: settling finds no repeat, so the download recreates the directory and publishes.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'out', 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination, {
+    respond: (publicationId) => ({ ok: true, data: { scriptPublicationId: publicationId } }),
+  });
+  const { file: recordFile, record } = soleRecord(stateDir);
+  fs.writeFileSync(
+    recordFile,
+    JSON.stringify({
+      ...record,
+      publishing: { revision: 1, file: '0:0', staging: path.join(directory, 'gone') },
+    }),
+  );
+
+  const delivered = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(delivered).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});

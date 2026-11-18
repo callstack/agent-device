@@ -417,15 +417,14 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    if ((revision as number) <= record.revision) {
-      // A repeat is judged against the record as settled under the record lock, the state a commit writes.
-      const answer = await withRecordLock(file, async () => {
-        const settled = settleUnderLock(file, revision as number, (destination) =>
-          judgeScriptDestination(destination),
-        );
-        return settled && committedVersionEntry(settled.current, settled.entry);
-      });
-      return { published: answer };
+    // A version that is committed, or that an interrupted commit may already have put in place, is settled
+    // under the record lock before anything is staged: a repeat is judged against the state a commit writes,
+    // and a version already on disk needs no fresh download.
+    if ((revision as number) <= Math.max(record.revision, record.publishing?.revision ?? 0)) {
+      const repeated = await withRecordLock(file, async () =>
+        settledRepeat(file, revision as number),
+      );
+      if (repeated) return { published: repeated.published };
     }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
@@ -596,6 +595,28 @@ function publishStaged(
 }
 
 /**
+ * Runs under the record lock, before staging: settles the record and answers the version when it turns out to
+ * be a repeat, or nothing when it still needs a download. An interrupted version that never reached the entry,
+ * and whose directory is gone since, still needs one: the download recreates the directory it lands in.
+ */
+function settledRepeat(
+  file: string,
+  revision: number,
+): Readonly<{ published: string | undefined }> | undefined {
+  let settled: ReturnType<typeof settleUnderLock>;
+  try {
+    settled = settleUnderLock(file, revision, (destination) => judgeScriptDestination(destination));
+  } catch (error) {
+    if (error instanceof CommittedVersionUnverified && error.kind === 'unconfirmed')
+      return undefined;
+    throw error;
+  }
+  if (!settled) return { published: undefined };
+  if (revision > settled.current.revision) return undefined;
+  return { published: committedVersionEntry(settled.current, settled.entry) };
+}
+
+/**
  * Runs under the record lock, for a repeat and for a commit alike: re-reads the record, judges its destination,
  * and settles an interrupted version against the entry judged, writing the settled record. A repeat's judgment
  * is classified as a repeat's is. Nothing, when the record went away.
@@ -674,9 +695,7 @@ function contentDigest(file: string): string | undefined {
   } catch (error) {
     // Every refusal of the verified open is the same answer: a symbolic link swapped in after the look is
     // refused by O_NOFOLLOW as ELOOP, and anything else that is not the file looked at by the helper's check.
-    if (error instanceof AppError || (error as NodeJS.ErrnoException).code === 'ELOOP') {
-      return undefined;
-    }
+    if (error instanceof AppError || isAbsentOrRefusedEntry(error)) return undefined;
     throw error;
   }
   if (descriptor === undefined) return undefined;
@@ -698,7 +717,7 @@ function contentDigest(file: string): string | undefined {
     // The bytes hashed belong to the entry only while the descriptor is still that entry, unchanged since it
     // was opened: a replacement, or a same-length write after the read, moves one of these.
     const read = fs.fstatSync(descriptor, { bigint: true });
-    const current = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+    const current = lstatEntryIfPresent(file);
     if (!current || !sameUnchangedFile(opened, read) || !sameUnchangedFile(read, current)) {
       return undefined;
     }
@@ -709,6 +728,25 @@ function contentDigest(file: string): string | undefined {
 }
 
 const DIGEST_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * What the entry stands as now, or nothing: a parent that became a file answers ENOTDIR and a removed one
+ * ENOENT, and either way there is no committed file at that path.
+ */
+function lstatEntryIfPresent(file: string): fs.BigIntStats | undefined {
+  try {
+    return fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+  } catch (error) {
+    if (isAbsentOrRefusedEntry(error)) return undefined;
+    throw error;
+  }
+}
+
+/** A path that names no file to verify: gone, behind a parent that is not a directory, or a link refused. */
+function isAbsentOrRefusedEntry(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP';
+}
 
 function sameUnchangedFile(left: fs.BigIntStats, right: fs.BigIntStats): boolean {
   return (

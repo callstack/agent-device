@@ -9,6 +9,11 @@ type PathResolutionOptions = {
   env?: EnvMap;
 };
 
+/** The host's path rules, read when asked, so a path is joined the way the platform it runs on joins it. */
+function hostPath(): path.PlatformPath {
+  return process.platform === 'win32' ? path.win32 : path.posix;
+}
+
 function resolveHomeDirectory(env?: EnvMap): string {
   return env?.HOME?.trim() || os.homedir();
 }
@@ -16,7 +21,7 @@ function resolveHomeDirectory(env?: EnvMap): string {
 export function expandUserHomePath(inputPath: string, options: PathResolutionOptions = {}): string {
   if (inputPath === '~') return resolveHomeDirectory(options.env);
   if (inputPath.startsWith('~/')) {
-    return path.join(resolveHomeDirectory(options.env), inputPath.slice(2));
+    return hostPath().join(resolveHomeDirectory(options.env), inputPath.slice(2));
   }
   return inputPath;
 }
@@ -26,8 +31,9 @@ export function resolveUserPath(
   options: PathResolutionOptions & { cwd: string },
 ): string {
   const expandedPath = expandUserHomePath(inputPath, options);
-  if (path.isAbsolute(expandedPath)) return expandedPath;
-  return path.resolve(options.cwd, expandedPath);
+  const rules = hostPath();
+  if (rules.isAbsolute(expandedPath)) return expandedPath;
+  return rules.resolve(options.cwd, expandedPath);
 }
 
 /**
@@ -40,7 +46,11 @@ export function resolveScriptDestination(
   options: Readonly<{ cwd: string; env?: EnvMap }>,
 ): string {
   scriptEntryNameOrRefuse(spelled);
-  return resolveUserPath(spelled, options);
+  // The working directory or home it is joined to can bring a namespace the spelling did not show, such as a
+  // pipe root, so the resolved path is judged by the same gate before anything probes or records it.
+  const resolved = resolveUserPath(spelled, options);
+  scriptEntryNameOrRefuse(resolved);
+  return resolved;
 }
 
 /**

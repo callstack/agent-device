@@ -133,36 +133,90 @@ test.each([
   expect(fs.readdirSync(root)).toEqual([]);
 });
 
-test.each([String.raw`\\localhost\pipe\recorder`, String.raw`\\?\UNC\localhost\pipe\recorder`])(
-  'a forced remote open to the Windows pipe namespace %s is refused before anything else',
-  async (spelled) => {
-    const root = mkdtempForTestSync('script-pipe-');
-    const original = Object.getOwnPropertyDescriptor(process, 'platform');
-    Object.defineProperty(process, 'platform', { value: 'win32' });
-    const probe = vi.spyOn(fs, 'existsSync');
-    try {
-      await expect(
+/** Runs `task` under the Windows path rules, where the IPC namespaces are reachable. */
+async function onWindowsRules<T>(task: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    return await task();
+  } finally {
+    Object.defineProperty(process, 'platform', original!);
+  }
+}
+
+/** A remote open refused as an unnamed entry before any existence probe, record, or dispatch. */
+async function expectRefusedBeforeAnything(
+  flags: Record<string, unknown>,
+  host = createTestHostEnvironment(),
+  cwd?: string,
+): Promise<void> {
+  const root = mkdtempForTestSync('script-ipc-');
+  const probe = vi.spyOn(fs, 'existsSync');
+  try {
+    await onWindowsRules(() =>
+      expect(
         prepareRemoteRequestArtifacts(
           {
             session: 'owned',
             command: 'open',
             positionals: ['Demo'],
-            flags: { saveScript: spelled, force: true },
-            meta: { cwd: root },
+            flags,
+            meta: { cwd: cwd ?? root },
           },
           REMOTE,
           signal,
-          createTestHostEnvironment(),
+          host,
         ),
       ).rejects.toMatchObject({
         code: 'INVALID_ARGS',
         details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
-      });
-      expect(probe).not.toHaveBeenCalled();
-    } finally {
-      probe.mockRestore();
-      Object.defineProperty(process, 'platform', original!);
-    }
-    expect(fs.readdirSync(root)).toEqual([]);
+      }),
+    );
+    expect(probe).not.toHaveBeenCalled();
+  } finally {
+    probe.mockRestore();
+  }
+  expect(fs.readdirSync(root)).toEqual([]);
+}
+
+test.each(
+  [
+    String.raw`\\localhost\pipe\recorder`,
+    String.raw`\\?\UNC\localhost\pipe\recorder`,
+    String.raw`\\server\IPC$\recorder`,
+    String.raw`\\?\UNC\server\ipc$\recorder`,
+    String.raw`\\server\mailslot\recorder`,
+    String.raw`\\?\UNC\server\MAILSLOT\recorder`,
+  ].flatMap((spelled) => [false, true].map((force) => ({ spelled, force }))),
+)(
+  'a remote open to the Windows IPC namespace $spelled (force=$force) is refused before anything else',
+  async ({ spelled, force }) => {
+    await expectRefusedBeforeAnything({ saveScript: spelled, ...(force ? { force: true } : {}) });
+  },
+);
+
+test.each([false, true])(
+  'a relative path joined to a pipe-root working directory is refused before anything else (force=%s)',
+  async (force) => {
+    await expectRefusedBeforeAnything(
+      { saveScript: 'journey.ad', ...(force ? { force: true } : {}) },
+      createTestHostEnvironment(),
+      String.raw`\\localhost\pipe`,
+    );
+  },
+);
+
+test.each(
+  [String.raw`\\localhost\pipe`, String.raw`\\server\IPC$`].flatMap((home) =>
+    [false, true].map((force) => ({ home, force })),
+  ),
+)(
+  'a home path joined to the IPC-root HOME $home is refused before anything else (force=$force)',
+  async ({ home, force }) => {
+    // `~/recorder` passes the raw check; only the path it expands to names the namespace.
+    await expectRefusedBeforeAnything(
+      { saveScript: '~/recorder', ...(force ? { force: true } : {}) },
+      createTestHostEnvironment({ env: { HOME: home } }),
+    );
   },
 );
