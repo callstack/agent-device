@@ -28,7 +28,9 @@ jobs:
   smoke-android:
     name: Smoke Tests
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # The emulator owns two cores and the smoke harness spawns one CLI process per
+    # step; on four vCPU both compete and every phase stretches with host load.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 80
     steps:
       - name: Checkout
