@@ -248,7 +248,7 @@ A destination a caller names — `--save-script=<path>` on the local route, or t
 | A missing level created meanwhile: foreign-owned; or owned by this user or root and non-sticky world-writable, non-sticky group-writable only, or sticky with either write bit | Refused, `foreign_owned`, `world_writable`, `shared_group_writable`, or `shared_parent` respectively | Directories this call already created |
 | The entry directly inside a shared sticky directory this user or root owns (a foreign-owned one is `foreign_owned` first) | Refused, `shared_parent` | None |
 | A directory another user created first in sticky `/tmp` | Refused, `foreign_owned` | None |
-| A non-sticky directory this user or root owns that only its group can write | Refused, `shared_group_writable` | None |
+| A non-sticky directory this user or root owns with the group-write bit set and the other-write bit clear | Refused, `shared_group_writable` | None |
 | A link loop, or a file as a path component | Refused, `link_loop_exceeded` or `not_a_directory` | None |
 | A relative destination at host-kit's entry | Refused, `relative_destination` | None |
 | A remote destination directory replaced while a version downloads | Refused when the confirming walk rejects the replacement or finds a different `dev:ino` (`parent_replaced`) | No entry |
