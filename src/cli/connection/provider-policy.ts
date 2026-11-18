@@ -10,6 +10,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   getProviderPluginDeclaration,
   providerPluginInstallCommand,
+  providerPluginRepairCommand,
 } from '../../commands/provider-plugin-catalog.ts';
 import {
   BUILTIN_CONNECT_PROVIDER_IDS,
@@ -90,7 +91,7 @@ export function unavailableConnectPluginError(
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run agent-device plugins update ${declaration.package}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginRepairCommand(declaration)}, then retry your original command.`,
     });
   }
   const installCommand = providerPluginInstallCommand(declaration);

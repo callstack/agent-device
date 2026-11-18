@@ -156,6 +156,21 @@ test('a 0.22 nightly core prescribes the matching channel plugin release', async
   assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
+test('a nightly core repairs a failed BrowserStack selection with the matching release', async () => {
+  vi.mocked(readVersion).mockReturnValue(NIGHTLY_0_22);
+  const { home, env } = pluginHome();
+  selectV2Plugin(home, '@agent-device/browserstack', 'throw new Error("Plugin failed to load.");');
+  const result = await runCliCapture(
+    ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
+    { cwd: home, env, stateDirPrefix: 'connect-nightly-broken-browserstack-' },
+  );
+  assert.equal(result.code, 1);
+  assert.deepEqual(result.calls, []);
+  const { error } = JSON.parse(result.stdout);
+  assert.equal(error.details.reason, 'plugin-unavailable');
+  assert.ok(error.hint.includes(`plugins add @agent-device/browserstack@${NIGHTLY_0_22}`));
+});
+
 test('a stable core prescribes the plain package for the same plugin', async () => {
   vi.mocked(readVersion).mockReturnValue('0.22.0');
   const { home, env } = pluginHome();

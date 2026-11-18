@@ -60,6 +60,15 @@ export function providerPluginInstallCommand(
   return `agent-device plugins add ${providerPluginSelector(declaration, coreVersion)}`;
 }
 
+export function providerPluginRepairCommand(
+  declaration: ProviderPluginDeclaration,
+  coreVersion: string = readVersion(),
+): string {
+  const selector = providerPluginSelector(declaration, coreVersion);
+  const action = selector === declaration.package ? 'update' : 'add';
+  return `agent-device plugins ${action} ${selector}`;
+}
+
 export function providerPluginHelp(coreVersion: string = readVersion()): string {
   const plugins = PROVIDER_PLUGIN_CATALOG.map(
     (plugin) =>
