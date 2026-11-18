@@ -75,11 +75,6 @@ Entry points for integrations:
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath, host, signal?)`
-- `agent-device/limrun`
-  - `new LimrunRuntime(options, host)`
-  - `runtime.getDeviceSession(device)`
-  - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
-    `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
 - `agent-device/plugins/webdriver`
   - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
@@ -87,7 +82,7 @@ Entry points for integrations:
 
 ## Migrate SDK hosts to 0.22
 
-In 0.22, Android host ADB helpers, archive inspection, Metro preparation, and `LimrunRuntime` require an explicit `{ env, cwd }` host. `resolveRemoteConfigProfile` requires `env`, and `createLocalArtifactAdapter` requires `cwd`. Capture these values in your application's entry point and pass the same host to its operations:
+In 0.22, Android host ADB helpers, archive inspection, and Metro preparation require an explicit `{ env, cwd }` host. `resolveRemoteConfigProfile` requires `env`, and `createLocalArtifactAdapter` requires `cwd`. Capture these values in your application's entry point and pass the same host to its operations:
 
 ```ts
 import { resolveAndroidArchivePackageName } from 'agent-device/artifacts';
