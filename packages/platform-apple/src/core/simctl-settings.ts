@@ -65,41 +65,66 @@ async function setPermission(
   }
 }
 
-/**
- * The services a grant or revoke of `all` changes one by one, in the widest access each takes:
- * full contacts and photos, and location always, which `simctl privacy grant all` gave too.
- * `notifications` is last because current runtimes refuse it.
- */
-const IOS_ALL_PRIVACY_SERVICES = [
-  'calendar',
-  'camera',
-  'contacts',
-  'location-always',
-  'media-library',
-  'microphone',
-  'motion',
-  'photos',
-  'reminders',
-  'siri',
-  'notifications',
-] as const;
+/** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
+const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
+  all: 'all',
+  camera: 'camera',
+  microphone: 'microphone',
+  contacts: 'contacts',
+  'contacts-limited': 'contacts-limited',
+  notifications: 'notifications',
+  calendar: 'calendar',
+  location: 'location',
+  'location-always': 'location-always',
+  'media-library': 'media-library',
+  motion: 'motion',
+  reminders: 'reminders',
+  siri: 'siri',
+};
 
 /**
- * What a revoke of `all` also takes back: limited photo access (`photos-add`) is a service of
- * its own, so revoking `photos` leaves it in place. Limited contacts share the `contacts` row.
+ * Whether a grant or revoke of `all` changes each target's service, keyed by every target so a new
+ * one cannot be left out without a compile error. `all` takes the widest access each service
+ * offers: full contacts and photos, and location always, which `simctl privacy grant all` gave
+ * too. The narrower targets are left to the row they share: limited contacts write the `contacts`
+ * row, and revoking `location-always` takes back while-in-use access too (iOS 27.2).
  */
-const IOS_ALL_REVOKED_PRIVACY_SERVICES = [
-  ...IOS_ALL_PRIVACY_SERVICES.slice(0, -1),
-  'photos-add',
-  'notifications',
-] as const;
+const IOS_ALL_TARGETS = {
+  calendar: true,
+  camera: true,
+  contacts: true,
+  'contacts-limited': false,
+  location: false,
+  'location-always': true,
+  'media-library': true,
+  microphone: true,
+  motion: true,
+  notifications: true,
+  photos: true,
+  reminders: true,
+  siri: true,
+} as const satisfies Record<Exclude<MobilePermissionTarget, 'all'>, boolean>;
+
+/** The services a grant of `all` changes, one `simctl privacy` call each. */
+const IOS_ALL_GRANTED_SERVICES: readonly string[] = (
+  Object.keys(IOS_ALL_TARGETS) as (keyof typeof IOS_ALL_TARGETS)[]
+)
+  .filter((target) => IOS_ALL_TARGETS[target])
+  .map((target) => (target === 'photos' ? 'photos' : IOS_PRIVACY_SERVICES[target]));
+
+/**
+ * The services a revoke of `all` changes: every granted one, and limited photo access
+ * (`photos-add`), a service of its own that revoking `photos` leaves in place.
+ */
+const IOS_ALL_REVOKED_SERVICES: readonly string[] = [...IOS_ALL_GRANTED_SERVICES, 'photos-add'];
 
 /**
  * `all` for grant and revoke, as one `simctl privacy` call per service. The simulator records
  * `simctl privacy grant all` as a single `kTCCServiceAll` row that iOS 27 does not consult, so the
  * app still prompts, and a revoke of `all` leaves every per-service grant in place. A service the
- * runtime refuses is skipped with a warning, as Android skips a permission it cannot change;
- * any other failure stops the sequence. A reset of `all` stays one call: it removes every row.
+ * runtime refuses is skipped with a warning, as Android skips a permission it cannot change. Any
+ * other failure stops the sequence, and its error carries the services already changed in
+ * `details.permissions`. A reset of `all` stays one call: it removes every row.
  */
 async function setEveryIosPrivacyService(
   { runSimctl, udid, deviceId }: SimctlSettingRequest,
@@ -109,14 +134,13 @@ async function setEveryIosPrivacyService(
   const applied: string[] = [];
   const warnings: string[] = [];
   let lastRefusal: unknown;
-  const services =
-    action === 'revoke' ? IOS_ALL_REVOKED_PRIVACY_SERVICES : IOS_ALL_PRIVACY_SERVICES;
+  const services = action === 'revoke' ? IOS_ALL_REVOKED_SERVICES : IOS_ALL_GRANTED_SERVICES;
   for (const service of services) {
     try {
       await runSimctl(['privacy', udid, action, service, appBundleId]);
       applied.push(service);
     } catch (error) {
-      if (!isIosPrivacyServiceRefusal(error)) throw error;
+      if (!isIosPrivacyServiceRefusal(error)) throw withAppliedServices(error, applied);
       lastRefusal = error;
       warnings.push(`Skipped ${service}: this iOS runtime does not let simctl privacy change it.`);
     }
@@ -125,6 +149,13 @@ async function setEveryIosPrivacyService(
     throw iosPrivacyServiceRefusedError(action, 'all', appBundleId, deviceId, lastRefusal);
   }
   return { permission: 'all', permissions: applied, ...(warnings.length > 0 ? { warnings } : {}) };
+}
+
+/** The error that stopped `all` partway, naming the services it had already changed. */
+function withAppliedServices(error: unknown, applied: readonly string[]): unknown {
+  if (!(error instanceof AppError) || applied.length === 0) return error;
+  error.details = { ...error.details, permissions: [...applied] };
+  return error;
 }
 
 async function setLocation(request: SimctlSettingRequest): Promise<Record<string, unknown> | void> {
@@ -150,23 +181,6 @@ async function requireAppBundleId({
     sessionAppRequiredDetails(),
   );
 }
-
-/** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
-const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
-  all: 'all',
-  camera: 'camera',
-  microphone: 'microphone',
-  contacts: 'contacts',
-  'contacts-limited': 'contacts-limited',
-  notifications: 'notifications',
-  calendar: 'calendar',
-  location: 'location',
-  'location-always': 'location-always',
-  'media-library': 'media-library',
-  motion: 'motion',
-  reminders: 'reminders',
-  siri: 'siri',
-};
 
 function parseIosPrivacyService(
   permissionTarget: string | undefined,

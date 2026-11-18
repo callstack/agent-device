@@ -133,6 +133,7 @@ test.for([
   },
 );
 
+// Every target but the narrower ones that share a row (contacts-limited, location).
 const EVERY_SERVICE = [
   'calendar',
   'camera',
@@ -141,10 +142,10 @@ const EVERY_SERVICE = [
   'media-library',
   'microphone',
   'motion',
+  'notifications',
   'photos',
   'reminders',
   'siri',
-  'notifications',
 ];
 
 function refusal(wording: string): AppError {
@@ -154,7 +155,7 @@ function refusal(wording: string): AppError {
 }
 
 // A revoke also takes back limited photo access, a service of its own.
-const EVERY_REVOKED_SERVICE = [...EVERY_SERVICE.slice(0, -1), 'photos-add', 'notifications'];
+const EVERY_REVOKED_SERVICE = [...EVERY_SERVICE, 'photos-add'];
 
 test.for([
   { state: 'grant', action: 'grant', wording: 'Failed to grant access', services: EVERY_SERVICE },
@@ -168,10 +169,11 @@ test.for([
   '$state all changes each service in turn and skips the one the runtime refuses',
   async ({ state, action, wording, services }) => {
     // The simulator records `all` as one kTCCServiceAll row that iOS does not consult.
-    const runSimctl = recordingRunner([
-      ...services.slice(0, -1).map(() => ({ stdout: '', stderr: '' })),
-      refusal(wording),
-    ]);
+    const runSimctl = recordingRunner(
+      services.map((service) =>
+        service === 'notifications' ? refusal(wording) : { stdout: '', stderr: '' },
+      ),
+    );
 
     const result = await applySimctlSetting(
       request(runSimctl, {
@@ -187,7 +189,7 @@ test.for([
     );
     expect(result).toEqual({
       permission: 'all',
-      permissions: services.slice(0, -1),
+      permissions: services.filter((service) => service !== 'notifications'),
       warnings: ['Skipped notifications: this iOS runtime does not let simctl privacy change it.'],
     });
   },
@@ -252,6 +254,8 @@ test('grant all stops at a failure that is not a refusal', async () => {
     ['privacy', 'SIM-1', 'grant', 'calendar', 'com.example.app'],
     ['privacy', 'SIM-1', 'grant', 'camera', 'com.example.app'],
   ]);
+  // The error names what had already changed, beside what the failure itself reported.
+  expect(failed.details).toEqual({ stderr: 'Invalid device: booted', permissions: ['calendar'] });
 });
 
 test('a privacy service the runtime refuses is unsupported; other failures pass through', async () => {
