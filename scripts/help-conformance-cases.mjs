@@ -155,7 +155,7 @@ export const CASES = [
   {
     id: 'accessibility-review',
     docs: ['--help:first30', 'accessibility'],
-    task: 'Review the accessibility of the installed iOS shop app com.example.shop. Cover the Home and Cart tabs, including large text, and capture evidence for each finding. Plan commands only.',
+    task: 'Review the accessibility of the installed iOS shop app com.example.shop. Cover the Home and Cart tabs, including large text, and capture evidence for each finding. The simulator starts at text size large in light mode. Plan commands only.',
     allowedExternalCommands: ['mkdir'],
     expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
     matchers: [

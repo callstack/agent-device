@@ -94,9 +94,10 @@ test('usageForCommand resolves accessibility help topic', async () => {
   assert.match(help, /agent-device settings text-size accessibility-extra-extra-extra-large/);
   assert.match(help, /agent-device open <app> --relaunch/);
   assert.match(help, /run agent-device settings text-size to record the current size/);
-  assert.match(help, /agent-device settings text-size <recorded-size>/);
+  assert.match(help, /set the recorded size again/);
   assert.match(help, /agent-device settings appearance dark/);
-  assert.match(help, /agent-device settings appearance <light\|dark>/);
+  assert.match(help, /set the noted mode again/);
+  assert.doesNotMatch(help, /<recorded-size>|<light\|dark>/);
   assert.match(help, /agent-device scroll down 0\.8, then run audit again/);
   assert.match(help, /Group findings by screen/);
 });

@@ -223,9 +223,9 @@ Coverage:
 Checks audit cannot do:
   Large text: first run agent-device settings text-size to record the current size. Then run agent-device settings text-size accessibility-extra-extra-extra-large, then agent-device open <app> --relaunch. The app adopts the size only after a relaunch.
     Then run audit and screenshot each key screen. Look for clipped, truncated, or overlapping text.
-    At the end, set the recorded size again with agent-device settings text-size <recorded-size>.
+    At the end, set the recorded size again. For example, if the recorded size was large, run agent-device settings text-size large.
   Dark mode: first note the current mode from a screenshot. Then run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
-    At the end, set the noted mode again with agent-device settings appearance <light|dark>.
+    At the end, set the noted mode again. For example, if the noted mode was light, run agent-device settings appearance light.
   If settings refuses on this device, such as a physical iPhone, list large text and dark mode as not done.
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
     A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
