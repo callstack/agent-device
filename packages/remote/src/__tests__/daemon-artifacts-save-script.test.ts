@@ -94,3 +94,27 @@ test('remote open expands home on the caller', async () => {
   );
   expect(result.clientArtifactPaths?.savedScript).toBe(path.join(home, 'journey.ad'));
 });
+
+test.each([
+  { name: 'a relative `./missing/.`', spelled: () => './missing/.' },
+  { name: 'an absolute `.` over a directory that exists', spelled: (root: string) => `${root}/.` },
+])('remote open refuses $name as an unnamed entry before anything else', async ({ spelled }) => {
+  const root = mkdtempForTestSync('script-unnamed-');
+  await expect(
+    prepareRemoteRequestArtifacts(
+      {
+        session: 'owned',
+        command: 'open',
+        positionals: ['Demo'],
+        flags: { saveScript: spelled(root) },
+        meta: { cwd: root },
+      },
+      REMOTE,
+      signal,
+      createTestHostEnvironment(),
+    ),
+  ).rejects.toMatchObject({
+    details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+  });
+  expect(fs.readdirSync(root)).toEqual([]);
+});

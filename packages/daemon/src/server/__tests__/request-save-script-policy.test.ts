@@ -10,7 +10,7 @@ import {
 } from '../../core/daemon-command-registry.ts';
 import {
   SAVE_SCRIPT_FLAG_OWNER_COMMANDS,
-  unsupportedSaveScriptFlagResponse,
+  saveScriptFlagResponse,
 } from '../request-save-script-policy.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
@@ -33,21 +33,17 @@ test('the flag owners are exactly the released open/close/replay surface', () =>
 
 test('owner commands and flag-free requests pass the seam untouched', () => {
   for (const command of SAVE_SCRIPT_FLAG_OWNER_COMMANDS) {
-    expect(unsupportedSaveScriptFlagResponse(request(command, { saveScript: true }))).toBe(
-      undefined,
-    );
-    expect(unsupportedSaveScriptFlagResponse(request(command, { saveScript: './flow.ad' }))).toBe(
-      undefined,
-    );
+    expect(saveScriptFlagResponse(request(command, { saveScript: true }))).toBe(undefined);
+    expect(saveScriptFlagResponse(request(command, { saveScript: './flow.ad' }))).toBe(undefined);
   }
-  expect(unsupportedSaveScriptFlagResponse(request('record', {}))).toBe(undefined);
-  expect(unsupportedSaveScriptFlagResponse(request('record', undefined))).toBe(undefined);
+  expect(saveScriptFlagResponse(request('record', {}))).toBe(undefined);
+  expect(saveScriptFlagResponse(request('record', undefined))).toBe(undefined);
 });
 
 test.each(['record', 'trace', 'click', 'fill', 'snapshot', 'test', 'session_save_script'])(
   'raw saveScript on %s is rejected with an ADR 0010 shaped INVALID_ARGS error',
   (command) => {
-    const response = unsupportedSaveScriptFlagResponse(request(command, { saveScript: true }));
+    const response = saveScriptFlagResponse(request(command, { saveScript: true }));
 
     expect(response?.ok).toBe(false);
     if (!response || response.ok) return;
@@ -60,9 +56,21 @@ test.each(['record', 'trace', 'click', 'fill', 'snapshot', 'test', 'session_save
 );
 
 test('presence is rejected, not truthiness — a raw false is unsupported too', () => {
-  const response = unsupportedSaveScriptFlagResponse(request('record', { saveScript: false }));
+  const response = saveScriptFlagResponse(request('record', { saveScript: false }));
 
   expect(response?.ok).toBe(false);
   if (!response || response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
 });
+
+test.each(['./missing/.', 'missing/..', '~/'])(
+  'an owner path spelled %s is refused at the seam before the daemon expands it',
+  (spelled) => {
+    const response = saveScriptFlagResponse(request('open', { saveScript: spelled }));
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' } },
+    });
+  },
+);

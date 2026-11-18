@@ -1,4 +1,5 @@
 export {
+  assertScriptEntryNamed,
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
   prepareScriptDestination,
@@ -22,6 +23,7 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
+  resolveScriptDestination,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

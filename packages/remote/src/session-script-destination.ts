@@ -53,7 +53,11 @@ type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
-  publishing?: Readonly<{ revision: number; file: string; staging: string }>;
+  /**
+   * `entry` is the path host-kit authorized for the version, so recovery probes the file the commit created;
+   * a record written before it was kept has none, and is settled from `destination` as it always was.
+   */
+  publishing?: Readonly<{ revision: number; file: string; staging: string; entry?: string }>;
   staging?: readonly string[];
   retired?: true;
 }>;
@@ -559,7 +563,7 @@ function publishStaged(
   // Confirmed here, under the record lock and right before the entry is created, because the download ran in
   // between. The entry is the one host-kit authorized, never the destination's own spelling (ADR 0016).
   const { entry } = confirmScriptDestination(current.destination, prepared);
-  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
+  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging, entry };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
@@ -582,7 +586,7 @@ function publishStaged(
 function settlePublishing(record: ScriptRecord): ScriptRecord {
   const { publishing, ...settled } = record;
   if (!publishing) return record;
-  if (fileIdentity(record.destination) !== publishing.file) return settled;
+  if (fileIdentity(publishing.entry ?? record.destination) !== publishing.file) return settled;
   return { ...settled, revision: Math.max(settled.revision, publishing.revision) };
 }
 
@@ -700,20 +704,25 @@ function parseRecord(file: string): ScriptRecord | undefined {
   } catch {
     return undefined;
   }
-  const publishing = record?.publishing;
   const valid =
     typeof record?.destination === 'string' &&
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
-    (publishing === undefined ||
-      (Number.isSafeInteger(publishing?.revision) &&
-        typeof publishing?.file === 'string' &&
-        typeof publishing?.staging === 'string')) &&
+    (record.publishing === undefined || isPublishing(record.publishing)) &&
     (record.retired === undefined || record.retired === true) &&
     (record.staging === undefined ||
       (Array.isArray(record.staging) &&
         record.staging.every((staging) => typeof staging === 'string')));
   return valid ? (record as ScriptRecord) : undefined;
+}
+
+function isPublishing(publishing: Partial<NonNullable<ScriptRecord['publishing']>>): boolean {
+  return (
+    Number.isSafeInteger(publishing.revision) &&
+    typeof publishing.file === 'string' &&
+    typeof publishing.staging === 'string' &&
+    (publishing.entry === undefined || typeof publishing.entry === 'string')
+  );
 }
 
 function writeRecord(file: string, record: ScriptRecord): void {

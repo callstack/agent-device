@@ -12,7 +12,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
@@ -136,7 +136,8 @@ function prepareRemoteScriptOutput(
       hint: 'Use open --save-script. A remote close writes the recording to that path. Remote repaired-script output is not supported.',
     });
   }
-  const localPath = resolveUserPath(
+  // The spelling is judged before it is expanded, and before anything asks whether it exists (ADR 0016).
+  const localPath = resolveScriptDestination(
     typeof requested === 'string' ? requested : `recording-${Date.now()}.ad`,
     { cwd: req.meta?.cwd ?? host.cwd, env: host.env },
   );

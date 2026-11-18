@@ -54,7 +54,7 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
    * script publication. Only the released flag owners (`open`, `close`,
    * `replay` — the commands whose CLI grammar declares `--save-script`) set
    * this; every other command's raw request is rejected at the daemon request
-   * seam by `unsupportedSaveScriptFlagResponse`, so a recordable command such
+   * seam by `saveScriptFlagResponse`, so a recordable command such
    * as `record` or `trace` cannot arm publication over the wire.
    */
   saveScriptFlagOwner?: boolean;

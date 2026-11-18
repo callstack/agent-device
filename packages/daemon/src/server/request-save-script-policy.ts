@@ -5,6 +5,7 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
+import { assertScriptEntryNamed } from '@agent-device/host-kit/file';
 import {
   listSaveScriptFlagOwnerCommands,
   ownsSaveScriptFlag,
@@ -43,11 +44,32 @@ const UNSUPPORTED_SAVE_SCRIPT_HINT =
  * owner command. Presence is what is rejected, not truthiness — a raw
  * `saveScript: false` is just as unsupported on `record` as `true` is, and
  * mirrors the maestro replay guard's `!== undefined` reading of the same flag.
+ *
+ * An owner's path is judged here as the caller SPELLED it, before the daemon
+ * expands it: an expansion folds a final `.` or `..` away, and the publish
+ * would then create a file under a directory's name (ADR 0016).
  */
-export function unsupportedSaveScriptFlagResponse(req: DaemonRequest): DaemonResponse | undefined {
-  if (req.flags?.saveScript === undefined) return undefined;
-  if (ownsSaveScriptFlag(req.command)) return undefined;
+export function saveScriptFlagResponse(req: DaemonRequest): DaemonResponse | undefined {
+  const requested = req.flags?.saveScript;
+  if (requested === undefined) return undefined;
+  if (!ownsSaveScriptFlag(req.command)) {
+    return rejectedSaveScript(
+      req,
+      new AppError('INVALID_ARGS', UNSUPPORTED_SAVE_SCRIPT_MESSAGE, {
+        hint: UNSUPPORTED_SAVE_SCRIPT_HINT,
+      }),
+    );
+  }
+  if (typeof requested !== 'string') return undefined;
+  try {
+    assertScriptEntryNamed(requested);
+    return undefined;
+  } catch (error) {
+    return rejectedSaveScript(req, error);
+  }
+}
 
+function rejectedSaveScript(req: DaemonRequest, error: unknown): DaemonResponse {
   emitDiagnostic({
     level: 'warn',
     phase: 'save_script_flag_rejected',
@@ -59,11 +81,10 @@ export function unsupportedSaveScriptFlagResponse(req: DaemonRequest): DaemonRes
   const flushed = flushDiagnosticsToSessionFile({ force: true });
   return {
     ok: false,
-    error: normalizeError(
-      new AppError('INVALID_ARGS', UNSUPPORTED_SAVE_SCRIPT_MESSAGE, {
-        hint: UNSUPPORTED_SAVE_SCRIPT_HINT,
-      }),
-      { diagnosticId: meta.diagnosticId, logPath: flushed?.path, diagnosticsRecord: flushed?.ref },
-    ),
+    error: normalizeError(error, {
+      diagnosticId: meta.diagnosticId,
+      logPath: flushed?.path,
+      diagnosticsRecord: flushed?.ref,
+    }),
   };
 }

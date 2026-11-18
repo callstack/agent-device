@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import { assertScriptEntryNamed } from './atomic-file.ts';
 
 type PathResolutionOptions = {
   cwd?: string;
@@ -27,6 +28,19 @@ export function resolveUserPath(
   const expandedPath = expandUserHomePath(inputPath, options);
   if (path.isAbsolute(expandedPath)) return expandedPath;
   return path.resolve(options.cwd, expandedPath);
+}
+
+/**
+ * Expands a script destination a caller spelled into the absolute path host-kit judges, refusing a spelling
+ * whose last segment names no entry BEFORE the expansion normalizes it away: `./missing/.` would otherwise
+ * become `<cwd>/missing`, and the publish would create a file under the directory's name.
+ */
+export function resolveScriptDestination(
+  spelled: string,
+  options: Readonly<{ cwd: string; env?: EnvMap }>,
+): string {
+  assertScriptEntryNamed(spelled);
+  return resolveUserPath(spelled, options);
 }
 
 /**

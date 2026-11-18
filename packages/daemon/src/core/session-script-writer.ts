@@ -18,8 +18,12 @@ import {
   isTouchTargetCommand,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
-import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishFileSync, publishScriptFileSync } from '@agent-device/host-kit/file';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import {
+  publishFileSync,
+  publishScriptFileSync,
+  resolveScriptDestination,
+} from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -187,7 +191,7 @@ export class SessionScriptWriter {
   private resolveScriptPath(session: SessionState): string {
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
     if (targetPath) {
-      return expandSessionPath(targetPath, this.hostCwd);
+      return resolveScriptDestination(targetPath, { cwd: this.hostCwd });
     }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');

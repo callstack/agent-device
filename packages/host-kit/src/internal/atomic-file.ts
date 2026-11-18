@@ -213,8 +213,9 @@ function scriptDestination(
   create: boolean,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
-  const name = finalEntryName(destination);
+  // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
+  const name = finalEntryName(destination);
   if (process.platform === 'win32') {
     // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
     if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
@@ -239,24 +240,36 @@ function authorizedEntry(
   return { directory, identity, name, entry: path.join(directory, name) };
 }
 
-/**
- * The name the entry is created under, judged before anything touches the filesystem. A trailing separator
- * names the same entry it always has; a name that is not one entry would make the joined entry a different
- * directory from the one the walk judged (ADR 0016).
- */
+/** The name the entry is created under, judged before anything touches the filesystem (ADR 0016). */
 function finalEntryName(destination: string): string {
-  const name = path.basename(destination);
-  if (
-    name === '' ||
-    name === '.' ||
-    name === '..' ||
-    destination.includes('\0') ||
-    name.includes('/') ||
-    name.includes(path.sep)
-  ) {
-    throw scriptAncestryFailure(destination, path.dirname(destination), 'unnamed_entry');
-  }
+  const name = scriptEntryName(destination, path);
+  if (name === undefined) throw unnamedEntryFailure(destination);
   return name;
+}
+
+function unnamedEntryFailure(destination: string): AppError {
+  return scriptAncestryFailure(destination, path.dirname(destination), 'unnamed_entry');
+}
+
+/**
+ * The one entry a script destination's spelling names under `rules`, or `undefined` when its last segment
+ * names none: empty, a root, `.`, `..`, a spelling holding a NUL, or the bare `~` a home expansion turns
+ * into a directory. A trailing separator names the same entry it always has. The split is root-aware: a
+ * basename would turn the share of a bare UNC root into a file name.
+ */
+export function scriptEntryName(spelled: string, rules: path.PlatformPath): string | undefined {
+  if (spelled.includes('\0') || /^~\/*$/.test(spelled)) return undefined;
+  // `parse` does not see an extended or device UNC prefix as a root, so its server and share would be names.
+  if (rules.sep === '\\' && /^[\\/]{2}[?.][\\/]UNC(?:[\\/]+[^\\/]+){0,2}[\\/]*$/i.test(spelled)) {
+    return undefined;
+  }
+  const { base } = rules.parse(spelled);
+  return base === '' || base === '.' || base === '..' ? undefined : base;
+}
+
+/** Refuses a spelled script destination whose last segment names no entry, before anything expands it. */
+export function assertScriptEntryNamed(spelled: string): void {
+  if (scriptEntryName(spelled, path) === undefined) throw unnamedEntryFailure(spelled);
 }
 
 /**
@@ -611,7 +624,7 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   entry_appeared:
     'a directory the script path needs was missing when the path was checked and appeared before this save could create it.',
   unnamed_entry:
-    'the script path has to end in one file name, not `.`, `..`, nothing at all, or a name holding a NUL or a separator.',
+    'the script path has to end in one file name, not `.`, `..`, `~`, a root, or nothing at all, and it cannot hold a NUL.',
   relative_destination:
     'the script path has to be absolute, so the directories it names are the ones that get checked.',
   unresolvable_parent:
@@ -661,6 +674,9 @@ function scriptAncestryFailure(
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
+  }
+  if (exposure === 'unnamed_entry') {
+    return 'End the script path in a valid file name, such as `--save-script=./workflows/journey.ad`.';
   }
   if (exposure === 'shared_group_writable') {
     return `Close the directory to its group with \`chmod g-w ${ancestor}\`, or save the script under a directory only you can write.`;

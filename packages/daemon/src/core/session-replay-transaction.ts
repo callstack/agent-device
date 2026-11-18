@@ -10,7 +10,7 @@ import {
   repairBoundary,
   repairSourcePath,
 } from './session-script-publication-state.ts';
-import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import { resolveScriptDestination } from '@agent-device/host-kit/file';
 
 /**
  * `ReplaySessionTransaction` (#1478 P4a): the daemon-private projection through which the ADR
@@ -63,7 +63,7 @@ export function armRepairStep(
   const state = publicationState(session);
   const explicitPath =
     typeof params.saveScript === 'string'
-      ? expandSessionPath(params.saveScript, hostCwd)
+      ? resolveScriptDestination(params.saveScript, { cwd: hostCwd })
       : state.kind === 'repair'
         ? undefined
         : params.healedSiblingPath;

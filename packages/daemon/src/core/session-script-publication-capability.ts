@@ -23,7 +23,7 @@ import {
   scriptTargetPath,
   type RemoteScriptDelivery,
 } from './session-script-publication-state.ts';
-import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import { resolveScriptDestination } from '@agent-device/host-kit/file';
 
 /**
  * `SessionScriptPublication` (#1478 P4a): the daemon-private projection owning every supported
@@ -60,7 +60,10 @@ export function armAuthoringOnOpen(
 ): void {
   session.scriptPublication = armAuthoring(
     {
-      path: requested.path !== undefined ? expandSessionPath(requested.path, hostCwd) : undefined,
+      path:
+        requested.path !== undefined
+          ? resolveScriptDestination(requested.path, { cwd: hostCwd })
+          : undefined,
       force: requested.force === true,
     },
     remote ? { ...remote, revision: 0 } : undefined,
@@ -130,7 +133,7 @@ export function applyRecordedSaveScriptFlags(
   const requested = {
     path:
       typeof flags.saveScript === 'string'
-        ? expandSessionPath(flags.saveScript, hostCwd)
+        ? resolveScriptDestination(flags.saveScript, { cwd: hostCwd })
         : undefined,
     force: flags.force === true,
   };
@@ -169,7 +172,7 @@ export function retargetActivePublication(
     target: resolveScriptTarget(state.target, {
       path:
         params.explicitPath !== undefined
-          ? expandSessionPath(params.explicitPath, hostCwd)
+          ? resolveScriptDestination(params.explicitPath, { cwd: hostCwd })
           : undefined,
       force: params.liveForce === true,
     }),

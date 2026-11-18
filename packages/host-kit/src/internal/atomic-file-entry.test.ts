@@ -7,9 +7,15 @@ import {
   ancestryRoot as root,
   directoryWith,
   expectUntrusted,
+  expectUntrustedReplaced,
   publish,
 } from './atomic-file-host.fixtures.ts';
-import { prepareScriptDestination } from './atomic-file.ts';
+import {
+  confirmScriptDestination,
+  prepareScriptDestination,
+  scriptEntryName,
+} from './atomic-file.ts';
+import { resolveScriptDestination } from './path-resolution.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
@@ -80,4 +86,78 @@ skipOnWindows('a trailing separator names the same entry it always has', () => {
   expect(fs.readFileSync(path.join(dir, 'journey.ad'), 'utf8')).toBe('context\n');
   expect(tree(dir)).toEqual(['journey.ad']);
   expect(prepareScriptDestination(`${dir}/journey.ad/`).entry).toBe(path.join(dir, 'journey.ad'));
+});
+
+test('a relative destination is refused as relative, whatever its last segment', () => {
+  expectUntrusted(
+    () => prepareScriptDestination('recordings/..'),
+    'relative_destination',
+    'recordings',
+  );
+});
+
+skipOnWindows('a confirmation refuses the same directory under a different name', () => {
+  const directory = root();
+  const dir = directoryWith(path.join(directory, 'dir'), 0o700);
+  const prepared = prepareScriptDestination(path.join(dir, 'journey.ad'));
+
+  expectUntrustedReplaced(
+    () => confirmScriptDestination(path.join(dir, 'other.ad'), prepared),
+    dir,
+  );
+});
+
+test.each([
+  { spelled: '\\\\server\\share\\', name: undefined },
+  { spelled: '\\\\server\\share', name: undefined },
+  { spelled: '\\\\?\\UNC\\server\\share\\', name: undefined },
+  { spelled: '\\\\?\\UNC\\server\\share', name: undefined },
+  { spelled: '\\\\.\\UNC\\server\\share', name: undefined },
+  { spelled: '\\\\?\\UNC\\server', name: undefined },
+  { spelled: '\\\\?\\C:\\', name: undefined },
+  { spelled: 'C:\\', name: undefined },
+  { spelled: 'C:', name: undefined },
+  { spelled: 'C:\\dir\\..', name: undefined },
+  { spelled: '\\\\server\\share\\journey.ad', name: 'journey.ad' },
+  { spelled: '\\\\?\\UNC\\server\\share\\journey.ad', name: 'journey.ad' },
+  { spelled: 'C:\\dir\\journey.ad\\', name: 'journey.ad' },
+])('Windows rules name $name for $spelled', ({ spelled, name }) => {
+  expect(scriptEntryName(spelled, path.win32)).toBe(name);
+});
+
+test.each([
+  { spelled: '/', name: undefined },
+  { spelled: '~', name: undefined },
+  { spelled: '~/', name: undefined },
+  { spelled: '~/.', name: undefined },
+  { spelled: './missing/.', name: undefined },
+  { spelled: 'dir/~', name: '~' },
+  { spelled: '~/journey.ad', name: 'journey.ad' },
+  { spelled: 'journey.ad/', name: 'journey.ad' },
+])('POSIX rules name $name for $spelled', ({ spelled, name }) => {
+  expect(scriptEntryName(spelled, path.posix)).toBe(name);
+});
+
+skipOnWindows.each(['./missing/.', 'missing/..', '~/', '~'])(
+  'expanding %s refuses it before the expansion folds its last segment away',
+  (spelled) => {
+    const directory = root();
+
+    expectUntrusted(
+      () => resolveScriptDestination(spelled, { cwd: directory, env: { HOME: directory } }),
+      'unnamed_entry',
+      path.dirname(spelled),
+    );
+    expect(tree(directory)).toEqual([]);
+  },
+);
+
+test('an unnamed entry hints at a file name, not at permissions', () => {
+  let hint: unknown;
+  try {
+    prepareScriptDestination('/');
+  } catch (error) {
+    hint = (error as { details?: { hint?: unknown } }).details?.hint;
+  }
+  expect(hint).toMatch(/valid file name/);
 });
