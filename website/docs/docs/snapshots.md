@@ -167,9 +167,10 @@ publish as `group` with the alert's accessible name.
 
 A `click`/`press`/`fill`/`find ... focus` refused on that node repeats the same description in
 `error.details.coveredBy` and names it in `error.hint`. For a persistent bar, follow the scroll
-suggestion when `coveredBy.scrollCanReveal` is true. Otherwise, use a different visible target
-or inspect with a snapshot or screenshot. This includes fixed targets, targets with no available
-scroll direction, and targets whose reachable tap points all sit behind the bar. `coveredBy` is diagnostic and has no
+suggestion when `coveredBy.scrollCanReveal` is true. This flag describes a possible path based on
+the captured viewport and scroll direction. Snapshots do not measure the remaining scroll distance.
+If the flag is absent or scrolling leaves the bar in the way, use a different visible target or
+inspect with a snapshot or screenshot. `coveredBy` is diagnostic and has no
 ref, so the cover is not an actionable target. It is absent when nothing nameable covers — an
 anonymous container with no accessible name that is not a persistent bar, or a backend policy that reports only the boolean, such
 as an Android replacement surface — and those refusals say only that the target is covered.
