@@ -10,6 +10,8 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
   acquireProcessLock,
+  prepareScriptDestination,
+  scriptAncestryReason,
   withProcessLock,
   type ProcessLockRelease,
 } from '@agent-device/host-kit/file';
@@ -78,8 +80,8 @@ export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const root = getSwiftCacheRoot(env);
   const homePath = path.join(root, 'home');
   const moduleCachePath = path.join(root, 'module-cache');
-  fs.mkdirSync(homePath, { recursive: true });
-  fs.mkdirSync(moduleCachePath, { recursive: true });
+  prepareSwiftCacheDirectory(homePath);
+  prepareSwiftCacheDirectory(moduleCachePath);
   return {
     ...env,
     HOME: homePath,
@@ -121,7 +123,7 @@ export async function compileSwiftSourceFile(params: {
   );
   await ensureSwiftExecutable({
     host: params.host,
-    sourcePaths,
+    source: { paths: sourcePaths },
     executablePath,
     timeoutMs: params.timeoutMs,
   });
@@ -138,15 +140,16 @@ export async function compileSwiftSourceText(params: {
 }): Promise<string> {
   const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
-  const cacheRoot = getSwiftCacheRoot(params.host.env);
-  const sourcePath = path.join(cacheRoot, 'sources', `${cacheName}-${key}.swift`);
-  const executablePath = path.join(cacheRoot, 'bin', `${cacheName}-${key}`);
+  const executablePath = path.join(
+    getSwiftCacheRoot(params.host.env),
+    'bin',
+    `${cacheName}-${key}`,
+  );
 
   await ensureSwiftExecutable({
     host: params.host,
-    sourcePaths: [sourcePath],
+    source: { text: params.source, fileName: `${cacheName}-${key}.swift` },
     executablePath,
-    sourceText: params.source,
     timeoutMs: params.timeoutMs,
     signal: params.signal,
   });
@@ -162,26 +165,52 @@ export function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
   return path.join(os.tmpdir(), 'agent-device-swift-cache');
 }
 
+/**
+ * Readies one directory of the Swift cache. Every level from `/` down is judged by host-kit's ancestry rule, and
+ * missing levels are created private one at a time, so the directory and everything above it is ground only this
+ * user (or root) can change. That is what lets a cached executable be reused and run without a later swap.
+ */
+function prepareSwiftCacheDirectory(directory: string): void {
+  try {
+    // The rule judges the PARENT of the destination it is given; the placeholder name is never created.
+    prepareScriptDestination(path.join(directory, 'entry'));
+  } catch (error) {
+    if (scriptAncestryReason(error) === undefined) throw error;
+    const details = (error as AppError).details;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Refusing to use the Swift helper cache directory ${directory}: another local user could change ${String(details?.ancestor)}.`,
+      {
+        reason: 'swift_cache_untrusted',
+        exposure: details?.exposure,
+        ancestor: details?.ancestor,
+        directory,
+        hint: 'Set AGENT_DEVICE_SWIFT_CACHE_DIR to a directory you own that only you can write.',
+      },
+      error,
+    );
+  }
+}
+
 async function ensureSwiftExecutable(params: {
   host: HostEnvironment;
-  sourcePaths: string[];
+  source: Readonly<{ paths: string[] }> | Readonly<{ text: string; fileName: string }>;
   executablePath: string;
-  sourceText?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<void> {
-  if (isExecutableFile(params.executablePath)) {
+  const executableDir = path.dirname(params.executablePath);
+  prepareSwiftCacheDirectory(executableDir);
+  if (isReusableExecutable(params.executablePath)) {
     return;
   }
 
-  const executableDir = path.dirname(params.executablePath);
-  fs.mkdirSync(executableDir, { recursive: true });
   const timeoutMs = params.timeoutMs ?? 120_000;
   await withProcessLock({
     acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs, params.signal),
     task: async () => {
       // Another process may have published the executable while this one waited for the lock.
-      if (isExecutableFile(params.executablePath)) {
+      if (isReusableExecutable(params.executablePath)) {
         return;
       }
       const tempDir = fs.mkdtempSync(
@@ -189,21 +218,20 @@ async function ensureSwiftExecutable(params: {
       );
       const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
       try {
-        const [primarySourcePath] = params.sourcePaths;
-        if (
-          params.sourceText !== undefined &&
-          primarySourcePath &&
-          !fs.existsSync(primarySourcePath)
-        ) {
-          fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
-          fs.writeFileSync(primarySourcePath, params.sourceText);
-        }
-        await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
+        // Source text is written inside this compile's own private directory, so no name another process can
+        // reach stands between the text and the compiler.
+        const sourcePaths =
+          'paths' in params.source
+            ? params.source.paths
+            : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
+        await runCmd('xcrun', ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
           signal: params.signal,
           kill: SWIFTC_STOP,
           env: buildSwiftToolEnv(params.host.env),
         });
+        // `swiftc` creates its output through the umask; a group-writable result would never be reused.
+        fs.chmodSync(tempExecutablePath, 0o755);
         fs.renameSync(tempExecutablePath, params.executablePath);
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -242,13 +270,25 @@ async function acquireSwiftCacheLock(
   }
 }
 
-function isExecutableFile(filePath: string): boolean {
-  try {
-    fs.accessSync(filePath, fs.constants.X_OK);
-    return fs.statSync(filePath).isFile();
-  } catch {
-    return false;
-  }
+/**
+ * Whether the cache entry is an executable this user published: a regular file, not a link, owned by this uid and
+ * writable by nobody else. Anything else is a miss, and the compile renames its own output over that name.
+ */
+function isReusableExecutable(filePath: string): boolean {
+  const stats = fs.lstatSync(filePath, { throwIfNoEntry: false });
+  return (
+    stats !== undefined &&
+    stats.isFile() &&
+    stats.uid === process.getuid?.() &&
+    (stats.mode & 0o022) === 0 &&
+    (stats.mode & 0o100) !== 0
+  );
+}
+
+function writeSourceText(directory: string, fileName: string, text: string): string {
+  const sourcePath = path.join(directory, fileName);
+  fs.writeFileSync(sourcePath, text, { flag: 'wx' });
+  return sourcePath;
 }
 
 function sanitizeCacheName(value: string): string {
