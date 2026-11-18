@@ -54,7 +54,7 @@ Their ownership rationale follows.
 | daemon-contracts | Shared daemon/client contracts belong below both sides. Keep the owner-scoped claim reconciler there because daemon open/startup and daemonless stale release both run it. Runtime recovery may reside there only when both sides run it and root composition supplies only the gateway. Capture-kit cannot depend back on daemon-contracts because that creates a project-reference cycle. |
 | root composition | Keep the daemon bundle entry at the root. Retain the Apple runner-owner, daemon lifecycle, device boot, and resource-cleanup platform-runtime seams for this batch: relocation requires coordinated changes to R13 and R76. Keep Limrun runtime composition at the root because moving it into the provider package would pull root composition across the boundary. |
 | command-runtime | The command binding and runtime factory moved into command-runtime. The binding retains the three-family daemon load shape. |
-| SDK | Keep the published Limrun facade at the public boundary, because a published facade cannot reside in a private workspace package. Keep its public session-type refinement there: moving it into the provider package requires renamed or dual-exported internal types. |
+| SDK | The published Limrun facade was removed with the `agent-device/limrun` export, so the provider package owns the runtime and its session types. |
 
 Daemon credential composition remains at the root.
 The daemon credential type belongs in daemon-contracts, and credential fingerprinting belongs with plugin manifest lookup.

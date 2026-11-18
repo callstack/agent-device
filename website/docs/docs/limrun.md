@@ -63,11 +63,11 @@ On an attached Android instance, agent-device does not replace an existing port 
 
 If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
-`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
+`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. `install` also takes a signed asset URL, which needs no API key.
 
 ## Keep idle sessions alive
 
-Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default. In the Node.js runtime, pass `keepAlive: true`.
+Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default.
 
 Two timers can end an idle Limrun session.
 
@@ -204,26 +204,11 @@ The count includes these kinds: `request-failed` (the host didn't resolve, refus
 
 Now and then, a request skips the capture: it is missing from the HAR and from the failure count. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
 
-## Embed the Node.js runtime
+## Drive Limrun from a Node.js integration
 
-A Node.js bridge, such as agent-device-cloud, can embed agent-device's Limrun runtime:
+`agent-device/limrun` and its `LimrunRuntime` class were removed in 0.22. A Node.js bridge, such as agent-device-cloud, drives Limrun through the typed client against the daemon that hosts the provider.
 
-```ts
-import { LimrunRuntime } from 'agent-device/limrun';
-
-const apiKey = process.env.LIMRUN_API_KEY;
-if (!apiKey) throw new Error('LIMRUN_API_KEY is required');
-
-const host = { env: { ...process.env }, cwd: process.cwd() };
-const runtime = new LimrunRuntime(
-  { apiKey, region: process.env.LIMRUN_REGION },
-  host,
-);
-```
-
-To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. The runtime never creates or deletes instances for a platform listed there.
-
-A provider that reaches a harness-owned instance through the Node.js client allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
+A provider that reaches a harness-owned instance allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -253,7 +238,7 @@ const provider = {
 };
 ```
 
-After allocating a lease, call `runtime.getDeviceSession(device)` to get the allocated device's capabilities: app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the interactor. On Android it also exposes agent-device's `AndroidAdbProvider` for helpers and reversible port forwarding. On iOS it exposes a typed `simctl` execution handle so your bridge can own runner lifecycle and launch policy. The runtime does not expose raw Limrun clients.
+After allocating a lease, use the client commands for that session. App inventory, foreground state, key input, log reads, recording, remote asset installation, and interaction all run through the same typed client methods as on a local device. The client does not expose raw Limrun clients.
 
 ## Record the screen
 
