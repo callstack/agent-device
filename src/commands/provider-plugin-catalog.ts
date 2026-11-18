@@ -4,6 +4,8 @@ type ProviderPluginDeclaration = Readonly<{
   provider: string;
   package: string;
   label: string;
+  // A 0.22.x-dev version carries no source branch. Use the 0.22 branch's nightly tag
+  // as the shared default for development builds, including main checkouts.
   nightlyTag?: 'nightly-0.22';
 }>;
 

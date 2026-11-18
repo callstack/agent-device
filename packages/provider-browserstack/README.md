@@ -13,12 +13,13 @@ export BROWSERSTACK_ACCESS_KEY=your-access-key
 agent-device connect browserstack --session checkout-android --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
 ```
 
-On a 0.22 nightly, install core with `npm install -g agent-device@nightly-0.22` and the plugin with
-`agent-device plugins add @agent-device/browserstack@nightly-0.22`. For a pinned nightly, copy the
-exact install command from the CLI's missing-plugin error.
+For a development build of 0.22, install the plugin from the `nightly-0.22` tag:
+`agent-device plugins add @agent-device/browserstack@nightly-0.22`.
+If you installed the CLI from `nightly` on main or `nightly-0.22` on the 0.22 branch,
+run `agent-device help remote` and use the exact BrowserStack package version it lists.
 
 See the [BrowserStack guide](https://agent-device.dev/docs/browserstack) for setup and supported operations.
-To update the plugin, run `agent-device plugins update @agent-device/browserstack`.
+On a stable release, run `agent-device plugins update @agent-device/browserstack` to update the plugin.
 
 After you add or update the plugin, close your sessions and run `agent-device daemon stop --state-dir <path>` for your daemon before reconnecting.
 
