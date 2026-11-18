@@ -361,8 +361,10 @@ export async function verifyHarmonyOpenForeground(
   if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
   // The poll never outlives the request's own deadline: whatever the budget
   // has less room for wins, and a budget with no room for one read falls to
-  // probe-failed.
+  // probe-failed. A clamped budget names the deadline instead of the 5s
+  // default, so the message never claims a window the request did not have.
   const requestDeadlineAtMs = input.execution.requestDeadlineAtMs;
+  const clampedByDeadline = requestDeadlineAtMs !== undefined;
   const pollBudgetMs =
     requestDeadlineAtMs === undefined
       ? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS
@@ -379,10 +381,14 @@ export async function verifyHarmonyOpenForeground(
     if (input.execution.foreground === true) {
       throw new AppError(
         'COMMAND_FAILED',
-        `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
+        clampedByDeadline
+          ? `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`
+          : `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
         {
           reason: 'open-foreground-probe-unreadable',
-          hint: 'Check the device connection, then run the open again.',
+          hint: clampedByDeadline
+            ? 'The request deadline is too tight for a foreground read: run the open again with more budget.'
+            : 'Check the device connection, then run the open again.',
         },
       );
     }
@@ -391,7 +397,9 @@ export async function verifyHarmonyOpenForeground(
   if (input.execution.foreground === true) {
     throw new AppError(
       'COMMAND_FAILED',
-      `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
+      clampedByDeadline
+        ? `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground before the request deadline`
+        : `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
       {
         reason: 'open-not-foreground',
         hint: 'Unlock the device screen, then run the open again.',
