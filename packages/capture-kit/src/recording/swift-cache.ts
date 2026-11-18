@@ -35,6 +35,8 @@ const COMPILER_ARGS = ['--sdk', 'macosx', 'swiftc'] as const;
 // The admin group on macOS, which may write /Applications itself on a stock install.
 const MACOS_ADMIN_GID = 80;
 const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
+const AGENT_DEVICE_PACKAGE_NAME = 'agent-device';
+const RECORDING_SCRIPT_MISSING_REASON = 'recording_script_missing';
 
 /**
  * The layout version. Each version lives in its own directory under the cache root, so nothing an earlier
@@ -268,55 +270,55 @@ function untrustedSwiftCache(
 }
 
 /**
- * Where a recording helper script can live, in the order a checkout, a source build, and a
- * published package each answer from.
+ * The installation root this module belongs to: the nearest directory at or above `moduleDir` whose package.json
+ * names the agent-device package. The search stops there, so nothing above the package is ever a candidate.
  */
-export function buildRecordingScriptPathCandidates(
-  scriptName: string,
-  moduleDir: string,
-  projectRoot: string,
-  cwd: string,
-): string[] {
-  const sourceScriptPath = `${RECORDING_SCRIPT_SUBDIRECTORY}/${scriptName}`;
-  const packagedScriptPath = `dist/${sourceScriptPath}`;
-  return [
-    path.resolve(moduleDir, scriptName),
-    path.resolve(projectRoot, sourceScriptPath),
-    path.resolve(moduleDir, `../${sourceScriptPath}`),
-    path.resolve(moduleDir, `../../${sourceScriptPath}`),
-    path.resolve(moduleDir, `../../../${sourceScriptPath}`),
-    path.resolve(projectRoot, packagedScriptPath),
-    path.resolve(cwd, sourceScriptPath),
-  ];
+function agentDevicePackageRoot(moduleDir: string): string | undefined {
+  for (let directory = moduleDir; ; directory = path.dirname(directory)) {
+    if (packageNameAt(directory) === AGENT_DEVICE_PACKAGE_NAME) return directory;
+    if (directory === path.dirname(directory)) return undefined;
+  }
+}
+
+function packageNameAt(directory: string): unknown {
+  try {
+    return (
+      JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8')) as {
+        name?: unknown;
+      }
+    ).name;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * Resolves one recording helper script: checkout, built package, or working-directory fallback.
- * The caller names the project root it trusts, so this module stays free of host metadata lookup;
- * the working directory defaults to the command host's.
+ * Resolves one recording helper script from this module's own installation only: the checkout's source path, or
+ * the packaged `dist/` copy inside the package. The source is compiled and run as this user, so it is never looked
+ * for above the package root or in a working directory, where another local user could have planted one.
  */
 export function resolveRecordingScriptPath(
   scriptName: string,
-  projectRoot: string,
-  cwd: string,
   moduleDir = path.dirname(fileURLToPath(import.meta.url)),
 ): string {
-  const scriptCandidates = buildRecordingScriptPathCandidates(
-    scriptName,
-    moduleDir,
-    projectRoot,
-    cwd,
+  const root = agentDevicePackageRoot(moduleDir);
+  const candidates =
+    root === undefined
+      ? []
+      : [
+          path.join(root, RECORDING_SCRIPT_SUBDIRECTORY, scriptName),
+          path.join(root, 'dist', RECORDING_SCRIPT_SUBDIRECTORY, scriptName),
+        ];
+  const found = candidates.find((candidate) =>
+    fs.statSync(candidate, { throwIfNoEntry: false })?.isFile(),
   );
-  for (const candidate of scriptCandidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
+  if (found !== undefined) return found;
   throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    hint: `Ensure ${RECORDING_SCRIPT_SUBDIRECTORY} is present in this checkout or bundled under dist/${RECORDING_SCRIPT_SUBDIRECTORY} in the package.`,
+    reason: RECORDING_SCRIPT_MISSING_REASON,
+    hint: `Ensure ${RECORDING_SCRIPT_SUBDIRECTORY} is present in this checkout or bundled under dist/${RECORDING_SCRIPT_SUBDIRECTORY} in the agent-device package.`,
     scriptName,
-    searchedPaths: scriptCandidates,
+    packageRoot: root,
+    searchedPaths: candidates,
   });
 }
 

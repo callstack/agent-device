@@ -12,7 +12,6 @@ import {
   errorMessage,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import { findProjectRoot } from '@agent-device/host-kit/version';
 import {
   runSwiftHelper,
   compileSwiftSourceFile,
@@ -266,12 +265,11 @@ async function compileDecoder(input: {
   videoPath: string;
   signal?: AbortSignal;
 }): Promise<string> {
-  const { cwd } = input.host;
   try {
     return await compileSwiftSourceFile({
       host: input.host,
-      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT, findProjectRoot(), cwd),
-      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT, findProjectRoot(), cwd)],
+      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT),
+      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT)],
       cacheName: 'recording-frames',
       timeoutMs: COMPILATION_TIMEOUT_MS,
     });

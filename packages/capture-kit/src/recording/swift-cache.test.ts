@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 
@@ -17,9 +18,9 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 import { runCmd } from '@agent-device/host-kit/command';
 import {
-  buildRecordingScriptPathCandidates,
   compileSwiftSourceFile,
   compileSwiftSourceText,
+  resolveRecordingScriptPath,
 } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -334,24 +335,74 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
 }
 
-test('recording script candidates include packaged dist apple-runner source', () => {
-  const packageRoot = path.join(tmpDir, 'package');
-  const scriptPath = path.join(
-    packageRoot,
-    'dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
-  );
+const RECORDING_SCRIPTS = 'apple/runner/AgentDeviceRunner/RecordingScripts';
+
+/** A directory with a package.json naming `name`, as an installed or checked-out package root. */
+function packageRoot(directory: string, name = 'agent-device'): string {
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name }));
+  return directory;
+}
+
+function plantScript(directory: string, source: string): string {
+  const scriptPath = path.join(directory, RECORDING_SCRIPTS, 'recording-overlay.swift');
   fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
-  fs.writeFileSync(scriptPath, 'print("overlay")\n');
+  fs.writeFileSync(scriptPath, source);
+  return scriptPath;
+}
 
-  const candidates = buildRecordingScriptPathCandidates(
-    'recording-overlay.swift',
-    path.join(packageRoot, 'dist/src'),
-    packageRoot,
-    tmpDir,
+test('a published install compiles its packaged script, never a competing one above the package', () => {
+  const installed = packageRoot(path.join(tmpDir, 'node_modules', 'agent-device'));
+  const packaged = plantScript(path.join(installed, 'dist'), 'print("packaged")\n');
+  // Where the old search climbed to from dist/src, outside the package.
+  plantScript(path.join(tmpDir, 'node_modules'), 'print("planted")\n');
+  plantScript(tmpDir, 'print("planted")\n');
+
+  expect(
+    resolveRecordingScriptPath('recording-overlay.swift', path.join(installed, 'dist', 'src')),
+  ).toBe(packaged);
+});
+
+test('a script found only outside the package is refused, not compiled', () => {
+  const installed = packageRoot(path.join(tmpDir, 'node_modules', 'agent-device'));
+  const planted = plantScript(path.join(tmpDir, 'node_modules'), 'print("planted")\n');
+
+  expect(() =>
+    resolveRecordingScriptPath('recording-overlay.swift', path.join(installed, 'dist', 'src')),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'COMMAND_FAILED',
+      details: expect.objectContaining({
+        reason: 'recording_script_missing',
+        packageRoot: installed,
+        searchedPaths: expect.not.arrayContaining([planted]),
+      }),
+    }),
   );
-  const firstExisting = candidates.find((candidate) => fs.existsSync(candidate));
+});
 
-  expect(firstExisting).toBe(scriptPath);
+test('a checkout resolves its source script past the workspace package that holds this module', () => {
+  const checkout = packageRoot(path.join(tmpDir, 'checkout'));
+  const source = plantScript(checkout, 'print("source")\n');
+  const moduleDir = path.join(checkout, 'packages', 'capture-kit', 'src', 'recording');
+  packageRoot(path.join(checkout, 'packages', 'capture-kit'), '@agent-device/capture-kit');
+  fs.mkdirSync(moduleDir, { recursive: true });
+
+  expect(resolveRecordingScriptPath('recording-overlay.swift', moduleDir)).toBe(source);
+});
+
+test('a module outside any agent-device package resolves no script at all', () => {
+  // Outside this checkout too: the test scratch above sits inside the agent-device repository.
+  const outside = mkdtempForTestSync('agent-device-stray-module-');
+  const stray = path.join(outside, 'dist', 'src');
+  fs.mkdirSync(stray, { recursive: true });
+  plantScript(outside, 'print("planted")\n');
+
+  expect(() => resolveRecordingScriptPath('recording-overlay.swift', stray)).toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'recording_script_missing', searchedPaths: [] }),
+    }),
+  );
 });
 
 test('the cache root and tool environment come from the host it is given, not the process', async () => {
