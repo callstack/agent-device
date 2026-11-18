@@ -165,3 +165,56 @@ test.for<MaterializationCase>([
     await closeLoopbackServer(server);
   }
 });
+
+test('a remote artifact named with a NUL byte is dropped and the action result is kept', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'remote artifact download')) return;
+  const root = mkdtempForTestSync('agent-device-remote-artifact-nul-');
+  const cwd = path.join(root, 'cwd');
+  fs.mkdirSync(cwd);
+  const requested: string[] = [];
+  const server = http.createServer((req, res) => {
+    requested.push(req.url ?? '');
+    res.end('artifact-bytes');
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    const response = await materializeRemoteArtifacts(
+      { baseUrl: `http://127.0.0.1:${port}`, token: 'secret' },
+      { token: 'secret', command: 'snapshot', session: 'capture', positionals: [], meta: { cwd } },
+      {
+        ok: true,
+        data: {
+          nodes: 3,
+          path: '/daemon/x',
+          artifacts: [
+            {
+              artifactId: 'nul',
+              field: 'path',
+              artifactType: 'screenshot',
+              path: '/daemon/x',
+              fileName: 'shot\0.png',
+            },
+          ],
+        },
+      },
+      createTestHostEnvironment(),
+      path.join(root, 'state'),
+    );
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        nodes: 3,
+        path: '/daemon/x',
+        artifacts: [],
+        droppedArtifacts: [{ field: 'path', reason: 'artifact_name_invalid' }],
+        warnings: [
+          'The remote artifact for "path" was not downloaded: its name cannot be a file name.',
+        ],
+      },
+    });
+    expect(requested).toEqual([]);
+    expect(fs.readdirSync(cwd)).toEqual([]);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
