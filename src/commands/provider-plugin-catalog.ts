@@ -37,7 +37,7 @@ export function getProviderPluginDeclaration(
 }
 
 // The release workflow stamps the core and its public plugins with the same nightly version.
-const NIGHTLY_0_22_VERSION = /^\d+\.\d+\.\d+-nightly-0-22\.\d{8}\.[1-9]\d*$/;
+const NIGHTLY_0_22_VERSION = /^0\.22\.\d+-nightly(?:-0-22)?\.\d{8}\.[1-9]\d*$/;
 const DEVELOPMENT_0_22_VERSION = /^0\.22\.\d+-dev$/;
 
 function providerPluginSelector(
