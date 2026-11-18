@@ -68,7 +68,11 @@ func run() throws {
   let payload = try Data(contentsOf: eventsURL)
   let envelope = try JSONDecoder().decode(GestureEnvelope.self, from: payload)
 
-  if envelope.events.isEmpty {
+  // An event whose reference pair is missing or not finite and positive has no proven transform
+  // into the captured canvas, so its marker is omitted (#4448); the telemetry event and the video
+  // are preserved either way. With nothing left to render, the raw capture is kept as-is.
+  let renderableEvents = envelope.events.filter { renderableReference(of: $0) != nil }
+  if renderableEvents.isEmpty {
     try FileManager.default.copyItem(at: inputURL, to: outputURL)
     return
   }
@@ -116,7 +120,7 @@ func run() throws {
   overlayLayer.frame = parentLayer.frame
   parentLayer.addSublayer(overlayLayer)
 
-  for event in envelope.events {
+  for event in renderableEvents {
     switch event.kind {
     case "tap":
       addTapLayer(event: event, renderSize: renderSize, to: overlayLayer)
@@ -381,65 +385,86 @@ func resolvedFrameDuration(for track: AVAssetTrack, maximumFrameRate: Int32) -> 
   return shortest
 }
 
-func overlayPoint(event: GestureEvent, x: Double, y: Double, renderSize: CGSize) -> CGPoint {
-  let scaleX = scaledAxis(renderSize: renderSize.width, referenceSize: event.referenceWidth)
-  let scaleY = scaledAxis(renderSize: renderSize.height, referenceSize: event.referenceHeight)
-  let scaledX = x * scaleX
-  let scaledY = y * scaleY
+/// The paired reference an event needs before its coordinates can be projected into the captured
+/// canvas: both axes present, finite, and positive. The old scale=1 fallback rendered point-space
+/// coordinates as video pixels (#4448); an unproven reference now omits the marker instead.
+func renderableReference(of event: GestureEvent) -> (width: Double, height: Double)? {
+  guard let width = event.referenceWidth, let height = event.referenceHeight,
+    width.isFinite, height.isFinite, width > 0, height > 0
+  else { return nil }
+  return (width, height)
+}
+
+/// Projects an event coordinate into the render space, or returns nil when the event carries no
+/// renderable reference — the caller then omits only this event's marker layers.
+func overlayPoint(event: GestureEvent, x: Double, y: Double, renderSize: CGSize) -> CGPoint? {
+  guard let reference = renderableReference(of: event) else { return nil }
+  let scaledX = x * (Double(renderSize.width) / reference.width)
+  let scaledY = y * (Double(renderSize.height) / reference.height)
   let flippedY = max(0, Double(renderSize.height) - scaledY)
   return CGPoint(x: scaledX, y: flippedY)
 }
 
-func scaledAxis(renderSize: CGFloat, referenceSize: Double?) -> Double {
-  guard let referenceSize, referenceSize > 0 else { return 1.0 }
-  return Double(renderSize) / referenceSize
+/// Adds the event's touch dot, or returns nil when the event has no renderable reference and its
+/// marker is omitted.
+func addEventTouchDot(event: GestureEvent, renderSize: CGSize, to overlayLayer: CALayer) -> CALayer? {
+  guard let center = overlayPoint(event: event, x: event.x, y: event.y, renderSize: renderSize)
+  else { return nil }
+  let layer = makeTouchDotLayer(center: center, renderSize: renderSize)
+  overlayLayer.addSublayer(layer)
+  return layer
 }
 
 func addTapLayer(event: GestureEvent, renderSize: CGSize, to overlayLayer: CALayer) {
-  let layer = makeTouchDotLayer(
-    center: overlayPoint(event: event, x: event.x, y: event.y, renderSize: renderSize),
-    renderSize: renderSize
-  )
-  overlayLayer.addSublayer(layer)
-
-  let opacity = CAKeyframeAnimation(keyPath: "opacity")
-  opacity.values = [0.0, 0.98, 0.98, 0.0]
-  opacity.keyTimes = [0.0, 0.08, 0.8, 1.0]
-
-  let scale = CAKeyframeAnimation(keyPath: "transform.scale")
-  scale.values = [0.84, 1.0, 1.0]
-  scale.keyTimes = [0.0, 0.22, 1.0]
-
-  let group = makeAnimationGroup(
-    animations: [opacity, scale],
+  addPressLayer(
+    event: event,
+    renderSize: renderSize,
+    to: overlayLayer,
     duration: minimumTapVisibility,
-    beginTime: AVCoreAnimationBeginTimeAtZero + (event.tMs / 1000.0)
+    opacityKeyTimes: [0.0, 0.08, 0.8, 1.0],
+    scaleKeyTimes: [0.0, 0.22, 1.0],
+    animationKey: "tap"
   )
-  layer.add(group, forKey: "tap")
 }
 
 func addLongPressLayer(event: GestureEvent, renderSize: CGSize, to overlayLayer: CALayer) {
-  let duration = max(0.75, (event.durationMs ?? 800) / 1000.0)
-  let layer = makeTouchDotLayer(
-    center: overlayPoint(event: event, x: event.x, y: event.y, renderSize: renderSize),
-    renderSize: renderSize
+  addPressLayer(
+    event: event,
+    renderSize: renderSize,
+    to: overlayLayer,
+    duration: max(0.75, (event.durationMs ?? 800) / 1000.0),
+    opacityKeyTimes: [0.0, 0.08, 0.92, 1.0],
+    scaleKeyTimes: [0.0, 0.15, 1.0],
+    animationKey: "longpress"
   )
-  overlayLayer.addSublayer(layer)
+}
+
+func addPressLayer(
+  event: GestureEvent,
+  renderSize: CGSize,
+  to overlayLayer: CALayer,
+  duration: CFTimeInterval,
+  opacityKeyTimes: [NSNumber],
+  scaleKeyTimes: [NSNumber],
+  animationKey: String
+) {
+  guard let layer = addEventTouchDot(event: event, renderSize: renderSize, to: overlayLayer)
+  else { return }
 
   let opacity = CAKeyframeAnimation(keyPath: "opacity")
   opacity.values = [0.0, 0.98, 0.98, 0.0]
-  opacity.keyTimes = [0.0, 0.08, 0.92, 1.0]
+  opacity.keyTimes = opacityKeyTimes
 
   let scale = CAKeyframeAnimation(keyPath: "transform.scale")
   scale.values = [0.84, 1.0, 1.0]
-  scale.keyTimes = [0.0, 0.15, 1.0]
+  scale.keyTimes = scaleKeyTimes
 
   let group = makeAnimationGroup(
     animations: [opacity, scale],
     duration: duration,
     beginTime: AVCoreAnimationBeginTimeAtZero + (event.tMs / 1000.0)
   )
-  layer.add(group, forKey: "longpress")
+  layer.add(group, forKey: animationKey)
 }
 
 func addSwipeLayers(event: GestureEvent, renderSize: CGSize, to overlayLayer: CALayer) {
@@ -548,9 +573,10 @@ func addTrailLayers(
   to overlayLayer: CALayer,
   style: TrailStyle
 ) {
-  guard let x2 = event.x2, let y2 = event.y2 else { return }
-  let startPoint = overlayPoint(event: event, x: event.x, y: event.y, renderSize: renderSize)
-  let endPoint = overlayPoint(event: event, x: x2, y: y2, renderSize: renderSize)
+  guard let x2 = event.x2, let y2 = event.y2,
+    let startPoint = overlayPoint(event: event, x: event.x, y: event.y, renderSize: renderSize),
+    let endPoint = overlayPoint(event: event, x: x2, y: y2, renderSize: renderSize)
+  else { return }
   let duration = max(0.1, (event.durationMs ?? 250) / 1000.0)
   let visibleDuration = max(minimumSwipeVisibility, duration + style.tail)
   let beginTime = AVCoreAnimationBeginTimeAtZero + (event.tMs / 1000.0)
@@ -659,6 +685,7 @@ func addPinchLayers(event: GestureEvent, renderSize: CGSize, to overlayLayer: CA
   let startRight = overlayPoint(event: event, x: event.x + Double(startOffset), y: event.y, renderSize: renderSize)
   let endLeft = overlayPoint(event: event, x: event.x - Double(endOffset), y: event.y, renderSize: renderSize)
   let endRight = overlayPoint(event: event, x: event.x + Double(endOffset), y: event.y, renderSize: renderSize)
+  guard let startLeft, let startRight, let endLeft, let endRight else { return }
 
   addPinchDot(
     overlayLayer: overlayLayer,
