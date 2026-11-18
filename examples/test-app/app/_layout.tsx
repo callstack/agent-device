@@ -24,6 +24,7 @@ function RootLayoutContent() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="accessory-setup" />
+        <Stack.Screen name="auth-session-lab" />
         <Stack.Screen name="automation" options={{ headerShown: true, title: 'Automation' }} />
         <Stack.Screen name="inert" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="snapshot-depth" />

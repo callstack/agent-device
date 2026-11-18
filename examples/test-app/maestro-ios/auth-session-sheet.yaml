@@ -1,0 +1,32 @@
+appId: com.callstack.agentdevicelab
+name: Sign-in sheet
+# Read SafariViewService in place while the app remains the accessibility primaryApp (#2438).
+# Stop before typing or submitting, which can encounter the capture refusals in #4593.
+env:
+  AUTH_SHEET_TIMEOUT: '20000'
+onFlowStart:
+  - launchApp:
+      clearState: true
+  - assertVisible: Agent Device Tester
+---
+- tapOn:
+    text: Settings
+- scrollUntilVisible:
+    element:
+      id: open-auth-session-lab
+- tapOn:
+    id: open-auth-session-lab
+- assertVisible: Sign-in sheet lab
+- assertVisible:
+    id: auth-session-open
+- tapOn:
+    id: auth-session-open
+- extendedWaitUntil:
+    visible: Fixture sign-in
+    timeout: ${AUTH_SHEET_TIMEOUT}
+- assertVisible:
+    text: Email
+- assertVisible:
+    text: Password
+- assertVisible:
+    text: LOGIN

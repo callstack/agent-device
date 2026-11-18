@@ -200,6 +200,7 @@
     "test-app:maestro": "node scripts/run-test-app-maestro-suite.mjs",
     "test-app:maestro:ios": "pnpm test-app:maestro --platform ios",
     "test-app:maestro:android": "pnpm test-app:maestro --platform android",
+    "test-app:maestro:auth:ios": "node --experimental-strip-types scripts/run-test-app-auth-session-lane.mjs",
     "test": "pnpm test:unit",
     "test:unit": "vitest run --project unit-core --project apple-runner --project fuzz-worker",
     "test:maestro-compat": "vitest run --project unit-core packages/maestro src/compat/__tests__/replay-input.test.ts",

@@ -18,6 +18,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
 - `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
+- `Sign-in sheet lab`: a real `ASWebAuthenticationSession` sheet hosted out of process in `com.apple.SafariViewService`, opened against a loopback fixture identity provider (see [Sign-in sheet lab](#sign-in-sheet-lab))
 - `Perf lab`: seeded JavaScript render problems for `react-devtools profile`, one per scenario (see [Perf lab](#perf-lab))
 - `Settle lab`: timed effects with known final screens for `--settle` regression runs (an in-place counter; results 500 and 800 ms after an immediate `Run N` acknowledgement; a 750 ms fading overlay; two-stage transitions with and without a spinner; a toast that precedes navigation), reached by the `agent-device-test-app://settle-lab` deep link
 - `Heavy feed`: a Bluesky-shaped home feed whose accessibility tree is deeper than 65 levels (see [Heavy feed](#heavy-feed))
@@ -333,6 +334,55 @@ and `posts` (default 60) route parameters change the shape.
 The stable ids are `heavy-feed-title`, `heavy-feed-liked-count`, `heavy-feed-last-action`, and per
 post `heavy-post-<n>`, `heavy-post-<n>-like`, `-reply`, `-repost`, and `-more`. A like press updates
 `Liked posts: <count>`, and a long press on a post sets `Last action: held post <n>`.
+
+## Sign-in sheet lab
+
+**Settings → Open sign-in sheet lab** (`open-auth-session-lab`, route `auth-session-lab`) presents a
+real `ASWebAuthenticationSession` sheet. iOS hosts that sheet out of the app's process in
+`com.apple.SafariViewService`, over this screen and with the app still the accessibility primaryApp,
+so it is the committed fixture for reading and driving a hosted web sign-in sheet in place (#2438,
+#2449). The native module is `modules/auth-session-lab`; nothing about the flow activates or
+relaunches anything, which is what keeps the sheet alive.
+
+The sheet opens a page served over loopback by the fixture identity provider, so the flow involves
+no real identity provider and no credential: `src/auth-idp-fixture.ts` owns the page and `Email`,
+`Password`, and `LOGIN` are the vocabulary a lane asserts on. Submitting the fixture form navigates
+to the app's own callback scheme, which ends the sheet and returns the app; `auth-session-status`
+then reports `completed` and `auth-session-message` carries the callback URL.
+
+Run the lane with the sheet's page served by the same script that owns its lifecycle:
+
+```bash
+pnpm test-app:maestro:auth:ios -- --udid "<simulator udid>"
+```
+
+The launcher starts the provider at `127.0.0.1:4593` and runs
+`examples/test-app/maestro-ios/auth-session-sheet.yaml` through `agent-device test --maestro`. When
+the flow ends or you cancel it, the launcher closes the provider.
+
+To drive the sheet by hand and see its loading state, start the provider from the repo root:
+
+```bash
+node --experimental-strip-types examples/test-app/scripts/serve-auth-idp.mjs --delay-ms 6000
+```
+
+Omit `--delay-ms` to show the form immediately.
+
+The committed flow reads the sheet and stops at its form controls. Driving past that point is not
+committed, because on iOS 27.0 the same steps alternate between passing and refusing the capture,
+which is the intermittency #4593 reports. Fill the sheet's fields and submit it when you want that
+state, and expect to see one of three capture refusals on the step that follows the first `inputText`
+or the submit: `regular iOS snapshot presentation requires a valid viewport`, `regular iOS snapshot
+node escaped its cumulative clip`, or `main thread execution timed out`. The first two come from
+`packages/capture-kit/src/ios-snapshot-engine/invariants.ts`. The XCTest runner reports the third, which
+`packages/apple-runner/src/runner-failure-diagnostics.ts` classifies. The viewport refusal carries no
+`retriable` flag, so the step aborts during stability re-capture.
+
+The app needs a build that includes the module: a development client (`pnpm test-app:ios`) or a
+Release build (`pnpm --dir examples/test-app exec expo run:ios --configuration Release --device
+generic --no-bundler`). It is a native change, so it produces one new fingerprinted build that
+consumers then share. A build without it shows `unavailable` in `auth-session-status` instead of
+opening a sheet.
 
 ## Local Agent Device suites
 

@@ -151,6 +151,7 @@ export default defineConfig({
             // The tooling send over real loopback daemons: in-process, no device.
             'scripts/lib/recorded-daemon.test.ts',
             'scripts/__tests__/vitest-slow-test-reporter.test.ts',
+            'scripts/__tests__/auth-session-lane.test.ts',
             // Artifact guards assert on Swift sources, package.json, workflows, docs and examples rather
             // than on a module under src.
             'test/repo-guards/*.test.ts',
