@@ -201,22 +201,58 @@ test.skipIf(process.getuid?.() === 0)(
   },
 );
 
-test.each(['home', 'module-cache'])(
-  'a group-writable compiler %s directory is refused before swiftc runs',
+test.each(['bin', 'home', 'module-cache'])(
+  'an owned %s directory wider than 0700 is closed to its owner before it is used',
   async (name) => {
     await plantCachedExecutable(() => {});
     fs.chmodSync(path.join(versionDir, name), 0o770);
 
+    await compile();
+
+    expect(modeOf(path.join(versionDir, name))).toBe(0o700);
+    expect(mockRunCmd).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(['home', 'module-cache'])(
+  'a compiler %s directory another local user owns is refused before swiftc runs',
+  async (name) => {
+    await plantCachedExecutable(() => {});
+    reportForeignOwner(path.join(versionDir, name));
+
     await expect(compile()).rejects.toMatchObject(
-      untrusted({
-        exposure: 'shared_group_writable',
-        ancestor: path.join(versionDir, name),
-        hint: expect.stringContaining(`chmod g-w ${path.join(versionDir, name)}`),
-      }),
+      untrusted({ exposure: 'foreign_owned', ancestor: path.join(versionDir, name) }),
     );
     expect(mockRunCmd).not.toHaveBeenCalled();
   },
 );
+
+test.each(['bin', 'home', 'module-cache'])(
+  'a %s link planted inside the version directory is refused, never followed out of it',
+  async (name) => {
+    fs.mkdirSync(versionDir, { recursive: true, mode: 0o700 });
+    const outside = path.join(tmpDir, `outside-${name}`);
+    fs.mkdirSync(outside, { mode: 0o700 });
+    fs.symlinkSync(outside, path.join(versionDir, name));
+
+    await expect(compile()).rejects.toMatchObject(
+      untrusted({ exposure: 'planted_link', ancestor: path.join(versionDir, name) }),
+    );
+    expect(mockRunCmd).not.toHaveBeenCalled();
+    expect(fs.readdirSync(outside)).toEqual([]);
+  },
+);
+
+test('an owned cached file without owner execute is compiled over, not reused', async () => {
+  const executablePath = await plantCachedExecutable((name) => {
+    fs.writeFileSync(name, 'planted', { mode: 0o644 });
+  });
+
+  await expect(compile()).resolves.toBe(executablePath);
+
+  expect(mockRunCmd).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(executablePath, 'utf8')).toBe('compiled');
+});
 
 test('a warmed bin that was removed and recreated by another local user is refused', async () => {
   const executablePath = await compile();
@@ -306,7 +342,17 @@ test.each([
 
     await expect(
       compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(shared, 'swift-cache') }),
-    ).rejects.toMatchObject(untrusted({ exposure, ancestor: shared }));
+    ).rejects.toMatchObject(
+      untrusted({
+        exposure,
+        ancestor: shared,
+        hint: expect.stringContaining(
+          exposure === 'shared_group_writable'
+            ? `chmod g-w ${shared}`
+            : 'AGENT_DEVICE_SWIFT_CACHE_DIR',
+        ),
+      }),
+    );
     expect(mockRunCmd).not.toHaveBeenCalled();
   },
 );
@@ -343,19 +389,19 @@ test('a version directory another local user owns is refused', async () => {
   expect(mockRunCmd).not.toHaveBeenCalled();
 });
 
-test.skipIf(process.getuid?.() === 0)(
-  'a bin this user may not write is refused as untrusted when the lock cannot be created',
-  async () => {
-    await plantCachedExecutable(() => {});
-    fs.chmodSync(binDir, 0o555);
-    try {
-      await expect(compile()).rejects.toMatchObject(untrusted({ errno: 'EACCES' }));
-    } finally {
-      fs.chmodSync(binDir, 0o700);
-    }
-    expect(mockRunCmd).not.toHaveBeenCalled();
-  },
-);
+test.skipIf(process.getuid?.() === 0).each([
+  ['0500', 'the lock cannot be created'],
+  ['0600', 'the cached entry cannot be looked up'],
+])('an owned bin at %s is refused as untrusted when %s', async (mode) => {
+  await plantCachedExecutable(() => {});
+  fs.chmodSync(binDir, Number.parseInt(mode, 8));
+  try {
+    await expect(compile()).rejects.toMatchObject(untrusted({ errno: 'EACCES' }));
+  } finally {
+    fs.chmodSync(binDir, 0o700);
+  }
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
 
 test('a bin replaced while waiting for the lock is refused, even with a helper at the name', async () => {
   const executablePath = await plantCachedExecutable(() => {});

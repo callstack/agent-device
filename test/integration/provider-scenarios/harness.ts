@@ -290,14 +290,17 @@ export async function createProviderScenarioHarness(
     close: async () => {
       if (closed) return;
       closed = true;
-      if (scopedAppleToolProvider) {
-        const { withAppleToolProvider } =
-          await import('@agent-device/platform-apple/tool-provider');
-        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.close());
-      } else {
-        await runtime?.close();
+      try {
+        if (scopedAppleToolProvider) {
+          const { withAppleToolProvider } =
+            await import('@agent-device/platform-apple/tool-provider');
+          await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.close());
+        } else {
+          await runtime?.close();
+        }
+      } finally {
+        await removeScenarioDirs();
       }
-      await removeScenarioDirs();
     },
   };
 }

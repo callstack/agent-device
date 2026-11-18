@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
+  liveRunDirectoryConsumers,
   TEST_RUN_TMP_PREFIX,
   TEST_RUN_TMP_ROOT,
   pruneAbandonedRunDirectories,
@@ -24,6 +26,16 @@ import {
 
 let testRunTmpDir: string;
 let previousTmpDir: string | undefined;
+let unsharedRunDir: string;
+let previousUnsharedDir: string | undefined;
+
+// State that a sticky shared directory such as /tmp must not hold, the Swift helper cache's among them, lives
+// in the checkout's ignored .tmp/ instead. Each run gets its own directory there, named like its TMPDIR one,
+// so the same liveness rule prunes what a killed run abandoned.
+const UNSHARED_TEST_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../.tmp/unshared-test-dirs',
+);
 
 // setup/teardown are vitest's globalSetup contract: it imports this file by
 // the path string in vitest.config.ts and calls these by name, so nothing in
@@ -31,7 +43,12 @@ let previousTmpDir: string | undefined;
 // fallow-ignore-next-line unused-export
 export function setup(): void {
   previousTmpDir = process.env.TMPDIR;
-  reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT));
+  previousUnsharedDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR;
+  const consumers = liveRunDirectoryConsumers();
+  reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT, { consumers }));
+  fs.mkdirSync(UNSHARED_TEST_ROOT, { recursive: true, mode: 0o700 });
+  fs.chmodSync(UNSHARED_TEST_ROOT, 0o700);
+  reportPrunedRunDirectories(pruneAbandonedRunDirectories(UNSHARED_TEST_ROOT, { consumers }));
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
   // another worktree, say) apart from one actually abandoned by a killed
@@ -40,6 +57,9 @@ export function setup(): void {
     path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
   );
   process.env.TMPDIR = testRunTmpDir;
+  unsharedRunDir = path.join(UNSHARED_TEST_ROOT, path.basename(testRunTmpDir));
+  fs.mkdirSync(unsharedRunDir, { mode: 0o700 });
+  process.env.AGENT_DEVICE_TEST_UNSHARED_DIR = unsharedRunDir;
 }
 
 // fallow-ignore-next-line unused-export
@@ -51,7 +71,9 @@ export async function teardown(): Promise<void> {
     );
   } finally {
     fs.rmSync(testRunTmpDir, { recursive: true, force: true });
+    fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     restoreEnv('TMPDIR', previousTmpDir);
+    restoreEnv('AGENT_DEVICE_TEST_UNSHARED_DIR', previousUnsharedDir);
   }
 }
 

@@ -15,10 +15,13 @@ export function mkdtempForTestSync(prefix: string): string {
 /**
  * Creates a fresh directory with no shared directory above it, for state that a sticky shared directory such
  * as `/tmp` must not hold: the Swift helper cache refuses one anywhere in its chain. It sits in the checkout's
- * ignored `.tmp/`, so the run's TMPDIR cleanup does not remove it: remove it when the test ends.
+ * ignored `.tmp/`, in the run's own directory there when the Vitest global setup named one; that setup removes
+ * it after the run and prunes what a killed run abandoned. Remove it when the test ends all the same.
  * test-kit's `tmp-dir.ts` has the same helper; test-kit depends on this package, so each keeps a copy.
  */
 export function mkdtempUnsharedForTestSync(prefix: string): string {
+  const runDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR?.trim();
+  if (runDir) return fs.mkdtempSync(path.join(runDir, prefix));
   const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../../../.tmp/unshared-test-dirs',

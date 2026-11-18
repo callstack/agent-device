@@ -9,13 +9,11 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
   acquireProcessLock,
-  confirmScriptDestination,
   expandUserHomePath,
   prepareScriptDestination,
   scriptAncestryReason,
   withProcessLock,
   type ProcessLockRelease,
-  type ScriptDestination,
 } from '@agent-device/host-kit/file';
 const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
@@ -64,16 +62,17 @@ export function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
   return path.join(cacheBase, 'agent-device', 'swift-cache');
 }
 
-/** A cache directory as the ancestry rule judged it, with the version directory judged first. */
+/** A cache directory as it was judged: its physical path, and the identity its own `lstat` answered. */
 type PreparedSwiftCacheDirectory = Readonly<{
   spelled: string;
-  prepared: ScriptDestination;
+  directory: string;
+  identity: string;
 }>;
 
 /**
- * Readies one directory of the current cache version. Every level from `/` down is judged by host-kit's ancestry
- * rule, and missing levels are created 0700 one at a time. The version directory is judged as a destination of
- * its own, so it is the one trust boundary: nobody else can add an entry in it, or anywhere below it.
+ * Readies one directory of the current cache version: a real directory directly inside the judged version
+ * directory, owned by this uid and owner-only. It is created 0700 there, and an existing one is judged by its own
+ * `lstat`, so no link can send the cache's work outside the version directory.
  */
 function prepareSwiftCacheDirectory(
   env: NodeJS.ProcessEnv,
@@ -82,10 +81,35 @@ function prepareSwiftCacheDirectory(
   const versionDir = path.join(getSwiftCacheRoot(env), `v${SWIFT_CACHE_VERSION}`);
   const spelled = path.join(versionDir, name);
   return untrustedAsSwiftCacheError(spelled, () => {
-    prepareSwiftCacheVersionDirectory(versionDir);
-    // The rule judges the PARENT of the destination it is given; the placeholder name is never created.
-    return { spelled, prepared: prepareScriptDestination(path.join(spelled, 'entry')) };
+    const directory = path.join(prepareSwiftCacheVersionDirectory(versionDir), name);
+    try {
+      fs.mkdirSync(directory, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    return { spelled, directory, identity: judgeOwnedDirectory(directory) };
   });
+}
+
+/** Refuses anything but a directory this uid owns, makes it owner-only, and answers its identity. */
+function judgeOwnedDirectory(directory: string): string {
+  const stats = fs.lstatSync(directory, { bigint: true });
+  const exposure = stats.isSymbolicLink()
+    ? 'planted_link'
+    : !stats.isDirectory()
+      ? 'not_a_directory'
+      : Number(stats.uid) !== process.getuid?.()
+        ? 'foreign_owned'
+        : undefined;
+  if (exposure) {
+    throw untrustedSwiftCache(directory, undefined, {
+      exposure,
+      ancestor: directory,
+      hint: swiftCacheHint(exposure, directory),
+    });
+  }
+  closeToOwner(directory);
+  return `${stats.dev}:${stats.ino}`;
 }
 
 /**
@@ -93,7 +117,7 @@ function prepareSwiftCacheDirectory(
  * An executable cache takes no sticky pass-through: in a sticky shared directory a cleanup can remove the cache
  * and another account can claim its name before a helper runs.
  */
-function prepareSwiftCacheVersionDirectory(versionDir: string): void {
+function prepareSwiftCacheVersionDirectory(versionDir: string): string {
   const { directory } = prepareScriptDestination(path.join(versionDir, 'entry'));
   for (let ancestor = path.dirname(directory); ; ancestor = path.dirname(ancestor)) {
     const stats = fs.lstatSync(ancestor);
@@ -112,6 +136,7 @@ function prepareSwiftCacheVersionDirectory(versionDir: string): void {
     if (ancestor === path.dirname(ancestor)) break;
   }
   closeToOwner(directory);
+  return directory;
 }
 
 /**
@@ -141,13 +166,19 @@ function closeToOwner(directory: string): void {
 }
 
 /**
- * The physical path of a prepared cache directory, after confirming it is still the directory the rule judged:
- * a directory removed and recreated since then, by anyone, is refused.
+ * The physical path of a prepared cache directory, after confirming it is still the directory that was judged:
+ * one removed and recreated since then, by anyone, is refused.
  */
-function confirmSwiftCacheDirectory(directory: PreparedSwiftCacheDirectory): string {
-  return untrustedAsSwiftCacheError(directory.spelled, () =>
-    confirmScriptDestination(path.join(directory.spelled, 'entry'), directory.prepared),
-  );
+function confirmSwiftCacheDirectory(prepared: PreparedSwiftCacheDirectory): string {
+  const stats = fs.lstatSync(prepared.directory, { bigint: true, throwIfNoEntry: false });
+  if (!stats?.isDirectory() || `${stats.dev}:${stats.ino}` !== prepared.identity) {
+    throw untrustedSwiftCache(prepared.spelled, undefined, {
+      exposure: 'parent_replaced',
+      ancestor: prepared.directory,
+      hint: swiftCacheHint(undefined, undefined),
+    });
+  }
+  return prepared.directory;
 }
 
 /**
@@ -173,24 +204,42 @@ function untrustedAsSwiftCacheError<T>(directory: string, judge: () => T): T {
   try {
     return judge();
   } catch (error) {
-    if (error instanceof AppError && scriptAncestryReason(error) !== undefined) {
-      const { exposure, ancestor } = error.details ?? {};
-      throw untrustedSwiftCache(directory, error, {
-        exposure,
-        ancestor,
-        hint: swiftCacheHint(exposure, ancestor),
-      });
-    }
-    // A level this user may not create or read, such as a cache root another account created first.
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EACCES' || code === 'EPERM') {
-      throw untrustedSwiftCache(directory, error, {
-        errno: code,
-        hint: swiftCacheHint(undefined, undefined),
-      });
-    }
-    throw error;
+    throw asSwiftCacheFailure(directory, error);
   }
+}
+
+/** The async form of {@link untrustedAsSwiftCacheError}, for a whole cache operation. */
+async function withinSwiftCache<T>(directory: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw asSwiftCacheFailure(directory, error);
+  }
+}
+
+/**
+ * The refusal a cache failure stands for. An ancestry refusal, and a filesystem operation this user may not
+ * perform, such as in a cache root another account created first, mean a cache that is not this user's to use.
+ * Typed errors, the compiler's among them, keep their own path.
+ */
+function asSwiftCacheFailure(directory: string, error: unknown): unknown {
+  if (error instanceof AppError) {
+    if (scriptAncestryReason(error) === undefined) return error;
+    const { exposure, ancestor } = error.details ?? {};
+    return untrustedSwiftCache(directory, error, {
+      exposure,
+      ancestor,
+      hint: swiftCacheHint(exposure, ancestor),
+    });
+  }
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'EACCES' || code === 'EPERM') {
+    return untrustedSwiftCache(directory, error, {
+      errno: code,
+      hint: swiftCacheHint(undefined, undefined),
+    });
+  }
+  return error;
 }
 
 function untrustedSwiftCache(
@@ -263,8 +312,8 @@ export function resolveRecordingScriptPath(
 export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...env,
-    HOME: prepareSwiftCacheDirectory(env, 'home').prepared.directory,
-    CLANG_MODULE_CACHE_PATH: prepareSwiftCacheDirectory(env, 'module-cache').prepared.directory,
+    HOME: prepareSwiftCacheDirectory(env, 'home').directory,
+    CLANG_MODULE_CACHE_PATH: prepareSwiftCacheDirectory(env, 'module-cache').directory,
   };
 }
 
@@ -324,8 +373,8 @@ export async function compileSwiftSourceText(params: {
 
 /**
  * Reuses or compiles one helper and answers its physical path. The entry, its lock and the compile's temp
- * directory all sit in the `bin` a fresh walk just judged, inside the owner-only version directory. After the
- * lock wait, and again before the rename, `bin` is confirmed to be that same directory.
+ * directory all sit in the `bin` just judged inside the owner-only version directory. After the lock wait, and
+ * again before the rename, `bin` is confirmed to be that same directory.
  */
 async function ensureSwiftExecutable(params: {
   host: HostEnvironment;
@@ -336,51 +385,45 @@ async function ensureSwiftExecutable(params: {
 }): Promise<string> {
   const bin = prepareSwiftCacheDirectory(params.host.env, 'bin');
   const entryIn = (directory: string) => path.join(directory, params.entryName);
-  const executablePath = entryIn(bin.prepared.directory);
-  // Cache operations that this user may not perform are a cache that is not this user's to use.
-  const inCache = <T>(operation: () => T): T => untrustedAsSwiftCacheError(bin.spelled, operation);
-  if (isReusableSwiftExecutable(executablePath)) {
-    return executablePath;
-  }
-
-  const timeoutMs = params.timeoutMs ?? 120_000;
-  await withProcessLock({
-    acquire: () =>
-      acquireSwiftCacheLock(`${executablePath}.lock`, timeoutMs, params.signal, bin.spelled),
-    task: async () => {
-      // Another process may have published the executable while this one waited for the lock.
-      if (isReusableSwiftExecutable(entryIn(confirmSwiftCacheDirectory(bin)))) {
-        return;
-      }
-      const tempDir = inCache(() =>
-        fs.mkdtempSync(
-          path.join(path.dirname(executablePath), `.${params.entryName}.${process.pid}.`),
-        ),
-      );
-      const tempExecutablePath = path.join(tempDir, params.entryName);
-      try {
-        // Source text is written inside this compile's own private directory, so no name another process can
-        // reach stands between the text and the compiler.
-        const sourcePaths =
-          'paths' in params.source
-            ? params.source.paths
-            : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
-        await runCmd('xcrun', ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
-          timeoutMs,
-          signal: params.signal,
-          kill: SWIFTC_STOP,
-          env: buildSwiftToolEnv(params.host.env),
-        });
-        inCache(() => {
+  const executablePath = entryIn(bin.directory);
+  return await withinSwiftCache(bin.spelled, async () => {
+    if (isReusableSwiftExecutable(executablePath)) {
+      return executablePath;
+    }
+    const timeoutMs = params.timeoutMs ?? 120_000;
+    await withProcessLock({
+      acquire: () => acquireSwiftCacheLock(`${executablePath}.lock`, timeoutMs, params.signal),
+      task: async () => {
+        // Another process may have published the executable while this one waited for the lock.
+        if (isReusableSwiftExecutable(entryIn(confirmSwiftCacheDirectory(bin)))) {
+          return;
+        }
+        const tempDir = fs.mkdtempSync(
+          path.join(bin.directory, `.${params.entryName}.${process.pid}.`),
+        );
+        const tempExecutablePath = path.join(tempDir, params.entryName);
+        try {
+          // Source text is written inside this compile's own private directory, so no name another process
+          // can reach stands between the text and the compiler.
+          const sourcePaths =
+            'paths' in params.source
+              ? params.source.paths
+              : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
+          await runCmd('xcrun', ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
+            timeoutMs,
+            signal: params.signal,
+            kill: SWIFTC_STOP,
+            env: buildSwiftToolEnv(params.host.env),
+          });
           publishableExecutable(tempExecutablePath);
           fs.renameSync(tempExecutablePath, entryIn(confirmSwiftCacheDirectory(bin)));
-        });
-      } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
-    },
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      },
+    });
+    return executablePath;
   });
-  return executablePath;
 }
 
 /**
@@ -407,7 +450,6 @@ async function acquireSwiftCacheLock(
   lockDir: string,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-  cacheDirectory: string,
 ): Promise<ProcessLockRelease> {
   try {
     return await acquireProcessLock({
@@ -430,10 +472,7 @@ async function acquireSwiftCacheLock(
         timeoutMs,
       });
     }
-    // A lock this user may not create means a cache directory that is not this user's to use.
-    return untrustedAsSwiftCacheError(cacheDirectory, () => {
-      throw error;
-    });
+    throw error;
   }
 }
 
