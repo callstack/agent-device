@@ -6,7 +6,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  * platform close must run and succeed BEFORE the healed `.ad` commits (never claim a successful
  * close a failed platform op didn't perform), a retry after a successful platform close but a
  * failed commit never re-dispatches that platform close, a competing writer can never clobber a
- * COMPLETE artifact, and close identity is tracked per TARGETED app so an untargeted close or a
+ * COMPLETE artifact, and close identity is tracked per request target so an untargeted close or a
  * differently-targeted retry never wrongly skips the platform close.
  *
  * See `session-replay-repair-transaction.test.ts` for the shared repair-transaction background.
@@ -276,7 +276,7 @@ test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact 
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(committed);
 });
 
-test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platform operation never lets a targeted retry skip the platform close', async () => {
+test('BLOCKER 3 (third follow-up): an untargeted close receipt never lets a targeted retry skip the platform close', async () => {
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-untargeted-',
   );
@@ -290,9 +290,8 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
     `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
   );
 
-  // First attempt: UNTARGETED close — `shouldDispatchPlatformClose` is false
-  // (no positional target, not `web`), so the platform close never dispatches
-  // at all; the commit then fails (no-clobber).
+  // First attempt: UNTARGETED close — it closes the session app (#4684); the
+  // commit then fails (no-clobber).
   const first = await handleCloseCommand({
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
@@ -303,7 +302,8 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
     leaseRegistry,
   });
   expect(first.ok).toBe(false);
-  expect(mockLifecycleDispatch).not.toHaveBeenCalled();
+  expect(mockLifecycleDispatch).toHaveBeenCalledTimes(1);
+  expect(mockLifecycleDispatch.mock.calls[0]?.[2]).toEqual(['com.example.app']);
   expect(sessionStore.get(sessionName)).toBeDefined();
 
   const retry = await handleCloseCommand({
@@ -321,8 +321,9 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
     sessionStore,
     leaseRegistry,
   });
-  expect(mockLifecycleDispatch).toHaveBeenCalledTimes(1);
-  expect(mockLifecycleDispatch.mock.calls[0]?.[2]).toEqual(['com.example.app']);
+  // The receipt is keyed on the request's positionals, so the targeted retry dispatches again.
+  expect(mockLifecycleDispatch).toHaveBeenCalledTimes(2);
+  expect(mockLifecycleDispatch.mock.calls[1]?.[2]).toEqual(['com.example.app']);
   expect(retry.ok).toBe(true);
 });
 

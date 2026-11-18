@@ -76,8 +76,16 @@ type RepairClosePreparation =
   | { repairArmed: boolean; healedScriptPath?: string; aborted?: boolean }
   | { response: DaemonResponse };
 
-const shouldDispatchPlatformClose = (req: DaemonRequest, session: SessionState): boolean =>
-  (req.positionals?.length ?? 0) > 0 || isWebSession(session);
+/**
+ * The app the platform close targets. `close` without an app closes the session app (#4684), the
+ * same way `close <app>` does; a native session that never opened an app has nothing to close.
+ * A web session's close always dispatches, with no positional.
+ */
+function platformCloseTarget(req: DaemonRequest, session: SessionState): string[] | undefined {
+  if (req.positionals && req.positionals.length > 0) return req.positionals;
+  if (isWebSession(session)) return [];
+  return session.appBundleId ? [session.appBundleId] : undefined;
+}
 
 async function prepareRepairClose(params: {
   req: DaemonRequest;
@@ -194,10 +202,11 @@ async function dispatchTargetedPlatformClose(params: {
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
 }): Promise<unknown> {
   const { req, session, logPath, lifecycle } = params;
-  if (!shouldDispatchPlatformClose(req, session)) return undefined;
+  const positionals = platformCloseTarget(req, session);
+  if (!positionals) return undefined;
   try {
     await lifecycle.operations.closeApplication({
-      positionals: req.positionals ?? [],
+      positionals,
       outPath: req.flags?.out,
       appBundleId: session.appBundleId,
       surface: session.surface ?? 'app',

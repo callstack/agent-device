@@ -145,7 +145,8 @@ test.each(['batch', 'replay'] as const)(
       expect(failed.json.error?.data?.details).toMatchObject({
         reason: 'session_cleanup_incomplete',
         failedSteps: ['application_lifecycle'],
-        dispatchedSteps: 1,
+        // home and the session app's platform close.
+        dispatchedSteps: 2,
       });
       expect(world.home).toHaveBeenCalledOnce();
       expect(helper.currentIme()).toBe(helperIme);

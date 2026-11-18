@@ -157,7 +157,7 @@ for (const platform of ['ios', 'android'] as const) {
   test(`${platform} close --shutdown finalizes before releasing a retained lease exactly once`, async () => {
     const world = scenario(platform, true);
     expect(await world.run()).toMatchObject({ ok: true, data: { shutdown: { success: true } } });
-    expect(world.events).toEqual(['finalize', 'release']);
+    expect(world.events).toEqual(['close', 'finalize', 'release']);
     expect(world.release).toHaveBeenCalledOnce();
     expect(world.sessionStore.get('test')).toBeUndefined();
     expect(world.leaseRegistry.listActiveLeases()).toEqual([]);
