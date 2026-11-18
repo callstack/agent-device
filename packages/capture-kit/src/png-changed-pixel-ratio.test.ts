@@ -45,3 +45,24 @@ describe('computePngChangedPixelRatio', () => {
     ).toEqual({ status: 'dimension_mismatch' });
   });
 });
+
+test('computePngChangedPixelRatio ignores the top band share when asked', () => {
+  const first = { width: 4, height: 4, data: new Uint8Array(4 * 4 * 4).fill(10) };
+  const second = { width: 4, height: 4, data: new Uint8Array(4 * 4 * 4).fill(10) };
+  // Second frame: top half (rows 0-1) jumps to 200, bottom half (rows 2-3) to 30.
+  for (let y = 0; y < 2; y += 1) {
+    for (let x = 0; x < 4; x += 1) second.data[(y * 4 + x) * 4] = 200;
+  }
+  for (let y = 2; y < 4; y += 1) {
+    for (let x = 0; x < 4; x += 1) second.data[(y * 4 + x) * 4] = 30;
+  }
+
+  const full = computePngChangedPixelRatio(first, second);
+  expect(full).toEqual({ status: 'compared', changedPixelRatio: 1 });
+
+  // With the top half excluded, the ignored rows drop out of the comparison:
+  // the ratio counts the bottom half's changed pixels over that compared
+  // region, so every pixel the pair was compared over changed.
+  const half = computePngChangedPixelRatio(first, second, { ignoreTopHeightShare: 0.5 });
+  expect(half).toEqual({ status: 'compared', changedPixelRatio: 1 });
+});

@@ -8,11 +8,14 @@ import {
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
+import type {
+  ScreenshotCaptureFacts,
+  ScreenshotRuntimeExecution,
+} from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
-import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import type { AgentDeviceBackend, BackendScreenshotOptions } from '@agent-device/contracts/backend';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import {
@@ -369,34 +372,11 @@ function createBoundScreenshotBackend(
     crop?: ScreenshotCropBinding;
   }>,
 ): AgentDeviceBackend {
-  const { session, dispatchContext, captureScreenshot, crop } = params;
+  const { session, dispatchContext, crop } = params;
   return {
     platform: publicPlatformString(session.device),
     captureScreenshot: async (_context, outPath, options) => {
-      const resolved = screenshotOptionsFromFlags({
-        ...dispatchContext,
-        ...screenshotFlagsFromOptions(options),
-      });
-      const facts = await captureScreenshot({
-        outPath,
-        options: {
-          appBundleId: dispatchContext.appBundleId,
-          pixelDensity: resolved.pixelDensity,
-          screenMask: resolved.screenMask,
-          fullscreen: resolved.fullscreen,
-          normalizeStatusBar: resolved.normalizeStatusBar,
-          stabilize: resolved.stabilize,
-          surface: options?.surface,
-          // An open session already proved the simulator is booted, so the per-capture recheck is
-          // the daemon's own knowledge rather than something the caller has to assert.
-          skipIosSimulatorBootCheck:
-            dispatchContext.skipIosSimulatorBootCheck ??
-            (isIosFamily(session.device) && session.device.kind === 'simulator'),
-          captureBackend: resolved.captureBackend,
-          preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
-        },
-        execution: screenshotExecutionFromContext(dispatchContext),
-      });
+      const facts = await captureScreenshotFromRequest(params, outPath, options);
       if (crop) {
         assertScreenshotCropCapture(session.device, facts);
         const outcome = await cropScreenshotToSelector({
@@ -414,4 +394,46 @@ function createBoundScreenshotBackend(
       return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
     },
   };
+}
+
+/**
+ * The one builder for a capture backed by this request: the screenshot backend and the press
+ * readback both capture through it, so their frames come from exactly the same input — the
+ * session's app identity, the resolved screenshot flags, the surface, and the runner execution
+ * from the dispatch context.
+ */
+export async function captureScreenshotFromRequest(
+  params: Readonly<{
+    session: SessionState;
+    dispatchContext: DaemonCommandContext;
+    captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
+  }>,
+  outPath: string,
+  options?: BackendScreenshotOptions,
+): Promise<ScreenshotCaptureFacts> {
+  const { session, dispatchContext, captureScreenshot } = params;
+  const resolved = screenshotOptionsFromFlags({
+    ...dispatchContext,
+    ...screenshotFlagsFromOptions(options),
+  });
+  return await captureScreenshot({
+    outPath,
+    options: {
+      appBundleId: dispatchContext.appBundleId,
+      pixelDensity: resolved.pixelDensity,
+      screenMask: resolved.screenMask,
+      fullscreen: resolved.fullscreen,
+      normalizeStatusBar: resolved.normalizeStatusBar,
+      stabilize: resolved.stabilize,
+      surface: options?.surface,
+      // An open session already proved the simulator is booted, so the per-capture recheck is
+      // the daemon's own knowledge rather than something the caller has to assert.
+      skipIosSimulatorBootCheck:
+        dispatchContext.skipIosSimulatorBootCheck ??
+        (isIosFamily(session.device) && session.device.kind === 'simulator'),
+      captureBackend: resolved.captureBackend,
+      preferredCaptureBackend: dispatchContext.preferredScreenshotCaptureBackend,
+    },
+    execution: screenshotExecutionFromContext(dispatchContext),
+  });
 }

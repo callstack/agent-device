@@ -1,3 +1,4 @@
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import type {
@@ -54,6 +55,7 @@ export async function dispatchRuntimeInteraction<
     touchExecutor: BoundTouchExecutor;
     /** The request's own observation capture when its action use carries none (#3510). */
     settleObservationCapture?: BoundSnapshotCapture;
+    readbackCapture?: AgentDeviceBackend['captureVerifyScreenshot'];
     androidFreshnessBaseline?: SessionState['snapshot'];
     /**
      * Present when the action targets a `@ref`: if Android dialog recovery
@@ -82,6 +84,7 @@ export async function dispatchRuntimeInteraction<
     ...params,
     touchExecutor: options.touchExecutor,
     settleObservationCapture: options.settleObservationCapture,
+    readbackCapture: options.readbackCapture,
     consumedCapture,
   });
   const actionStartedAt = Date.now();

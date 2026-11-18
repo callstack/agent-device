@@ -231,24 +231,16 @@ export type PostActionSurfaceChange = {
   disclosure: string;
 };
 
+export type ScreenshotVerification = {
+  changedFromBefore: boolean;
+  changedPixelRatio?: number;
+};
+
 /**
- * Opt-in (`--verify`) cheap post-condition evidence for mutating interaction
- * commands (#1047). `digest`/`nodeCount`/`interactiveNodeCount` describe a single
- * capture taken right after the action in the pre-action capture's view (interactive-only
- * by default, #4486); `changedFromBefore` compares that digest against the pre-action
- * capture the resolution path already held, so no extra device round trip is spent beyond
- * the one verify capture.
- * `changedFromBefore: false` is evidence, not failure — the command still
- * succeeded.
- *
- * The field is ABSENT when no pre-action baseline was captured, so "no comparison
- * was made" stays distinguishable from "nothing changed": a missing baseline must
- * not read as an unchanged screen, because a coordinate tap that landed on
- * nothing would otherwise report the same verdict as one that changed nothing.
- *
- * When `surfaceChange` is present the two captures describe different surfaces, so the digest
- * comparison is not made at all: `changedFromBefore` then reports that transition, which replaced
- * the whole observed surface.
+ * The tree fields summarize one post-action capture in the pre-action view (#1047, #4486).
+ * A surface transition takes precedence over comparisons. Otherwise `changedFromBefore`
+ * reports the screenshot comparison when available, or the tree comparison when a baseline exists.
+ * A false result is advisory. The command still succeeded.
  */
 export type InteractionEvidence = {
   foregroundApp?: string;
@@ -257,6 +249,7 @@ export type InteractionEvidence = {
   digest: string;
   changedFromBefore?: boolean;
   surfaceChange?: PostActionSurfaceChange;
+  screenshotDiff?: ScreenshotVerification;
 };
 
 export type SettleDiffLine = {

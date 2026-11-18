@@ -6,12 +6,15 @@ import type {
   RepeatedInput,
   ResolvedInteractionTarget,
   ResolvedTarget,
+  ScreenshotVerification,
 } from '@agent-device/contracts/interaction';
+import { isSemanticTouchTarget } from '@agent-device/selectors/touch-semantics';
+import { containsPoint } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { isFillableType } from '@agent-device/contracts/snapshot';
+import { isFillableType, isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
@@ -176,9 +179,9 @@ async function tapCommand(
   const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
-  let backendResult;
-  try {
-    backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
+  const tap = runtime.backend.tap;
+  const dispatch = () =>
+    tap.call(runtime.backend, toBackendContext(runtime, options), point, {
       button: options.button,
       count: options.count,
       intervalMs: options.intervalMs,
@@ -187,6 +190,32 @@ async function tapCommand(
       doubleTap: options.doubleTap,
       ...(pointObservation ? { pointObservation } : {}),
     });
+  let backendResult;
+  let screenshot: ScreenshotVerification | undefined;
+  try {
+    const baseline = atRest.preAction;
+    const useScreenshot =
+      observation.verify &&
+      atRest.kind === 'point' &&
+      baseline !== undefined &&
+      runtime.backend.captureVerifyScreenshot !== undefined &&
+      !baseline.nodes.some(
+        (node) =>
+          node.rect &&
+          !isViewportRootNode(node) &&
+          (node.hittable === true || isSemanticTouchTarget(node)) &&
+          containsPoint(node.rect, point.x, point.y),
+      );
+    if (useScreenshot) {
+      const { withScreenshotVerification } = await import('./verify-screenshot.ts');
+      ({ result: backendResult, screenshot } = await withScreenshotVerification(
+        runtime,
+        options,
+        dispatch,
+      ));
+    } else {
+      backendResult = await dispatch();
+    }
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of
     // band so a daemon-level failure corroboration can still record the same
@@ -204,6 +233,7 @@ async function tapCommand(
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     },
     observation,
+    screenshot,
   );
 }
 

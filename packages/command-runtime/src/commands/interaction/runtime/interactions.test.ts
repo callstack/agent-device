@@ -933,3 +933,40 @@ test('runtime press plan names the refused key and the pending keys when a membe
   );
   assert.equal(taps.length, 2);
 });
+
+test.each([
+  { x: 15, verify: true, frames: [], changed: false },
+  { x: 200, verify: false, frames: [], changed: undefined },
+  { x: 200, verify: true, frames: ['before', 'after'], changed: false },
+  { x: 200, verify: true, frames: ['before', 'after'], changed: true },
+])(
+  'coordinate verification brackets dispatch only away from a touch target ($x, $verify, $changed)',
+  async ({ x, verify, frames, changed }) => {
+    const { PNG } = await import('pngjs');
+    const { writeFile } = await import('node:fs/promises');
+    const captures: string[] = [];
+    let tapped = false;
+    const device = createInteractionDevice(selectorSnapshot(), {
+      tap: async () => {
+        tapped = true;
+      },
+      clock: { now: () => 0, sleep: async () => {} },
+      captureVerifyScreenshot: async (outPath) => {
+        captures.push(tapped ? 'after' : 'before');
+        const png = new PNG({ width: 4, height: 4 });
+        png.data.fill(255);
+        if (tapped) png.data[0] = 0; // Status-bar-only change is ignored.
+        if (tapped && changed) png.data[16] = 0;
+        await writeFile(outPath, PNG.sync.write(png));
+        return { ignoreTopHeightShare: 0.25 };
+      },
+    });
+    const result = await device.interactions.press({ kind: 'point', x, y: 25 }, { verify });
+    assert.deepEqual(captures, frames);
+    assert.equal(result.evidence?.changedFromBefore, changed);
+    assert.equal(
+      result.evidence?.screenshotDiff?.changedFromBefore,
+      frames.length ? changed : undefined,
+    );
+  },
+);

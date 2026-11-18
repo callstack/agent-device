@@ -1,6 +1,7 @@
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {
   InteractionEvidence,
+  ScreenshotVerification,
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
@@ -65,9 +66,22 @@ export async function applyPostActionObservation<T extends object>(
   resolved: ResolvedInteractionTarget,
   result: T,
   params: PostActionObservationPlan,
+  screenshot?: ScreenshotVerification,
 ): Promise<ObservedResult<T>> {
   const observed = await observeAfterInteraction(runtime, options, resolved, params);
-  return reconcileNonHittableHintWithEvidence({ ...result, ...observed });
+  const evidence =
+    screenshot && observed.evidence
+      ? {
+          ...observed.evidence,
+          changedFromBefore: observed.evidence.surfaceChange ? true : screenshot.changedFromBefore,
+          screenshotDiff: screenshot,
+        }
+      : observed.evidence;
+  return reconcileNonHittableHintWithEvidence({
+    ...result,
+    ...observed,
+    ...(evidence ? { evidence } : {}),
+  });
 }
 
 /**

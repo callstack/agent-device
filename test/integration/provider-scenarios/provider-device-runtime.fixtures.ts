@@ -1,3 +1,7 @@
+import {
+  bindProviderScreenshotInteractor,
+  defaultCaptureOnly,
+} from '@agent-device/contracts/screenshot-runtime';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type {
@@ -71,6 +75,7 @@ export type FakeProviderCall = {
     | 'close'
     | 'tap'
     | 'snapshot'
+    | 'screenshot'
     | 'portReverse.ensure';
   [key: string]: unknown;
 };
@@ -80,8 +85,11 @@ type FakeProviderSession = {
   interactor: Interactor;
 };
 
-export async function createFakeProviderWorld(platform: 'android' | 'ios' = 'android') {
-  const runtime = new FakeProviderDeviceRuntime(platform);
+export async function createFakeProviderWorld(
+  platform: 'android' | 'ios' = 'android',
+  screenshot?: Interactor['screenshot'],
+) {
+  const runtime = new FakeProviderDeviceRuntime(platform, screenshot);
   const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders([runtime]);
   const owner = providerRuntimeOwner(FAKE_PROVIDER, platform);
   const providerModule = createProviderScenarioLifecycleModule(runtime, owner);
@@ -161,6 +169,14 @@ async function bindProviderScenarioPlatformRuntime(
         providerScenarioApplicationLifecycle(runtime, request.device, request.scope.signal),
         facts.operations,
       ),
+      ...(facts.operations.captureScreenshot.available
+        ? bindProviderScreenshotInteractor({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),
+            captureCapabilities: defaultCaptureOnly('Fake provider uses one screenshot backend'),
+          })
+        : {}),
       ...bindProviderSnapshotInteractor({
         device: request.device,
         signal: request.scope.signal,
@@ -246,6 +262,10 @@ function providerScenarioRuntimeFacts(
       listApps: fakeProviderUnavailable,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       captureSnapshot: fakeProviderAvailable,
+      captureScreenshot:
+        runtime instanceof FakeProviderDeviceRuntime && runtime.screenshot
+          ? fakeProviderAvailable
+          : fakeProviderUnavailable,
       // The press rides the same interactor transport as every other catalog operation, but the
       // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
       // Apple owner's fact reads instead of restating it (#2699).
@@ -306,18 +326,20 @@ async function unavailableProviderScenarioOperation(): Promise<never> {
 export class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   readonly provider = FAKE_PROVIDER;
   readonly calls: FakeProviderCall[] = [];
+  readonly screenshot?: Interactor['screenshot'];
   private readonly sessionsByLeaseId = new Map<string, FakeProviderSession>();
   private readonly platform: 'android' | 'ios';
 
-  constructor(platform: 'android' | 'ios' = 'android') {
+  constructor(platform: 'android' | 'ios' = 'android', screenshot?: Interactor['screenshot']) {
     this.platform = platform;
+    this.screenshot = screenshot;
   }
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) => {
       if (lease.leaseProvider !== this.provider) return undefined;
       const device = this.createDevice(lease);
-      const interactor = createFakeProviderInteractor(device, this.calls);
+      const interactor = createFakeProviderInteractor(device, this.calls, this.screenshot);
       this.sessionsByLeaseId.set(lease.leaseId, { device, interactor });
       this.calls.push({
         type: 'lease.allocate',
@@ -424,7 +446,11 @@ export class FakeProviderDeviceRuntime implements ProviderDeviceRuntime {
   }
 }
 
-function createFakeProviderInteractor(device: DeviceInfo, calls: FakeProviderCall[]): Interactor {
+function createFakeProviderInteractor(
+  device: DeviceInfo,
+  calls: FakeProviderCall[],
+  screenshot: Interactor['screenshot'] | undefined,
+): Interactor {
   return new Proxy<Partial<Interactor>>(
     {
       open: async (app, options) => {
@@ -437,6 +463,14 @@ function createFakeProviderInteractor(device: DeviceInfo, calls: FakeProviderCal
         calls.push({ type: 'tap', deviceId: device.id, x, y });
         return { backend: 'fake-provider', x, y };
       },
+      ...(screenshot
+        ? {
+            screenshot: async (outPath, options) => {
+              calls.push({ type: 'screenshot', deviceId: device.id, options });
+              return await screenshot(outPath, options);
+            },
+          }
+        : {}),
       snapshot: async (options): Promise<SnapshotResult> => {
         calls.push({
           type: 'snapshot',

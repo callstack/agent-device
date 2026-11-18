@@ -409,6 +409,7 @@ export function createInteractionDevice(
   overrides: Partial<
     Pick<
       AgentDeviceBackend,
+      | 'captureVerifyScreenshot'
       | 'captureSnapshot'
       | 'resolveGestureViewport'
       | 'tap'
@@ -430,6 +431,7 @@ export function createInteractionDevice(
 ) {
   return createAgentDevice({
     backend: {
+      captureVerifyScreenshot: overrides.captureVerifyScreenshot,
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
