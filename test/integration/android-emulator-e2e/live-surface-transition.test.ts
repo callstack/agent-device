@@ -59,7 +59,7 @@ test('a delayed transition satisfies the wait only after a capture differs, keep
       outputPath,
       'capture surface',
       'surface never changed',
-      capture,
+      { capture },
     ),
   );
 
@@ -81,7 +81,7 @@ test('a capture that fails transiently is retried until the surface changes', as
       outputPath,
       'capture surface',
       'surface never changed',
-      capture,
+      { capture },
     ),
   );
 
@@ -99,7 +99,7 @@ test('a surface that never changes fails at the deadline and keeps the last obse
       outputPath,
       'capture surface',
       'surface never changed',
-      capture,
+      { capture },
     ),
   );
 
@@ -124,7 +124,7 @@ test('a wait whose captures keep failing reports the last capture error at the d
       outputPath,
       'capture surface',
       'surface never changed',
-      capture,
+      { capture },
     ),
   );
 
@@ -146,13 +146,15 @@ test('no capture outlives the remaining deadline', async () => {
       outputPath,
       'capture surface',
       'surface never changed',
-      (_output, _attempt, remainingMs) =>
-        new Promise((_resolve, reject) =>
-          setTimeout(() => {
-            failedAt = Date.now();
-            reject(new Error('capture timed out'));
-          }, remainingMs),
-        ),
+      {
+        capture: (_output, _attempt, remainingMs) =>
+          new Promise((_resolve, reject) =>
+            setTimeout(() => {
+              failedAt = Date.now();
+              reject(new Error('capture timed out'));
+            }, remainingMs),
+          ),
+      },
     ),
   );
 
@@ -173,9 +175,11 @@ test('a capture that resolves after the deadline is rejected as a late observati
       outputPath,
       'capture surface',
       'surface never changed',
-      async (output, _attempt, remainingMs) => {
-        await new Promise((resolve) => setTimeout(resolve, remainingMs + 500));
-        fs.writeFileSync(output, HOME_SURFACE);
+      {
+        capture: async (output, _attempt, remainingMs) => {
+          await new Promise((resolve) => setTimeout(resolve, remainingMs + 500));
+          fs.writeFileSync(output, HOME_SURFACE);
+        },
       },
     ),
   );

@@ -40,11 +40,6 @@ export type LiveDeviceContext<BehaviorId extends string> = {
   startedAtMs: number;
   stepHistory: StepRecord[];
   timings: ScenarioTiming[];
-  /**
-   * Per-context CLI override, ahead of the harness-wide `runCli`. Lets one scenario run against a
-   * scripted device (delayed captures, scripted appstate) without touching the shared harness.
-   */
-  runCli?: LiveRunCli;
 };
 
 export type LiveScenario<Context> = {
@@ -56,11 +51,8 @@ type HarnessOptions<Context, BehaviorId extends string> = {
   behaviorsForScenario: (scenarioId: string) => readonly BehaviorId[];
   commandsForScenario: (scenarioId: string) => readonly string[];
   commonFlags: (context: Context, args: readonly string[]) => string[];
-  runCli?: (
-    args: string[],
-    env: NodeJS.ProcessEnv,
-    options?: { timeoutMs?: number },
-  ) => Promise<CliJsonResult>;
+  /** CLI runner injection: the seam tests use to script a device for a scenario. */
+  runCli?: LiveRunCli;
   /**
    * Platform-owned device facts for a failed step (rotation state, whether the app process is
    * alive, crash logs), read outside agent-device so they describe the device even when the CLI
@@ -246,8 +238,7 @@ export function createLiveDeviceHarness<
   ): Promise<{ result: CliJsonResult; fullArgs: string[] }> {
     const fullArgs = buildStepArgs(context, args, stepOptions);
     const startedAt = Date.now();
-    const runCli = context.runCli ?? options.runCli ?? runBuiltCliJson;
-    const result = await runCli(fullArgs, context.env, {
+    const result = await (options.runCli ?? runBuiltCliJson)(fullArgs, context.env, {
       timeoutMs: stepOptions.timeoutMs,
     });
     const failedAsExpected = stepOptions.expectFailure === true && result.status !== 0;
@@ -306,7 +297,7 @@ export function createLiveDeviceHarness<
   }
 
   function captureFailedStepEvidence(context: Context): Promise<FailedStepEvidence> {
-    const runCli = context.runCli ?? options.runCli ?? runBuiltCliJson;
+    const runCli = options.runCli ?? runBuiltCliJson;
     const deviceEvidence = options.deviceEvidence;
     return collectFailedStepEvidence({
       stem: path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`),

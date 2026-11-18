@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { capturePng, filesDiffer } from './live-assertions.ts';
+import { capturePng as defaultPngCapture, filesDiffer } from './live-assertions.ts';
 import type { LiveContext } from './live-harness.ts';
+import type { RunStepOptions } from '../live-device-e2e/runtime.ts';
 
 const SURFACE_TRANSITION_TIMEOUT_MS = 10_000;
 const SURFACE_TRANSITION_POLL_MS = 250;
 const SURFACE_CAPTURE_TIMEOUT_MS = 5_000;
+
+/** A PNG capture step: `screenshot <outputPath> --scale 0.5` with harness step options. */
+export type PngCapture = (
+  context: LiveContext,
+  step: string,
+  outputPath: string,
+  options: RunStepOptions,
+) => Promise<void>;
 
 /**
  * One screenshot attempt of a surface wait. Writes the observed image to `outputPath`.
@@ -19,14 +28,28 @@ export type SurfaceCapture = (
   remainingMs: number,
 ) => Promise<void>;
 
+export type SurfaceTransitionOptions = {
+  /**
+   * Injects one attempt. Tests that inject `capture` bypass the default capture and therefore
+   * do not observe its timeout forwarding.
+   */
+  capture?: SurfaceCapture;
+  /**
+   * The PNG capture the default attempts run through. Scenarios pass the capture bound to their
+   * harness so the default capture's `timeoutMs` reaches the CLI runner of that harness.
+   */
+  capturePng?: PngCapture;
+};
+
 /**
  * Waits until a fresh screenshot differs from the baseline surface, keeping the final observed
  * image at `outputPath`. System navigation (Home, Recents) is dispatched before the new surface
  * has drawn, so a single capture right after the command can still show the previous surface.
  * Each attempt removes and overwrites `outputPath`, so the file always holds the last observed
- * image and a failed capture cannot leave a stale one behind. A capture that resolves after the
- * deadline is rejected as a late observation, and the wait fails at the deadline if navigation
- * never produced the change.
+ * image and a failed capture cannot leave a stale one behind. The default capture is bounded by
+ * the remaining deadline (capped per attempt), a capture that resolves after the deadline is
+ * rejected as a late observation, and the wait fails at the deadline if navigation never
+ * produced the change.
  */
 export async function waitForSurfaceChange(
   context: LiveContext,
@@ -34,8 +57,10 @@ export async function waitForSurfaceChange(
   outputPath: string,
   captureStep: string,
   failure: string,
-  capture?: SurfaceCapture,
+  options: SurfaceTransitionOptions = {},
 ): Promise<void> {
+  const capturePng = options.capturePng ?? defaultPngCapture;
+  const capture = options.capture ?? defaultCapture(capturePng, context, captureStep);
   const deadline = Date.now() + SURFACE_TRANSITION_TIMEOUT_MS;
   let lastObservation = 'no capture finished';
   let attempt = 0;
@@ -47,7 +72,7 @@ export async function waitForSurfaceChange(
     attempt += 1;
     fs.rmSync(outputPath, { force: true });
     try {
-      await (capture ?? defaultCapture(context, captureStep))(outputPath, attempt, remaining);
+      await capture(outputPath, attempt, remaining);
       if (Date.now() >= deadline) {
         lastObservation = `capture ${attempt} resolved after the deadline`;
       } else if (filesDiffer(baselinePath, outputPath)) {
@@ -64,7 +89,11 @@ export async function waitForSurfaceChange(
   assert.fail(`${failure} within ${SURFACE_TRANSITION_TIMEOUT_MS}ms (${lastObservation})`);
 }
 
-function defaultCapture(context: LiveContext, captureStep: string): SurfaceCapture {
+function defaultCapture(
+  capturePng: PngCapture,
+  context: LiveContext,
+  captureStep: string,
+): SurfaceCapture {
   return (output, attempt, remainingMs) =>
     capturePng(context, `${captureStep} (attempt ${attempt})`, output, {
       // The wait owns the miss policy: a failed attempt is retried under the deadline and only

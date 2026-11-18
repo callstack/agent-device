@@ -12,23 +12,31 @@ import {
 } from '../live-device-e2e/assertions.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
-import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
+import { type AndroidLiveHarness, androidLiveHarness, type LiveContext } from './live-harness.ts';
 
 export { assertFilesDiffer, assertJsonContains, assertMp4File, assertNonEmptyFile, filesDiffer };
 
-export const { assertElementText, assertWaitSelector, assertWaitText, capturePng } =
-  createLiveDeviceAssertions<AndroidEmulatorBehaviorId, LiveContext>(
-    runStep,
-    verifyCommand,
+/**
+ * Builds the assertion helpers bound to one harness's `runStep`/`verifyCommand`, so a harness
+ * constructed with a scripted `runCli` observes the same steps the live lane runs.
+ */
+export function createAndroidLiveAssertions(harness: AndroidLiveHarness = androidLiveHarness) {
+  return createLiveDeviceAssertions<AndroidEmulatorBehaviorId, LiveContext>(
+    harness.runStep,
+    harness.verifyCommand,
     PUBLIC_COMMANDS.wait,
   );
+}
+
+export const { assertElementText, assertWaitSelector, assertWaitText, capturePng } =
+  createAndroidLiveAssertions();
 
 export async function scrollToVisibleSelector(
   context: LiveContext,
   selector: string,
 ): Promise<void> {
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const result = await runStep(
+    const result = await androidLiveHarness.runStep(
       context,
       `check ${selector} visibility (${attempt + 1})`,
       ['is', 'visible', selector],
@@ -44,7 +52,7 @@ export async function scrollToVisibleSelector(
       `could not observe ${selector}: ${JSON.stringify(result.json)}`,
     );
     if (attempt < 5) {
-      await runStep(context, `scroll toward ${selector} (${attempt + 1})`, [
+      await androidLiveHarness.runStep(context, `scroll toward ${selector} (${attempt + 1})`, [
         'scroll',
         'down',
         '0.25',
