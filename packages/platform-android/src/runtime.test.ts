@@ -277,9 +277,15 @@ test('Android refuses the action-button fact on every kind', async () => {
   }
 });
 
-test('Android refuses the shake fact on every kind', async () => {
-  for (const runtimeDevice of [
+test('Android admits the shake fact on emulators and refuses every other kind', async () => {
+  const emulator = await bindOrdinary(
+    createAndroidPlatformRuntime(androidNavigationHost()),
     ANDROID_EMULATOR,
+  );
+  expect(emulator.facts.operations.shake).toEqual({ available: true });
+  expect(emulator.operations.shake).toEqual(expect.any(Function));
+
+  for (const runtimeDevice of [
     { ...ANDROID_EMULATOR, kind: 'device' as const },
     UNKNOWN_KIND_DEVICE,
   ]) {
@@ -287,10 +293,9 @@ test('Android refuses the shake fact on every kind', async () => {
       createAndroidPlatformRuntime(androidNavigationHost()),
       runtimeDevice,
     );
-    expect(binding.facts.operations.shake).toEqual({
+    expect(binding.facts.operations.shake).toMatchObject({
       available: false,
-      reason: 'unsupported-platform-leaf',
-      hint: 'shake is supported on iOS simulators; adb has no control that shakes an Android device.',
+      reason: 'unsupported-device-kind',
     });
     expect(binding.operations.shake).toBeUndefined();
   }

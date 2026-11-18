@@ -105,10 +105,10 @@ const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Android has no key event for this system button.',
 );
-/** adb has no shake control: `input` sends keys and touches, never a device motion. */
-const shakeUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'shake is supported on iOS simulators; adb has no control that shakes an Android device.',
+/** The emulator console's accelerometer override is the only shake control adb reaches. */
+const shakeKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'shake overrides the accelerometer through the Android emulator console; a physical device has no console, so shake it by hand.',
 );
 const headlessUnavailable = unavailableFact(
   'unsupported-device-kind',
@@ -361,7 +361,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
-          shake: shakeUnavailable,
+          shake: device.kind === 'emulator' ? available : shakeKindUnavailable,
           ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),

@@ -244,7 +244,7 @@ const foldUnavailable = unavailableFact(
 
 const shakeUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  "shake posts through simctl on the daemon host; agent-device does not drive a WebDriver backend's own shake.",
+  "shake goes through simctl or the Android emulator console on the daemon host; agent-device does not drive a WebDriver backend's own shake.",
 );
 
 const telephonyUnavailable = unavailableFact(

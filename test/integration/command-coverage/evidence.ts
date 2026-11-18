@@ -65,7 +65,7 @@ export const ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',
     [C.shake],
-    'Android refuses the shake fact on every kind',
+    'Android admits the shake fact on emulators and refuses every other kind',
   );
 export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(

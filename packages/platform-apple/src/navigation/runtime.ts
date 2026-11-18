@@ -167,12 +167,12 @@ function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
 const shakeKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
-  hint: 'shake is supported on iPhone and iPad simulators; a physical device has no host control that shakes it.',
+  hint: 'shake is supported on iPhone and iPad simulators and Android emulators; a physical device has no host control that shakes it.',
 } as const);
 const shakeOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'shake is supported on iPhone and iPad simulators only.',
+  hint: 'shake is supported on iPhone and iPad simulators and Android emulators only.',
 } as const);
 /**
  * The shake is the Darwin notification the Simulator app's Device > Shake menu posts, sent with

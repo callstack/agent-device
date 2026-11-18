@@ -1434,7 +1434,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   [C.shake]: {
     androidEmulator: androidEmulator.contract(
       ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE,
-      'the Android runtime fact refuses shake on every kind, because adb has no shake control',
+      'the Android emulator advertises the console accelerometer shake and binds it; a physical device is refused by the fact',
     ),
     iosSimulator: iosSimulator.contract(
       APPLE_SHAKE_FACT_EVIDENCE.path,

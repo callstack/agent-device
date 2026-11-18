@@ -254,7 +254,7 @@ What a **Yes** does not claim:
 | [Set screen orientation](/docs/commands#navigation) | Set only; unlock unsupported | Set only; unlock unsupported | Yes | Yes | No | No |
 | [Phone hardware buttons](/docs/commands#navigation) | No | Volume only | Yes | Yes | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | Models with an Action Button only | Models with an Action Button only | No | No | No | No |
-| [Shake](/docs/commands#navigation) | Yes | No | No | No | No | No |
+| [Shake](/docs/commands#navigation) | Yes | No | Yes | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | Foldable models only | No | Foldable models only | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No | No | No |
 | [System and app settings helpers](/docs/commands#settings-helpers) | Yes | No | Yes | Yes | Clear app state only; other settings and reads unsupported | Clear app state only; other settings and reads unsupported |
@@ -272,7 +272,7 @@ What a **Yes** does not claim:
 | [Set screen orientation](/docs/commands#navigation) | Yes | Yes | No | No | No |
 | [Phone hardware buttons](/docs/commands#navigation) | No | No | No | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | No |
-| [Shake](/docs/commands#navigation) | No | No | No | No | No |
+| [Shake](/docs/commands#navigation) | Yes | No | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | Foldable models only | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | Yes | Yes | Yes | Yes | Yes |
 | [System and app settings helpers](/docs/commands#settings-helpers) | Yes | Yes | Set only; no reads | No | No |

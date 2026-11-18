@@ -44,7 +44,7 @@ import { createSystemSurfaceForegroundProbe } from './system-surface-foreground.
  */
 const providerShakeUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'shake posts through simctl on the daemon host; a provider-owned simulator has no shake control here.',
+  'On Apple targets shake posts through simctl on the daemon host; a provider-owned simulator has no shake control here.',
 );
 
 /** Binds a provider-owned runner session to the shared Apple command and runtime implementation. */
