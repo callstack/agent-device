@@ -4,7 +4,7 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 
 ## Prepare
 
-1. To build runtime changes, run `pnpm build`.
+1. Run `pnpm build`, then verify only with its `node bin/agent-device.mjs`.
 2. For Android source verification, run `pnpm build:android`.
 3. For Swift runner changes, run `pnpm build:xcuitest`.
    A graceful shutdown can hand off an active runner. A new daemon can adopt the old binary.
@@ -17,8 +17,6 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 ## Prove the path
 
 Run the exact route that changed. Record the commands, device, source SHA, and observable results.
-Use the `agent-device` that `pnpm build` built from the branch: `node bin/agent-device.mjs`.
-An installed or host-provided `agent-device` does not prove the change.
 For Android, `snapshot -i --json` must show `androidSnapshot.backend: android-helper`.
 Its `helperVersion` must match `package.json`. A UIAutomator fallback proves only that fallback.
 
