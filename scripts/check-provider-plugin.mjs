@@ -1,5 +1,5 @@
 // Manual pre-push check for provider plugin packages; no CI lane runs it (it needs pnpm and a
-// built core). Usage: `pnpm build && node scripts/check-provider-plugin.mjs packages/provider-testmu`.
+// built core). Usage: `pnpm build && pnpm check:provider-plugin packages/provider-testmu`.
 // A fixture without `respond` is for a provider with no credentials: connect must pass at once.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
