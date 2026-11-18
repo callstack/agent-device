@@ -254,6 +254,7 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
 
   const logsStart = await runStep(context, 'start fixture log stream', ['logs', 'start']);
   assert.equal(logsStart.json?.data?.started, true, JSON.stringify(logsStart.json));
+  assert.equal(logsStart.json?.data?.relaunched, undefined, JSON.stringify(logsStart.json));
   assert.ok(fs.existsSync(String(logsStart.json?.data?.path)), JSON.stringify(logsStart.json));
   const logsPath = await runStep(context, 'inspect fixture log stream', ['logs', 'path']);
   assert.equal(logsPath.json?.data?.active, true, JSON.stringify(logsPath.json));

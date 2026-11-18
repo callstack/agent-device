@@ -245,6 +245,22 @@ test('logs clear --restart finishes generation one before adopting generation tw
   });
 });
 
+test.each([
+  { relaunched: true, expected: { relaunched: true } },
+  { relaunched: false, expected: {} },
+])(
+  'logs start reports relaunched only when the start relaunched the app ($relaunched)',
+  async ({ relaunched, expected }) => {
+    runtime = createRuntimeHarness({ relaunched });
+    const { sessionStore, sessionName } = openSession();
+    const started = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);
+    expect(started).toEqual({
+      ok: true,
+      data: { path: expect.any(String), started: true, ...expected },
+    });
+  },
+);
+
 test('cancellation after native start persists recovery truth and cleans the pending handle', async () => {
   const { sessionStore, sessionName } = openSession();
   const response = await runLogs(
@@ -355,6 +371,7 @@ function createRuntimeHarness(
   options: {
     inspectAvailable?: boolean;
     inspectFact?: RuntimeOperationFact;
+    relaunched?: boolean;
   } = {},
 ) {
   const owner = localRuntimeOwner('apple');
@@ -394,7 +411,7 @@ function createRuntimeHarness(
       lifecycle: 'open',
       descriptor: { version: 1, body: { outputPath: input.outputPath } },
     });
-    return createAppLogStartResult(handle, envelope);
+    return createAppLogStartResult(handle, envelope, { relaunched: options.relaunched });
   });
   const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
     appLogInspect: inspect,

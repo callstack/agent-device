@@ -91,6 +91,9 @@ export async function startAppleAppLogs(
         fence: input.fence,
         descriptor,
       }),
+      // devicectl --console --terminate-existing relaunches the app, and devicectl forwards the
+      // stop signal to the app, which ends it.
+      { relaunched: backend === 'ios-device' },
     );
     adopted = true;
     return result;

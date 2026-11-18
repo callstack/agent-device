@@ -77,7 +77,7 @@ Logs:
   Do not cat a full stale log into agent context. Open or grep only the relevant window when needed.
   logs clear --restart is the compact command to clear old logs and start a fresh capture; do not split it into logs stop, logs clear, logs start.
   On iOS simulators, logs scope by bundle id and resolved app executable, so use this instead of raw simctl log stream predicates.
-  On iOS physical devices, logs clear --restart relaunches the session app through devicectl process launch --console so stdout/stderr can be captured.
+  On iOS physical devices, logs start and logs clear --restart relaunch the session app through devicectl process launch --console so stdout/stderr can be captured; logs start reports relaunched: true. logs stop ends the app.
   For iOS simulator launch-time stdout/stderr, use --launch-console on the direct app launch:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
   --launch-console is only for local or Limrun iOS simulator app launches, not URL opens.
