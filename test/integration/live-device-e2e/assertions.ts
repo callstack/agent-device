@@ -78,8 +78,12 @@ export function assertJsonContains(result: CliJsonResult, expected: string, mess
   assert.ok(serialized.includes(expected), `${message}\nreceived: ${serialized}`);
 }
 
+export function filesDiffer(first: string, second: string): boolean {
+  return !fs.readFileSync(first).equals(fs.readFileSync(second));
+}
+
 export function assertFilesDiffer(first: string, second: string, message: string): void {
-  assert.notDeepEqual(fs.readFileSync(first), fs.readFileSync(second), message);
+  assert.ok(filesDiffer(first, second), message);
 }
 
 export function assertNonEmptyFile(filePath: string, name: string): void {

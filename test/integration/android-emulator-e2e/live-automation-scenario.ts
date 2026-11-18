@@ -16,6 +16,7 @@ import {
 } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
+import { waitForSurfaceChange } from './live-surface-transition.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -227,13 +228,27 @@ async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<vo
   const homeState = await runStep(context, 'read Android Home foreground state', ['appstate']);
   assert.notEqual(homeState.json?.data?.package, context.appId, JSON.stringify(homeState.json));
   const home = path.join(context.artifactDir, 'home.png');
-  await capturePng(context, 'capture Android Home surface', home);
+  // Home is dispatched before the launcher has drawn, so one capture can still show the fixture.
+  await waitForSurfaceChange(
+    context,
+    foreground,
+    home,
+    'capture Android Home surface',
+    'Android Home never replaced the fixture pixels',
+  );
   assertFilesDiffer(foreground, home, 'Android Home should replace fixture pixels');
   verifyCommand(context, C.home, 'Home changes Android foreground package and system pixels');
 
   await runStep(context, 'open Android Recents', ['app-switcher']);
   const recents = path.join(context.artifactDir, 'recents.png');
-  await capturePng(context, 'capture Android Recents surface', recents);
+  // The Recents transition can still be animating when the switcher is dispatched.
+  await waitForSurfaceChange(
+    context,
+    home,
+    recents,
+    'capture Android Recents surface',
+    'Android Recents never differed from the Home pixels',
+  );
   assertFilesDiffer(home, recents, 'Android Recents should differ from Home pixels');
   verifyCommand(context, C.appSwitcher, 'Recents pixels differ from Home system surface');
 

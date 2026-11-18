@@ -8,12 +8,13 @@ import {
   assertMp4File,
   assertNonEmptyFile,
   createLiveDeviceAssertions,
+  filesDiffer,
 } from '../live-device-e2e/assertions.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
-export { assertFilesDiffer, assertJsonContains, assertMp4File, assertNonEmptyFile };
+export { assertFilesDiffer, assertJsonContains, assertMp4File, assertNonEmptyFile, filesDiffer };
 
 export const { assertElementText, assertWaitSelector, assertWaitText, capturePng } =
   createLiveDeviceAssertions<AndroidEmulatorBehaviorId, LiveContext>(
