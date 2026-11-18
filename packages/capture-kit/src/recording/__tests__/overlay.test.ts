@@ -388,10 +388,15 @@ test('the overlay compiles its shipped source, never one planted at the checkout
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
   const compiled: Record<string, string> = {};
+  const outsideStaging: string[] = [];
   const defaultRunCmd = mockRunCmd.getMockImplementation()!;
   mockRunCmd.mockImplementationOnce(async (cmd, args, options) => {
-    // The bytes the compiler would read, while the staging directory still exists.
+    // Every Swift input the compiler is handed must be a file in this compile's private staging directory,
+    // the directory its output is written to; any path elsewhere is a source read from disk.
+    const stagingDirectory = path.dirname(args[args.indexOf('-o') + 1]!);
     for (const sourcePath of args.slice(3, args.indexOf('-o'))) {
+      if (path.dirname(sourcePath) !== stagingDirectory) outsideStaging.push(sourcePath);
+      // The bytes the compiler would read, while the staging directory still exists.
       compiled[path.basename(sourcePath)] = fs.readFileSync(sourcePath, 'utf8');
     }
     return await defaultRunCmd(cmd, args, options);
@@ -405,6 +410,7 @@ test('the overlay compiles its shipped source, never one planted at the checkout
   });
 
   const { RECORDING_OVERLAY_SOURCES } = await import('../recording-swift-sources.ts');
+  expect(outsideStaging).toEqual([]);
   expect(compiled).toEqual(
     Object.fromEntries(RECORDING_OVERLAY_SOURCES.map(({ fileName, text }) => [fileName, text])),
   );

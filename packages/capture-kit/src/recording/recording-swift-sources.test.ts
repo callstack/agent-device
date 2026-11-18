@@ -28,3 +28,14 @@ test('every recording helper source is embedded', () => {
     REGENERATE,
   ).toEqual([]);
 });
+
+test('each helper compiles exactly its own sources, main file first', () => {
+  expect(RECORDING_OVERLAY_SOURCES.map((source) => source.fileName)).toEqual([
+    'recording-overlay.swift',
+    'RecordingExportSupport.swift',
+  ]);
+  expect(RECORDING_FRAMES_SOURCES.map((source) => source.fileName)).toEqual([
+    'recording-frames.swift',
+    'RecordingExportSupport.swift',
+  ]);
+});

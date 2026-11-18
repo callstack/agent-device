@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTestHost } from '../host-environment.fixtures.ts';
@@ -15,7 +16,12 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { compileSwiftSourceText, getSwiftCacheRoot, runSwiftHelper } from './swift-cache.ts';
+import {
+  compileSwiftSources,
+  compileSwiftSourceText,
+  getSwiftCacheRoot,
+  runSwiftHelper,
+} from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -944,4 +950,36 @@ test('a link without the .app suffix that resolves to a bundle is judged at the 
     }),
   );
   expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+/** An entry name as a release that keyed entries without the compiler arguments spelled it. */
+function entryKeyedWithoutCompilerArguments(cacheName: string, parts: string[]): string {
+  const hash = createHash('sha256');
+  for (const part of ['3', process.platform, process.arch, ...parts])
+    hash.update(part).update('\0');
+  return `${cacheName}-${hash.digest('hex').slice(0, 16)}`;
+}
+
+test('an executable keyed without the compiler arguments is never reused', async () => {
+  fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
+  for (const level of [cacheRoot, versionDir, binDir]) fs.chmodSync(level, 0o700);
+  const plantedText = path.join(binDir, entryKeyedWithoutCompilerArguments('helper', ['print(1)']));
+  const plantedSources = path.join(
+    binDir,
+    entryKeyedWithoutCompilerArguments('sources', ['main.swift', 'print(2)']),
+  );
+  for (const planted of [plantedText, plantedSources]) {
+    fs.writeFileSync(planted, 'built with other flags', { mode: 0o755 });
+  }
+
+  const textHelper = await compile();
+  const sourcesHelper = await compileSwiftSources({
+    host: createTestHost(),
+    cacheName: 'sources',
+    sources: [{ fileName: 'main.swift', text: 'print(2)' }],
+  });
+
+  expect([textHelper, sourcesHelper]).not.toContain(plantedText);
+  expect([textHelper, sourcesHelper]).not.toContain(plantedSources);
+  expect(mockRunCmd).toHaveBeenCalledTimes(2);
 });

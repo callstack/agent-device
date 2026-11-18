@@ -409,6 +409,8 @@ export async function compileSwiftSources(params: {
     SWIFT_CACHE_VERSION,
     process.platform,
     process.arch,
+    // The fixed compiler arguments are part of what is compiled: a release that changes them gets new entries.
+    ...COMPILER_ARGS,
     ...params.sources.flatMap(({ fileName, text }) => [fileName, text]),
   ]);
   return await ensureSwiftExecutable({
@@ -428,7 +430,13 @@ export async function compileSwiftSourceText(params: {
   signal?: AbortSignal;
 }): Promise<string> {
   const cacheName = sanitizeCacheName(params.cacheName);
-  const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
+  const key = hashParts([
+    SWIFT_CACHE_VERSION,
+    process.platform,
+    process.arch,
+    ...COMPILER_ARGS,
+    params.source,
+  ]);
   return await ensureSwiftExecutable({
     host: params.host,
     sources: [{ fileName: `${cacheName}-${key}.swift`, text: params.source }],
