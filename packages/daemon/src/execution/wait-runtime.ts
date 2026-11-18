@@ -10,7 +10,7 @@ import { absenceCaptureOptionError } from '@agent-device/selectors/absence-obser
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import { createPlatformRequestScope } from '../core/platform-request-scope.ts';
 import { parseVersionedRefPositional } from './ref-positionals.ts';
-import { resolveRefStalenessWarning } from './session-snapshot.ts';
+import { resolveRefStalenessWarning, unissuedRefReadError } from './session-snapshot.ts';
 import {
   resolveSessionAtAddress,
   resolveSessionDevice,
@@ -145,6 +145,8 @@ function normalizeWaitPositionals(
   if (parsed.kind !== 'ref') return { waitParsed: parsed };
   const versionedRef = parseVersionedRefPositional(parsed.rawRef);
   if (!versionedRef.ok) return versionedRef.response;
+  const unissued = unissuedRefReadError(session, versionedRef.ref);
+  if (unissued) return errorResponse(unissued.code, unissued.message, unissued.details);
   return {
     waitParsed: { ...parsed, rawRef: versionedRef.ref },
     staleRefsWarning: resolveRefStalenessWarning({

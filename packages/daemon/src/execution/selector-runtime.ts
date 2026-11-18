@@ -11,6 +11,7 @@ import {
   markSessionPartialRefsIssued,
   publishAmbiguousMatchCandidateRefs,
   resolveRefStalenessWarning,
+  unissuedRefReadError,
 } from './session-snapshot.ts';
 import {
   checkElementTargetArgs,
@@ -135,6 +136,11 @@ export async function dispatchGetViaRuntime(
   if (target.target.kind === 'ref') {
     const invalidRefFlagsResponse = refSnapshotFlagGuardResponse('get', req.flags);
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
+    const unissued = unissuedRefReadError(
+      params.sessionStore.get(params.sessionName),
+      target.target.ref,
+    );
+    if (unissued) return errorResponse(unissued.code, unissued.message, unissued.details);
   }
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
   // snapshot path so the post-resolution identity guard runs.

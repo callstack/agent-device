@@ -4,6 +4,7 @@ import {
   activateCompleteRefFrame,
   activatePartialRefFrame,
   admitRefMutation,
+  admitRefRead,
   expireRefFrame,
   refFrame,
   refFrameEpoch,
@@ -161,4 +162,13 @@ test('a frame cannot be constructed, edited, or derived outside ref-frame-slot.t
     () => frame.expired(),
   ];
   assert.equal(rejectedByTsc.length, 4);
+});
+
+test('a read is admitted for every ref under a complete frame and only for issued refs under a partial one', () => {
+  const complete = session();
+  activateCompleteRefFrame(complete);
+  assert.equal(reason(admitRefRead(complete, 'e9')), undefined);
+  const partial = partialSession(7, new Set(['e4']));
+  assert.equal(reason(admitRefRead(partial, 'e4')), undefined);
+  assert.equal(reason(admitRefRead(partial, 'e9')), 'ref_not_issued');
 });

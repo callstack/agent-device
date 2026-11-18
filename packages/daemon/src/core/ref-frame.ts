@@ -244,3 +244,15 @@ export function admitRefMutation(params: {
 
   return { admitted: true };
 }
+
+/**
+ * ADR 0014 read evidence: a partial frame retains its source tree only as evidence for the refs it
+ * issued. Any other ref body, plain or pinned, was minted from a tree that frame superseded, so
+ * resolving it there would bind whatever node now holds that number (#1076, #4686). Reads stay
+ * fail-open with a warning everywhere else; only this case has no evidence to read.
+ */
+export function admitRefRead(session: SessionState, refBody: string): RefFrameAdmission {
+  const scope = refFrameScope(session);
+  if (scope !== 'all' && !scope.has(refBody)) return { admitted: false, reason: 'ref_not_issued' };
+  return { admitted: true };
+}
