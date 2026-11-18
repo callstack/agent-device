@@ -27,7 +27,12 @@ import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from './cli-help-foldable.ts';
 import { reactNativeHelpTopic } from './cli-help-react-native.ts';
 import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
-import { providerPluginHelp } from '../provider-plugin-catalog.ts';
+import {
+  AWS_DEVICE_FARM,
+  BROWSERSTACK,
+  providerPluginHelp,
+  providerPluginInstallCommand,
+} from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [
   'Default config files: ~/.agent-device/config.json (or <AGENT_DEVICE_HOME>/config.json), ./agent-device.json (project-safe defaults only).',
@@ -465,7 +470,7 @@ Rules:
   foldable: foldableHelpTopic,
   remote: {
     summary: 'Direct proxy, cloud profiles, and remote config',
-    body: `agent-device help remote
+    body: (coreVersion: string) => `agent-device help remote
 
 Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
@@ -475,13 +480,13 @@ Providers:
   Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
   BrowserStack (plugin, install separately): agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
-  AWS Device Farm: the @agent-device/aws-device-farm plugin is private and unpublished; after publication install it with agent-device plugins add, then agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
+  AWS Device Farm (plugin, install separately): install the @agent-device/aws-device-farm plugin, then agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
   TestMu AI (plugin, install separately): agent-device connect testmu verifies credentials and the exact virtual device (emulator or simulator) or, with --provider-device-type real, real device and OS version, then stores a local provider profile. --provider-app takes an lt:// app reference, an https URL, or a local path: connect looks an lt:// id up among your uploads for that device pool, while URL and local sources are uploaded and validated when open creates the session. It does not create a hub session.
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
   Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
 
 Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
-${providerPluginHelp()}
+${providerPluginHelp(coreVersion)}
 
 After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
@@ -549,7 +554,7 @@ TestMu AI real-device flow:
 
 ${TV_PLUGIN_FLOWS}
 BrowserStack hosted-device flow:
-  agent-device plugins add @agent-device/browserstack
+  ${providerPluginInstallCommand(BROWSERSTACK, coreVersion)}
   export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
   agent-device open com.example.app
@@ -559,6 +564,7 @@ BrowserStack hosted-device flow:
   agent-device disconnect
 
 AWS Device Farm hosted-device flow:
+  ${providerPluginInstallCommand(AWS_DEVICE_FARM, coreVersion)}
   export AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect aws-device-farm --platform android --aws-project-arn <arn> --aws-device-arn <arn> --aws-app-arn <arn>
   agent-device open com.example.app
@@ -721,7 +727,10 @@ Rules:
   Keep browser plans session-scoped: open a URL, inspect refs, act on refs/selectors, verify with wait/get/is/snapshot, capture screenshot only when visual evidence is needed, then close. Each --session name is its own browser (cookies and storage) and its own device (agent-browser-chrome:session:p_<name>, or t_<tenant hash>_<name> under tenant isolation so tenants never share a browser): web sessions with different names run in parallel, and the same name in the same tenant conflicts while different tenants may reuse a name. Without --session under local workspace scoping, each workspace uses its own browser and device (agent-browser-chrome:session:w_<workspace scope>); different workspaces can run in parallel, while the same workspace conflicts across daemons sharing a claims directory. A request without a workspace scope (no cwd) uses the default session's browser and device (p_default, or t_<tenant hash>_default under tenant isolation). A name matches case-insensitively and must be 1 to 30 characters of letters, digits, "_" and "-" (1 to 17 under tenant isolation); anything else, including surrounding whitespace or an empty --session "", is refused with web_session_name_invalid.`,
   },
   ...qaReportHelpTopics,
-} as const satisfies Record<string, { summary: string; body: string }>;
+} as const satisfies Record<
+  string,
+  { summary: string; body: string | ((coreVersion: string) => string) }
+>;
 
 function formatCommandListArg(commandName: string, schema: CommandSchema, arg: string): string {
   const optional = arg.endsWith('?');
@@ -935,11 +944,13 @@ export function helpTopicIds(): string[] {
 function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;
-  const body = topicName === 'commands' ? renderFullCommandReferenceText() : topic.body;
+  const coreVersion = readVersion();
+  const topicBody = typeof topic.body === 'function' ? topic.body(coreVersion) : topic.body;
+  const body = topicName === 'commands' ? renderFullCommandReferenceText() : topicBody;
   const related = RELATED_HELP_LINES.filter((entry) => entry.topic !== topicName)
     .map((entry) => `  ${entry.line}\n`)
     .join('');
-  return `${withVersionHeader(topicName, body)}
+  return `${withVersionHeader(topicName, body, coreVersion)}
 
 Related:
 ${related}`;
@@ -955,8 +966,8 @@ const RELATED_HELP_LINES = [
 // installed version here (instead of hand-editing every topic string) gives the skill router a
 // single, reliable header to read the CLI version from without a separate --version call: a
 // missing/old header on `help workflow` means an old CLI that predates this format.
-function withVersionHeader(topicId: string, body: string): string {
+function withVersionHeader(topicId: string, body: string, coreVersion: string): string {
   const legacyHeader = `agent-device help ${topicId}`;
   if (!body.startsWith(legacyHeader)) return body;
-  return `agent-device ${readVersion()} — ${topicId}${body.slice(legacyHeader.length)}`;
+  return `agent-device ${coreVersion} — ${topicId}${body.slice(legacyHeader.length)}`;
 }
