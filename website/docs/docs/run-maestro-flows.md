@@ -12,7 +12,7 @@ For recording and replaying native `.ad` scripts, see [Replay and E2E testing](/
 
 ## Install Maestro support
 
-The 0.22 plugin is private and not yet available from npm. After publication, Maestro flows and export require the optional `@agent-device/maestro` plugin:
+Install the Maestro plugin to replay Maestro flows or export scripts to Maestro YAML.
 
 ```bash
 agent-device plugins add @agent-device/maestro
