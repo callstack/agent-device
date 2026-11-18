@@ -50,6 +50,11 @@ test.each([
     node: { type: 'com.google.android.material.bottomnavigation.BottomNavigationView' },
     kind: 'bottom-navigation',
   },
+  {
+    name: 'a bottom navigation bar named in role only',
+    node: { type: 'Other', role: 'BottomNavigationBar' },
+    kind: 'bottom-navigation',
+  },
 ])('snapshotBarKind reads $name', ({ node, kind }) => {
   expect(snapshotBarKind(node)).toBe(kind);
   expect(isSnapshotBarNode(node)).toBe(true);

@@ -20,10 +20,11 @@ export function normalizeType(type: string): string {
  * vocabulary; which kinds a scan treats as viewport chrome is the consumer's own choice.
  */
 const SNAPSHOT_BAR_KINDS = [
+  // First, so a BottomNavigationBar name does not resolve to navigation-bar.
+  ['bottomnavigation', 'bottom-navigation'],
   ['tabbar', 'tab-bar'],
   ['toolbar', 'toolbar'],
   ['navigationbar', 'navigation-bar'],
-  ['bottomnavigation', 'bottom-navigation'],
 ] as const;
 
 type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
