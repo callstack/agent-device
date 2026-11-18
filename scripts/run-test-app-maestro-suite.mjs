@@ -11,6 +11,7 @@ const options = {
   platform: 'ios',
   session: 'test-app-maestro',
   flowDir: path.join(repoRoot, 'examples', 'test-app', 'maestro'),
+  flow: undefined,
   close: false,
   passthrough: [],
 };
@@ -36,6 +37,11 @@ for (let index = 2; index < process.argv.length; index += 1) {
     index += 1;
     continue;
   }
+  if (arg === '--flow' && process.argv[index + 1]) {
+    options.flow = path.resolve(process.argv[index + 1]);
+    index += 1;
+    continue;
+  }
   if (arg === '--close') {
     options.close = true;
     continue;
@@ -43,11 +49,13 @@ for (let index = 2; index < process.argv.length; index += 1) {
   options.passthrough.push(arg);
 }
 
-const flows = fs
-  .readdirSync(options.flowDir)
-  .filter((entry) => entry.endsWith('.yaml') || entry.endsWith('.yml'))
-  .sort()
-  .map((entry) => path.join(options.flowDir, entry));
+const flows = options.flow
+  ? [options.flow]
+  : fs
+      .readdirSync(options.flowDir)
+      .filter((entry) => entry.endsWith('.yaml') || entry.endsWith('.yml'))
+      .sort()
+      .map((entry) => path.join(options.flowDir, entry));
 
 if (flows.length === 0) {
   console.error(`No Maestro flows found in ${options.flowDir}`);

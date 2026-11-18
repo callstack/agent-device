@@ -358,10 +358,10 @@ pnpm test-app:maestro:auth:ios -- --udid "<simulator udid>"
 
 That starts `examples/test-app/scripts/serve-auth-idp.mjs`, runs
 `examples/test-app/maestro-ios/auth-session-sheet.yaml`
-through `agent-device test --maestro`, and stops the provider when the flow ends. Start the provider
-yourself when you drive the sheet by hand, and add `--delay-ms <n>` to hold the loading page first, so
-you can read the sheet while its page is still loading. The flow lives in `maestro-ios/` rather than
-`maestro/` because the shared directory is also run on Android.
+through `agent-device test --maestro`. The launcher stops the provider when the flow ends or you
+cancel the lane. Start the provider yourself when you drive the sheet by hand. Add `--delay-ms <n>`
+to hold the loading page so you can read the sheet while its page is still loading. The flow lives
+in `maestro-ios/` rather than `maestro/` because the shared directory is also run on Android.
 
 The committed flow reads the sheet and stops at its form controls. Driving past that point is not
 committed, because on iOS 27.0 the same steps alternate between passing and refusing the capture,
