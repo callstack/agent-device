@@ -21,10 +21,12 @@ export function mkdtempForTestSync(prefix: string): string {
  */
 export function mkdtempUnsharedForTestSync(prefix: string): string {
   const runDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR?.trim();
-  if (runDir) return fs.mkdtempSync(path.join(runDir, prefix));
-  // From the checkout down, every level must be a real directory this user owns that nobody else can write.
+  // The physical path: the Swift cache compares the paths its ancestry walk resolved, such as macOS's /private/var.
+  if (runDir) return fs.realpathSync(fs.mkdtempSync(path.join(runDir, prefix)));
+  // From the checkout down, every level must be a real directory this user owns that nobody else can write. The
+  // root is named per uid, so in a shared checkout another user's runs never share it.
   let level = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-  for (const name of ['', '.tmp', 'unshared-test-dirs']) {
+  for (const name of ['', '.tmp', `unshared-test-dirs-${process.getuid?.() ?? 'user'}`]) {
     level = path.join(level, name);
     if (name && !fs.existsSync(level)) fs.mkdirSync(level, { mode: 0o700 });
     const seen = fs.lstatSync(level);
@@ -32,5 +34,5 @@ export function mkdtempUnsharedForTestSync(prefix: string): string {
       throw new Error(`${level} is not a real directory this user owns that only they can write`);
     }
   }
-  return fs.mkdtempSync(path.join(level, prefix));
+  return fs.realpathSync(fs.mkdtempSync(path.join(level, prefix)));
 }

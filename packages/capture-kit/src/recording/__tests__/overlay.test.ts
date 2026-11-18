@@ -47,8 +47,7 @@ const mockRunCmd = vi.mocked(runCmd);
 let tmpDir: string;
 
 beforeEach(() => {
-  // Physical spelling: the Swift cache answers the paths its ancestry walk resolved, such as /private/var.
-  tmpDir = fs.realpathSync(mkdtempUnsharedForTestSync('agent-device-overlay-test-'));
+  tmpDir = mkdtempUnsharedForTestSync('agent-device-overlay-test-');
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });

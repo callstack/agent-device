@@ -32,8 +32,7 @@ let versionDir: string;
 let binDir: string;
 
 beforeEach(() => {
-  // Physical spelling: the ancestry walk resolves links such as macOS's /var, and judges the names it reaches.
-  tmpDir = fs.realpathSync(mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-'));
+  tmpDir = mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-');
   cacheRoot = path.join(tmpDir, 'swift-cache');
   versionDir = path.join(cacheRoot, 'v3');
   binDir = path.join(versionDir, 'bin');

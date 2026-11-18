@@ -67,7 +67,7 @@ test('worker inherits the run-owned temp directory', () => {
     assert.equal(path.basename(unsharedRunDir), path.basename(workerTmpDir));
     assert.equal(
       path.dirname(unsharedRunDir),
-      path.join(REPOSITORY_ROOT, '.tmp', 'unshared-test-dirs'),
+      path.join(REPOSITORY_ROOT, '.tmp', `unshared-test-dirs-${process.getuid?.() ?? 'user'}`),
     );
     assert.equal(
       fs.existsSync(unsharedRunDir),

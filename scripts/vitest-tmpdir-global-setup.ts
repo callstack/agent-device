@@ -34,7 +34,12 @@ let previousUnsharedDir: string | undefined;
 // in the checkout's ignored .tmp/ instead. Each run gets its own directory there, named like its TMPDIR one,
 // so the same liveness rule prunes what a killed run abandoned.
 const CHECKOUT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const UNSHARED_TEST_ROOT = path.join(CHECKOUT_ROOT, '.tmp', 'unshared-test-dirs');
+// Named per uid, so in a shared checkout another user's runs never share the root.
+const UNSHARED_TEST_ROOT = path.join(
+  CHECKOUT_ROOT,
+  '.tmp',
+  `unshared-test-dirs-${process.getuid?.() ?? 'user'}`,
+);
 
 // setup/teardown are vitest's globalSetup contract: it imports this file by
 // the path string in vitest.config.ts and calls these by name, so nothing in
