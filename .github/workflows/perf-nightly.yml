@@ -54,9 +54,8 @@ permissions:
   actions: read
 
 concurrency:
-  # Run scheduled benchmarks in sequence so each can use the previous run's results.
   group: perf-nightly-${{ github.event_name }}-${{ github.ref }}
-  queue: max
+  cancel-in-progress: false
 
 env:
   PERF_ROUNDS: ${{ github.event.inputs.rounds || '3' }}
