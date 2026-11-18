@@ -6,10 +6,11 @@ import { expect, test } from 'vitest';
 import { parse } from 'yaml';
 import type { CheckId } from '../check-affected/model.ts';
 import { selectDeviceLane } from '../device-lane-impact.ts';
+import { runnableSteps } from '../gate/workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-type Step = { id?: string; name?: string; if?: string; run?: string };
+type Step = { id?: string; name?: string; if?: string; run?: string; parallel?: Step[] };
 
 function jobSteps(workflow: string, job: string): Step[] {
   const doc = parse(
@@ -17,7 +18,7 @@ function jobSteps(workflow: string, job: string): Step[] {
   ) as {
     jobs: Record<string, { steps: Step[] }>;
   };
-  return doc.jobs[job]!.steps;
+  return runnableSteps(doc.jobs[job]!.steps);
 }
 
 const LANES = {
