@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { AUTH_IDP_DEFAULT_URL } from '../auth-idp-fixture';
@@ -17,8 +17,11 @@ export function AuthSessionLabScreen(props: { onBack: () => void }) {
   const styles = createStyles(colors);
   const [status, setStatus] = useState<SheetStatus>(initialStatus);
   const [message, setMessage] = useState('Ready to open the system sign-in sheet.');
+  const presenting = useRef(false);
 
   async function openSheet() {
+    if (presenting.current) return;
+    presenting.current = true;
     setStatus('presenting');
     setMessage('Sign-in sheet requested.');
 
@@ -27,9 +30,15 @@ export function AuthSessionLabScreen(props: { onBack: () => void }) {
       setStatus('completed');
       setMessage(`Signed in: ${callbackUrl}`);
     } catch (error) {
-      const canceled = error instanceof Error && error.name === 'AuthSessionCanceled';
+      const canceled =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'ERR_AUTH_SESSION_CANCELED';
       setStatus(canceled ? 'canceled' : 'error');
       setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      presenting.current = false;
     }
   }
 
