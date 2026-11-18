@@ -218,7 +218,7 @@ It adds no state name, command, or flag:
 
 A destination a caller names — `--save-script=<path>` on the local route, or the same path in the remote client's publication record (#4511 amendment) — is judged before anything is created.
 
-**Guarantee.** A destination is accepted only when no other non-root local user can replace or plant a component the publish traverses. Each such directory is owned by the current user or by root, and is either closed to entries from others (neither group- nor world-writable) or sticky. A sticky directory lets others add new names but not replace an entry they do not own, so the walk passes through one, and may create a missing private subdirectory in one this user or root owns, but never creates the script entry directly in it. Once that holds, every existing entry on the route stays in place, so the judged path is the path the publish reaches. The rule closes the window with PERMISSIONS, not with timing. On a local filesystem with no ACLs on the judged directories, no other non-root local user can steer where the recording is written or create that file. It is not a promise that nobody else can read the file.
+**Guarantee.** A destination is accepted only when no other non-root local user can replace or plant a component the publish traverses. Each such directory is owned by the current user or by root, and is either closed to entries from others (neither group- nor world-writable) or sticky. A shared sticky directory lets others add new names but not replace an entry they do not own, so the walk passes through one, may create a missing private subdirectory in one this user or root owns, and never creates the script entry directly in it. A private sticky directory this user or root owns can receive the entry. Once that holds, every existing entry on the route stays in place, so the judged path is the path the publish reaches. The rule closes the window with PERMISSIONS, not with timing. On a local filesystem with no ACLs on the judged directories, no other non-root local user can steer where the recording is written or create that file. It is not a promise that nobody else can read the file.
 
 **Path input.** Both routes expand the caller's path with `resolveUserPath` (`packages/host-kit/src/internal/path-resolution.ts`) before they ask host-kit. An absolute spelling reaches the walk intact. A relative or `~/` spelling is folded lexically first, by `path.resolve` against the working directory or `path.join` onto the home directory, so a `..` in it is applied as text before the walk sees it. This records current behavior. Host-kit refuses a relative destination at its entry (`relative_destination`) on every platform: walking one would put the working directory in the judged chain, and Node can answer that name stale after a `chdir`.
 
@@ -236,17 +236,17 @@ A destination a caller names — `--save-script=<path>` on the local route, or t
 
 | Case | Result | Permitted side effects |
 | --- | --- | --- |
-| A route through a non-sticky directory others can write, reached directly or through a link target | Refused, `world_writable` | None |
+| A route through a non-sticky world-writable directory this user or root owns, reached directly or through a link target | Refused, `world_writable` | None |
 | A route through a link another user owns in a sticky shared directory | Refused, `planted_link` | None |
-| A `..` applied, as the kernel applies it, to the physical directory reached, landing in a non-sticky directory others can write | Refused, `world_writable` | None |
-| A relative link target, resolved from the directory that holds the link, that crosses a non-sticky directory others can write | Refused, `world_writable` | None |
+| A `..` applied, as the kernel applies it, to the physical directory reached, landing in a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
+| A relative link target, resolved from the directory that holds the link, that crosses a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
 | A `..` queued behind a missing directory | Refused, `unresolvable_parent` | None |
 | A `..` over directories that all exist and are private | Accepted where the kernel lands | The entry |
 | A missing parent below a sticky directory this user or root owns | Accepted | The parent, at 0700, and the published entry in it |
-| A missing parent below a non-sticky directory others can write | Refused | None |
+| A missing parent below a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
 | A missing level created meanwhile as this user's private directory | Accepted | The entry |
 | A missing level created meanwhile foreign-owned, group-writable, or sticky and world-writable | Refused, `foreign_owned`, `shared_group_writable`, or `shared_parent` | Directories this call already created |
-| The entry directly inside a sticky shared directory | Refused, `shared_parent` | None |
+| The entry directly inside a shared sticky directory | Refused, `shared_parent` | None |
 | A directory another user created first in sticky `/tmp` | Refused, `foreign_owned` | None |
 | A group-writable directory the current user owns | Refused, `shared_group_writable` | None |
 | A link loop, or a file as a path component | Refused, `link_loop_exceeded` or `not_a_directory` | None |
