@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { PNG } from '@agent-device/capture-kit/png';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createInteractionDevice, selectorSnapshot } from './__tests__/test-utils/index.ts';
 
 test('coordinate verification keeps a changed tree digest when the frames match', async () => {
-  const { PNG } = await import('pngjs');
   const { writeFile } = await import('node:fs/promises');
   let tapped = false;
   const device = createInteractionDevice(selectorSnapshot(), {
@@ -55,7 +55,6 @@ test.each([
 ])(
   'coordinate verification brackets dispatch only away from a touch target ($x, $verify, $changed)',
   async ({ x, verify, frames, changed }) => {
-    const { PNG } = await import('pngjs');
     const { writeFile } = await import('node:fs/promises');
     const captures: string[] = [];
     let tapped = false;
