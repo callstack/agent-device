@@ -7,7 +7,7 @@ import {
 } from '../../../core/touch-runtime.ts';
 import { readSettleRequest } from './interaction-flags.ts';
 import type { BoundSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
-import { resolveSettleObservationCapture } from '../../../core/settle-observation-capture.ts';
+import { resolveObservationCapture } from '../../../core/observation-capture.ts';
 import type { InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';
@@ -52,7 +52,7 @@ export async function prepareTouchDispatch(
     touchExecutor.captureSnapshot === undefined &&
     readSettleRequest(params.req.flags) !== undefined;
   const settleObservationCapture = owesObservationCapture
-    ? await resolveSettleObservationCapture({
+    ? await resolveObservationCapture({
         command: params.req.command,
         session,
         inspectFacts: params.inspectFacts,

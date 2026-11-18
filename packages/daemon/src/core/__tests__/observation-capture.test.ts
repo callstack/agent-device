@@ -3,7 +3,7 @@ import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { selectorCaptureFixture } from '../../__tests__/support/selector-capture-fixture.ts';
-import { resolveSettleObservationCapture } from '../settle-observation-capture.ts';
+import { resolveObservationCapture } from '../observation-capture.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
@@ -17,7 +17,7 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 // admitted, how often, and that every way an observation capture goes away degrades to no capture
 // while disclosing its typed reason.
 
-const unavailablePhase = ['settle_observation_capture_unavailable'];
+const unavailablePhase = ['observation_capture_unavailable'];
 
 /** Level included: a degrade the caller cannot see must not be info-only, which success drops. */
 function disclosures(): { level: string | undefined; data: Record<string, unknown> }[] {
@@ -37,7 +37,7 @@ beforeEach(() => {
 test('an available plan inspects once and binds once for the whole observation', async () => {
   const fixture = selectorCaptureFixture();
 
-  const capture = await resolveSettleObservationCapture({
+  const capture = await resolveObservationCapture({
     command: 'back',
     session: makeIosSession('settle', { appBundleId: 'com.example.app' }),
     inspectFacts: fixture.inspectFacts,
@@ -79,7 +79,7 @@ test.each([
   async ({ refusal, session, operation, reason }) => {
     const fixture = selectorCaptureFixture(refusal);
 
-    const capture = await resolveSettleObservationCapture({
+    const capture = await resolveObservationCapture({
       command: 'back',
       session: session(),
       inspectFacts: fixture.inspectFacts,
@@ -121,7 +121,7 @@ test.each([
             },
           };
 
-    const capture = await resolveSettleObservationCapture({
+    const capture = await resolveObservationCapture({
       command: 'back',
       session: makeIosSession('settle', { appBundleId: 'com.example.app' }),
       platformServices: daemonPlatformServicesFixture(),

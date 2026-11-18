@@ -11,7 +11,7 @@ import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import type { SessionState } from './session-state.ts';
 
 /**
- * The capture a post-action observation (`--settle`) polls, for a request whose own action binding
+ * The request-bound capture for an internal observation, on a request whose own action binding
  * carries none: a coordinate-targeted `press`/`fill` (whose point use declares none) or a
  * generic-route action (#3510). Those routes polled the legacy interactor while the commands the
  * caller runs next read the request-bound runtime, and on an iOS simulator those are two projections
@@ -19,13 +19,13 @@ import type { SessionState } from './session-state.ts';
  *
  * Admitting the `capture-only` plan the selector family polls under closes the split; where both
  * paths already reached the same tree, the admitted operation resolves to the implementation used
- * before. Settling is best-effort by contract, so nothing here may fail or cancel the action it
+ * before. Observing is best-effort by contract, so nothing here may fail or cancel the work it
  * follows: every unavailability degrades to `undefined`, leaving the observation on the owner's own
  * snapshot path, and discloses its typed reason. Admitting through the side-effect-free facts probe
  * and binding only on admission keeps an optional observation from building a command-facing refusal
  * response, whose Apple branch live-probes the booted simulator set for a hint nothing shows.
  */
-export async function resolveSettleObservationCapture(
+export async function resolveObservationCapture(
   params: Readonly<{ command: string; session: SessionState }> & RuntimeAdmissionBindings,
 ): Promise<BoundSnapshotCapture | undefined> {
   const plan = resolveSelectorCaptureRuntimePlan({
@@ -85,7 +85,7 @@ function unavailable(detail: ObservationCaptureUnavailable): undefined {
     // `warn`, not the default `info`: a degrade that answers `ok: true` is dropped at info level on
     // the success path, which is the passing-unnoticed this discloses against.
     level: 'warn',
-    phase: 'settle_observation_capture_unavailable',
+    phase: 'observation_capture_unavailable',
     // The error's name travels, never its message: request diagnostics keep user input out.
     data:
       detail.outcome === 'refused'

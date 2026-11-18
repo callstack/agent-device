@@ -20,7 +20,7 @@ import {
 import type { BoundContextFromFlags } from '../core/context.ts';
 import type { RuntimeAdmissionBindings } from '../core/request-runtime-binding.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
-import { resolveSettleObservationCapture } from '../core/settle-observation-capture.ts';
+import { resolveObservationCapture } from '../core/observation-capture.ts';
 import { isOutdatedObservation, refFrameTree } from '../core/ref-frame.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from '../core/session-store.ts';
@@ -156,7 +156,7 @@ async function createGenericSettleRuntime(
   context: GenericSettleContext,
 ): Promise<Awaited<ReturnType<typeof createInteractionRuntime>> | undefined> {
   try {
-    const boundCapture = await resolveSettleObservationCapture({
+    const boundCapture = await resolveObservationCapture({
       command: context.req.command,
       session: context.session,
       inspectFacts: context.inspectFacts,
