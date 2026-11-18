@@ -156,15 +156,13 @@ async function createGenericSettleRuntime(
   context: GenericSettleContext,
 ): Promise<Awaited<ReturnType<typeof createInteractionRuntime>> | undefined> {
   try {
-    const boundCapture = (
-      await resolveObservationCapture({
-        command: context.req.command,
-        session: context.session,
-        inspectFacts: context.inspectFacts,
-        platformServices: context.platformServices,
-        bindDevice: context.bindDevice,
-      })
-    ).capture;
+    const outcome = await resolveObservationCapture({
+      command: context.req.command,
+      session: context.session,
+      inspectFacts: context.inspectFacts,
+      platformServices: context.platformServices,
+      bindDevice: context.bindDevice,
+    });
     return await createInteractionRuntime({
       createCommandSurface: context.createCommandSurface,
       req: context.req,
@@ -175,7 +173,7 @@ async function createGenericSettleRuntime(
       contextFromFlags: context.contextFromFlags,
       platformServices: context.platformServices,
       captureSnapshotForSession,
-      settleObservationCapture: boundCapture,
+      settleObservationCapture: outcome.kind === 'captured' ? outcome.capture : undefined,
     });
   } catch {
     return undefined;

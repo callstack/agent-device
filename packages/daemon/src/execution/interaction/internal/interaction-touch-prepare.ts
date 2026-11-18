@@ -51,20 +51,19 @@ export async function prepareTouchDispatch(
   const owesObservationCapture =
     touchExecutor.captureSnapshot === undefined &&
     readSettleRequest(params.req.flags) !== undefined;
-  const settleObservationCapture = owesObservationCapture
-    ? (
-        await resolveObservationCapture({
-          command: params.req.command,
-          session,
-          inspectFacts: params.inspectFacts,
-          platformServices: params.platformServices,
-          bindDevice: params.bindDevice,
-        })
-      ).capture
+  const settleObservationOutcome = owesObservationCapture
+    ? await resolveObservationCapture({
+        command: params.req.command,
+        session,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      })
     : undefined;
   return {
     ok: true,
     touchExecutor,
-    settleObservationCapture,
+    settleObservationCapture:
+      settleObservationOutcome?.kind === 'captured' ? settleObservationOutcome.capture : undefined,
   };
 }

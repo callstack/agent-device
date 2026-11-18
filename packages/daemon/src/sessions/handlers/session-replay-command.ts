@@ -196,13 +196,9 @@ export function createReplaySession(
     | undefined;
   const bindDevice = capture?.bindDevice;
   // Bypasses the request's device-key cache on purpose: that key can outlive a close, while this
-  // cell re-admits on a new lifetime or device object. Each bypass binding is adopted into the
-  // request's cleanup stack and released when the request ends, the same seam every other request
-  // binding uses. Holding one per re-admission for the request's lifetime is safe: the count is
-  // bounded by the plan's close/reopen steps under the request's device lock, supersession happens
-  // only between steps, and the superseded binding owns no capture state — a local owner's capture
-  // operations resolve the bridge or runner per call, and what each binding's own dispose releases
-  // is its app-log reader, whose dispose is a no-op when none was started.
+  // cell re-admits on a new lifetime or device object. Each bypass binding is owned by the request's
+  // cleanup stack and released when the request ends, like every other request binding; capture
+  // operations resolve their source per call, so a superseded binding holds no capture state.
   const bindCaptureDevice: BindDeviceRuntime | undefined = bindDevice
     ? (device, use) => bindDevice(device, use, 'bypass')
     : undefined;
@@ -230,15 +226,12 @@ export function createReplaySession(
       inspectFacts: capture.inspectFacts,
       platformServices: capture.platformServices,
       bindDevice: bindCaptureDevice,
-    }).then((resolution) => {
-      // A `refused` outcome is the owner's declared support for this cell's plan: stable, so the
-      // cell keeps it and the next annotated step reuses the degradation without a second probe or
-      // warning. The two failure outcomes are transient: drop the cell so the next verification
-      // re-admits, and let this observation run on the owner's own snapshot path.
-      const transient =
-        resolution.outcome === 'admission-probe-failed' || resolution.outcome === 'bind-failed';
-      if (transient && captureCell?.binding === binding) captureCell = undefined;
-      return resolution.capture;
+    }).then((outcome) => {
+      // The owner discloses each kind and splits stable from retryable; replay only acts on
+      // retry eligibility: a retryable cell is dropped so the next verification re-admits, while a
+      // refusal or a bound capture is kept for the cell's lifetime.
+      if (outcome.kind === 'retryable' && captureCell?.binding === binding) captureCell = undefined;
+      return outcome.kind === 'captured' ? outcome.capture : undefined;
     });
     captureCell = { lifetime, device, booted, hasApp, binding };
     return binding;

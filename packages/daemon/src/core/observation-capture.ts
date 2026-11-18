@@ -20,45 +20,56 @@ import type { SessionState } from './session-state.ts';
  * Admitting the `capture-only` plan the selector family polls under closes the split; where both
  * paths already reached the same tree, the admitted operation resolves to the implementation used
  * before. Observing is best-effort by contract, so nothing here may fail or cancel the work it
- * follows: every unavailability leaves `capture` absent, keeping the observation on the owner's own
- * snapshot path, and is disclosed with its typed reason. The resolution's `outcome` also tells a
- * caller that reuses the answer across observations which class it holds: a `refused` fact is the
- * owner's declared support and stable until the plan changes, while the two failure outcomes are
- * transient and worth another probe. Admitting through the side-effect-free facts probe and binding
+ * follows: the result is one of three mutually exclusive kinds — a bound `capture`, a `refused`
+ * fact about the owner's declared support, or a `retryable` probe or bind failure. A caller that
+ * reuses the answer across observations keeps `refused` until its plan changes and re-probes only
+ * on `retryable`; it never restates what a probe or bind cost the observation. Every kind is
+ * disclosed where it is decided: `admitted` and `bound` at info, so a request's own record shows
+ * which cells reached a runtime capture, and the loss kinds at `warn` — an info-only degrade on a
+ * route that answers `ok: true` is dropped on the success path, which is the passing-unnoticed the
+ * loss disclosures guard against. Admitting through the side-effect-free facts probe and binding
  * only on admission keeps an optional observation from building a command-facing refusal response,
  * whose Apple branch live-probes the booted simulator set for a hint nothing shows.
  */
 export async function resolveObservationCapture(
   params: Readonly<{ command: string; session: SessionState }> & RuntimeAdmissionBindings,
-): Promise<ObservationCaptureResolution> {
+): Promise<ObservationCaptureOutcome> {
   const plan = resolveSelectorCaptureRuntimePlan({
     hasActiveApp: params.session.appBundleId !== undefined,
     intent: 'capture-only',
   });
   const admission = await admitObservationCapturePlan(params, plan);
-  if ('outcome' in admission) return admission;
+  if (admission === undefined) return { kind: 'retryable' };
   if (!admission.admitted) {
-    return unavailable({
+    return refused({
       command: params.command,
-      outcome: 'refused',
       operation: admission.operation,
       reason: admission.fact.reason,
     });
   }
+  emitDiagnostic({
+    level: 'info',
+    phase: 'observation_capture_admitted',
+    data: { command: params.command, plan: plan.kind, deviceId: params.session.device.id },
+  });
   try {
-    return {
-      capture: await bindAdmittedSnapshotCapture({
-        admission,
-        bindDevice: params.bindDevice,
-        platformServices: params.platformServices,
-      }),
-    };
+    const capture = await bindAdmittedSnapshotCapture({
+      admission,
+      bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
+    });
+    emitDiagnostic({
+      level: 'info',
+      phase: 'observation_capture_bound',
+      data: { command: params.command, plan: plan.kind, deviceId: params.session.device.id },
+    });
+    return { kind: 'captured', capture };
   } catch (error) {
-    return unavailable({ command: params.command, outcome: 'bind-failed', error });
+    return retryable({ command: params.command, failure: 'bind-failed', error });
   }
 }
 
-/** A failed facts probe resolves as its own transient outcome; the observation degrades like any refusal. */
+/** A failed facts probe is the owner's own machinery failing: the retryable kind, disclosed once here. */
 async function admitObservationCapturePlan(
   params: Readonly<{ command: string; session: SessionState }> & RuntimeAdmissionBindings,
   plan: SelectorCaptureRuntimePlan,
@@ -70,45 +81,47 @@ async function admitObservationCapturePlan(
       inspectFacts: params.inspectFacts,
     });
   } catch (error) {
-    return unavailable({ command: params.command, outcome: 'admission-probe-failed', error });
+    retryable({ command: params.command, failure: 'admission-probe-failed', error });
+    return undefined;
   }
 }
 
-/** The observation's capture, or the typed class of why it has to go without one. */
-export type ObservationCaptureResolution = Readonly<{
-  capture?: BoundSnapshotCapture;
-  outcome?: ObservationCaptureUnavailability['outcome'];
-}>;
+/** The three mutually exclusive answers; each carries only what its own branch decided. */
+export type ObservationCaptureOutcome =
+  | Readonly<{ kind: 'captured'; capture: BoundSnapshotCapture }>
+  | Readonly<{ kind: 'refused' }>
+  | Readonly<{ kind: 'retryable' }>;
 
-/** Why the observation has to go without a capture, as one typed fact the caller can read. */
-export type ObservationCaptureUnavailability = Readonly<{ command: string }> &
-  (
-    | Readonly<{
-        outcome: 'refused';
-        operation: string;
-        reason: RuntimeOperationUnavailability['reason'];
-      }>
-    | Readonly<{ outcome: 'admission-probe-failed' | 'bind-failed'; error: unknown }>
-  );
-
-/** Discloses the loss once, and names its class so a caching caller knows whether to re-probe. */
-function unavailable(
-  detail: ObservationCaptureUnavailability,
-): Readonly<{ outcome: ObservationCaptureUnavailability['outcome'] }> {
+/** Discloses the declared refusal; the caller keeps it while its plan is unchanged. */
+function refused(detail: {
+  command: string;
+  operation: string;
+  reason: RuntimeOperationUnavailability['reason'];
+}): Readonly<{ kind: 'refused' }> {
   emitDiagnostic({
-    // `warn`, not the default `info`: a degrade that answers `ok: true` is dropped at info level on
-    // the success path, which is the passing-unnoticed this discloses against.
+    level: 'warn',
+    phase: 'observation_capture_unavailable',
+    data: { ...detail, outcome: 'refused' },
+  });
+  return { kind: 'refused' };
+}
+
+/** Discloses a failure of the owner's own machinery; the caller may try again at the next observation. */
+function retryable(detail: {
+  command: string;
+  failure: 'admission-probe-failed' | 'bind-failed';
+  error: unknown;
+}): Readonly<{ kind: 'retryable' }> {
+  emitDiagnostic({
+    // `warn`, not info: a degrade on a route that answers `ok: true` must survive the success-path filter.
     level: 'warn',
     phase: 'observation_capture_unavailable',
     // The error's name travels, never its message: request diagnostics keep user input out.
-    data:
-      detail.outcome === 'refused'
-        ? { ...detail }
-        : {
-            command: detail.command,
-            outcome: detail.outcome,
-            errorName: (detail.error as Error | undefined)?.name,
-          },
+    data: {
+      command: detail.command,
+      outcome: detail.failure,
+      errorName: (detail.error as Error | undefined)?.name,
+    },
   });
-  return { outcome: detail.outcome };
+  return { kind: 'retryable' };
 }
