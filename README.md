@@ -37,7 +37,7 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
 Install the CLI and check setup. It requires Node.js 22.12 or newer; web automation requires Node.js 24 or newer. See [Installation](https://agent-device.dev/docs/installation) for target requirements.
 
 ```bash
-npm install -g agent-device@latest
+npm install -g agent-device@nightly-0.22
 agent-device doctor
 agent-device help workflow
 ```
@@ -153,7 +153,7 @@ The same session and evidence model works at every step: the agent explores the 
 | --- | --- | --- |
 | Local | Trying commands and debugging apps on simulators, emulators, physical devices, macOS, and Linux. | Follow the Quick Start. |
 | CI/CD | Automated pull request and merge validation with replay scripts and captured artifacts. | Try the [EAS workflow template](https://github.com/callstackincubator/eas-agent-device/blob/main/.eas/workflows/agent-qa-mobile.yml). |
-| Cloud / remote | Linux runners, managed devices, and remote jobs. | Set up a [remote proxy](https://agent-device.dev/docs/remote-proxy), connect a [device cloud](https://agent-device.dev/docs/device-clouds) (BrowserStack and TestMu AI through `agent-device plugins add`, AWS Device Farm after its plugin is published, or Limrun), or [contact Callstack](mailto:hello@callstack.com) for team QA. |
+| Cloud / remote | Linux runners, managed devices, and remote jobs. | Set up a [remote proxy](https://agent-device.dev/docs/remote-proxy), connect a [device cloud](https://agent-device.dev/docs/device-clouds) (BrowserStack, AWS Device Farm, and TestMu AI through `agent-device plugins add`, or Limrun), or [contact Callstack](mailto:hello@callstack.com) for team QA. |
 
 ## How it works
 
