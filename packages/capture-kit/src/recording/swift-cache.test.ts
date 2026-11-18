@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
@@ -76,7 +77,7 @@ test('every embedded source participates in the cache key and reaches the compil
   expect(withSupportAgain).toBe(withSupport);
   expect(withChangedSupport).not.toBe(withSupport);
   const staged = mockRunCmd.mock.calls.map(([, args]) => {
-    const sourcePaths = args.slice(3, args.indexOf('-o'));
+    const sourcePaths = args.filter((arg) => arg.endsWith('.swift'));
     // Each staged source sits in that compile's private staging directory, beside its output.
     expect(
       sourcePaths.every(
@@ -92,7 +93,7 @@ test('staged sources are written owner-only, whatever the umask', async () => {
   const previousUmask = process.umask(0o022);
   const modes: number[] = [];
   mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
-    for (const sourcePath of args.slice(3, args.indexOf('-o'))) {
+    for (const sourcePath of args.filter((arg) => arg.endsWith('.swift'))) {
       modes.push(fs.statSync(sourcePath).mode & 0o777);
     }
     fs.writeFileSync(args[args.indexOf('-o') + 1]!, 'compiled');
@@ -356,4 +357,42 @@ test('the cache root and tool environment come from the host it is given, not th
     LANG: 'host-locale',
     HOME: path.join(hostCacheDir, 'v3', 'home'),
   });
+});
+
+/** An entry name as a release that keyed entries without the compiler arguments spelled it. */
+function entryKeyedWithoutCompilerArguments(cacheName: string, parts: string[]): string {
+  const hash = createHash('sha256');
+  for (const part of ['3', process.platform, process.arch, ...parts])
+    hash.update(part).update('\0');
+  return `${cacheName}-${hash.digest('hex').slice(0, 16)}`;
+}
+
+test('an executable keyed without the compiler arguments is never reused', async () => {
+  const cacheRoot = path.join(tmpDir, 'swift-cache');
+  const binDir = path.join(cacheRoot, 'v3', 'bin');
+  fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
+  for (const level of [cacheRoot, path.dirname(binDir), binDir]) fs.chmodSync(level, 0o700);
+  const plantedText = path.join(binDir, entryKeyedWithoutCompilerArguments('helper', ['print(1)']));
+  const plantedSources = path.join(
+    binDir,
+    entryKeyedWithoutCompilerArguments('sources', ['main.swift', 'print(2)']),
+  );
+  for (const planted of [plantedText, plantedSources]) {
+    fs.writeFileSync(planted, 'built with other flags', { mode: 0o755 });
+  }
+
+  const textHelper = await compileSwiftSourceText({
+    host: createTestHost(),
+    source: 'print(1)',
+    cacheName: 'helper',
+  });
+  const sourcesHelper = await compileSwiftSources({
+    host: createTestHost(),
+    cacheName: 'sources',
+    sources: [{ fileName: 'main.swift', text: 'print(2)' }],
+  });
+
+  expect([textHelper, sourcesHelper]).not.toContain(plantedText);
+  expect([textHelper, sourcesHelper]).not.toContain(plantedSources);
+  expect(mockRunCmd).toHaveBeenCalledTimes(2);
 });

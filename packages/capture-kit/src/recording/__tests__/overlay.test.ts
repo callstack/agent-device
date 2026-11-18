@@ -394,7 +394,7 @@ test('the overlay compiles its shipped source, never one planted at the checkout
     // Every Swift input the compiler is handed must be a file in this compile's private staging directory,
     // the directory its output is written to; any path elsewhere is a source read from disk.
     const stagingDirectory = path.dirname(args[args.indexOf('-o') + 1]!);
-    for (const sourcePath of args.slice(3, args.indexOf('-o'))) {
+    for (const sourcePath of args.filter((arg) => arg.endsWith('.swift'))) {
       if (path.dirname(sourcePath) !== stagingDirectory) outsideStaging.push(sourcePath);
       // The bytes the compiler would read, while the staging directory still exists.
       compiled[path.basename(sourcePath)] = fs.readFileSync(sourcePath, 'utf8');
