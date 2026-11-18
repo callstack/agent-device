@@ -214,7 +214,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:bc620e6f98821fdfe7e65eb63404eb175ffd583730cb877fa5a5f9f4e80c9fe0",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:25e6767b8f77f492cc0d1b546ae978bbfb4d618f1b517abd73c29c9d96647bcf",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:723eb0c36c2c6bde3b97bafcdaef2dcce090b6f5051a3a3aa5d353b45704bf73",
     "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
@@ -222,8 +222,8 @@
   "compatibleChanges": [
     {
       "declaration": "packages/remote/src/session-script-destination.ts#publishScriptVersion",
-      "digest": "sha256:25e6767b8f77f492cc0d1b546ae978bbfb4d618f1b517abd73c29c9d96647bcf",
-      "rationale": "#4565 changes only how the caller resolves and stages a destination locally. The route, its request fields, its response fields, its status and its artifact framing are untouched, and so is the download contract this declaration consumes. Host-kit owns the sequence: it walks the destination and refuses it before creating anything, creates each missing level at 0700 inside the directory it judged, and answers with that directory and its identity; the route stages each version inside the directory that answer names and, after the download, confirms it through host-kit's one confirmation call before the rename. The digest has moved again since that ack was first written, and again for local shape alone: the allocation step answers the staging directory itself instead of returning the prepared destination to its caller, and the locals handed on are named for what they are. None of it is a field, a route or a payload, so a released daemon receives the same request and answers the same way, a released caller resolves the same paths on its own disk, and a skewed peer parses every payload as before."
+      "digest": "sha256:723eb0c36c2c6bde3b97bafcdaef2dcce090b6f5051a3a3aa5d353b45704bf73",
+      "rationale": "#4677 changes only what the caller reports from its own disk. A version delivered again is now answered as the entry host-kit committed for the record's destination, judged without creating anything, instead of the destination as the caller spelled it, so a repeated delivery reports the same savedScript path as the first one. Like #4565 before it, the change is local shape alone: the route, its request fields, its response fields, its status and its artifact framing are untouched, and so is the download contract this declaration consumes. A released daemon receives the same request and answers the same way, and a skewed peer parses every payload as before."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
