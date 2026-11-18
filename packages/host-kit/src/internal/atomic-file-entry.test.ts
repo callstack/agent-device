@@ -178,6 +178,8 @@ test.each([
   { spelled: '\\\\?\\Volume{0}\\journey.ad', name: undefined },
   { spelled: '\\\\?\\C:\\dir\\journey.ad', name: 'journey.ad' },
   { spelled: 'C:\\new\\COM⁴.ad', name: 'COM⁴.ad' },
+  { spelled: 'C:\\dir\\COM¹\u00A0.ad', name: 'COM¹\u00A0.ad' },
+  { spelled: 'C:\\dir\\COM¹ .ad', name: undefined },
   { spelled: 'C:\\new\\a b.c.ad', name: 'a b.c.ad' },
   { spelled: `C:\\dir\\${'a'.repeat(256)}`, name: undefined },
   { spelled: `C:\\dir\\${'é'.repeat(255)}`, name: 'é'.repeat(255) },
@@ -304,3 +306,12 @@ skipOnWindows(
     expect(tree(dir)).toEqual(['script\uFFFD.ad']);
   },
 );
+
+test('a temp stem counts bytes, keeping 16 two-byte characters of a long name', () => {
+  const sibling = withAtomicPublishTempPathSync(
+    path.join('/recordings', `${'é'.repeat(32)}.ad`),
+    (temporaryPath) => temporaryPath,
+  );
+
+  expect(path.basename(sibling).split('.')[1]).toBe('é'.repeat(16));
+});

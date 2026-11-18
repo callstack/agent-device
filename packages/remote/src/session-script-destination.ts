@@ -18,6 +18,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
   confirmScriptDestination,
+  judgeScriptDestination,
   scriptAncestryReason,
   prepareScriptDestination,
   publishFileSync,
@@ -406,10 +407,13 @@ async function publishScriptVersion(
     });
     return { published: undefined };
   }
-  if ((revision as number) <= record.revision) return { published: record.destination };
   const pending = { named: false };
   let staging: string | undefined;
   try {
+    // A version already published is answered as the entry it was committed to, never the spelling.
+    if ((revision as number) <= record.revision) {
+      return { published: judgeScriptDestination(record.destination).entry };
+    }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));

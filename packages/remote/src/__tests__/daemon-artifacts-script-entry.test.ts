@@ -198,3 +198,44 @@ test.skipIf(process.platform === 'win32').each(ENTRY_CASES)(
     verify(directory, destination);
   },
 );
+
+test('retrying the interrupted version itself reports the entry it settled', async () => {
+  const { stateDir, directory } = caller();
+  const destination = `${path.join(directory, 'journey.ad')}/`;
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  let writes = 0;
+  vi.mocked(file.publishFileSync).mockImplementation((options) => {
+    // The fourth record write records the revision; failing it leaves version 1 committed but unrecorded.
+    if (options.destination.endsWith('.json') && writes++ === 3) throw new Error('crashed');
+    actual.publishFileSync(options);
+  });
+  const { id } = await open(baseUrl, stateDir, destination);
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+
+  const retried = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(retried).toMatchObject({
+    ok: true,
+    data: { savedScript: path.join(directory, 'journey.ad') },
+  });
+  expect(retried.ok && retried.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(fs.readFileSync(path.join(directory, 'journey.ad'), 'utf8')).toBe('v1\n');
+});
+
+test('a version delivered twice reports the committed entry both times', async () => {
+  const { stateDir, directory } = caller();
+  const destination = `${path.join(directory, 'journey.ad')}/`;
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const entry = path.join(directory, 'journey.ad');
+
+  const { id, response } = await open(baseUrl, stateDir, destination);
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(response).toMatchObject({ ok: true, data: { savedScript: entry } });
+  expect(again).toMatchObject({ ok: true, data: { savedScript: entry } });
+  expect(fs.readFileSync(entry, 'utf8')).toBe('v1\n');
+});

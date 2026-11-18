@@ -1,6 +1,7 @@
 export {
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
+  judgeScriptDestination,
   prepareScriptDestination,
   publishDurableFileSync,
   publishFileSync,

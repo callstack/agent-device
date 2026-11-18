@@ -347,7 +347,8 @@ function windowsEntryName(normalized: string, rules: path.PlatformPath): string 
   // reserved device name, with or without an extension.
   if (/[<>:"/\\|?*]/.test(base) || hasControlCharacter(base) || /[. ]$/.test(base))
     return undefined;
-  const stem = base.split('.')[0]?.trimEnd() ?? '';
+  // Only ASCII spaces fall away before the comparison; a no-break space is part of the name.
+  const stem = base.split('.')[0]?.replace(/ +$/, '') ?? '';
   return /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$/i.test(stem) ? undefined : base;
 }
 
@@ -448,6 +449,14 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
   if (path.dirname(value) !== path.dirname(destination)) return false;
   const name = path.basename(value);
   return name.startsWith(temporaryNamePrefix(destination)) && name.endsWith('.tmp');
+}
+
+/**
+ * Judges a destination that is already in place, creating nothing, and reports its entry: what a caller
+ * answers about a version it published before (ADR 0016).
+ */
+export function judgeScriptDestination(destination: string): ScriptDestination {
+  return scriptDestination(destination, false);
 }
 
 /**
