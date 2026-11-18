@@ -361,10 +361,10 @@ export async function verifyHarmonyOpenForeground(
   if (bundleId === undefined || isDeepLinkTarget(bundleId)) return outcome;
   // The poll never outlives the request's own deadline: whatever the budget
   // has less room for wins, and a budget with no room for one read falls to
-  // probe-failed. A clamped budget names the deadline instead of the 5s
-  // default, so the message never claims a window the request did not have.
+  // probe-failed. The message names the window that actually bounded the
+  // poll: a budget the deadline squeezed below the 5s default says deadline,
+  // and the deadline hint fires only when no read had room to run.
   const requestDeadlineAtMs = input.execution.requestDeadlineAtMs;
-  const clampedByDeadline = requestDeadlineAtMs !== undefined;
   const pollBudgetMs =
     requestDeadlineAtMs === undefined
       ? HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS
@@ -372,36 +372,45 @@ export async function verifyHarmonyOpenForeground(
           HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
           Math.max(0, requestDeadlineAtMs - Date.now()),
         );
+  const clampedByDeadline = pollBudgetMs < HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
   const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
   }
-  throw openForegroundHardFailure(bundleId, verification, clampedByDeadline);
+  throw openForegroundHardFailure(bundleId, verification, clampedByDeadline, pollBudgetMs);
 }
 
 /**
  * The `--foreground` hard failure: a probe whose every read failed is a probe
  * that never ran to an answer, so it carries the unreadable reason and the
- * connection hint; an answered read that never named the launched app carries
- * `open-not-foreground` and the unlock hint.
+ * connection hint — the deadline hint fires only when the deadline left no
+ * room for one read; an answered read that never named the launched app
+ * carries `open-not-foreground` and the unlock hint.
  */
 function openForegroundHardFailure(
   bundleId: string,
   verification: OpenForegroundVerification,
   clampedByDeadline: boolean,
+  pollBudgetMs: number,
 ): AppError {
   if (verification.state === 'probe-failed') {
+    if (clampedByDeadline && pollBudgetMs <= 0) {
+      return new AppError(
+        'COMMAND_FAILED',
+        `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`,
+        {
+          reason: 'open-foreground-probe-unreadable',
+          hint: 'The request deadline is too tight for a foreground read: run the open again with more budget.',
+        },
+      );
+    }
     return new AppError(
       'COMMAND_FAILED',
-      clampedByDeadline
-        ? `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`
-        : `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
+      `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
       {
         reason: 'open-foreground-probe-unreadable',
-        hint: clampedByDeadline
-          ? 'The request deadline is too tight for a foreground read: run the open again with more budget.'
-          : 'Check the device connection, then run the open again.',
+        hint: 'Check the device connection, then run the open again.',
       },
     );
   }

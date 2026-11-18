@@ -600,6 +600,60 @@ test('verifyHarmonyOpenForeground reports probe-failed without reading when the 
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('a far deadline keeps the 5s window and the connection hint when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 60_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  // A deadline with 60s left never bounds the 5s poll: the failure names the
+  // real window and sends the agent to the device, not to a bigger timeout.
+  await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(String(error.message), /within 5s/);
+      assert.doesNotMatch(error.details?.hint ?? '', /deadline/i);
+      return true;
+    },
+  );
+});
+
+test('a partly clamped deadline names the deadline window on open-not-foreground', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockResolvedValue({
+    exitCode: 0,
+    stdout: missionDump('com.example.application', 'BACKGROUND'),
+    stderr: '',
+  });
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(3_000);
+
+  // The deadline cut the budget below 5s and reads answered with no
+  // foreground: the failure names the deadline that bounded the poll.
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.match(String(error.message), /before the request deadline/);
+      assert.match(error.details?.hint ?? '', /unlock the device screen/i);
+      return true;
+    },
+  );
+});
+
 test('verifyHarmonyOpenForeground names the deadline, not the connection, when the clamp spent the budget', async () => {
   mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
   const pending = verifyHarmonyOpenForeground(
