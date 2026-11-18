@@ -49,7 +49,8 @@ extension RunnerTests {
 
     // The viewport and the interface orientation are one hop: geometry that arrives in the device's
     // native space can only be placed relative to the app's own frame and rotation, and asking for
-    // the pair twice would read them at two different moments of a rotation.
+    // the pair twice would read them at two different moments of a rotation. A full-screen app's
+    // box comes from the root snapshot instead, so only its orientation is read live here.
     let viewport = try runMainThreadWork(
       "snapshot_viewport",
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
@@ -156,10 +157,11 @@ extension RunnerTests {
   /// when it is exactly the screen AXRuntime reports the app filling, at the origin. Nil keeps the
   /// live read: a placed iPad window (#4399), an offset window, and a landscape window, whose frame
   /// is the portrait screen with width and height swapped.
-  static func fullScreenWindowFrame(windowFrames: [CGRect], fullScreenFrame: CGRect) -> CGRect? {
+  /// `fullScreenFrame` runs its AXRuntime probe only once a usable window is found.
+  static func fullScreenWindowFrame(windowFrames: [CGRect], fullScreenFrame: @autoclosure () -> CGRect) -> CGRect? {
     guard
       let window = windowFrames.first(where: { !$0.isEmpty }),
-      Self.isFullScreenAtOrigin(window, fullScreenFrame: fullScreenFrame)
+      Self.isFullScreenAtOrigin(window, fullScreenFrame: fullScreenFrame())
     else {
       return nil
     }

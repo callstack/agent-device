@@ -182,10 +182,14 @@ extension RunnerTests {
       }
       XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
       let appWindows = app.windows.allElementsBoundByIndex.filter(\.exists).map(\.frame)
+      let fullScreenWindow = Self.fullScreenWindowFrame(windowFrames: appWindows, fullScreenFrame: Self.fullScreenFrame(of: app))
+      // An iPad can place the fixture's window, which keeps the live read; an iPhone app always fills
+      // the screen, so there a nil predicate is a failure, not a skip.
       try XCTSkipIf(
-        Self.fullScreenWindowFrame(windowFrames: appWindows, fullScreenFrame: Self.fullScreenFrame(of: app)) == nil,
-        "the fixture app's window is not the full screen at the origin on this device"
+        fullScreenWindow == nil && UIDevice.current.userInterfaceIdiom == .pad,
+        "the fixture app's window is not the full screen at the origin on this iPad"
       )
+      _ = try XCTUnwrap(fullScreenWindow, "the fixture app's window is not the full screen at the origin")
       let hint = CaptureHint(
         projection: .regular,
         depth: nil,
