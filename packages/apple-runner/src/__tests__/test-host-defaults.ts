@@ -33,6 +33,7 @@ function appleToolingTestAdapters(): Pick<
   | 'hasScopedAppleToolProvider'
   | 'buildSimctlArgsForDevice'
   | 'simulatorAddressFor'
+  | 'wasSimulatorRecentlyObservedBooted'
   | 'resolveIosPhysicalDeviceControl'
 > {
   const simulatorSetPathFor = (device: DeviceInfo): string | undefined =>
@@ -74,6 +75,7 @@ function appleToolingTestAdapters(): Pick<
       udid: device.id,
       simulatorSetPath: simulatorSetPathFor(device),
     }),
+    wasSimulatorRecentlyObservedBooted: async () => false,
     resolveIosPhysicalDeviceControl: (device): IosPhysicalDeviceRunnerControl => ({
       backend: device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice',
       resolveTunnel: async () => ({ tunnelIp: null }),
