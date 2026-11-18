@@ -962,3 +962,32 @@ test('a cache root that is a link to a missing directory under a sticky shared o
   expect(mockRunCmd).not.toHaveBeenCalled();
   expect(fs.readdirSync(shared)).toEqual([]);
 });
+
+test('a cache never creates a tail under a shared directory after an intermediate link disappears', async () => {
+  const shared = path.join(tmpDir, 'sticky-shared');
+  const privateTarget = path.join(tmpDir, 'private-target');
+  fs.mkdirSync(shared);
+  fs.chmodSync(shared, 0o1777);
+  fs.mkdirSync(privateTarget, { mode: 0o700 });
+  const hop = path.join(shared, 'hop');
+  const link = path.join(tmpDir, 'linked-cache');
+  const missing = path.join(privateTarget, 'missing');
+  fs.symlinkSync(privateTarget, hop);
+  fs.symlinkSync(path.join(hop, 'missing'), link);
+
+  const realLstat = fs.lstatSync.bind(fs);
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((name: never, ...rest: never[]) => {
+    const stats = realLstat(name, ...rest);
+    // The old preflight has resolved the hop when it probes the missing tail at the private target.
+    // Remove the hop before the creation walk can resolve the cache spelling again.
+    if (String(name) === missing) fs.unlinkSync(hop);
+    return stats;
+  }) as typeof fs.lstatSync);
+
+  await expect(compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: link })).rejects.toMatchObject(untrusted());
+
+  if (realLstat(hop, { throwIfNoEntry: false })?.isSymbolicLink()) fs.unlinkSync(hop);
+  expect(fs.readdirSync(shared)).toEqual([]);
+  expect(fs.readdirSync(privateTarget)).toEqual([]);
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
