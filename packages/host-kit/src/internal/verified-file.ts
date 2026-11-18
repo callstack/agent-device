@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   identityOf,
   lstatEntry,
+  lstatIfPresent,
   othersCreateEntriesIn,
   pathComponents,
   publishFileSync,
@@ -16,8 +17,8 @@ import {
   type ScriptAncestryExposure,
   type ScriptDestinationTrust,
   type WalkGround,
+  type WalkPolicy,
 } from './atomic-file.ts';
-
 /**
  * Both guards are the same failure mode seen from two sides — something other than a plain
  * regular file sits at the final path — so the recovery is shared (ADR 0010 §3).
@@ -177,6 +178,7 @@ export function assertScriptTargetVacant(destination: string): void {
   });
 }
 
+/** Whether two `lstat` answers describe the one inode. */
 function sameFile(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
@@ -206,57 +208,209 @@ function optionalNoFollowFlag(): number {
  * described.
  * ------------------------------------------------------------------------- */
 
-/** The state file's judged landing spot: the entry spelled FROM the judged directory, never from the caller. */
-function stateEntry(
-  pathname: string,
-):
-  | Readonly<{ destination: string; exposure: undefined }>
-  | Readonly<{ destination: undefined; exposure: PrivateDirectoryExposure }> {
+/**
+ * The state file's judged landing spot: the entry spelled FROM the judged directory, never from the caller,
+ * together with the identity the walk gave that directory.
+ *
+ * The identity travels with the destination, so the I/O owner can prove the ground is still the ground that
+ * was judged before a byte goes out. A state directory that was moved and replaced between the judgment and
+ * the write is a different directory, and its entries belong to whatever now stands there.
+ */
+function stateEntry(pathname: string):
+  | Readonly<{
+      destination: string;
+      directory: string;
+      identity: string | undefined;
+      exposure: undefined;
+    }>
+  | Readonly<{
+      destination: undefined;
+      directory: undefined;
+      identity: undefined;
+      exposure: PrivateDirectoryExposure;
+    }> {
   const chain = judgePrivateDirectoryChain(path.dirname(pathname));
-  if (chain.exposure) return { destination: undefined, exposure: chain.exposure };
+  if (chain.exposure) {
+    return {
+      destination: undefined,
+      directory: undefined,
+      identity: undefined,
+      exposure: chain.exposure,
+    };
+  }
   // The caller's own spelling is not kept: a `..` or an alias would put a state file, or its temporary
   // sibling, in ground this judgment never read.
-  return { destination: path.join(chain.directory, path.basename(pathname)), exposure: undefined };
-}
-
-/** The entry a state write must have, or the typed refusal that says why it cannot be had. */
-function requiredStateEntry(pathname: string): string {
-  const asked = stateEntry(pathname);
-  if (asked.destination === undefined) throw stateChainFailure(pathname, asked.exposure);
-  return asked.destination;
-}
-
-/** The refusal a state writer answers with, naming the path its caller asked about. */
-function stateChainFailure(pathname: string, exposure: PrivateDirectoryExposure): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `Refusing to write ${pathname}: ${privateDirectoryWordingOf(exposure)}`,
-    {
-      reason: PRIVATE_STATE_DIR_REASON,
-      exposure,
-      path: pathname,
-      hint: 'Keep the state directory owned by the user that runs agent-device and closed to others, or point AGENT_DEVICE_STATE_DIR at such a directory.',
-    },
-  );
+  return {
+    destination: path.join(chain.directory, path.basename(pathname)),
+    directory: chain.directory,
+    identity: chain.identity,
+    exposure: undefined,
+  };
 }
 
 /**
- * Opens one state file for appending and returns the handle, at the mode a state record carries.
+ * Writes one state record, or throws the typed refusal that says why it cannot be had.
  *
- * The mode is said on the OPEN descriptor rather than at a name, so no link can stand between the ask and
- * the change and no `umask` can price the file down. The caller keeps the handle: the daemon's log handle is
- * handed to a spawned process as its stdout and stderr, and a report about a refused path is written through
- * a handle already trusted rather than by going back to that path's name.
+ * The record owners are the callers that have a startup or a shutdown report to account for and answer for the
+ * failure themselves; a caller that must not fail takes {@link tryOpenPrivateStateFileSync}.
  */
-export function openPrivateStateFileForAppendSync(pathname: string): number {
-  const destination = requiredStateEntry(pathname);
-  const descriptor = openVerifiedFileForAppend(destination);
+function requiredStateEntry(pathname: string): Readonly<{
+  destination: string;
+  directory: string;
+  identity: string | undefined;
+}> {
+  const asked = stateEntry(pathname);
+  if (asked.destination === undefined)
+    throw stateRefusal(pathname, asked.exposure, privateDirectoryWordingOf(asked.exposure));
+  return asked;
+}
+
+/**
+ * Proves the directory a state entry is spelled in is still the one the chain judged.
+ *
+ * One `lstat` of the judged directory, compared with the identity the walk's own `lstat` answered. A directory
+ * that was renamed away and replaced, or removed and made again, is a different inode: its names are then
+ * another process's, and a marker or a report written into it answers a question about this daemon with bytes
+ * that daemon did not place. Absence is the same refusal.
+ */
+function assertStateDirectoryJudged(
+  asked: Readonly<{ destination: string; directory: string; identity: string | undefined }>,
+): void {
+  if (asked.identity === undefined) return;
+  const standing = lstatEntry(asked.directory);
+  if (standing !== undefined && identityOf(standing) === asked.identity) return;
+  throw stateRefusal(
+    asked.destination,
+    'parent_replaced',
+    'the state directory changed as it was opened. Keep the state directory in place while agent-device runs, ' +
+      'or point AGENT_DEVICE_STATE_DIR at a directory nothing else replaces.',
+  );
+}
+
+/** The refusal every state rule answers with, naming the path its caller asked about. */
+function stateRefusal(
+  pathname: string,
+  exposure: PrivateDirectoryExposure,
+  remedy: string,
+): AppError {
+  return new AppError('COMMAND_FAILED', `Refusing to write ${pathname}: ${remedy}`, {
+    reason: PRIVATE_STATE_DIR_REASON,
+    exposure,
+    path: pathname,
+    hint: remedy,
+  });
+}
+
+/**
+ * The ONE state open boundary: judge the directory, spell the entry from it, open it without following
+ * anything, and prove both the directory and the entry are what the judgment described.
+ *
+ * Every state write goes through here so no opener is left that asks less. `purpose` is the one thing the caller
+ * says about the entry. `append` is a record line going to the end; `append-readable` is the same for a writer
+ * that reads the tail through the same handle; `truncate` is the daemon's log, where the daemon's own stdout and
+ * stderr already stand open on the inode and the file must be emptied WITHOUT being replaced. A truncate is done
+ * THROUGH the descriptor the judgment produced: `O_TRUNC` said at a NAME would empty whatever that name
+ * describes — the file a planted link points at, or the FIFO another local user left — before any rule got a
+ * look at it.
+ *
+ * A refusal closes the descriptor it had already opened: a rule that walked away from a handle in a long-lived
+ * daemon leaked one per refusal.
+ */
+function openStateEntrySync(pathname: string, purpose: PrivateStateOpenPurpose): number {
+  const asked = requiredStateEntry(pathname);
+  assertStateDirectoryJudged(asked);
+  const descriptor = OPEN_STATE_ENTRY[purpose](asked.destination);
+  try {
+    assertPrivateStateDescriptor(descriptor, asked.destination);
+    assertStateDirectoryJudged(asked);
+    return descriptor;
+  } catch (error) {
+    try {
+      fs.closeSync(descriptor);
+    } catch {
+      // The refusal is the answer; a descriptor the host will not close changes it not.
+    }
+    throw error;
+  }
+}
+
+/**
+ * {@link openStateEntrySync} answered as an answer, for a caller that must not fail over a refused record.
+ *
+ * No daemon may lose a startup over its log: a launch that cannot get a verified handle still starts, and an
+ * unmade truncation costs a run its previous log lines and never this one's.
+ */
+export function tryOpenPrivateStateFileSync(
+  pathname: string,
+  purpose: PrivateStateOpenPurpose,
+):
+  | Readonly<{ descriptor: number; failure: undefined }>
+  | Readonly<{ descriptor: undefined; failure: unknown }> {
+  try {
+    return { descriptor: openStateEntrySync(pathname, purpose), failure: undefined };
+  } catch (error) {
+    return { descriptor: undefined, failure: error };
+  }
+}
+
+/** How a state entry is about to be used, which is what decides the flags its open asks for. */
+export type PrivateStateOpenPurpose = 'append' | 'append-readable' | 'truncate';
+
+/**
+ * The one seam each purpose opens through, all of them link-free and judged.
+ *
+ * `append-readable` is the state record's own case: the writer reads the last byte THROUGH the handle it is
+ * about to append to, to see whether a crashed run left the file without its newline. One handle cannot carry
+ * two access modes, so the seam reader asks both at once, and `readSync` at an explicit offset is what reads the
+ * tail while `O_APPEND` is still what makes the write go to the end.
+ */
+const OPEN_STATE_ENTRY: Record<PrivateStateOpenPurpose, (destination: string) => number> = {
+  append: openVerifiedFileForAppend,
+  'append-readable': (destination) =>
+    openVerifiedFile(destination, fs.constants.O_RDWR | fs.constants.O_APPEND, true)!,
+  truncate: openVerifiedFileForTruncate,
+};
+
+/**
+ * Proves the bytes behind a state descriptor are this process's own to write, and narrows their mode.
+ *
+ * A verified open says the NAME is a regular file this call reached without following anything. It does not say
+ * who ELSE holds those bytes: a record planted by an earlier attacker, or given a second name by a hard link,
+ * is content this process did not establish, and writing to it would answer a question about this run out of
+ * somebody else's file. So the descriptor's own `fstat` is asked three things: the uid is this process's, the
+ * entry has exactly one name, and the mode is the state mode — the last said on the descriptor, which is the
+ * only seam where no link can stand between the ask and the change.
+ *
+ * An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
+ * narrowed rather than refused. A second name is not something `fchmod` can take away, and is refused.
+ */
+function assertPrivateStateDescriptor(descriptor: number, destination: string): void {
+  const held = fs.fstatSync(descriptor, { bigint: true });
+  const uid = process.getuid?.();
+  if (uid !== undefined && Number(held.uid) !== uid) {
+    throw stateRefusal(
+      destination,
+      'foreign_owned',
+      'another local user owns that record. Remove the record at that name; agent-device will make its own.',
+    );
+  }
+  // A second name is not something `fchmod` can take away.
+  if (Number(held.nlink) !== 1) {
+    throw stateRefusal(
+      destination,
+      'shared_parent',
+      `that record has ${String(held.nlink)} names. Remove the record at that name; ` +
+        'agent-device will make its own.',
+    );
+  }
+  // An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
+  // narrowed rather than refused — on the DESCRIPTOR, the one seam where no link can stand between the ask and
+  // the change.
   try {
     fs.fchmodSync(descriptor, PRIVATE_STATE_FILE_MODE);
   } catch (error) {
     reportSkippedModeRepair(destination, error instanceof Error ? error.message : String(error));
   }
-  return descriptor;
 }
 
 /**
@@ -270,45 +424,21 @@ export function writePrivateStateLineSync(descriptor: number, line: string): voi
 }
 
 /**
- * {@link openPrivateStateFileForAppendSync} answered as an answer, for a caller that must not fail when the
- * record is refused. The daemon's log handle is the case: a launch that cannot get a verified handle still
- * starts, and carries on with the plain one it has always used.
- */
-export function tryOpenPrivateStateFileForAppendSync(
-  pathname: string,
-):
-  | Readonly<{ descriptor: number; failure: undefined }>
-  | Readonly<{ descriptor: undefined; failure: unknown }> {
-  try {
-    return { descriptor: openPrivateStateFileForAppendSync(pathname), failure: undefined };
-  } catch (error) {
-    return { descriptor: undefined, failure: error };
-  }
-}
-
-/**
  * Appends one record line to one state file, and repairs the seam a crashed append left.
  *
- * A crash mid-append can leave no trailing newline, and gluing two records makes both unparsable. The last
- * byte is read through host-kit's verified read opener and the line written through its verified append
- * opener; the two are joined by an identity comparison, so glue is only ever added to the bytes it was read
- * from. A replaced entry is refused, never glued.
+ * A crash mid-append can leave no trailing newline, and gluing two records makes both unparsable. The last byte
+ * is read THROUGH the same append handle the line goes to, so the glue is added to the bytes it was read from
+ * by construction: one open, no window between a read and a write for the entry to be replaced in, and no
+ * second opener to disagree with the first about what stands at the name.
+ *
+ * A refusal THROWS: the caller writes a marker or a report this run has to account for, and an unrecorded phase
+ * is a wrong answer rather than a smaller one. The daemon's log handle is the opposite case and takes
+ * {@link tryOpenPrivateStateFileSync}.
  */
 export function appendPrivateStateFileSync(pathname: string, line: string): void {
-  const destination = requiredStateEntry(pathname);
-  const seam = readVerifiedTailSync(destination, 1);
-  const descriptor = openVerifiedFileForAppend(destination);
+  const descriptor = openStateEntrySync(pathname, 'append-readable');
   try {
-    if (seam !== undefined && !seam.text.endsWith('\n')) {
-      if (seam.identity !== identityOf(fs.fstatSync(descriptor, { bigint: true }))) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          `State record changed as it was opened: ${destination}`,
-          { reason: PRIVATE_STATE_DIR_REASON, path: destination },
-        );
-      }
-      line = `\n${line}`;
-    }
+    if (!lastByteEndsALine(descriptor)) line = `\n${line}`;
     fs.appendFileSync(descriptor, line, 'utf8');
   } finally {
     fs.closeSync(descriptor);
@@ -316,15 +446,32 @@ export function appendPrivateStateFileSync(pathname: string, line: string): void
 }
 
 /**
- * Publishes one state file: staged in a sibling opened EXCLUSIVELY at 0600 and written through that
- * descriptor, then renamed onto the name, and durable down to the directory entry.
+ * Whether the bytes behind an append handle already end with a newline, or hold nothing at all.
  *
- * A rename replaces a symbolic link at the destination instead of writing through it, and the sibling is
- * cleaned up only while it is still the entry this call created.
+ * The size and the byte both come from the descriptor, so a record that was never written (size zero) and one
+ * that already ends cleanly both answer "nothing to glue".
+ */
+function lastByteEndsALine(descriptor: number): boolean {
+  const size = fs.fstatSync(descriptor).size;
+  if (size === 0) return true;
+  const last = Buffer.alloc(1);
+  if (fs.readSync(descriptor, last, 0, 1, size - 1) !== 1) return true;
+  return last[0] === 0x0a;
+}
+
+/**
+ * Publishes one state file: staged in a sibling opened EXCLUSIVELY at 0600 and written through that
+ * descriptor, then renamed onto the name.
+ *
+ * A rename replaces a symbolic link at the destination instead of writing through it, the sibling goes beside
+ * the entry spelled FROM the judged directory, and the sibling is cleaned up only while it is still the entry
+ * this call created.
  */
 export function publishPrivateStateFileSync(pathname: string, contents: string): void {
+  const asked = requiredStateEntry(pathname);
+  assertStateDirectoryJudged(asked);
   publishFileSync({
-    destination: requiredStateEntry(pathname),
+    destination: asked.destination,
     contents,
     mode: PRIVATE_STATE_FILE_MODE,
     exactMode: true,
@@ -332,35 +479,49 @@ export function publishPrivateStateFileSync(pathname: string, contents: string):
 }
 
 /**
- * The last {@link maxBytes} of one state file, or `undefined` when there is nothing trustworthy to read.
+ * How far one state read got, said as an answer rather than folded into "no file".
  *
- * A refusal reads the same as absence: a record the daemon cannot vouch for is one the caller does not have,
- * and a caller that believed a planted record would be believing what another local user wrote. The open is
- * verified, non-blocking, and the bytes are capped, so a FIFO or an enormous file planted at the name can
- * neither stop a reader nor exhaust it. The answer carries the entry's identity, so a writer that read
- * before it appended can tell whether the entry it read is the entry it holds.
+ * A caller that only wants the bytes folds this to `undefined`. A caller that has to decide something about the
+ * daemon's health cannot: a startup observer that read no marker because the state chain refused it has learned
+ * about the host, not about the daemon, and treating the two alike would report a refused record as a daemon
+ * that stopped making progress.
  */
-function readVerifiedTailSync(
-  pathname: string,
-  maxBytes: number,
-): Readonly<{ text: string; identity: string }> | undefined {
+export type PrivateStateRead =
+  | Readonly<{ status: 'read'; text: string }>
+  | Readonly<{ status: 'absent' }>
+  | Readonly<{ status: 'refused' }>;
+
+/**
+ * Reads at most {@link maxBytes} of one state file through the state boundary.
+ *
+ * A refusal reads as a refusal, never as bytes: a record the rule cannot vouch for is one the caller does not
+ * have, and a caller that believed a planted record would be believing what another local user wrote. The open
+ * is verified and non-blocking, so a FIFO or a link planted at the name can neither stop a reader nor steer it.
+ *
+ * `whole` says what the bound means. A TAIL read takes the last bytes and is what a log or a phase marker is
+ * read for; the bound only caps the cost. A WHOLE read takes the first bytes and REFUSES an entry longer than
+ * the bound, because a JSON record cut from the front is no record, and one cut from the BACK is: an enormous
+ * file padded at the front would hand a tail reader a perfectly parsable report that this daemon never wrote.
+ */
+function readStateEntrySync(pathname: string, maxBytes: number, whole: boolean): PrivateStateRead {
   const asked = stateEntry(pathname);
-  if (asked.destination === undefined) return undefined;
+  if (asked.destination === undefined) return { status: 'refused' };
   let descriptor: number | undefined;
   try {
     descriptor = openVerifiedFileForRead(asked.destination);
-    if (descriptor === undefined) return undefined;
+    if (descriptor === undefined) return { status: 'absent' };
     const size = fs.fstatSync(descriptor).size;
+    if (size === 0) return { status: 'absent' };
+    // A WHOLE read's bound is a rule about the entry, not a cost cap: an entry too long to be one record is not
+    // a record, and the answer is the refusal it is rather than bytes dressed up as one.
+    if (whole && size > maxBytes) return { status: 'refused' };
     const length = Math.min(size, maxBytes);
-    if (length <= 0) return undefined;
     const buffer = Buffer.alloc(length);
-    if (fs.readSync(descriptor, buffer, 0, length, size - length) !== length) return undefined;
-    return {
-      text: buffer.toString('utf8'),
-      identity: identityOf(fs.fstatSync(descriptor, { bigint: true })),
-    };
+    if (fs.readSync(descriptor, buffer, 0, length, size - length) !== length)
+      return { status: 'refused' };
+    return { status: 'read', text: buffer.toString('utf8') };
   } catch {
-    return undefined;
+    return { status: 'refused' };
   } finally {
     if (descriptor !== undefined) {
       try {
@@ -372,9 +533,31 @@ function readVerifiedTailSync(
   }
 }
 
-/** {@link readVerifiedTailSync} answered as text, for a caller that has no use for the identity. */
-export function readPrivateStateFileSync(pathname: string, maxBytes: number): string | undefined {
-  return readVerifiedTailSync(pathname, maxBytes)?.text;
+/**
+ * The last {@link maxBytes} of one state file, read through the state boundary, answered with WHY it has none.
+ *
+ * A caller that only wants bytes takes `.text` from the `read` case, and absence and refusal both answer
+ * `undefined` there. A caller judging a daemon's health takes the whole answer: {@link PrivateStateRead} is the
+ * reason this is not just a string, and a marker read that the state chain refused says something about the
+ * host that a missing marker does not.
+ */
+export function readPrivateStateFileTailSync(pathname: string, maxBytes: number): PrivateStateRead {
+  return readStateEntrySync(pathname, maxBytes, false);
+}
+
+/**
+ * One whole state file of at most {@link maxBytes}, or `undefined` when it is refused OR too long to be one.
+ *
+ * A bound that silently keeps the tail is no bound for a record that is read as a whole: it turns the padding
+ * in front of a planted report into an answer. A daemon writes its reports well inside this bound, so a longer
+ * entry is not a big report, it is not a report.
+ */
+export function readPrivateStateWholeFileSync(
+  pathname: string,
+  maxBytes: number,
+): string | undefined {
+  const read = readStateEntrySync(pathname, maxBytes, true);
+  return read.status === 'read' ? read.text : undefined;
 }
 
 const PRIVATE_STATE_FILE_MODE = 0o600;
@@ -395,10 +578,10 @@ const PRIVATE_STATE_FILE_MODE = 0o600;
  * daemon does not choose them, and a home directory is nobody's to tighten.
  * ------------------------------------------------------------------------- */
 
-/** What one state-chain answer permits, and the ground it was judged on. */
 /** The typed reason a state refusal answers with, named once for whoever reads it. */
 export const PRIVATE_STATE_DIR_REASON = 'state_dir_untrusted';
 
+/** What one state-chain answer permits, and the ground it was judged on. */
 export type PrivateDirectoryChain = Readonly<{
   /** The RESOLVED directory to create an entry in, spelled from the judged chain, never the caller's. */
   directory: string;
@@ -466,45 +649,48 @@ function stateChain(
     return createWindowsStateDirectory(target, create);
   }
   const trust = scriptTrust({});
-  const arrived = walkStateRoute(target, trust, create);
+  // The state root's own name, counted from the route the walk takes: the walk is asked not to follow a link at
+  // it or below it, and a refusal about it or below it is the only one this rule may repair. Positions are the
+  // walk's, not spellings, so an allowed ancestor alias such as `/var` neither trips the link rule nor hides the
+  // state directory from the repair gate.
+  const stateRootRouteName = pathComponents(path.resolve(stateDir)).length - 1;
+  const policy: WalkPolicy = {
+    noLinksAtRouteNameOrBelow: stateRootRouteName,
+    refusal: { atRouteName: undefined },
+  };
+  const arrived = walkStateRoute(target, trust, create, policy);
   if ('refusedOn' in arrived) {
     // A loose level the daemon's OWN state tree is the shared checkout's failure mode — umask 002 is what a
     // group-writable home directory carries — and a daemon that refused its own leftover would break on
-    // every restart, so the level is narrowed and the route is judged again. What may be narrowed starts at
-    // the state directory: a refusal naming a level ABOVE it is judged and left exactly as it stands,
-    // because the daemon did not choose `$HOME` and nobody's home directory is agent-device's to tighten.
+    // every restart, so the level is narrowed and the route is judged again. Only a refusal about the state
+    // directory itself or a level below it is narrowed: one about a level ABOVE it is judged and left exactly
+    // as it stands, because the daemon did not choose `$HOME` and nobody's home directory is agent-device's to
+    // tighten. The walk answers that question, and not a comparison of paths: the walk spells the ground it
+    // ARRIVED AT, so a state directory reached through an allowed alias refuses under a spelling that no text
+    // comparison with the caller's path would match, and would stay loose forever.
     if (
       !repaired &&
       create &&
       repairableStateExposure(arrived.exposure) &&
-      standsInsideStateDirectory(target, arrived.refusedOn)
-    )
-      return repairStateDirectoryAndJudgeAgain(arrived.refusedOn, trust);
+      policy.refusal?.atRouteName !== undefined &&
+      policy.refusal.atRouteName >= stateRootRouteName
+    ) {
+      return repairStateDirectoryAndJudgeAgain(stateDir, names, arrived.refusedOn, trust);
+    }
     return refusedStateChain(arrived.refusedOn, arrived.exposure);
   }
-  // One thing more than the destination rule, and the reason the state rule is not just the walk: a
-  // directory other local users can add an entry to is refused however it is dressed. A sticky bit shields
-  // other people's entries; it does not win the race to plant `daemon-shutdown.json` first.
+  // One thing more than the destination rule, and the reason the state rule is not just the walk: a directory
+  // other local users can add an entry to is refused however it is dressed. A sticky bit shields other
+  // people's entries; it does not win the race to plant `daemon-shutdown.json` first. The walk stood on every
+  // level of the route, so this asks of each one and not only of the last.
   if (othersCreateEntriesIn(arrived.authority, trust)) {
-    if (!repaired && create) return repairStateDirectoryAndJudgeAgain(arrived.deepest, trust);
+    if (!repaired && create) {
+      return repairStateDirectoryAndJudgeAgain(stateDir, names, arrived.deepest, trust);
+    }
     return refusedStateChain(arrived.deepest, 'shared_parent');
   }
   if (create) narrowDirectoryMode(arrived.deepest, trust);
   return { directory: arrived.deepest, identity: arrived.identity, exposure: undefined };
-}
-
-/**
- * Whether `directory` is the state directory itself or one of the levels below it.
- *
- * This is the line the repair draws: below the state directory, every level is a name the daemon picked and
- * can narrow back to the private mode. Above it, the levels belong to somebody else's layout — `$HOME`, a
- * mount point, a shared volume root — and a tool that quietly re-modes them has damaged a host while
- * meaning to protect one. The answer is spelling-based on purpose: a `..` cannot reach here, since a state
- * path that folds one is refused before any walk.
- */
-function standsInsideStateDirectory(stateDir: string, directory: string): boolean {
-  const relative = path.relative(stateDir, directory);
-  return relative.length === 0 || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 /**
@@ -523,27 +709,31 @@ function repairableStateExposure(exposure: PrivateDirectoryExposure): boolean {
 }
 
 /**
- * Narrows `directory` to {@link SCRIPT_DIR_MODE}, reaching ONLY the inode the look judged, and reporting
- * what it could not do.
+ * Narrows `directory` to {@link SCRIPT_DIR_MODE}, reaching ONLY the inode the look judged, and reporting what
+ * it could not do.
  *
  * A mode is never said at a NAME, because `chmod` follows a link: the entry is looked up, then opened
  * `O_DIRECTORY | O_NOFOLLOW`, which answers a symbolic link at that name by not opening it at all, and the
  * `fstat` of the open descriptor is compared with the identity that lookup answered. Ownership is decided on
  * the same lookup the rule judges with, so a level belonging to another local user — root's included — is
- * left alone. Any step that fails is a skip with a diagnostic: a repair is never an outcome.
+ * left alone. Every lookup is inside the guard, so a host that fails one for a reason this rule does not
+ * model costs the narrowing and not the caller: establishment is best effort, and a repair is never an outcome.
  */
 function narrowDirectoryMode(directory: string, trust: ScriptDestinationTrust): void {
-  const seen = lstatEntry(directory);
-  if (seen === undefined || !seen.isDirectory()) return;
-  if (Number(seen.uid) !== trust.uid) return;
-  if ((Number(seen.mode) & 0o777) === SCRIPT_DIR_MODE) return;
-  const flags = directoryNoFollowOpenFlags();
-  if (flags === undefined) {
-    reportSkippedModeRepair(directory, 'this host cannot open a directory without following links');
-    return;
-  }
   let descriptor: number | undefined;
   try {
+    const seen = lstatEntry(directory);
+    if (seen === undefined || !seen.isDirectory()) return;
+    if (Number(seen.uid) !== trust.uid) return;
+    if ((Number(seen.mode) & 0o777) === SCRIPT_DIR_MODE) return;
+    const flags = directoryNoFollowOpenFlags();
+    if (flags === undefined) {
+      reportSkippedModeRepair(
+        directory,
+        'this host cannot open a directory without following links',
+      );
+      return;
+    }
     descriptor = fs.openSync(directory, flags);
     const stood = fs.fstatSync(descriptor, { bigint: true });
     if (identityOf(stood) !== identityOf(seen))
@@ -562,13 +752,22 @@ function narrowDirectoryMode(directory: string, trust: ScriptDestinationTrust): 
   }
 }
 
-/** Narrows the judged state directory and judges the route again, once. */
+/**
+ * Narrows the judged state directory and judges the ROUTE THE CALLER ASKED FOR again, once.
+ *
+ * The re-judgment asks the caller's own `names` and not just the state directory: the repair happened at the
+ * state root, and the levels below it are what the caller came for, so an answer that stopped at the root
+ * would report a chain the caller never asked about and send it into a write whose own directory was never
+ * judged.
+ */
 function repairStateDirectoryAndJudgeAgain(
+  stateDir: string,
+  names: readonly string[],
   target: string,
   trust: ScriptDestinationTrust,
 ): PrivateDirectoryChain {
   narrowDirectoryMode(target, trust);
-  return stateChain(target, [], true, true);
+  return stateChain(stateDir, names, true, true);
 }
 
 /**
@@ -590,16 +789,28 @@ function directoryNoFollowOpenFlags(): number | undefined {
 /**
  * The chain's spelling, refused when there is none.
  *
- * A `..` has no answer here. Folding one away is what sends a state path OUTSIDE the state directory
- * through a link, and the writer would then be told about a directory it never named.
+ * A `..` is refused from the RAW spelling, before anything is joined or resolved: `path.resolve` folds one
+ * away, and a state path of the form `<link>/..` would then be judged as the directory the link stands in —
+ * the walk would create levels, or narrow a mode, at a directory other than the one the caller named, and
+ * would tell the caller about a directory it never asked for.
  */
 function spelledStateTarget(stateDir: string, names: readonly string[]): string | undefined {
   if (!path.isAbsolute(stateDir)) return undefined;
   const oneName = (name: string): boolean =>
     name.length > 0 && name !== '.' && name !== '..' && !name.includes('/') && !name.includes('\\');
   if (!names.every(oneName)) return undefined;
-  const target = path.join(path.resolve(stateDir), ...names);
-  return pathComponents(target).includes('..') ? undefined : target;
+  if (hasParentEscape(stateDir)) return undefined;
+  return path.join(path.resolve(stateDir), ...names);
+}
+
+/**
+ * Whether a spelled path names a step back out of the directory it is in, under either separator.
+ *
+ * `pathComponents` speaks the POSIX separator, because the walk that uses it only runs there; a state path is
+ * refused on every host, so this asks the question the way the host's own path does.
+ */
+function hasParentEscape(spelled: string): boolean {
+  return spelled.split(/[\\/]/).some((name) => name === '..');
 }
 
 /** A chain that is not this process's own, answered with the level that made it so. */
@@ -639,9 +850,10 @@ function walkStateRoute(
   target: string,
   trust: ScriptDestinationTrust,
   create: boolean,
+  policy: WalkPolicy,
 ): WalkGround | Readonly<{ refusedOn: string; exposure: PrivateDirectoryExposure }> {
   try {
-    return walkSpelledParent(target, target, trust, create);
+    return walkSpelledParent(target, target, trust, create, policy);
   } catch (error) {
     const exposure = stateExposureOf(error);
     if (exposure !== undefined) return { refusedOn: stateAncestorOf(error) ?? target, exposure };

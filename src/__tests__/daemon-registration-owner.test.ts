@@ -105,131 +105,6 @@ test('publication is atomic, binds identity and paths, and excludes a second acq
   assert.deepEqual(await readDaemonShutdownReport(paths.baseDir), report);
 });
 
-test('publication truncates the log the daemon is already appending to', async () => {
-  const { paths, owner } = await acquire();
-  const daemonOutput = fs.openSync(paths.logPath, 'a');
-  try {
-    fs.writeSync(daemonOutput, 'previous run\n');
-    owner.publish(fields);
-    fs.writeSync(daemonOutput, 'listening\n');
-  } finally {
-    fs.closeSync(daemonOutput);
-  }
-  assert.equal(fs.readFileSync(paths.logPath, 'utf8'), 'listening\n');
-  await owner.finish(report);
-});
-
-function onWindowsHost<T>(run: () => Promise<T>): Promise<T> {
-  const previous = Object.getOwnPropertyDescriptor(process, 'platform');
-  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-  return run().finally(() => {
-    if (previous) Object.defineProperty(process, 'platform', previous);
-  });
-}
-
-// Windows refuses ftruncate on a handle opened append-only, and closing an
-// append handle to reopen one drops the inode pin. These tests pin the
-// platform split: an existing log is emptied through one pinned handle, and
-// the Windows host rule (EPERM on an append handle, enforced here at the fs
-// seam) is answered by an `'r+'` handle instead of a create/reopen window
-// on the common path (#3291).
-
-// Emulates the Windows host rule at the fs seam: ftruncate through an
-// append-only handle raises EPERM as NTFS would, while every other open and
-// truncate passes through. Records the flags each log open used so each test
-// can pin the exact handle sequence.
-function spyWindowsLogHandleRules(logPath: string): string[] {
-  const flagsByDescriptor = new Map<number, string>();
-  const logOpenFlags: string[] = [];
-  const realOpen = fs.openSync;
-  vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    if (String(target) === logPath) logOpenFlags.push(String(flags));
-    const descriptor = realOpen(target, flags, mode);
-    flagsByDescriptor.set(descriptor, String(flags));
-    return descriptor;
-  }) as typeof fs.openSync);
-  const realTruncate = fs.ftruncateSync;
-  vi.spyOn(fs, 'ftruncateSync').mockImplementation(((descriptor: number, len?: number) => {
-    if (flagsByDescriptor.get(descriptor) === 'a') {
-      throw Object.assign(new Error('EPERM: operation not permitted, ftruncate'), {
-        code: 'EPERM',
-      });
-    }
-    realTruncate(descriptor, len);
-  }) as typeof fs.ftruncateSync);
-  return logOpenFlags;
-}
-
-test('a Windows host empties an existing log through one pinned write handle', async () => {
-  const { paths, owner } = await acquire();
-  fs.writeFileSync(paths.logPath, 'previous run\n');
-  const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
-  await onWindowsHost(async () => {
-    try {
-      owner.publish(fields);
-      assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
-      // No append handle and no second open of the path: one r+ handle
-      // carried the inode from the truncation through to its close.
-      assert.deepEqual(logOpenFlags, ['r+']);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
-
-test('a missing Windows-host log is created through append and emptied through a write handle', async () => {
-  const { paths, owner } = await acquire();
-  const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
-  await onWindowsHost(async () => {
-    try {
-      owner.publish(fields);
-      assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
-      // The append handle is confined to the file-missing path: the failed
-      // 'r+' probe, the creation through 'a', then one write handle that
-      // carries the truncation.
-      assert.deepEqual(logOpenFlags, ['r+', 'a', 'r+']);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
-
-test('a log removed between creation and the write-handle reopen fails startup loudly', async () => {
-  const { paths, owner } = await acquire();
-  const realOpen = fs.openSync;
-  let created = false;
-  vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    // A rotation that removes the just-created log before the write handle
-    // reopens it surfaces as this startup failure, never a silent unemptied log.
-    if (String(target) === paths.logPath) {
-      if (String(flags) === 'a') created = true;
-      else if (created && String(flags) === 'r+') fs.rmSync(paths.logPath, { force: true });
-    }
-    return realOpen(target, flags, mode);
-  }) as typeof fs.openSync);
-  await onWindowsHost(async () => {
-    try {
-      assert.throws(
-        () => owner.publish(fields),
-        (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
-      );
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
-
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
   [
@@ -302,21 +177,30 @@ test('spent acquisitions cannot publish, remove metadata or write a report', asy
   await successor.owner.finish();
 });
 
-test('startup clears a prior report while held; a failed clear releases the acquisition', async () => {
+test('startup clears a prior report while held; a failed clear costs neither the lock nor the startup', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-registration-clear-'));
   const reportPath = `${paths.baseDir}/daemon-shutdown.json`;
   fs.writeFileSync(reportPath, 'old report');
   const first = await acquire(paths);
   assert.equal(fs.existsSync(reportPath), false);
   await first.owner.finish();
+  // Clearing a previous run's report is tidying, not an outcome of acquiring the registration. A `rmSync` that
+  // fails on that NAME is a fact about ground this run does not control — and a startup that handed the lock
+  // back over it would refuse to start while holding proof that nobody else can take its registration.
   const primary = Object.assign(new Error('clear failure'), { code: 'EACCES' });
   const original = fs.rmSync;
   vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
     if (target === reportPath) throw primary;
     return original(target, options);
   });
-  await assert.rejects(tryAcquireDaemonRegistration(paths), (error) => error === primary);
-  assert.equal(fs.existsSync(paths.lockPath), false);
+  const second = await tryAcquireDaemonRegistration(paths);
+
+  assert.equal(second.status, 'acquired');
+  assert.equal(fs.existsSync(paths.lockPath), true);
+  // The refusal is written down, and the state log is the first place it goes: a warning about one record the
+  // daemon cannot remove belongs in the daemon's own log, not on the refused name.
+  assert.match(fs.readFileSync(paths.logPath, 'utf8'), /daemon_stale_report_cleanup_failed/);
+  await second.owner.finish();
 });
 
 test('unlink disappearance is settled, other failures remain primary even when release fails', async () => {

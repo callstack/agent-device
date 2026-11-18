@@ -2,7 +2,8 @@ import { AppError, normalizeError, type NormalizedError } from '@agent-device/ke
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   inspectProcessLock,
-  readPrivateStateFileSync,
+  readPrivateStateFileTailSync,
+  type PrivateStateRead,
   type ProcessLockInspection,
 } from '@agent-device/host-kit/file';
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
@@ -61,6 +62,17 @@ type DaemonStartupWaitResult =
 type StartupPhaseObservation = {
   spawnedAtMs: number;
   markers: Partial<Record<DaemonStartupPhase, number>>;
+  /**
+   * Whether the LAST read of this launch's marker record was REFUSED by the state rule.
+   *
+   * A refusal answers nothing about the daemon: the client has not seen a marker that stopped growing, it has
+   * seen a record it may not read. Concluding a stall from that would report a host the client cannot read as a
+   * daemon that stopped working, and then retire a healthy process — so a refusal stops the stall verdict from
+   * being reached, and the wait ends at the ceiling, whose wording says the daemon did not register rather than
+   * that it made no progress. Absence is NOT a refusal: a marker that is not written yet is real evidence of no
+   * progress, and a stall still ends that wait early.
+   */
+  markerRefused: boolean;
 };
 
 /** The ceiling on one local daemon startup; `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides it. */
@@ -311,6 +323,9 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     startupError,
     daemonProcess,
     ...(phases ? { phases: describeStartupPhaseTimings(phases) } : {}),
+    // Says out loud that this client could not READ the daemon's startup marker, so the reader of this failure
+    // knows the timings below are what was visible, not everything the daemon wrote (#4649).
+    ...(phases?.markerRefused ? { startupMarkerReadable: false } : {}),
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
     hint:
@@ -331,7 +346,11 @@ async function attemptLocalDaemonStartup(
   } catch (error) {
     return await recoverFailedDaemonLaunch(settings, error);
   }
-  const observation: StartupPhaseObservation = { spawnedAtMs, markers: {} };
+  const observation: StartupPhaseObservation = {
+    spawnedAtMs,
+    markers: {},
+    markerRefused: false,
+  };
   const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
   if (startup.kind === 'ready') {
     // Winner readiness (startedByClient false) is only reachable after this launch exited busy:
@@ -533,6 +552,11 @@ async function observeLiveDaemonStartup(
   const info = await readReadyLaunchedDaemon(settings, launch, deadline);
   if (info) return { kind: 'ready', daemon: { info, startedByClient: true } };
   refreshStartupPhaseMarkers(settings, launch.pid, observation);
+  // A marker this client may not read is a fact about the host and no evidence either way, so it answers "keep
+  // waiting": the wait ends at the registration ceiling, whose wording says the daemon did not register. A
+  // STALL would say this client watched a healthy daemon stop making progress and then retire it, which is the
+  // false accusation a refused record must never be allowed to make.
+  if (observation.markerRefused) return null;
   if (
     isProcessAlive(launch.pid) &&
     Date.now() - lastStartupProgressMs(observation) >= DAEMON_STARTUP_STALL_WINDOW_MS
@@ -547,16 +571,31 @@ function refreshStartupPhaseMarkers(
   launchPid: number,
   observation: StartupPhaseObservation,
 ): void {
-  const tail = readRecentFileTail(
+  const read = readStartupPhaseMarkers(settings, launchPid);
+  observation.markerRefused = read.status === 'refused';
+  if (read.status !== 'read') return;
+  for (const [phase, timestampMs] of Object.entries(
+    readDaemonStartupPhaseMarkers(read.text),
+  ) as Array<[DaemonStartupPhase, number]>) {
+    observation.markers[phase] = timestampMs;
+  }
+}
+
+/**
+ * Reads this launch's startup-phase marker record through the state boundary.
+ *
+ * The answer is {@link PrivateStateRead} and not text, because the caller has to tell three host facts apart:
+ * a record that is not written yet, a record whose bytes cannot be trusted, and a record that says what the
+ * daemon reached.
+ */
+function readStartupPhaseMarkers(
+  settings: DaemonClientSettings,
+  launchPid: number,
+): PrivateStateRead {
+  return readPrivateStateFileTailSync(
     resolveDaemonStartupPhasesPath(settings.paths.baseDir, launchPid),
     DAEMON_STARTUP_MARKER_TAIL_BYTES,
   );
-  if (!tail) return;
-  for (const [phase, timestampMs] of Object.entries(readDaemonStartupPhaseMarkers(tail)) as Array<
-    [DaemonStartupPhase, number]
-  >) {
-    observation.markers[phase] = timestampMs;
-  }
 }
 
 function lastStartupProgressMs(observation: StartupPhaseObservation): number {
@@ -694,5 +733,6 @@ function readRecentFileTail(filePath: string, maxBytes: number): string | undefi
   // same rule that keeps the daemon from writing through a planted link keeps this reader from BELIEVING
   // one, and its non-blocking open keeps a FIFO at that name from stopping a startup (#4649). A record the
   // rule will not vouch for is read as the absence it is.
-  return readPrivateStateFileSync(filePath, maxBytes)?.trim() || undefined;
+  const read = readPrivateStateFileTailSync(filePath, maxBytes);
+  return read.status === 'read' ? read.text.trim() || undefined : undefined;
 }

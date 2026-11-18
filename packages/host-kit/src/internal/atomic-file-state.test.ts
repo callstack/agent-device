@@ -50,25 +50,28 @@ skipOnWindows('creates a missing state chain at 0700 under the shared checkout u
   expect(modeOf(path.join(state, 'sessions'))).toBe(0o700);
 });
 
-skipOnWindows(
-  'a state directory made under a umask that takes an owner bit is still usable',
-  () => {
-    // `mkdir` ANDs its mode with the umask, so 0277 would leave the new directory 0500: this call could not
-    // create the name below it, and the next one could not read it. The mode is said again after the create.
-    const parent = directoryWith(path.join(root(), 'parent'), 0o700);
-    const state = path.join(parent, 'state');
+skipOnWindows('a state chain made under a umask that takes an OWNER bit is still usable', () => {
+  // `mkdir` ANDs its mode with the umask, so a umask of 0277 leaves a 0700 request answering 0500: the daemon
+  // could then create the name it came for and never read it back. The mode is said again after the create,
+  // and for EVERY level this call made — the state directory and each name below it — because a chain whose
+  // last level is usable and whose first one is not is a chain that cannot be written into at all.
+  const parent = directoryWith(path.join(root(), 'parent'), 0o700);
+  const state = path.join(parent, 'state');
+  const sessions = path.join(state, 'sessions');
 
-    const previous = process.umask(0o077);
-    try {
-      expect(ensurePrivateDirectoryChain(state, ['sessions']).exposure).toBeUndefined();
-    } finally {
-      process.umask(previous);
-    }
+  const previous = process.umask(0o277);
+  let created: string | undefined;
+  try {
+    const chain = ensurePrivateDirectoryChain(state, ['sessions']);
+    created = chain.exposure ? undefined : chain.directory;
+  } finally {
+    process.umask(previous);
+  }
 
-    fs.writeFileSync(path.join(state, 'sessions', 'marker.jsonl'), '{}\n', { mode: 0o600 });
-    expect(modeOf(path.join(state, 'sessions'))).toBe(0o700);
-  },
-);
+  expect(created).toBe(sessions);
+  expect(modeOf(state)).toBe(0o700);
+  expect(modeOf(sessions)).toBe(0o700);
+});
 
 // --- what it repairs, and what a repair cannot reach ---
 
@@ -173,24 +176,42 @@ skipOnWindows.for(['EPERM', 'EROFS', 'EACCES', 'ENOENT'])(
   },
 );
 
-skipOnWindows('a repair reaches the judged inode, never a link planted at its name', () => {
-  // The race the review named: the name a state directory stands at is replaced by a symbolic link, and a
-  // `chmod` by NAME would then set 0700 on whatever that link names — a file of the daemon user's,
-  // somewhere else on the host. `O_DIRECTORY | O_NOFOLLOW` answers the link by not opening it at all, so the
-  // only inode a state repair can change is the one it reached without following anything.
-  const directory = root();
-  const victim = path.join(directory, 'victim');
-  fs.writeFileSync(victim, 'mine\n', { mode: 0o644 });
-  fs.chmodSync(victim, 0o644);
-  const state = path.join(directory, 'state');
-  fs.symlinkSync(victim, state, 'dir');
+skipOnWindows(
+  'refuses a state directory whose NAME is a link, and never touches its target',
+  () => {
+    // The race the review named: the name a state directory stands at is replaced by a symbolic link. In the
+    // destination rule ADR 0016 lets such a link through when only this user could have put it there; the state
+    // rule asks more, because here the daemon CREATES records at the end of the route and NARROWS modes along
+    // it. A link at the state directory would move both the records and the `chmod` to ground the caller never
+    // named, so the refusal is about the link itself — and as a consequence no repair is attempted at all, and
+    // the target keeps its mode without any descriptor being opened on it.
+    const directory = root();
+    const victim = path.join(directory, 'victim');
+    fs.writeFileSync(victim, 'mine\n', { mode: 0o644 });
+    fs.chmodSync(victim, 0o644);
+    const state = path.join(directory, 'state');
+    fs.symlinkSync(victim, state, 'dir');
 
-  const chain = ensurePrivateDirectoryChain(state);
+    const chain = ensurePrivateDirectoryChain(state);
 
-  // The walk's own answer for a directory that is not one, and the target is untouched.
-  expect(chain.exposure).toBe('not_a_directory');
-  expect(fs.lstatSync(state).isSymbolicLink()).toBe(true);
-  expect(modeOf(victim)).toBe(0o644);
+    expect(chain.exposure).toBe('planted_link');
+    expect(fs.lstatSync(state).isSymbolicLink()).toBe(true);
+    expect(modeOf(victim)).toBe(0o644);
+  },
+);
+
+skipOnWindows('refuses a link at a level BELOW the state directory too', () => {
+  // The line is drawn AT the state directory and everything under it, so an ancestor alias stays allowed and a
+  // link inside the daemon's own tree does not. This is the same attack one level down: the record would land
+  // on the link's target, and the mode repair would be said to it.
+  const state = directoryWith(path.join(root(), 'state'), 0o700);
+  const elsewhere = directoryWith(path.join(root(), 'elsewhere'), 0o700);
+  fs.symlinkSync(elsewhere, path.join(state, 'sessions'), 'dir');
+
+  const chain = ensurePrivateDirectoryChain(state, ['sessions']);
+
+  expect(chain.exposure).toBe('planted_link');
+  expect(fs.existsSync(elsewhere)).toBe(true);
 });
 
 skipOnWindows('a symbolic link in ground only this user can write is judged through', () => {

@@ -76,6 +76,23 @@ describe('publishFileSync', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('new bytes');
   });
 
+  test.skipIf(process.platform === 'win32')(
+    'publishes with NO mode asked at the mode the umask gives, as it always did',
+    () => {
+      // What the exclusive create must not do is quietly make every artifact private. A contact sheet a daemon
+      // publishes and a CI account reads lands 0644 under umask 022; a caller that wants 0600 ASKS for it, the
+      // way a state record does.
+      const target = destination('umask-governed.png');
+      const previousUmask = process.umask(0o022);
+      try {
+        publishFileSync({ destination: target, contents: 'bytes' });
+        expect(fs.statSync(target).mode & 0o777).toBe(0o644);
+      } finally {
+        process.umask(previousUmask);
+      }
+    },
+  );
+
   test.skipIf(process.platform === 'win32')('pays an asked-for mode with the umask', () => {
     // A generic caller gets `mode` ANDed with the umask, because that is what a CREATE answers and it is what
     // every caller of this function has had since the function existed: 0600 under umask 0200 is 0400. Only

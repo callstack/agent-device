@@ -5,8 +5,7 @@ import type {
   OwnedProcessRecordScope,
   OwnedProcessRecordWriter,
 } from '@agent-device/contracts/platform-runtime-host';
-import { withAtomicPublishTempPathSync } from './atomic-publish.ts';
-import { identityOf } from './script-destination.ts';
+import { publishDurableFileSync } from './atomic-publish.ts';
 
 const RECORD_FILE_NAME = 'owned-processes.json';
 const RECORD_VERSION = 1;
@@ -59,21 +58,10 @@ export function createOwnedProcessRecordStore(options: {
       }
       const directory = path.dirname(recordPath);
       fs.mkdirSync(directory, { recursive: true });
-      withAtomicPublishTempPathSync(recordPath, (temporaryPath, siblingIsOurs) => {
-        const descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
-        siblingIsOurs(identityOf(fs.fstatSync(descriptor, { bigint: true })));
-        try {
-          fs.writeFileSync(
-            descriptor,
-            `${JSON.stringify({ version: RECORD_VERSION, processes: normalized })}\n`,
-            'utf8',
-          );
-          fs.fsyncSync(descriptor);
-        } finally {
-          fs.closeSync(descriptor);
-        }
-        assertSafeRecordDestination(recordPath);
-        fs.renameSync(temporaryPath, recordPath);
+      publishDurableFileSync({
+        destination: recordPath,
+        contents: `${JSON.stringify({ version: RECORD_VERSION, processes: normalized })}\n`,
+        mode: 0o600,
       });
     },
     clear(scope) {

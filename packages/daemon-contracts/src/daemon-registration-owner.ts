@@ -20,7 +20,7 @@ import {
   privateDirectoryWordingOf,
   publishFileSync,
   publishPrivateStateFileSync,
-  tryOpenPrivateStateFileForAppendSync,
+  tryOpenPrivateStateFileSync,
   writePrivateStateLineSync,
   inspectProcessLock,
   tryAcquireProcessLock,
@@ -99,13 +99,11 @@ export async function tryAcquireDaemonRegistration(
   });
   if (attempt.status !== 'acquired') return attempt;
   const { acquisition } = attempt;
-  try {
-    acquisition.assertHeld();
-    fs.rmSync(resolveDaemonShutdownReportPath(boundPaths.baseDir), { force: true });
-    sweepDeadDaemonStartupPhasesFiles(boundPaths.baseDir);
-  } catch (error) {
-    await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
-  }
+  // Both cleanups are tidying, and neither is this startup's outcome: a shutdown report or a phase marker the
+  // daemon cannot remove is one more stale record in a directory this run already judged. Removing them by
+  // NAME is also what would follow a planted link, so `rmSync` failing is a host fact to write down, not a
+  // reason to hand the registration back and fail a daemon that holds a lock nobody else can take.
+  clearStaleDaemonRecords(acquisition, boundPaths);
   let published: Pick<DaemonRegistrationFields, 'ownership'> | undefined;
   return {
     status: 'acquired',
@@ -186,7 +184,7 @@ export async function tryAcquireDaemonRegistration(
  * refused directory can steer.
  */
 function reportStateRecordFailure(logPath: string, phase: string, error: unknown): void {
-  const opened = tryOpenPrivateStateFileForAppendSync(logPath);
+  const opened = tryOpenPrivateStateFileSync(logPath, 'append');
   if (opened.descriptor !== undefined) {
     try {
       writePrivateStateLineSync(
@@ -204,10 +202,36 @@ function reportStateRecordFailure(logPath: string, phase: string, error: unknown
       }
     }
   }
-  // For a detached daemon this stream is the log already: the launcher holds this process's stdout and
-  // stderr open on the verified log descriptor. For an embedded runtime it is the host's own stream. Either
-  // way it is a descriptor no entry inside the refused directory can steer.
-  process.stderr.write(`Daemon ${phase}: ${normalizeError(error).message}\n`);
+  reportRefusedStateSink(logPath, error, phase);
+}
+
+/**
+ * Says out loud that a state sink was refused, on this process's own stderr, and survives a host that will
+ * not take the write.
+ *
+ * For a detached daemon this stream is the log already: the launcher holds this process's stdout and stderr
+ * open on the verified log descriptor. For an embedded runtime it is the host's own stream. Either way it is a
+ * descriptor no entry inside a refused directory can steer, which is why refusals go here and never back to the
+ * refused name. A redirected stderr whose pipe is closed throws out of `write`, and a refusal is not worth
+ * losing a shutdown or a registration release over, so the write itself is the one thing here that is best
+ * effort.
+ */
+function reportRefusedStateSink(refusedPath: string, error: unknown, phase = 'refused'): void {
+  try {
+    process.stderr.write(`Daemon ${phase}: ${refusedPath}: ${normalizeError(error).message}\n`);
+  } catch {
+    // No sink is left. The refusal still stands as the answer the caller got.
+  }
+}
+
+/**
+ * This host's null device, for a launch whose log the state rule refused.
+ *
+ * The child still starts: an untrusted log name is a reason not to write the log, not a reason not to run a
+ * daemon. Its output goes where a write goes and cannot block, and the refusal is on stderr.
+ */
+function openNullDeviceSync(): number {
+  return fs.openSync(os.devNull, 'w');
 }
 
 function removeRegistrationUnderLock(
@@ -270,6 +294,31 @@ export function recordDaemonStartupMarker(
   }
 }
 
+/**
+ * Removes the records a previous run left behind, and never makes this startup fail over one.
+ *
+ * A stale shutdown report is one this daemon's next stop will overwrite anyway, and a dead owner's phase
+ * marker is one the sweep exists to tidy; neither is an outcome of acquiring the registration. Both are removed
+ * by name, so a refusal is a host fact about ground this run does not control, and the place it is written down
+ * is the state record's own failure sink — never the refused name's.
+ */
+function clearStaleDaemonRecords(
+  acquisition: ProcessLockAcquisition,
+  paths: Readonly<DaemonPaths>,
+): void {
+  try {
+    acquisition.assertHeld();
+    fs.rmSync(resolveDaemonShutdownReportPath(paths.baseDir), { force: true });
+  } catch (error) {
+    reportStateRecordFailure(paths.logPath, 'daemon_stale_report_cleanup_failed', error);
+  }
+  try {
+    sweepDeadDaemonStartupPhasesFiles(paths.baseDir);
+  } catch (error) {
+    reportStateRecordFailure(paths.logPath, 'daemon_stale_marker_sweep_failed', error);
+  }
+}
+
 async function releaseRegistrationAfterFailure(
   acquisition: ProcessLockAcquisition,
   error: unknown,
@@ -288,45 +337,28 @@ async function releaseRegistrationAfterFailure(
 }
 
 /**
- * The daemon's stdout and stderr append to this inode, so it is emptied in place, never
- * replaced. On POSIX the append handle that creates the file also permits truncation, and
- * keeping that one handle open for the whole operation is what pins the inode. A Windows
- * handle opened append-only (`'a'`) rejects `ftruncate` with EPERM, so that host empties the
- * log through a read-write handle instead (#3291). A failure at any step propagates: an
- * unreadable log must fail startup loudly.
+ * The daemon's stdout and stderr append to this inode, so it is emptied in place, never replaced.
+ *
+ * The truncate happens THROUGH a verified handle: `O_TRUNC` said at a NAME would empty whatever that name
+ * describes — the file a planted link points at, or the FIFO another local user left — before any rule got a
+ * look at it. So the log is opened the way every state record is, judged chain and link-free, and emptied with
+ * `ftruncate` on the descriptor the judgment produced, which is also what pins the inode for the whole
+ * operation (#3291).
+ *
+ * A refusal is reported and skipped, never answered by opening the name again: the thing that made the verified
+ * open refuse is exactly what a plain `fs.openSync(logPath, 'a')` would follow. An unemptied log costs this run
+ * the previous run's lines. Failing a startup over a stale log would cost it the daemon.
  */
 function truncateDaemonLog(logPath: string): void {
-  if (process.platform === 'win32') {
-    truncateDaemonLogOnWindowsHost(logPath);
+  const opened = tryOpenPrivateStateFileSync(logPath, 'truncate');
+  if (opened.descriptor === undefined) {
+    reportRefusedStateSink(logPath, opened.failure, 'daemon_log_truncate');
     return;
   }
-  const descriptor = fs.openSync(logPath, 'a', 0o600);
   try {
-    fs.ftruncateSync(descriptor, 0);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-/**
- * `ftruncate` on Windows requires a handle opened for writing beyond append. An existing log
- * is opened `'r+'` directly, so no window exists between handles on the common path; a
- * missing log is first created through `'a'` and then reopened, and a creation race against
- * that reopen surfaces as this startup failing rather than a silently unemptied log.
- */
-function truncateDaemonLogOnWindowsHost(logPath: string): void {
-  let descriptor: number;
-  try {
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    fs.closeSync(fs.openSync(logPath, 'a', 0o600));
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  }
-  try {
-    fs.ftruncateSync(descriptor, 0);
-  } finally {
-    fs.closeSync(descriptor);
+    fs.closeSync(opened.descriptor);
+  } catch {
+    // The truncation already happened at the moment the verified open returned.
   }
 }
 
@@ -383,15 +415,16 @@ export function launchDaemonProcess(
   // a reason to refuse a startup, so a chain the daemon does not own is written down and left as it is.
   establishPrivateDaemonStateDir(input.paths.baseDir);
   // The log the child's stdout and stderr become is opened the way every state file is: judged chain,
-  // link-free open, mode said on the descriptor. A host that refuses that open still gets the append it
-  // has always gotten, because a launch is not a state record and a missing log would be its own loss.
-  const opened = tryOpenPrivateStateFileForAppendSync(input.paths.logPath);
+  // link-free open, mode said on the descriptor. A chain that refuses that open gets NO reopening of the
+  // name: the refusal is about what stands at that name — a link, a FIFO, ground another local user
+  // controls — and a plain append by name would follow it, or block on it, which is the outcome the
+  // verified open exists to avoid. The child then writes to this host's null device, and the refusal is said
+  // on this process's stderr, which is the one sink no entry in that directory can steer.
+  const opened = tryOpenPrivateStateFileSync(input.paths.logPath, 'append');
   if (opened.failure !== undefined) {
-    process.stderr.write(
-      `Daemon log ${input.paths.logPath} is not a verified state file: ${normalizeError(opened.failure).message}\n`,
-    );
+    reportRefusedStateSink(input.paths.logPath, opened.failure, 'daemon_log_open_refused');
   }
-  const logFd = opened.descriptor ?? fs.openSync(input.paths.logPath, 'a', 0o600);
+  const logFd = opened.descriptor ?? openNullDeviceSync();
   try {
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,

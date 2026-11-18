@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import {
-  establishPrivateDaemonStateDir,
+  launchDaemonProcess,
   recordDaemonStartupMarker,
   tryAcquireDaemonRegistration,
   type DaemonRegistrationOwner,
@@ -75,7 +75,14 @@ test.skipIf(process.platform === 'win32')(
     // used to lose the process before it wrote a marker or took a registration. A state path the daemon
     // cannot read is a fact about the host: one line on stderr and a startup that goes on, with each record
     // that would land there refused on its own.
-    const { paths } = await acquire();
+    //
+    // LAUNCHED, not called through the establishing helper: it is the launcher that has to survive this, and a
+    // helper that merely did not throw would still leave a launch that lost its child.
+    const paths = resolveDaemonPaths(
+      path.join(fs.realpathSync(mkdtempForTestSync('agent-device-state-privacy-eacces-')), 'state'),
+    );
+    // Reported OUTSIDE the state directory: this launch cannot establish that directory, which is the point.
+    const reported = path.join(path.dirname(paths.baseDir), 'cwd.txt');
     vi.spyOn(fs, 'lstatSync').mockImplementation(() => {
       throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
     });
@@ -86,15 +93,73 @@ test.skipIf(process.platform === 'win32')(
     });
 
     try {
-      assert.doesNotThrow(() => establishPrivateDaemonStateDir(paths.baseDir));
+      const launch = launchDaemonProcess({
+        env: process.env,
+        cwd: process.cwd(),
+        paths,
+        args: [
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(reported)}, process.cwd())`,
+        ],
+        serverMode: 'socket',
+      });
+      // A child the launcher did manage to start, and one it handed a working stdout to.
+      await launch.exited;
+      assert.equal(fs.readFileSync(reported, 'utf8'), process.cwd());
     } finally {
       stderr.mockRestore();
     }
 
-    assert.equal(written.length, 1);
     const said = written.join('');
     assert.match(said, /not private/);
     assert.match(said, /cannot read that part of the state path/);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a launch whose log the state rule refuses still starts the daemon and says so',
+  async () => {
+    // The launcher is the entry point that matters: it runs before the first marker, outside every handler, and
+    // it hands this process's stdout and stderr to the child. A `daemon.log` that is a symbolic link is refused
+    // by the state open — and the answer must NOT be a second, plain `openSync(logPath, 'a')`, because that is
+    // the reopen that would write through the link the rule just refused. So the child gets the null device, the
+    // refusal goes to this process's stderr, and the daemon starts.
+    const paths = resolveDaemonPaths(
+      path.join(fs.realpathSync(mkdtempForTestSync('agent-device-state-privacy-launch-')), 'state'),
+    );
+    const victim = path.join(paths.baseDir, 'theirs.log');
+    fs.mkdirSync(paths.baseDir, { mode: 0o700 });
+    fs.chmodSync(paths.baseDir, 0o700);
+    fs.writeFileSync(victim, 'not yours\n', { mode: 0o600 });
+    fs.symlinkSync(victim, paths.logPath, 'file');
+    const reported = path.join(paths.baseDir, 'cwd.txt');
+    const written: string[] = [];
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    try {
+      const launch = launchDaemonProcess({
+        env: process.env,
+        cwd: process.cwd(),
+        paths,
+        args: [
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(reported)}, process.cwd())`,
+        ],
+        serverMode: 'socket',
+      });
+      await launch.exited;
+    } finally {
+      stderr.mockRestore();
+    }
+
+    // The child ran, and its output reached neither the link's target nor the refused name.
+    assert.equal(fs.readFileSync(reported, 'utf8'), process.cwd());
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'not yours\n');
+    assert.equal(fs.lstatSync(paths.logPath).isSymbolicLink(), true);
+    assert.match(written.join(''), /daemon_log_open_refused/);
   },
 );
 

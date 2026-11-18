@@ -61,29 +61,31 @@ export function publish(destination: string): void {
   publishScriptFileSync({ destination, contents: 'context\n' });
 }
 
-/** The unmocked lookups, so serving an owner never wraps a previously served one. */
+/** The unmocked lookup, so serving an owner never wraps a previously served one. */
 const realLstatSync = fs.lstatSync.bind(fs);
-const realStatSync = fs.statSync.bind(fs);
 
 /**
  * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
  * the fixture's and not the CI image's directory tree. Only the ids move: modes and inode numbers stay
- * what they are on disk. Both lookups are served, because a rule `lstat`s an entry to learn whether it is
- * a link and `stat`s the directory it stands in. Ids come back as bigint or number depending on the
- * caller, so a moved id keeps that type.
+ * what they are on disk.
+ *
+ * `lstat` is the only lookup served, because `lstat` is the only one host-kit's rules ask an ownership answer
+ * from: the walk judges every name it resolves from its own `lstat` of the NAME, and the state boundary judges
+ * the entry it opened by `fstat` of the descriptor it holds. `@agent-device/test-kit`'s `serveHostOwnership`
+ * serves `stat` too, for rules outside this package. A package's tests may not reach test-kit, and one package
+ * may not publish test support to another (R83), so each keeps its own copy — change both together.
  */
 export function serveOwnership(owners: Readonly<Record<string, number>>): void {
-  const reuid = <S extends { uid: number | bigint }>(stats: S, pathname: string): S => {
-    const uid = owners[pathname];
-    if (uid === undefined || BigInt(stats.uid) === BigInt(uid)) return stats;
-    return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
-      uid: typeof stats.uid === 'bigint' ? BigInt(uid) : uid,
-    }) as S;
-  };
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: never, ...rest: never[]) =>
-    reuid(realLstatSync(pathname, ...rest), String(pathname))) as typeof fs.lstatSync);
-  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: never, ...rest: never[]) =>
-    reuid(realStatSync(pathname, ...rest), String(pathname))) as typeof fs.statSync);
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((name: never, ...rest: never[]) => {
+    const stats = realLstatSync(name, ...rest);
+    const uid = owners[String(name)];
+    // Node hands a fresh Stats to every call, so the served id goes on that object and on nothing else. It
+    // keeps the type the caller asked for: ids come back as bigint or as numbers depending on the options.
+    if (stats !== undefined && uid !== undefined) {
+      (stats as { uid: number | bigint }).uid = typeof stats.uid === 'bigint' ? BigInt(uid) : uid;
+    }
+    return stats;
+  }) as typeof fs.lstatSync);
 }
 
 /** Runs `run` under `process.umask(0o002)` — the umask of a shared checkout that breaks a mode-less `mkdir`. */

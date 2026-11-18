@@ -15,9 +15,11 @@ import {
 } from './atomic-file-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
-  openPrivateStateFileForAppendSync,
   publishPrivateStateFileSync,
-  readPrivateStateFileSync,
+  readPrivateStateFileTailSync,
+  tryOpenPrivateStateFileSync,
+  type PrivateStateOpenPurpose,
+  type PrivateStateRead,
   writePrivateStateLineSync,
 } from './verified-file.ts';
 
@@ -120,7 +122,7 @@ skipOnWindows('publishing replaces a link at the name instead of writing through
 
   expect(fs.readFileSync(outside, 'utf8')).toBe('theirs\n');
   expect(fs.lstatSync(report).isFile()).toBe(true);
-  expect(readPrivateStateFileSync(report, 4096)).toBe('{"a":1}\n');
+  expect(readOf(readPrivateStateFileTailSync(report, 4096))).toBe('{"a":1}\n');
 });
 
 skipOnWindows('publishing creates at 0600 whatever the umask, and leaves no sibling behind', () => {
@@ -187,7 +189,7 @@ skipOnWindows(
     const state = stateDir();
     const report = path.join(state, 'daemon-shutdown.json');
     fs.writeFileSync(report, '{"a":1}\n', { mode: 0o600 });
-    expect(readPrivateStateFileSync(report, 4096)).toBe('{"a":1}\n');
+    expect(readOf(readPrivateStateFileTailSync(report, 4096))).toBe('{"a":1}\n');
 
     const outside = path.join(state, 'theirs.json');
     fs.writeFileSync(outside, '{"planted":true}\n', { mode: 0o600 });
@@ -196,7 +198,7 @@ skipOnWindows(
 
     // A refusal reads exactly like absence: a caller that believed this record would be believing what
     // another local user wrote.
-    expect(readPrivateStateFileSync(link, 4096)).toBeUndefined();
+    expect(readOf(readPrivateStateFileTailSync(link, 4096))).toBeUndefined();
     expect(fs.readFileSync(outside, 'utf8')).toBe('{"planted":true}\n');
   },
 );
@@ -207,7 +209,7 @@ skipOnWindows('reads only the bound it is given', () => {
   const log = path.join(state, 'daemon.log');
   fs.writeFileSync(log, 'x'.repeat(100_000), { mode: 0o600 });
 
-  expect(readPrivateStateFileSync(log, 64)).toBe('x'.repeat(64));
+  expect(readOf(readPrivateStateFileTailSync(log, 64))).toBe('x'.repeat(64));
 });
 
 skipOnWindows('a FIFO at a state name is refused, and never blocks the reader', () => {
@@ -218,7 +220,7 @@ skipOnWindows('a FIFO at a state name is refused, and never blocks the reader', 
   const made = spawnSync('mkfifo', [report], { encoding: 'utf8' });
   expect(made.status).toBe(0);
 
-  expect(readPrivateStateFileSync(report, 4096)).toBeUndefined();
+  expect(readOf(readPrivateStateFileTailSync(report, 4096))).toBeUndefined();
 });
 
 skipOnWindows('a read of ground another local user owns is the same answer as no record', () => {
@@ -227,7 +229,9 @@ skipOnWindows('a read of ground another local user owns is the same answer as no
   fs.writeFileSync(path.join(state, 'daemon-shutdown.json'), '{"planted":true}\n', { mode: 0o600 });
   serveOwnership({ [state]: FOREIGN_UID });
 
-  expect(readPrivateStateFileSync(path.join(state, 'daemon-shutdown.json'), 4096)).toBeUndefined();
+  expect(
+    readOf(readPrivateStateFileTailSync(path.join(state, 'daemon-shutdown.json'), 4096)),
+  ).toBeUndefined();
 });
 
 // --- writing through a handle this process already holds ---
@@ -240,7 +244,7 @@ skipOnWindows('a handle opened for append is the log, at the mode a state record
   const previous = process.umask(0o022);
   let descriptor: number;
   try {
-    descriptor = openPrivateStateFileForAppendSync(log);
+    descriptor = openStateHandle(log, 'append');
     writePrivateStateLineSync(descriptor, '{"level":"warn"}\n');
   } finally {
     process.umask(previous);
@@ -263,10 +267,28 @@ skipOnWindows(
       throw new Error('a mode said at a NAME would reach here');
     });
 
-    expect(() => openPrivateStateFileForAppendSync(path.join(state, 'daemon.log'))).toThrow(
-      /Refusing to write/,
-    );
+    expect(
+      refusalMessage(tryOpenPrivateStateFileSync(path.join(state, 'daemon.log'), 'append')),
+    ).toMatch(/Refusing to write/);
 
     expect(chmod.mock.calls).toEqual([]);
   },
 );
+
+/** The bytes a state read answered, or `undefined` for absence and refusal alike. */
+function readOf(read: PrivateStateRead): string | undefined {
+  return read.status === 'read' ? read.text : undefined;
+}
+
+/** The handle a state open answered, refused loudly when it answered none. */
+function openStateHandle(pathname: string, purpose: PrivateStateOpenPurpose): number {
+  const opened = tryOpenPrivateStateFileSync(pathname, purpose);
+  if (opened.descriptor === undefined) throw opened.failure;
+  return opened.descriptor;
+}
+
+/** The message of a state open that refused, after pinning that it refused at all. */
+function refusalMessage(opened: { descriptor: number | undefined; failure: unknown }): string {
+  expect(opened.descriptor).toBeUndefined();
+  return String((opened.failure as Error).message);
+}

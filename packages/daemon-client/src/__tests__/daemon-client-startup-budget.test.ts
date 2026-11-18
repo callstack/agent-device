@@ -19,7 +19,9 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   closeLoopbackServer,
+  FOREIGN_UID,
   mkdtempForTestSync,
+  serveHostOwnership,
   startHttpDaemonFixture,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
@@ -283,6 +285,67 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
       phaseRecordEntries(paths),
       [],
       'a joined startup must sweep its own phase-marker file',
+    );
+  } finally {
+    await (child?.exited ?? Promise.resolve());
+  }
+});
+
+test('a startup whose marker record the state rule refuses waits to the ceiling, not a stall', async () => {
+  // The marker is a state record. A client that may not read it has learned about the HOST and nothing about
+  // the daemon, so declaring that daemon stalled would retire a process this client never watched. The wait
+  // runs to the registration ceiling instead — and the ceiling, not the stall, is the wording that says the
+  // daemon did not register. Absence is the opposite case: the test above retires a marker-less daemon at the
+  // stall window. Here the child DOES write its markers; this client is simply not allowed to read them.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', undefined);
+  const now = virtualClock();
+  const started = now.value;
+  // The real path, because the state rule resolves the route it judges: on macOS `mkdtemp` answers a name under
+  // `/var`, the alias for `/private/var`, and an ownership fixture keyed on that spelling would describe a
+  // directory the walk never looked at.
+  const paths = resolveDaemonPaths(
+    fs.realpathSync(mkdtempForTestSync('daemon-start-marker-refused-')),
+  );
+  let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => ({
+        ...unregisteredDaemonLaunch(paths, true),
+        observe(launched) {
+          child = launched;
+        },
+      }),
+    ]),
+  );
+  // Ground another local user controls, asked of the CLIENT's own views only: the detached child writes its
+  // markers for real, and every read this process makes of that directory is refused by the state rule.
+  serveHostOwnership({ [paths.baseDir]: FOREIGN_UID });
+  let markerOnDisk = false;
+  const booted = registrationBooted(paths);
+  pause.mockImplementation(async () => {
+    if (!booted()) return await realPause();
+    markerOnDisk ||= phaseRecordEntries(paths).length > 0;
+    if (now.value - started < 130_000) now.value += 5_000;
+    await realPause();
+  });
+  try {
+    const failure = await expectStartupFailure(sendToDaemon(request(paths)));
+    const elapsed = now.value - started;
+    assert.equal(failure.details?.reason, 'startup-ceiling');
+    assert.ok(
+      elapsed >= 120_000,
+      `a refused marker must cost the ceiling and not the stall window (${String(elapsed)}ms)`,
+    );
+    assert.equal(
+      failure.details?.startupMarkerReadable,
+      false,
+      'the failure must say the marker could not be read',
+    );
+    assert.equal(startupPhases(failure).spawned, 0, 'no phase was observed, which is the point');
+    assert.equal(spawn.mock.calls.length, 1, 'a refused marker is no reason to relaunch');
+    assert.ok(
+      markerOnDisk,
+      'the child must really have written markers this client could not read',
     );
   } finally {
     await (child?.exited ?? Promise.resolve());
