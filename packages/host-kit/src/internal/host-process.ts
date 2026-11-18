@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
+import { psReadOptions, psStartTimesLocaleMismatch } from './ps-start-time.ts';
 import { sleep } from './retry.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -196,7 +197,7 @@ async function runHostPsAsync<Row>(
   parse: (stdout: string) => Row[],
 ): Promise<Row[]> {
   try {
-    const result = await runCmd(hostPsCommand(), args, { allowFailure: true, timeoutMs });
+    const result = await runCmd(hostPsCommand(), args, psReadOptions(timeoutMs));
     return result.exitCode !== 0 ? [] : parse(result.stdout);
   } catch {
     // A failed ps read is unknown evidence; callers remain fail-closed.
@@ -247,6 +248,7 @@ export function processStartTimesDiffer(
 ): boolean {
   if (!left || !right) return false;
   if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
+  if (psStartTimesLocaleMismatch(left, right)) return false;
   return left !== right;
 }
 
@@ -332,10 +334,11 @@ function readHostProcessIdentityRowsSync(
     return windowsProcessIdentityRows(readWindowsProcessRows(pids, WINDOWS_PS_TIMEOUT_MS));
   }
   try {
-    const result = runCmdSync(hostPsCommand(), HOST_PROCESS_IDENTITY_PS_ARGS(pids), {
-      allowFailure: true,
-      timeoutMs: PS_TIMEOUT_MS,
-    });
+    const result = runCmdSync(
+      hostPsCommand(),
+      HOST_PROCESS_IDENTITY_PS_ARGS(pids),
+      psReadOptions(PS_TIMEOUT_MS),
+    );
     return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
   } catch {
     // A failed ps snapshot is unknown evidence; callers remain fail-closed.
@@ -392,10 +395,11 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
     if (token !== undefined) return token;
   }
   try {
-    const result = runCmdSync(hostPsCommand(), ['-p', String(pid), '-o', field], {
-      allowFailure: true,
-      timeoutMs: PS_TIMEOUT_MS,
-    });
+    const result = runCmdSync(
+      hostPsCommand(),
+      ['-p', String(pid), '-o', field],
+      psReadOptions(PS_TIMEOUT_MS),
+    );
     return processFieldValue(result);
   } catch {
     return null;

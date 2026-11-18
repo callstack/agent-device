@@ -19,6 +19,7 @@ import {
   readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
+  processStartTimesDiffer,
 } from './host-process.ts';
 import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
@@ -363,3 +364,36 @@ test.skipIf(process.platform !== 'linux')(
     }
   },
 );
+
+test('every ps start-time read pins the C locale so one process reads the same from any caller', async () => {
+  psReturns('4242 Ss   Mon Aug 10 20:00:00 2026\n');
+  mockRunCmd.mockResolvedValue({
+    stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n',
+    stderr: '',
+    exitCode: 0,
+  });
+
+  readHostProcessIdentityObservations([4242]);
+  await readHostProcessIdentityObservationsAsync([4242]);
+  psReturns('Mon Aug 10 20:00:00 2026\n');
+  readProcessStartTime(4242);
+
+  const calls = [...mockRunCmdSync.mock.calls, ...mockRunCmd.mock.calls];
+  assert.equal(calls.length, 3);
+  for (const call of calls) assert.equal(call[2]?.env?.LC_ALL, 'C');
+});
+
+test('a localized start time against its C-locale rendering is unknown, not a different lifetime', () => {
+  assert.equal(
+    processStartTimesDiffer('mar. 17 nov. 19:42:27 2026', 'Tue Nov 17 19:42:27 2026'),
+    false,
+  );
+  assert.equal(
+    processStartTimesDiffer('Tue Nov 17 19:42:27 2026', 'mar. 17 nov. 19:42:27 2026'),
+    false,
+  );
+  assert.equal(
+    processStartTimesDiffer('Tue Nov 17 19:42:27 2026', 'Tue Nov 17 19:42:28 2026'),
+    true,
+  );
+});
