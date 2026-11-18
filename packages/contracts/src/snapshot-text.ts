@@ -14,16 +14,21 @@ export function normalizeType(type: string): string {
   return normalized;
 }
 
-/** Presented bar kind, keyed by the normalized kind fragment that identifies it. */
+/**
+ * Presented bar kind, keyed by the normalized kind fragment that identifies it. This module owns
+ * the full bar identity, including Android bottom navigation, so every consumer reads one
+ * vocabulary; which kinds a scan treats as viewport chrome is the consumer's own choice.
+ */
 const SNAPSHOT_BAR_KINDS = [
   ['tabbar', 'tab-bar'],
   ['toolbar', 'toolbar'],
   ['navigationbar', 'navigation-bar'],
+  ['bottomnavigation', 'bottom-navigation'],
 ] as const;
 
 type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
 
-/** Reads the bar kind from the captured type, role, and subrole, or nothing for a non-bar node. */
+/** Reads the bar kind, including bottom navigation, from the captured type, role, and subrole, or nothing for a non-bar node. */
 export function snapshotBarKind(
   node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
 ): SnapshotBarKind | undefined {
@@ -31,7 +36,7 @@ export function snapshotBarKind(
   return SNAPSHOT_BAR_KINDS.find(([fragment]) => normalized.includes(fragment))?.[1];
 }
 
-/** Reads bar identity from the captured type, role, and subrole. */
+/** Reads bar identity, including bottom navigation, from the captured type, role, and subrole. */
 export function isSnapshotBarNode(
   node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
 ): boolean {

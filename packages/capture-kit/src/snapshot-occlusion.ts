@@ -9,7 +9,6 @@ import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   findNearestScrollableAncestor,
   isScrollableNodeLike,
-  isSnapshotBarNode,
   snapshotBarKind,
   snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
@@ -143,7 +142,25 @@ export function annotateCoveredSnapshotNodes(
 
 /** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
 const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
-const BOTTOM_NAVIGATION_KIND_FRAGMENTS = ['bottomnavigation'];
+
+/**
+ * The bar kinds this scan exempts as viewport chrome. Bar identity itself — including bottom
+ * navigation — is owned by `snapshotBarKind` in contracts; the choice of which kinds get a
+ * viewport exemption stays here, and bottom navigation is not one of them: an Android
+ * BottomNavigationView keeps covering the content behind it.
+ */
+const VIEWPORT_CHROME_BAR_KINDS: ReadonlySet<string> = new Set([
+  'tab-bar',
+  'toolbar',
+  'navigation-bar',
+]);
+
+function isViewportChromeBarNode(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): boolean {
+  const kind = snapshotBarKind(node);
+  return kind !== undefined && VIEWPORT_CHROME_BAR_KINDS.has(kind);
+}
 
 /**
  * The bounded, non-actionable description of the cover the scan found, or nothing when the cover has
@@ -162,7 +179,7 @@ const BOTTOM_NAVIGATION_KIND_FRAGMENTS = ['bottomnavigation'];
 function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
   const label = node.label?.trim();
   const typeKind = formatRole(node.type ?? 'Element');
-  const barKind = persistentBarKind(node);
+  const barKind = snapshotBarKind(node);
   const anonymous = ANONYMOUS_CONTAINER_KINDS.has(typeKind);
   if (!label && !barKind && anonymous) return null;
   const rect = positiveRect(node.rect);
@@ -172,13 +189,6 @@ function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode 
     ...(rect ? { rect } : {}),
     ...(barKind ? { persistentBar: true } : {}),
   };
-}
-
-function persistentBarKind(node: CoveringNodeEvidence): string | undefined {
-  return (
-    snapshotBarKind(node) ??
-    (nodeKindIncludesAny(node, BOTTOM_NAVIGATION_KIND_FRAGMENTS) ? 'bottom-navigation' : undefined)
-  );
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */
@@ -406,7 +416,7 @@ function isSiblingSizedChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!isSnapshotBarNode(node)) return false;
+  if (!isViewportChromeBarNode(node)) return false;
   if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
@@ -565,7 +575,7 @@ function isNavigationBarAround(bar: RawSnapshotNode, rect: Rect): boolean {
 /** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
 function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
   const isHostedRegion =
-    isSnapshotBarNode(node) ||
+    isViewportChromeBarNode(node) ||
     (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
@@ -575,7 +585,7 @@ function isFullViewportChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!isSnapshotBarNode(node)) return false;
+  if (!isViewportChromeBarNode(node)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
 

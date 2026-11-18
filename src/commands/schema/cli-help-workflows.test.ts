@@ -66,6 +66,20 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /wait_target_absent: readable capture, no match/);
   assert.match(help, /wait_target_present: absence timeout/);
   assert.match(help, /wait_capture_stalled: no readable capture by deadline/);
+  assert.match(help, /Target covered by other visible UI: refused with target_covered/);
+  assert.match(
+    help,
+    /dismiss or close the cover only when it is dismissible \(sheet, dialog, alert\)/,
+  );
+  assert.match(
+    help,
+    /under a persistent bar \(tab bar, toolbar, navigation bar, bottom navigation\) use a different visible target or inspect with snapshot\/screenshot/,
+  );
+  assert.match(
+    help,
+    /scrolling past the bar only when coveredBy\.targetInScrollableContent is true/,
+  );
+  assert.doesNotMatch(help, /Dismiss\/close it or scroll the target clear/);
 });
 
 test('usageForCommand resolves validate help topic', async () => {

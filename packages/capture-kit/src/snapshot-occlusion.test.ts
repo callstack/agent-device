@@ -707,6 +707,37 @@ test('a full-viewport toolbar container does not cover its application siblings'
   assert.equal(annotated[1]?.interactionBlocked, undefined);
 });
 
+test('a full-viewport bottom navigation bar is not viewport chrome: it still covers and publishes as a persistent bar', () => {
+  // Bar identity (including bottom navigation) is owned by contracts; the viewport exemption is
+  // this scan's own choice of the three chrome kinds, so a viewport-sized BottomNavigationView
+  // keeps covering the content behind it instead of being exempted as a chrome container.
+  const application: RawSnapshotNode = {
+    index: 0,
+    type: 'application',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+  const target: RawSnapshotNode = {
+    index: 1,
+    type: 'button',
+    role: 'button',
+    parentIndex: 0,
+    label: 'Room',
+    rect: { x: 20, y: 100, width: 120, height: 50 },
+  };
+  const bottomNavigation: RawSnapshotNode = {
+    index: 2,
+    type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+    parentIndex: 0,
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([application, target, bottomNavigation]);
+
+  assert.equal(annotated[1]?.interactionBlocked, 'covered');
+  assert.equal(annotated[1]?.coveredBy?.persistentBar, true);
+  assert.match(annotated[1]?.coveredBy?.kind ?? '', /bottomnavigation/);
+});
+
 test.for([
   // #3883: on iOS 27 an app's 2pt top bar pushes the floating-bar container to y=2.
   {
