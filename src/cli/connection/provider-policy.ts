@@ -7,7 +7,11 @@ import {
   primePluginConnections,
 } from '@agent-device/plugins/connection';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { getProviderPluginDeclaration } from '../../commands/provider-plugin-catalog.ts';
+import {
+  getProviderPluginDeclaration,
+  providerPluginInstallCommand,
+  providerPluginRepairCommand,
+} from '../../commands/provider-plugin-catalog.ts';
 import {
   BUILTIN_CONNECT_PROVIDER_IDS,
   BUILTIN_PROVIDER_IDS,
@@ -95,10 +99,10 @@ export function unavailableConnectPluginError(
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
-      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run agent-device plugins update ${declaration.package}, then retry your original command.`,
+      hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginRepairCommand(declaration)}, then retry your original command.`,
     });
   }
-  const installCommand = `agent-device plugins add ${declaration.package}`;
+  const installCommand = providerPluginInstallCommand(declaration);
   return new AppError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
@@ -107,7 +111,7 @@ export function unavailableConnectPluginError(
       provider,
       package: declaration.package,
       installCommand,
-      hint: `${declaration.unpublished ? 'This plugin is private and not yet published. After publication, install' : 'Install'}:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
+      hint: `Install:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
     },
   );
 }
