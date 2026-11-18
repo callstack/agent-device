@@ -908,6 +908,9 @@ importers:
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:../platform-android
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
     devDependencies:
       '@agent-device/platform-apple':
         specifier: workspace:*

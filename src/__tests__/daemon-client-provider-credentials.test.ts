@@ -15,7 +15,7 @@ import {
 import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
 import { builtinPluginInventory } from './test-utils/builtin-plugin-inventory.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { LIMRUN_CREDENTIAL_VARIABLES } from '../provider-limrun-credentials.ts';
+import { LIMRUN_CREDENTIAL_VARIABLES } from '@agent-device/provider-limrun/internal';
 import { readDaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
 const inventory = await builtinPluginInventory();
