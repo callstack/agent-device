@@ -76,6 +76,7 @@ export const mockBindDeviceRuntime = vi.fn(
   async (
     device: DeviceInfo,
     use,
+    _cache?: 'bypass',
     loadLifecycleOperations: LifecycleOperationsLoader = applicationLifecycleRuntimeFixture,
   ) => narrowDeviceBinding(await readinessBinding(device, loadLifecycleOperations), use),
 );
@@ -128,7 +129,8 @@ export async function handleSessionCommands(
       params.bindDevice ??
       (lifecycleOperationsLoader === undefined
         ? mockBindDeviceRuntime
-        : (device, use) => mockBindDeviceRuntime(device, use, lifecycleOperationsLoader)),
+        : (device, use, cache) =>
+            mockBindDeviceRuntime(device, use, cache, lifecycleOperationsLoader)),
     platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),
     reconcileOrphanedDeviceClaim: async () => ({
       status: 'retained',

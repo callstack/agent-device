@@ -5,6 +5,7 @@ import { makeIosAppSession } from '../../../__tests__/support/session-factories.
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
+import type { ReplayCommandTestInput } from '../replay-runtime/replay-command-fixture.ts';
 import {
   baseReplayRequest,
   writeReplayFile,
@@ -43,7 +44,11 @@ export type ReplayScriptScene = ReplaySessionScene &
   }>;
 
 /** An iOS app session plus a written `.ad` script, ready to replay. */
-export function replayScriptScene(prefix: string, lines: string[]): ReplayScriptScene {
+export function replayScriptScene(
+  prefix: string,
+  lines: string[],
+  capture?: ReplayCommandTestInput['capture'],
+): ReplayScriptScene {
   const scene = iosReplayScene(prefix);
   const filePath = writeReplayFile(scene.root, lines);
   const invoked: DaemonRequest[] = [];
@@ -60,6 +65,7 @@ export function replayScriptScene(prefix: string, lines: string[]): ReplayScript
         sessionName: scene.sessionName,
         logPath: scene.logPath,
         sessionStore: scene.sessionStore,
+        ...(capture === undefined ? {} : { capture }),
         invoke: async (req) => {
           invoked.push(req);
           return invoke ? invoke(req) : { ok: true, data: {} };

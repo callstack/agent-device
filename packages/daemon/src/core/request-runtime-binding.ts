@@ -32,6 +32,7 @@ export type BindDeviceRuntime = <
 >(
   device: DeviceInfo,
   use: RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>,
+  cache?: 'bypass',
 ) => Promise<
   BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
 >;
@@ -125,16 +126,24 @@ export function createRequestRuntimeBindings(params: {
     return binding;
   };
 
-  const bindDevice: BindDeviceRuntime = async (device, use) => {
+  const bindOrdinary = (device: DeviceInfo) =>
+    params.gateway
+      .bind({ device, intent: { kind: 'ordinary' }, scope: params.scope })
+      .then(async (binding) => await adoptBinding(cleanups, binding, params.scope))
+      .then(admitBinding);
+
+  const bindDevice: BindDeviceRuntime = async (device, use, cache) => {
     params.admitDevice?.(device);
+    if (cache === 'bypass') {
+      return recordBoundMutations(
+        narrowDeviceBinding(await bindOrdinary(device), use),
+        params.dispatchLedger,
+      );
+    }
     const key = JSON.stringify([deviceIdentityKey(deviceIdentity(device)), device.booted === true]);
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
-      const intent: DeviceBindingIntent = { kind: 'ordinary' };
-      bindingPromise = params.gateway
-        .bind({ device, intent, scope: params.scope })
-        .then(async (binding) => await adoptBinding(cleanups, binding, params.scope))
-        .then(admitBinding);
+      bindingPromise = bindOrdinary(device);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);

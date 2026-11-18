@@ -192,7 +192,7 @@ export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput):
 /**
  * The capture implementation every observation on this request reads the screen through: the action
  * binding's own capture when its runtime use carries one, otherwise the capture the request admitted
- * for its observations (`settle-observation-capture.ts`). Resolved once, at construction, so a route
+ * for its observations (`observation-capture.ts`). Resolved once, at construction, so a route
  * cannot answer one capture from the request-bound runtime and the next from the legacy path. Which
  * backend a bound capture presents stays per-capture: the settle loop pins it once it sees a
  * `private-ax` verdict.
