@@ -212,8 +212,9 @@ Scope:
 Loop for each screen:
   1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
   2. Run agent-device audit, then agent-device snapshot -i. Audit captures the screen itself, so it goes first.
-  3. Record each finding with its element name and kind. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
-     To act on a finding, use the ref from that snapshot -i. Match the finding to the snapshot by element name, not by ref number.
+  3. Record each finding with its kind, role, and size. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
+     To act on a finding, use the ref from that snapshot -i. The ref numbers can differ, so do not match by ref number.
+     Find the element in the snapshot by role and position. To compare positions, use the rect from agent-device audit --json and from agent-device snapshot -i --json.
   4. Capture evidence: agent-device screenshot ./a11y-output/<screen>.png --overlay-refs
 
 Coverage:
@@ -230,7 +231,7 @@ Checks audit cannot do:
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
     A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
-    Run agent-device snapshot -i --actions to list the accessibility actions of each element.
+    On the iOS simulator, agent-device snapshot -i --actions names the custom actions that a merged element hides.
 
 Fix loop (only when the user asks to fix):
   Change the app source, then reload (Fast Refresh, or agent-device open <app> --relaunch).
@@ -260,7 +261,7 @@ Loop:
   Keep stateful commands serial within the same session. Parallel runs can pollute text fields, focus, alerts, and navigation state.
 
 Platform checks:
-  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i, matched by element name. Report audit's findings as accessibility findings.
+  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i. Find the element by role and position, not by ref number. Report audit's findings as accessibility findings.
   For a whole-app accessibility review, read help accessibility.
   On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
