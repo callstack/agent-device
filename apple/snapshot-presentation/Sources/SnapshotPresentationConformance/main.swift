@@ -26,6 +26,7 @@ private struct ConformanceInput: Decodable {
   let depth: Int?
   let scope: String?
   let foldPolicy: String
+  let regularTreePolicy: RegularSnapshotTree.Policy?
   let viewport: SnapshotRect
   let nodes: [Node]
 }
@@ -54,31 +55,52 @@ private struct BatchOutput: Encodable {
 
 private func acquisition(for input: ConformanceInput) -> SnapshotAcquisition {
   let inputOptions = options(for: input)
+  let rawNodes = input.nodes.map { node in
+    RawAXNode(
+      index: node.index,
+      type: node.type,
+      label: node.label,
+      identifier: node.identifier,
+      value: node.value,
+      rect: node.rect,
+      enabled: node.enabled,
+      focused: node.focused,
+      selected: node.selected,
+      hittable: node.hittable,
+      depth: node.depth,
+      parentIndex: node.parentIndex,
+      hiddenContentAbove: node.hiddenContentAbove,
+      hiddenContentBelow: node.hiddenContentBelow
+    )
+  }
+  let hint = SnapshotPresentation.captureHint(for: inputOptions)
+  let nodes = hint.isRaw ? rawNodes : input.regularTreePolicy.map { regularTreeNodes(rawNodes, policy: $0) } ?? rawNodes
   return SnapshotAcquisition(
-    hint: SnapshotPresentation.captureHint(for: inputOptions),
-    nodes: input.nodes.map { node in
-      RawAXNode(
-        index: node.index,
-        type: node.type,
-        label: node.label,
-        identifier: node.identifier,
-        value: node.value,
-        rect: node.rect,
-        enabled: node.enabled,
-        focused: node.focused,
-        selected: node.selected,
-        hittable: node.hittable,
-        depth: node.depth,
-        parentIndex: node.parentIndex,
-        hiddenContentAbove: node.hiddenContentAbove,
-        hiddenContentBelow: node.hiddenContentBelow
-      )
-    },
+    hint: hint,
+    nodes: nodes,
     truncated: false,
     effectiveDepth: nil,
     // The host engine refuses to fold without a viewport, so the differential always reports one.
     viewport: .reported(box: input.viewport.cgRect)
   )
+}
+
+private func regularTreeNodes(_ rawNodes: [RawAXNode], policy: RegularSnapshotTree.Policy) -> [RawAXNode] {
+  var tree = RegularSnapshotTree(policy: policy)
+  var retained: [RawAXNode] = []
+  var childParents: [Int: Int] = [:]
+  for raw in rawNodes {
+    let parentIndex = raw.parentIndex.flatMap { childParents[$0] }
+    let node = raw.reindexed(index: retained.count, depth: raw.depth, parentIndex: parentIndex)
+    if raw.parentIndex == nil {
+      retained.append(node)
+      childParents[raw.index] = node.index
+    } else {
+      let included = tree.append(node, elementType: node.type, to: &retained)
+      childParents[raw.index] = included ? node.index : parentIndex
+    }
+  }
+  return retained
 }
 
 private func options(for input: ConformanceInput) -> PresentationOptions {

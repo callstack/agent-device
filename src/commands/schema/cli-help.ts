@@ -250,6 +250,7 @@ tvOS:
 
 Focus and visual truth:
   On Android TV and tvOS, if snapshot -i exposes a focused node, verify it with is focused <selector>.
+  On tvOS, snapshot -i can report focus on the outer tile when duplicate accessibility wrappers collapse.
   Use wait focused=true only when repeated snapshots preserve focus metadata for the app.
   If the app exposes only a surface view, or focus metadata is transient, use screenshot --overlay-refs, screenshot, or diff snapshot as visual truth and keep moving focus with tv-remote. On Vega OS, use the VVD display as visual truth until capture support lands.
   Do not assume press/click @ref works on Android TV, tvOS, or Vega OS until the desired element is focused.`,

@@ -7,6 +7,7 @@ import { isGeometricallyActionable, isPositiveFiniteRect } from '@agent-device/k
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   compareDifferentialCases,
+  runSwiftCases,
   SWIFT_RUN_TIMEOUT_MS,
 } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.ts';
 import {
@@ -22,6 +23,14 @@ import {
   threadNodes,
   viewport as capturedViewport,
 } from '../packages/capture-kit/src/ios-snapshot-engine/runner-presentation-fixtures.ts';
+
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
+import {
+  presentAppleRunnerSnapshot,
+  readAppleSnapshotResult,
+} from '../packages/platform-apple/src/snapshot-presentation.ts';
+import { TVOS_SIMULATOR } from '../packages/platform-apple/src/__tests__/device-fixtures.ts';
 
 type DifferentialCase = Parameters<typeof compareDifferentialCases>[0][number];
 
@@ -394,3 +403,179 @@ test('the TypeScript rows cover every viewport kind that carries a box', () => {
     'reported',
   ]);
 });
+
+test('regular tvOS tree captures publish focus on the surviving tile as focus moves', () => {
+  const cases = ([0, 1, 2] as const).flatMap((focusedTile) =>
+    (['regular', 'interactive', 'raw'] as const).map((mode) => ({
+      name: `${mode} tile ${focusedTile + 1}`,
+      route: 'runner-presented' as const,
+      projection: mode === 'raw' ? ('raw' as const) : ('regular' as const),
+      interactiveOnly: mode === 'interactive',
+      depth: null,
+      scope: null,
+      foldPolicy: 'plain-viewport' as const,
+      regularTreePolicy: 'tvOS' as const,
+      viewport: { x: 0, y: 0, width: 1920, height: 1080 },
+      nodes: tvFocusRow(focusedTile),
+      focusedTile,
+    })),
+  );
+  const swiftCases = runSwiftCases(cases);
+  for (const [index, testCase] of cases.entries()) {
+    const swift = swiftCases[index]!;
+    assert.equal(swift.outcome, 'success', testCase.name);
+    const raw = testCase.projection === 'raw';
+    const read = readAppleSnapshotResult(
+      {
+        nodes: swift.rawNodes,
+        snapshotViewport: { kind: 'reported', rect: testCase.viewport },
+      },
+      TVOS_SIMULATOR,
+    );
+    const presented = presentAppleRunnerSnapshot(
+      TVOS_SIMULATOR,
+      { raw, interactiveOnly: testCase.interactiveOnly },
+      read,
+    );
+    const capture = stampSnapshotIdentity(presented, {
+      backend: 'xctest',
+      producer: 'apple-runner',
+    });
+    const state = buildSnapshotState(capture, {
+      snapshotRaw: raw,
+      snapshotInteractiveOnly: testCase.interactiveOnly,
+    });
+    for (const nodes of [swift.rawNodes!, presented.nodes, state.nodes]) {
+      const focused = nodes.filter((node) => node.focused === true);
+      assert.deepEqual(
+        focused.map((node) => [
+          node.type,
+          node.label,
+          node.rect && Number(node.rect.width.toFixed(9)),
+          node.hittable,
+        ]),
+        [['Other', `Tile ${testCase.focusedTile + 1}`, raw ? 333.5 : 333.6, true]],
+        testCase.name,
+      );
+    }
+    const scaled = {
+      x: TILE_ORIGINS[testCase.focusedTile] - 8.3375,
+      y: 197.475,
+      width: 350.175,
+      height: 526.05,
+    };
+    const geometryViews = testCase.interactiveOnly
+      ? [swift.rawNodes!]
+      : [swift.rawNodes!, presented.nodes, state.nodes];
+    for (const nodes of geometryViews) {
+      assert.ok(
+        nodes.some(
+          ({ rect }) =>
+            rect &&
+            (['x', 'y', 'width', 'height'] as const).every(
+              (key) => Math.abs(rect[key] - scaled[key]) < 1e-9,
+            ),
+        ),
+        `${testCase.name} keeps the focus-scaled frame`,
+      );
+    }
+    assert.ok(state.nodes.find((node) => node.focused)?.ref, testCase.name);
+  }
+});
+
+test('regular tree focus stays on the same branch and keeps each Apple identity policy', () => {
+  const nodes = tvFocusRow(0);
+  const base = {
+    route: 'runner-presented',
+    projection: 'regular',
+    interactiveOnly: false,
+    depth: null,
+    scope: null,
+    foldPolicy: 'plain-viewport',
+    viewport: { x: 0, y: 0, width: 1920, height: 1080 },
+  } as const;
+  const siblingNodes = nodes.map((node) => {
+    if (node.focused) return { ...node, parentIndex: 4, depth: 5 };
+    if (node.parentIndex === 6) return { ...node, depth: 6 };
+    return node;
+  });
+  const cases = runSwiftCases([
+    { ...base, name: 'full bounds', regularTreePolicy: 'fullBounds', nodes },
+    { ...base, name: 'origin only', regularTreePolicy: 'originOnly', nodes },
+    {
+      ...base,
+      name: 'tvOS sibling duplicate',
+      regularTreePolicy: 'tvOS',
+      nodes: siblingNodes,
+    },
+  ]);
+  for (const outcome of cases) assert.equal(outcome.outcome, 'success');
+  assert.deepEqual(
+    cases.map((outcome) =>
+      outcome.rawNodes?.filter((node) => node.focused).map((node) => node.rect?.width),
+    ),
+    [[333.5], [], []],
+  );
+});
+
+const TILE_ORIGINS = [96, 441.5, 787] as const;
+
+function tvFocusRow(focusedTile: number): DifferentialCase['nodes'] {
+  const viewport = { x: 0, y: 0, width: 1920, height: 1080 };
+  const row = { x: 0, y: 210, width: 1920, height: 501 };
+  const facts = { enabled: true, hittable: true };
+  return [
+    { ...facts, index: 0, depth: 0, type: 'Application', rect: viewport, hittable: false },
+    {
+      ...facts,
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'CollectionView',
+      rect: viewport,
+      identifier: 'home-collection',
+    },
+    { ...facts, index: 2, depth: 2, parentIndex: 1, type: 'Cell', rect: row },
+    { ...facts, index: 3, depth: 3, parentIndex: 2, type: 'CollectionView', rect: row },
+    ...TILE_ORIGINS.flatMap((x, tile) => {
+      const index = 4 + tile * 4;
+      const label = `Tile ${tile + 1}`;
+      const rect = { x, y: 210, width: 333.6, height: 501 };
+      return [
+        {
+          ...facts,
+          index,
+          depth: 4,
+          parentIndex: 3,
+          type: 'Cell',
+          identifier: `tile-cell-${tile + 1}`,
+          rect,
+        },
+        { ...facts, index: index + 1, depth: 5, parentIndex: index, type: 'Other', label, rect },
+        {
+          ...facts,
+          index: index + 2,
+          depth: 6,
+          parentIndex: index + 1,
+          type: 'Other',
+          label,
+          rect: { ...rect, width: 333.5 },
+          ...(tile === focusedTile ? { focused: true } : {}),
+        },
+        ...(tile === focusedTile
+          ? [
+              {
+                ...facts,
+                index: index + 3,
+                depth: 7,
+                parentIndex: index + 2,
+                type: 'Other',
+                label,
+                rect: { x: x - 8.3375, y: 197.475, width: 350.175, height: 526.05 },
+              },
+            ]
+          : []),
+      ];
+    }),
+  ];
+}

@@ -217,7 +217,7 @@ extension RunnerTests {
       )
     }
 
-    var seen = Set<String>()
+    var regularTree = RegularSnapshotTree(policy: .platformDefault)
     var stack: [SnapshotTraversalEntry] = []
     if Self.canDescendAtRawDepth(0, hint: hint) {
       stack = rootChildren.map {
@@ -238,29 +238,15 @@ extension RunnerTests {
         index: nodes.count,
         parentIndex: entry.parentIndex
       )
-      let key = Self.snapshotTraversalIdentity(
-        elementType: snapshot.elementType,
-        label: evaluation.label,
-        identifier: evaluation.identifier,
-        frame: snapshot.frame
-      )
-      let isDuplicate = seen.contains(key)
-      if !isDuplicate {
-        seen.insert(key)
-      }
-
-      // A repeated node collapses into its parent: its children re-parent onto `entry.parentIndex`,
-      // so identical rows share one addressable owner.
-      let currentIndex = isDuplicate ? entry.parentIndex : nodes.count
+      let included = regularTree.append(node, elementType: String(describing: snapshot.elementType), to: &nodes)
+      let currentIndex = included ? node.index : entry.parentIndex
       for child in snapshot.children.reversed() {
         stack.append(
           SnapshotTraversalEntry(snapshot: child, depth: depth + 1, parentIndex: currentIndex)
         )
       }
 
-      if isDuplicate { continue }
-
-      nodes.append(node)
+      if !included { continue }
       if nodes.count > Self.regularSnapshotMaxNodes {
         throw regularSnapshotTooLargeFailure(nodeCount: nodes.count)
       }

@@ -38,7 +38,7 @@ public struct RawAXNode: Equatable {
   public let placeholder: String?
   public var rect: SnapshotRect
   public let enabled: Bool
-  public let focused: Bool?
+  public internal(set) var focused: Bool?
   public let selected: Bool?
   /// Geometric actionability; `nil` when the capture has no viewport box to decide it against.
   public var hittable: Bool?

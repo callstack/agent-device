@@ -303,19 +303,6 @@ extension RunnerTests {
 #endif
   }
 
-  static func snapshotTraversalIdentity(
-    elementType: XCUIElement.ElementType,
-    label: String,
-    identifier: String,
-    frame: CGRect
-  ) -> String {
-    #if os(iOS)
-    "\(elementType)-\(label)-\(identifier)-\(frame.origin.x)-\(frame.origin.y)-\(frame.width)-\(frame.height)"
-    #else
-    return "\(elementType)-\(label)-\(identifier)-\(frame.origin.x)-\(frame.origin.y)"
-    #endif
-  }
-
   private func aggregatedLabel(for snapshot: XCUIElementSnapshot, depth: Int = 0) -> String? {
     if depth > 4 { return nil }
     let text = snapshot.label.trimmingCharacters(in: .whitespacesAndNewlines)
