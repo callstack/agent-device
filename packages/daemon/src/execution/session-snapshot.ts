@@ -2,7 +2,13 @@ import { randomInt } from 'node:crypto';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs, AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { activatePartialRefFrame, refFrameEpoch, refFrameState } from '../core/ref-frame.ts';
+import {
+  activatePartialRefFrame,
+  admitRefRead,
+  refFrameEpoch,
+  refFrameScope,
+  refFrameState,
+} from '../core/ref-frame.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 
@@ -247,6 +253,29 @@ function buildPinnedStaleRefWarning(params: {
 }): string {
   const plainRef = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
   return `Ref @${plainRef} was minted from snapshot s${params.mintedGeneration} but the session's ref frame is now s${params.currentFrameEpoch} — re-run snapshot -i.`;
+}
+
+/**
+ * The refusal for an `@ref` read the current frame holds no evidence for (`admitRefRead`): a
+ * partial publication — a read-only `find`, a settled diff, a replay divergence screen — replaced
+ * the frame that minted it. Returns undefined when the read may proceed.
+ */
+export function unissuedRefReadError(
+  session: SessionState | undefined,
+  ref: string,
+): AppError | undefined {
+  if (!session) return undefined;
+  const refBody = normalizeRefBody(ref);
+  if (admitRefRead(session, refBody).admitted) return undefined;
+  const scope = refFrameScope(session);
+  const currentGeneration = refFrameEpoch(session);
+  return new AppError('COMMAND_FAILED', `Ref @${refBody} was not issued by the current ref frame`, {
+    reason: 'ref_not_issued',
+    ref: `@${refBody}`,
+    ...(currentGeneration !== undefined ? { currentGeneration } : {}),
+    scope: scope === 'all' ? 'all' : Array.from(scope),
+    hint: 'A find, settled diff, or replay divergence published new refs after this one was issued, so it no longer resolves. Use a ref that response printed, or run snapshot -i for fresh refs.',
+  });
 }
 
 /**

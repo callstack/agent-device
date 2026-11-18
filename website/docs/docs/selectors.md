@@ -48,6 +48,11 @@ position instead.
 agent-device find "Follow" click --first
 ```
 
+A read-only `find` that prints a ref (`get text`, `get attrs`, `list`) publishes only the refs it
+returns, so it ends the earlier snapshot's refs. A later `get` or `wait` on one of those older refs
+fails with `error.details.reason: ref_not_issued` instead of reading whichever element now has that
+number. Use a ref the `find` printed, or run `snapshot -i` again.
+
 Tips:
 
 - `find role <value>` and the `role=` selector key use the same role names that snapshots show. See
