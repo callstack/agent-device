@@ -50,14 +50,11 @@ test.each([
     node: { type: 'com.google.android.material.bottomnavigation.BottomNavigationView' },
     kind: 'bottom-navigation',
   },
-  {
-    name: 'a bottom navigation bar named in role only',
-    node: { type: 'Other', role: 'BottomNavigationBar' },
-    kind: 'bottom-navigation',
-  },
 ])('snapshotBarKind reads $name', ({ node, kind }) => {
-  expect(snapshotBarKind(node)).toBe(kind);
-  expect(isNativeIosSnapshotBarNode(node)).toBe(kind !== 'bottom-navigation');
+  const producer = kind === 'bottom-navigation' ? 'android-uiautomator' : 'apple-runner';
+  expect(snapshotBarKind(node, producer)).toBe(kind);
+  expect(isNativeIosSnapshotBarNode(node, producer)).toBe(kind !== 'bottom-navigation');
+  expect(snapshotBarKind(node, 'cdp-dom')).toBeUndefined();
 });
 
 test.each([
@@ -65,6 +62,6 @@ test.each([
   { type: 'HomeToolbarView' },
   { type: 'Other', role: 'BottomTabBar' },
 ])('a non-bar node reads no bar kind for %j', (node) => {
-  expect(snapshotBarKind(node)).toBeUndefined();
-  expect(isNativeIosSnapshotBarNode(node)).toBe(false);
+  expect(snapshotBarKind(node, 'apple-runner')).toBeUndefined();
+  expect(isNativeIosSnapshotBarNode(node, 'apple-runner')).toBe(false);
 });

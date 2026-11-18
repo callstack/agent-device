@@ -191,33 +191,36 @@ export function coveredByTabBarSnapshot(): SnapshotState {
  */
 export function coveredByScanSnapshot(coverType = 'TabBar'): SnapshotState {
   return makeSnapshotState(
-    annotateCoveredSnapshotNodes([
-      {
-        index: 0,
-        depth: 0,
-        type: 'Application',
-        label: 'Example',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'Button',
-        label: 'Save draft',
-        rect: { x: 16, y: 790, width: 140, height: 44 },
-        hittable: true,
-      },
-      {
-        index: 2,
-        depth: 1,
-        parentIndex: 0,
-        type: coverType,
-        label: 'Media',
-        rect: { x: 0, y: 760, width: 390, height: 84 },
-        hittable: true,
-      },
-    ]),
+    annotateCoveredSnapshotNodes(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          label: 'Example',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Save draft',
+          rect: { x: 16, y: 790, width: 140, height: 44 },
+          hittable: true,
+        },
+        {
+          index: 2,
+          depth: 1,
+          parentIndex: 0,
+          type: coverType,
+          label: 'Media',
+          rect: { x: 0, y: 760, width: 390, height: 84 },
+          hittable: true,
+        },
+      ],
+      { producer: 'apple-runner' },
+    ),
   );
 }
 
@@ -248,36 +251,39 @@ export function coveredByAnonymousTabBarScanSnapshot(
       : [];
   const buttonIndex = scroller.length + 1;
   return makeSnapshotState(
-    annotateCoveredSnapshotNodes([
-      {
-        index: 0,
-        depth: 0,
-        type: 'Application',
-        label: 'Example',
-        rect: { x: 0, y: 0, width: 402, height: 874 },
-      },
-      ...scroller,
-      {
-        index: buttonIndex,
-        depth: scroller.length + 1,
-        parentIndex: scroller.length > 0 ? 1 : 0,
-        type: 'Button',
-        label: 'Save draft',
-        rect: options.horizontal
-          ? { x: 16, y: 810, width: 140, height: 44 }
-          : { x: 16, y: 800, width: 140, height: 44 },
-        hittable: true,
-      },
-      {
-        index: buttonIndex + 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'Other',
-        role: 'UITabBar',
-        rect: { x: 0, y: 791, width: 402, height: 83 },
-        hittable: true,
-      },
-    ]),
+    annotateCoveredSnapshotNodes(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          label: 'Example',
+          rect: { x: 0, y: 0, width: 402, height: 874 },
+        },
+        ...scroller,
+        {
+          index: buttonIndex,
+          depth: scroller.length + 1,
+          parentIndex: scroller.length > 0 ? 1 : 0,
+          type: 'Button',
+          label: 'Save draft',
+          rect: options.horizontal
+            ? { x: 16, y: 810, width: 140, height: 44 }
+            : { x: 16, y: 800, width: 140, height: 44 },
+          hittable: true,
+        },
+        {
+          index: buttonIndex + 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Other',
+          role: 'UITabBar',
+          rect: { x: 0, y: 791, width: 402, height: 83 },
+          hittable: true,
+        },
+      ],
+      { producer: 'apple-runner' },
+    ),
   );
 }
 

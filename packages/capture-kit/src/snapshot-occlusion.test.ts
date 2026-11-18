@@ -6,6 +6,7 @@ import {
   annotateCoveredSnapshotNodes,
   annotateSnapshotNodesCoveredByPolicy,
 } from './snapshot-occlusion.ts';
+import { buildSnapshotState } from './snapshot-state.ts';
 
 // #1478 P5 codec-extraction regression: `annotateCoveredSnapshotNodes` marks
 // a touch candidate `interactionBlocked: 'covered'` when a later, floating
@@ -256,6 +257,21 @@ test('annotateSnapshotNodesCoveredByPolicy publishes the cover a backend hit tes
   assert.equal(result?.interactionBlocked, 'covered');
   assert.equal(result?.hittable, false);
   assert.deepEqual(result?.coveredBy, { kind: 'button', label: 'Top story', rect: card.rect });
+});
+
+test('a labelled ARIA toolbar keeps its hit-test cover without claiming persistence', () => {
+  const rect = { x: 0, y: 100, width: 300, height: 60 };
+  const target: RawSnapshotNode = { index: 0, type: 'button', rect, hittable: true };
+
+  const [result] = annotateSnapshotNodesCoveredByPolicy([target], () => ({
+    type: 'toolbar',
+    role: 'toolbar',
+    label: 'Editing actions',
+    rect,
+  }));
+
+  assert.equal(result?.interactionBlocked, 'covered');
+  assert.deepEqual(result?.coveredBy, { kind: 'toolbar', label: 'Editing actions', rect });
 });
 
 test('annotateSnapshotNodesCoveredByPolicy names no cover when the hit element is an anonymous box', () => {
@@ -707,35 +723,39 @@ test('a full-viewport toolbar container does not cover its application siblings'
   assert.equal(annotated[1]?.interactionBlocked, undefined);
 });
 
-test('a full-viewport bottom navigation bar is not viewport chrome: it still covers and publishes as a persistent bar', () => {
-  // Bar identity (including bottom navigation) is owned by contracts; the viewport exemption is
-  // this scan's own choice of the three chrome kinds, so a viewport-sized BottomNavigationView
-  // keeps covering the content behind it instead of being exempted as a chrome container.
-  const application: RawSnapshotNode = {
-    index: 0,
-    type: 'application',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  };
-  const target: RawSnapshotNode = {
-    index: 1,
-    type: 'button',
-    role: 'button',
-    parentIndex: 0,
-    label: 'Room',
-    rect: { x: 20, y: 100, width: 120, height: 50 },
-  };
-  const bottomNavigation: RawSnapshotNode = {
-    index: 2,
+test.each([
+  {
     type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
-    parentIndex: 0,
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  };
+    cover: { kind: 'bottom-navigation', persistentBar: true },
+  },
+  {
+    type: 'com.example.BottomNavigationView',
+    cover: { kind: 'bottomnavigationview' },
+  },
+])('Android snapshot assembly preserves qualified cover identity for $type', ({ type, cover }) => {
+  const rect = { x: 0, y: 0, width: 400, height: 800 };
+  const state = buildSnapshotState(
+    {
+      backend: 'android',
+      producer: 'android-uiautomator',
+      nodes: [
+        { index: 0, type: 'application', rect },
+        {
+          index: 1,
+          type: 'button',
+          role: 'button',
+          parentIndex: 0,
+          label: 'Room',
+          rect: { x: 20, y: 100, width: 120, height: 50 },
+        },
+        { index: 2, type, parentIndex: 0, label: 'Actions', rect },
+      ],
+    },
+    undefined,
+  );
 
-  const annotated = annotateCoveredSnapshotNodes([application, target, bottomNavigation]);
-
-  assert.equal(annotated[1]?.interactionBlocked, 'covered');
-  assert.equal(annotated[1]?.coveredBy?.persistentBar, true);
-  assert.equal(annotated[1]?.coveredBy?.kind, 'bottom-navigation');
+  assert.equal(state.nodes[1]?.interactionBlocked, 'covered');
+  assert.deepEqual(state.nodes[1]?.coveredBy, { ...cover, label: 'Actions', rect });
 });
 
 test.for([

@@ -8,6 +8,7 @@ import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   isScrollableNodeLike,
+  type SnapshotProducer,
   snapshotBarKind,
   snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
@@ -97,6 +98,7 @@ function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): Neighbour
 }
 
 export type SnapshotOcclusionOptions = {
+  producer?: SnapshotProducer;
   /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
   isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
 };
@@ -133,7 +135,10 @@ export function annotateCoveredSnapshotNodes(
     if (!isCandidateTouchNode(node)) continue;
     const coveringNode = findCoveringNode(scan, position, node, options);
     if (!coveringNode) continue;
-    const coveredBy = describeCoveringNode(coveringNode);
+    const coveredBy = describeCoveringNode(
+      coveringNode,
+      snapshotBarKind(coveringNode, options.producer),
+    );
     coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
@@ -171,10 +176,12 @@ function isViewportChromeBarNode(
  * still describes itself with no label to lean on. Persistent bars always publish their canonical
  * bar kind, including when the type is generic and only the role or subrole identifies the bar.
  */
-function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
+function describeCoveringNode(
+  node: CoveringNodeEvidence,
+  barKind?: ReturnType<typeof snapshotBarKind>,
+): SnapshotCoveringNode | null {
   const label = node.label?.trim();
   const typeKind = formatRole(node.type ?? 'Element');
-  const barKind = snapshotBarKind(node);
   const anonymous = ANONYMOUS_CONTAINER_KINDS.has(typeKind);
   if (!label && !barKind && anonymous) return null;
   const rect = positiveRect(node.rect);

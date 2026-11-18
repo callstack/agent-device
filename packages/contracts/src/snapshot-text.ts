@@ -1,5 +1,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer } from './snapshot-producers.ts';
 
 export function normalizeType(type: string): string {
   let normalized = type
@@ -14,33 +15,55 @@ export function normalizeType(type: string): string {
   return normalized;
 }
 
-const SNAPSHOT_BAR_KINDS = [
-  ['bottomnavigation', 'bottom-navigation'],
-  ['bottomnavigationbar', 'bottom-navigation'],
-  ['bottomnavigationview', 'bottom-navigation'],
-  ['tabbar', 'tab-bar'],
-  ['toolbar', 'toolbar'],
-  ['navigationbar', 'navigation-bar'],
+const APPLE_BAR_KINDS = [
+  ['TabBar', 'tab-bar'],
+  ['Toolbar', 'toolbar'],
+  ['NavigationBar', 'navigation-bar'],
 ] as const;
 
-type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
+const ANDROID_BAR_KINDS = [
+  ['com.google.android.material.bottomnavigation.BottomNavigationView', 'bottom-navigation'],
+  ['android.widget.Toolbar', 'toolbar'],
+  ['androidx.appcompat.widget.Toolbar', 'toolbar'],
+] as const;
 
-/** Reads an exact bar identity from the captured type, role, or subrole. */
+type SnapshotBarNode = Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>;
+type SnapshotBarKind = (typeof APPLE_BAR_KINDS | typeof ANDROID_BAR_KINDS)[number][1];
+
+/** Reads native bar identity only from captures that publish native type or class names. */
 export function snapshotBarKind(
-  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+  node: SnapshotBarNode,
+  producer: SnapshotProducer | undefined,
 ): SnapshotBarKind | undefined {
-  const names = [node.type, node.role, node.subrole].map((value) =>
-    normalizeType(value ?? '').replace(/^ui/, ''),
-  );
-  return SNAPSHOT_BAR_KINDS.find(([name]) => names.includes(name))?.[1];
+  if (
+    producer === 'apple-runner' ||
+    producer === 'simulator-ax-bridge' ||
+    producer === 'macos-helper'
+  ) {
+    const names = [node.type, node.role, node.subrole].map((name) =>
+      name
+        ?.trim()
+        .replace(/^UIKit\./, '')
+        .replace(/^(?:XCUIElementType|UI|AX)/, ''),
+    );
+    return APPLE_BAR_KINDS.find(([name]) => names.includes(name))?.[1];
+  }
+  if (producer === 'android-uiautomator') {
+    const names = [node.type, node.role, node.subrole];
+    return ANDROID_BAR_KINDS.find(([name]) => names.includes(name))?.[1];
+  }
+  return undefined;
 }
 
 /** Identifies native iOS bars whose direct items use platform sizing. */
 export function isNativeIosSnapshotBarNode(
-  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+  node: SnapshotBarNode,
+  producer: SnapshotProducer | undefined,
 ): boolean {
-  const kind = snapshotBarKind(node);
-  return kind !== undefined && kind !== 'bottom-navigation';
+  return (
+    (producer === 'apple-runner' || producer === 'simulator-ax-bridge') &&
+    snapshotBarKind(node, producer) !== undefined
+  );
 }
 
 export function snapshotNodeKindIncludesAny(

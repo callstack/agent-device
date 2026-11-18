@@ -4,7 +4,7 @@ import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapsho
 import { annotateCoveredSnapshotNodes } from '../../snapshot-occlusion.ts';
 import { auditSnapshot } from '../snapshot-audit.ts';
 
-const IOS: AuditContext = { platform: 'ios', truncated: false };
+const IOS: AuditContext = { platform: 'ios', producer: 'apple-runner', truncated: false };
 const ANDROID: AuditContext = { platform: 'android', pixelDensity: 2, truncated: false };
 
 function node(index: number, fields: Partial<SnapshotNode> = {}): SnapshotNode {
@@ -396,7 +396,9 @@ function scannedCoverTree(cover: CoverPublication): SnapshotNode[] {
       rect: { x: 0, y: 791, width: 402, height: 83 },
     },
   ];
-  return annotateCoveredSnapshotNodes(raw).map((scanned) => ({
+  return annotateCoveredSnapshotNodes(raw, {
+    producer: cover.type.startsWith('com.google.android.') ? 'android-uiautomator' : 'apple-runner',
+  }).map((scanned) => ({
     ...scanned,
     ref: `e${scanned.index}`,
   }));
@@ -453,10 +455,12 @@ test('keeps the covered-control finding for a button in a horizontal scroller wh
       rect: { x: 0, y: 725, width: 400, height: 75 },
     },
   ];
-  const nodes = annotateCoveredSnapshotNodes(raw).map((scanned) => ({
-    ...scanned,
-    ref: `e${scanned.index}`,
-  }));
+  const nodes = annotateCoveredSnapshotNodes(raw, { producer: 'android-uiautomator' }).map(
+    (scanned) => ({
+      ...scanned,
+      ref: `e${scanned.index}`,
+    }),
+  );
   expect(nodes[2]).toMatchObject({
     interactionBlocked: 'covered',
     coveredBy: { persistentBar: true },
@@ -578,6 +582,9 @@ test.each([{ role: 'UITabBar' }, { subrole: 'UIToolbar' }, { subrole: 'AXToolbar
     });
     const parent = node(0, { type: 'Other', hittable: false, ...barClass });
     expect(audit([parent, item]).findings).toEqual([]);
+    expect(
+      summarize(audit([parent, item], { ...IOS, producer: 'appium-source' }).findings),
+    ).toEqual(['small-target @e1']);
     expect(summarize(audit([parent, { ...item, label: undefined }]).findings)).toEqual([
       'missing-name @e1',
     ]);

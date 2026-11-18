@@ -50,6 +50,7 @@ type SizeRule =
 
 type AuditScan = {
   platform: AuditContext['platform'];
+  producer: AuditContext['producer'];
   byIndex: ReadonlyMap<number, SnapshotNode>;
   children: ChildrenByParent;
 };
@@ -61,6 +62,7 @@ type AuditScan = {
 export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditContext): AuditResult {
   const scan: AuditScan = {
     platform: context.platform,
+    producer: context.producer,
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
   };
@@ -137,7 +139,7 @@ function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership
   if (scan.platform !== 'ios') return 'app';
   if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
   const parent = parentOf(node, scan);
-  return parent && isNativeIosSnapshotBarNode(parent) ? 'platform-sized' : 'app';
+  return parent && isNativeIosSnapshotBarNode(parent, scan.producer) ? 'platform-sized' : 'app';
 }
 
 function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean {

@@ -1,5 +1,6 @@
 import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer } from './snapshot-producers.ts';
 
 export type AuditFindingKind = 'small-target' | 'missing-name' | 'covered-control';
 
@@ -36,6 +37,7 @@ export type AuditFinding =
 
 export type AuditContext = {
   platform: PublicPlatform;
+  producer?: SnapshotProducer;
   /** Absent means a mobile target. */
   target?: DeviceTarget;
   /** Physical pixels per dp, from the Android capture. */
