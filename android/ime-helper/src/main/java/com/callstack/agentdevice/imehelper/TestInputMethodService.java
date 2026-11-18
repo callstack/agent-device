@@ -60,6 +60,7 @@ public class TestInputMethodService extends InputMethodService {
   // 65_000 and 66_000 chars, so this declared bound is the binding per-dispatch limit and the
   // host chunks below it. Never truncate to fit: over-cap payloads are rejected with a result code.
   private static final int MAX_BASE64_LENGTH = 64_000;
+  private static final int MAX_TEXT_BYTES = MAX_BASE64_LENGTH / 4 * 3;
 
   private BroadcastReceiver receiver;
 
@@ -70,23 +71,16 @@ public class TestInputMethodService extends InputMethodService {
         new BroadcastReceiver() {
           @Override
           public void onReceive(Context context, Intent intent) {
-            // goAsync + setResult makes `am broadcast` block until the result is set, giving the
-            // host an ordered acknowledgement instead of a fire-and-forget exit code.
+            // Keep editor access on the receiver's main thread, where the IME owns its connection.
             final BroadcastReceiver.PendingResult pending = goAsync();
-            final Intent action = intent;
-            new Thread(
-                    () -> {
-                      try {
-                        handleAction(action, pending);
-                      } catch (Throwable error) {
-                        // Never let untrusted extras crash the IME process.
-                        Log.w(TAG, "handleAction failed for " + action.getAction(), error);
-                        pending.setResult(RESULT_REJECTED_PAYLOAD, "error", null);
-                      } finally {
-                        pending.finish();
-                      }
-                    })
-                .start();
+            try {
+              handleAction(intent, pending);
+            } catch (RuntimeException error) {
+              Log.w(TAG, "handleAction failed: " + error.getClass().getSimpleName());
+              pending.setResult(RESULT_REJECTED_PAYLOAD, "error", null);
+            } finally {
+              pending.finish();
+            }
           }
         };
     IntentFilter filter = new IntentFilter();
@@ -166,6 +160,12 @@ public class TestInputMethodService extends InputMethodService {
       if (text == null) {
         pending.setResult(RESULT_REJECTED_PAYLOAD, "empty", null);
         Log.w(TAG, "handleAction: empty payload");
+        return;
+      }
+      if (text.length() > MAX_TEXT_BYTES
+          || text.getBytes(StandardCharsets.UTF_8).length > MAX_TEXT_BYTES) {
+        pending.setResult(RESULT_REJECTED_PAYLOAD, "too-large", null);
+        Log.w(TAG, "handleAction: text payload too large, rejected utf16=" + text.length());
         return;
       }
     } else {

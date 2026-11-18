@@ -381,6 +381,83 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   );
 });
 
+test('fillAndroid rebinds once when the first clear has no input connection', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const state = { currentText: 'old value' };
+  const calls: (readonly string[])[] = [];
+  let rebound = false;
+  const adb = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      calls.push(args);
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
+      if (args[1] === 'ime' && args[2] === 'set') rebound = true;
+      if (args[1] === 'am' && args[2] === 'broadcast') {
+        if (args.includes(CLEAR_ACTION) && !rebound) {
+          return { exitCode: 0, stdout: 'Broadcast completed: result=3\n', stderr: '' };
+        }
+        return imeBroadcastAck(args, state);
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    captureXml: () => androidInputXml({ text: state.currentText }),
+  });
+  await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, 'new value'),
+  );
+  assert.equal(state.currentText, 'new value');
+  assert.deepEqual(
+    calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
+    ['disable', 'enable', 'set'],
+  );
+  assert.equal(calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length, 2);
+  assert.equal(calls.filter((args) => args.includes(CLEAR_ACTION)).length, 2);
+  assert.equal(calls.filter((args) => args.includes(INPUT_ACTION)).length, 1);
+});
+
+test.each([true, false])(
+  'fillAndroid requires a matching readback after clear refusal (match=%s)',
+  async (matches) => {
+    setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+    const state = { currentText: 'existing value' };
+    const requested = matches ? state.currentText : 'replacement';
+    const calls: (readonly string[])[] = [];
+    const adb = createAndroidSnapshotHelperExecutor({
+      exec: async (args) => {
+        calls.push(args);
+        if (args[1] === 'am' && args[2] === 'broadcast') {
+          if (args.includes(CLEAR_ACTION)) {
+            return {
+              exitCode: 0,
+              stdout: 'Broadcast completed: result=2, data="utf16=0"\n',
+              stderr: '',
+            };
+          }
+          return imeBroadcastAck(args, state);
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+      captureXml: () => androidInputXml({ text: state.currentText }),
+    });
+    const fill = withAndroidAdbProvider(
+      { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+      { serial: ANDROID_EMULATOR.id },
+      async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, requested),
+    );
+    if (matches) {
+      assert.equal(await fill, undefined);
+    } else {
+      await assert.rejects(fill, (error: AppError) => {
+        assert.equal(error.details?.dispatchKind, 'commit-returned-false');
+        return true;
+      });
+    }
+    assert.equal(state.currentText, 'existing value');
+    assert.equal(calls.filter((args) => args.includes(INPUT_ACTION)).length, 0);
+  },
+);
+
 test.each([true, false])(
   'fillAndroid recovers a cleared field with hint=%s',
   async (hintShowing) => {

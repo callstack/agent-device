@@ -5,7 +5,10 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
+import {
+  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
+  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+} from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
@@ -337,7 +340,18 @@ async function fillAndroidImeHelper(
   let dispatchedSteps = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
     const deviceKey = getAndroidImeHelperDeviceKey(device);
-    await clearAndroidImeHelperTextCommitted(adb, packageName, deviceKey);
+    try {
+      await clearAndroidImeHelperTextCommitted(adb, packageName, deviceKey);
+    } catch (error) {
+      if (
+        isImeDispatchRejection(error, 'commit-returned-false') &&
+        error.details?.attemptedUtf16 === 0
+      ) {
+        const observed = await verifyAndroidFilledText(device, x, y, text, helper);
+        if (observed.ok) return observed;
+      }
+      throw error;
+    }
     dispatchedSteps += 1;
     if (text) {
       // Dispatched in code-point-safe chunks within the helper's declared byte bound; every chunk
@@ -350,14 +364,25 @@ async function fillAndroidImeHelper(
     return await verifyAndroidFilledText(device, x, y, text, helper);
   };
   const attemptFillWithRetry = async (): Promise<AndroidFillVerification> => {
-    const first = await attemptFill();
-    if (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first)) {
+    let first: AndroidFillVerification | undefined;
+    try {
+      first = await attemptFill();
+    } catch (error) {
+      if (dispatchedSteps !== 0 || !isImeDispatchRejection(error, 'no-input-connection')) {
+        throw error;
+      }
+    }
+    if (first && (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first))) {
       return first;
     }
     // The caller focused the target while resolving the channel; the retry re-focuses because it
     // covers the rare not-yet-bound InputConnection right after focus. A commit none of which
     // reached the field may also have gone to a stale input session, which only a rebind replaces.
-    if (isAndroidFillCommitDropped(first, beforeTarget)) await confirmAndroidTestImeRebound(device);
+    if (
+      first ? isAndroidFillCommitDropped(first, beforeTarget) : getAndroidTestImeOwnership(device)
+    ) {
+      await confirmAndroidTestImeRebound(device);
+    }
     await focusAndroid(device, x, y);
     dispatchedSteps += 1;
     return await attemptFill();
@@ -370,6 +395,17 @@ async function fillAndroidImeHelper(
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
   return verification;
+}
+
+function isImeDispatchRejection(
+  error: unknown,
+  kind: 'commit-returned-false' | 'no-input-connection',
+): error is AppError {
+  return (
+    error instanceof AppError &&
+    error.details?.failureReason === ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON &&
+    error.details.dispatchKind === kind
+  );
 }
 
 async function typeAndroidShell(
