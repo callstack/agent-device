@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTestHost } from '../host-environment.fixtures.ts';
-import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { mkdtempUnsharedForTestSync } from '../tmp-dir.fixtures.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -32,7 +32,7 @@ let binDir: string;
 
 beforeEach(() => {
   // Physical spelling: the ancestry walk resolves links such as macOS's /var, and judges the names it reaches.
-  tmpDir = fs.realpathSync(mkdtempForTestSync('agent-device-swift-cache-trust-'));
+  tmpDir = fs.realpathSync(mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-'));
   cacheRoot = path.join(tmpDir, 'swift-cache');
   versionDir = path.join(cacheRoot, 'v3');
   binDir = path.join(versionDir, 'bin');
@@ -292,4 +292,100 @@ test('the default root is the user cache directory, never the shared temp direct
   expect(onPlatform('linux', { HOME: '/home/u', AGENT_DEVICE_SWIFT_CACHE_DIR: '/override' })).toBe(
     '/override',
   );
+});
+
+test.each([
+  ['1777', 'world_writable'],
+  ['1770', 'shared_group_writable'],
+])(
+  'a cache under a sticky shared directory (mode %s) is refused, not passed through',
+  async (mode, exposure) => {
+    const shared = path.join(tmpDir, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, Number.parseInt(mode, 8));
+
+    await expect(
+      compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(shared, 'swift-cache') }),
+    ).rejects.toMatchObject(untrusted({ exposure, ancestor: shared }));
+    expect(mockRunCmd).not.toHaveBeenCalled();
+  },
+);
+
+test('an existing 0755 cache is closed to its owner, so a umask 002 lock is unreachable for others', async () => {
+  fs.mkdirSync(binDir, { recursive: true, mode: 0o755 });
+  for (const level of [cacheRoot, versionDir, binDir]) fs.chmodSync(level, 0o755);
+  const previousUmask = process.umask(0o002);
+  let lockDir = '';
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    const outputPath = args[args.indexOf('-o') + 1]!;
+    lockDir = path.join(binDir, `${path.basename(outputPath)}.lock`);
+    expect(fs.statSync(lockDir).isDirectory()).toBe(true);
+    fs.writeFileSync(outputPath, 'compiled');
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  try {
+    await compile();
+  } finally {
+    process.umask(previousUmask);
+  }
+
+  expect(path.relative(versionDir, lockDir).startsWith('..')).toBe(false);
+  expect(modeOf(versionDir)).toBe(0o700);
+});
+
+test('a version directory another local user owns is refused', async () => {
+  fs.mkdirSync(versionDir, { recursive: true, mode: 0o700 });
+  reportForeignOwner(versionDir);
+
+  await expect(compile()).rejects.toMatchObject(
+    untrusted({ exposure: 'foreign_owned', ancestor: versionDir }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test.skipIf(process.getuid?.() === 0)(
+  'a bin this user may not write is refused as untrusted when the lock cannot be created',
+  async () => {
+    await plantCachedExecutable(() => {});
+    fs.chmodSync(binDir, 0o555);
+    try {
+      await expect(compile()).rejects.toMatchObject(untrusted({ errno: 'EACCES' }));
+    } finally {
+      fs.chmodSync(binDir, 0o700);
+    }
+    expect(mockRunCmd).not.toHaveBeenCalled();
+  },
+);
+
+test('a bin replaced while waiting for the lock is refused, even with a helper at the name', async () => {
+  const executablePath = await plantCachedExecutable(() => {});
+  const lockDir = `${executablePath}.lock`;
+  fs.mkdirSync(lockDir);
+  // The parent process stands in for another live process that holds the lock while it compiles.
+  fs.writeFileSync(
+    path.join(lockDir, 'owner.json'),
+    JSON.stringify({ pid: process.ppid, startTime: null, acquiredAtMs: Date.now() }),
+  );
+
+  const compiled = compile();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  fs.renameSync(binDir, path.join(versionDir, 'old-bin'));
+  fs.mkdirSync(binDir, { mode: 0o700 });
+  fs.writeFileSync(executablePath, 'planted', { mode: 0o755 });
+
+  await expect(compiled).rejects.toMatchObject(untrusted({ exposure: 'parent_replaced' }));
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('the compile output is made executable through its descriptor, never through a swapped link', async () => {
+  const victim = path.join(tmpDir, 'victim');
+  fs.writeFileSync(victim, 'untouched', { mode: 0o600 });
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    fs.symlinkSync(victim, args[args.indexOf('-o') + 1]!);
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  await expect(compile()).rejects.toMatchObject({ code: 'ELOOP' });
+  expect(modeOf(victim)).toBe(0o600);
+  expect(fs.readdirSync(binDir)).toEqual([]);
 });

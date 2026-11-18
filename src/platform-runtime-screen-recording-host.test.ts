@@ -4,7 +4,11 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+  mkdtempUnsharedForTestSync,
+} from '@agent-device/test-kit';
 import * as video from '@agent-device/capture-kit/recording-video';
 import { runtimeModule } from '@agent-device/platform-apple';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
@@ -30,18 +34,23 @@ const hostPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 beforeEach(() => {
   Object.defineProperty(process, 'platform', { ...hostPlatform, value: 'darwin' });
 });
+const swiftCaches: string[] = [];
 afterEach(() => {
+  for (const cache of swiftCaches.splice(0)) fs.rmSync(cache, { recursive: true, force: true });
   Object.defineProperty(process, 'platform', hostPlatform);
   vi.restoreAllMocks();
 });
 
 async function harness(device: DeviceInfo, launch = () => {}) {
   const root = mkdtempForTestSync('warm-video-validator-');
+  // The Swift helper cache refuses a sticky shared directory such as /tmp anywhere above it.
+  const swiftCache = mkdtempUnsharedForTestSync('warm-video-validator-cache-');
+  swiftCaches.push(swiftCache);
   const unused = async (): Promise<never> => {
     throw new Error('unused');
   };
   const host = createPlatformRuntimeHost({
-    host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: root } },
+    host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCache } },
     sessionsDir: root,
     resolveSessionArtifacts: () => {
       throw new Error('unused');

@@ -31,7 +31,7 @@ import {
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { runCmdBackground, withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempUnsharedForTestSync } from '@agent-device/test-kit';
 import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
@@ -104,6 +104,12 @@ export async function createProviderScenarioHarness(
   deps: ProviderScenarioDependencies,
 ): Promise<ProviderScenarioHarness> {
   const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-scenario-'));
+  // The Swift helper cache refuses a sticky shared directory such as /tmp anywhere above it.
+  const swiftCacheRoot = mkdtempUnsharedForTestSync('provider-scenario-swift-cache-');
+  const removeScenarioDirs = async () => {
+    fs.rmSync(swiftCacheRoot, { recursive: true, force: true });
+    await removeProviderScenarioTempDir(testRoot);
+  };
   const stateDir = path.join(testRoot, 'state');
   const daemonPaths = resolveDaemonPaths(stateDir);
   const env: NodeJS.ProcessEnv = {
@@ -113,7 +119,7 @@ export async function createProviderScenarioHarness(
     // A scenario that seeds claims for its daemon names the directory through the process.
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
-    AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(testRoot, 'swift-cache'),
+    AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCacheRoot,
     ...deps.env,
     // Set last: the harness reads its own state dir and transport back from these.
     AGENT_DEVICE_STATE_DIR: stateDir,
@@ -218,11 +224,11 @@ export async function createProviderScenarioHarness(
       composeDeps,
     });
   } catch (error) {
-    await removeProviderScenarioTempDir(testRoot);
+    await removeScenarioDirs();
     throw error;
   }
   if (!runtime?.httpPort) {
-    await removeProviderScenarioTempDir(testRoot);
+    await removeScenarioDirs();
     throw new Error('Provider scenario daemon did not start an HTTP server');
   }
   const httpPort = runtime.httpPort;
@@ -291,7 +297,7 @@ export async function createProviderScenarioHarness(
       } else {
         await runtime?.close();
       }
-      await removeProviderScenarioTempDir(testRoot);
+      await removeScenarioDirs();
     },
   };
 }

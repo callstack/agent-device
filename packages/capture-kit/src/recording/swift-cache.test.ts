@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { mkdtempUnsharedForTestSync } from '../tmp-dir.fixtures.ts';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
@@ -28,7 +28,7 @@ let tmpDir: string;
 
 beforeEach(() => {
   // Physical spelling: the cache answers the paths its ancestry walk resolved, such as macOS's /private/var.
-  tmpDir = fs.realpathSync(mkdtempForTestSync('agent-device-swift-cache-test-'));
+  tmpDir = fs.realpathSync(mkdtempUnsharedForTestSync('agent-device-swift-cache-test-'));
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });
