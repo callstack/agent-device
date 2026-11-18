@@ -220,6 +220,42 @@ export function coveredByScanSnapshot(): SnapshotState {
   );
 }
 
+/**
+ * An unnamed bar published as type `Other` with its UIKit class in `role`, run through the real
+ * annotation pass: the scan reads the bar identity from the role, not the generic type.
+ */
+export function coveredByAnonymousTabBarScanSnapshot(): SnapshotState {
+  return makeSnapshotState(
+    annotateCoveredSnapshotNodes([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        label: 'Example',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Save draft',
+        rect: { x: 16, y: 800, width: 140, height: 44 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Other',
+        role: 'UITabBar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        hittable: true,
+      },
+    ]),
+  );
+}
+
 export function duplicateCoveredLabelSnapshot(): SnapshotState {
   return makeSnapshotState([
     {

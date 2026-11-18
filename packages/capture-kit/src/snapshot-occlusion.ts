@@ -9,6 +9,7 @@ import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   isScrollableNodeLike,
   isSnapshotBarNode,
+  snapshotBarKind,
   snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
@@ -153,22 +154,30 @@ const BOTTOM_NAVIGATION_KIND_FRAGMENTS = ['bottomnavigation'];
  * the surface to dismiss. Strip that label and the same node would say `the group at (...)`, which
  * points at a box nobody would recognize; an anonymous container of that shape therefore publishes
  * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
- * still describes itself with no label to lean on. A persistent bar always publishes, because its
- * `persistentBar` fact reaches consumers even when its type is generic and the bar is unnamed.
+ * still describes itself with no label to lean on. A persistent bar always publishes, and when its
+ * type presents as an anonymous container, its kind comes from the bar identity its role or subrole
+ * carries (`Other` with role `UITabBar` publishes `tab-bar`), so the cover names a recognizable bar.
  */
 function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
   const label = node.label?.trim();
-  const kind = formatRole(node.type ?? 'Element');
-  const persistentBar =
-    isSnapshotBarNode(node) || nodeKindIncludesAny(node, BOTTOM_NAVIGATION_KIND_FRAGMENTS);
-  if (!label && !persistentBar && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
+  const typeKind = formatRole(node.type ?? 'Element');
+  const barKind = persistentBarKind(node);
+  const anonymous = ANONYMOUS_CONTAINER_KINDS.has(typeKind);
+  if (!label && !barKind && anonymous) return null;
   const rect = positiveRect(node.rect);
   return {
-    kind,
+    kind: barKind && anonymous ? barKind : typeKind,
     ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
     ...(rect ? { rect } : {}),
-    ...(persistentBar ? { persistentBar: true } : {}),
+    ...(barKind ? { persistentBar: true } : {}),
   };
+}
+
+function persistentBarKind(node: CoveringNodeEvidence): string | undefined {
+  return (
+    snapshotBarKind(node) ??
+    (nodeKindIncludesAny(node, BOTTOM_NAVIGATION_KIND_FRAGMENTS) ? 'bottom-navigation' : undefined)
+  );
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */

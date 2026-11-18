@@ -14,13 +14,28 @@ export function normalizeType(type: string): string {
   return normalized;
 }
 
-const SNAPSHOT_BAR_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+/** Presented bar kind, keyed by the normalized kind fragment that identifies it. */
+const SNAPSHOT_BAR_KINDS = [
+  ['tabbar', 'tab-bar'],
+  ['toolbar', 'toolbar'],
+  ['navigationbar', 'navigation-bar'],
+] as const;
+
+export type SnapshotBarKind = (typeof SNAPSHOT_BAR_KINDS)[number][1];
+
+/** Reads the bar kind from the captured type, role, and subrole, or nothing for a non-bar node. */
+export function snapshotBarKind(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): SnapshotBarKind | undefined {
+  const normalized = normalizeNodeKind(node);
+  return SNAPSHOT_BAR_KINDS.find(([fragment]) => normalized.includes(fragment))?.[1];
+}
 
 /** Reads bar identity from the captured type, role, and subrole. */
 export function isSnapshotBarNode(
   node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
 ): boolean {
-  return snapshotNodeKindIncludesAny(node, SNAPSHOT_BAR_KIND_FRAGMENTS);
+  return snapshotBarKind(node) !== undefined;
 }
 
 export function snapshotNodeKindIncludesAny(

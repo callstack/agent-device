@@ -5,6 +5,7 @@ import { throwIfOffscreenInteractionTarget } from './target-visibility-stages.ts
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
+  coveredByAnonymousTabBarScanSnapshot,
   coveredByScanSnapshot,
   coveredByTabBarSnapshot,
   createInteractionDevice,
@@ -183,6 +184,31 @@ test('runtime covered refusal names the covering element the occlusion scan foun
     },
   );
   assert.deepEqual(calls, []);
+});
+
+test('runtime covered refusal names an unnamed generic-typed bar and never says dismiss', async () => {
+  const device = createInteractionDevice(coveredByAnonymousTabBarScanSnapshot(), {
+    tap: async () => {},
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+      });
+      assert.match(
+        String(details?.hint),
+        /^Covered by the tab-bar at \(0, 791 402x83\)\. Scroll the target clear of it/,
+      );
+      assert.doesNotMatch(String(details?.hint), /dismiss|close|the other/i);
+      return true;
+    },
+  );
 });
 
 test('runtime covered refusal keeps the generic hint when the cover is a policy boolean', async () => {
