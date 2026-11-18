@@ -20,6 +20,7 @@ import {
   readProcessIdentities,
   readProcessIdentityFacts,
 } from './host-process.ts';
+import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
@@ -42,13 +43,7 @@ function psInstalledAt(installed: readonly string[]): void {
 }
 
 beforeEach(() => {
-  const readFileSync = fs.readFileSync;
-  vi.spyOn(fs, 'readFileSync').mockImplementation((path, options) => {
-    if (String(path).startsWith('/proc/')) {
-      throw Object.assign(new Error('proc is unavailable in the ps fixture'), { code: 'ENOENT' });
-    }
-    return readFileSync(path, options);
-  });
+  mockLinuxProcessStatAbsent();
   mockRunCmdSync.mockReset();
   mockRunCmd.mockReset();
 });

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { afterEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 // Every claim the stopper makes is about what the host answers, so one double answers both syscalls it
 // reads: `kill(pid, signal)` for the signals and liveness probes, and `ps` for the identity fields.
@@ -316,6 +317,12 @@ function targetOf(model: HostCase): ProcessStopTarget {
     },
   };
 }
+
+beforeEach(() => {
+  // The identity reader reads `/proc/<pid>/stat` before the `ps` row, so an unmocked host can answer
+  // for the fixture pid. See host-proc.fixtures.ts.
+  mockLinuxProcessStatAbsent();
+});
 
 afterEach(() => {
   vi.useRealTimers();
