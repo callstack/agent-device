@@ -1,0 +1,534 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, expect, test, vi } from 'vitest';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { FOREIGN_UID, mkdtempForTestSync, serveHostOwnership } from '@agent-device/test-kit';
+import { artifactServer, open } from './support/script-publication-fixtures.ts';
+
+afterEach(() => {
+  // These cases spy on `fs` to serve an ownership shape the host does not have; a later file on the same worker
+  // would otherwise keep answering that fixture.
+  vi.restoreAllMocks();
+});
+
+// Where a remote recording is allowed to CREATE its file. The daemon answers, the version downloads, and
+// the bytes land wherever the destination's own spelling resolves to, so the ground a destination names is
+// judged one component at a time the way the kernel walks it (ADR 0016, #4565). A refused destination
+// publishes nothing at all: the response is still a success, its script version is not delivered, and no
+// file appears in the directory a link led through. What the same rule accepts, and the shape of each
+// refusal, is pinned at the walk itself in host-kit's `atomic-file-ancestry.test.ts`; these are the cases
+// that only exist once the publication, the download and the record are in the way.
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording creates a missing parent in a sticky directory and publishes there',
+  async () => {
+    // `open --save-script /tmp/rec/journey.ad` with `rec` absent is the ordinary shape, and `/tmp` is
+    // sticky. Judging the chain before the parent exists asks the question about `/tmp` and refuses a
+    // recording the local writer accepts, so the parent is created first on both routes (#4565).
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-mkdir-'));
+    const stateDir = path.join(root, 'state');
+    const sticky = path.join(root, 'tmp');
+    fs.mkdirSync(sticky);
+    fs.chmodSync(sticky, 0o1777);
+    const destination = path.join(sticky, 'recordings', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.not.objectContaining({ scriptDeliveryFailure: expect.anything() }),
+      }),
+    );
+    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording creates a missing parent at 0700 on a shared umask',
+  async () => {
+    // The umask of a shared checkout: a mode-less creation is 0775, and the check that judges the new
+    // directory right after the `mkdir` refuses the very directory the route just made, so the save fails
+    // AND leaves 0775 `recordings` standing where any local user could write. host-kit creates at 0700 and
+    // a recursive mkdir applies that mode to every level, so the new directory passes the check it is
+    // judged by and the version lands in it.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-umask-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.chmodSync(home, 0o700);
+    const recordings = path.join(home, 'workflows', 'recordings');
+    const destination = path.join(recordings, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    const previous = process.umask(0o002);
+    let result: Awaited<ReturnType<typeof open>>;
+    try {
+      result = await open(baseUrl, stateDir, destination);
+    } finally {
+      process.umask(previous);
+    }
+
+    expect(result.response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.not.objectContaining({ scriptDeliveryFailure: expect.anything() }),
+      }),
+    );
+    expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
+    expect(fs.lstatSync(path.join(home, 'workflows')).mode & 0o777).toBe(0o700);
+    expect(fs.lstatSync(recordings).mode & 0o777).toBe(0o700);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording creates the entry in the directory the walk judged, not the spelled one',
+  async () => {
+    // `home/work -> priv/x`, `priv/y` and `home/elsewhere/y` both private. The version is judged, staged,
+    // and judged again, and only then does the entry get created: in between, another process may put a
+    // different directory where `work` stood. Handing the kernel the SPELLD destination for that last
+    // step asks it to resolve the chain a second time, and it resolves through the new link, so the
+    // recording lands beside a directory the rule never judged. Creating the entry in the directory the
+    // walk answered is what keeps it where the judgment said.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-entry-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.chmodSync(home, 0o700);
+    const privX = path.join(root, 'priv', 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    fs.chmodSync(path.join(root, 'priv'), 0o700);
+    const privY = path.join(root, 'priv', 'y');
+    fs.mkdirSync(privY);
+    fs.chmodSync(privY, 0o700);
+    // `elsewhere/stash` exists so that the SWAPPED link sends `home/work/../y` to `elsewhere/y`: `..`
+    // applies to the link's target, which is what makes the spelled path answer a different directory
+    // once `work` points there.
+    const elsewhere = path.join(home, 'elsewhere');
+    fs.mkdirSync(elsewhere);
+    fs.mkdirSync(path.join(elsewhere, 'stash'));
+    const elsewhereY = path.join(elsewhere, 'y');
+    fs.mkdirSync(elsewhereY);
+    fs.chmodSync(elsewhere, 0o700);
+    const link = path.join(home, 'work');
+    fs.symlinkSync(privX, link);
+    const destination = `${home}/work/../y/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    // The move happens after the last judgment and before the entry is created: exactly the moment the
+    // spelled destination would be re-resolved.
+    const realLinkSync = fs.linkSync;
+    let moved = false;
+    vi.spyOn(fs, 'linkSync').mockImplementation(((existing: unknown, newPath: unknown) => {
+      if (!moved && String(newPath).endsWith('journey.ad')) {
+        moved = true;
+        fs.rmSync(link, { force: true });
+        fs.symlinkSync(path.join(elsewhere, 'stash'), link);
+      }
+      return (realLinkSync as (...args: unknown[]) => unknown)(existing, newPath);
+    }) as typeof fs.linkSync);
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.not.objectContaining({ scriptDeliveryFailure: expect.anything() }),
+      }),
+    );
+    expect(fs.readdirSync(privY)).toEqual(['journey.ad']);
+    expect(fs.readdirSync(elsewhereY)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination with a missing parent and creates no directories',
+  async () => {
+    // The same shape as the case above, with the parent ABSENT: this route creates the missing parent
+    // itself, so a `mkdir` that runs ahead of the rule leaves `recordings` standing in the open directory
+    // after the publication refuses — a directory this user made in ground another local user can name
+    // things in. What exists is asked about before anything is created, so a refused destination publishes
+    // nothing at all, directories included.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-stray-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const destination = path.join(shared, 'recordings', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination that steps back out of a missing directory',
+  async () => {
+    // The walk ends at `missing`, so the world-writable `shared` below it is never judged, and this
+    // route's `mkdir -p` resolves the two steps up as text and builds `<root>/shared/recordings`. The
+    // version would then be written into a directory the rule saw nothing of, beside directories left in
+    // ground another local user owns the naming of. The chain that exists is asked about first, so the
+    // refusal arrives before the first `mkdir` and nothing is created.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-upward-'));
+    const stateDir = path.join(root, 'state');
+    const privateDir = path.join(root, 'private');
+    fs.mkdirSync(privateDir);
+    fs.chmodSync(privateDir, 0o700);
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const destination = `${privateDir}/missing/../../shared/recordings/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(privateDir)).toEqual([]);
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses the ground a link target crosses on the way in',
+  async () => {
+    // `rec -> <root>/shared/relay/sub`, `shared` at 0777 and not sticky, `shared/relay -> <root>/chosen`.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-target-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    fs.chmodSync(chosen, 0o700);
+    fs.symlinkSync(chosen, path.join(shared, 'relay'));
+    const sub = path.join(chosen, 'sub');
+    fs.mkdirSync(sub);
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.symlinkSync(path.join(shared, 'relay', 'sub'), path.join(home, 'rec'));
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(sub)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a target spelled relative to the link that holds it',
+  async () => {
+    // `ln -s ../team/rec rec` is how a link is usually written. The target is resolved from the directory
+    // that holds the link, so the walk leaves the home and crosses `shared` at 0777 on the way in.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-relative-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const team = path.join(shared, 'team');
+    fs.mkdirSync(team);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    fs.chmodSync(chosen, 0o700);
+    fs.symlinkSync(chosen, path.join(team, 'rec'));
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.symlinkSync(path.join('..', 'shared', 'team', 'rec'), path.join(home, 'rec'));
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(chosen)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording stages inside the directory the entry is created in',
+  async () => {
+    // `home/work -> priv/x`, `priv/y` private, `home/y` at 0777. The entry lands in `priv/y`, but the
+    // spelled parent folds to `home`, so staging beside the spelled parent downloads the version into a
+    // directory the ancestry walk never judged as the entry's, and moves it in by a rename that is no
+    // longer within one directory.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-staging-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    fs.chmodSync(home, 0o700);
+    const sharedY = path.join(home, 'y');
+    fs.mkdirSync(sharedY);
+    fs.chmodSync(sharedY, 0o777);
+    const privX = path.join(root, 'priv', 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    const privY = path.join(root, 'priv', 'y');
+    fs.mkdirSync(privY);
+    fs.chmodSync(privY, 0o700);
+    fs.symlinkSync(privX, path.join(home, 'work'));
+    const destination = `${home}/work/../y/journey.ad`;
+    const created: string[] = [];
+    const realMkdtempSync = fs.mkdtempSync;
+    vi.spyOn(fs, 'mkdtempSync').mockImplementation(((template: string, ...rest: unknown[]) => {
+      created.push(path.dirname(template));
+      return (realMkdtempSync as (...args: unknown[]) => unknown)(template, ...rest);
+    }) as typeof fs.mkdtempSync);
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(expect.objectContaining({ ok: true }));
+    expect(created).toEqual([privY]);
+    expect(fs.readdirSync(sharedY)).toEqual([]);
+    expect(fs.readFileSync(path.join(privY, 'journey.ad'), 'utf8')).toContain('open Demo');
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a link another local user owns on the way in',
+  async () => {
+    // `~/rec -> <root>/tmp/relay -> ~/chosen`, `relay` another user's file in a sticky shared directory.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-hopowner-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    const tmp = path.join(root, 'tmp');
+    fs.mkdirSync(tmp);
+    fs.chmodSync(tmp, 0o1777);
+    const relay = path.join(tmp, 'relay');
+    fs.symlinkSync(chosen, relay);
+    fs.symlinkSync(relay, path.join(home, 'rec'));
+    serveHostOwnership({ [relay]: FOREIGN_UID });
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(chosen)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses the directory a .. steps back into',
+  async () => {
+    // `home/work -> priv/x`, `priv/y` at 0777: the write lands in `priv/y`, not in the `home/y` the
+    // normalized spelling names.
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-dotdot-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    const priv = path.join(root, 'priv');
+    const privX = path.join(priv, 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    const privY = path.join(priv, 'y');
+    fs.mkdirSync(privY);
+    fs.chmodSync(privY, 0o777);
+    fs.symlinkSync(privX, path.join(home, 'work'));
+    const destination = `${home}/work/../y/journey.ad`;
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestor_untrusted' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(privY)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a private link standing on shared ground two levels up',
+  async () => {
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-traverse-'));
+    const stateDir = path.join(root, 'state');
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const mine = path.join(shared, 'mine');
+    fs.mkdirSync(mine);
+    fs.chmodSync(mine, 0o700);
+    const privateWork = path.join(root, 'private');
+    fs.mkdirSync(privateWork);
+    fs.symlinkSync(privateWork, path.join(mine, 'rec'));
+    const destination = path.join(mine, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({
+            cause: 'script_ancestor_untrusted',
+          }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(privateWork)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a chain that leaves a shared directory through a link',
+  async () => {
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-relay-'));
+    const stateDir = path.join(root, 'state');
+    const home = path.join(root, 'home');
+    fs.mkdirSync(home);
+    const team = path.join(root, 'srv', 'team');
+    fs.mkdirSync(team, { recursive: true });
+    fs.chmodSync(team, 0o777);
+    const chosen = path.join(root, 'chosen');
+    fs.mkdirSync(chosen);
+    fs.chmodSync(chosen, 0o700);
+    fs.symlinkSync(chosen, path.join(team, 'relay'));
+    fs.symlinkSync(path.join(team, 'relay'), path.join(home, 'rec'));
+    const destination = path.join(home, 'rec', 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination);
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({
+            cause: 'script_ancestor_untrusted',
+          }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(chosen)).toEqual([]);
+  },
+);
+
+test.skipIf(process.platform === 'win32').each([
+  {
+    name: 'a symbolic link planted where the script should land',
+    plant: (root: string) => {
+      const shared = path.join(root, 'shared');
+      fs.mkdirSync(shared);
+      fs.chmodSync(shared, 0o777);
+      const attacker = path.join(root, 'attacker');
+      fs.mkdirSync(attacker);
+      fs.symlinkSync(attacker, path.join(shared, 'work'));
+      return {
+        destination: path.join(shared, 'work', 'journey.ad'),
+        untouched: attacker,
+      };
+    },
+  },
+  {
+    name: 'a world-writable directory',
+    plant: (root: string) => {
+      const shared = path.join(root, 'shared');
+      fs.mkdirSync(shared);
+      fs.chmodSync(shared, 0o777);
+      return { destination: path.join(shared, 'journey.ad'), untouched: shared };
+    },
+  },
+])('a remote recording refuses a destination under $name', async ({ plant }) => {
+  const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-'));
+  const stateDir = path.join(root, 'state');
+  const { destination, untouched } = plant(root);
+  const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+
+  const { response } = await open(baseUrl, stateDir, destination);
+
+  expect(response).toEqual(
+    expect.objectContaining({
+      ok: true,
+      data: expect.objectContaining({
+        scriptDeliveryFailure: expect.objectContaining({
+          cause: 'script_ancestor_untrusted',
+        }),
+      }),
+    }),
+  );
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(fs.readdirSync(untouched)).toEqual([]);
+});
+
+test.skipIf(process.platform === 'win32')(
+  'a remote recording refuses a destination whose directory was swapped while the version downloaded',
+  async () => {
+    const root = fs.realpathSync(mkdtempForTestSync('script-ancestry-'));
+    const stateDir = path.join(root, 'state');
+    const work = path.join(root, 'work');
+    fs.mkdirSync(work);
+    const destination = path.join(work, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
+    const realOpen = fs.promises.open.bind(fs.promises);
+    // The replacement is a private directory, so only the parent's identity can catch it. The swap
+    // happens once the staged file is open: after the parent's identity was captured.
+    const spyOpen = vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
+      const handle = await realOpen(file as never, ...(rest as unknown as never[]));
+      fs.rmSync(work, { recursive: true, force: true });
+      fs.mkdirSync(work);
+      return handle;
+    });
+
+    let response: DaemonResponse;
+    try {
+      response = (await open(baseUrl, stateDir, destination)).response;
+    } finally {
+      spyOpen.mockRestore();
+    }
+
+    expect(response).toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({
+          scriptDeliveryFailure: expect.objectContaining({ cause: 'script_ancestry_replaced' }),
+        }),
+      }),
+    );
+    expect(fs.readdirSync(work)).toEqual([]);
+  },
+);

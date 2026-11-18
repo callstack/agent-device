@@ -23,7 +23,7 @@ const PROCESS_LOCK_SOURCE = new URL(
 test('simple same-directory publishers use the shared atomic publish owner', () => {
   for (const sourcePath of SIMPLE_PUBLISHERS) {
     const source = fs.readFileSync(sourcePath, 'utf8');
-    assert.match(source, /publishFileSync/);
+    assert.match(source, /publish(?:Script)?FileSync/);
     assert.doesNotMatch(source, /fs\.(?:writeFileSync|renameSync)\s*\(/);
   }
 });

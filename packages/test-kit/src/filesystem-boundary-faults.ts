@@ -71,14 +71,15 @@ function installFilesystemFault(options: {
   const failure = createErrno(options.errno);
   let injected = false;
   const temporaryDescriptors = new Set<number>();
+  const temporaryPath = (value: unknown) => isPublishTemporarySiblingOf(value, options.targetPath);
   const isTargetOrTemporary = (value: unknown): boolean =>
-    value === options.targetPath || isAtomicPublishTemporaryPath(value, options.targetPath);
+    value === options.targetPath || temporaryPath(value);
 
   if (options.faultPoint === 'write') {
     const originalOpenSync = fs.openSync;
     vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
       const descriptor = Reflect.apply(originalOpenSync, fs, args);
-      if (isAtomicPublishTemporaryPath(args[0], options.targetPath)) {
+      if (temporaryPath(args[0])) {
         temporaryDescriptors.add(descriptor);
       }
       return descriptor;
@@ -88,7 +89,7 @@ function installFilesystemFault(options: {
     vi.spyOn(fs, 'writeFileSync').mockImplementation((...args) => {
       const destination = args[0];
       const writesPublishedTemporary =
-        isAtomicPublishTemporaryPath(destination, options.targetPath) ||
+        temporaryPath(destination) ||
         (typeof destination === 'number' && temporaryDescriptors.has(destination));
       if (writesPublishedTemporary) {
         injected = true;
@@ -109,6 +110,45 @@ function installFilesystemFault(options: {
   }
 
   return { wasInjected: () => injected };
+}
+
+/**
+ * Whether a value is the temporary sibling a publish makes for `targetPath`, by NAME and by directory.
+ *
+ * The directory is asked as device and inode, not as text: a publisher that judges ground stages its sibling
+ * in the PHYSICAL directory it judged, and a spelling through a symbolic link (`/var` on macOS) or a `..`
+ * behind a link is one directory in the filesystem and two in text. Comparing the text would leave the real
+ * sibling unmatched.
+ */
+export function isPublishTemporarySiblingOf(value: unknown, targetPath: string): boolean {
+  if (typeof value !== 'string') return false;
+  // The NAME half is host-kit's, and it is asked with the value's own directory as the destination's, so only
+  // the shape is judged. What is left is the question host-kit cannot answer: is that directory the one
+  // `targetPath` stands in?
+  const named = isAtomicPublishTemporaryPath(
+    value,
+    path.join(path.dirname(value), path.basename(targetPath)),
+  );
+  if (!named) return false;
+  const spelled = path.dirname(targetPath);
+  const directory = path.dirname(value);
+  if (directory === spelled) return true;
+  const expected = statOrNull(spelled);
+  const seen = statOrNull(directory);
+  return (
+    expected !== undefined &&
+    seen !== undefined &&
+    seen.dev === expected.dev &&
+    seen.ino === expected.ino
+  );
+}
+
+function statOrNull(pathname: string): fs.Stats | undefined {
+  try {
+    return fs.statSync(pathname);
+  } catch {
+    return undefined;
+  }
 }
 
 function createErrno(errno: FilesystemErrno): NodeJS.ErrnoException {

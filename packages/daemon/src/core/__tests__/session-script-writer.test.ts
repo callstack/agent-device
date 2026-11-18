@@ -15,6 +15,7 @@ import { markRepairTransactionComplete } from '../session-replay-transaction.ts'
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import { parseReplayScriptDetailed, resolveReplayAction } from '@agent-device/ad-script';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { failScriptStagingWrite } from '../../__tests__/support/script-staging-failure.ts';
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
 
@@ -554,7 +555,10 @@ test('write(session) without { force: true } still refuses, even when a prior wr
 // concurrent race correctly without any lock — first writer wins, the loser
 // sees `EEXIST` and is refused.
 test('two writers racing on the SAME ABSENT target: exactly one linkSync wins, the other is refused (no lock involved)', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-race-');
+  // Realpath'ed because the publish creates the entry in the directory the ancestry walk ANSWERED, and on
+  // macOS `mkdtemp` spells the scratch root through the `/var` alias: this spy compares the entry's path
+  // with the one it expects to see.
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-race-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
@@ -696,9 +700,12 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
 test('an ordinary recording returns a filesystem write failure as a typed error, never a quiet skip', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-fs-failure-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
-  const blocker = path.join(root, 'blocker');
-  fs.writeFileSync(blocker, '');
-  const outPath = path.join(blocker, 'flow.ad');
+  // The staging write of the publication is made to fail, so the failure the caller sees is the
+  // filesystem's own and not an ancestry verdict. A directory the mode bits deny this user is not used
+  // for that: mode bits do not bind root, so under a root caller the write would succeed and this test
+  // would be reporting the host's permission model instead of the writer's error handling.
+  const outPath = path.join(root, 'flow.ad');
+  failScriptStagingWrite(outPath);
   const session = makeAuthoringSession('default', {
     scriptPublication: authoringPublication('armed', { path: outPath }),
     actions: [action({ command: 'click', positionals: ['id="new"'] })],

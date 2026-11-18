@@ -1,8 +1,13 @@
 export {
+  confirmScriptDestination,
   isAtomicPublishTemporaryPath,
+  prepareScriptDestination,
   publishDurableFileSync,
   publishFileSync,
+  publishScriptFileSync,
+  scriptAncestryReason,
   type DurableFilePublishMode,
+  type ScriptDestination,
 } from './internal/atomic-file.ts';
 export {
   lstatIfPresent,

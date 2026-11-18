@@ -16,6 +16,7 @@ import {
 } from '../session-close-script.ts';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
+import { failScriptStagingWrite } from '../../../../__tests__/support/script-staging-failure.ts';
 
 const roots: string[] = [];
 
@@ -195,10 +196,12 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
 test('ordinary close reports a filesystem failure of its script write instead of a quiet success', () => {
   const root = mkdtempForTestSync('agent-device-session-close-script-fs-');
   roots.push(root);
-  // A regular file where the target directory must be: publishing into it fails with ENOTDIR.
-  const blocker = path.join(root, 'blocker');
-  fs.writeFileSync(blocker, '');
-  const targetPath = path.join(blocker, 'flow.ad');
+  // The publication's staging write is made to fail, so the caller sees the filesystem's own failure and
+  // not an ancestry refusal. A directory whose mode denies this user is not used for that: mode bits do
+  // not bind root, so under a root caller the write would succeed and this test would be measuring the
+  // host's permission model instead of what close does with a failure.
+  const targetPath = path.join(root, 'flow.ad');
+  failScriptStagingWrite(targetPath);
   const { req, ref, sessionStore } = setup(
     'fs-failure',
     makeIosSession('fs-failure', {

@@ -12,9 +12,18 @@ import type {
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
+import {
+  acquireProcessLock,
+  confirmScriptDestination,
+  scriptAncestryReason,
+  prepareScriptDestination,
+  publishFileSync,
+  withProcessLock,
+  type ScriptDestination,
+} from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
 
@@ -398,14 +407,15 @@ async function publishScriptVersion(
     return { published: undefined };
   }
   if ((revision as number) <= record.revision) return { published: record.destination };
-  const directory = path.dirname(record.destination);
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    await fs.promises.mkdir(directory, { recursive: true });
-    staging = await withRecordLock(file, async () => allocateStaging(file, directory));
-    if (!staging) return { published: undefined };
-    const staged = path.join(staging, 'script.ad');
+    // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
+    const prepared = prepareScriptDestination(record.destination);
+    const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
+    staging = allocated;
+    if (!allocated) return { published: undefined };
+    const staged = path.join(allocated, 'script.ad');
     await context.download({
       ...endpoint,
       artifactId: artifactId as string,
@@ -413,7 +423,14 @@ async function publishScriptVersion(
       requestScope: req.meta,
       privateFile: { maxBytes: MAX_SCRIPT_BYTES },
     });
-    const version = { revision: revision as number, staging, staged, pending };
+    const version = {
+      revision: revision as number,
+      staging: allocated,
+      staged,
+      // What host-kit answered above, carried for the one confirmation before the rename.
+      prepared,
+      pending,
+    };
     return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
   } catch (error) {
     return {
@@ -429,11 +446,14 @@ async function publishScriptVersion(
   }
 }
 
-/** Creates a staging directory and lists it in the record before any script bytes reach it. */
-function allocateStaging(file: string, directory: string): string | undefined {
+/**
+ * Creates a staging directory in the ground host-kit judged, and lists it in the record before any script
+ * bytes reach it, or nothing when the record went away (ADR 0016).
+ */
+function allocateStaging(file: string, prepared: ScriptDestination): string | undefined {
   const record = readRecord(file);
   if (!record) return undefined;
-  const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
+  const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
   try {
     writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
   } catch (error) {
@@ -521,10 +541,11 @@ function publishStaged(
     revision: number;
     staging: string;
     staged: string;
+    prepared: ScriptDestination;
     pending: { named: boolean };
   }>,
 ): string | undefined {
-  const { revision, staging, staged, pending } = version;
+  const { revision, staging, staged, prepared, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
   let current = settlePublishing(record);
@@ -535,15 +556,21 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
+  // Confirmed here, under the record lock and right before the entry is created, because the download ran in
+  // between (ADR 0016).
+  const judged = confirmScriptDestination(current.destination, prepared);
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
   pending.named = true;
   const exclusive = current.revision === 0 && !current.force;
+  // The entry is spelled FROM that answer, never through the destination's own spelling, as the local
+  // publisher does (ADR 0016).
+  const entry = path.join(judged, path.basename(current.destination));
   try {
-    if (exclusive) fs.linkSync(staged, current.destination);
-    else fs.renameSync(staged, current.destination);
+    if (exclusive) fs.linkSync(staged, entry);
+    else fs.renameSync(staged, entry);
   } catch (error) {
     writeRecord(file, settlePublishing({ ...current, publishing }));
     pending.named = false;
@@ -575,6 +602,19 @@ function scriptDeliveryFailure(
 ): ScriptDeliveryFailure {
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
+  const refusal = scriptAncestryReason(error);
+  if (refusal) {
+    return {
+      reason: 'script_delivery_failed',
+      cause: refusal,
+      publicationId,
+      message:
+        error instanceof AppError
+          ? error.message
+          : `The remote script could not be saved to ${destination}.`,
+      hint: error instanceof AppError ? (error.details?.hint ?? '') : '',
+    };
+  }
   const recovery = closing
     ? 'The session is closed, so no later version follows.'
     : 'The next recorded action or close delivers the full recording again.';

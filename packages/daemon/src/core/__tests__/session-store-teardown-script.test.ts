@@ -81,7 +81,8 @@ test.skipIf(process.platform === 'win32')(
       expect(fs.statSync(result.path).mode & 0o777).toBe(0o600);
     }
     expect(localWrite).toMatchObject({ written: true, path: local });
-    const umask = process.umask();
-    expect(fs.statSync(local).mode & 0o777).toBe(0o666 & ~umask);
+    // A target the caller names is published by host-kit's destination rule, which SAYS 0600 on the file
+    // rather than asking for it, so the recording opens to nobody but its owner whatever the umask says.
+    expect(fs.statSync(local).mode & 0o777).toBe(0o600);
   },
 );

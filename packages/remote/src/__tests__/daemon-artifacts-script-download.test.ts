@@ -1,104 +1,34 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import * as file from '@agent-device/host-kit/file';
-import {
-  closeLoopbackServer,
-  createTestHostEnvironment,
-  listenOnLoopback,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { sendRemoteScriptOpen } from '../session-script-destination.ts';
+import {
+  answer,
+  artifactServer,
+  open,
+  records,
+  request,
+  script,
+} from './support/script-publication-fixtures.ts';
 
 vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/file')>();
   return { ...actual, publishFileSync: vi.fn(actual.publishFileSync) };
 });
 
-type Served = { body: string; broken?: boolean; endless?: boolean };
-const servers: http.Server[] = [];
-
-afterEach(async () => {
+afterEach(() => {
   vi.mocked(file.publishFileSync).mockClear();
-  await Promise.all(servers.splice(0).map((server) => closeLoopbackServer(server)));
 });
-
-async function artifactServer(artifacts: Record<string, Served>): Promise<string> {
-  const server = http.createServer((req, res) => {
-    const artifact = artifacts[decodeURIComponent(req.url?.replace(/^\/+artifacts\//, '') ?? '')];
-    if (!artifact) {
-      res.writeHead(404).end();
-      return;
-    }
-    if (artifact.endless) {
-      res.writeHead(200);
-      const write = () => {
-        if (!res.destroyed) res.write(artifact.body, () => setImmediate(write));
-      };
-      write();
-      return;
-    }
-    res.writeHead(200, { 'content-length': Buffer.byteLength(artifact.body) });
-    if (!artifact.broken) {
-      res.end(artifact.body);
-      return;
-    }
-    res.flushHeaders();
-    res.write(artifact.body.slice(0, 4));
-    setImmediate(() => res.destroy());
-  });
-  servers.push(server);
-  return `http://127.0.0.1:${await listenOnLoopback(server)}`;
-}
 
 function journey() {
   // The real path, so a destination names the same file the publication renames into place.
   const root = fs.realpathSync(mkdtempForTestSync('script-download-'));
   const stateDir = path.join(root, 'state');
   return { root, stateDir, destination: path.join(root, 'caller', 'journey.ad') };
-}
-
-function request(command: string, meta: DaemonWireRequest['meta'] = {}): DaemonWireRequest {
-  return { token: 't', session: 'journey', command, positionals: [], meta };
-}
-
-function script(artifactId: string, revision: number, publicationId: string): DaemonArtifact {
-  return {
-    field: 'savedScript',
-    artifactType: 'session-script',
-    artifactId,
-    scriptPublicationId: publicationId,
-    scriptRevision: revision,
-  };
-}
-
-function records(stateDir: string): string[] {
-  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
-  return fs.existsSync(directory)
-    ? fs.readdirSync(directory).filter((n) => n.endsWith('.json'))
-    : [];
-}
-
-/** Answers a request the way the daemon does and materializes the answer like the client. */
-function answer(
-  baseUrl: string,
-  stateDir: string,
-  req: DaemonWireRequest,
-  data: Record<string, unknown>,
-): Promise<DaemonResponse> {
-  const info = { baseUrl, token: 't' };
-  return materializeRemoteArtifacts(
-    info,
-    req,
-    { ok: true, data },
-    createTestHostEnvironment(),
-    stateDir,
-  );
 }
 
 /** A successful response whose script version could not be saved on this machine. */
@@ -110,35 +40,6 @@ function deliveryFailure(cause: string) {
       warnings: [expect.stringContaining('script')],
     }),
   });
-}
-
-/** A remote `open --save-script`: the daemon arms the publication it is sent, with version 1. */
-async function open(
-  baseUrl: string,
-  stateDir: string,
-  destination: string,
-  options: { force?: boolean; respond?: (id: string) => DaemonResponse } = {},
-) {
-  let sent: DaemonWireRequest | undefined;
-  let recordsAtSend: string[] = [];
-  const req = {
-    ...request('open', { clientArtifactPaths: { savedScript: destination } }),
-    flags: { saveScript: true, ...(options.force ? { force: true } : {}) },
-  };
-  const info = { baseUrl, token: 't', capabilities: ['script-artifacts'] };
-  const response = await sendRemoteScriptOpen(info, req, stateDir, async (next) => {
-    sent = next;
-    recordsAtSend = records(stateDir);
-    const id = next.meta?.scriptPublicationId as string;
-    const reply = options.respond?.(id);
-    if (reply) return reply;
-    return answer(baseUrl, stateDir, next, {
-      scriptPublicationId: id,
-      artifacts: [script('v1', 1, id)],
-    });
-  });
-  const id = sent?.meta?.scriptPublicationId as string;
-  return { id, sent, recordsAtSend, response };
 }
 
 test('an open records its destination before it is sent, and sends only its publication ID', async () => {

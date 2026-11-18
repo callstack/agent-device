@@ -19,7 +19,7 @@ import {
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
 import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { publishFileSync, publishScriptFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -133,8 +133,16 @@ export class SessionScriptWriter {
       const remote =
         session.scriptPublication?.kind === 'authoring' && session.scriptPublication.remoteDelivery;
       scriptPath = remote ? this.remoteScriptPath() : this.resolveScriptPath(session);
-      const scriptDir = path.dirname(scriptPath);
-      if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
+      // A destination the CALLER named is the caller's own, and host-kit's destination rule is what judges it:
+      // that route walks the chain, creates nothing outside what it judged, and writes the file at 0600. A path
+      // of this daemon's own is made the way it has always been made (#4565).
+      const callerOwnsDestination =
+        !remote &&
+        scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION) !== undefined;
+      if (!callerOwnsDestination) {
+        const scriptDir = path.dirname(scriptPath);
+        if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
+      }
       // #1258: `options.force` is the caller's already-merged decision
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
@@ -143,6 +151,7 @@ export class SessionScriptWriter {
         scriptPath,
         script: prepared.script,
         force: options?.force,
+        callerOwnsDestination,
         ...(remote ? { mode: 0o600 } : {}),
       });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
@@ -264,7 +273,6 @@ function toRepairCommitFailure(error: unknown, scriptPath: string | undefined): 
     },
   );
 }
-
 /**
  * ADR 0012 decision 6, no-clobber (maintainer-approved simplification):
  * publishes `script` to `scriptPath` atomically, refusing ANY pre-existing
@@ -302,9 +310,21 @@ function publishHealedScriptAtomically(params: {
   script: string;
   force?: boolean;
   mode?: number;
+  callerOwnsDestination: boolean;
 }): void {
-  const { scriptPath, script, force, mode } = params;
+  const { scriptPath, script, force, mode, callerOwnsDestination } = params;
   try {
+    if (callerOwnsDestination) {
+      // host-kit owns this route's whole sequence (#4565): it walks the destination's chain, refuses a
+      // destination another local user can steer BEFORE creating anything, creates what is missing one level
+      // at a time at 0700 inside the directory it judged, and writes the script itself at 0600.
+      publishScriptFileSync({
+        destination: scriptPath,
+        contents: script,
+        publish: force ? 'replace' : 'link-exclusive',
+      });
+      return;
+    }
     publishFileSync({
       destination: scriptPath,
       contents: script,
