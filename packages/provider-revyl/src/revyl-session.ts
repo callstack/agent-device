@@ -45,6 +45,11 @@ export type RevylSession = Readonly<{
   screen: RevylScreenSize | undefined;
   /** Read from `health`: whether `/drag` takes the finger's travel time as `duration_ms`. */
   dragDuration: boolean;
+  /**
+   * Read from `health`: whether `/set_orientation` rotates to a named landscape side and upside down.
+   * A worker without it rotates only to portrait or to a landscape side it does not name.
+   */
+  preciseOrientation: boolean;
   device: DeviceInfo;
   client: RevylClient;
   lease: DeviceLease;
@@ -181,6 +186,7 @@ export async function startRevylSession(
         sessionId,
         screen: readRevylScreenSize(health),
         dragDuration: health.supports_explicit_drag_duration === true,
+        preciseOrientation: health.supports_precise_orientation === true,
         device: buildRevylDevice(input.platform, lease, runId),
         client,
         lease,

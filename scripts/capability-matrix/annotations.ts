@@ -432,6 +432,16 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
             admits: ['setOrientation'],
             refuses: ['unlockOrientation'],
           },
+          'revyl-ios': {
+            text: 'Portrait and landscape-left only; unlock unsupported',
+            admits: ['setOrientation'],
+            refuses: ['unlockOrientation'],
+          },
+          'revyl-android': {
+            text: 'Set only; unlock unsupported',
+            admits: ['setOrientation'],
+            refuses: ['unlockOrientation'],
+          },
         },
       },
       {
@@ -522,6 +532,16 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
           },
           'harmonyos-device': {
             text: 'Clear app state only; other settings and reads unsupported',
+            admits: ['setSetting'],
+            refuses: ['readSetting'],
+          },
+          'revyl-ios': {
+            text: 'Appearance, location coordinates, permission, clear app state, and reset keychain; no reads',
+            admits: ['setSetting'],
+            refuses: ['readSetting'],
+          },
+          'revyl-android': {
+            text: 'Appearance, location coordinates, permission, and clear app state; no reads',
             admits: ['setSetting'],
             refuses: ['readSetting'],
           },
