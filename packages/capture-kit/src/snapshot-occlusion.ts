@@ -142,23 +142,20 @@ export function annotateCoveredSnapshotNodes(
 /** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
 const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
 
-/**
- * The bar kinds this scan exempts as viewport chrome. Bar identity itself — including bottom
- * navigation — is owned by `snapshotBarKind` in contracts; the choice of which kinds get a
- * viewport exemption stays here, and bottom navigation is not one of them: an Android
- * BottomNavigationView keeps covering the content behind it.
- */
-const VIEWPORT_CHROME_BAR_KINDS: ReadonlySet<string> = new Set([
-  'tab-bar',
-  'toolbar',
-  'navigation-bar',
-]);
+const VIEWPORT_CHROME_KIND_FRAGMENTS = [
+  ...TAB_BAR_KIND_FRAGMENTS,
+  ...TOOLBAR_HOST_KIND_FRAGMENTS,
+  ...NAVIGATION_BAR_KIND_FRAGMENTS,
+];
 
+/** Viewport hosts can expose internal classes such as UIKit tab platters. */
 function isViewportChromeBarNode(
   node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
 ): boolean {
-  const kind = snapshotBarKind(node);
-  return kind !== undefined && VIEWPORT_CHROME_BAR_KINDS.has(kind);
+  return (
+    !nodeKindIncludesAny(node, ['bottomnavigation']) &&
+    nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)
+  );
 }
 
 /**

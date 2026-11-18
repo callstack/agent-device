@@ -189,7 +189,7 @@ export function coveredByTabBarSnapshot(): SnapshotState {
  * The same tab-bar-over-button shape run through the real annotation pass, so the covered node
  * carries the scan's `coveredBy` description exactly as a capture publishes it.
  */
-export function coveredByScanSnapshot(): SnapshotState {
+export function coveredByScanSnapshot(coverType = 'TabBar'): SnapshotState {
   return makeSnapshotState(
     annotateCoveredSnapshotNodes([
       {
@@ -212,7 +212,7 @@ export function coveredByScanSnapshot(): SnapshotState {
         index: 2,
         depth: 1,
         parentIndex: 0,
-        type: 'TabBar',
+        type: coverType,
         label: 'Media',
         rect: { x: 0, y: 760, width: 390, height: 84 },
         hittable: true,

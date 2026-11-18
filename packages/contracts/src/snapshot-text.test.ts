@@ -60,8 +60,11 @@ test.each([
   expect(isNativeIosSnapshotBarNode(node)).toBe(kind !== 'bottom-navigation');
 });
 
-test('a non-bar node reads no bar kind', () => {
-  const node = { type: 'Button', role: 'UIButton' };
+test.each([
+  { type: 'Button', role: 'UIButton' },
+  { type: 'HomeToolbarView' },
+  { type: 'Other', role: 'BottomTabBar' },
+])('a non-bar node reads no bar kind for %j', (node) => {
   expect(snapshotBarKind(node)).toBeUndefined();
   expect(isNativeIosSnapshotBarNode(node)).toBe(false);
 });

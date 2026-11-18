@@ -186,6 +186,27 @@ test('runtime covered refusal names the covering element the occlusion scan foun
   assert.deepEqual(calls, []);
 });
 
+test('runtime covered refusal keeps dismissal recovery for a custom toolbar overlay', async () => {
+  const device = createInteractionDevice(coveredByScanSnapshot('HomeToolbarView'), {
+    tap: async () => {},
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'hometoolbarview',
+        label: 'Media',
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+      });
+      assert.match(String(details?.hint), /Dismiss or close that element/);
+      return true;
+    },
+  );
+});
+
 test('runtime covered refusal names an unnamed generic-typed bar and never says dismiss', async () => {
   const device = createInteractionDevice(coveredByAnonymousTabBarScanSnapshot(), {
     tap: async () => {},
