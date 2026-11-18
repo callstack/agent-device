@@ -32,6 +32,10 @@ Two guarantees establish this invariant.
 **1. Capture scope.** The capture uses the same `captureSnapshot` wrapper as the plain command's backend.
 It does not use a parallel single-shot dispatch.
 It captures through the request's admitted capture, the same one the commands the replay dispatches use, so the tree is the producer's that recorded the target evidence.
+Replay reuses that admission per capture cell: one device object and active-app split within one session lifetime.
+Keep a refused admission for the cell's lifetime, so each annotated step does not probe and warn again.
+Drop it only for the transient `admission-probe-failed` and `bind-failed` outcomes, so the next verification re-admits.
+A close and reopen, or a refreshed device object, starts a new cell and a fresh admission and bind.
 It inherits full-window scope:
 
 - Android uses the snapshot-helper route.

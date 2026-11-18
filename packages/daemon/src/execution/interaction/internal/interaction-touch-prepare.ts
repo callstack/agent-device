@@ -52,13 +52,15 @@ export async function prepareTouchDispatch(
     touchExecutor.captureSnapshot === undefined &&
     readSettleRequest(params.req.flags) !== undefined;
   const settleObservationCapture = owesObservationCapture
-    ? await resolveObservationCapture({
-        command: params.req.command,
-        session,
-        inspectFacts: params.inspectFacts,
-        platformServices: params.platformServices,
-        bindDevice: params.bindDevice,
-      })
+    ? (
+        await resolveObservationCapture({
+          command: params.req.command,
+          session,
+          inspectFacts: params.inspectFacts,
+          platformServices: params.platformServices,
+          bindDevice: params.bindDevice,
+        })
+      ).capture
     : undefined;
   return {
     ok: true,

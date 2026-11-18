@@ -20,20 +20,23 @@ import type { SessionState } from './session-state.ts';
  * Admitting the `capture-only` plan the selector family polls under closes the split; where both
  * paths already reached the same tree, the admitted operation resolves to the implementation used
  * before. Observing is best-effort by contract, so nothing here may fail or cancel the work it
- * follows: every unavailability degrades to `undefined`, leaving the observation on the owner's own
- * snapshot path, and discloses its typed reason. Admitting through the side-effect-free facts probe
- * and binding only on admission keeps an optional observation from building a command-facing refusal
- * response, whose Apple branch live-probes the booted simulator set for a hint nothing shows.
+ * follows: every unavailability leaves `capture` absent, keeping the observation on the owner's own
+ * snapshot path, and is disclosed with its typed reason. The resolution's `outcome` also tells a
+ * caller that reuses the answer across observations which class it holds: a `refused` fact is the
+ * owner's declared support and stable until the plan changes, while the two failure outcomes are
+ * transient and worth another probe. Admitting through the side-effect-free facts probe and binding
+ * only on admission keeps an optional observation from building a command-facing refusal response,
+ * whose Apple branch live-probes the booted simulator set for a hint nothing shows.
  */
 export async function resolveObservationCapture(
   params: Readonly<{ command: string; session: SessionState }> & RuntimeAdmissionBindings,
-): Promise<BoundSnapshotCapture | undefined> {
+): Promise<ObservationCaptureResolution> {
   const plan = resolveSelectorCaptureRuntimePlan({
     hasActiveApp: params.session.appBundleId !== undefined,
     intent: 'capture-only',
   });
   const admission = await admitObservationCapturePlan(params, plan);
-  if (admission === undefined) return undefined;
+  if ('outcome' in admission) return admission;
   if (!admission.admitted) {
     return unavailable({
       command: params.command,
@@ -43,17 +46,19 @@ export async function resolveObservationCapture(
     });
   }
   try {
-    return await bindAdmittedSnapshotCapture({
-      admission,
-      bindDevice: params.bindDevice,
-      platformServices: params.platformServices,
-    });
+    return {
+      capture: await bindAdmittedSnapshotCapture({
+        admission,
+        bindDevice: params.bindDevice,
+        platformServices: params.platformServices,
+      }),
+    };
   } catch (error) {
     return unavailable({ command: params.command, outcome: 'bind-failed', error });
   }
 }
 
-/** `undefined` means the owner's facts probe failed: the caller degrades like any other refusal. */
+/** A failed facts probe resolves as its own transient outcome; the observation degrades like any refusal. */
 async function admitObservationCapturePlan(
   params: Readonly<{ command: string; session: SessionState }> & RuntimeAdmissionBindings,
   plan: SelectorCaptureRuntimePlan,
@@ -69,8 +74,14 @@ async function admitObservationCapturePlan(
   }
 }
 
+/** The observation's capture, or the typed class of why it has to go without one. */
+export type ObservationCaptureResolution = Readonly<{
+  capture?: BoundSnapshotCapture;
+  outcome?: ObservationCaptureUnavailability['outcome'];
+}>;
+
 /** Why the observation has to go without a capture, as one typed fact the caller can read. */
-type ObservationCaptureUnavailable = Readonly<{ command: string }> &
+export type ObservationCaptureUnavailability = Readonly<{ command: string }> &
   (
     | Readonly<{
         outcome: 'refused';
@@ -80,7 +91,10 @@ type ObservationCaptureUnavailable = Readonly<{ command: string }> &
     | Readonly<{ outcome: 'admission-probe-failed' | 'bind-failed'; error: unknown }>
   );
 
-function unavailable(detail: ObservationCaptureUnavailable): undefined {
+/** Discloses the loss once, and names its class so a caching caller knows whether to re-probe. */
+function unavailable(
+  detail: ObservationCaptureUnavailability,
+): Readonly<{ outcome: ObservationCaptureUnavailability['outcome'] }> {
   emitDiagnostic({
     // `warn`, not the default `info`: a degrade that answers `ok: true` is dropped at info level on
     // the success path, which is the passing-unnoticed this discloses against.
@@ -96,5 +110,5 @@ function unavailable(detail: ObservationCaptureUnavailable): undefined {
             errorName: (detail.error as Error | undefined)?.name,
           },
   });
-  return undefined;
+  return { outcome: detail.outcome };
 }

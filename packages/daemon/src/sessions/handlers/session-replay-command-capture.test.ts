@@ -11,7 +11,10 @@
  * observation: the recorded-evidence comparison and the store must agree on who built the tree.
  */
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+} from '@agent-device/contracts/snapshot-runtime';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createRequestRuntimeBindings } from '../../core/request-runtime-binding.ts';
@@ -204,6 +207,67 @@ test.each(['close and reopen', 'open with refreshed device'])(
   },
 );
 
+// The replay cell binds `capture-only` with the cache bypassed, while every command the replay
+// dispatches binds its action use through the request's device-key cache. Both bindings of one
+// device are live in the same request: the cache must not hand the bypass cell the action
+// projection, the two captures must not cross projections, and each binding's own dispose must
+// still run exactly once when the request ends.
+test('a bypassed capture binding and a cached action binding of one device coexist in one request', async () => {
+  const fixture = selectorCaptureFixture({ snapshot: bridgeSaveButton });
+  const disposals: string[] = [];
+  const bind = vi.fn<typeof unavailableDeviceRuntimeGateway.bind>(async ({ device }) => ({
+    ...(await unavailableBinding(device)),
+    facts: await fixture.inspectFacts(device),
+    operations: {
+      captureSnapshot: async (input: CaptureSnapshotInput) => {
+        fixture.captures.push(input);
+        return bridgeSaveButton();
+      },
+    },
+    [Symbol.asyncDispose]: async () => {
+      disposals.push(device.id);
+    },
+  }));
+  const bindings = createRequestRuntimeBindings({
+    gateway: { ...unavailableDeviceRuntimeGateway, inspectFacts: fixture.inspectFacts, bind },
+    dispatchLedger: createRequestDispatchLedger(),
+    scope: platformRequestScopeFixture(),
+    admitDeviceClaim: async () => {},
+  });
+  // What a dispatched click binds through the same request seam: the cached path, no bypass.
+  const actionUse = { required: ['captureSnapshot'] as const, preferred: [] as const };
+  const scene = replayScriptScene(
+    'agent-device-replay-capture-coexist-',
+    [...verifiedClick, ...verifiedClick],
+    {
+      meta: { requestId: REQUEST_ID, cwd: '/work' },
+      inspectFacts: bindings.inspectFacts,
+      platformServices: daemonPlatformServicesFixture(),
+      bindDevice: bindings.bindDevice,
+    },
+  );
+  try {
+    const response = await scene.replay({
+      invoke: async () => {
+        const session = scene.sessionStore.get(scene.sessionName)!;
+        await bindings.bindDevice(session.device, actionUse);
+        return { ok: true, data: {} };
+      },
+    });
+    expect(response.ok).toBe(true);
+    // One bypass bind for the replay's one verification cell and one gateway bind feeding the
+    // cached action projection: the two routes share one device without reusing each other's
+    // binding, and the two dispatches reuse the cell and the cache entry, not new binds.
+    expect(bind).toHaveBeenCalledTimes(2);
+    expect(fixture.captures).toHaveLength(2);
+    expect(disposals).toEqual([]);
+  } finally {
+    await bindings[Symbol.asyncDispose]();
+  }
+  // Both live bindings are adopted by the request cleanup, each disposed exactly once.
+  expect(disposals).toHaveLength(2);
+});
+
 test.each(['admission-probe-failed', 'bind-failed'] as const)(
   'replay re-admits at the next verification after %s',
   async (outcome) => {
@@ -238,7 +302,11 @@ test.each(['admission-probe-failed', 'bind-failed'] as const)(
   },
 );
 
-test('an owner that refuses the capture keeps verification on its own path and says so', async () => {
+// A refusal is the owner's declared support for the cell's plan, so the cell keeps it for its
+// lifetime: the second annotated step verifies through the owner's own path again WITHOUT a second
+// facts probe or a second warning. (The two transient failure outcomes are the opposite class and
+// are dropped by the re-admission test above.)
+test('an owner that refuses the capture keeps verification on its own path and says so once', async () => {
   const fixture = selectorCaptureFixture({
     capture: { available: false, reason: 'unsupported-platform-leaf' },
     snapshot: bridgeSaveButton,
@@ -261,7 +329,7 @@ test('an owner that refuses the capture keeps verification on its own path and s
   });
   const scene = replayScriptScene(
     'agent-device-replay-capture-refused-',
-    [SAVE_ANNOTATION, 'click id="save"'],
+    [...verifiedClick, ...verifiedClick],
     {
       meta: { requestId: REQUEST_ID, cwd: '/work' },
       inspectFacts: fixture.inspectFacts,
@@ -275,9 +343,11 @@ test('an owner that refuses the capture keeps verification on its own path and s
   // Refusing the optional binding costs the run nothing: the action still replays on the owner's
   // own snapshot path, which is what a caller with no composed runtime keeps doing.
   expect(response.ok).toBe(true);
-  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click', 'click']);
   expect(fixture.binds).toEqual([]);
-  expect(legacyDispatchCapture).toHaveBeenCalled();
+  // One probe and one disclosure for the two steps: the cached refusal answers the second.
+  expect(fixture.inspections).toHaveLength(1);
+  expect(legacyDispatchCapture).toHaveBeenCalledTimes(2);
   expect(disclosures()).toEqual([
     {
       level: 'warn',

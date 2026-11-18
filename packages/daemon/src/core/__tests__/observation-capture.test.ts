@@ -37,20 +37,22 @@ beforeEach(() => {
 test('an available plan inspects once and binds once for the whole observation', async () => {
   const fixture = selectorCaptureFixture();
 
-  const capture = await resolveObservationCapture({
+  const resolution = await resolveObservationCapture({
     command: 'back',
     session: makeIosSession('settle', { appBundleId: 'com.example.app' }),
     inspectFacts: fixture.inspectFacts,
     platformServices: daemonPlatformServicesFixture(),
     bindDevice: fixture.bindDevice,
   });
-  if (!capture) throw new Error('expected an admitted capture');
+  if (!resolution.capture) throw new Error('expected an admitted capture');
+  // No outcome rides a bound resolution: a caching caller keeps the capture for its cell's lifetime.
+  expect(resolution.outcome).toBeUndefined();
 
   expect(fixture.inspections).toEqual([IOS_SIMULATOR]);
   expect(fixture.binds).toEqual([IOS_SIMULATOR]);
 
-  await capture({});
-  await capture({});
+  await resolution.capture({});
+  await resolution.capture({});
   expect(fixture.binds).toEqual([IOS_SIMULATOR]);
   expect(fixture.captures).toHaveLength(2);
 });
@@ -79,7 +81,7 @@ test.each([
   async ({ refusal, session, operation, reason }) => {
     const fixture = selectorCaptureFixture(refusal);
 
-    const capture = await resolveObservationCapture({
+    const resolution = await resolveObservationCapture({
       command: 'back',
       session: session(),
       inspectFacts: fixture.inspectFacts,
@@ -87,7 +89,9 @@ test.each([
       bindDevice: fixture.bindDevice,
     });
 
-    expect(capture).toBeUndefined();
+    // The outcome class rides the resolution: `refused` is the stable fact a caching caller keeps.
+    expect(resolution).toEqual({ outcome: 'refused' });
+    expect(resolution.capture).toBeUndefined();
     expect(fixture.binds).toEqual([]);
     expect(disclosures()).toEqual([
       { level: 'warn', data: { command: 'back', outcome: 'refused', operation, reason } },
@@ -121,14 +125,17 @@ test.each([
             },
           };
 
-    const capture = await resolveObservationCapture({
+    const resolution = await resolveObservationCapture({
       command: 'back',
       session: makeIosSession('settle', { appBundleId: 'com.example.app' }),
       platformServices: daemonPlatformServicesFixture(),
       ...failing,
     });
 
-    expect(capture).toBeUndefined();
+    // The transient class rides the resolution: a caching caller drops its cell on these two,
+    // unlike the stable `refused` outcome above.
+    expect(resolution).toEqual({ outcome });
+    expect(resolution.capture).toBeUndefined();
     expect(fixture.binds).toEqual([]);
     expect(disclosures()).toEqual([
       { level: 'warn', data: { command: 'back', outcome, errorName: failure.name } },
