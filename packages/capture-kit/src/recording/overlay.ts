@@ -1,12 +1,11 @@
 import fs from 'node:fs';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
-import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import {
-  buildSwiftToolEnv,
+  runSwiftHelper,
   compileSwiftSourceFile,
   resolveRecordingScriptPath,
 } from './swift-cache.ts';
@@ -100,7 +99,8 @@ async function exportProcessedVideo(params: {
       );
     }
     try {
-      await runCmd(
+      await runSwiftHelper(
+        host,
         executablePath,
         [
           '--input',
@@ -111,7 +111,7 @@ async function exportProcessedVideo(params: {
           '--timeout-ms',
           String(Math.round(exportMs)),
         ],
-        { timeoutMs: helperMs, env: buildSwiftToolEnv(host.env) },
+        { timeoutMs: helperMs },
       );
     } catch (error) {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;

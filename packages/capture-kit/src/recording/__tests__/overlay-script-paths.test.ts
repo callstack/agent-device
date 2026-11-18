@@ -14,7 +14,10 @@ vi.mock('@agent-device/host-kit/command', async () => {
 });
 vi.mock('../video.ts', () => ({ waitForPlayableVideo: vi.fn(async () => true) }));
 vi.mock('../swift-cache.ts', () => ({
-  buildSwiftToolEnv: () => ({}),
+  runSwiftHelper: vi.fn(
+    async (_host: unknown, executablePath: string, args: readonly string[], options: object) =>
+      await (await import('@agent-device/host-kit/command')).runCmd(executablePath, args, options),
+  ),
   compileSwiftSourceFile: vi.fn(async () => '/bin/true'),
   resolveRecordingScriptPath: vi.fn(
     (name: string, _projectRoot: string, cwd: string) => `${cwd}/${name}`,

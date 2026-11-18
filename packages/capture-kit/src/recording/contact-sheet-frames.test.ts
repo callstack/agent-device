@@ -92,7 +92,9 @@ describe('extractRecordingFrames', () => {
       timesMs: [0, 250],
     });
 
-    const [, args] = mockRunCmd.mock.calls[0]!;
+    const [, args, options] = mockRunCmd.mock.calls[0]!;
+    // Launched with the constructed helper environment: its fixed PATH, never the host's.
+    expect(options?.env?.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
     expect(args).toEqual([
       '--input',
       VIDEO,

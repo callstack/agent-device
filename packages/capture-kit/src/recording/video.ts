@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails, isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
+import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import {
-  buildSwiftToolEnv,
   compileSwiftSourceText,
   getSwiftCacheRoot,
   isUntrustedSwiftCacheError,
+  runSwiftHelper,
 } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -153,10 +153,9 @@ export async function isPlayableVideo(
     );
     // A budget with no time left reads as not playable; `runCmd` would read a timeout of 0 as none.
     if (runTimeoutMs <= 0) return false;
-    const result = await runCmd(validatorPath, [filePath], {
+    const result = await runSwiftHelper(host, validatorPath, [filePath], {
       allowFailure: true,
       timeoutMs: runTimeoutMs,
-      env: buildSwiftToolEnv(host.env),
     }).catch((error: unknown) => {
       if (isCommandTimeoutError(error)) return undefined;
       throw error;

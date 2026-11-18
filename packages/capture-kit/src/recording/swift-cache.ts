@@ -4,7 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { commandDeveloperDir, runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import {
+  commandDeveloperDir,
+  runCmd,
+  withCommandHost,
+  type ExecOptions,
+  type ExecResult,
+} from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
@@ -319,7 +325,7 @@ export function resolveRecordingScriptPath(
  * cache, a fixed PATH and the host's locale. No other inherited variable reaches a helper, so no loader variable
  * (`DYLD_*`) can make a private, unchanged binary load someone else's code, on a cache hit or a fresh compile.
  */
-export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const locale = Object.entries(env).filter(([name]) => name === 'LANG' || name.startsWith('LC_'));
   return {
     ...Object.fromEntries(locale),
@@ -327,6 +333,23 @@ export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     CLANG_MODULE_CACHE_PATH: prepareSwiftCacheDirectory(env, 'module-cache').directory,
     PATH: COMPILER_PATH,
   };
+}
+
+/**
+ * Launches a compiled helper with the constructed helper environment, under an empty request overlay, so neither
+ * the host's other variables nor a request's own `DEVELOPER_DIR` reach it. Every helper launch goes through here.
+ */
+export async function runSwiftHelper(
+  host: HostEnvironment,
+  executablePath: string,
+  args: readonly string[],
+  options: Omit<ExecOptions, 'env'> = {},
+): Promise<ExecResult> {
+  return await withCommandHost(
+    { host, requestEnv: {} },
+    async () =>
+      await runCmd(executablePath, args, { ...options, env: buildSwiftToolEnv(host.env) }),
+  );
 }
 
 /**

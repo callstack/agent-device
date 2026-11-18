@@ -8,7 +8,7 @@ import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtu
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { compileSwiftSourceText } from './swift-cache.ts';
+import { compileSwiftSourceText, runSwiftHelper } from './swift-cache.ts';
 import {
   hasVideoContainer,
   isPlayableVideo,
@@ -21,7 +21,11 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
 vi.mock('./swift-cache.ts', async () => ({
-  buildSwiftToolEnv: () => ({}),
+  // The launcher every helper goes through; it reaches the mocked runCmd, so a launch that skips it is visible.
+  runSwiftHelper: vi.fn(
+    async (_host: unknown, executablePath: string, args: readonly string[], options: object) =>
+      await (await import('@agent-device/host-kit/command')).runCmd(executablePath, args, options),
+  ),
   getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR ?? '',
   compileSwiftSourceText: vi.fn(async () => '/bin/true'),
   isUntrustedSwiftCacheError: (
@@ -250,6 +254,17 @@ test('retains main container-only completion when the Swift compiler is missing'
   );
   await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
   expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('the validator launches through the Swift helper launcher, with the host it is given', async () => {
+  const mp4 = writeFixture('launcher.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/launcher' }, cwd: directory };
+  vi.mocked(runSwiftHelper).mockClear();
+
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+
+  expect(runSwiftHelper).toHaveBeenCalledWith(host, '/bin/true', [mp4], expect.any(Object));
+  expect(runCmd).toHaveBeenCalledOnce();
 });
 
 test('a missing validator executable after compilation returns the typed unavailable error', async () => {

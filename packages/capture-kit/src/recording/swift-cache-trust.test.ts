@@ -15,7 +15,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
+import { compileSwiftSourceText, getSwiftCacheRoot, runSwiftHelper } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -629,61 +629,93 @@ test('the compiler environment is exactly the allowlist, whatever the host sets'
     PATH: `${path.join(tmpDir, 'planted-bin')}:/usr/bin`,
     LANG: 'en_US.UTF-8',
     LC_ALL: 'en_US.UTF-8',
+    LC_CTYPE: 'fr_FR.UTF-8',
+    TEST_LC_CTYPE: 'decoy',
     ...UNNAMED_HOST_VARIABLES,
   });
 
   const { cmd, env } = compilerLaunch();
   expect(cmd).toBe('/usr/bin/xcrun');
   expect(mockRunCmd.mock.calls[0]![1].slice(0, 3)).toEqual(['--sdk', 'macosx', 'swiftc']);
+  // The env handed to the spawn. Node's own spawn may still add NODE_V8_COVERAGE when coverage collection is on,
+  // even beside an explicit env; that one variable is Node's behavior, outside this code's control.
   expect(Object.keys(env).sort()).toEqual(
-    ['CLANG_MODULE_CACHE_PATH', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'TEMP', 'TMP', 'TMPDIR'].sort(),
+    [
+      'CLANG_MODULE_CACHE_PATH',
+      'HOME',
+      'LANG',
+      'LC_ALL',
+      'LC_CTYPE',
+      'PATH',
+      'TEMP',
+      'TMP',
+      'TMPDIR',
+    ].sort(),
   );
   expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
 });
 
 /**
- * Launches a cached helper the way the validator, overlay and frame decoder do, at the real subprocess boundary,
- * and answers the variable names the helper process saw. The stand-in helper is a script run by this test's own
+ * Launches a cached helper through `runSwiftHelper`, the launcher the validator, overlay and frame decoder use,
+ * with the mocked `runCmd` handing the launch to the real one, so host-kit applies whatever request overlay is in
+ * force. Answers the environment the helper process saw. The stand-in helper is a script run by this test's own
  * Node, not a shell or /usr/bin/env, which macOS strips loader variables from before they could show.
  */
-async function helperProcessEnvNames(
+async function helperProcessEnv(
   executablePath: string,
-  hostEnv: NodeJS.ProcessEnv,
-): Promise<string[]> {
+  host: { env: NodeJS.ProcessEnv; cwd: string },
+): Promise<Record<string, string>> {
   const { runCmd: spawnForReal } = await vi.importActual<
     typeof import('@agent-device/host-kit/command')
   >('@agent-device/host-kit/command');
-  const { stdout } = await spawnForReal(executablePath, [], { env: buildSwiftToolEnv(hostEnv) });
-  return JSON.parse(stdout) as string[];
+  mockRunCmd.mockImplementationOnce(
+    async (cmd, args, options) => await spawnForReal(cmd, args, options),
+  );
+  // A request scope with its own DEVELOPER_DIR, as the daemon gives one request.
+  const { stdout } = await withCommandHost(
+    { host, requestEnv: { DEVELOPER_DIR: '/request/scoped/Developer' } },
+    async () => await runSwiftHelper(host, executablePath, []),
+  );
+  return JSON.parse(stdout) as Record<string, string>;
 }
 
-test('a cold and a warm helper launch never pass loader or other unnamed host variables to the helper', async () => {
-  const hostEnv = {
-    AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
+test('a cold and a warm helper launch pass no loader variable, request DEVELOPER_DIR or other unnamed variable', async () => {
+  const host = hostWith({
     DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
     DYLD_LIBRARY_PATH: '/tmp/planted',
     COMPILER_PATH: '/tmp/planted-bin',
-  };
+    DEVELOPER_DIR: '/host/Developer',
+  });
   mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
     fs.writeFileSync(
       args[args.indexOf('-o') + 1]!,
-      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify(Object.keys(process.env)));\n`,
+      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify(process.env));\n`,
     );
     return { stdout: '', stderr: '', exitCode: 0 };
   });
+  // The host's own DEVELOPER_DIR is only a selection for the compile; it must be one the compile accepts.
+  const compileHost = { ...host, env: { ...host.env, DEVELOPER_DIR: '' } };
 
-  const cold = await compile(hostEnv);
-  const coldNames = await helperProcessEnvNames(cold, hostEnv);
-  const warm = await compile(hostEnv);
-  const warmNames = await helperProcessEnvNames(warm, hostEnv);
+  const cold = await compileSwiftSourceText({
+    host: compileHost,
+    source: 'print(1)',
+    cacheName: 'helper',
+  });
+  const coldEnv = await helperProcessEnv(cold, host);
+  const warm = await compileSwiftSourceText({
+    host: compileHost,
+    source: 'print(1)',
+    cacheName: 'helper',
+  });
+  const warmEnv = await helperProcessEnv(warm, host);
 
   expect(warm).toBe(cold);
-  expect(mockRunCmd).toHaveBeenCalledOnce();
-  for (const names of [coldNames, warmNames]) {
-    expect(names.filter((name) => name.startsWith('DYLD_') || name === 'COMPILER_PATH')).toEqual(
-      [],
-    );
-    expect(names).toEqual(expect.arrayContaining(['HOME', 'PATH']));
+  for (const env of [coldEnv, warmEnv]) {
+    expect(
+      Object.keys(env).filter((name) => /^DYLD_|^COMPILER_PATH$|^DEVELOPER_DIR$/.test(name)),
+    ).toEqual([]);
+    expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+    expect(env.HOME).toBe(path.join(versionDir, 'home'));
   }
 });
 

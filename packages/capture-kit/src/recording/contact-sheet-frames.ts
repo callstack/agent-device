@@ -12,10 +12,9 @@ import {
   errorMessage,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import {
-  buildSwiftToolEnv,
+  runSwiftHelper,
   compileSwiftSourceFile,
   resolveRecordingScriptPath,
 } from './swift-cache.ts';
@@ -95,7 +94,8 @@ export async function extractRecordingFrames(
 
   let result;
   try {
-    result = await runCmd(
+    result = await runSwiftHelper(
+      input.host,
       executablePath,
       [
         '--input',
@@ -109,7 +109,6 @@ export async function extractRecordingFrames(
       ],
       {
         timeoutMs: EXTRACTION_TIMEOUT_MS,
-        env: buildSwiftToolEnv(input.host.env),
         allowFailure: true,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
