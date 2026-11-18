@@ -451,10 +451,7 @@ function tapContactPoints(points: readonly Point[]): Point[] {
 }
 
 /** The floor of three frames is what lets transport lowering claim a denser-than-endpoints path. */
-export function sampleGestureOffsets(
-  durationMs: number,
-  profile: GestureSamplingProfile,
-): number[] {
+function sampleGestureOffsets(durationMs: number, profile: GestureSamplingProfile): number[] {
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
     throw new AppError('INVALID_ARGS', 'gesture sample duration must be a positive finite number');
   }
@@ -671,7 +668,7 @@ function addPoints(left: Point, right: Point): Point {
   return { x: left.x + right.x, y: left.y + right.y };
 }
 
-export function interpolateGesturePoint(start: Point, end: Point, progress: number): Point {
+function interpolateGesturePoint(start: Point, end: Point, progress: number): Point {
   return {
     x: start.x + (end.x - start.x) * progress,
     y: start.y + (end.y - start.y) * progress,
