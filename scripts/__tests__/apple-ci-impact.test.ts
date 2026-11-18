@@ -16,6 +16,7 @@ import { selectChecks } from '../check-affected/model.ts';
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 type AppleStep = {
+  name?: string;
   id?: string;
   uses?: string;
   if?: string;
