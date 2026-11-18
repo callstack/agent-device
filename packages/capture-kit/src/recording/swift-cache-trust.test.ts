@@ -851,3 +851,23 @@ test('the selection is canonicalized by the filesystem native spelling, which th
 
   expect(compilerLaunch().env.DEVELOPER_DIR).toBe(canonical);
 });
+
+test('a link without the .app suffix that resolves to a bundle is judged at the bundle Contents/Developer', async () => {
+  const bundle = developerDirectory('Linked.app');
+  const contents = path.join(bundle, 'Contents');
+  fs.mkdirSync(path.join(contents, 'Developer'), { recursive: true, mode: 0o755 });
+  fs.chmodSync(contents, 0o775);
+  const link = path.join(tmpDir, 'xcode');
+  fs.symlinkSync(bundle, link);
+
+  await expect(
+    compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: link }),
+  ).rejects.toMatchObject(
+    untrusted({
+      exposure: 'untrusted_developer_dir',
+      ancestor: contents,
+      hint: expect.any(String),
+    }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});

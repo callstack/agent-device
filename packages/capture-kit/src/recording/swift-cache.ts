@@ -365,9 +365,11 @@ async function selectedDeveloperDir(host: HostEnvironment): Promise<string | und
  * itself as a stock macOS install leaves it: root-owned, writable by the admin group.
  */
 function trustedDeveloperDir(selection: string): string {
-  const resolved = path.isAbsolute(selection)
+  // Normalized before and after resolving: a link without the .app suffix can still resolve to a bundle.
+  const spelled = path.isAbsolute(selection)
     ? realpathIfPresent(effectiveDeveloperDir(selection))
     : undefined;
+  const resolved = spelled && realpathIfPresent(effectiveDeveloperDir(spelled));
   const ancestor = resolved === undefined ? selection : untrustedDeveloperDirLevel(resolved);
   if (resolved !== undefined && ancestor === undefined) return resolved;
   throw new AppError(
