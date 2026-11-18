@@ -155,6 +155,62 @@ test('a script publishes at a Windows drive root without creating the volume', (
   });
 });
 
+test('Windows script preparation creates nested parents one level at a time', () => {
+  const directory = fs.statSync(root());
+  const stat = vi.spyOn(fs, 'statSync').mockReturnValue(directory);
+  const mkdir = vi
+    .spyOn(fs, 'mkdirSync')
+    .mockImplementationOnce(() => {
+      throw Object.assign(new Error('A directory appeared'), { code: 'EEXIST' });
+    })
+    .mockReturnValue(undefined);
+  onWindows(() => {
+    const destination = String.raw`Z:\recordings\today\journey.ad`;
+    expect(prepareScriptDestination(destination).entry).toBe(destination);
+  });
+  expect(mkdir.mock.calls).toEqual([
+    [String.raw`Z:\recordings`, { mode: 0o700 }],
+    [String.raw`Z:\recordings\today`, { mode: 0o700 }],
+  ]);
+  expect(stat.mock.calls).toEqual([
+    ['Z:\\', { throwIfNoEntry: false }],
+    [String.raw`Z:\recordings`, { throwIfNoEntry: false }],
+  ]);
+});
+
+test('Windows script preparation stops when the volume disappears after validation', () => {
+  const directory = fs.statSync(root());
+  const stat = vi.spyOn(fs, 'statSync').mockReturnValueOnce(directory).mockReturnValue(undefined);
+  const missing = Object.assign(new Error('The volume disappeared'), { code: 'ENOENT' });
+  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+    throw missing;
+  });
+  onWindows(() => {
+    expect(() => prepareScriptDestination(String.raw`Z:\recordings\today\journey.ad`)).toThrow(
+      missing,
+    );
+  });
+  expect(stat).toHaveBeenCalledExactlyOnceWith('Z:\\', { throwIfNoEntry: false });
+  expect(mkdir).toHaveBeenCalledExactlyOnceWith(String.raw`Z:\recordings`, { mode: 0o700 });
+});
+
+test('Windows script preparation refuses a file that appeared in place of a parent', () => {
+  const directory = fs.statSync(root());
+  const file = fs.statSync(new URL(import.meta.url));
+  vi.spyOn(fs, 'statSync').mockReturnValueOnce(directory).mockReturnValueOnce(file);
+  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+    throw Object.assign(new Error('A file appeared'), { code: 'EEXIST' });
+  });
+  onWindows(() => {
+    expectUntrusted(
+      () => prepareScriptDestination(String.raw`Z:\recordings\today\journey.ad`),
+      'not_a_directory',
+      String.raw`Z:\recordings`,
+    );
+  });
+  expect(mkdir).toHaveBeenCalledExactlyOnceWith(String.raw`Z:\recordings`, { mode: 0o700 });
+});
+
 test.each(['///journey.ad', '//server', 'C:journey.ad', String.raw`\\?\C:\journey.ad`])(
   'all Windows publication boundaries refuse the unqualified path %s',
   (destination) => {

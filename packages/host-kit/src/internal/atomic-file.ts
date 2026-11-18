@@ -234,17 +234,7 @@ function scriptDestination(
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
   if (process.platform === 'win32') {
-    const rules = path.win32;
-    const root = requireWindowsScriptVolume(destination, destination);
-    const name = entryNameOrRefuse(destination, rules);
-    const directory = rules.dirname(rules.normalize(destination));
-    if (!fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
-      throw scriptAncestryFailure(destination, root, 'unresolvable_parent');
-    }
-    if (create && rules.relative(root, directory) !== '') {
-      fs.mkdirSync(directory, { recursive: true, mode: SCRIPT_DIR_MODE });
-    }
-    return authorizedEntry(directory, 'windows', name);
+    return windowsScriptDestination(destination, create);
   }
   // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
@@ -258,6 +248,38 @@ function scriptDestination(
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
   return authorizedEntry(arrived.deepest, arrived.identity, name);
+}
+
+function windowsScriptDestination(destination: string, create: boolean): ScriptDestination {
+  const rules = path.win32;
+  const root = requireWindowsScriptVolume(destination, destination);
+  const name = entryNameOrRefuse(destination, rules);
+  const directory = rules.dirname(rules.normalize(destination));
+  const tail = rules.relative(root, directory);
+  requireWindowsScriptDirectory(destination, root);
+  if (tail === '') return authorizedEntry(directory, 'windows', name);
+  if (create) createWindowsScriptParents(destination, root, tail);
+  else requireWindowsScriptDirectory(destination, directory);
+  return authorizedEntry(directory, 'windows', name);
+}
+
+function createWindowsScriptParents(destination: string, root: string, tail: string): void {
+  let level = root;
+  for (const part of tail.split(path.win32.sep)) {
+    level = path.win32.join(level, part);
+    try {
+      fs.mkdirSync(level, { mode: SCRIPT_DIR_MODE });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      requireWindowsScriptDirectory(destination, level);
+    }
+  }
+}
+
+function requireWindowsScriptDirectory(destination: string, directory: string): void {
+  const stats = fs.statSync(directory, { throwIfNoEntry: false });
+  if (!stats) throw scriptAncestryFailure(destination, directory, 'unreachable_parent');
+  if (!stats.isDirectory()) throw scriptAncestryFailure(destination, directory, 'not_a_directory');
 }
 
 function authorizedEntry(
