@@ -7,15 +7,13 @@ Use BrowserStack App Automate to run agent-device on hosted Android and iOS devi
 
 ## Install the plugin
 
-Install the plugin on the host that runs the daemon. For a 0.22 nightly, use:
+Install the plugin on the host that runs the daemon.
 
 ```bash
 agent-device plugins add @agent-device/browserstack@nightly-0.22
 ```
 
-For a pinned nightly, copy the exact install command from the missing-plugin error.
-On stable 0.22 releases, use `agent-device plugins add @agent-device/browserstack`.
-Releases up to 0.21 bundle the provider in core.
+If the CLI prints an install command in a missing-plugin error, use that command.
 
 The plugin is an optional npm package installed under `AGENT_DEVICE_HOME`.
 After you add or update it, close open sessions and run `agent-device daemon stop`

@@ -40,7 +40,7 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
 Install the CLI and check setup. It requires Node.js 22.12 or newer; web automation requires Node.js 24 or newer. See [Installation](https://agent-device.dev/docs/installation) for target requirements.
 
 ```bash
-npm install -g agent-device@latest
+npm install -g agent-device@nightly-0.22
 agent-device doctor
 agent-device help workflow
 ```
