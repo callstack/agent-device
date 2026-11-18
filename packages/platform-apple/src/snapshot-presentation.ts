@@ -9,6 +9,7 @@ import {
   IosSnapshotEngineError,
   presentIosRunnerSnapshot,
   toIosSnapshotEngineErrorDetails,
+  type IosSnapshotFoldPolicy,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
@@ -159,8 +160,23 @@ export type AppleRunnerSnapshotPresentation = Readonly<{
   viewport?: SnapshotViewportSize;
 }>;
 
+/**
+ * The fold policy the Apple runner projected this payload with. The runner picks it at compile time
+ * (`SnapshotVisibilityFold.Policy.platformDefault`): the projection cursor on the iPhone/iPad
+ * runtime, plain viewport intersection on tvOS and visionOS. The host revalidates an already
+ * presented payload, so it must reuse that rule rather than its own default: the tvOS focus effect
+ * scales a focused cell past its row on purpose, and a cursor clip read from that row refuses the
+ * whole screen (#4654). The two predicates share their leaf set with the producer's `#if os(iOS)`
+ * so one runtime can only mean one policy.
+ */
+function runnerFoldPolicy(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs'>,
+): IosSnapshotFoldPolicy {
+  return isHandheldAppleDevice(device) ? 'cursor-projected' : 'plain-viewport';
+}
+
 export function presentAppleRunnerSnapshot(
-  deviceId: string,
+  device: Pick<DeviceInfo, 'id' | 'platform' | 'target' | 'appleOs'>,
   options: SnapshotOptions | undefined,
   result: AppleRunnerSnapshotResult,
 ): AppleRunnerSnapshotPresentation {
@@ -196,7 +212,7 @@ export function presentAppleRunnerSnapshot(
       presentationKey: buildIosSnapshotPresentationKey(request),
       viewport: validationViewport,
       hittability: { kind: 'available' },
-      lineage: { targetId: deviceId },
+      lineage: { targetId: device.id },
       residue: [],
     },
   };
@@ -204,7 +220,7 @@ export function presentAppleRunnerSnapshot(
   try {
     // The engine returns the box its regular projection validated this payload against and no box
     // for raw — deriving it here would only repeat that rule (#3182).
-    const presentation = presentIosRunnerSnapshot(input, request);
+    const presentation = presentIosRunnerSnapshot(input, request, runnerFoldPolicy(device));
     attachSnapshotViewportEvidence(presentation.nodes, viewportEvidence);
     const validatedViewport =
       viewportEvidence.kind === 'reported'

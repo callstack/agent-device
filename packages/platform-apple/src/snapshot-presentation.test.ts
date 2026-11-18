@@ -1,4 +1,4 @@
-import { IOS_SIMULATOR, MACOS_DEVICE } from './__tests__/device-fixtures.ts';
+import { IOS_SIMULATOR, MACOS_DEVICE, TVOS_SIMULATOR } from './__tests__/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -53,7 +53,7 @@ test.each([
       IOS_SIMULATOR,
     );
     assert.deepEqual(read.viewportEvidence, expected);
-    const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+    const presented = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, read);
     assert.equal(
       presented.nodes.some((node) => node.identifier === 'action'),
       true,
@@ -92,7 +92,7 @@ test('reported runner viewport retains screen authority through the wire reader 
     IOS_SIMULATOR,
   );
   assert.deepEqual(read.viewportEvidence, { kind: 'reported', rect });
-  const presented = presentAppleRunnerSnapshot('device-1', undefined, read);
+  const presented = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, read);
   assert.deepEqual(presented.viewport, { width: 551, height: 813 });
   assert.deepEqual(presented.nodes.find((node) => node.identifier === 'action')?.rect, {
     x: 481,
@@ -110,7 +110,7 @@ test('reported runner viewport retains screen authority through the wire reader 
 
 function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {
   return () =>
-    presentAppleRunnerSnapshot('device-1', undefined, {
+    presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
       nodes: [NO_VIEWPORT_ROOT],
       truncated: true,
       quality: {
@@ -228,7 +228,7 @@ test('an undeclared rootless payload keeps the plain engine invariant', () => {
 });
 
 test('a sparse verdict still presents the nodes it did read', () => {
-  const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
+  const nodes = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [
       {
         index: 0,
@@ -262,7 +262,7 @@ const SYSTEM_SHEET: IosSystemSurfaceProvenance = {
 
 test('a presented system surface travels with an undeclared-payload refusal as typed provenance', () => {
   try {
-    presentAppleRunnerSnapshot('device-1', undefined, {
+    presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
       nodes: [NO_VIEWPORT_ROOT],
       quality: { state: 'healthy', backend: 'tree' },
       systemSurface: SYSTEM_SHEET,
@@ -310,7 +310,7 @@ test('a healthy payload with valid viewport roots still presents', () => {
     rect: { x: 16, y: 400, width: 80, height: 32 },
     hittable: true,
   };
-  const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
+  const nodes = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [screen, button],
   }).nodes;
   assert.deepEqual(
@@ -339,7 +339,11 @@ test('a runner payload with the hittable bit absent presents without declaring i
     },
   ];
   for (const interactiveOnly of [false, true]) {
-    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes }).nodes;
+    const presented = presentAppleRunnerSnapshot(
+      IOS_SIMULATOR,
+      { interactiveOnly },
+      { nodes },
+    ).nodes;
     const button = presented.find((node) => node.label === 'Not Now');
     assert.ok(button, `interactiveOnly=${interactiveOnly}: the undecided button is presented`);
     assert.equal('hittable' in button, false);
@@ -462,7 +466,7 @@ test('the published viewport is the root box the presentation validated against 
     hittable: true,
   };
 
-  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+  const presented = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [screen, button],
   });
 
@@ -483,7 +487,7 @@ test('the published viewport follows the quality payload the fold prefers (#3182
     rect: { x: 0, y: 0, width: 390, height: 844 },
   };
 
-  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+  const presented = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [scopedRoot],
     qualityPayload: { nodes: [qualityRoot], truncated: false, scope: null },
   });
@@ -494,13 +498,13 @@ test('the published viewport follows the quality payload the fold prefers (#3182
 test('a capture with no usable viewport box publishes no viewport, never a zero (#3182)', () => {
   // `runnerFatal` skips presentation, so this exercises the publication seam alone: a zero-extent
   // root is the failed Apple read, and the guard must answer with absence.
-  const fatalZero = presentAppleRunnerSnapshot('device-1', undefined, {
+  const fatalZero = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
     runnerFatal: true,
   });
   assert.equal('viewport' in fatalZero, false);
 
-  const rootless = presentAppleRunnerSnapshot('device-1', undefined, {
+  const rootless = presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
     nodes: [{ index: 0, type: 'Other' }],
     runnerFatal: true,
   });
@@ -510,7 +514,7 @@ test('a capture with no usable viewport box publishes no viewport, never a zero 
   // one that reaches publication still holding an unchecked root. A zero-extent Application there
   // must answer with absence rather than the failed read's dimensions.
   const rawZero = presentAppleRunnerSnapshot(
-    'device-1',
+    IOS_SIMULATOR,
     { raw: true },
     {
       nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
@@ -524,7 +528,7 @@ test('a raw projection publishes no viewport, because nothing validated its box 
   // under `raw` would hand the caller the same largest-rect guess #3182 exists to retire, labelled
   // as a measured fact — and the regular path would refuse this very payload.
   const presented = presentAppleRunnerSnapshot(
-    'device-1',
+    IOS_SIMULATOR,
     { raw: true },
     {
       nodes: [
@@ -620,13 +624,204 @@ test('a clipped system alert passes host validation and retains its typed qualit
     },
     IOS_SIMULATOR,
   );
-  const presentation = presentAppleRunnerSnapshot('device-1', { interactiveOnly: true }, read);
+  const presentation = presentAppleRunnerSnapshot(IOS_SIMULATOR, { interactiveOnly: true }, read);
   assert.equal(
     presentation.nodes.some((node) => node.label === 'Ask App Not to Track'),
     true,
   );
   assert.deepEqual(read.qualityNotes, [note]);
   assert.equal(read.quality, undefined);
+});
+
+// #4654: a tvOS runner folds its tree with plain viewport intersection, because the tvOS focus
+// effect scales a focused cell past its row by design and the row clip would hide that content.
+// The host then revalidates that already-presented payload, so it must use the fold policy the
+// producer used. The frames below are the reporter's `snapshot -i --raw` capture of a focused tile
+// on a tvOS home row: raw 24 is the focused cell, raw 25/26/28 are its content scaled ×1.05 around
+// the cell's centre, and raw 21 is the row that the host treated as the clip.
+function tvFocusScaledRowNodes(): RawSnapshotNode[] {
+  return [
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 1920, height: 1080 }, depth: 0 },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'CollectionView',
+      identifier: 'layout_renderer_collection_view',
+      rect: { x: 0, y: 0, width: 1920, height: 1080 },
+      depth: 1,
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Cell',
+      rect: { x: 0, y: 210, width: 1920, height: 501 },
+      depth: 2,
+    },
+    {
+      index: 3,
+      parentIndex: 2,
+      type: 'CollectionView',
+      rect: { x: 0, y: 210, width: 1920, height: 501 },
+      depth: 3,
+    },
+    {
+      index: 4,
+      parentIndex: 3,
+      type: 'Cell',
+      identifier: 'cell_section0_item0',
+      rect: { x: 96, y: 210, width: 333.6, height: 501 },
+      depth: 4,
+      hittable: true,
+    },
+    {
+      index: 5,
+      parentIndex: 4,
+      type: 'Other',
+      label: 'Focused tile',
+      rect: { x: 96, y: 210, width: 333.5, height: 501 },
+      depth: 5,
+      focused: true,
+      hittable: true,
+    },
+    {
+      index: 6,
+      parentIndex: 5,
+      type: 'Other',
+      label: 'Focused tile',
+      rect: { x: 96, y: 210, width: 333.5, height: 501 },
+      depth: 6,
+    },
+    {
+      index: 7,
+      parentIndex: 6,
+      type: 'Other',
+      label: 'Focused tile',
+      rect: { x: 87.6625, y: 197.475, width: 350.175, height: 526.05 },
+      depth: 7,
+    },
+    {
+      index: 8,
+      parentIndex: 7,
+      type: 'Other',
+      rect: { x: 87.6625, y: 197.475, width: 350.175, height: 526.05 },
+      depth: 8,
+    },
+  ];
+}
+
+test('a tvOS runner payload keeps its plain-viewport fold through host validation (#4654)', () => {
+  const read = readAppleSnapshotResult(
+    {
+      nodes: tvFocusScaledRowNodes(),
+      snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+    },
+    TVOS_SIMULATOR,
+  );
+
+  const presented = presentAppleRunnerSnapshot(TVOS_SIMULATOR, undefined, read);
+
+  const focused = presented.nodes.find((node) => node.focused === true);
+  assert.equal(focused?.label, 'Focused tile');
+  assert.equal(focused?.hittable, true);
+  // The tvOS fold publishes the focus-scaled frame it observed, so the capture keeps it verbatim.
+  assert.deepEqual(presented.nodes.find((node) => node.index === 7)?.rect, {
+    x: 87.6625,
+    y: 197.475,
+    width: 350.175,
+    height: 526.05,
+  });
+});
+
+test('an interactive tvOS snapshot lists the focused tile its row clip would hide (#4654)', () => {
+  const read = readAppleSnapshotResult(
+    {
+      nodes: tvFocusScaledRowNodes(),
+      snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+    },
+    TVOS_SIMULATOR,
+  );
+
+  const presented = presentAppleRunnerSnapshot(TVOS_SIMULATOR, { interactiveOnly: true }, read);
+
+  const focused = presented.nodes.filter((node) => node.focused === true);
+  assert.equal(focused.length, 1);
+  assert.equal(focused[0]?.label, 'Focused tile');
+  assert.equal(focused[0]?.hittable, true);
+});
+
+test('a tvOS runner payload still refuses a node outside the viewport (#4654)', () => {
+  const offScreenAction: RawSnapshotNode = {
+    index: 9,
+    parentIndex: 3,
+    type: 'Button',
+    label: 'Below the screen',
+    rect: { x: 0, y: 1400, width: 200, height: 80 },
+    depth: 4,
+    hittable: true,
+  };
+  const read = readAppleSnapshotResult(
+    {
+      nodes: [...tvFocusScaledRowNodes(), offScreenAction],
+      snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+    },
+    TVOS_SIMULATOR,
+  );
+
+  assert.throws(
+    () => presentAppleRunnerSnapshot(TVOS_SIMULATOR, undefined, read),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      const details = error.details as {
+        reason?: string;
+        index?: number;
+        frame?: { y: number };
+      };
+      // The refusal keeps naming the node the producer published at that index.
+      return (
+        details.reason === 'regular-node-outside-cumulative-clip' &&
+        details.index === 9 &&
+        details.frame?.y === 1400
+      );
+    },
+  );
+});
+
+test('a tvOS runner payload still refuses an actionable node with no frame (#4654)', () => {
+  const framelessAction: RawSnapshotNode = {
+    index: 9,
+    parentIndex: 3,
+    type: 'Button',
+    label: 'Nowhere',
+    depth: 4,
+    hittable: true,
+  };
+  const read = readAppleSnapshotResult(
+    {
+      nodes: [...tvFocusScaledRowNodes(), framelessAction],
+      snapshotViewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+    },
+    TVOS_SIMULATOR,
+  );
+
+  assert.throws(
+    () => presentAppleRunnerSnapshot(TVOS_SIMULATOR, undefined, read),
+    (error: unknown) =>
+      error instanceof AppError &&
+      (error.details as { reason?: string }).reason === 'regular-degenerate-actionable-node',
+  );
+});
+
+test('a handheld runner payload still refuses a node outside its cumulative clip (#4654)', () => {
+  assert.throws(
+    () =>
+      presentAppleRunnerSnapshot(IOS_SIMULATOR, undefined, {
+        nodes: tvFocusScaledRowNodes(),
+        viewportEvidence: { kind: 'reported', rect: { x: 0, y: 0, width: 1920, height: 1080 } },
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      (error.details as { reason?: string }).reason === 'regular-node-outside-cumulative-clip',
+  );
 });
 
 test('runner wire keeps real verdicts independent of clipping notes', () => {
