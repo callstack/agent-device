@@ -87,9 +87,12 @@ export function buildDaemonShutdownReport(
  * The parse is given text rather than a path on purpose: reading the name is a different owner's job, and this
  * one answers only for the shape of what it is handed — including whose lifetime handed it.
  *
- * `writtenBy` is read when the record states one, and a record that names an author answers ONLY for that
- * lifetime. A report that states no author predates the field, which is the same additive case as a report
- * that predates the claims section: its known parts are still read.
+ * `expectedAuthor` asks for ONE lifetime's report and no other. Then the record must PROVE it is that one: an
+ * author the record states has to be valid and match, and a record stating no author at all — however sound
+ * its other parts — is not proof of anything, so the answer is no report and the stop says its cleanup
+ * confidence is unknown rather than crediting somebody else's teardown to this daemon. Without the ask, an
+ * author-less record predates the field, which is the same additive case as a report that predates the claims
+ * section: its known parts are still read.
  */
 function parseDaemonShutdownReport(
   text: string | undefined,
@@ -99,14 +102,17 @@ function parseDaemonShutdownReport(
   try {
     const parsed: unknown = JSON.parse(text);
     if (!isProviderReleaseReport(parsed)) return null;
-    const author = readReportAuthor(parsed);
-    if (author && expectedAuthor && !reportAuthorMatches(author, expectedAuthor)) return null;
+    if (expectedAuthor !== undefined) {
+      const author = readReportAuthor(parsed);
+      if (author === undefined || !reportAuthorMatches(author, expectedAuthor)) return null;
+    }
     return { providerReleases: parsed.providerReleases, claims: readClaimSection(parsed) };
   } catch {
     return null;
   }
 }
 
+/** The author a record states, or `undefined` when it states none, or states one that is not valid. */
 function readReportAuthor(value: { writtenBy?: unknown }): DaemonShutdownReportAuthor | undefined {
   const stated = value.writtenBy as Readonly<{ pid?: unknown; startTime?: unknown }> | undefined;
   if (!stated || !Number.isInteger(stated.pid) || (stated.pid as number) <= 0) return undefined;
@@ -115,16 +121,23 @@ function readReportAuthor(value: { writtenBy?: unknown }): DaemonShutdownReportA
 }
 
 /**
- * Whether a report names the lifetime the caller stopped. Equal pids are NOT the same run: `startTime` is
- * what tells a recycled pid apart, the same fact every other daemon record is correlated by. A record whose
- * author cannot be compared — a start time either side does not state — is not proof of being this run's, so
- * it answers `false` and the stop reports its cleanup confidence as unknown rather than known.
+ * Whether a report names the lifetime the caller stopped — and whether that name can prove it.
+ *
+ * Equal pids are NOT the same run: `startTime` is what tells a recycled pid apart, the same fact every other
+ * daemon record is correlated by, and the same rule applies here — a start time either side does not state
+ * proves nothing, so a caller that expects attribution is answered as UNMATCHED rather than handed a record
+ * that cannot say which run wrote it. A pid with no start time is exactly what a recycled pid looks like.
  */
 function reportAuthorMatches(
   author: DaemonShutdownReportAuthor,
   expected: DaemonShutdownReportAuthor,
 ): boolean {
-  return author.pid === expected.pid && author.startTime === expected.startTime;
+  return (
+    author.pid === expected.pid &&
+    author.startTime !== null &&
+    expected.startTime !== null &&
+    author.startTime === expected.startTime
+  );
 }
 
 /** The most a shutdown report is ever read for: it names leases and claims, and a bounded read is what keeps

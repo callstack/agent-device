@@ -52,9 +52,11 @@ skipOnWindows('creates a missing state chain at 0700 under the shared checkout u
 
 skipOnWindows('a state chain made under a umask that takes an OWNER bit is still usable', () => {
   // `mkdir` ANDs its mode with the umask, so a umask of 0277 leaves a 0700 request answering 0500: the daemon
-  // could then create the name it came for and never read it back. The mode is said again after the create,
+  // could then create the name it came for and never read it back. The MASK is asked for the create itself,
   // and for EVERY level this call made — the state directory and each name below it — because a chain whose
-  // last level is usable and whose first one is not is a chain that cannot be written into at all.
+  // last level is usable and whose first one is not is a chain that cannot be written into at all. Asking the
+  // mask is also the only way to make the mode without saying it at a NAME afterwards: the alternative is a
+  // `chmod` (or a re-open) at a name another process can put a link at in the moment between.
   const parent = directoryWith(path.join(root(), 'parent'), 0o700);
   const state = path.join(parent, 'state');
   const sessions = path.join(state, 'sessions');
@@ -71,6 +73,29 @@ skipOnWindows('a state chain made under a umask that takes an OWNER bit is still
   expect(created).toBe(sessions);
   expect(modeOf(state)).toBe(0o700);
   expect(modeOf(sessions)).toBe(0o700);
+});
+
+skipOnWindows('a created state level never has its mode said at a name', () => {
+  // `chmod` resolves a name, so it reaches whatever stands there when it runs — including a link another
+  // local user planted between the create and the mode change, in a directory they can write. The create is
+  // asked with the umask masked, so the entry is BORN at 0700 and no such window is opened. This row pins
+  // that the creation path asks for no name-based mode change at all.
+  const parent = directoryWith(path.join(root(), 'parent'), 0o700);
+  const state = path.join(parent, 'state');
+
+  const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+    throw new Error('a mode said at a NAME would reach here');
+  });
+  const previous = process.umask(0o022);
+  try {
+    expect(ensurePrivateDirectoryChain(state, ['sessions']).exposure).toBeUndefined();
+  } finally {
+    process.umask(previous);
+    chmod.mockRestore();
+  }
+
+  expect(chmod.mock.calls).toEqual([]);
+  expect(modeOf(state)).toBe(0o700);
 });
 
 // --- what it repairs, and what a repair cannot reach ---
@@ -229,6 +254,42 @@ skipOnWindows('a symbolic link in ground only this user can write is judged thro
 
   expect(chain.exposure).toBeUndefined();
   expect(chain.directory).toBe(path.join(real, 'state'));
+});
+
+skipOnWindows('refuses a sticky shared level in the MIDDLE of the daemon’s own route', () => {
+  // ADR 0016 lets a sticky shared directory be passed THROUGH, because passing through one cannot hand
+  // anybody the name you are about to create. The state route is not passing through: every level below the
+  // state directory is ground this daemon writes its own records into, and a shared level there still lets
+  // another local user plant the link that re-lands everything below it. So the question the rule asks of
+  // the directory an entry is created in, it asks of EVERY level from the state directory down — and a level
+  // above the state directory keeps ADR 0016's answer, because the daemon did not choose it.
+  const state = directoryWith(path.join(root(), 'state'), 0o700);
+  const middle = directoryWith(path.join(state, 'sessions'), 0o700);
+  fs.chmodSync(middle, 0o1777);
+  serveOwnership({ [middle]: 0 });
+
+  const chain = ensurePrivateDirectoryChain(state, ['sessions', 'records']);
+
+  expect(chain.exposure).toBe('shared_parent');
+  expect(fs.existsSync(path.join(middle, 'records'))).toBe(false);
+  // Root's own directory: narrowing it is not this rule's to do, and the flag bit is what the rule never
+  // treats as a pass.
+  expect(modeOf(middle)).toBe(0o777);
+});
+
+skipOnWindows('a sticky shared level ABOVE the state directory is judged and left alone', () => {
+  // The mirror of the row above: the walk refuses the daemon's own ground, and refuses nothing further up,
+  // because a level the caller did not choose is neither its to repair nor its to refuse out of existence.
+  // This is what keeps a host that keeps work in a shared sticky directory able to run at all.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o700);
+  fs.chmodSync(shared, 0o1777);
+  const state = directoryWith(path.join(shared, 'state'), 0o700);
+
+  const chain = judgePrivateDirectoryChain(state);
+
+  expect(chain.exposure).toBeUndefined();
+  expect(modeOf(shared)).toBe(0o777);
 });
 
 // --- the route it judges ---

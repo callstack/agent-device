@@ -59,9 +59,9 @@ test.for(['EPERM', 'EROFS'])(
     const paths = resolveDaemonPaths(
       path.join(fs.realpathSync(mkdtempForTestSync('agent-device-launch-chmod-')), 'state'),
     );
-    // Both seams a state mode is said on. A level this call CREATED takes its mode at the name; a level that
-    // already stands, and the log this call opened, take it on the OPEN DESCRIPTOR, because `chmod` by name
-    // follows a link planted there.
+    // Both seams a state mode is asked at. A level this call CREATES takes its mode from the create itself,
+    // with the umask masked; a level that already stands, and the log this call opened, take it on the OPEN
+    // DESCRIPTOR, because `chmod` by name follows a link planted there.
     const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
       throw Object.assign(new Error(code), { code });
     });

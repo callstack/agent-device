@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from './diagnostics.ts';
 import {
   identityOf,
   lstatEntry,
@@ -8,7 +9,6 @@ import {
   othersCreateEntriesIn,
   pathComponents,
   publishFileSync,
-  reportSkippedModeRepair,
   SCRIPT_DIR_MODE,
   scriptAncestryReason,
   scriptTrust,
@@ -413,7 +413,9 @@ function privateStateDescriptorExposure(
  *
  * An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
  * narrowed rather than refused — on the DESCRIPTOR, the one seam where no link can stand between the ask and
- * the change.
+ * the change. A caller that keeps the handle past this call asks {@link assertPrivateStateFileModeSync} and
+ * refuses the route when the mode cannot be had; an opener that hands the handle to a caller which treats a
+ * loose mode as a warning reports the skip instead.
  */
 function assertPrivateStateDescriptor(descriptor: number, destination: string): void {
   const held = fs.fstatSync(descriptor, { bigint: true });
@@ -434,9 +436,26 @@ function assertPrivateStateDescriptor(descriptor: number, destination: string): 
     );
   }
   try {
-    fs.fchmodSync(descriptor, PRIVATE_STATE_FILE_MODE);
+    assertPrivateStateFileModeSync(descriptor);
   } catch (error) {
     reportSkippedModeRepair(destination, error instanceof Error ? error.message : String(error));
+  }
+}
+
+/**
+ * Makes the bytes behind a descriptor carry the state file's mode, and PROVES they do.
+ *
+ * The mode is said on the descriptor and then read back from it, because a caller that keeps this handle is
+ * going to write through it for as long as it lives: an `fchmod` the host refused, or a filesystem that will
+ * not carry the mode at all, would otherwise leave a record readable by every local user while the process
+ * that wrote it believed the state rule had said 0600. The read-back is the whole of the difference — and it
+ * is the check a caller cannot make afterwards, since by then the handle is in use.
+ */
+export function assertPrivateStateFileModeSync(descriptor: number): void {
+  fs.fchmodSync(descriptor, PRIVATE_STATE_FILE_MODE);
+  const mode = Number(fs.fstatSync(descriptor, { bigint: true }).mode) & 0o777;
+  if (mode !== PRIVATE_STATE_FILE_MODE) {
+    throw new Error(`this host left the record at mode ${mode.toString(8)} instead of 600`);
   }
 }
 
@@ -502,12 +521,16 @@ function lastByteEndsALine(descriptor: number): boolean {
 export function publishPrivateStateFileSync(pathname: string, contents: string): void {
   const asked = requiredStateEntry(pathname);
   assertStateDirectoryJudged(asked);
+  const judgeTheDirectory = () => assertStateDirectoryJudged(asked);
   publishFileSync({
     destination: asked.destination,
     contents,
     mode: PRIVATE_STATE_FILE_MODE,
     exactMode: true,
-    assertDestination: () => assertStateDirectoryJudged(asked),
+    // The same judgment at both seams the NAME is written at, and again before the sibling this call created
+    // is removed: bytes judged in one directory must not be committed into, or tidied up out of, another's.
+    assertDestination: judgeTheDirectory,
+    assertStagedIn: judgeTheDirectory,
   });
 }
 
@@ -691,13 +714,17 @@ function stateChain(
     return createWindowsStateDirectory(target, create);
   }
   const trust = scriptTrust({});
-  // The state root's own name, counted from the route the walk takes: the walk is asked not to follow a link at
-  // it or below it, and a refusal about it or below it is the only one this rule may repair. Positions are the
-  // walk's, not spellings, so an allowed ancestor alias such as `/var` neither trips the link rule nor hides the
-  // state directory from the repair gate.
+  // The state root's own name, counted from the route the walk takes: from that name down the walk refuses a
+  // link and refuses ground other local users can add a name to, and a refusal about it or below it is the only
+  // one this rule may repair. Positions are the walk's, not spellings, so an allowed ancestor alias such as
+  // `/var` neither trips the link rule nor hides the state directory from the repair gate.
   const stateRootRouteName = pathComponents(path.resolve(stateDir)).length - 1;
   const policy: WalkPolicy = {
     noLinksAtRouteNameOrBelow: stateRootRouteName,
+    // Every level of the daemon's own route, not just the one an entry is created in: a state file written
+    // from a directory reached through a level another local user can plant a name in is a record whose route
+    // somebody else chose, and a sticky bit does not stop that planting.
+    sharedLevelRefusedOnRoute: true,
     refusal: { atRouteName: undefined },
   };
   const arrived = walkStateRoute(target, trust, create, policy);
@@ -751,15 +778,27 @@ function repairableStateExposure(exposure: PrivateDirectoryExposure): boolean {
 }
 
 /**
- * Narrows `directory` to {@link SCRIPT_DIR_MODE}, reaching ONLY the inode the look judged, and reporting what
- * it could not do.
+ * Says one state mode the host would not carry, and moves on. The phase is the one a launch has always
+ * reported: a repair is never an outcome, so it is written down and the judgment goes on reading the mode
+ * that actually stands.
+ */
+function reportSkippedModeRepair(target: string, reason: string): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'daemon_state_mode_repair_skipped',
+    data: { path: target, error: reason },
+  });
+}
+
+/**
+ * Narrows `directory` to {@link SCRIPT_DIR_MODE}, reaching ONLY the inode this call just judged.
  *
  * A mode is never said at a NAME, because `chmod` follows a link: the entry is looked up, then opened
  * `O_DIRECTORY | O_NOFOLLOW`, which answers a symbolic link at that name by not opening it at all, and the
  * `fstat` of the open descriptor is compared with the identity that lookup answered. Ownership is decided on
- * the same lookup the rule judges with, so a level belonging to another local user — root's included — is
- * left alone. Every lookup is inside the guard, so a host that fails one for a reason this rule does not
- * model costs the narrowing and not the caller: establishment is best effort, and a repair is never an outcome.
+ * the same lookup the rule judges with, so a level belonging to another local user — root's included — is left
+ * alone. Every lookup is inside the guard, so a host that fails one for a reason this rule does not model costs
+ * the narrowing and not the caller: establishment is best effort, and a repair is never an outcome.
  */
 function narrowDirectoryMode(directory: string, trust: ScriptDestinationTrust): void {
   let descriptor: number | undefined;
@@ -795,6 +834,22 @@ function narrowDirectoryMode(directory: string, trust: ScriptDestinationTrust): 
 }
 
 /**
+ * `O_RDONLY | O_DIRECTORY | O_NOFOLLOW`, or `undefined` where the host does not name all three. Absent flags
+ * mean no narrowing: a host that cannot refuse to follow a link cannot promise the mode lands on the judged
+ * inode, and an unmade repair is a skip, never a guess.
+ *
+ * `O_RDONLY` is the one access flag whose value is ZERO on the supported hosts, so it is asked for as
+ * "an integer this host names" while the two flags that carry the safety are asked for as non-zero.
+ */
+function directoryNoFollowOpenFlags(): number | undefined {
+  const access = fs.constants.O_RDONLY;
+  const guards = [fs.constants.O_DIRECTORY, fs.constants.O_NOFOLLOW];
+  if (!Number.isInteger(access)) return undefined;
+  if (!guards.every((flag) => Number.isInteger(flag) && Number(flag) > 0)) return undefined;
+  return guards.reduce((all, flag) => all | Number(flag), Number(access));
+}
+
+/**
  * Narrows the judged state directory and judges the ROUTE THE CALLER ASKED FOR again, once.
  *
  * The re-judgment asks the caller's own `names` and not just the state directory: the repair happened at the
@@ -810,22 +865,6 @@ function repairStateDirectoryAndJudgeAgain(
 ): PrivateDirectoryChain {
   narrowDirectoryMode(target, trust);
   return stateChain(stateDir, names, true, true);
-}
-
-/**
- * `O_RDONLY | O_DIRECTORY | O_NOFOLLOW`, or `undefined` where the host does not name all three. Absent flags
- * mean no repair: a host that cannot refuse to follow a link cannot promise the mode lands on the judged
- * inode, and an unmade repair is a skip, never a guess.
- *
- * `O_RDONLY` is the one access flag whose value is ZERO on the supported hosts, so it is asked for as
- * "an integer this host names" while the two flags that carry the safety are asked for as non-zero.
- */
-function directoryNoFollowOpenFlags(): number | undefined {
-  const access = fs.constants.O_RDONLY;
-  const guards = [fs.constants.O_DIRECTORY, fs.constants.O_NOFOLLOW];
-  if (!Number.isInteger(access)) return undefined;
-  if (!guards.every((flag) => Number.isInteger(flag) && Number(flag) > 0)) return undefined;
-  return guards.reduce((all, flag) => all | Number(flag), Number(access));
 }
 
 /**

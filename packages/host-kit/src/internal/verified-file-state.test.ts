@@ -15,6 +15,7 @@ import {
 } from './atomic-file-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
+  assertPrivateStateFileModeSync,
   publishPrivateStateFileSync,
   readPrivateStateFileTailSync,
   tryOpenPrivateStateFileSync,
@@ -304,6 +305,73 @@ skipOnWindows('a record with a second name is refused as a read too, not just as
 
   expect(readPrivateStateFileTailSync(report, 4096).status).toBe('refused');
 });
+
+skipOnWindows('a staging sibling whose write failed is still tidied from ground that holds', () => {
+  // The other side of the same gate: the ordinary failure leaves nothing behind, because the caller's own
+  // directory judgment still answers the same inode.
+  const state = stateDir();
+  const report = path.join(state, 'daemon-shutdown.json');
+  const realWrite = fs.writeFileSync.bind(fs);
+  const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(((
+    target: unknown,
+    ...rest: unknown[]
+  ) => {
+    if (typeof target === 'number') throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+    return (realWrite as (...args: unknown[]) => unknown)(target, ...rest);
+  }) as typeof fs.writeFileSync);
+
+  try {
+    expect(() => publishPrivateStateFileSync(report, '{"a":1}\n')).toThrow(/ENOSPC/);
+  } finally {
+    write.mockRestore();
+  }
+
+  expect(fs.readdirSync(state)).toEqual([]);
+});
+
+skipOnWindows(
+  'a state mode the host will not carry is answered as a refusal, not a warning',
+  () => {
+    // A caller that KEEPS the handle — the daemon's log sink is one — writes through it for as long as it
+    // lives. `fchmod` that fails, or a filesystem that will not hold the mode, would otherwise leave the run's
+    // records readable by every local user while the writer believed the state rule had said 0600. The mode is
+    // therefore said and READ BACK on the descriptor, and the caller that keeps the handle is owed the answer.
+    const state = stateDir();
+    const log = path.join(state, 'daemon.log');
+    fs.writeFileSync(log, 'earlier\n', { mode: 0o644 });
+    fs.chmodSync(log, 0o644);
+
+    const handle = openStateHandle(log, 'append');
+    const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    });
+    try {
+      expect(() => assertPrivateStateFileModeSync(handle)).toThrow(/EPERM/);
+    } finally {
+      fchmod.mockRestore();
+    }
+
+    // The host accepts the change and answers a loose mode anyway, which is what a filesystem that does not
+    // carry the bit does: the read-back is what catches it.
+    const fstat = fs.fstatSync.bind(fs);
+    const stat = vi.spyOn(fs, 'fstatSync').mockImplementation(((
+      descriptor: number,
+      options?: fs.StatOptions & { bigint?: true },
+    ) => {
+      const stats = fstat(descriptor, options);
+      if (options?.bigint) (stats as { mode: number | bigint }).mode = BigInt(0o100644);
+      return stats;
+    }) as typeof fs.fstatSync);
+    try {
+      expect(() => assertPrivateStateFileModeSync(handle)).toThrow(/644/);
+    } finally {
+      stat.mockRestore();
+      fs.closeSync(handle);
+    }
+
+    expect(fs.readFileSync(log, 'utf8')).toBe('earlier\n', 'the refusal writes nothing');
+  },
+);
 
 /** The bytes a state read answered, or `undefined` for absence and refusal alike. */
 function readOf(read: PrivateStateRead): string | undefined {

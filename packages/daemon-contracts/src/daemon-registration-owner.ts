@@ -27,6 +27,7 @@ import {
   acquireProcessLockAcquisition,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
+  type PrivateDirectoryExposure,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
@@ -252,12 +253,14 @@ function removeRegistrationUnderLock(
 }
 
 /**
- * The state chains this process has established, so the create-and-repair walk is asked ONCE per directory.
+ * The state chains this process has ESTABLISHED, so the create-and-repair walk is asked ONCE per spelling.
  *
  * Establishment is the ACTION half of the rule: it makes missing levels at 0700 and narrows a loose level this
  * user owns, and says what it found. Nothing about a later write trusts its answer — every state open judges
  * the chain again and proves the descriptor it got (#4649) — so asking the action a dozen times in one startup,
- * once per phase marker, buys no safety and re-opens ground the first ask already settled.
+ * once per phase marker, buys no safety and re-opens ground the first ask already settled. A FAILED verdict is
+ * remembered too: repeating a walk that cannot succeed, once per marker, repairs nothing and buries the one
+ * line that says what is wrong. What a later write does with that verdict is its own judgment, every time.
  */
 const establishedStateDirs = new Set<string>();
 
@@ -267,18 +270,34 @@ const establishedStateDirs = new Set<string>();
  * The line goes to this process's stderr, which the launcher redirects into the daemon log. Nothing here
  * refuses a startup: an exposed state directory is a fact about the host, and the per-file rule is what
  * withholds a record from it (#4649).
+ *
+ * The directory is passed on EXACTLY as configured, and so is the memo key: nothing here normalizes a state
+ * path, because `path.resolve` folds a `..` away, and the chain rule has to judge, and refuse, the route the
+ * operator actually named rather than the directory a text substitution would have meant.
  */
 export function establishPrivateDaemonStateDir(stateDir: string): void {
-  // `path.join(..., '.')` normalizes the spelling without resolving links, so two callers that name one
-  // directory differently ask once, and a `..` cannot smuggle a second walk of the same route.
-  const asked = path.join(stateDir, '.');
-  if (establishedStateDirs.has(asked)) return;
-  establishedStateDirs.add(asked);
+  if (establishedStateDirs.has(stateDir)) return;
+  establishedStateDirs.add(stateDir);
   const chain = ensurePrivateDirectoryChain(stateDir);
-  if (chain.exposure) {
+  if (chain.exposure !== undefined) sayStateDirExposure(chain.exposure, chain.directory);
+}
+
+/**
+ * Says which part of the state route is not private, on a route no entry in that route can steer.
+ *
+ * stderr is the launcher's own log handle for a detached daemon and the host's stream for an embedded one, so
+ * it is the one sink a planted FIFO or a closed log cannot reach. It is also a sink that can fail: a pipe
+ * nobody reads throws out of `write`, and this line is a REPORT about the state directory — losing it to its
+ * own I/O, or dying on it, would leave a daemon running with an exposed state tree and nothing said. The write
+ * is contained; the verdict is what the caller keeps either way.
+ */
+function sayStateDirExposure(exposure: PrivateDirectoryExposure, directory: string): void {
+  try {
     process.stderr.write(
-      `Daemon state dir ${chain.directory} is not private: ${privateDirectoryWordingOf(chain.exposure)}\n`,
+      `Daemon state dir ${directory} is not private: ${privateDirectoryWordingOf(exposure)}\n`,
     );
+  } catch {
+    // The verdict stands; only the route it was said on failed.
   }
 }
 

@@ -54,6 +54,56 @@ test("a report left by an earlier run of the same pid is not this stop's cleanup
   }
 });
 
+test('a stop that expects attribution is not answered by a record that proves no lifetime', async () => {
+  // The stop passes the lifetime it stopped precisely so the answer is about THAT run. A record that states
+  // no author, or states one with no start time, cannot say which run wrote it — and a recycled pid looks
+  // exactly like that. Crediting such a record would tell the caller devices were released by the daemon
+  // that just exited, on the strength of a file that cannot name its writer.
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
+  const reportPath = path.join(stateDir, 'daemon-shutdown.json');
+  const outcome = {
+    providerReleases: { released: [], pending: [] },
+    claims: { released: [claim], orphaned: [], superseded: [], unattributable: [] },
+  };
+
+  try {
+    // A record from before the field existed: still readable for a caller that asks for no lifetime...
+    fs.writeFileSync(reportPath, JSON.stringify(outcome));
+    expect(await readDaemonShutdownReport(stateDir)).toEqual(outcome);
+    // ...and worth nothing to a caller that does.
+    expect(await readDaemonShutdownReport(stateDir, AUTHOR)).toBeNull();
+
+    // A record that states this pid and no start time: indistinguishable from an earlier run of a pid that
+    // has since been recycled, so it states no author for the purpose of attribution.
+    fs.writeFileSync(reportPath, JSON.stringify({ ...outcome, writtenBy: { pid: AUTHOR.pid } }));
+    expect(await readDaemonShutdownReport(stateDir, AUTHOR)).toBeNull();
+
+    // A record that states the caller's own pid and a start time of null, the same shape from the other side.
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify(buildDaemonShutdownReport(outcome, { pid: AUTHOR.pid, startTime: null })),
+    );
+    expect(
+      await readDaemonShutdownReport(stateDir, { pid: AUTHOR.pid, startTime: null }),
+    ).toBeNull();
+
+    // A pid that is not the caller's at all.
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify(
+        buildDaemonShutdownReport(outcome, { pid: 9999, startTime: AUTHOR.startTime }),
+      ),
+    );
+    expect(await readDaemonShutdownReport(stateDir, AUTHOR)).toBeNull();
+
+    // And the one record that does prove it: this pid, this lifetime.
+    fs.writeFileSync(reportPath, JSON.stringify(buildDaemonShutdownReport(outcome, AUTHOR)));
+    expect(await readDaemonShutdownReport(stateDir, AUTHOR)).toEqual(outcome);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('round-trips provider release and device claim records without lease credentials', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const lease: DeviceLease = {

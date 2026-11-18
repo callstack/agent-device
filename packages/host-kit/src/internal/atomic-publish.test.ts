@@ -49,6 +49,92 @@ describe('publishFileSync', () => {
     expect(siblings).toEqual([]);
   });
 
+  test('a sibling whose identity the host will not say is still tidied by the claim', () => {
+    // The name embeds this pid and a fresh UUID and was created EXCLUSIVELY, which proves a moment ago that
+    // nobody else's entry stood there. A host that answers no identity for the open descriptor therefore
+    // leaves the CLAIM standing — and the lookup is asked best effort, so it costs this call neither the bytes
+    // it came to write nor the tidying of its own sibling.
+    const target = destination('unidentified.txt');
+    const fstat = vi.spyOn(fs, 'fstatSync').mockImplementation((() => {
+      throw Object.assign(new Error('ENOSYS'), { code: 'ENOSYS' });
+    }) as unknown as typeof fs.fstatSync);
+
+    try {
+      publishFileSync({ destination: target, contents: 'bytes' });
+    } finally {
+      fstat.mockRestore();
+    }
+
+    expect(fs.readFileSync(target, 'utf8')).toBe('bytes');
+    expect(
+      fs
+        .readdirSync(directory)
+        .filter((name) => name.startsWith('.unidentified.txt.') && name.endsWith('.tmp')),
+    ).toEqual([]);
+  });
+
+  test('a staging sibling is not tidied out of ground the caller no longer holds', () => {
+    // The sibling this call created is its own to delete only while the DIRECTORY holding it is still the one
+    // the caller judged. A directory renamed away and made again meanwhile belongs to whoever owns that ground
+    // now, so a `rm` at the spelled sibling path would remove an entry this call has no authority over — and
+    // would destroy the only evidence of the failed write. The cleanup therefore asks the caller's own
+    // directory judgment first, and skips when it no longer holds.
+    const target = destination('held.txt');
+    const siblings = () =>
+      fs
+        .readdirSync(directory)
+        .filter((name) => name.startsWith('.held.txt.') && name.endsWith('.tmp'));
+
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(((written: unknown) => {
+      if (typeof written === 'number') throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+      throw new Error('unexpected plain write');
+    }) as typeof fs.writeFileSync);
+
+    try {
+      expect(() =>
+        publishFileSync({
+          destination: target,
+          contents: 'bytes',
+          assertStagedIn: () => {
+            throw new Error('the judged directory is gone');
+          },
+        }),
+      ).toThrow(/ENOSPC/);
+      expect(siblings().length).toBe(1);
+    } finally {
+      write.mockRestore();
+      for (const name of siblings()) fs.rmSync(path.join(directory, name), { force: true });
+    }
+  });
+
+  test('a failed publish whose directory still holds leaves no sibling behind', () => {
+    // The other side of the same gate: an ordinary write failure is tidied, because the caller's own
+    // directory judgment still answers the ground it judged.
+    const target = destination('tidied.txt');
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(((written: unknown) => {
+      if (typeof written === 'number') throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+      throw new Error('unexpected plain write');
+    }) as typeof fs.writeFileSync);
+
+    try {
+      expect(() =>
+        publishFileSync({
+          destination: target,
+          contents: 'bytes',
+          assertStagedIn: () => {},
+        }),
+      ).toThrow(/ENOSPC/);
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(
+      fs
+        .readdirSync(directory)
+        .filter((name) => name.startsWith('.tidied.txt.') && name.endsWith('.tmp')),
+    ).toEqual([]);
+  });
+
   test.skipIf(process.platform === 'win32').each([0o600, 0o640])(
     'preserves existing mode %s before replacing its contents',
     (mode) => {

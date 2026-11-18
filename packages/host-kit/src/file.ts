@@ -17,6 +17,7 @@ export { scriptAncestryReason } from './internal/script-destination-refusal.ts';
 export { resolveScriptDestination } from './internal/entry-name.ts';
 export {
   appendPrivateStateFileSync,
+  assertPrivateStateFileModeSync,
   assertScriptTargetVacant,
   ensurePrivateDirectoryChain,
   judgePrivateDirectoryChain,

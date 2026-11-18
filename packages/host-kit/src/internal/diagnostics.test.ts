@@ -227,6 +227,164 @@ test('a value registered after an emit but before flush is replaced in the flush
   assert.match(diagnostics, /captured \[REDACTED\]/);
 });
 
+test('a line the sink setup itself emits never travels through the sink being built', () => {
+  // Sink setup is an act of judgment on that very path: opening it, proving its mode. A warning IT emits —
+  // "the mode could not be said on this handle" is one — must not be appended at the name, whose judgment is
+  // what is still being made, and must not ask for a second sink. It goes to stderr, which no entry in that
+  // directory can steer.
+  const directory = mkdtempForTestSync('agent-device-diag-setup-warning-');
+  const logPath = path.join(directory, 'daemon.log');
+  const sinkFile = path.join(directory, 'through-the-sink.ndjson');
+  const asked: string[] = [];
+
+  const said = captureStderrWrites(() => {
+    withDiagnosticsScope(
+      {
+        debug: true,
+        logPath,
+        logSinkFactory: (pathname) => {
+          asked.push(pathname);
+          // The setup itself reports something while it is still deciding about this path.
+          emitDiagnostic({ level: 'warn', phase: 'during_setup' });
+          return {
+            write: (line) => {
+              fs.appendFileSync(sinkFile, line, 'utf8');
+              return true;
+            },
+          };
+        },
+      },
+      () => emitDiagnostic({ phase: 'after_setup' }),
+    );
+  });
+
+  assert.match(said, /"phase":"during_setup"/, 'the setup warning is said on stderr');
+  assert.deepEqual(asked, [logPath], 'one judgment serves the setup warning and the line after it');
+  const throughSink = fs.readFileSync(sinkFile, 'utf8');
+  assert.equal(
+    throughSink.includes('during_setup'),
+    false,
+    'a warning raised by setup is kept out of the handle whose authority setup is deciding',
+  );
+  assert.match(throughSink, /after_setup/);
+  assert.equal(fs.existsSync(logPath), false, 'nothing is written at the name');
+});
+
+test('a sink whose owner cannot answer costs the line to stderr and is asked again next time', () => {
+  // The setup of a sink touches the host, so it fails for reasons no rule models. That is a refused route,
+  // not an exception the caller of `emitDiagnostic` is owed: the event leaves by stderr, nothing is written at
+  // the name, and the next line gets a fresh judgment rather than a permanently dead log.
+  const directory = mkdtempForTestSync('agent-device-diag-sink-throw-');
+  const logPath = path.join(directory, 'daemon.log');
+  const sinkFile = path.join(directory, 'through-the-sink.ndjson');
+  const asked: string[] = [];
+
+  const said = captureStderrWrites(() => {
+    withDiagnosticsScope(
+      {
+        debug: true,
+        logPath,
+        logSinkFactory: (pathname) => {
+          asked.push(pathname);
+          if (asked.length === 1) throw Object.assign(new Error('EIO'), { code: 'EIO' });
+          return {
+            write: (line) => {
+              fs.appendFileSync(sinkFile, line, 'utf8');
+              return true;
+            },
+          };
+        },
+      },
+      () => {
+        emitDiagnostic({ level: 'warn', phase: 'first' });
+        emitDiagnostic({ phase: 'second' });
+      },
+    );
+  });
+
+  assert.match(said, /"phase":"first"/, 'the line that had nowhere to go is said on stderr');
+  assert.deepEqual(asked, [logPath, logPath], 'the next line asks the owner again');
+  assert.match(fs.readFileSync(sinkFile, 'utf8'), /second/);
+  assert.equal(fs.existsSync(logPath), false);
+});
+
+test('a plain log path whose write fails costs a warning and never the caller', () => {
+  // The unjudged append is an optional diagnostic: an `EIO` from the device, or a directory that cannot be
+  // made, must not raise out of `emitDiagnostic` and must not end the scope's logging. Both the warning and
+  // its own stderr fallback are I/O acts too, so the whole path is contained.
+  const directory = mkdtempForTestSync('agent-device-diag-write-fails-');
+  const logPath = path.join(directory, 'request.ndjson');
+  const realAppend = fs.appendFileSync.bind(fs);
+  let brokeOnce = false;
+  const append = vi.spyOn(fs, 'appendFileSync').mockImplementation(((
+    target: unknown,
+    ...rest: unknown[]
+  ) => {
+    if (!brokeOnce && target === logPath) {
+      brokeOnce = true;
+      throw Object.assign(new Error('EIO'), { code: 'EIO' });
+    }
+    return (realAppend as (...args: unknown[]) => unknown)(target, ...rest);
+  }) as typeof fs.appendFileSync);
+
+  let said = '';
+  try {
+    said = captureStderrWrites(() => {
+      withDiagnosticsScope({ command: 'fill', logPath, debug: true }, () => {
+        assert.doesNotThrow(() => emitDiagnostic({ phase: 'lost' }));
+        emitDiagnostic({ phase: 'kept' });
+      });
+    });
+  } finally {
+    append.mockRestore();
+  }
+
+  assert.match(said, /diagnostic_log_write_failed/);
+  assert.match(said, /"phase":"lost"/, 'the line that could not land is said on stderr');
+  assert.match(fs.readFileSync(logPath, 'utf8'), /kept/, 'later lines keep reaching the log');
+});
+
+test('a log path whose directory cannot be made costs a warning and never the caller', () => {
+  // The `mkdir` on the plain path is the other I/O act on that route: a read-only mount answers EROFS and
+  // the scope still runs.
+  const directory = mkdtempForTestSync('agent-device-diag-mkdir-fails-');
+  const logPath = path.join(directory, 'nested', 'request.ndjson');
+  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation((() => {
+    throw Object.assign(new Error('EROFS'), { code: 'EROFS' });
+  }) as unknown as typeof fs.mkdirSync);
+
+  let said = '';
+  try {
+    said = captureStderrWrites(() => {
+      withDiagnosticsScope({ command: 'fill', logPath, debug: true }, () => {
+        assert.doesNotThrow(() => emitDiagnostic({ phase: 'nowhere' }));
+      });
+    });
+  } finally {
+    mkdir.mockRestore();
+  }
+
+  assert.match(said, /diagnostic_log_write_failed/);
+  assert.match(said, /"phase":"nowhere"/);
+});
+
+/** Runs `run` with every write to this process's stderr collected, and returns what was said. */
+function captureStderrWrites(run: () => void): string {
+  let said = '';
+  const write = process.stderr.write.bind(process.stderr);
+  const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    said += typeof chunk === 'string' ? chunk : String(chunk);
+    return true;
+  });
+  try {
+    run();
+  } finally {
+    spy.mockRestore();
+    process.stderr.write = write;
+  }
+  return said;
+}
+
 test('appendDiagnosticLine ensures the log directory once across appended lines', () => {
   const logDir = mkdtempForTestSync('agent-device-diag-mkdir-');
   const logPath = path.join(logDir, 'nested', 'request.ndjson');

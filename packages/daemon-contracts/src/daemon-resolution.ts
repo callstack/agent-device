@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import { expandUserHomePath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -68,7 +68,20 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       },
     );
   }
-  return resolveUserPath(value, { env: options.env, cwd: options.cwd });
+  // Joined TEXTUALLY, not with `path.resolve`: `resolve` folds a `..` away, and a step back out is exactly the
+  // one name whose meaning depends on what the route physically stands in — through a symbolic link,
+  // `link/..` lands beside the link, not inside its target. The state rule judges the route it is handed, so
+  // this one is passed on with its `..` intact and refused there (#4649) rather than being judged as the
+  // directory a text substitution would have meant. A leading `./` is the only thing dropped, since it names
+  // the directory already stood in and no link can change that.
+  return joinSpelledUnderCwd(options.cwd, expanded);
+}
+
+/** Puts a spelled relative path under `cwd` without resolving any name away. */
+function joinSpelledUnderCwd(cwd: string, spelled: string): string {
+  const relative = spelled.replace(/^\.\//, '');
+  if (!relative) return cwd;
+  return cwd.endsWith(path.sep) ? `${cwd}${relative}` : `${cwd}${path.sep}${relative}`;
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

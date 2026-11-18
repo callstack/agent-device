@@ -75,6 +75,16 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   flushedLogPath?: string;
   /** The sink the last answer produced for `logPath`, kept until the next failure re-asks. */
   logSink?: DiagnosticLineSink;
+  /**
+   * Whether this scope is ASKING for its sink right now. Set only while the factory runs, and cleared
+   * however that ask ends: a scope left permanently in it would route every later line to stderr.
+   */
+  establishingLogSink?: boolean;
+  /**
+   * Whether a warning about a line this scope could not write is being made right now. Set only for that
+   * act, and cleared however it ends: a scope left permanently in it would keep its log unused.
+   */
+  reportingUndeliverableLine?: boolean;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
@@ -397,29 +407,137 @@ function sanitizePathPart(value: string): string {
 }
 
 function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): void {
+  // A warning ABOUT a failed write is itself a line, and the route it would take is the one that just failed.
+  // Sending it there would ask the same I/O that is failing, once per warning, until the stack gives out, so
+  // while one is being reported every line leaves by stderr and nothing touches the path.
+  if (scope.reportingUndeliverableLine) {
+    sayDiagnosticLineOnStderr(line);
+    return;
+  }
   // A judged sink is owed only to the path its owner named, and only while that is still the path in
   // play: a scope that moved on to another log asks that one with a sink of its own.
   const factory = logPath === scope.logPath ? scope.logSinkFactory : undefined;
   if (!factory) {
-    const dir = path.dirname(logPath);
-    if (!scope.ensuredDirectories.has(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-      scope.ensuredDirectories.add(dir);
+    try {
+      ensureDirectoryForLog(scope, logPath);
+      fs.appendFileSync(logPath, line, 'utf8');
+    } catch (error) {
+      reportUndeliverableDiagnosticLine(scope, error);
+      sayDiagnosticLineOnStderr(line);
     }
-    fs.appendFileSync(logPath, line, 'utf8');
     return;
   }
   // Asked at the FIRST line, never before one exists: a scope that logs nothing creates nothing,
   // changes no mode, and holds no descriptor. Every line after that answer, the forced final flush
   // included, goes through the handle the answer checked and never through the name again.
-  let sink = scope.logSink;
+  //
+  // While the ask is in flight, ITS OWN path has no sink yet — including for a line the setup emits
+  // about that path. Such a line goes to stderr: writing it at the name would reach ground whose
+  // judgment is what is being made, and asking the factory again would open the path once per warning.
+  if (scope.establishingLogSink) {
+    sayDiagnosticLineOnStderr(line);
+    return;
+  }
+  const sink = scope.logSink ?? establishDiagnosticLineSink(scope, factory, logPath);
   if (!sink) {
-    sink = factory(logPath);
-    scope.logSink = sink;
+    sayDiagnosticLineOnStderr(line);
+    return;
   }
-  if (!sink.write(line)) {
+  try {
+    if (!sink.write(line)) closeDiagnosticLineSink(scope);
+  } catch (error) {
+    // A sink's `write` is not owed the caller's flow: the route is dropped so the next line is judged
+    // again, and this one is said where a broken handle cannot swallow it.
     closeDiagnosticLineSink(scope);
+    reportUndeliverableDiagnosticLine(scope, error);
+    sayDiagnosticLineOnStderr(line);
   }
+}
+
+/**
+ * Asks the sink's owner for the handle one path's lines travel through, or `undefined` when it refuses.
+ *
+ * `scope.establishingLogSink` is set for the whole ask and the answer is stored only after it. Two
+ * things follow, and both are needed:
+ *
+ * - A warning the SETUP itself emits — the state rule reporting a mode it could not narrow on the
+ *   log's own descriptor is one — is kept OUT of the sink being built, because `appendDiagnosticLine`
+ *   sees the flag and routes that line to stderr. Sink setup therefore never writes into, or re-asks
+ *   for, the handle whose authority is still being decided.
+ * - No half-made sink can be used: while the ask runs the scope holds no sink, so nothing can push
+ *   bytes through a handle whose owner has not finished deciding that the path may be written at all.
+ */
+function establishDiagnosticLineSink(
+  scope: DiagnosticsScope,
+  factory: DiagnosticLineSinkFactory,
+  logPath: string,
+): DiagnosticLineSink | undefined {
+  scope.establishingLogSink = true;
+  try {
+    const sink = factory(logPath);
+    scope.logSink = sink;
+    return sink;
+  } catch (error) {
+    // A sink's owner that cannot answer has refused the route by failing to produce one. Events leave
+    // by stderr, and the next line asks again.
+    scope.logSink = undefined;
+    reportUndeliverableDiagnosticLine(scope, error);
+    return undefined;
+  } finally {
+    scope.establishingLogSink = false;
+  }
+}
+
+/** One event's text, handed to the route that needs no path at all. */
+function sayDiagnosticLineOnStderr(line: string): void {
+  try {
+    process.stderr.write(line);
+  } catch {
+    // No sink is left to say it with.
+  }
+}
+
+/**
+ * Says why a line could not be written, on a route that does not depend on the file it was for.
+ *
+ * The warning is an I/O act of its own and can fail too, so every part of it is contained: a line that
+ * cannot reach the log is said on stderr, and stderr is not a promise either — a closed pipe makes the whole
+ * thing cost nothing.
+ *
+ * `scope.reportingUndeliverableLine` is set for the whole act, and it is the part that keeps the report from
+ * eating the run: the warning is itself an event, and its route is the log route that just failed. Without
+ * the flag, appending it would ask the same failing I/O again, once per warning, until the stack gives out.
+ * While it stands, `appendDiagnosticLine` sends every line to stderr instead.
+ */
+function reportUndeliverableDiagnosticLine(scope: DiagnosticsScope, reason: unknown): void {
+  const error = reason instanceof Error ? reason.message : String(reason);
+  scope.reportingUndeliverableLine = true;
+  try {
+    emitDiagnostic({
+      phase: 'diagnostic_log_write_failed',
+      level: 'warn',
+      data: { error },
+    });
+  } catch {
+    // The scope's own log route is the thing that just failed; stderr is the answer.
+  } finally {
+    scope.reportingUndeliverableLine = false;
+  }
+  try {
+    process.stderr.write(
+      `${DIAGNOSTIC_STDERR_PREFIX}${JSON.stringify({ level: 'warn', phase: 'diagnostic_log_write_failed', error })}\n`,
+    );
+  } catch {
+    // No sink is left to say it with.
+  }
+}
+
+/** Makes the directory a plain (unjudged) log path needs, and remembers it did. */
+function ensureDirectoryForLog(scope: DiagnosticsScope, logPath: string): void {
+  const dir = path.dirname(logPath);
+  if (scope.ensuredDirectories.has(dir)) return;
+  scope.ensuredDirectories.add(dir);
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 /** Lets go of the sink a scope holds so its descriptor cannot outlive the scope that earned it. */
