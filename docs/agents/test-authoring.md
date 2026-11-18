@@ -51,7 +51,6 @@ Use existing clocks or tool seams instead of production-time waits.
 Slow-test pins only shrink.
 For a new pin, give measured justification.
 Split tests by behavior.
-Keep split files beside their source module.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test

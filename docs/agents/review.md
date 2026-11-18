@@ -18,7 +18,6 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - Routing and surfaces: trace through daemon and backend to the affected entrypoints.
   Helper tests that bypass the router do not prove dispatch.
 - Typed errors: follow reasons from producers through normalization, transport, and consumers.
-  Never replace them with text matching.
 - Interaction paths: verify the claims in `packages/contracts/src/interaction-guarantees.ts` against native code.
   Error-path delegation does not prove success-path parity.
   Before you compare performance, prove that both paths are reachable.
@@ -33,6 +32,11 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - Changed code: flag dead code, redundant guards, casts, narrating comments, and competing owners.
 - Help and user docs: trace changed behavior claims to code paths.
   Block unsupported claims.
+- New trust boundary: before you write code, get a rule and a case table reviewed.
+  The table names who chooses the path, what the kernel resolves, what can change between checks, where bytes are first written, which failures keep the action result, and the accepted cases.
+  If prose, tests, configuration, or dependencies change the security contract, review again.
+  Fix a regression that this change introduces at every entry point.
+  For an unrelated finding, link an existing independent issue.
 - Bulk prose rewrites (docs, ADRs, help): get a review from another model provider.
   The reviewer compares each changed sentence with the base. A self-review is not evidence.
 

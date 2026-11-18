@@ -14,6 +14,7 @@ Rename canonicalization preserves a `git mv` of a module already inside the base
 It does not exempt a pre-existing external module moved into the closure.
 `scripts/__tests__/closure-growth-rule.ts` owns the rule.
 `scripts/__tests__/closure-growth-rule.test.ts` plants violations in every failing direction.
+To check a change, stage new entry files, fetch `origin/main`, and run `pnpm exec vitest run --project unit-core scripts/__tests__/eager-closure-budgets.test.ts`.
 The hard ADR-0019 checks remain unchanged: façade exactness and no platform implementation before binding.
 The tolerance relaxes the module-count proxy, never the loading property.
 

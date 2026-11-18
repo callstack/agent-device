@@ -31,6 +31,9 @@ place version skew is designed in was the one place with no gate.
 | `wire-mutations.test.ts` (`unit-core`) | every PR | does the gate actually **catch** each class of wire break? |
 | `pnpm check:daemon-wire-compat` (`Released-Surface Compatibility`) | own `fetch-depth: 0` job | did the drift **since the last released tag** come with a bump or an ack? |
 
+Run both unit gates locally with `pnpm exec vitest run --project unit-core test/wire-compat`.
+Run `pnpm check:daemon-wire-compat` with full history and release tags.
+
 The mutation lane exists because the first two answer "the manifest describes
 today's source", never "the manifest describes the *right* source". A gate can
 list 151 declarations, pass every check, and still miss the seam that breaks a

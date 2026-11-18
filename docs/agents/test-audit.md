@@ -2,7 +2,6 @@
 
 Optimize detection and feedback time, not deletion counts.
 For test quality, use [test authoring](test-authoring.md).
-For checks, use [validation](testing.md).
 
 ## Retain independent contracts
 
@@ -28,7 +27,6 @@ Before you edit, record:
 - What deletion permits and its risk.
 
 Before a never-run deletion, prove non-collection or skipping in every automatic and manual lane.
-For mutations, use [isolated experiments](test-experiments.md).
 Report baseline and mutant counts.
 For an obsolete test with no remaining contract, record consumer and runner evidence.
 

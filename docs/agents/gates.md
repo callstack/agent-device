@@ -1,7 +1,5 @@
 # Maintain gates
 
-For execution, read [validation](testing.md).
-
 `CHECK_CATALOG` in `scripts/check-affected/checks.ts` owns checks and commands.
 CI declares ownership through the shared `run-gate` action with a literal gate id.
 For a new check, update the catalog and executable model.
@@ -28,3 +26,5 @@ Generate it or fetch evidence artifacts.
 Versioned corpora, schemas, fixtures, and golden tables remain source inputs.
 If TypeScript helpers cannot load, plain `.mjs` packaging fixtures keep child-process use local.
 Prefer `execFile`.
+
+For a startup-path import, follow ADR 0027. For a wire change, follow `test/wire-compat/README.md`.

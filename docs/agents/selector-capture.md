@@ -30,7 +30,6 @@ ADRs 0002, 0004, 0005, 0011, 0014, and 0015 own their rationale and decisions.
 - Post-gesture stabilization runs first.
   When required, Android freshness recovery composes afterward.
   Gesture-like mutations mark stabilization.
-  While stabilization is pending, these mutations disable direct iOS selector shortcuts.
 - Write session snapshots through the shared snapshot mutation boundary.
   Sparse observations and empty ref-scoped projections do not overwrite stored evidence.
 - Maestro matching remains snapshot- and policy-owned.
