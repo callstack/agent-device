@@ -11,12 +11,13 @@ import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-mod
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('the configured Vitest lifecycle redirects worker TMPDIR and removes it after the run', async () => {
+test('the configured Vitest lifecycle redirects worker TMPDIR and removes it, and its checkout-local directory, after the run', async () => {
   const probeName = `vitest-tmpdir-probe-${process.pid}-${Date.now()}.test.ts`;
   const probePath = path.join(REPOSITORY_ROOT, 'src', '__tests__', probeName);
   const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-tmpdir-lifecycle-test-'));
   const evidencePath = path.join(evidenceRoot, 'worker-tmpdir.txt');
   let workerTmpDir: string | undefined;
+  let unsharedRunDir: string | undefined;
 
   fs.writeFileSync(
     probePath,
@@ -31,7 +32,9 @@ test('worker inherits the run-owned temp directory', () => {
   expect(path.basename(tmpdir)).toMatch(new RegExp(${JSON.stringify(
     `^${TEST_RUN_TMP_PREFIX}\\d+-`,
   )}));
-  fs.writeFileSync(process.env.AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH!, tmpdir);
+  const unshared = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR!;
+  expect(fs.statSync(unshared).isDirectory()).toBe(true);
+  fs.writeFileSync(process.env.AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH!, JSON.stringify({ tmpdir, unshared }));
 });
 `,
   );
@@ -50,7 +53,10 @@ test('worker inherits the run-owned temp directory', () => {
       },
     );
 
-    workerTmpDir = fs.readFileSync(evidencePath, 'utf8');
+    ({ tmpdir: workerTmpDir, unshared: unsharedRunDir } = JSON.parse(
+      fs.readFileSync(evidencePath, 'utf8'),
+    ));
+    assert.ok(workerTmpDir && unsharedRunDir);
     assert.equal(path.dirname(workerTmpDir), TEST_RUN_TMP_ROOT);
     assert.match(path.basename(workerTmpDir), new RegExp(`^${TEST_RUN_TMP_PREFIX}\\d+-`));
     assert.equal(
@@ -58,8 +64,19 @@ test('worker inherits the run-owned temp directory', () => {
       false,
       'global teardown must remove the run directory',
     );
+    assert.equal(path.basename(unsharedRunDir), path.basename(workerTmpDir));
+    assert.equal(
+      path.dirname(unsharedRunDir),
+      path.join(REPOSITORY_ROOT, '.tmp', 'unshared-test-dirs'),
+    );
+    assert.equal(
+      fs.existsSync(unsharedRunDir),
+      false,
+      'global teardown must remove the checkout-local run directory',
+    );
   } finally {
     if (workerTmpDir) fs.rmSync(workerTmpDir, { recursive: true, force: true });
+    if (unsharedRunDir) fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     fs.rmSync(probePath, { force: true });
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }

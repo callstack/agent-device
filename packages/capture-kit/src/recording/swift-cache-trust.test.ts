@@ -14,6 +14,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
 import { compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -202,7 +203,7 @@ test.skipIf(process.getuid?.() === 0)(
 );
 
 test.each(['bin', 'home', 'module-cache'])(
-  'an owned %s directory wider than 0700 is closed to its owner before it is used',
+  'an owned %s directory wider than 0700 is never adopted: the version directory is rebuilt',
   async (name) => {
     await plantCachedExecutable(() => {});
     fs.chmodSync(path.join(versionDir, name), 0o770);
@@ -357,7 +358,7 @@ test.each([
   },
 );
 
-test('an existing 0755 cache is closed to its owner, so a umask 002 lock is unreachable for others', async () => {
+test('an existing 0755 cache is rebuilt private, so a umask 002 lock is unreachable for others', async () => {
   fs.mkdirSync(binDir, { recursive: true, mode: 0o755 });
   for (const level of [cacheRoot, versionDir, binDir]) fs.chmodSync(level, 0o755);
   const previousUmask = process.umask(0o002);
@@ -435,3 +436,61 @@ test('the compile output is made executable through its descriptor, never throug
   expect(modeOf(victim)).toBe(0o600);
   expect(fs.readdirSync(binDir)).toEqual([]);
 });
+
+test('a link planted while module-cache was group-writable is gone after the run, with nothing written through it', async () => {
+  await plantCachedExecutable(() => {});
+  const moduleCache = path.join(versionDir, 'module-cache');
+  const outside = path.join(tmpDir, 'outside-module-cache');
+  fs.mkdirSync(outside, { mode: 0o700 });
+  fs.writeFileSync(path.join(outside, 'kept'), 'kept');
+  fs.chmodSync(moduleCache, 0o770);
+  fs.symlinkSync(outside, path.join(moduleCache, 'planted'));
+
+  await compile();
+
+  expect(fs.readdirSync(moduleCache)).toEqual([]);
+  expect(modeOf(moduleCache)).toBe(0o700);
+  expect(fs.readdirSync(outside)).toEqual(['kept']);
+  expect(fs.readFileSync(path.join(outside, 'kept'), 'utf8')).toBe('kept');
+});
+
+test('a lock entry left while bin was group-writable is gone after the run', async () => {
+  const executablePath = await plantCachedExecutable(() => {});
+  const staleLock = `${executablePath}.lock`;
+  fs.mkdirSync(staleLock);
+  fs.writeFileSync(
+    path.join(staleLock, 'owner.json'),
+    JSON.stringify({ pid: process.ppid, startTime: null, acquiredAtMs: Date.now() }),
+  );
+  fs.chmodSync(binDir, 0o770);
+
+  await expect(compile()).resolves.toBe(executablePath);
+
+  expect(mockRunCmd).toHaveBeenCalledOnce();
+  expect(fs.existsSync(staleLock)).toBe(false);
+});
+
+test.skipIf(process.getuid?.() === 0)(
+  'a staging cleanup that fails keeps the compiler failure as the answer',
+  async () => {
+    const compilerFailure = new AppError('COMMAND_FAILED', 'swiftc: error: build failed');
+    let stagingDir = '';
+    mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+      const outputPath = args[args.indexOf('-o') + 1]!;
+      stagingDir = path.dirname(outputPath);
+      fs.writeFileSync(outputPath, 'partial');
+      // The staging directory can no longer have its entries removed.
+      fs.chmodSync(stagingDir, 0o500);
+      throw compilerFailure;
+    });
+
+    try {
+      await expect(compile()).rejects.toBe(compilerFailure);
+      expect(compilerFailure.details).toMatchObject({
+        stagingCleanupError: expect.stringMatching(/EACCES|EPERM|ENOTEMPTY/),
+      });
+    } finally {
+      if (stagingDir) fs.chmodSync(stagingDir, 0o700);
+    }
+  },
+);

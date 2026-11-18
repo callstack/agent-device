@@ -33,6 +33,10 @@ export function mkdtempUnsharedForTestSync(prefix: string): string {
     '../../../.tmp/unshared-test-dirs',
   );
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const seen = fs.lstatSync(root);
+  if (!seen.isDirectory() || seen.uid !== process.getuid?.()) {
+    throw new Error(`${root} is not a directory this user owns`);
+  }
   fs.chmodSync(root, 0o700);
   return fs.mkdtempSync(path.join(root, prefix));
 }

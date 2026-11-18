@@ -9,6 +9,7 @@ import {
   reportPrunedRunDirectories,
   reportStoppedRunDirectoryConsumers,
   stopRunDirectoryConsumers,
+  sweepUnsharedRunDirectories,
 } from './check-tmpdir-leaks-model.ts';
 
 // os.tmpdir() reads TMPDIR on every call, so redirecting it here covers every
@@ -26,7 +27,7 @@ import {
 
 let testRunTmpDir: string;
 let previousTmpDir: string | undefined;
-let unsharedRunDir: string;
+let unsharedRunDir: string | undefined;
 let previousUnsharedDir: string | undefined;
 
 // State that a sticky shared directory such as /tmp must not hold, the Swift helper cache's among them, lives
@@ -46,9 +47,9 @@ export function setup(): void {
   previousUnsharedDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR;
   const consumers = liveRunDirectoryConsumers();
   reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT, { consumers }));
-  fs.mkdirSync(UNSHARED_TEST_ROOT, { recursive: true, mode: 0o700 });
-  fs.chmodSync(UNSHARED_TEST_ROOT, 0o700);
-  reportPrunedRunDirectories(pruneAbandonedRunDirectories(UNSHARED_TEST_ROOT, { consumers }));
+  const unshared = sweepUnsharedRunDirectories(UNSHARED_TEST_ROOT, { consumers });
+  if (unshared.swept) reportPrunedRunDirectories(unshared.pruned);
+  else console.warn(`Skipping the checkout-local test directory sweep: ${unshared.reason}`);
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
   // another worktree, say) apart from one actually abandoned by a killed
@@ -57,9 +58,11 @@ export function setup(): void {
     path.join(TEST_RUN_TMP_ROOT, `${TEST_RUN_TMP_PREFIX}${process.pid}-`),
   );
   process.env.TMPDIR = testRunTmpDir;
-  unsharedRunDir = path.join(UNSHARED_TEST_ROOT, path.basename(testRunTmpDir));
-  fs.mkdirSync(unsharedRunDir, { mode: 0o700 });
-  process.env.AGENT_DEVICE_TEST_UNSHARED_DIR = unsharedRunDir;
+  if (unshared.swept) {
+    unsharedRunDir = path.join(UNSHARED_TEST_ROOT, path.basename(testRunTmpDir));
+    fs.mkdirSync(unsharedRunDir, { mode: 0o700 });
+    process.env.AGENT_DEVICE_TEST_UNSHARED_DIR = unsharedRunDir;
+  }
 }
 
 // fallow-ignore-next-line unused-export
@@ -71,7 +74,7 @@ export async function teardown(): Promise<void> {
     );
   } finally {
     fs.rmSync(testRunTmpDir, { recursive: true, force: true });
-    fs.rmSync(unsharedRunDir, { recursive: true, force: true });
+    if (unsharedRunDir) fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     restoreEnv('TMPDIR', previousTmpDir);
     restoreEnv('AGENT_DEVICE_TEST_UNSHARED_DIR', previousUnsharedDir);
   }

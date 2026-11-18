@@ -225,3 +225,35 @@ export function reportPrunedRunDirectories(pruned: readonly string[]): void {
     `[tmpdir] pruned ${pruned.length} abandoned ${TEST_RUN_TMP_PREFIX}* director${pruned.length === 1 ? 'y' : 'ies'} left by an earlier killed run\n`,
   );
 }
+
+/** What the checkout-local sweep did: swept, with what it pruned, or skipped and why. */
+export type UnsharedSweep =
+  | Readonly<{ swept: true; pruned: readonly string[] }>
+  | Readonly<{ swept: false; reason: string }>;
+
+/**
+ * Readies and sweeps the checkout-local root for state a sticky shared directory such as /tmp must not hold, the
+ * Swift helper cache's among them. Only a real directory this uid owns is touched, never what a link at the root
+ * names, and a run directory whose name carries no pid is kept: this sweep never deletes on doubt.
+ */
+export function sweepUnsharedRunDirectories(
+  root: string,
+  liveness: RunDirectoryLiveness = {},
+): UnsharedSweep {
+  if (fs.lstatSync(root, { throwIfNoEntry: false }) === undefined) {
+    fs.mkdirSync(path.dirname(root), { recursive: true });
+    try {
+      fs.mkdirSync(root, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  }
+  const stats = fs.lstatSync(root);
+  if (!stats.isDirectory() || stats.uid !== process.getuid?.()) {
+    return { swept: false, reason: `${root} is not a directory this user owns` };
+  }
+  fs.chmodSync(root, 0o700);
+  const pruned = findLeakedRunDirectories(root, liveness).filter((name) => PID_SUFFIX.test(name));
+  for (const name of pruned) fs.rmSync(path.join(root, name), { recursive: true, force: true });
+  return { swept: true, pruned };
+}

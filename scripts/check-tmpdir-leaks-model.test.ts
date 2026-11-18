@@ -7,6 +7,7 @@ import {
   findLeakedRunDirectories,
   pruneAbandonedRunDirectories,
   runDirectoryNameOf,
+  sweepUnsharedRunDirectories,
 } from './check-tmpdir-leaks-model.ts';
 
 const NONE: ReadonlySet<string> = new Set();
@@ -158,4 +159,34 @@ test('a consumer is identified by the run directory its TMPDIR sits inside, at a
   );
   assert.equal(runDirectoryNameOf('/tmp/other-123-abc'), undefined);
   assert.equal(runDirectoryNameOf('/var/folders/x/T/agent-device-test-run-1-a'), undefined);
+});
+
+test('the checkout-local sweep prunes a dead run and keeps a name with no pid', () => {
+  withScratchRoot((scratch) => {
+    const root = path.join(scratch, 'unshared');
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-not-a-pid'));
+
+    const sweep = sweepUnsharedRunDirectories(root, { isAlive: () => false, consumers: NONE });
+
+    assert.deepEqual(sweep, { swept: true, pruned: ['agent-device-test-run-3333-cccccc'] });
+    assert.deepEqual(fs.readdirSync(root), ['agent-device-test-run-not-a-pid']);
+    assert.equal(fs.statSync(root).mode & 0o777, 0o700);
+  });
+});
+
+test('the checkout-local sweep skips a root that is a link, and touches nothing it names', () => {
+  withScratchRoot((scratch) => {
+    const target = path.join(scratch, 'target');
+    fs.mkdirSync(path.join(target, 'agent-device-test-run-3333-cccccc'), { recursive: true });
+    fs.chmodSync(target, 0o755);
+    const root = path.join(scratch, 'unshared');
+    fs.symlinkSync(target, root);
+
+    const sweep = sweepUnsharedRunDirectories(root, { isAlive: () => false, consumers: NONE });
+
+    assert.equal(sweep.swept, false);
+    assert.deepEqual(fs.readdirSync(target), ['agent-device-test-run-3333-cccccc']);
+    assert.equal(fs.statSync(target).mode & 0o777, 0o755);
+  });
 });

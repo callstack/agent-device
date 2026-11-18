@@ -30,7 +30,8 @@ const SWIFT_CACHE_VERSION = '3';
 const SWIFT_CACHE_UNTRUSTED_REASON = 'swift_cache_untrusted';
 
 /** The directories of one cache version; every one of them sits inside the private version directory. */
-type SwiftCacheDirectory = 'bin' | 'home' | 'module-cache';
+const SWIFT_CACHE_DIRECTORIES = ['bin', 'home', 'module-cache'] as const;
+type SwiftCacheDirectory = (typeof SWIFT_CACHE_DIRECTORIES)[number];
 
 const SWIFT_CACHE_OVERRIDE_HINT =
   'set AGENT_DEVICE_SWIFT_CACHE_DIR to a directory you own that only you can write, outside shared directories ' +
@@ -91,7 +92,7 @@ function prepareSwiftCacheDirectory(
   });
 }
 
-/** Refuses anything but a directory this uid owns, makes it owner-only, and answers its identity. */
+/** Refuses anything but an owner-only directory this uid owns, and answers its identity. */
 function judgeOwnedDirectory(directory: string): string {
   const stats = fs.lstatSync(directory, { bigint: true });
   const exposure = stats.isSymbolicLink()
@@ -108,14 +109,23 @@ function judgeOwnedDirectory(directory: string): string {
       hint: swiftCacheHint(exposure, directory),
     });
   }
-  closeToOwner(directory);
+  // A level this call just created is 0700; a wider one here was opened while the cache was in use.
+  if (Number(stats.mode) & 0o077) {
+    throw untrustedSwiftCache(directory, undefined, {
+      exposure: Number(stats.mode) & 0o002 ? 'world_writable' : 'shared_group_writable',
+      ancestor: directory,
+      hint: swiftCacheHint(undefined, undefined),
+    });
+  }
   return `${stats.dev}:${stats.ino}`;
 }
 
 /**
  * The version directory is the boundary: judged by the walk, with no shared directory above it, and owner-only.
  * An executable cache takes no sticky pass-through: in a sticky shared directory a cleanup can remove the cache
- * and another account can claim its name before a helper runs.
+ * and another account can claim its name before a helper runs. A version directory that is, or holds, a level
+ * open to the group or others is never adopted: whatever was planted while it was open goes with it, and the
+ * cache rebuilds in a fresh private one.
  */
 function prepareSwiftCacheVersionDirectory(versionDir: string): string {
   const { directory } = prepareScriptDestination(path.join(versionDir, 'entry'));
@@ -135,34 +145,25 @@ function prepareSwiftCacheVersionDirectory(versionDir: string): string {
     }
     if (ancestor === path.dirname(ancestor)) break;
   }
-  closeToOwner(directory);
-  return directory;
+  if (!holdsSharedLevel(directory)) return directory;
+  // `rmSync` removes a link it meets, never what the link names.
+  fs.rmSync(directory, { recursive: true, force: true });
+  return prepareScriptDestination(path.join(versionDir, 'entry')).directory;
 }
 
 /**
- * Makes a directory this user owns owner-only, through a descriptor that refuses a final link, so a lock or
- * compile output created below it under a group-writable umask is unreachable for anyone else.
+ * Whether the version directory, or one of its cache directories, is a directory this uid owns that is open to
+ * the group or others. Anything else at those names is refused when that directory is prepared.
  */
-function closeToOwner(directory: string): void {
-  const seen = fs.lstatSync(directory);
-  if ((seen.mode & 0o077) === 0) return;
-  const descriptor = fs.openSync(
-    directory,
-    fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW,
-  );
-  try {
-    const opened = fs.fstatSync(descriptor);
-    if (opened.dev !== seen.dev || opened.ino !== seen.ino || opened.uid !== process.getuid?.()) {
-      throw untrustedSwiftCache(directory, undefined, {
-        exposure: opened.uid === process.getuid?.() ? 'parent_replaced' : 'foreign_owned',
-        ancestor: directory,
-        hint: swiftCacheHint(undefined, undefined),
-      });
-    }
-    fs.fchmodSync(descriptor, 0o700);
-  } finally {
-    fs.closeSync(descriptor);
-  }
+function holdsSharedLevel(versionDirectory: string): boolean {
+  return [
+    versionDirectory,
+    ...SWIFT_CACHE_DIRECTORIES.map((name) => path.join(versionDirectory, name)),
+  ].some((level) => {
+    const stats = fs.lstatSync(level, { bigint: true, throwIfNoEntry: false });
+    if (!stats?.isDirectory() || Number(stats.uid) !== process.getuid?.()) return false;
+    return (Number(stats.mode) & 0o077) !== 0;
+  });
 }
 
 /**
@@ -402,6 +403,7 @@ async function ensureSwiftExecutable(params: {
           path.join(bin.directory, `.${params.entryName}.${process.pid}.`),
         );
         const tempExecutablePath = path.join(tempDir, params.entryName);
+        let failure: { error: unknown } | undefined;
         try {
           // Source text is written inside this compile's own private directory, so no name another process
           // can reach stands between the text and the compiler.
@@ -417,13 +419,35 @@ async function ensureSwiftExecutable(params: {
           });
           publishableExecutable(tempExecutablePath);
           fs.renameSync(tempExecutablePath, entryIn(confirmSwiftCacheDirectory(bin)));
+        } catch (error) {
+          failure = { error };
+          throw error;
         } finally {
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          removeStagingDirectory(tempDir, failure);
         }
       },
     });
     return executablePath;
   });
+}
+
+/**
+ * Removes a compile's staging directory. When the compile already failed, that failure stays the answer: a
+ * cleanup failure is attached to it as secondary detail instead of replacing it.
+ */
+function removeStagingDirectory(directory: string, failure: { error: unknown } | undefined): void {
+  try {
+    fs.rmSync(directory, { recursive: true, force: true });
+  } catch (cleanupError) {
+    if (failure === undefined) throw cleanupError;
+    if (failure.error instanceof AppError) {
+      failure.error.details = {
+        ...failure.error.details,
+        stagingCleanupError:
+          cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      };
+    }
+  }
 }
 
 /**
