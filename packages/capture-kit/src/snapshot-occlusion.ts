@@ -141,6 +141,7 @@ export function annotateCoveredSnapshotNodes(
 
 /** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
 const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
+const BOTTOM_NAVIGATION_KIND_FRAGMENTS = ['bottomnavigation'];
 
 /**
  * The bounded, non-actionable description of the cover the scan found, or nothing when the cover has
@@ -152,22 +153,29 @@ const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
  * the surface to dismiss. Strip that label and the same node would say `the group at (...)`, which
  * points at a box nobody would recognize; an anonymous container of that shape therefore publishes
  * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
- * still describes itself with no label to lean on.
+ * still describes itself with no label to lean on. A persistent bar always publishes, because its
+ * `persistentBar` fact reaches consumers even when its type is generic and the bar is unnamed.
  */
 function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
   const label = node.label?.trim();
   const kind = formatRole(node.type ?? 'Element');
-  if (!label && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
+  const persistentBar =
+    isSnapshotBarNode(node) || nodeKindIncludesAny(node, BOTTOM_NAVIGATION_KIND_FRAGMENTS);
+  if (!label && !persistentBar && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
   const rect = positiveRect(node.rect);
   return {
     kind,
     ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
     ...(rect ? { rect } : {}),
+    ...(persistentBar ? { persistentBar: true } : {}),
   };
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */
-export type CoveringNodeEvidence = Pick<RawSnapshotNode, 'type' | 'label' | 'rect'>;
+export type CoveringNodeEvidence = Pick<
+  RawSnapshotNode,
+  'type' | 'role' | 'subrole' | 'label' | 'rect'
+>;
 
 /**
  * Applies backend-owned covered decisions through the same publication annotation contract. A

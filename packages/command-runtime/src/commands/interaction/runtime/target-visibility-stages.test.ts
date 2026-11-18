@@ -175,6 +175,7 @@ test('runtime covered refusal names the covering element the occlusion scan foun
         kind: 'tab-bar',
         label: 'Media',
         rect: { x: 0, y: 760, width: 390, height: 84 },
+        persistentBar: true,
       });
       assert.doesNotMatch(String(details?.hint), /@e\d/);
       assert.match(String(details?.hint), /Covered by the tab-bar "Media" at \(0, 760 390x84\)/);

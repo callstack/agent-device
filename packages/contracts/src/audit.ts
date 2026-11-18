@@ -25,6 +25,7 @@ type AuditFindingBase = {
   role: string;
   /** Accessible label from the captured node. */
   label?: string;
+  /** Accessibility identifier or resource id from the captured node. */
   identifier?: string;
 };
 

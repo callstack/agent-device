@@ -162,11 +162,14 @@ when it has one, and its `rect`:
 
 `coveredBy.kind` is the same presented role any other node carries, so a cover can be a generic
 container — an alert's container often arrives as `group` — and the label is what makes it nameable.
+When the cover is a persistent bar (tab bar, toolbar, navigation bar, or bottom navigation),
+`coveredBy` also carries `persistentBar: true`. The scan reads that fact from the cover's type, role,
+and subrole, so a bar with a generic kind and no name still publishes `coveredBy`.
 
 A `click`/`press`/`fill`/`find ... focus` refused on that node repeats the same description in
 `error.details.coveredBy` and names it in `error.hint`. `coveredBy` is diagnosis only: it carries no
 ref, so the cover is not an actionable target. It is absent when nothing nameable covers — an
-anonymous container with no accessible name, or a backend policy that reports only the boolean, such
+anonymous container with no accessible name that is not a persistent bar, or a backend policy that reports only the boolean, such
 as an Android replacement surface — and those refusals say only that the target is covered.
 
 `role=` selectors (and `find role=...`) match the `kind` vocabulary: a node whose `kind` is `text`

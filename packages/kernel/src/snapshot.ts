@@ -269,6 +269,11 @@ export type SnapshotCoveringNode = {
   label?: string;
   /** The cover's positive rect as the scan measured it. */
   rect?: Rect;
+  /**
+   * Set when the cover is persistent bar chrome (tab bar, toolbar, navigation bar, bottom
+   * navigation), read from the cover's type, role, and subrole. Absent for any other cover.
+   */
+  persistentBar?: true;
 };
 
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */

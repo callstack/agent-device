@@ -311,20 +311,8 @@ function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-const PERSISTENT_CHROME_KINDS = new Set([
-  'tabbar',
-  'navigationbar',
-  'toolbar',
-  'bottomnavigation',
-  'bottomnavigationview',
-]);
-
-function isPersistentChromeKind(kind: string | undefined): boolean {
-  return PERSISTENT_CHROME_KINDS.has(normalizeType(kind ?? '').replaceAll('-', ''));
-}
-
 function isScrollableChromeOcclusion(node: SnapshotNode, scan: AuditScan): boolean {
-  if (!isPersistentChromeKind(node.coveredBy?.kind)) return false;
+  if (node.coveredBy?.persistentBar !== true) return false;
   const visited = new Set<number>();
   let ancestor = parentOf(node, scan);
   while (ancestor && !visited.has(ancestor.index)) {

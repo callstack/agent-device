@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { AuditContext, AuditFinding } from '@agent-device/contracts/capture';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { annotateCoveredSnapshotNodes } from '../../snapshot-occlusion.ts';
 import { auditSnapshot } from '../snapshot-audit.ts';
 
 const IOS: AuditContext = { platform: 'ios', truncated: false };
@@ -334,40 +335,101 @@ test('publishes the captured label and identifier but omits a missing-name label
   expect(findings[2]).toMatchObject({ label: 'Pay' });
 });
 
-test.each(['tab-bar', 'navigation-bar', 'toolbar', 'bottomnavigation', 'bottomnavigationview'])(
-  'ignores %s over a scrolled row but retains it over a fixed control',
-  (kind) => {
-    const covered = {
-      interactionBlocked: 'covered',
-      hittable: false,
-      coveredBy: { kind, label: 'Not a chrome label' },
-    } as const;
-    const findings = audit([
-      node(0, { type: 'ScrollView', hittable: false }),
-      node(1, { type: 'Other', parentIndex: 0 }),
-      node(2, { parentIndex: 1, label: 'Scrolled row', ...covered }),
-      node(3, { label: 'Fixed control', ...covered }),
-    ]).findings;
-    expect(summarize(findings)).toEqual(['covered-control @e3']);
-  },
-);
+type CoverPublication = {
+  name: string;
+  type: string;
+  role?: string;
+  subrole?: string;
+  label?: string;
+};
 
-test.each(['sheet', 'dialog', 'banner', 'group', 'floating-view'])(
-  'retains %s over a control inside a scroll container',
-  (kind) => {
-    const findings = audit([
-      node(0, { type: 'ScrollView', hittable: false }),
-      node(1, {
-        parentIndex: 0,
-        label: 'Pay',
-        interactionBlocked: 'covered',
-        hittable: false,
-        coveredBy: { kind, label: 'Tab Bar' },
-      }),
-    ]).findings;
-    expect(summarize(findings)).toEqual(['covered-control @e1']);
+/**
+ * Window > screen holding a scroll view (one row inside) and a fixed control, with the cover listed
+ * last so it draws on top. The row and the fixed control both sit under the cover. The occlusion scan
+ * produces each `coveredBy`, so the audit reads exactly what a capture publishes.
+ */
+function scannedCoverTree(cover: CoverPublication): SnapshotNode[] {
+  const raw: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'Other',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      depth: 2,
+      type: 'ScrollView',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 3,
+      parentIndex: 2,
+      depth: 3,
+      type: 'Button',
+      label: 'Scrolled row',
+      hittable: true,
+      rect: { x: 0, y: 800, width: 402, height: 60 },
+    },
+    {
+      index: 4,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      label: 'Fixed control',
+      hittable: true,
+      rect: { x: 300, y: 800, width: 60, height: 60 },
+    },
+    {
+      index: 5,
+      parentIndex: 1,
+      depth: 2,
+      type: cover.type,
+      ...(cover.role ? { role: cover.role } : {}),
+      ...(cover.subrole ? { subrole: cover.subrole } : {}),
+      ...(cover.label ? { label: cover.label } : {}),
+      hittable: true,
+      rect: { x: 0, y: 791, width: 402, height: 83 },
+    },
+  ];
+  return annotateCoveredSnapshotNodes(raw).map((scanned) => ({
+    ...scanned,
+    ref: `e${scanned.index}`,
+  }));
+}
+
+test.for<CoverPublication>([
+  { name: 'type only', type: 'TabBar' },
+  { name: 'navigation bar type', type: 'NavigationBar', label: 'Inbox' },
+  { name: 'toolbar type', type: 'Toolbar' },
+  { name: 'UIKit class in role beside a generic type', type: 'Other', role: 'UITabBar' },
+  { name: 'subrole only', type: 'Other', subrole: 'AXToolbar' },
+  {
+    name: 'Android bottom navigation',
+    type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
   },
-);
+])('ignores a scanned bar from the $name publication over a scrolled row only', (cover) => {
+  const nodes = scannedCoverTree(cover);
+  expect(nodes[3]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { persistentBar: true },
+  });
+  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
+});
+
+test.for<CoverPublication>([
+  { name: 'sheet', type: 'Sheet' },
+  { name: 'dialog', type: 'Dialog', label: 'Tab Bar' },
+  { name: 'labelled alert group', type: 'Alert', label: 'Confirm' },
+])('retains a scanned $name over a control inside a scroll container', (cover) => {
+  const nodes = scannedCoverTree(cover);
+  expect(nodes[3]).toMatchObject({ interactionBlocked: 'covered' });
+  expect(nodes[3]?.coveredBy?.persistentBar).toBeUndefined();
+  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
+});
 
 test.each([
   [IOS, 'Apple HIG recommends 44×44pt.'],
@@ -407,7 +469,7 @@ test('keeps a child under an overlay when its covered row is excluded as scroll 
       type: 'Cell',
       parentIndex: 0,
       interactionBlocked: 'covered',
-      coveredBy: { kind: 'tab-bar' },
+      coveredBy: { kind: 'tab-bar', persistentBar: true },
     }),
     node(2, {
       parentIndex: 1,
