@@ -120,6 +120,7 @@ function registerDownloadableArtifacts(
       localPath: artifact.localPath,
       scriptPublicationId: artifact.scriptPublicationId,
       scriptRevision: artifact.scriptRevision,
+      captureGrantId: artifact.captureGrantId,
     };
   };
   if (captureOutputOwnership(data) === 'caller') {

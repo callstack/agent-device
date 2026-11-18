@@ -5,6 +5,7 @@ import type {
   DaemonResponse,
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
+import type { CaptureGrant } from './capture-grant.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -41,6 +42,7 @@ export type PreparedRemoteRequest = {
   installSource?: NonNullable<DaemonWireRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
   clientArtifactPaths?: Record<string, string>;
+  captureGrantId?: string;
 };
 
 export async function prepareRemoteRequestArtifacts(
@@ -48,6 +50,7 @@ export async function prepareRemoteRequestArtifacts(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
+  stateDir?: string,
 ): Promise<PreparedRemoteRequest> {
   if (!isRemoteDaemon(info)) {
     return await prepareRemoteRequestArtifactsWithinBudget(req, info, signal, host);
@@ -55,7 +58,7 @@ export async function prepareRemoteRequestArtifacts(
   return await withUploadPreparationDeadline(
     signal,
     async (preparationSignal) =>
-      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host),
+      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host, stateDir),
   );
 }
 
@@ -64,6 +67,7 @@ async function prepareRemoteRequestArtifactsWithinBudget(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
+  stateDir?: string,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
@@ -84,6 +88,7 @@ async function prepareRemoteRequestArtifactsWithinBudget(
 
   flags = prepareRemoteScriptOutput(req, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
+  const captureGrantId = await admitCaptureStartGrant(req, info, stateDir, clientArtifactPaths);
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
     info,
@@ -103,6 +108,7 @@ async function prepareRemoteRequestArtifactsWithinBudget(
       installSource,
       uploadedArtifactId,
       clientArtifactPaths,
+      captureGrantId,
     });
 
   if (req.command !== 'install' && req.command !== 'reinstall') return baseResult();
@@ -232,6 +238,7 @@ function createPreparedRemoteRequest(
     ...(Object.keys(result.clientArtifactPaths).length > 0
       ? { clientArtifactPaths: result.clientArtifactPaths }
       : {}),
+    ...(result.captureGrantId === undefined ? {} : { captureGrantId: result.captureGrantId }),
   };
 }
 
@@ -292,6 +299,33 @@ async function prepareRemoteInstallSource(
     },
     uploadedArtifactId,
   };
+}
+
+/**
+ * #4518: a capture start's caller-named destination is admitted and durably stored under its own
+ * minted grant ID BEFORE the request is dispatched — never created from the response — so an
+ * accepted-but-answerless start still retains its matching authority in a later CLI process.
+ * Returns the grant ID the transport should carry in `meta.captureGrantId`, or `undefined`.
+ */
+async function admitCaptureStartGrant(
+  req: Omit<DaemonWireRequest, 'token'>,
+  info: DaemonArtifactEndpoint,
+  stateDir: string | undefined,
+  clientArtifactPaths: Record<string, string>,
+): Promise<string | undefined> {
+  if (stateDir === undefined || !info.baseUrl) return undefined;
+  const grants = await import('./capture-grant.ts');
+  if (!grants.isCaptureStartRequest(req)) return undefined;
+  const slot = grants.captureSlotOfCommand(req.command);
+  const destination = clientArtifactPaths.outPath;
+  if (slot === undefined || !hasNonEmptyString(destination)) return undefined;
+  return await grants.admitCaptureGrant({
+    stateDir,
+    baseUrl: info.baseUrl,
+    req,
+    slot,
+    destination,
+  });
 }
 
 type RemoteArtifactCommand = {
@@ -488,6 +522,74 @@ export async function settleScriptDeliveryReceiptOfFailure(
 }
 
 /**
+ * #4518: marks the open capture grants of a finishing request whose answer was an error as
+ * pending-recovery, so the bounded sweep never removes evidence of a capture whose outcome this
+ * client cannot know. The unbound error names no grant, so EVERY known-open grant of the
+ * request's scope is preserved — never one guessed grant, and nothing is authorized from the
+ * response text. Never throws.
+ */
+export async function noteUncertainFinishingCapture(
+  info: DaemonArtifactEndpoint,
+  req: DaemonWireRequest,
+  stateDir: string,
+): Promise<void> {
+  try {
+    if (!info.baseUrl) return;
+    const grants = await import('./capture-grant.ts');
+    const slot = grants.captureSlotOfCommand(req.command);
+    if (slot === undefined || !grants.finishesCaptureRequest(req)) return;
+    const open = grants.listOpenCaptureGrantsInScope({
+      stateDir,
+      baseUrl: info.baseUrl,
+      req,
+      slot,
+    });
+    for (const grant of open) {
+      await grants.settleCaptureGrant({
+        stateDir,
+        baseUrl: info.baseUrl,
+        req,
+        slot,
+        grantId: grant.grantId,
+        outcome: 'pending-recovery',
+      });
+    }
+  } catch {
+    // A settle that cannot run leaves the records open; they are retained evidence regardless.
+  }
+}
+
+/**
+ * #4518: settles the grant a REJECTED capture start named in its own request evidence
+ * (`meta.captureGrantId` this process minted and sent) as finished — the start reached a known
+ * negative outcome, so the sweep may reclaim the record once stale. Bounded to exactly the
+ * record the request evidence names; uncertain records (no response, unknown scope) are never
+ * cleared, and admission refusal remains the bounded backstop. Never throws.
+ */
+export async function noteFailedCaptureStart(
+  info: DaemonArtifactEndpoint,
+  req: DaemonWireRequest,
+  stateDir: string,
+): Promise<void> {
+  try {
+    if (!info.baseUrl) return;
+    const grants = await import('./capture-grant.ts');
+    const slot = grants.captureSlotOfCommand(req.command);
+    if (slot === undefined || !grants.isCaptureStartRequest(req)) return;
+    await grants.settleCaptureGrant({
+      stateDir,
+      baseUrl: info.baseUrl,
+      req,
+      slot,
+      grantId: req.meta?.captureGrantId,
+      outcome: 'finished',
+    });
+  } catch {
+    // A settle that cannot run leaves the record open; admission caps still bound the store.
+  }
+}
+
+/**
  * Downloads the artifacts of a successful remote response. A session script goes only where this
  * client's own `open --save-script` recorded under `stateDir`, never where a response says; that
  * owner loads only for a response that names a publication or carries a script artifact.
@@ -503,7 +605,7 @@ export async function materializeRemoteArtifacts(
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const download = (scripts?: SessionScriptDelivery) =>
-    downloadResponseArtifacts(endpoint, req, response, host, scripts);
+    downloadResponseArtifacts(endpoint, req, response, host, scripts, stateDir);
   // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
   // publication and no script artifact of its own (#4595).
   if (
@@ -524,10 +626,12 @@ async function downloadResponseArtifacts(
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
   scripts: SessionScriptDelivery | undefined,
+  stateDir: string,
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutScriptFieldOwner(response.data);
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
+  const grantContext = await resolveCaptureGrantContext(endpoint, req, response, stateDir);
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   for (const artifact of artifacts) {
@@ -540,7 +644,7 @@ async function downloadResponseArtifacts(
       continue;
     }
     if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
-    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
+    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host, grantContext);
     const materializedPath = await downloadRemoteArtifact({
       ...endpoint,
       artifactId: artifact.artifactId,
@@ -618,18 +722,100 @@ function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
 }
 
 /**
+ * #4518: the grant context one finishing response is matched against. A persisted start
+ * destination is authorized EXCLUSIVELY by the daemon's PRODUCER-ECHOED `captureGrantId`
+ * (response data or artifact) matched against the grant this client minted and persisted BEFORE
+ * dispatch, with the full scope (endpoint/tenant/run/lease/session/slot). An older daemon that
+ * echoes no ID, or an echoed ID that matches nothing, authorizes NOTHING: only the current
+ * request's own registered paths win, and everything else keeps the pre-grant contained cwd-local
+ * name with a disclosed diagnostic — there is no scope-open fallback and no generation is inferred
+ * from an unbound response. `undefined` for requests that finish no grant-covered capture
+ * (trace/perf remain on the existing echo path — residual #4518).
+ */
+type CaptureGrantContext = Readonly<{
+  slot: 'record';
+  grant: CaptureGrant | undefined;
+  echoedGrantId: string | undefined;
+  authorize(params: { field: string; localPath: unknown }): string | undefined;
+  disclose(
+    field: string,
+    detail: 'missing-grant' | 'unmatched-grant-id' | 'not-a-derivation',
+  ): void;
+}>;
+
+async function resolveCaptureGrantContext(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  stateDir: string,
+): Promise<CaptureGrantContext | undefined> {
+  const grants = await import('./capture-grant.ts');
+  const slot = grants.captureSlotOfCommand(req.command);
+  if (slot === undefined || !grants.finishesCaptureRequest(req)) return undefined;
+  const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
+  const echoedGrantId =
+    grants.readCaptureGrantId(response.data?.captureGrantId) ??
+    artifacts
+      .map((artifact) => grants.readCaptureGrantId(artifact?.captureGrantId))
+      .find((id) => id !== undefined);
+  const grant = grants.readCaptureGrantById({
+    stateDir,
+    baseUrl: endpoint.baseUrl,
+    req,
+    slot,
+    grantId: echoedGrantId,
+  });
+  if (grant !== undefined) {
+    // The producer echoed this exact grant ID: the capture reached a known outcome.
+    void grants.settleCaptureGrant({
+      stateDir,
+      baseUrl: endpoint.baseUrl,
+      req,
+      slot,
+      grantId: echoedGrantId,
+      outcome: 'finished',
+    });
+  }
+  return {
+    slot,
+    grant,
+    echoedGrantId,
+    authorize: ({ field, localPath }) =>
+      grants.authorizedCaptureLocalPath({ grant, field, localPath }),
+    disclose: (field, detail) => grants.discloseUnauthorizedLocalPath(req, field, detail),
+  };
+}
+
+/**
  * Where this client writes one downloaded artifact. The client chooses: a path it registered in
- * this request wins, and a response `localPath` is accepted only on a stop or report that echoes an
- * earlier request's destination. Anything else lands in cwd under the response file name's basename.
+ * this request wins; otherwise a finishing capture's response `localPath` is accepted only when it
+ * is an allowlisted derivation of the destination this client granted for that capture (#4518).
+ * Anything else lands in cwd under the response file name's basename, and the refusal is
+ * disclosed — a response string never chooses the directory.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
+  grantContext: CaptureGrantContext | undefined,
 ): string {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return requestedPath;
-  if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
+  if (grantContext !== undefined) {
+    const authorized = grantContext.authorize({
+      field: artifact.field,
+      localPath: artifact.localPath,
+    });
+    if (authorized !== undefined) return authorized;
+    grantContext.disclose(
+      artifact.field,
+      grantContext.grant === undefined
+        ? grantContext.echoedGrantId === undefined
+          ? 'missing-grant'
+          : 'unmatched-grant-id'
+        : 'not-a-derivation',
+    );
+  } else if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return artifact.localPath;
   }
   const responseName = path.basename(artifact.fileName?.trim() ?? '');

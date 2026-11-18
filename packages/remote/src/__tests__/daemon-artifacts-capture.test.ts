@@ -99,11 +99,13 @@ test.for<MaterializationCase>([
     expected: 'cwd/x',
   },
   {
-    name: 'a record stop accepts the echo of its start destination',
+    // #4518: without a grant this client persisted for the start (or a grant ID the daemon echoed
+    // back), a record stop's response localPath is never trusted; it lands in cwd.
+    name: 'a record stop without a grant refuses the response localPath to cwd',
     command: 'record',
     localPath: 'client/clip.mp4',
     fileName: 'clip.mp4',
-    expected: 'client/clip.mp4',
+    expected: 'cwd/clip.mp4',
   },
   {
     name: 'a close does not authorize an unrelated response artifact destination',

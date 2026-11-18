@@ -99,6 +99,27 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
   };
 }
 
+/**
+ * #4518: echoes the capture grant ID the daemon bound to the accepted capture, so the client can
+ * match this stop to the grant IT minted and persisted before dispatch. The ID is echoed from the
+ * capture's own durable record; the internal ownership fence never leaves the envelope.
+ */
+export function withCaptureGrantEcho(
+  response: DaemonResponse,
+  grantId: string | undefined,
+): DaemonResponse {
+  if (grantId === undefined || !response.ok || !response.data) return response;
+  const artifacts = Array.isArray(response.data.artifacts) ? response.data.artifacts : [];
+  return {
+    ...response,
+    data: {
+      ...response.data,
+      captureGrantId: grantId,
+      artifacts: artifacts.map((artifact) => ({ ...artifact, captureGrantId: grantId })),
+    },
+  };
+}
+
 /** The files a finished recording hands to its caller: the video, later chunks, and telemetry. */
 export function recordingStopArtifacts(completion: ScreenRecordingCompletion): DaemonArtifact[] {
   const artifacts: DaemonArtifact[] = [recordingArtifact(completion)];

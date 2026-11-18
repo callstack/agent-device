@@ -911,18 +911,20 @@ function applyResponseLevelView(
   const view = RESPONSE_VIEWS[req.command];
   if (!view) return response;
   const data = response.data ?? {};
-  // A view narrows a command's own result; remote script delivery facts are not part of it.
+  // A view narrows a command's own result; remote delivery facts are not part of it.
   const delivery = Object.fromEntries(
-    SCRIPT_DELIVERY_FIELDS.filter((field) => data[field] !== undefined).map((field) => [
-      field,
-      data[field],
-    ]),
+    [...SCRIPT_DELIVERY_FIELDS, ...CAPTURE_GRANT_FIELDS]
+      .filter((field) => data[field] !== undefined)
+      .map((field) => [field, data[field]]),
   );
   return { ok: true, data: { ...view(data, level), ...delivery } };
 }
 
 /** The remote recording facts (ADR 0016) that every response level keeps. */
 const SCRIPT_DELIVERY_FIELDS = ['scriptPublicationId', 'scriptDeliveryFailure'] as const;
+
+/** The capture grant echo (#4518) that every response level keeps. */
+const CAPTURE_GRANT_FIELDS = ['captureGrantId'] as const;
 
 // Diagnostic phases emitted once per real iOS-runner round-trip. `..._command_send`
 // is the command itself; `..._readiness_preflight` is the pre-command uptime probe

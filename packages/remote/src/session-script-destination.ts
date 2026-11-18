@@ -16,16 +16,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
-  acquireProcessLock,
   confirmScriptDestination,
   scriptAncestryReason,
   prepareScriptDestination,
   publishFileSync,
-  withProcessLock,
   type ScriptDestination,
 } from '@agent-device/host-kit/file';
-import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
+import { withoutTrailingSlashes, withRemoteStateLock } from './remote-state-record-lock.ts';
 
 /** The download stops at this size, so a daemon cannot fill the caller's disk. */
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
@@ -655,12 +653,6 @@ function recordPath(
   return path.join(stateDir, 'remote-connections', 'session-scripts', `${key}.json`);
 }
 
-function withoutTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value[end - 1] === '/') end -= 1;
-  return value.slice(0, end);
-}
-
 /**
  * Creates a record, and removes the records a close retired and those nobody has touched for
  * `STALE_RECORD_MS`.
@@ -723,16 +715,13 @@ function writeRecord(file: string, record: ScriptRecord): void {
   publishFileSync({ destination: file, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
 }
 
-async function withRecordLock<T>(file: string, task: () => Promise<T>): Promise<T> {
-  const { pid, startTime } = readCurrentOwnerIdentity();
-  return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        lockDirPath: `${file}.lock`,
-        owner: { pid, startTime, acquiredAtMs: Date.now() },
-        timeoutMs: RECORD_LOCK_TIMEOUT_MS,
-        description: 'remote session script record',
-      }),
+function withRecordLock<T>(file: string, task: () => Promise<T>): Promise<T> {
+  return withRemoteStateLock(
+    {
+      lockDirPath: `${file}.lock`,
+      description: 'remote session script record',
+      timeoutMs: RECORD_LOCK_TIMEOUT_MS,
+    },
     task,
-  });
+  );
 }

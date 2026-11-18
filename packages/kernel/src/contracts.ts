@@ -159,6 +159,12 @@ export type DaemonRequestMeta = {
   clientArtifactPaths?: Record<string, string>;
   /** The ID a remote client minted for its `open --save-script`; each script version carries it. */
   scriptPublicationId?: string;
+  /**
+   * The ID the client minted for this capture-start attempt (#4518). One distinct ID per start
+   * attempt; the daemon binds it to the accepted capture and echoes it back from the matching
+   * stop/report. It carries no authority by itself: the client's own persisted grant does.
+   */
+  captureGrantId?: string;
   installSource?: DaemonInstallSource;
   retainMaterializedPaths?: boolean;
   materializedPathRetentionMs?: number;
@@ -207,6 +213,8 @@ export type DaemonArtifact = {
   scriptPublicationId?: string;
   /** A `session-script` version number. Versions of one recording grow, so the newest one wins. */
   scriptRevision?: number;
+  /** The capture grant (#4518) this artifact belongs to, echoed by the daemon from the accepted capture. */
+  captureGrantId?: string;
 };
 
 /**
@@ -262,6 +270,18 @@ export type ScriptDeliveryReceipt = {
   close?: { step: number };
   failures?: ScriptDeliveryFailure[];
 };
+
+/**
+ * The shape a client-minted capture grant ID must have (#4518): an opaque token, never a path or
+ * free text. Both sides of the wire read it through this one rule, so a malformed ID is simply
+ * absent — it authorizes nothing and is dropped, not repaired.
+ */
+const CAPTURE_GRANT_ID_PATTERN = /^[A-Za-z0-9-]{16,64}$/;
+
+/** The well-formed capture grant ID a request or artifact carries, or `undefined`. */
+export function readCaptureGrantId(value: unknown): string | undefined {
+  return typeof value === 'string' && CAPTURE_GRANT_ID_PATTERN.test(value) ? value : undefined;
+}
 
 /** How many `failures` one receipt may name; a receipt naming more authorizes nothing. */
 const SCRIPT_DELIVERY_RECEIPT_MAX_FAILURES = 1000;

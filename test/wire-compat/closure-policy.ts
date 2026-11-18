@@ -49,6 +49,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'packages/remote/src/daemon-artifacts.ts#CaptureGrantContext':
+    "The CLIENT'S OWN match result for one finishing capture: the persisted grant record, the echoed grant ID, and two client-local callbacks. The grant record lives only in the client's state directory and the echoed ID crosses the wire only as the listed optional `captureGrantId` fields; this context type itself never crosses.",
   'packages/remote/src/session-script-destination.ts#PublishOutcome':
     "The CLIENT'S OWN result of one publish attempt: the published path, or a failure plus the local error object behind it. Neither half crosses the wire as this shape: both are transformations into client-local output, the path into the listed `data.savedScript` string and a failure into the listed packages/kernel/src/contracts.ts#ScriptDeliveryFailure. The `error` member is a local unknown thrown value that never reaches the peer.",
   'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':

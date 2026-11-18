@@ -2,7 +2,7 @@
 
 The CLI client trusts its caller to choose local destinations.
 The client trusts a remote daemon for data and validated identifiers.
-Script publication takes no path from the daemon. Capture delivery still can (#4518).
+Script publication takes no path from the daemon. Capture delivery takes no path from the daemon either (#4518): a finishing capture's response `localPath` is honored only as a derivation of the destination this client itself persisted before the start, matched by the producer-echoed grant ID and full scope; an older daemon that echoes no ID, or an unmatched ID, leaves only the contained cwd-local name.
 The daemon trusts its state directory. Nobody trusts the network or other local users.
 Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 

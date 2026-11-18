@@ -304,7 +304,7 @@ function buildRemoteArtifactMeta(
   preparedRemoteRequest: Awaited<ReturnType<typeof prepareRemoteRequestArtifacts>>,
 ): Pick<
   NonNullable<DaemonRequest['meta']>,
-  'uploadedArtifactId' | 'clientArtifactPaths' | 'installSource'
+  'uploadedArtifactId' | 'clientArtifactPaths' | 'installSource' | 'captureGrantId'
 > {
   return {
     ...(preparedRemoteRequest.uploadedArtifactId
@@ -315,6 +315,9 @@ function buildRemoteArtifactMeta(
       : {}),
     ...(preparedRemoteRequest.installSource
       ? { installSource: preparedRemoteRequest.installSource }
+      : {}),
+    ...(preparedRemoteRequest.captureGrantId
+      ? { captureGrantId: preparedRemoteRequest.captureGrantId }
       : {}),
   };
 }
@@ -396,6 +399,7 @@ async function protectArtifactUploadWithLeaseBeats(
       info,
       callerSignal ?? new AbortController().signal,
       settings.host,
+      settings.paths.baseDir,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -410,6 +414,7 @@ async function protectArtifactUploadWithLeaseBeats(
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
         settings.host,
+        settings.paths.baseDir,
       ),
     callerSignal,
   });
