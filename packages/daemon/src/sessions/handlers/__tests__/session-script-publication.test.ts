@@ -371,3 +371,34 @@ test('a remote recording refuses active publication and stays armed for close', 
   expect(session.scriptPublication).toMatchObject({ status: 'armed' });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'refuses an active save into a directory any local user can write, and keeps it armed',
+  () => {
+    // An active save names a caller destination like close does, so the same destination rule judges it.
+    const shared = path.join(fs.realpathSync(root), 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const session = armedSession();
+    store.publish('authoring', session);
+
+    const response = handleSessionScriptPublication({
+      req: request(path.join(shared, 'screen-x.ad')),
+      sessionName: 'authoring',
+      sessionStore: store,
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        details: {
+          reason: 'script_ancestor_untrusted',
+          exposure: 'world_writable',
+          ancestor: shared,
+        },
+      },
+    });
+    expect(fs.readdirSync(shared)).toEqual([]);
+    expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'armed' });
+  },
+);

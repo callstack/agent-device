@@ -53,24 +53,29 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test.skipIf(process.platform === 'win32')(
-  'a refused destination with a missing parent leaves no directories behind',
-  () => {
-    // `close --save-script /shared/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
-    // runs before the rule answers leaves `recordings` standing in ground another local user can name
-    // things in, after the publish refuses.
+test.skipIf(process.platform === 'win32').each([
+  { mode: 0o777, exposure: 'world_writable', hint: (_dir: string) => 'only you can write' },
+  { mode: 0o775, exposure: 'shared_group_writable', hint: (dir: string) => `chmod g-w ${dir}` },
+])(
+  'a refused destination with a missing parent leaves no directories behind ($exposure)',
+  ({ mode, exposure, hint }) => {
+    // `close --save-script <shared>/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
+    // runs before the rule answers leaves `recordings` behind after the refusal. A group-writable
+    // directory is the one refusal the hint tells the caller how to fix in place.
     const directory = root();
-    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const shared = directoryWith(path.join(directory, 'shared'), mode);
     const destination = path.join(shared, 'recordings', 'journey.ad');
 
     const result = writerFor(directory).write(recordingTo(destination));
 
     expect(result.written).toBe(false);
-    expect(result.written ? undefined : result.error?.details).toMatchObject({
+    const details = result.written ? undefined : result.error?.details;
+    expect(details).toMatchObject({
       reason: 'script_ancestor_untrusted',
-      exposure: 'world_writable',
+      exposure,
       ancestor: shared,
     });
+    expect(String(details?.hint)).toContain(hint(shared));
     expect(fs.readdirSync(shared)).toEqual([]);
   },
 );
@@ -145,13 +150,13 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test.skipIf(process.platform === 'win32')(
-  'a recording through a link and .. lands in the directory the kernel reaches',
-  () => {
-    // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`.
+test.skipIf(process.platform === 'win32').each([false, true])(
+  'a recording through a link and .. lands in the directory the kernel reaches (force: %s)',
+  (force) => {
+    // `home/work/../y` is the private `priv/y`; folded as text it is `home/y`, which does not exist and
+    // must not be staged in or created.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
-    const foldedY = directoryWith(path.join(home, 'y'), 0o777);
     const privX = path.join(directory, 'priv', 'x');
     fs.mkdirSync(privX, { recursive: true });
     const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o700);
@@ -163,13 +168,14 @@ test.skipIf(process.platform === 'win32')(
       return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
     }) as typeof fs.writeFileSync);
 
-    const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
+    const destination = `${home}/work/../y/journey.ad`;
+    const result = writerFor(directory).write(recordingTo(destination, force), { force });
 
-    expect(result.written).toBe(true);
     expect(staged).toEqual([privY]);
+    expect(result.written).toBe(true);
     const landed = path.join(privY, 'journey.ad');
     expect(fs.readFileSync(landed, 'utf8')).toContain('Demo');
     expect(fs.lstatSync(landed).mode & 0o777).toBe(0o600);
-    expect(fs.readdirSync(foldedY)).toEqual([]);
+    expect(fs.readdirSync(home)).toEqual(['work']);
   },
 );
