@@ -42,7 +42,7 @@ export type AutomationScenarioSteps = {
   verifyCommand: AndroidLiveHarness['verifyCommand'];
 };
 
-export const automationScenarioSteps: AutomationScenarioSteps = {
+const automationScenarioSteps: AutomationScenarioSteps = {
   assertElementText,
   assertWaitSelector,
   assertWaitText,
