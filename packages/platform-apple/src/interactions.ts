@@ -183,10 +183,14 @@ export function iosRunnerOverrides(
         );
       },
       performGesture: async (plan) => await performGestureApple(device, ctx, runnerOpts, plan),
-      gestureViewport: async () => {
+      gestureViewport: async (includesKeyboard) => {
         const result = await runAppleRunnerCommand(
           device,
-          { command: 'gestureViewport', appBundleId: ctx.appBundleId },
+          {
+            command: 'gestureViewport',
+            appBundleId: ctx.appBundleId,
+            ...(includesKeyboard ? { includesKeyboard } : {}),
+          },
           runnerOpts,
         );
         return readGestureViewport(result);

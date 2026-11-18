@@ -99,6 +99,10 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     (i) => i.fill(10, 20, 'hello', undefined, { allowNonHittableCoordinateFallback: true }),
   ],
   'ios-simulator.interactions-gesture-viewport.read': [IOS_SIMULATOR, (i) => i.gestureViewport!()],
+  'ios-simulator.interactions-gesture-viewport.include-keyboard': [
+    IOS_SIMULATOR,
+    (i) => i.gestureViewport!(true),
+  ],
   'ios-simulator.interactions-press-series.tap': [
     IOS_SIMULATOR,
     press({ count: 2, intervalMs: 50 }),

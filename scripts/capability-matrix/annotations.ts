@@ -163,7 +163,7 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         label: 'Keyboard dismiss, enter, and status',
         commands: ['keyboard'],
         link: docs('commands', 'keyboard'),
-        note: "`status` reports the focused field's return key on a visible keyboard. It does not claim the key can be named: only Android can report `none`, and the Apple runner reports `unknown` for a key whose wording names no action it knows.",
+        note: 'For a visible keyboard, the Apple runner uses a recognized accessibility identifier to report the Return action as `returnKey` and the key\'s localized wording as `returnKeyLabel`. For example, the identifier `Search` gives `returnKey: "search"` even when the label is `"szukaj"`. If the runner cannot identify the action, it reports `unknown`. Only Android can report `none`.',
         cells: {
           'harmonyos-emulator': {
             text: 'Dismiss and enter; status unsupported',

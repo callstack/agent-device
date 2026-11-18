@@ -422,7 +422,7 @@ export type Interactor = {
   ): Promise<{
     found: boolean;
   }>;
-  gestureViewport?(): Promise<Rect>;
+  gestureViewport?(includesKeyboard?: true): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   /**
    * Optional (parity with `actionButton`): opens the springboard, a control not every owner

@@ -253,6 +253,7 @@ struct Command: Codable {
   let delayMs: Int?
   let textEntryMode: String?
   let action: String?
+  let includesKeyboard: Bool?
   let x: Double?
   let y: Double?
   let button: String?
@@ -712,16 +713,11 @@ struct ErrorPayload: Codable {
   /// Only on an iOS `BACK_SWIPE_NO_CHANGE`: the dismiss controls in the top band the caller may press
   /// instead. Absent when there are none.
   var dismissControls: [DismissControlPayload]? = nil
-  /// Only on a `KEYBOARD_DISMISS_UNAVAILABLE` whose cause is known: `tree_unreadable` says the screen
-  /// could not be read, so no dismiss key was found, rather than that the keyboard has none.
-  var cause: String? = nil
-
   private enum CodingKeys: String, CodingKey {
     case code
     case message
     case hint
     case dismissControls
-    case cause
   }
 
   static func targetAppUnavailable(bundleId: String?) -> ErrorPayload {

@@ -1,238 +1,68 @@
-import Foundation
 import CoreGraphics
+import Foundation
+import AgentDeviceSnapshotPresentation
 
-/// One `keyboard status` answer: whether the software keyboard is on screen and, when it is, what
-/// its return key offers.
-///
-/// `returnKey` is a `RunnerKeyboardReturnKey` raw value, or `nil` when the keyboard is hidden — a
-/// hidden keyboard has no return key to report, which is a different fact from one this read cannot
-/// name. `returnKeyLabel` is the wording the return key itself carries, with surrounding whitespace
-/// trimmed, so a localized or an app's custom key stays readable even where the kind is `unknown`.
-/// It is present only for a control this read identified as the return key: a keyboard whose return
-/// key cannot be identified — a number or phone pad has none — answers `unknown` with no label, so a
-/// caller is never told a key exists on a layout that has no key to press.
 struct RunnerKeyboardStatus: Equatable {
   let visible: Bool
   let returnKey: String?
   let returnKeyLabel: String?
-}
 
-extension RunnerKeyboardStatus {
-  /// One control the status read observed on the visible keyboard: the wording it carries in the
-  /// accessibility tree, and the frame it occupies. `frame` is what locates the return key by slot —
-  /// the space bar's immediate right neighbour, when that neighbour is also its row's last worded key.
+  static let hidden = RunnerKeyboardStatus(visible: false, returnKey: nil, returnKeyLabel: nil)
+  private static let visibleWithUnknownReturn = RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
+
   struct ObservedKeyboardKey {
-    let text: String?
+    let label: String
+    let identifier: String
     let frame: CGRect
-    /// The control's accessibility identifier, where the read carries it. A return key can show
-    /// `done` as its label and `Done` as its identifier, so dismiss matches either.
-    var identifier: String? = nil
-    /// Whether the tree carries the control as a key or as a button. Only keys are character keys: a
-    /// QuickType candidate or an accessory toolbar's control is a button, whatever its wording.
-    var kind: Kind = .key
-    enum Kind: Equatable {
-      case key
-      case button
-    }
+    let isKey: Bool
   }
 
-  /// One snapshot of the keyboard: its frame and every key's wording and frame, taken together so a
-  /// decision never mixes two reads of a keyboard that may be sliding. The dismiss read also carries,
-  /// as buttons, the dismiss-worded controls the app holds outside the keyboard, such as
-  /// an input accessory's `Done`, from the same snapshot.
-  struct ObservedKeyboard {
-    let frame: CGRect
-    let keys: [ObservedKeyboardKey]
-  }
-
-  /// What identifies Apple's space bar in the accessibility tree: wording that is whitespace and
-  /// nothing else. This read measured a single space on an English and a Polish iOS layout, so the
-  /// anchor survives the localization the positional rule exists for. A pad's keys all carry digit or
-  /// `Delete` wording, so a pad has no anchor, and therefore no candidate.
-  private static func isSpaceBar(_ text: String?) -> Bool {
-    guard let text, !text.isEmpty else { return false }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
-  /// Builds the answer from what the runner observed. The keyboard decides whether a return key is
-  /// reported at all: a hidden one has none, which is a different fact from one this read cannot
-  /// name. Only Android's `IME_ACTION_NONE` can establish that a field offers no action key, so
-  /// `none` is never this runner's answer.
-  ///
-  /// The key's own wording decides the kind, through the one rule `keyboard enter` probes with
-  /// (`RunnerKeyboardReturnKey.kind(of:)`), so the two commands can never disagree about the same
-  /// key. The label itself is kept as the accessibility tree carries it apart from its surrounding
-  /// whitespace, so a localized or an app's custom key stays readable even where the kind is
-  /// `unknown`.
+  /// An iPad accessory can appear as the keyboard while its keys sit below the display.
   static func observed(
-    visible: Bool,
-    returnControlText: String?
-  ) -> RunnerKeyboardStatus {
-    guard visible else {
-      return RunnerKeyboardStatus(visible: false, returnKey: nil, returnKeyLabel: nil)
+    keyboardFrame: CGRect,
+    keys: [ObservedKeyboardKey],
+    nativeDisplaySize: CGSize?,
+    interfaceOrientation: Int
+  ) -> RunnerKeyboardStatus? {
+    guard SnapshotGeometry.isPositiveFinite(keyboardFrame),
+      let nativeDisplaySize,
+      let frame = SurfaceGeometry.panelFrame(nativeSize: nativeDisplaySize, orientation: interfaceOrientation),
+      case .reported(let bounds, _) = SnapshotViewport.reported(box: frame)
+    else { return nil }
+    let space = keyboardSpace(keyboardFrame, displayBounds: bounds, interfaceOrientation: interfaceOrientation)
+    let visibleFrame = space.orientedFrame(of: keyboardFrame).intersection(bounds.rect)
+    guard SnapshotGeometry.isPositiveFinite(visibleFrame) else { return .hidden }
+
+    let measuredKeys = keys.compactMap { key -> ObservedKeyboardKey? in
+      guard SnapshotGeometry.isPositiveFinite(key.frame) else { return nil }
+      return ObservedKeyboardKey(label: key.label, identifier: key.identifier, frame: space.orientedFrame(of: key.frame), isKey: key.isKey)
     }
-    guard let returnControlText else {
-      return RunnerKeyboardStatus(
-        visible: true,
-        returnKey: RunnerKeyboardReturnKey.unknown.rawValue,
-        returnKeyLabel: nil
-      )
+    let visibleKeys = measuredKeys.filter { visibleFrame.contains(CGPoint(x: $0.frame.midX, y: $0.frame.midY)) }
+    guard let firstKeyY = visibleKeys.filter(\.isKey).map(\.frame.minY).min() else {
+      return measuredKeys.contains(where: \.isKey) ? .hidden : .visibleWithUnknownReturn
     }
-    let label = returnControlText.trimmingCharacters(in: .whitespacesAndNewlines)
-    return RunnerKeyboardStatus(
-      visible: true,
-      returnKey: RunnerKeyboardReturnKey.kind(of: label).rawValue,
-      returnKeyLabel: label.isEmpty ? nil : label
-    )
+
+    let returnKeys = visibleKeys.compactMap { key -> (RunnerKeyboardReturnKey, String)? in
+      let kind = RunnerKeyboardReturnKey.kind(forIdentifier: key.identifier)
+      guard kind != .unknown, key.frame.maxY > firstKeyY else { return nil }
+      return (kind, key.label.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    guard returnKeys.count == 1, let (kind, label) = returnKeys.first else {
+      return .visibleWithUnknownReturn
+    }
+    return RunnerKeyboardStatus(visible: true, returnKey: kind.rawValue, returnKeyLabel: label.isEmpty ? nil : label)
   }
 
-  /// Builds the answer from every control the read saw on the visible keyboard, so it does not need to
-  /// read English to find the return key. A control whose wording `kind(of:)` names a kind for is the
-  /// return key on any keyboard in any language, and its wording is the label. When none maps — a fully
-  /// localized keyboard — the return key is the control in the slot Apple's keyboards give it: the
-  /// keyboard's `returnKeySlot`, the space bar's immediate right neighbour where that neighbour is also
-  /// its row's trailing worded control.
-  ///
-  /// The slot is anchored on the space bar rather than on the keyboard's bottom-right corner because
-  /// the corner is not the return key on every layout: a number, decimal or phone pad has no space bar
-  /// and puts Delete in that corner, so reporting the corner would tell a caller an OTP field has a
-  /// return key. The trailing half of the test is what keeps the rule off iPadOS, whose bottom row puts
-  /// a numbers key and then a hide-keyboard key right of the space bar while its return key ends the row
-  /// above. Neither case reports a key.
-  ///
-  /// `returnKeyLabel` therefore comes only from a control this read identified as the return key. A
-  /// visible keyboard with no identifiable return control answers `unknown` with no label, which is the
-  /// honest reading of a pad that has no return key at all, and of a layout this rule does not know.
-  static func observed(
-    visible: Bool,
-    keyboardKeys: [ObservedKeyboardKey]
-  ) -> RunnerKeyboardStatus {
-    guard visible else {
-      return RunnerKeyboardStatus(visible: false, returnKey: nil, returnKeyLabel: nil)
-    }
-    return observed(visible: true, returnControlText: returnControl(in: keyboardKeys)?.text)
+  /// A landscape iPhone can report a vertical key plane in portrait display coordinates.
+  private static func keyboardSpace(
+    _ frame: CGRect, displayBounds: SnapshotViewport.Box, interfaceOrientation: Int
+  ) -> SnapshotGeometrySpace {
+    let bounds = displayBounds.rect
+    guard SnapshotGeometrySpace.namesQuarterTurn(interfaceOrientation),
+      bounds.width > bounds.height,
+      frame.height > frame.width, !bounds.contains(frame),
+      CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width).contains(frame)
+    else { return .appOrientation }
+    return .deviceNative(appFrame: displayBounds, interfaceOrientation: interfaceOrientation)
   }
-
-  /// The top edge of the first row of character keys: the highest single-character control of key type.
-  /// It anchors where the key rows start, so a control wholly above it is an input accessory's, not a
-  /// key. A button never anchors, however short its wording: a QuickType candidate such as `I` or `A`
-  /// is a button above the key rows and would pull the anchor up to the prediction bar. `nil` when no
-  /// character key was read with wording and a frame, and then nothing can be placed relative to the
-  /// key rows.
-  static func characterKeyRowTop(in keys: [ObservedKeyboardKey]) -> CGFloat? {
-    keys
-      .filter {
-        $0.kind == .key && $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
-          && !$0.frame.isEmpty
-      }
-      .map { $0.frame.minY }
-      .min()
-  }
-
-  /// The one decision that a control is the visible keyboard's return key, by wording first and by
-  /// slot otherwise (see `observed(visible:keyboardKeys:)`). `keyboard status` reports it, and
-  /// `keyboard dismiss` presses nothing that could be it, so the two commands cannot disagree about
-  /// which key is the return key.
-  ///
-  /// A wording match is the return key only when it is placed inside the key rows: below the top of
-  /// the first row of character keys. A control above that line is an input accessory's `Next` or
-  /// `Done`, and with no character key to anchor on, nothing can be placed, so no wording names it.
-  static func returnControl(in keys: [ObservedKeyboardKey]) -> ObservedKeyboardKey? {
-    let rowTop = characterKeyRowTop(in: keys)
-    let named = keys.first { key in
-      guard RunnerKeyboardReturnKey.kind(of: key.text ?? "") != .unknown, let rowTop else { return false }
-      return !key.frame.isEmpty && key.frame.maxY > rowTop
-    }
-    return named ?? returnKeySlot(in: keys)
-  }
-
-  /// Wording of the controls that only hide the keyboard. Neither can be a return key.
-  static let hideKeyboardLabels = ["Hide keyboard", "Dismiss keyboard"]
-
-  /// The dismiss controls `keyboard dismiss` may press, in the order it tries them.
-  static let dismissLabels = hideKeyboardLabels + ["Done"]
-
-  /// How far above the keyboard an accessory's button can sit and still belong to it.
-  static let accessoryReach: CGFloat = 80
-
-  /// True when `frame` belongs to the keyboard: it has a frame, it does not start below the keyboard,
-  /// and it is inside the keyboard or no more than `accessoryReach` above it. An app button with the
-  /// same wording elsewhere on screen is not the keyboard's.
-  static func isNearKeyboard(_ frame: CGRect, keyboardFrame: CGRect) -> Bool {
-    !frame.isEmpty && !keyboardFrame.isEmpty
-      && frame.minY < keyboardFrame.maxY
-      && keyboardFrame.minY - frame.maxY <= accessoryReach
-  }
-
-  /// Whether a refusal should say the screen could not be read: the app tree was unreadable and the
-  /// keyboard's own read, the only one left, held no dismiss candidate. A fallback that held a candidate
-  /// the live lookup then rejected, as covered or ambiguous, is a keyboard whose key could not be pressed,
-  /// which is a different cause.
-  static func refusalIsTreeUnreadable(treeReadable: Bool, surface: ObservedKeyboard?) -> Bool {
-    !treeReadable && (surface.map { dismissControls(in: $0).isEmpty } ?? true)
-  }
-
-  /// Every control `keyboard dismiss` may press, in dismiss-label order then tree order, all read from
-  /// one snapshot so no decision mixes two reads of a keyboard that may be sliding.
-  ///
-  /// A candidate carries dismiss wording as its label or identifier and is near the keyboard. A
-  /// hide-keyboard control is never a return key. A `Done` is pressed only when it cannot be the return
-  /// key: wholly above the keyboard, which holds an input accessory of any shape, or inside the keyboard
-  /// and above the first row of character keys, which needs that row as an anchor and so fails closed
-  /// without one. A candidate whose type, label and identifier name another control near the keyboard is
-  /// left out, because a live lookup could not tell the two apart; a same-wording button far from the
-  /// keyboard, such as a header `Done`, does not count.
-  static func dismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
-    let near = keyboard.keys.filter { isNearKeyboard($0.frame, keyboardFrame: keyboard.frame) }
-    let rowTop = characterKeyRowTop(in: keyboard.keys)
-    return dismissLabels.flatMap { label in
-      near.filter { key in
-        guard key.text == label || key.identifier == label else { return false }
-        let canBeReturnKey = !hideKeyboardLabels.contains(label)
-          && key.frame.maxY > keyboard.frame.minY && key.frame.maxY > (rowTop ?? -.infinity)
-        let identity = near.filter {
-          $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
-        }
-        return !canBeReturnKey && identity.count == 1
-      }
-    }
-  }
-
-  /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to
-  /// anchor the slot on, or when the space bar's right neighbour is not also its row's trailing worded
-  /// control. One positional test, both halves, and no wording list: see `observed(visible:keyboardKeys:)`
-  /// for why the anchor is the space bar, and why a neighbour that is not its row's trailing key cannot
-  /// be the return key.
-  private static func returnKeySlot(in keys: [ObservedKeyboardKey]) -> ObservedKeyboardKey? {
-    // The space bar is the widest key on Apple's keyboards by several times any other, so taking the
-    // widest whitespace-worded control cannot mistake a padding or divider element for it.
-    guard let spaceBar = keys
-      .filter({ isSpaceBar($0.text) && !$0.frame.isEmpty })
-      .max(by: { $0.frame.width < $1.frame.width })
-    else {
-      return nil
-    }
-    let spaceEdge = spaceBar.frame.maxX
-    let spaceMidY = spaceBar.frame.midY
-    // Worded, measurable controls in the space bar's row, at or right of its right edge. The tolerance
-    // absorbs the fractions of a point a layout may round away between keys that sit edge to edge. The
-    // space bar is never among them: its wording is whitespace, which no return key's wording ever is.
-    let rightOfSpaceBar = keys.filter { key in
-      !key.frame.isEmpty
-        && !(key.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && key.frame.minY <= spaceMidY
-        && key.frame.maxY >= spaceMidY
-        && key.frame.minX >= spaceEdge - returnKeySlotTolerance
-    }
-    // Both halves of the one rule: the nearest such control, and the last of them, must be the same key.
-    let ordered = rightOfSpaceBar.sorted { ($0.frame.minX, $0.frame.maxX) < ($1.frame.minX, $1.frame.maxX) }
-    guard let first = ordered.first, let last = ordered.last, first.frame == last.frame else {
-      return nil
-    }
-    return first
-  }
-
-  /// Keys sit edge to edge, so the slot's left edge is the space bar's right edge; this absorbs the
-  /// fractions of a point a keyboard's layout may round away.
-  private static let returnKeySlotTolerance: CGFloat = 2
 }

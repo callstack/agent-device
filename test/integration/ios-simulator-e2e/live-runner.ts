@@ -339,6 +339,12 @@ async function assertFormInput(context: LiveContext): Promise<void> {
   assertJsonContains(seededEmail, 'ada@example', 'seeded email should be observable before submit');
 
   await assertWaitSelector(context, 'label="Done" visible=true');
+  const keyboardStatus = await runStep(context, 'read the visible software keyboard', [
+    'keyboard',
+    'status',
+  ]);
+  assert.equal(keyboardStatus.json?.data?.visible, true, JSON.stringify(keyboardStatus.json));
+
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
   await capturePng(context, 'capture visible input keyboard', keyboardVisiblePath);
   // The email field's return key reads "Done" and submits, so `keyboard dismiss` must refuse it

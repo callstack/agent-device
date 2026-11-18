@@ -1,59 +1,6 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
-private enum KeyboardDismissObservationTiming {
-  static let timeout: TimeInterval = 2
-  // #1542: dismissing the keyboard can trigger the host app's own content-offset
-  // adjustment (e.g. a ScrollView correcting the inset it grew to keep a focused
-  // field above the keyboard). That adjustment is a separate, unsynchronized
-  // animation the keyboard's own `waitForNonExistence` above knows nothing about:
-  // the keyboard AX element can vanish well before the app settles. The very next
-  // command is frequently a synthesized, AX-free drag (scroll/gesture — kept
-  // AX-free so it still works under #1105-family AX degradation), which has no
-  // XCTest quiescence wait of its own, so it can land mid-animation and net to
-  // zero. These bounds cap the settle wait this trades in.
-  // A spring-driven content-offset correction can pass through a near-zero-
-  // velocity inflection (the top of an overshoot) that two adjacent samples
-  // alone cannot distinguish from true rest. Requiring 3 consecutive matching
-  // samples demands ~2 full sample intervals of actual stillness before
-  // stopping early, so a momentary pause mid-animation cannot look settled.
-  static let settleTimeout: TimeInterval = 2.0
-  static let settleSampleInterval: TimeInterval = 0.15
-  static let settleRequiredConsecutiveMatches: Int = 3
-}
-
-// The mechanism that actually resigned the keyboard, disclosed to the caller
-// (#1598) so a response never claims "dismissed" without saying how — a
-// safe-area tap has a very different reliability/side-effect profile than
-// tapping the keyboard's own Done key, and callers need to know which one
-// fired.
-enum RunnerKeyboardDismissMechanism: String {
-  case dismissKey
-}
-
-/// What looking for a dismiss control to tap came to: one was tapped, none exists, or none was found
-/// because the app tree could not be read and the keyboard's own read held none.
-enum KeyboardDismissTap {
-  case tapped
-  case notFound
-  case treeUnreadable
-}
-
-/// One `keyboard dismiss` attempt, plus the fact that decides how a refusal is classified:
-/// `dispatchedDismissal` says whether the runner ever dispatched a dismissal.
-struct RunnerKeyboardDismissOutcome {
-  let wasVisible: Bool
-  let dismissed: Bool
-  let visible: Bool
-  let mechanism: RunnerKeyboardDismissMechanism?
-  /// Whether a dismissal was dispatched — the keyboard's own control was tapped, or the tvOS remote's
-  /// Menu press landed. Only its absence proves the command sent nothing.
-  let dispatchedDismissal: Bool
-  /// Whether the app tree could not be read and the keyboard's own read found no dismiss control, so
-  /// the refusal can say it could not see the screen instead of claiming the keyboard has no key.
-  var treeUnreadable = false
-}
-
 /// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
 /// Visible frames include the input assistant and share the nodes' normalized coordinate space.
 /// A complete scan with no keyboard establishes absence; projected or partial trees never do.
@@ -209,310 +156,93 @@ extension RunnerTests {
 
 extension RunnerTests {
   func isKeyboardVisible(app: XCUIApplication) -> Bool {
-    return visibleKeyboardFrame(app: app) != nil
+    visibleKeyboardFrame(app: app) != nil
   }
 
-  /// What `keyboard status` answers with: the keyboard's visibility and, when it is up, the return
-  /// key the focused field offers. It reads the keyboard's own key elements rather than looking a
-  /// control up by English name, so a localized keyboard (a return key reading `szukaj`) is reported
-  /// with its own wording instead of a label-less `unknown`. `RunnerKeyboardStatus` decides which
-  /// observed control is the return key, through the same `kind(of:)` rule `keyboard enter` probes
-  /// with, so the two commands can never disagree about the wording they can name.
-  ///
-  /// The keyboard is another process, so every element read is a round trip. One snapshot of the
-  /// keyboard carries its visibility, its frame, and every key's wording and frame, so the whole read
-  /// is one round trip instead of one per key.
-  func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus {
+  @MainActor
+  func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus? {
 #if os(iOS)
-    guard let keyboard = readKeyboard(app: app) else {
-      return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
-    }
-    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keyboard.keys)
-#else
-    guard isKeyboardVisible(app: app) else {
-      return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
-    }
-    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: [])
-#endif
-  }
-
-#if os(iOS)
-  /// Every key, then every button, the keyboard snapshot holds, in tree order, with its wording and
-  /// frame. An element that answers no wording at all is dropped; wording that is only whitespace is
-  /// kept, because that is how the accessibility tree carries the space bar and the positional rule
-  /// anchors the return key's slot on it. Keys come before buttons so the first control whose wording
-  /// names a return kind is the same one a per-type query would reach first.
-  func observedKeyboardKeys(in keyboard: XCUIElementSnapshot) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
-    var keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
-    var buttons: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
-    var pending = Array(keyboard.children.reversed())
-    while let node = pending.popLast() {
-      pending.append(contentsOf: node.children.reversed())
-      guard node.elementType == .key || node.elementType == .button,
-        !node.label.isEmpty || !node.identifier.isEmpty
-      else { continue }
-      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(
-        text: node.label,
-        frame: node.frame,
-        identifier: node.identifier.isEmpty ? nil : node.identifier,
-        kind: node.elementType == .key ? .key : .button
-      )
-      if node.elementType == .key { keys.append(observed) } else { buttons.append(observed) }
-    }
-    return keys + buttons
-  }
-#endif
-
-  /// The visible keyboard as one snapshot read, or `nil` when there is none to read: the read failed or
-  /// came back empty, or the platform has no software keyboard. `nil` is not "a keyboard with no keys",
-  /// and a decision that needs the keys must not treat it as one.
-  func readKeyboard(app: XCUIApplication) -> RunnerKeyboardStatus.ObservedKeyboard? {
-#if os(iOS)
-    let snapshot = safely("KEYBOARD_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
-    guard let snapshot, !snapshot.frame.isEmpty else { return nil }
-    return RunnerKeyboardStatus.ObservedKeyboard(frame: snapshot.frame, keys: observedKeyboardKeys(in: snapshot))
-#else
-    return nil
-#endif
-  }
-
-#if os(iOS)
-  /// The keyboard and the dismiss-worded buttons outside it, such as an input accessory's `Done`, from
-  /// one snapshot of the app. The keyboard's own snapshot does not hold an accessory's buttons, and the
-  /// keyboard and an accessory must be judged from one read.
-  func readKeyboardSurface(app: XCUIApplication) -> (
-    surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool
-  ) {
-    resolveKeyboardSurface(
-      appRoot: safely("KEYBOARD_SURFACE_SNAPSHOT", { try? app.snapshot() }),
-      keyboardRead: { self.readKeyboard(app: app) }
-    )
-  }
-
-  /// The surface when the app snapshot holds a keyboard with a frame. When it does not, because the read
-  /// failed or a tree too deep to serialize came back without its keyboard node, the keyboard's own read
-  /// answers instead, so its dismiss key still works, and the tree counts as unreadable: a refusal that
-  /// finds nothing there says so. Callers ask only while the keyboard is up.
-  func resolveKeyboardSurface(
-    appRoot: XCUIElementSnapshot?,
-    keyboardRead: () -> RunnerKeyboardStatus.ObservedKeyboard?
-  ) -> (surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool) {
-    if let appRoot, let surface = keyboardSurface(in: appRoot) { return (surface, true) }
-    return (keyboardRead(), false)
-  }
-
-  private func keyboardSurface(in root: XCUIElementSnapshot) -> RunnerKeyboardStatus.ObservedKeyboard? {
-    var keyboard: XCUIElementSnapshot?
-    var outside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
-    var pending = [root]
-    while let node = pending.popLast() {
-      if node.elementType == .keyboard, keyboard == nil {
-        keyboard = node
-        continue
-      }
-      pending.append(contentsOf: node.children.reversed())
-      let wording = RunnerKeyboardStatus.dismissLabels
-      if node.elementType == .button, wording.contains(node.label) || wording.contains(node.identifier) {
-        outside.append(
-          RunnerKeyboardStatus.ObservedKeyboardKey(
-            text: node.label,
-            frame: node.frame,
-            identifier: node.identifier.isEmpty ? nil : node.identifier,
-            kind: .button
-          )
-        )
-      }
-    }
-    guard let keyboard, !keyboard.frame.isEmpty else { return nil }
-    return RunnerKeyboardStatus.ObservedKeyboard(
-      frame: keyboard.frame,
-      keys: observedKeyboardKeys(in: keyboard) + outside
-    )
-  }
-#endif
-
-  func dismissKeyboard(app: XCUIApplication) -> RunnerKeyboardDismissOutcome {
-    let keyboard = app.keyboards.firstMatch
-    let wasVisible = isKeyboardVisible(app: app)
-    guard wasVisible else {
-      return RunnerKeyboardDismissOutcome(
-        wasVisible: false,
-        dismissed: false,
-        visible: false,
-        mechanism: nil,
-        dispatchedDismissal: false
-      )
-    }
-
-#if os(tvOS)
-    _ = pressTvRemote(.menu)
-    sleepFor(0.2)
-    let tvVisible = isKeyboardVisible(app: app)
-    return RunnerKeyboardDismissOutcome(
-      wasVisible: true,
-      dismissed: !tvVisible,
-      visible: tvVisible,
-      mechanism: tvVisible ? nil : .dismissKey,
-      // On tvOS the Menu press always goes out, so a refusal after it did dispatch and keeps the
-      // generic code.
-      dispatchedDismissal: true
-    )
-#else
-    let tap = tapKeyboardDismissControl(app: app)
-    if tap == .tapped {
-      _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
-      waitForScreenshotStability(
-        app: app,
-        timeout: KeyboardDismissObservationTiming.settleTimeout,
-        sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
-        requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
-      )
-      let visible = isKeyboardVisible(app: app)
-      return RunnerKeyboardDismissOutcome(
-        wasVisible: true,
-        dismissed: !visible,
-        visible: visible,
-        mechanism: visible ? nil : .dismissKey,
-        dispatchedDismissal: true
-      )
-    }
-
-    // #1606 review P1 (twice): generic background-tap dismissal is
-    // deliberately UNSUPPORTED. No geometry or role query can prove a
-    // coordinate is side-effect-free — a full-screen unlabeled Pressable is
-    // indistinguishable from an inert backdrop, so a "safe-area" tap can
-    // navigate or submit while reporting a successful dismiss. The dismiss
-    // key is the only mechanism the runner can vouch for.
-    return RunnerKeyboardDismissOutcome(
-      wasVisible: true,
-      dismissed: false,
-      visible: isKeyboardVisible(app: app),
-      mechanism: nil,
-      dispatchedDismissal: false,
-      treeUnreadable: tap == .treeUnreadable
-    )
-#endif
-  }
-
-  /// The refusal a visible keyboard that stayed up answers with. The two ways it stays up answer
-  /// different questions and must not share one classification: finding no dismiss control sent
-  /// nothing and is the runner's own typed refusal (`KEYBOARD_DISMISS_UNAVAILABLE`, so the host
-  /// publishes its `details.reason` instead of leaving callers to read the prose), while a control
-  /// that was tapped and left the keys up did dispatch and keeps the generic code.
-  func keyboardDismissRefusal(dispatchedDismissal: Bool, treeUnreadable: Bool = false) -> ErrorPayload {
-    if dispatchedDismissal {
-      return ErrorPayload(
-        code: "UNSUPPORTED_OPERATION",
-        message: "Unable to dismiss the keyboard: a dismiss mechanism ran and the keyboard stayed visible",
-        hint: keyboardDismissRefusalHint
-      )
-    }
-    return ErrorPayload(
-      code: RunnerWireErrorCode.keyboardDismissUnavailable,
-      message: treeUnreadable
-        ? "Unable to dismiss the keyboard: the screen could not be read and the keyboard itself exposes no dismiss key, and background taps are never attempted"
-        : "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
-      hint: keyboardDismissRefusalHint,
-      cause: treeUnreadable ? "tree_unreadable" : nil
-    )
-  }
-
-  private var keyboardDismissRefusalHint: String {
-    return
-      "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
-  }
-
-  /// The refusal a `keyboard enter` answers with when the control is missing: the keyboard exposes no
-  /// return-like key, and typing a return found no field to type into. It carries the runner's own code
-  /// so the host publishes `details.reason` instead of leaving callers to read the prose. The dispatch
-  /// disclosure stays `unknown` because typing the return can fail after XCTest sent it.
-  var keyboardReturnRefusal: ErrorPayload {
-    return ErrorPayload(
-      code: RunnerWireErrorCode.keyboardReturnUnavailable,
-      message: "Unable to press the keyboard return key: the keyboard exposes no return-like key and no text field was available to submit",
-      hint: "Tap the app's own submit control by its ref, or focus a text field with fill or type before asking keyboard enter to submit it."
-    )
-  }
-
-  /// The refusal for a sole text field that was found and tapped but would not take the return. It is
-  /// not an absent control, so it has no typed reason; the tap may have landed.
-  var keyboardReturnFieldAttemptFailure: ErrorPayload {
-    return ErrorPayload(
-      code: "UNSUPPORTED_OPERATION",
-      message: "Unable to press the keyboard return key: the only text field was found, but tapping it and typing a return failed",
-      hint: "Focus the field with fill or type, or tap the app's own submit control by its ref."
-    )
-  }
-
-
-  // AX-free on purpose (screenshot bytes, not the accessibility tree) so it holds
-  // under the same AX degradation the synthesized gesture lane is built to survive.
-  // Bounded and self-terminating: returns as soon as `requiredConsecutiveMatches`
-  // consecutive samples match, so an already-settled screen (the common case)
-  // pays close to nothing. The stopping decision itself
-  // (`runnerScreenshotStabilitySettled`) is a pure function of the samples taken
-  // so far, so it is unit-testable without a real screenshot pipeline; this loop
-  // is the thin, untestable I/O shell around it.
-  private func waitForScreenshotStability(
-    app: XCUIApplication,
-    timeout: TimeInterval,
-    sampleInterval: TimeInterval,
-    requiredConsecutiveMatches: Int
-  ) {
-    let deadline = Date().addingTimeInterval(timeout)
-    var samples: [Data?] = [screenshotFingerprintForStabilityCheck(app: app)]
-    while Date() < deadline {
-      sleepFor(sampleInterval)
-      samples.append(screenshotFingerprintForStabilityCheck(app: app))
-      if runnerScreenshotStabilitySettled(samples, requiredConsecutiveMatches: requiredConsecutiveMatches) {
-        logScreenshotStability(samples: samples, settled: true)
+    var result: RunnerKeyboardStatus?
+    let (issues, exception) = holdingRecordedIssues {
+      let keyboard = app.keyboards.firstMatch
+      guard keyboard.exists else {
+        result = .hidden
         return
       }
+      guard let snapshot = try? keyboard.snapshot() else { return }
+      let displaySize: CGSize?
+      let orientation: Int
+      if requestLitPanel != nil {
+        guard let panel = try? requireRequestLitPanelSurface(app: app) else { return }
+        displaySize = panel.geometry.panelNativeSize
+        orientation = panel.geometry.orientation
+      } else {
+        displaySize = soleDisplayPortraitSize()
+        orientation = capturedInterfaceOrientation(app: app)
+      }
+      let keys = observedKeyboardKeys(in: snapshot)
+      result = RunnerKeyboardStatus.observed(
+        keyboardFrame: snapshot.frame,
+        keys: keys,
+        nativeDisplaySize: displaySize,
+        interfaceOrientation: orientation
+      )
     }
-    logScreenshotStability(samples: samples, settled: false)
+    for issue in issues {
+      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_STATUS_ISSUE=%@", issue.compactDescription)
+    }
+    if let exception { NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_STATUS_EXCEPTION=%@", exception) }
+    return issues.isEmpty && exception == nil ? result : nil
+#else
+    return .hidden
+#endif
   }
 
-  /// Says what the settle actually looked at: samples that are all `nil` means the capture refused to
-  /// produce a frame, which is a different fact from a screen that never held still, and the two read
-  /// identically from the outside (#2728).
-  private func logScreenshotStability(samples: [Data?], settled: Bool) {
-    NSLog(
-      "AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=%ld captured=%ld settled=%@",
-      samples.count,
-      samples.compactMap { $0 }.count,
-      settled ? "yes" : "no"
+#if os(iOS)
+  private func observedKeyboardKeys(in keyboard: XCUIElementSnapshot) -> [RunnerKeyboardStatus.ObservedKeyboardKey] {
+    var keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var pending = keyboard.children
+    while let node = pending.popLast() {
+      pending.append(contentsOf: node.children)
+      guard node.elementType == .key || node.elementType == .button else { continue }
+      keys.append(.init(label: node.label, identifier: node.identifier, frame: node.frame, isKey: node.elementType == .key))
+    }
+    return keys
+  }
+#endif
+
+  func keyboardDismissRefusal() -> ErrorPayload {
+    ErrorPayload(
+      code: RunnerWireErrorCode.keyboardDismissUnavailable,
+      message: "The Apple runner cannot dismiss this keyboard automatically",
+      hint: "Inspect the screen and press the visible Hide Keyboard key or an app control that ends editing. If the app supports interactive dismissal, use gesture pan to drag a finger down from inside its scrollable content and check the keyboard state again."
     )
   }
 
-  private func screenshotFingerprintForStabilityCheck(app: XCUIApplication) -> Data? {
-    guard let image = captureRunnerFrame(app: app) else { return nil }
-    return runnerPngData(for: image)
+  var keyboardReturnRefusal: ErrorPayload {
+    ErrorPayload(
+      code: RunnerWireErrorCode.keyboardReturnUnavailable,
+      message: "Could not confirm Return was sent to the focused input",
+      hint: "Check the screen before retrying. Focus the intended input before sending Return, or press the app's submit control explicitly."
+    )
   }
 
-  /// `fieldAttempted` is true when the sole-text-field route found a field and tapped it before typing,
-  /// so a failed press there is a failed attempt rather than a missing control.
-  func pressKeyboardReturn(
-    app: XCUIApplication
-  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool) {
+  func pressKeyboardReturn(app: XCUIApplication) -> Bool {
 #if os(tvOS)
-    return (wasVisible: false, pressed: pressTvRemote(.select), visible: false, fieldAttempted: false)
+    return pressTvRemote(.select)
 #elseif os(iOS)
-    let wasVisible = isKeyboardVisible(app: app)
-    if tapKeyboardReturnControl(app: app) {
-      sleepFor(0.2)
-      return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: false)
+    // XCTest reports absent focus through an issue. Any issue leaves dispatch uncertain,
+    // so report failure without invalidating the session the caller needs to observe the app.
+    let (issues, exception) = holdingRecordedIssues {
+      app.typeText(XCUIKeyboardKey.return.rawValue)
     }
-
-    guard typeKeyboardReturn({ app.typeText(XCUIKeyboardKey.return.rawValue) }) else {
-      if let singleTarget = singleTextEntryElement(app: app) {
-        return pressKeyboardReturn(on: singleTarget, app: app, wasVisible: wasVisible)
-      }
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app), fieldAttempted: false)
+    if let exception { NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_EXCEPTION=%@", exception) }
+    for issue in issues {
+      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_ISSUE=%@", issue.compactDescription)
     }
-    sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: false)
+    return issues.isEmpty && exception == nil
 #else
-    return (wasVisible: false, pressed: false, visible: false, fieldAttempted: false)
+    return false
 #endif
   }
 
@@ -529,153 +259,4 @@ extension RunnerTests {
     return nil
 #endif
   }
-
-  private func pressKeyboardReturn(
-    on element: XCUIElement,
-    app: XCUIApplication,
-    wasVisible: Bool
-  ) -> (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool) {
-#if os(iOS)
-    // `element` is bound by index, and the keyboard the tap raises shifts those indices, so the
-    // return goes to whatever the tap focused rather than to a re-resolved `element`.
-    let typed = typeKeyboardReturn({
-      element.tap()
-      app.typeText(XCUIKeyboardKey.return.rawValue)
-    })
-    guard typed else {
-      return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app), fieldAttempted: true)
-    }
-    sleepFor(0.2)
-    return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app), fieldAttempted: true)
-#else
-    return (wasVisible: wasVisible, pressed: false, visible: false, fieldAttempted: false)
-#endif
-  }
-
-  /// Types a return, false when nothing was typed: an ObjC exception, or XCTest's refusal to type
-  /// with nothing focused. XCTest records that refusal as an issue, which would invalidate the runner
-  /// session, so it alone is dropped; every other issue is recorded as usual.
-  private func typeKeyboardReturn(_ type: () -> Void) -> Bool {
-    let (issues, exceptionMessage) = holdingRecordedIssues(type)
-    let noFocus = issues.filter { Self.isNoKeyboardFocusIssue($0.compactDescription) }
-    issues.filter { !Self.isNoKeyboardFocusIssue($0.compactDescription) }.forEach { record($0) }
-    if !noFocus.isEmpty { NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_NO_FOCUS") }
-    if let exceptionMessage {
-      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_IGNORED_EXCEPTION=%@", exceptionMessage)
-    }
-    return noFocus.isEmpty && exceptionMessage == nil
-  }
-
-  /// XCTest names this refusal only in its English issue text, as it does the AX failures that
-  /// `isSuppressedAxSnapshotIssueDescription` matches.
-  static func isNoKeyboardFocusIssue(_ description: String) -> Bool {
-    description.contains("Neither element nor any descendant has keyboard focus")
-  }
-
-  private func singleTextEntryElement(app: XCUIApplication) -> XCUIElement? {
-#if os(iOS)
-    let matches = safely("KEYBOARD_RETURN_TEXT_ENTRY_QUERY", []) {
-      app.descendants(matching: .any).allElementsBoundByIndex.filter { element in
-        guard element.exists else { return false }
-        switch element.elementType {
-        case .textField, .secureTextField, .searchField, .textView:
-          return true
-        default:
-          return false
-        }
-      }
-    }
-    return matches.count == 1 ? matches[0] : nil
-#else
-    return nil
-#endif
-  }
-
-  /// Taps a dismiss control `RunnerKeyboardStatus.dismissControls` admits, and nothing else: never the
-  /// return key, which submits the focused field, and nothing at all when the keyboard cannot be read.
-  ///
-  /// One read decides which controls are candidates. Each candidate is then looked up live by type,
-  /// label and identifier, the matches kept are those near the keyboard, and the control is tapped only
-  /// when exactly one remains and it is hittable. A candidate that does not meet that is passed over
-  /// for the next; when none does, nothing is tapped. No snapshot coordinate is ever tapped.
-  private func tapKeyboardDismissControl(app: XCUIApplication) -> KeyboardDismissTap {
-#if os(iOS)
-    let read = readKeyboardSurface(app: app)
-    let none: KeyboardDismissTap =
-      RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: read.treeReadable, surface: read.surface)
-      ? .treeUnreadable : .notFound
-    guard let surface = read.surface else {
-      return none
-    }
-    for control in RunnerKeyboardStatus.dismissControls(in: surface) {
-      let identifier = control.identifier ?? ""
-      let predicate =
-        identifier.isEmpty
-        ? NSPredicate(format: "label == %@", control.text ?? "")
-        : NSPredicate(format: "label == %@ AND identifier == %@", control.text ?? "", identifier)
-      let near = app.descendants(matching: control.kind == .key ? .key : .button)
-        .matching(predicate)
-        .allElementsBoundByIndex
-        .filter { RunnerKeyboardStatus.isNearKeyboard($0.frame, keyboardFrame: surface.frame) }
-      if near.count == 1, near[0].exists, near[0].isHittable {
-        near[0].tap()
-        return .tapped
-      }
-    }
-    return none
-#else
-    return .notFound
-#endif
-  }
-
-  /// The keyboard's own return control, in the order `RunnerKeyboardReturnKey.probeLabels` tries its
-  /// labels. On iOS, `nil` means no listed label was hittable. On other platforms nothing is queried
-  /// and `nil` is returned, so callers must not read it as an absent return control.
-  func findKeyboardReturnControl(app: XCUIApplication) -> XCUIElement? {
-#if os(iOS)
-    for label in RunnerKeyboardReturnKey.probeLabels {
-      let candidates = [
-        app.keyboards.buttons[label],
-        app.keyboards.keys[label],
-      ]
-      if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        return hittable
-      }
-    }
-#endif
-    return nil
-  }
-
-  private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
-#if os(iOS)
-    guard let control = findKeyboardReturnControl(app: app) else {
-      return false
-    }
-    control.tap()
-    return true
-#else
-    return false
-#endif
-  }
-}
-
-/// True once the `requiredConsecutiveMatches` most recent samples are all present
-/// and byte-identical — i.e. the screen held still across that whole run of
-/// polls, not just the last two. A spring-driven content-offset correction can
-/// pass through a near-zero-velocity inflection that two adjacent samples alone
-/// cannot distinguish from true rest; requiring a longer run of matches demands
-/// real elapsed stillness before stopping early. `nil` entries (a screenshot
-/// capture that failed) never count toward a match, so a flaky capture cannot
-/// look like stability; the caller's bounded loop still terminates on its
-/// deadline regardless.
-func runnerScreenshotStabilitySettled(
-  _ samples: [Data?],
-  requiredConsecutiveMatches: Int
-) -> Bool {
-  guard requiredConsecutiveMatches >= 2, samples.count >= requiredConsecutiveMatches else {
-    return false
-  }
-  let window = samples.suffix(requiredConsecutiveMatches)
-  guard let first = window.first, let firstData = first else { return false }
-  return window.allSatisfy { $0 == firstData }
 }

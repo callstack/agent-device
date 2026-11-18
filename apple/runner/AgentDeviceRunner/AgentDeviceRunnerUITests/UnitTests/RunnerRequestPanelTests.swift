@@ -51,6 +51,7 @@ private final class LitPanelBookingProbe: NSObject {
   static weak var applicationFrameRecordingTest: XCTestCase?
   static var keyboard: XCUIElement?
   static var keyboardFrame: CGRect?
+  static var keyboardSnapshot: XCUIElementSnapshot?
   static var targetFrame = CGRect(x: 190, y: 140, width: 20, height: 20)
   static var windowDisplayID: UInt = 3
   static var includeDarkSelector = true
@@ -112,6 +113,10 @@ private final class LitPanelBookingProbe: NSObject {
   }
   @objc var keyboards: XCUIElementQuery {
     unsafeBitCast(SurfaceSelectorQuery([Self.keyboard!]), to: XCUIElementQuery.self)
+  }
+  @objc(snapshotWithError:)
+  func snapshot() throws -> XCUIElementSnapshot {
+    try XCTUnwrap(Self.keyboardSnapshot)
   }
   @objc var allElementsBoundByIndex: [XCUIElement] { [Self.window!] }
   @objc(descendantsMatchingType:)
@@ -591,6 +596,68 @@ extension RunnerTests {
     let response = try executeOnMainPrepared(command: command, activeApp: app)
     XCTAssertTrue(response.ok, response.error?.message ?? "")
     try assertions(response)
+  }
+
+  @MainActor
+  func testKeyboardCommandsUseTheDisplayBelowAPlacedWindow() throws {
+    try assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: true)
+  }
+
+  @MainActor
+  func testKeyboardCommandsUseTheSoleDisplayBelowAPlacedWindow() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "the fixture requires a single-display host")
+    let cached = mainOwned.soleDisplayPortraitSize
+    defer { mainOwned.soleDisplayPortraitSize = cached }
+    let restore = try overrideSoleScreenValues([
+      "bounds": NSValue(cgRect: CGRect(x: 0, y: 0, width: 1668, height: 2420)),
+      "scale": NSNumber(value: 2),
+    ])
+    defer { restore() }
+    try assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: false)
+  }
+
+  @MainActor
+  private func assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: Bool) throws {
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let keyboardFrame = CGRect(x: 0, y: 925, width: 834, height: 282)
+    let panelField = litPanel ? #","litPanel":{"displayId":3,"widthPt":834,"heightPt":1210}"# : ""
+    let originalProbeOrientation = LitPanelBookingProbe.orientation
+    defer { LitPanelBookingProbe.orientation = originalProbeOrientation }
+    try withLitPanelBookingProbe(composed: true) { _ in
+      LitPanelBookingProbe.windowFrame = placedWindow
+      LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.portrait
+      LitPanelBookingProbe.keyboardFrame = keyboardFrame
+      LitPanelBookingProbe.keyboardSnapshot = ElementAttributesFixture(.keyboard, keyboardFrame, children: [
+        ElementAttributesFixture(.key, CGRect(x: 300, y: 1000, width: 60, height: 60), label: "A"),
+        ElementAttributesFixture(.button, CGRect(x: 702, y: 1100, width: 120, height: 60), label: "OK", identifier: "Done"),
+      ])
+      let keyboard = try XCTUnwrap(LitPanelBookingProbe.keyboard)
+      let selector = NSSelectorFromString("snapshotWithError:")
+      let method = try XCTUnwrap(class_getInstanceMethod(type(of: keyboard), selector))
+      let stub = try XCTUnwrap(class_getInstanceMethod(LitPanelBookingProbe.self, selector))
+      let originalSnapshot = method_setImplementation(method, method_getImplementation(stub))
+      defer {
+        method_setImplementation(method, originalSnapshot)
+        LitPanelBookingProbe.keyboardSnapshot = nil
+      }
+
+      for name in ["keyboardStatus", "keyboardDismiss"] {
+        let command = try runnerCommandFixture(
+          #"{"command":"\#(name)"\#(panelField)}"#
+        )
+        let requestID = setRequestLitPanel(from: command)
+        defer { endRequestLitPanel(requestID) }
+        XCTAssertEqual(try onScreenWindowFrame(app: app), placedWindow)
+        let response = try executeOnMainPrepared(command: command, activeApp: app)
+        if name == "keyboardStatus" {
+          XCTAssertEqual(response.data?.visible, true)
+          XCTAssertEqual(response.data?.keyboardReturnKey, "done")
+          XCTAssertEqual(response.data?.keyboardReturnKeyLabel, "OK")
+        } else {
+          XCTAssertEqual(response.error?.code, RunnerWireErrorCode.keyboardDismissUnavailable)
+        }
+      }
+    }
   }
 
   /// Runs `body` with the app's window probed as the only window on lit display 3 at `frame`,

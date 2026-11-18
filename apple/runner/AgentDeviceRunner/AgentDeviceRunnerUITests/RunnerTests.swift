@@ -62,14 +62,9 @@ final class RunnerTests: XCTestCase {
     static let backSwipeNoChange = "BACK_SWIPE_NO_CHANGE"
     static let backSwipeUnverified = "BACK_SWIPE_UNVERIFIED"
     static let backSwipeNotDispatched = "BACK_SWIPE_NOT_DISPATCHED"
-    /// A `keyboard dismiss` the visible keyboard would not come down for: it exposes no dismiss key the
-    /// runner vouches for (#1606). The host reports it under `UNSUPPORTED_OPERATION` and publishes
-    /// `details.reason`, so a caller never reads the refusal off the message prose.
+    /// The runner refused automatic dismissal before dispatch.
     static let keyboardDismissUnavailable = "KEYBOARD_DISMISS_UNAVAILABLE"
-    /// A `keyboard enter` that found no return key to press and no text entry to submit through, so
-    /// nothing was submitted. The host reports it under `UNSUPPORTED_OPERATION` and publishes
-    /// `details.reason`; the disclosure stays `unknown` because typing the return can fail after XCTest
-    /// sent it. A sole field that was found but would not take the return is not this refusal.
+    /// Return may have reached the focused input.
     static let keyboardReturnUnavailable = "KEYBOARD_RETURN_UNAVAILABLE"
     /// A press of a hardware or Siri Remote control this target cannot perform: the press helper refuses
     /// before pressing anything, so the host reports `UNSUPPORTED_OPERATION` with `details.reason` and
