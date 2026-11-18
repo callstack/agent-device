@@ -72,6 +72,49 @@ test('body progress renews inactivity but never the 600-second aggregate', async
   }
 });
 
+test('bodyComplete stops only the inactivity ceiling; post-body work observes the aggregate', async () => {
+  vi.useFakeTimers();
+  try {
+    const req = fakeReq();
+    const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
+    const failure = reqError(req);
+    // The body completed: the inactivity ceiling must not fire for post-body work…
+    ingress.bodyComplete();
+    ingress.bodyComplete();
+    await vi.advanceTimersByTimeAsync(INACTIVITY_MS * 4);
+    assert.equal(req.destroyed, false);
+    assert.equal(ingress.signal.aborted, false);
+    // …but the 600-second aggregate still bounds it.
+    await vi.advanceTimersByTimeAsync(AGGREGATE_MS - INACTIVITY_MS * 4 + 1);
+    const error = (await failure) as AppError;
+    assert.equal(req.destroyed, true);
+    assert.equal(error.details?.reason, 'transfer_ingress_deadline_exceeded');
+    assert.equal(error.details?.timeoutMs, AGGREGATE_MS);
+    ingress.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('body bytes received after bodyComplete re-arm only the inactivity ceiling', async () => {
+  vi.useFakeTimers();
+  try {
+    const req = fakeReq();
+    const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
+    const failure = reqError(req);
+    ingress.bodyComplete();
+    await vi.advanceTimersByTimeAsync(AGGREGATE_MS - 1_000);
+    // A late body byte renews inactivity only; the aggregate still fires on schedule.
+    ingress.onAcceptedBodyBytes(1);
+    await vi.advanceTimersByTimeAsync(1_001);
+    const error = (await failure) as AppError;
+    assert.equal(error.details?.reason, 'transfer_ingress_deadline_exceeded');
+    ingress.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('dispose stops both timers without aborting', async () => {
   vi.useFakeTimers();
   try {

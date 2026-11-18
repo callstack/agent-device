@@ -10,7 +10,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
-import { beginUploadTransferIngress } from './upload-ingress.ts';
+import { beginUploadTransferIngress, throwIfIngressAborted } from './upload-ingress.ts';
 import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 
 const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
@@ -119,8 +119,10 @@ async function handleUpload(
       await receiveUpload(req, {
         signal: ingress.signal,
         onBodyBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+        onBodyComplete: () => ingress.bodyComplete(),
       }),
       auth.tenantId,
+      ingress.signal,
     );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
@@ -149,6 +151,9 @@ async function handleUploadPreflight(
     if (!auth) return;
 
     const body = await readRestJsonBody(req, 64 * 1024);
+    // The JSON body is fully received: inactivity stops here and the remaining work
+    // observes only the aggregate (#4441).
+    ingress.bodyComplete();
     const preflight = readUploadPreflightBody(body);
     const upload = beginResumableUpload({
       baseUrl: origin,
@@ -191,6 +196,7 @@ async function handleResumableUpload(
       tenantId: auth.tenantId,
       signal: ingress.signal,
       onAcceptedBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+      onBodyComplete: () => ingress.bodyComplete(),
     });
     if (result.complete) {
       res.statusCode = 200;
@@ -229,11 +235,17 @@ async function handleUploadFinalize(
     if (!auth) return;
 
     const body = await readRestJsonBody(req, 64 * 1024);
+    // The JSON body is fully received: inactivity stops here, so the post-body hash,
+    // extraction and registration observe only the aggregate (#4441).
+    ingress.bodyComplete();
     const finalize = readUploadFinalizeBody(body);
     sendUploadedArtifactResponse(
       res,
-      await finalizeResumableUpload(finalize.uploadId, auth.tenantId),
+      // The request's ingress signal is threaded through the serialized admission into
+      // the post-body hash, the owned extraction stream and artifact materialization.
+      await finalizeResumableUpload(finalize.uploadId, auth.tenantId, { signal: ingress.signal }),
       auth.tenantId,
+      ingress.signal,
     );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
@@ -252,7 +264,10 @@ function sendUploadedArtifactResponse(
   res: http.ServerResponse,
   result: { artifactPath: string; tempDir: string },
   tenantId: string | undefined,
+  signal?: AbortSignal,
 ): void {
+  // Registration boundary: an aborted ingress owner never registers an artifact.
+  throwIfIngressAborted(signal);
   const uploadId = trackUploadedArtifact({
     artifactPath: result.artifactPath,
     tempDir: result.tempDir,

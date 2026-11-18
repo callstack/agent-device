@@ -20,6 +20,12 @@ export type UploadTransferIngress = {
   readonly signal: AbortSignal;
   /** Renews only the inactivity ceiling; never the aggregate. */
   onAcceptedBodyBytes(bytes: number): void;
+  /**
+   * Stops only the inactivity ceiling once the request body is complete. Post-body
+   * work (hash, extraction, registration) then observes just the aggregate. Safe to
+   * call more than once; does not abort.
+   */
+  bodyComplete(): void;
   /** Stops both timers. Safe to call more than once; does not abort. */
   dispose(): void;
 };
@@ -49,11 +55,16 @@ export function beginUploadTransferIngress(params: {
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
 
+  const stopInactivity = () => {
+    if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
+    inactivityTimer = undefined;
+  };
+
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     clearTimeout(aggregateTimer);
-    if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
+    stopInactivity();
   };
 
   const fail = (error: AppError) => {
@@ -83,6 +94,9 @@ export function beginUploadTransferIngress(params: {
     signal,
     onAcceptedBodyBytes(bytes: number) {
       if (!disposed && bytes > 0) armInactivity();
+    },
+    bodyComplete() {
+      if (!disposed) stopInactivity();
     },
     dispose,
   };

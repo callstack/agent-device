@@ -15,6 +15,7 @@ import {
   validateArtifactContentLength,
 } from './artifact-download.ts';
 import { computeUploadHash, receiveResumableTransfer } from './resumable-upload-transfer.ts';
+import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
 
 const RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
@@ -109,6 +110,7 @@ export async function receiveResumableUploadChunk(params: {
   tenantId?: string;
   signal?: AbortSignal;
   onAcceptedBytes?: (bytes: number) => void;
+  onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
   return await runExclusive(entry, 'receive', params.req, async () => {
@@ -123,48 +125,76 @@ export async function receiveResumableUploadChunk(params: {
         if (!entry.closed) refreshResumableUploadTimer(entry);
         params.onAcceptedBytes?.(bytes);
       },
+      onBodyComplete: params.onBodyComplete,
     });
     if (appended && !entry.closed) refreshResumableUploadTimer(entry);
     return result;
   });
 }
 
+/**
+ * The ingress owner a finalize runs under (#4441): its signal is threaded through the
+ * serialized admission and into the post-body hash, the owned extraction stream, and
+ * the artifact materialization, so expiry or client disconnect cancels that work with
+ * the owner's typed reason instead of running it unbounded.
+ */
+export type FinalizeUploadIngressLink = {
+  signal?: AbortSignal;
+};
+
 export async function finalizeResumableUpload(
   uploadId: string,
   tenantId?: string,
+  ingress?: FinalizeUploadIngressLink,
 ): Promise<{ artifactPath: string; tempDir: string }> {
   const entry = requireResumableUpload(uploadId, tenantId);
-  return await runExclusive(entry, 'finalize', undefined, async () => {
-    const offset = fs.statSync(entry.payloadPath).size;
-    if (offset !== entry.sizeBytes) {
-      // An incomplete finalize is not terminal: the ticket stays resumable and keeps
-      // its original idle lifetime, so the timer is left armed exactly as it was (#4441).
-      throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
-        uploadId,
-        offset,
-        sizeBytes: entry.sizeBytes,
-      });
-    }
-    // A complete finalize is active work that owns the entry: disarm the idle timer so
-    // expiry cannot fire during the post-write checks (hash, extraction, rename). Both
-    // terminal outcomes close the entry and clean up through closeEntry (#4441).
-    disarmResumableUploadTimer(entry);
-    try {
-      const actualHash = await computeUploadHash(entry.payloadPath);
-      if (actualHash !== entry.sha256) {
-        throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
+  const signal = ingress?.signal;
+  return await runExclusive(
+    entry,
+    'finalize',
+    undefined,
+    async () => {
+      // Admission of the serialized queue: an already-fired owner stays authoritative,
+      // and a close/cancel that raced the wait keeps its own typed expiry error.
+      throwIfIngressAborted(signal);
+      // fs.statSync is inherently synchronous; the owner was checked immediately before.
+      const offset = fs.statSync(entry.payloadPath).size;
+      if (offset !== entry.sizeBytes) {
+        // An incomplete finalize is not terminal: the ticket stays resumable and keeps
+        // its original idle lifetime, so the timer is left armed exactly as it was (#4441).
+        throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
           uploadId,
-          expectedSha256: entry.sha256,
-          actualSha256: actualHash,
+          offset,
+          sizeBytes: entry.sizeBytes,
         });
       }
-      const artifactPath = await materializeFinalArtifact(entry);
-      markFinalized(entry);
-      return { artifactPath, tempDir: entry.tempDir };
-    } catch (error) {
-      throw await cleanupTerminalFinalizeFailure(entry, error);
-    }
-  });
+      // A complete finalize is active work that owns the entry: disarm the idle timer so
+      // expiry cannot fire during the post-write checks (hash, extraction, rename). Both
+      // terminal outcomes close the entry and clean up through closeEntry (#4441).
+      disarmResumableUploadTimer(entry);
+      try {
+        throwIfIngressAborted(signal);
+        const actualHash = await computeUploadHash(entry.payloadPath, signal);
+        if (actualHash !== entry.sha256) {
+          throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
+            uploadId,
+            expectedSha256: entry.sha256,
+            actualSha256: actualHash,
+          });
+        }
+        throwIfIngressAborted(signal);
+        const artifactPath = await materializeFinalArtifact(entry, signal);
+        throwIfIngressAborted(signal);
+        markFinalized(entry);
+        return { artifactPath, tempDir: entry.tempDir };
+      } catch (error) {
+        // Joined cleanup runs on every terminal failure; the typed first failure —
+        // including an abort-owned one mapped back to the owner's reason — is rethrown.
+        throw await cleanupTerminalFinalizeFailure(entry, resolveIngressFailure(signal, error));
+      }
+    },
+    signal,
+  );
 }
 
 function createResumableUploadEntry(
@@ -239,11 +269,17 @@ async function runExclusive<T>(
   kind: 'receive' | 'finalize',
   req: IncomingMessage | undefined,
   action: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const operation = entry.tail
     .catch(() => {})
     .then(async () => {
       if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
+      // A pending finalize admission whose ingress owner fired while queued rejects
+      // with the owner's typed reason. The close check above runs first, so a
+      // close/cancel race keeps the close side's typed expiry error, and the entry's
+      // ownership is untouched either way (#4441).
+      throwIfIngressAborted(signal);
       if (kind === 'receive') entry.activeReceive = req;
       try {
         return await action();
@@ -258,9 +294,15 @@ async function runExclusive<T>(
   return await operation;
 }
 
-async function materializeFinalArtifact(entry: ResumableUploadEntry): Promise<string> {
+async function materializeFinalArtifact(
+  entry: ResumableUploadEntry,
+  signal?: AbortSignal,
+): Promise<string> {
   if (entry.artifactType === 'file') {
     const artifactPath = path.join(entry.tempDir, entry.fileName);
+    // rename is a single non-cancellable filesystem operation; the owner is checked
+    // immediately before it and the entry's cleanup still owns any failure.
+    throwIfIngressAborted(signal);
     await fs.promises.rename(entry.payloadPath, artifactPath);
     return artifactPath;
   }
@@ -269,6 +311,7 @@ async function materializeFinalArtifact(entry: ResumableUploadEntry): Promise<st
     tempDir: entry.tempDir,
     platform: entry.platform === 'android' ? 'android' : 'ios',
     expectedRootName: entry.fileName,
+    signal,
   });
   await fs.promises.rm(entry.payloadPath, { force: true });
   return artifactPath;

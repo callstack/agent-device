@@ -18,6 +18,7 @@ export async function receiveResumableTransfer(params: {
   invalidate: (error: unknown) => Promise<void>;
   signal?: AbortSignal;
   onAcceptedBytes?: (bytes: number) => void;
+  onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number; appended: boolean }> {
   const oldSize = await currentOffset(params.entry);
   const range = parseUploadContentRange(
@@ -53,6 +54,9 @@ export async function receiveResumableTransfer(params: {
     if (contentLength !== undefined && limiter.bytesSeen !== contentLength) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-length');
     }
+    // The body is complete: inactivity no longer applies to this request, so valid
+    // post-body work observes only the owner's aggregate (#4441).
+    params.onBodyComplete?.();
   } catch (error) {
     // An aborted ingress signal owns the failure with its typed reason; an earlier
     // classified failure (limiter, ticket expiry) is preserved unchanged (#4441).
@@ -95,9 +99,23 @@ export function observeAcceptedWrites(
   } as typeof stream.write;
 }
 
-export async function computeUploadHash(filePath: string): Promise<string> {
+/**
+ * Hashes a received payload under the ingress owner's signal when given: the read
+ * stream is destroyed with the owner's typed reason on abort, and an abort-owned
+ * generic failure is mapped back to that reason. The file is bounded by the byte
+ * cap that admitted it.
+ */
+export async function computeUploadHash(filePath: string, signal?: AbortSignal): Promise<string> {
   const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk);
+  try {
+    const stream = fs.createReadStream(filePath, signal ? { signal } : undefined);
+    for await (const chunk of stream) {
+      signal?.throwIfAborted();
+      hash.update(chunk);
+    }
+  } catch (error) {
+    throw resolveIngressFailure(signal, error);
+  }
   return hash.digest('hex');
 }
 

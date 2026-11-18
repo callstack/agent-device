@@ -8,19 +8,28 @@ export async function extractTarInstallableArtifact(params: {
   tempDir: string;
   platform: 'ios' | 'android';
   expectedRootName?: string;
+  signal?: AbortSignal;
 }): Promise<string> {
+  params.signal?.throwIfAborted();
   const outputRoot = path.join(params.tempDir, 'extracted');
   let rootName = '';
+  // detectTarArchiveType's open/read/close are inherently synchronous filesystem
+  // operations; the owner is checked again before and after them.
   const type = await detectTarArchiveType(params.archivePath);
+  params.signal?.throwIfAborted();
   await extractArchiveSafely({
     archivePath: params.archivePath,
     outputRoot,
     type,
+    signal: params.signal,
     validateManifest: (manifest) => {
       rootName = resolveArchiveRootName(manifest, params.platform, params.expectedRootName);
     },
   });
+  params.signal?.throwIfAborted();
   const installablePath = path.join(outputRoot, rootName);
+  // existsSync/rmSync are inherently synchronous; the owner was checked immediately
+  // before this point and the extraction stream itself was abort-owned.
   if (!fs.existsSync(installablePath)) {
     fs.rmSync(outputRoot, { recursive: true, force: true });
     throw new AppError(

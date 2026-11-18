@@ -55,6 +55,82 @@ test('receiveUpload verifies x-artifact-hash and removes its temp dir on mismatc
   }
 });
 
+test('receiveUpload cancels post-body work when its ingress owner fires at body completion', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-owned-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    const body = Buffer.from('owned-bytes');
+    const controller = new AbortController();
+    const typed = new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+      reason: 'transfer_ingress_deadline_exceeded',
+      transferPhase: 'request-body',
+      timeoutMs: 600_000,
+    });
+    // The synthetic owner fires exactly when the body pipeline completes, before the
+    // hash phase: the post-body work is owned, not admitted unbounded behind the cap.
+    await assert.rejects(
+      receiveUpload(
+        makeUploadRequest(body, {
+          'x-artifact-type': 'file',
+          'x-artifact-filename': 'Sample.apk',
+          'x-artifact-hash': sha256(body),
+        }),
+        {
+          signal: controller.signal,
+          onBodyComplete: () => controller.abort(typed),
+        },
+      ),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'transfer_ingress_deadline_exceeded',
+    );
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('receiveUpload aborts an in-flight post-body hash under its ingress owner', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-hash-abort-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    // 64 MiB hashes across real I/O time, so the owner can fire mid-hash.
+    const body = Buffer.alloc(64 * 1024 * 1024, 0x62);
+    const controller = new AbortController();
+    const typed = new AppError('COMMAND_FAILED', 'Upload body stalled', {
+      reason: 'transfer_phase_timeout',
+      transferPhase: 'request-body',
+      timeoutMs: 120_000,
+    });
+    const upload = receiveUpload(
+      makeUploadRequest(body, {
+        'x-artifact-type': 'file',
+        'x-artifact-filename': 'Sample.apk',
+        'x-artifact-hash': sha256(body),
+      }),
+      {
+        signal: controller.signal,
+        onBodyComplete: () => {
+          setTimeout(() => controller.abort(typed), 5);
+        },
+      },
+    );
+    await assert.rejects(
+      upload,
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'transfer_phase_timeout',
+    );
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('receiveUpload refuses a hash algorithm other than sha256', async () => {
   const req = makeUploadRequest(Buffer.from('apk-bytes'), {
     'x-artifact-type': 'file',

@@ -335,6 +335,99 @@ test('an earlier classified pipeline failure survives a later abort of the same 
   assert.equal(error?.details?.reason, 'RESOURCE_EXPIRED');
 });
 
+test('an ingress owner aborted while finalize waits in the admission queue owns the rejection and the ticket recovers', async () => {
+  const flushIO = async () => {
+    for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
+  };
+  const bytes = Buffer.from('AB');
+  const uploadId = beginUpload(bytes).uploadId;
+  // Occupy the serialized admission queue with a receive that stays open.
+  const blocker = requestStream({ 'content-range': 'bytes 0-1/2' });
+  const receiving = receiveResumableUploadChunk({ uploadId, req: blocker });
+  blocker.write('A');
+  await flushIO();
+  const controller = new AbortController();
+  const finalizing = finalizeResumableUpload(uploadId, undefined, { signal: controller.signal });
+  await flushIO();
+  // The synthetic owner fires while the finalize is still pending admission.
+  controller.abort(
+    new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+      reason: 'transfer_ingress_deadline_exceeded',
+      transferPhase: 'request-body',
+      timeoutMs: 600_000,
+    }),
+  );
+  blocker.end('B');
+  assert.deepEqual(await receiving, { complete: true, offset: 2 });
+  const error = (await finalizing.then(
+    () => null,
+    (error: unknown) => error,
+  )) as AppError | null;
+  assert.equal(error instanceof AppError, true);
+  assert.equal(error?.details?.reason, 'transfer_ingress_deadline_exceeded');
+  // Ownership is preserved: the aborted admission did not close the ticket, so a
+  // fresh finalize without the owner still succeeds (recovery).
+  const finalized = await finalizeResumableUpload(uploadId);
+  try {
+    assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'AB');
+  } finally {
+    fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('an ingress owner aborted mid-hash cancels the finalize with its typed reason and cleans up', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-finalize-abort-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    // 64 MiB stays under the 2 GiB cap but hashes across real I/O time, so the
+    // synthetic owner can fire mid-hash.
+    const bytes = Buffer.alloc(64 * 1024 * 1024, 0x61);
+    const uploadId = beginUpload(bytes).uploadId;
+    await receiveResumableUploadChunk({ uploadId, req: request(bytes) });
+    const controller = new AbortController();
+    const finalizing = finalizeResumableUpload(uploadId, undefined, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    controller.abort(
+      new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+        reason: 'transfer_ingress_deadline_exceeded',
+        transferPhase: 'request-body',
+        timeoutMs: 600_000,
+      }),
+    );
+    const error = (await finalizing.then(
+      () => null,
+      (error: unknown) => error,
+    )) as AppError | null;
+    assert.equal(error instanceof AppError, true);
+    assert.equal(error?.details?.reason, 'transfer_ingress_deadline_exceeded');
+    // Semantic cleanup: the terminal failure closed the ticket and removed its temp
+    // dir, so a retry reports expiry and the temp root is empty.
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('finalize with a live ingress signal succeeds through the owned post-body phases', async () => {
+  const bytes = Buffer.from('OWNED');
+  const uploadId = beginUpload(bytes).uploadId;
+  await receiveResumableUploadChunk({ uploadId, req: request(bytes) });
+  const controller = new AbortController();
+  const finalized = await finalizeResumableUpload(uploadId, undefined, {
+    signal: controller.signal,
+  });
+  try {
+    assert.equal(controller.signal.aborted, false);
+    assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'OWNED');
+  } finally {
+    fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+  }
+});
+
 test('idempotent preflight does not extend upload expiry', async () => {
   vi.useFakeTimers();
   try {
