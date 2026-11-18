@@ -64,6 +64,8 @@ Each `open <appId>` exports with an explicit `launchApp.appId`, so a flow can sw
 
 Deep links, including schemes without `//` such as `tel:` and `mailto:`, export as `openLink`. A standalone `open tel:+15551234567` emits only the link command; `open com.example.app mailto:agent@example.test` emits the app launch followed by the link.
 
+On the native iOS runner, use `tapOn` on a visible dismissal control. If the app supports drag dismissal, use a `swipe` that stays above the keyboard.
+
 Export is strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, home, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. `home` exports as `pressKey: Home`, so flows that visit the home screen and reopen the app can be exported. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching. A strict `wait absent` is reported as unsupported rather than mapped to Maestro's more lenient `notVisible` condition.
 
 ## Troubleshooting
