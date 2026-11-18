@@ -12,10 +12,8 @@ ADR 0016 judges caller-named script destinations on POSIX against the writing pr
 Both script publishers stage and commit inside the judged directory.
 Remote script delivery caps bytes as they arrive.
 
-## Proposed in #4669; applies once approved
+## Proposed in #4669
 
-- For caller output, judge each directory as ADR 0016 does.
-- For a peer-named entry under a local root, validate the single-entry name before filesystem work.
-
-ADR 0016's staging and byte-cap rules are candidates for that migration.
+#4669 proposes judging caller output as ADR 0016 does, and validating a peer-named entry's single name before filesystem work, with ADR 0016 staging and byte caps as candidates.
+Do not apply these before #4669 is approved.
 Screenshot `--out`, contact sheets, the JUnit reporter, trace and recording outputs, client state, and daemon state do not follow these rules yet (#4669).
