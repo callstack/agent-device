@@ -147,9 +147,12 @@ function judgeOwnedDirectory(directory: string): string {
     throw untrustedSwiftCache(directory, undefined, {
       exposure,
       ancestor: directory,
+      // No command is built from the path: a pasted, unquoted path with a space would name another directory.
       hint:
-        `Remove that cache directory with \`rm -rf ${directory}\` so it is created again private, or ` +
-        SWIFT_CACHE_OVERRIDE_HINT,
+        'Point AGENT_DEVICE_SWIFT_CACHE_DIR at a new directory that only you can write. agent-device never ' +
+        `deletes the refused directory; remove it yourself once you no longer need it: ${directory}. ` +
+        'Only owner and mode bits are checked, not ACLs: keeping ACLs on the cache directory closed is your ' +
+        'responsibility.',
     });
   }
   return `${stats.dev}:${stats.ino}`;

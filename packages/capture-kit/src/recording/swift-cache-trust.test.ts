@@ -82,6 +82,16 @@ function reportForeignOwner(target: string): void {
   }) as typeof fs.lstatSync);
 }
 
+/** The hint names the refused directory as text and offers the override, never a command built from the path. */
+function refusalHintNaming(directory: string) {
+  return expect.toSatisfy(
+    (hint: string) =>
+      hint.includes('AGENT_DEVICE_SWIFT_CACHE_DIR') &&
+      hint.includes(directory) &&
+      !hint.includes('rm -rf'),
+  );
+}
+
 function modeOf(pathname: string): number {
   return fs.statSync(pathname).mode & 0o777;
 }
@@ -213,7 +223,7 @@ test.each(['bin', 'home', 'module-cache'])(
       untrusted({
         exposure: 'not_owner_only',
         ancestor: directory,
-        hint: expect.stringContaining(`rm -rf ${directory}`),
+        hint: refusalHintNaming(directory),
       }),
     );
     expect(mockRunCmd).not.toHaveBeenCalled();
@@ -373,7 +383,7 @@ test('an existing 0755 version directory is refused, so a umask 002 lock never l
       untrusted({
         exposure: 'not_owner_only',
         ancestor: versionDir,
-        hint: expect.stringContaining(`rm -rf ${versionDir}`),
+        hint: refusalHintNaming(versionDir),
       }),
     );
   } finally {
@@ -471,7 +481,7 @@ test('a group-writable module-cache holding a planted link is refused, and the l
     untrusted({
       exposure: 'not_owner_only',
       ancestor: moduleCache,
-      hint: expect.stringContaining(`rm -rf ${moduleCache}`),
+      hint: refusalHintNaming(moduleCache),
     }),
   );
   expect(mockRunCmd).not.toHaveBeenCalled();
@@ -489,7 +499,7 @@ test('a group-writable bin holding a leftover lock is refused, and the lock is l
     untrusted({
       exposure: 'not_owner_only',
       ancestor: binDir,
-      hint: expect.stringContaining(`rm -rf ${binDir}`),
+      hint: refusalHintNaming(binDir),
     }),
   );
   expect(mockRunCmd).not.toHaveBeenCalled();
@@ -523,3 +533,32 @@ test.skipIf(process.getuid?.() === 0)(
     }
   },
 );
+
+test('a refused directory whose path holds a space and a quote is named exactly, with no command built from it', async () => {
+  const awkwardRoot = path.join(tmpDir, "Docs Cache 'q'", 'swift-cache');
+  const awkwardBin = path.join(awkwardRoot, 'v3', 'bin');
+  await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: awkwardRoot });
+  fs.chmodSync(awkwardBin, 0o770);
+  vi.clearAllMocks();
+
+  await expect(compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: awkwardRoot })).rejects.toMatchObject(
+    untrusted({
+      exposure: 'not_owner_only',
+      ancestor: awkwardBin,
+      hint: refusalHintNaming(awkwardBin),
+    }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a regular file planted at home is refused, never used as the compiler home', async () => {
+  await plantCachedExecutable(() => {});
+  const home = path.join(versionDir, 'home');
+  fs.rmSync(home, { recursive: true });
+  fs.writeFileSync(home, 'planted', { mode: 0o600 });
+
+  await expect(compile()).rejects.toMatchObject(
+    untrusted({ exposure: 'not_a_directory', ancestor: home }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});

@@ -254,6 +254,8 @@ export function sweepUnsharedRunDirectories(
  * A missing level below `checkout` is created 0700 before it is judged.
  */
 function untrustedLevelBetween(checkout: string, root: string): string | undefined {
+  const untrustedAncestor = untrustedAncestorOf(checkout);
+  if (untrustedAncestor) return untrustedAncestor;
   const levels = path.relative(checkout, root).split(path.sep).filter(Boolean);
   if (levels.includes('..') || path.isAbsolute(levels[0] ?? '')) {
     return `${root} is not inside ${checkout}`;
@@ -267,6 +269,22 @@ function untrustedLevelBetween(checkout: string, root: string): string | undefin
     }
   }
   return undefined;
+}
+
+/**
+ * Why an ancestor of the checkout lets another user swap the checkout's path, or `undefined` when none does:
+ * every ancestor up to `/` must be a real directory this uid or root owns that the group and others cannot
+ * write, sticky or not, which is the rule the Swift helper cache applies to its own ancestry.
+ */
+function untrustedAncestorOf(checkout: string): string | undefined {
+  for (let ancestor = path.dirname(checkout); ; ancestor = path.dirname(ancestor)) {
+    const stats = fs.lstatSync(ancestor);
+    const owner = stats.uid === 0 || stats.uid === process.getuid?.();
+    if (!stats.isDirectory() || !owner || stats.mode & 0o022) {
+      return `${ancestor} is not a real directory owned by this user or root that only its owner can write`;
+    }
+    if (ancestor === path.dirname(ancestor)) return undefined;
+  }
 }
 
 function createMissingLevel(level: string): void {

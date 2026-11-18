@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { mock, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   findLeakedRunDirectories,
   pruneAbandonedRunDirectories,
@@ -11,6 +12,20 @@ import {
 } from './check-tmpdir-leaks-model.ts';
 
 const NONE: ReadonlySet<string> = new Set();
+
+// The checkout-local sweep refuses a checkout under a shared directory such as /tmp, so its cases stand in the
+// repository's ignored .tmp/, whose ancestry is this user's.
+const REPOSITORY_TMP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.tmp');
+
+function withTrustedScratchRoot(fn: (root: string) => void): void {
+  fs.mkdirSync(REPOSITORY_TMP, { recursive: true });
+  const root = fs.mkdtempSync(path.join(REPOSITORY_TMP, 'check-tmpdir-leaks-model-test-'));
+  try {
+    fn(root);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
 
 function withScratchRoot(fn: (root: string) => void): void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-tmpdir-leaks-model-test-'));
@@ -162,7 +177,7 @@ test('a consumer is identified by the run directory its TMPDIR sits inside, at a
 });
 
 test('the checkout-local sweep prunes a dead run and keeps a name with no pid', () => {
-  withScratchRoot((scratch) => {
+  withTrustedScratchRoot((scratch) => {
     const root = path.join(scratch, 'unshared');
     fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), { recursive: true });
     fs.mkdirSync(path.join(root, 'agent-device-test-run-not-a-pid'));
@@ -178,7 +193,7 @@ test('the checkout-local sweep prunes a dead run and keeps a name with no pid', 
 });
 
 test('the checkout-local sweep skips a root that is a link, and touches nothing it names', () => {
-  withScratchRoot((scratch) => {
+  withTrustedScratchRoot((scratch) => {
     const target = path.join(scratch, 'target');
     fs.mkdirSync(path.join(target, 'agent-device-test-run-3333-cccccc'), { recursive: true });
     fs.chmodSync(target, 0o755);
@@ -197,7 +212,7 @@ test('the checkout-local sweep skips a root that is a link, and touches nothing 
 });
 
 test('the checkout-local sweep skips a root another user owns', () => {
-  withScratchRoot((scratch) => {
+  withTrustedScratchRoot((scratch) => {
     const root = path.join(scratch, 'unshared');
     fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), {
       recursive: true,
@@ -227,7 +242,7 @@ test('the checkout-local sweep skips a root another user owns', () => {
 });
 
 test('the checkout-local sweep skips a root below a group-writable level', () => {
-  withScratchRoot((scratch) => {
+  withTrustedScratchRoot((scratch) => {
     const shared = path.join(scratch, '.tmp');
     const root = path.join(shared, 'unshared');
     fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), {
@@ -237,6 +252,47 @@ test('the checkout-local sweep skips a root below a group-writable level', () =>
     fs.chmodSync(shared, 0o770);
 
     const sweep = sweepUnsharedRunDirectories(scratch, root, {
+      isAlive: () => false,
+      consumers: NONE,
+    });
+
+    assert.equal(sweep.swept, false);
+    assert.deepEqual(fs.readdirSync(root), ['agent-device-test-run-3333-cccccc']);
+  });
+});
+
+test('the checkout-local sweep skips a checkout below a group-writable ancestor', () => {
+  withTrustedScratchRoot((scratch) => {
+    const shared = path.join(scratch, 'shared');
+    const checkout = path.join(shared, 'checkout');
+    const root = path.join(checkout, '.tmp', 'unshared');
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), {
+      recursive: true,
+      mode: 0o700,
+    });
+    fs.chmodSync(shared, 0o770);
+
+    const sweep = sweepUnsharedRunDirectories(checkout, root, {
+      isAlive: () => false,
+      consumers: NONE,
+    });
+
+    assert.equal(sweep.swept, false);
+    assert.deepEqual(fs.readdirSync(root), ['agent-device-test-run-3333-cccccc']);
+  });
+});
+
+test('the checkout-local sweep skips a root outside the checkout', () => {
+  withTrustedScratchRoot((scratch) => {
+    const checkout = path.join(scratch, 'checkout');
+    const root = path.join(scratch, 'elsewhere', 'unshared');
+    fs.mkdirSync(checkout, { mode: 0o700 });
+    fs.mkdirSync(path.join(root, 'agent-device-test-run-3333-cccccc'), {
+      recursive: true,
+      mode: 0o700,
+    });
+
+    const sweep = sweepUnsharedRunDirectories(checkout, root, {
       isAlive: () => false,
       consumers: NONE,
     });
