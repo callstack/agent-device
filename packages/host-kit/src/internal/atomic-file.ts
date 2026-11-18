@@ -9,10 +9,17 @@ import { emitDiagnostic } from './diagnostics.ts';
  * account database, so the answer does not depend on which name services run (ADR 0016). Every judgment below
  * decides over the fields of one `lstat`, so each is testable on its values.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number }>;
+export type ScriptDestinationTrust = Readonly<{ uid: number; privateAncestry?: boolean }>;
 
-function scriptTrust(): ScriptDestinationTrust {
-  return { uid: process.getuid?.() ?? -1 };
+/**
+ * How strictly a caller's destination is judged. `privateAncestry` is for executable state, such as the Swift
+ * helper cache: no directory the walk traverses may be group- or world-writable, sticky or not, because a
+ * sticky shared directory lets another user claim a name a cleaner removed (ADR 0016).
+ */
+export type ScriptDestinationOptions = Readonly<{ privateAncestry?: boolean }>;
+
+function scriptTrust(options: ScriptDestinationOptions): ScriptDestinationTrust {
+  return { uid: process.getuid?.() ?? -1, privateAncestry: options.privateAncestry === true };
 }
 
 /**
@@ -49,7 +56,7 @@ export function untrustedAncestryExposure(
   trust: ScriptDestinationTrust,
 ): ScriptAncestryExposure | undefined {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
-  if (directory.mode & 0o1000) return undefined;
+  if (directory.mode & 0o1000 && !trust.privateAncestry) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
   if (directory.mode & 0o020) return 'shared_group_writable';
   return undefined;
@@ -191,22 +198,29 @@ const SCRIPT_DIR_MODE = 0o700;
  * Readies a script destination and reports the PHYSICAL directory to create the entry in, in ADR 0016's order:
  * walk, refuse before anything is created, create what is missing, walk the completed chain again, answer.
  */
-export function prepareScriptDestination(destination: string): ScriptDestination {
-  return scriptDestination(destination, true);
+export function prepareScriptDestination(
+  destination: string,
+  options: ScriptDestinationOptions = {},
+): ScriptDestination {
+  return scriptDestination(destination, true, options);
 }
 
 /**
  * ADR 0016's judgment of one destination. `create` says whether the caller needs the missing tail created:
  * a walk that stops short is an answer for that caller and a refusal for the other.
  */
-function scriptDestination(destination: string, create: boolean): ScriptDestination {
+function scriptDestination(
+  destination: string,
+  create: boolean,
+  options: ScriptDestinationOptions = {},
+): ScriptDestination {
   const spelled = spelledParent(destination);
   if (process.platform === 'win32') {
     // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
     if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
     return { directory: spelled, identity: 'windows' };
   }
-  const trust = scriptTrust();
+  const trust = scriptTrust(options);
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
   // `mkdir -p <sticky shared>/recordings`, where those levels are 0700 of this call's own (ADR 0016).

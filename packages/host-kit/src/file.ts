@@ -8,6 +8,7 @@ export {
   scriptAncestryReason,
   type DurableFilePublishMode,
   type ScriptDestination,
+  type ScriptDestinationOptions,
 } from './internal/atomic-file.ts';
 export {
   lstatIfPresent,

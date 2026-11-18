@@ -33,8 +33,6 @@ const COMPILER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
 const COMPILER_ARGS = ['--sdk', 'macosx', 'swiftc'] as const;
 // The admin group on macOS, which may write /Applications itself on a stock install.
 const MACOS_ADMIN_GID = 80;
-// Kept below the smallest limit the supported kernels apply (macOS 32, Linux 40), as host-kit's walk does.
-const MAX_LINK_HOPS = 30;
 
 /**
  * The layout version. Each version lives in its own directory under the cache root, so nothing an earlier
@@ -113,61 +111,16 @@ function prepareSwiftCacheDirectory(
  */
 function prepareSwiftCacheVersionDirectory(cacheRoot: string): string {
   const versionName = `v${SWIFT_CACHE_VERSION}`;
-  // Judged before anything is created, so no level is made under ground the cache would then refuse.
-  refuseUntrustedCacheAncestry(cacheRoot, untrustedLevelFrom(deepestExistingLevel(cacheRoot)));
-  // The walk judges and creates the PARENT of the name it is given; the version directory is never resolved by it.
-  const { directory: root } = prepareScriptDestination(path.join(cacheRoot, versionName));
-  // Judged again over the completed chain the walk answers.
-  refuseUntrustedCacheAncestry(cacheRoot, untrustedLevelFrom(root));
+  // One walk judges and creates the PARENT of the name it is given, links followed. With private ancestry it
+  // refuses any traversed directory others can write, sticky or not, before its first mkdir; the version
+  // directory itself is never resolved by it.
+  const { directory: root } = prepareScriptDestination(path.join(cacheRoot, versionName), {
+    privateAncestry: true,
+  });
   const versionDirectory = path.join(root, versionName);
   createPrivateDirectory(versionDirectory);
   judgeOwnedDirectory(versionDirectory);
   return versionDirectory;
-}
-
-/**
- * The deepest existing directory the kernel reaches resolving `spelled`, following every link on the way down,
- * so a link to a missing directory answers with where that directory would be created, not with the link's own
- * parent. A link hop past the kernel's own limit answers with the link, which the strict rule then refuses.
- */
-function deepestExistingLevel(spelled: string): string {
-  const queue = spelled.split('/').filter((name) => name !== '' && name !== '.');
-  let current = '/';
-  for (let hops = 0; queue.length > 0;) {
-    const name = queue.shift()!;
-    const next = name === '..' ? path.dirname(current) : path.join(current, name);
-    const stats = fs.lstatSync(next, { throwIfNoEntry: false });
-    if (stats === undefined) return current;
-    if (!stats.isSymbolicLink()) {
-      current = next;
-      if (!stats.isDirectory()) return current;
-      continue;
-    }
-    hops += 1;
-    if (hops > MAX_LINK_HOPS) return next;
-    const target = fs.readlinkSync(next);
-    if (path.isAbsolute(target)) current = '/';
-    queue.unshift(...target.split('/').filter((part) => part !== '' && part !== '.'));
-  }
-  return current;
-}
-
-function refuseUntrustedCacheAncestry(cacheRoot: string, ancestor: string | undefined): void {
-  if (ancestor !== undefined) {
-    const stats = fs.lstatSync(ancestor);
-    const exposure = !stats.isDirectory()
-      ? 'not_a_directory'
-      : stats.mode & 0o002
-        ? 'world_writable'
-        : stats.mode & 0o020
-          ? 'shared_group_writable'
-          : 'foreign_owned';
-    throw untrustedSwiftCache(cacheRoot, undefined, {
-      exposure,
-      ancestor,
-      hint: swiftCacheHint(exposure, ancestor),
-    });
-  }
 }
 
 /** Creates a directory at 0700 when it is missing; what already stands there is judged by the caller. */
