@@ -24,7 +24,7 @@ Install `agent-device` on the machine where your coding agent runs terminal comm
 ## Global install
 
 ```bash
-npm install -g agent-device@latest
+npm install -g agent-device@nightly-0.22
 agent-device doctor
 agent-device --version
 agent-device help
@@ -46,37 +46,22 @@ For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rule
 Interactive CLI runs periodically check npm for a newer `agent-device` release in the background. When one is available, the CLI suggests reinstalling globally:
 
 ```bash
-npm install -g agent-device@latest
+npm install -g agent-device@nightly-0.22
 agent-device doctor
 agent-device --version
 ```
 
 Set `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` to disable the notice.
 
-## Nightly builds
-
-Nightly builds publish `main` after its CI passes, at most once per UTC day:
-
-```bash
-npm install -g agent-device@nightly
-```
-
-The `0.22` preview channel requires a separate activation and first successful publish. Once
-available, install it with `npm install -g agent-device@nightly-0.22`. If npm reports that the tag
-is missing, that channel has not published yet; use `@nightly` for `main` or `@latest` for stable.
-
-A nightly install's update notice follows the channel you installed, including `nightly-0.22`. To
-return to stable releases, install `agent-device@latest`.
-
 ## Without installing
 
 ```bash
-npx agent-device --version
-npx agent-device help workflow
-npx agent-device open Settings --platform ios
+npx agent-device@nightly-0.22 --version
+npx agent-device@nightly-0.22 help workflow
+npx agent-device@nightly-0.22 open Settings --platform ios
 ```
 
-One-off `npx` use is fine for you and for scripts that intentionally fetch from npm. For agents, use a global install, a project-local install, or a version pinned by you or your project config, so repeated commands resolve to a known CLI. Don't let agents choose a version or run `npx -y agent-device@latest` unless you've decided to trust whatever npm serves.
+One-off `npx` use is fine for you and for scripts that intentionally fetch from npm. For agents, use a global install, a project-local install, or a version pinned by you or your project config, so repeated commands resolve to a known CLI.
 
 ## Vega OS TV prerequisites
 

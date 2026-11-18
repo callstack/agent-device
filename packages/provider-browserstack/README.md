@@ -3,16 +3,18 @@
 Use BrowserStack App Automate Android and iOS devices with [agent-device](https://agent-device.dev).
 You need a BrowserStack account with App Automate access.
 
+Install the plugin on the daemon host, then connect with your BrowserStack credentials.
+
 ```sh
-npm install -g agent-device
-agent-device plugins add @agent-device/browserstack
+agent-device plugins add @agent-device/browserstack@nightly-0.22
 export BROWSERSTACK_USERNAME=your-username
 export BROWSERSTACK_ACCESS_KEY=your-access-key
 agent-device connect browserstack --session checkout-android --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
 ```
 
+Run `agent-device help remote` to see the install command for your CLI.
+
 See the [BrowserStack guide](https://agent-device.dev/docs/browserstack) for setup and supported operations.
-To update the plugin, run `agent-device plugins update @agent-device/browserstack`.
 
 After you add or update the plugin, close your sessions and run `agent-device daemon stop --state-dir <path>` for your daemon before reconnecting.
 
