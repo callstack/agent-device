@@ -27,7 +27,11 @@ import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from './cli-help-foldable.ts';
 import { reactNativeHelpTopic } from './cli-help-react-native.ts';
 import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
-import { providerPluginHelp } from '../provider-plugin-catalog.ts';
+import {
+  AWS_DEVICE_FARM_PLUGIN_INSTALL,
+  BROWSERSTACK_PLUGIN_INSTALL,
+  providerPluginHelp,
+} from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [
   'Default config files: ~/.agent-device/config.json (or <AGENT_DEVICE_HOME>/config.json), ./agent-device.json (project-safe defaults only).',
@@ -472,7 +476,7 @@ Providers:
   Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
   Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
   BrowserStack (plugin, install separately): agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
-  AWS Device Farm: the @agent-device/aws-device-farm plugin is private and unpublished; after publication install it with agent-device plugins add, then agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
+  AWS Device Farm (plugin, install separately): install the @agent-device/aws-device-farm plugin, then agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
   TestMu AI (plugin, install separately): agent-device connect testmu verifies credentials and the exact virtual device (emulator or simulator) or, with --provider-device-type real, real device and OS version, then stores a local provider profile. --provider-app takes an lt:// app reference, an https URL, or a local path: connect looks an lt:// id up among your uploads for that device pool, while URL and local sources are uploaded and validated when open creates the session. It does not create a hub session.
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
   Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
@@ -546,7 +550,7 @@ TestMu AI real-device flow:
 
 ${TV_PLUGIN_FLOWS}
 BrowserStack hosted-device flow:
-  agent-device plugins add @agent-device/browserstack
+  ${BROWSERSTACK_PLUGIN_INSTALL}
   export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
   agent-device open com.example.app
@@ -556,6 +560,7 @@ BrowserStack hosted-device flow:
   agent-device disconnect
 
 AWS Device Farm hosted-device flow:
+  ${AWS_DEVICE_FARM_PLUGIN_INSTALL}
   export AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect aws-device-farm --platform android --aws-project-arn <arn> --aws-device-arn <arn> --aws-app-arn <arn>
   agent-device open com.example.app

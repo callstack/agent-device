@@ -417,7 +417,7 @@ test('usageForCommand resolves remote help topic', async () => {
   );
   assert.match(
     help,
-    /AWS Device Farm: the @agent-device\/aws-device-farm plugin is private and unpublished/,
+    /AWS Device Farm \(plugin, install separately\): install the @agent-device\/aws-device-farm plugin/,
   );
   assert.match(help, /Limrun: agent-device connect limrun/);
   assert.match(help, /It does not create an App Automate session/);
