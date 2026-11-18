@@ -499,7 +499,12 @@ test('pressAndroid dispatches no failure suppression even when one is smuggled p
 });
 
 // The orientation settle polls at its own interval; the clock is the assertion, not the wait.
-vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
+// A fake clock makes the wait consume that clock, as a real wait does.
+vi.mock('@agent-device/host-kit/retry', () => ({
+  sleep: async (ms: number) => {
+    if (vi.isFakeTimers()) vi.setSystemTime(Date.now() + ms);
+  },
+}));
 
 const ORIENTATION_CALLS = [
   ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
@@ -554,6 +559,48 @@ test('setAndroidOrientation fails when the display never reports the requested r
         }
       },
     );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('positive-cost display reads end the settle on the last rotation, never on a starved read', async () => {
+  // #4562: main slept to the deadline and admitted one final read on the milliseconds left, so a
+  // real 100 ms `dumpsys display` overran it and its adb timeout replaced the "did not take
+  // effect" fact a pinned foreground app must see. The loop now keeps one read's reserve (300 ms)
+  // unspent by the wait: every admitted read can answer, and the last one gets exactly the reserve.
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  const probeBudgets: number[] = [];
+  let reads = 0;
+  try {
+    await withFakeAdb(
+      (args, options) => {
+        if (args[1] !== 'dumpsys') return undefined;
+        const budgetMs = options?.timeoutMs ?? 0;
+        probeBudgets.push(budgetMs);
+        const costMs = reads === 0 ? 50 : 100;
+        reads += 1;
+        vi.setSystemTime(Date.now() + Math.min(costMs, budgetMs));
+        if (budgetMs < costMs)
+          return new Error(`adb shell dumpsys display timed out after ${budgetMs}ms`);
+        return '  mCurrentOrientation=0\n';
+      },
+      async ({ device }) => {
+        await assert.rejects(setAndroidOrientation(device, 'landscape-left'), (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.doesNotMatch(error.message, /could not confirm the display rotation/);
+          assert.match(
+            error.message,
+            /did not take effect: the display still reports rotation 0 after 15000ms/,
+          );
+          assert.equal(error.details?.observedRotation, 0);
+          return true;
+        });
+      },
+    );
+    assert.equal(reads, 26);
+    assert.equal(Math.min(...probeBudgets), 300);
+    assert.equal(probeBudgets.at(-1), 300);
   } finally {
     vi.useRealTimers();
   }

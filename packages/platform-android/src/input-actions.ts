@@ -148,6 +148,9 @@ export async function unlockAndroidOrientation(device: DeviceInfo): Promise<void
 
 const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
 const ORIENTATION_SETTLE_POLL_MS = 500;
+// A `dumpsys display` read takes 20–280 ms on a loaded device; a read admitted with less left
+// than this can never answer, and its adb timeout would mask the "did not take effect" fact (#4562).
+const MIN_ORIENTATION_READ_BUDGET_MS = 300;
 
 /**
  * The display rotates some time after the setting lands; on a loaded emulator that takes
@@ -164,8 +167,11 @@ async function settleAndroidOrientation(
 ): Promise<void> {
   const deadline = Date.now() + ORIENTATION_SETTLE_TIMEOUT_MS;
   let observed = await readAndroidDisplayRotation(device, orientation, deadline);
-  while (observed !== undefined && observed !== userRotation && Date.now() < deadline) {
-    await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, remainingMs(deadline)));
+  while (observed !== undefined && observed !== userRotation) {
+    // The wait spends only what is above one read's reserve, so every admitted read can answer.
+    const leftMs = deadline - Date.now();
+    if (leftMs < MIN_ORIENTATION_READ_BUDGET_MS) break;
+    await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, leftMs - MIN_ORIENTATION_READ_BUDGET_MS));
     observed = await readAndroidDisplayRotation(device, orientation, deadline);
   }
   if (observed === undefined || observed === userRotation) return;
