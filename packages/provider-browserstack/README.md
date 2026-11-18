@@ -3,6 +3,8 @@
 Use BrowserStack App Automate Android and iOS devices with [agent-device](https://agent-device.dev).
 You need a BrowserStack account with App Automate access.
 
+For a stable 0.22 release:
+
 ```sh
 npm install -g agent-device
 agent-device plugins add @agent-device/browserstack
@@ -10,6 +12,10 @@ export BROWSERSTACK_USERNAME=your-username
 export BROWSERSTACK_ACCESS_KEY=your-access-key
 agent-device connect browserstack --session checkout-android --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
 ```
+
+On a 0.22 nightly, install core with `npm install -g agent-device@nightly-0.22` and the plugin with
+`agent-device plugins add @agent-device/browserstack@nightly-0.22`. For a pinned nightly, copy the
+exact install command from the CLI's missing-plugin error.
 
 See the [BrowserStack guide](https://agent-device.dev/docs/browserstack) for setup and supported operations.
 To update the plugin, run `agent-device plugins update @agent-device/browserstack`.
