@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
-import { psReadOptions, psStartTimesLocaleMismatch } from './ps-start-time.ts';
+import { psLstartReadOptions, psReadOptions } from './ps-start-time.ts';
 import { sleep } from './retry.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -172,8 +172,16 @@ async function readProcessIdentityRows(
     );
   }
   const [identityRows, commandRows] = await Promise.all([
-    runHostPsAsync(HOST_PROCESS_IDENTITY_PS_ARGS(pids), timeoutMs, parseHostProcessIdentityRows),
-    runHostPsAsync(HOST_PROCESS_COMMAND_PS_ARGS(pids), timeoutMs, parseHostProcessCommandRows),
+    runHostPsAsync(
+      HOST_PROCESS_IDENTITY_PS_ARGS(pids),
+      psLstartReadOptions(timeoutMs),
+      parseHostProcessIdentityRows,
+    ),
+    runHostPsAsync(
+      HOST_PROCESS_COMMAND_PS_ARGS(pids),
+      psReadOptions(timeoutMs),
+      parseHostProcessCommandRows,
+    ),
   ]);
   const identities = new Map(identityRows.map((row) => [row.pid, row]));
   const commands = new Map(commandRows.map((row) => [row.pid, row.command]));
@@ -193,11 +201,11 @@ async function readProcessIdentityRows(
 
 async function runHostPsAsync<Row>(
   args: string[],
-  timeoutMs: number,
+  options: ExecOptions,
   parse: (stdout: string) => Row[],
 ): Promise<Row[]> {
   try {
-    const result = await runCmd(hostPsCommand(), args, psReadOptions(timeoutMs));
+    const result = await runCmd(hostPsCommand(), args, options);
     return result.exitCode !== 0 ? [] : parse(result.stdout);
   } catch {
     // A failed ps read is unknown evidence; callers remain fail-closed.
@@ -241,14 +249,41 @@ function readLinuxProcessStat(pid: number): { state: string; startTime: string }
   }
 }
 
-/** Positive proof of different lifetimes; unreadable or mixed-format records prove nothing. */
+/**
+ * The `ps -o lstart=` rendering printed under the pinned C locale, e.g. `Tue Nov 17 19:42:27 2026`.
+ */
+const PS_START_TIME_C_FORM = /^[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/;
+/** The invariant-culture CIM birth stamp a Windows host reads: `yyyyMMddHHmmssfffffff`. */
+const WINDOWS_START_TIME = /^\d{21}$/;
+
+/**
+ * The format of a recorded start time. Only the formats host-kit itself reads are verified: the
+ * `linux:` token of one /proc read, the pinned C-form `lstart`, and the Windows invariant stamp.
+ * Anything else is a legacy record — written by an older build whose `ps` ran under another
+ * locale, such as `mar. 17 nov. 19:42:27 2026` or a rendering with no colon-separated clock — and
+ * its text cannot be compared against another format.
+ */
+function psStartTimeFormat(value: string): 'linux' | 'c-lstart' | 'windows' | 'legacy' {
+  if (value.startsWith('linux:')) return 'linux';
+  if (PS_START_TIME_C_FORM.test(value)) return 'c-lstart';
+  if (WINDOWS_START_TIME.test(value)) return 'windows';
+  return 'legacy';
+}
+
+/**
+ * Positive proof of different lifetimes. Unreadable values prove nothing, and a difference proves
+ * exit only when both sides share one verified format: a legacy localized rendering beside a
+ * C-form read, or beside another legacy rendering, is unverified evidence, never proof that the
+ * recorded process is gone.
+ */
 export function processStartTimesDiffer(
   left: string | null | undefined,
   right: string | null | undefined,
 ): boolean {
   if (!left || !right) return false;
-  if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
-  if (psStartTimesLocaleMismatch(left, right)) return false;
+  const leftFormat = psStartTimeFormat(left);
+  if (leftFormat !== psStartTimeFormat(right)) return false;
+  if (leftFormat === 'legacy') return false;
   return left !== right;
 }
 
@@ -337,7 +372,7 @@ function readHostProcessIdentityRowsSync(
     const result = runCmdSync(
       hostPsCommand(),
       HOST_PROCESS_IDENTITY_PS_ARGS(pids),
-      psReadOptions(PS_TIMEOUT_MS),
+      psLstartReadOptions(PS_TIMEOUT_MS),
     );
     return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
   } catch {
@@ -356,7 +391,7 @@ async function readHostProcessIdentityRowsAsync(
   }
   return await runHostPsAsync(
     HOST_PROCESS_IDENTITY_PS_ARGS(pids),
-    PS_TIMEOUT_MS,
+    psLstartReadOptions(PS_TIMEOUT_MS),
     parseHostProcessIdentityRows,
   );
 }
@@ -398,7 +433,9 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
     const result = runCmdSync(
       hostPsCommand(),
       ['-p', String(pid), '-o', field],
-      psReadOptions(PS_TIMEOUT_MS),
+      // Only the lstart-bearing read is locale-pinned; command and state keep the caller's
+      // locale so their text matches the unpinned listHostProcesses read byte for byte.
+      field === 'lstart=' ? psLstartReadOptions(PS_TIMEOUT_MS) : psReadOptions(PS_TIMEOUT_MS),
     );
     return processFieldValue(result);
   } catch {

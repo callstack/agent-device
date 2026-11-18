@@ -246,7 +246,7 @@ test('a renewal through a migrated record’s own token writes back the shape th
       workspace: '/worktrees/legacy',
       stateDir: root,
       ownerPid: process.pid,
-      ownerStartTime: 'test-process-start-time',
+      ownerStartTime: 'Tue Nov 17 19:42:27 2026',
       ownerToken: 'legacy-token',
       createdAtMs: 1,
       updatedAtMs: 1,
@@ -258,7 +258,7 @@ test('a renewal through a migrated record’s own token writes back the shape th
       deviceKey: canonicalLocalDeviceKey(device),
       ownerToken: 'legacy-token',
       ownerPid: process.pid,
-      ownerStartTime: 'test-process-start-time',
+      ownerStartTime: 'Tue Nov 17 19:42:27 2026',
     },
     process.env,
   );
@@ -380,7 +380,10 @@ test('PID reuse is uncertain ownership and never authorizes reconciliation', asy
     stateDir: root,
   });
   const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
-  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, ownerStartTime: 'other-start' }));
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({ ...stored, ownerStartTime: 'Tue Nov 17 19:42:28 2026' }),
+  );
   const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
 
   const result = await acquireDeviceClaim({

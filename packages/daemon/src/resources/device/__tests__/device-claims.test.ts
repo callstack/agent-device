@@ -681,8 +681,12 @@ test('release names the exact refusal for uncertain owners and misnamed claim fi
   });
   assert.equal(acquired.status, 'acquired');
   const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
-  // Same PID, different recorded start time: PID reuse, uncertain ownership.
-  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, ownerStartTime: 'other-start' }));
+  // Same PID, different recorded start time in the same verified C-locale format: PID reuse,
+  // uncertain ownership. A legacy-format token would be unverified, not reuse.
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({ ...stored, ownerStartTime: 'Tue Nov 17 19:42:28 2026' }),
+  );
   // A dead-owner claim stored under a name that is not the hash of its own
   // device key: the claim lock protects a different path, so release refuses.
   fs.writeFileSync(

@@ -57,12 +57,25 @@ test('a different published pid proves the owner no longer serves its state dir'
 
 test('a published start time proves supersession only when both sides are readable', () => {
   const stateDir = useStateDir();
-  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
-  assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'owner-start' }), true);
+  // Two C-form renderings one second apart are the same verified format with different values,
+  // so the difference proves the pid changed hands.
+  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'Tue Nov 17 19:42:28 2026' });
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
+    true,
+  );
+  // A legacy localized rendering beside a C-form read is unverified, not a proved supersession.
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'mar. 17 nov. 19:42:28 2026' }),
+    false,
+  );
   // An unreadable start time on either side leaves the identity unproven.
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: null }), false);
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: null });
-  assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'owner-start' }), false);
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
+    false,
+  );
 });
 
 test('the published owner itself is never superseded, and absence is not proof', () => {

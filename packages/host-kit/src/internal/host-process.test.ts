@@ -170,9 +170,9 @@ test.each([
     'unverified',
   ],
   [
-    'a contradicted start time',
-    { startTime: 'S1', matches: true },
-    ['S2', 'recorded'],
+    'a contradicted start time in the same verified C-locale format',
+    { startTime: 'Tue Nov 17 19:42:27 2026', matches: true },
+    ['Tue Nov 17 19:42:28 2026', 'recorded'],
     'reassigned',
   ],
   [
@@ -193,5 +193,43 @@ test('judgeProcessIdentity reads a zombie as exited whatever else the host says'
   assert.equal(
     judgeProcessIdentity({ startTime: 'S1' }, { startTime: 'S2', command: null, zombie: true }),
     'exited',
+  );
+});
+
+test('judgeProcessIdentity treats a legacy-locale record against a C-locale read as unverified', () => {
+  // Records written before the C-locale pin hold a localized `ps -o lstart` rendering: fr_FR
+  // prints `mar. 17 nov. 19:42:27 2026`, and locales that omit HH:mm:ss print no clock at all.
+  // Neither proves a different lifetime, so the verdict is unverified — never reassigned, and
+  // never permission to signal.
+  const facts = { startTime: 'Tue Nov 17 19:42:27 2026', command: null, zombie: false };
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'mar. 17 nov. 19:42:27 2026' }, facts),
+    'unverified',
+  );
+  assert.equal(judgeProcessIdentity({ startTime: '17 nov. 2026' }, facts), 'unverified');
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'tir. 17. nov. 19:42:27 2026' }, facts),
+    'unverified',
+  );
+});
+
+test('judgeProcessIdentity still proves reuse between two C-locale reads', () => {
+  assert.equal(
+    judgeProcessIdentity(
+      { startTime: 'Tue Nov 17 19:42:27 2026' },
+      { startTime: 'Tue Nov 17 19:42:28 2026', command: null, zombie: false },
+    ),
+    'reassigned',
+  );
+});
+
+test('judgeProcessIdentity matches a non-ASCII command read byte for byte', () => {
+  const command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
+  assert.equal(
+    judgeProcessIdentity(
+      { startTime: 'Tue Nov 17 19:42:27 2026', matches: (observed) => observed === command },
+      { startTime: 'Tue Nov 17 19:42:27 2026', command, zombie: false },
+    ),
+    'ours',
   );
 });

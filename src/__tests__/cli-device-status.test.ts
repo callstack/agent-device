@@ -18,6 +18,14 @@ import {
 
 pinOwnProcessStartTime(hostProcess);
 
+/** A start time in the same verified format as `live` but naming a different lifetime. */
+function staleStartTimeLike(live: string | null): string {
+  if (live === null) return 'Thu Jan  1 00:00:00 1970';
+  if (live.startsWith('linux:')) return 'linux:00000000-0000-4000-8000-000000000000:999999999';
+  if (/^\d{21}$/.test(live)) return '00000000000000000000';
+  return live.replace(/\d{4}$/, '1970');
+}
+
 test('device status is daemonless and does not send a daemon request', async () => {
   const result = await runCliCapture(['device', 'status', '--json']);
   assert.equal(result.code, null);
@@ -467,7 +475,9 @@ test('keeps corrupt claims visible and requires --stale for uncertain reclaimabl
         workspace: '/worktrees/pid-reused',
         stateDir: process.cwd(),
         ownerPid: owner.pid,
-        ownerStartTime: 'different-readable-start-time',
+        // Same verified format as the live read but a different value, so the pid proves reuse;
+        // a legacy-format token would be unverified rather than proof.
+        ownerStartTime: staleStartTimeLike(owner.startTime),
         ownerToken: 'pid-reused-token',
         createdAtMs: 1,
         updatedAtMs: 1,

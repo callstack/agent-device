@@ -53,11 +53,21 @@ test('a failed start-time read is not proof of death for an alive pid', () => {
 });
 
 test('a definite start-time mismatch classifies as owner-process-reused', () => {
-  mockReadProcessStartTime.mockReturnValue('start-b');
+  // The mismatch must be proven in one verified format: two C-form renderings one second apart.
+  mockReadProcessStartTime.mockReturnValue('Tue Nov 17 19:42:28 2026');
   assert.equal(
-    classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'start-a' } }),
+    classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'Tue Nov 17 19:42:27 2026' } }),
     'owner-process-reused',
   );
+});
+
+test('a legacy-locale record beside a C-locale read stays live, never reused', () => {
+  // `mar. 17 nov. 19:42:27 2026` (fr_FR) and `17 nov. 2026` (no colon-separated clock) are
+  // renderings an older build could have recorded; neither proves the pid changed hands.
+  for (const legacy of ['mar. 17 nov. 19:42:27 2026', '17 nov. 2026']) {
+    mockReadProcessStartTime.mockReturnValue('Tue Nov 17 19:42:27 2026');
+    assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: legacy } }), 'live');
+  }
 });
 
 test.each([

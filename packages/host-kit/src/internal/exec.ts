@@ -170,6 +170,19 @@ function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv 
   return { ...(env ?? scope.host.env), ...scope.requestEnv };
 }
 
+/**
+ * The environment a command spawned without an explicit `env` receives — the bound host scope's
+ * environment with the request's values on top, or the process's own outside a scope — with
+ * `overrides` applied as the final word. Use this to pin one child variable, such as the C locale
+ * of a `ps -o lstart` read, without dropping the rest: `TZ` picks the zone `lstart` renders in, so
+ * replacing the whole environment would move the identity clock under the pin.
+ */
+export function effectiveChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const scope = commandHostScope.getStore();
+  if (!scope) return { ...process.env, ...overrides };
+  return { ...scope.host.env, ...scope.requestEnv, ...overrides };
+}
+
 export async function runCmd(
   cmd: string,
   args: readonly string[],

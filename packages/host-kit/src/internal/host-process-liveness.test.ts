@@ -14,8 +14,10 @@ vi.mock('./exec.ts', async () => {
 
 import {
   isProcessZombie,
+  listHostProcesses,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
+  readProcessCommand,
   readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
@@ -365,35 +367,112 @@ test.skipIf(process.platform !== 'linux')(
   },
 );
 
-test('every ps start-time read pins the C locale so one process reads the same from any caller', async () => {
-  psReturns('4242 Ss   Mon Aug 10 20:00:00 2026\n');
-  mockRunCmd.mockResolvedValue({
-    stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n',
-    stderr: '',
-    exitCode: 0,
-  });
+/** The `-o` value of a ps call: `lstart=`-bearing reads pin the locale, the others must not. */
+function psFieldOf(args: readonly string[]): string {
+  return args.find((arg) => arg.endsWith('=')) ?? '';
+}
+
+test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep the caller locale', async () => {
+  // BSD/macOS ps escapes non-ASCII argv bytes under LC_ALL=C, so a pinned command read would
+  // disagree byte-for-byte with the unpinned listHostProcesses scan and break managed-process
+  // ownership for non-ASCII paths. The rule: every read whose output carries lstart is pinned,
+  // and no command-text read is.
+  const utf8Command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
+  const escapeLikeCLocalePs = (text: string) =>
+    text.replaceAll(/[^\x20-\x7E]/g, (ch) => `M-C${ch}`);
+  const commandFor = (options?: { env?: NodeJS.ProcessEnv }) =>
+    options?.env?.LC_ALL === 'C' ? escapeLikeCLocalePs(utf8Command) : utf8Command;
+  mockRunCmdSync.mockImplementation(
+    (_cmd: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+      const field = psFieldOf(args);
+      if (field === 'pid=,state=,lstart=')
+        return { stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+      if (field === 'lstart=')
+        return { stdout: 'Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+      if (field === 'command=')
+        return { stdout: `${commandFor(options)}\n`, stderr: '', exitCode: 0 };
+      return { stdout: 'Ss\n', stderr: '', exitCode: 0 };
+    },
+  );
+  mockRunCmd.mockImplementation(
+    async (_cmd: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+      const field = psFieldOf(args);
+      if (field.includes('command='))
+        return { stdout: `4242 ${commandFor(options)}\n`, stderr: '', exitCode: 0 };
+      return { stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+    },
+  );
 
   readHostProcessIdentityObservations([4242]);
   await readHostProcessIdentityObservationsAsync([4242]);
-  psReturns('Mon Aug 10 20:00:00 2026\n');
-  readProcessStartTime(4242);
+  await readProcessIdentityFacts(4242);
+  assert.equal(readProcessStartTime(4242), 'Mon Aug 10 20:00:00 2026');
+  assert.equal(
+    readProcessCommand(4242),
+    utf8Command,
+    'command text must read as UTF-8, not as C-locale escapes',
+  );
+  isProcessZombie(4242);
+  await listHostProcesses({ timeoutMs: 1_000 });
 
   const calls = [...mockRunCmdSync.mock.calls, ...mockRunCmd.mock.calls];
-  assert.equal(calls.length, 3);
-  for (const call of calls) assert.equal(call[2]?.env?.LC_ALL, 'C');
+  assert.ok(calls.length > 0);
+  let sawCommandRead = false;
+  for (const call of calls) {
+    const field = psFieldOf(call[1] ?? []);
+    if (field.includes('lstart=')) {
+      assert.equal(call[2]?.env?.LC_ALL, 'C', `lstart-bearing read (${field}) must pin LC_ALL=C`);
+    } else {
+      sawCommandRead ||= field.includes('command=');
+      assert.equal(
+        call[2]?.env,
+        undefined,
+        `non-lstart read (${field}) must carry no env pin, so command text keeps one encoding`,
+      );
+    }
+  }
+  assert.ok(sawCommandRead, 'the pid=,command= batch read must have run');
 });
 
-test('a localized start time against its C-locale rendering is unknown, not a different lifetime', () => {
-  assert.equal(
-    processStartTimesDiffer('mar. 17 nov. 19:42:27 2026', 'Tue Nov 17 19:42:27 2026'),
-    false,
-  );
-  assert.equal(
-    processStartTimesDiffer('Tue Nov 17 19:42:27 2026', 'mar. 17 nov. 19:42:27 2026'),
-    false,
-  );
-  assert.equal(
-    processStartTimesDiffer('Tue Nov 17 19:42:27 2026', 'Tue Nov 17 19:42:28 2026'),
-    true,
-  );
+test('the pinned lstart read overrides only LC_ALL on top of the effective child environment', () => {
+  vi.stubEnv('TZ', 'Pacific/Kiritimati');
+  try {
+    psReturns('Mon Aug 10 20:00:00 2026\n');
+    readProcessStartTime(4242);
+
+    const env = mockRunCmdSync.mock.calls[0]?.[2]?.env;
+    assert.equal(env?.LC_ALL, 'C');
+    assert.equal(
+      env?.TZ,
+      'Pacific/Kiritimati',
+      'dropping TZ would render lstart in the wrong zone under the pin',
+    );
+    assert.deepEqual(env, { ...process.env, LC_ALL: 'C' });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test('only two start times in the same verified format prove different lifetimes', () => {
+  const cForm = 'Tue Nov 17 19:42:27 2026';
+  const french = 'mar. 17 nov. 19:42:27 2026'; // fr_FR rendering, with a clock
+  const frenchNoClock = '17 nov. 2026'; // locales that omit HH:mm:ss entirely
+  const norwegian = 'tir. 17. nov. 19:42:27 2026'; // nb_NO renders the clock with dots
+  // A legacy rendering beside a C-form read is unverified, never a different lifetime.
+  assert.equal(processStartTimesDiffer(french, cForm), false);
+  assert.equal(processStartTimesDiffer(cForm, french), false);
+  assert.equal(processStartTimesDiffer(frenchNoClock, cForm), false);
+  assert.equal(processStartTimesDiffer(cForm, frenchNoClock), false);
+  // Two different legacy renderings are not comparable either.
+  assert.equal(processStartTimesDiffer(french, norwegian), false);
+  assert.equal(processStartTimesDiffer(french, frenchNoClock), false);
+  // Two values in one verified format still prove a difference.
+  assert.equal(processStartTimesDiffer(cForm, 'Tue Nov 17 19:42:28 2026'), true);
+  assert.equal(processStartTimesDiffer('linux:boot:1', 'linux:boot:2'), true);
+  assert.equal(processStartTimesDiffer('202610081234567890129', '202701010000000000009'), true);
+  // Mixed formats and unreadable values prove nothing.
+  assert.equal(processStartTimesDiffer(cForm, 'linux:boot:1'), false);
+  assert.equal(processStartTimesDiffer(french, 'linux:boot:1'), false);
+  assert.equal(processStartTimesDiffer(cForm, null), false);
+  assert.equal(processStartTimesDiffer(cForm, cForm), false);
 });

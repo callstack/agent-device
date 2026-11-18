@@ -7,6 +7,13 @@ import { createAppleScreenRecordingHost } from './platform-runtime-screen-record
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
 
+/** C-form `lstart` token per pid: the verified format, so a differing token proves a different lifetime. */
+function startToken(pid: number): string {
+  return `Tue Nov 17 19:${String(40 + (pid % 20)).padStart(2, '0')}:${String(pid % 60).padStart(2, '0')} 2026`;
+}
+/** A C-form start time naming a different lifetime than any `startToken`. */
+const LATER_LIFETIME = 'Wed Nov 18 08:00:00 2026';
+
 const processes = vi.hoisted(() => ({
   alive: new Map<number, boolean>(),
   starts: new Map<number, string>(),
@@ -391,11 +398,11 @@ test('a recorder whose stop was refused can be stopped by the next stop', async 
   // A refused attempt stays refused for that attempt only. Whatever made this one refuse,
   // the next `record stop` must be able to end the same recorder rather than replay the
   // rejection for the rest of the session.
-  processes.starts.set(50, 'start-of-a-different-process');
+  processes.starts.set(50, LATER_LIFETIME);
   await expect(process.terminate()).rejects.toThrow('process ownership changed');
   expect(running.kill).not.toHaveBeenCalled();
 
-  processes.starts.set(50, 'start-50');
+  processes.starts.set(50, startToken(50));
   await expect(process.terminate()).resolves.toBeUndefined();
   expect(running.kill).toHaveBeenCalledWith('SIGINT');
 });
@@ -462,7 +469,7 @@ function background(pid: number | undefined, command?: string) {
   });
   if (pid !== undefined) {
     processes.alive.set(pid, true);
-    processes.starts.set(pid, `start-${pid}`);
+    processes.starts.set(pid, startToken(pid));
     processes.commands.set(pid, command ?? `xcrun simctl io ${simulator.id} recordVideo`);
   }
   const kill = vi.fn((_signal: NodeJS.Signals) => {

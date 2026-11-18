@@ -5,7 +5,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
-import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  isProcessAlive,
+  readProcessCommand,
+  readProcessStartTime,
+} from '@agent-device/host-kit/process';
 import { isAgentDeviceDaemonProcess, stopDaemonProcess } from './daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
@@ -35,13 +39,13 @@ afterEach(async () => {
   }
 });
 
-/** A daemon entry from a branch-named checkout, whose path has no project-name marker. */
-function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: string } {
+/** A daemon entry from a checkout under `prefix`, whose path has no project-name marker. */
+function spawnFakeDaemon(prefix: string): { pid: number; entryPath: string } {
   // Vitest redirects `os.tmpdir()` under a worktree-named run directory. Use
   // the host temp root so this path itself cannot accidentally contain the
   // project name and mask the worktree identity regression.
   const tempRoot = process.platform === 'win32' ? os.tmpdir() : '/tmp';
-  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(tempRoot, 'repair-evidence-')));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(tempRoot, prefix)));
   spawnedRoots.push(root);
   const entryPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
@@ -54,6 +58,59 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
     exited: new Promise<void>((resolve) => child.once('exit', () => resolve())),
   });
   return { pid, entryPath };
+}
+
+/** A daemon entry from a branch-named checkout, whose path has no project-name marker. */
+function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: string } {
+  return spawnFakeDaemon('repair-evidence-');
+}
+
+/** A start time in the same verified format as `live` but naming a different lifetime. */
+function staleStartTimeLike(live: string): string {
+  if (live.startsWith('linux:')) return 'linux:00000000-0000-4000-8000-000000000000:999999999';
+  if (/^\d{21}$/.test(live)) return '00000000000000000000';
+  return live.replace(/\d{4}$/, '1970');
+}
+
+const FRENCH_MONTHS: Record<string, string> = {
+  Jan: 'janv.',
+  Feb: 'févr.',
+  Mar: 'mars',
+  Apr: 'avr.',
+  May: 'mai',
+  Jun: 'juin',
+  Jul: 'juil.',
+  Aug: 'août',
+  Sep: 'sept.',
+  Oct: 'oct.',
+  Nov: 'nov.',
+  Dec: 'déc.',
+};
+const FRENCH_WEEKDAYS: Record<string, string> = {
+  Mon: 'lun.',
+  Tue: 'mar.',
+  Wed: 'mer.',
+  Thu: 'jeu.',
+  Fri: 'ven.',
+  Sat: 'sam.',
+  Sun: 'dim.',
+};
+const C_FORM_LSTART = /^(\w{3}) (\w{3}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/;
+
+/** The fr_FR `ps -o lstart` rendering of a C-form start time, clock included. */
+function frenchLstart(cForm: string): string {
+  const match = C_FORM_LSTART.exec(cForm);
+  assert.ok(match, `expected a C-form lstart, got ${cForm}`);
+  const [, weekday, month, day, clock, year] = match;
+  return `${FRENCH_WEEKDAYS[weekday] ?? weekday} ${day} ${FRENCH_MONTHS[month] ?? month} ${clock} ${year}`;
+}
+
+/** A localized rendering with no colon-separated clock, as locales that omit HH:mm:ss print. */
+function frenchDateOnlyLstart(cForm: string): string {
+  const match = C_FORM_LSTART.exec(cForm);
+  assert.ok(match, `expected a C-form lstart, got ${cForm}`);
+  const [, , month, day, , year] = match;
+  return `${day} ${FRENCH_MONTHS[month] ?? month} ${year}`;
 }
 
 // #1545: a reachable daemon with a code-signature mismatch is replaced. If a
@@ -96,7 +153,9 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
 
   const actualStartTime = readProcessStartTime(pid);
   assert.ok(actualStartTime, 'expected the spawned daemon to report a start time');
-  const staleStartTime = `${actualStartTime}-previous-lifetime`;
+  // A proven reuse needs a stale value in the same verified format as the live read; a legacy
+  // token would be unverified rather than proof.
+  const staleStartTime = staleStartTimeLike(actualStartTime);
   assert.equal(isAgentDeviceDaemonProcess(pid, staleStartTime), false);
 
   const result = await stopDaemonProcess(
@@ -110,3 +169,54 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
   });
   assert.equal(isProcessAlive(pid), true);
 });
+
+// #4656: a record written before the C-locale pin may hold a localized `lstart` rendering. At
+// the daemon stop boundary it must yield unverified identity — never `already-exited`, and
+// never a signal — so a live daemon is not retired while it still runs.
+test.skipIf(process.platform !== 'darwin')(
+  'a legacy-locale record yields unverified identity at daemon stop, not an exited daemon',
+  async () => {
+    const { pid } = spawnFakeDaemonFromBranchNamedCheckout();
+    const startTime = readProcessStartTime(pid);
+    assert.ok(startTime, 'expected the spawned daemon to report a start time');
+    assert.ok(C_FORM_LSTART.test(startTime), `expected a C-form lstart, got ${startTime}`);
+
+    for (const legacy of [frenchLstart(startTime), frenchDateOnlyLstart(startTime)]) {
+      const result = await stopDaemonProcess(
+        { pid, startTime: legacy },
+        { mode: 'graceful', termTimeoutMs: 200, killTimeoutMs: 100 },
+      );
+      assert.equal(result.status, 'retained', `legacy record ${legacy} must not retire the daemon`);
+      if (result.status === 'retained') {
+        assert.equal(result.reason, 'identity-unverified');
+      }
+      assert.equal(
+        isProcessAlive(pid),
+        true,
+        'no signal may reach a daemon the legacy record cannot verify',
+      );
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'the stop route reads a non-ASCII daemon argv as UTF-8, not as C-locale escapes',
+  async () => {
+    const { pid, entryPath } = spawnFakeDaemon('utf8-é-ü-');
+    assert.ok(entryPath.includes('é-ü'));
+
+    const command = readProcessCommand(pid);
+    assert.ok(command?.includes('é-ü'), `expected the UTF-8 argv, got ${JSON.stringify(command)}`);
+    const startTime = readProcessStartTime(pid);
+    assert.ok(startTime, 'expected the spawned daemon to report a start time');
+    assert.equal(isAgentDeviceDaemonProcess(pid, startTime), true);
+
+    const result = await stopDaemonProcess(
+      { pid, startTime },
+      { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
+    );
+    assert.equal(result.status, 'exited');
+    await spawnedChildren.at(-1)!.exited;
+    assert.equal(isProcessAlive(pid), false);
+  },
+);
