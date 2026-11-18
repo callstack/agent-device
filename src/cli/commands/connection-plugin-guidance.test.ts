@@ -5,6 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
 import { readVersion } from '@agent-device/host-kit/version';
 import { runCliCapture } from '../../__tests__/cli-capture.ts';
+import { usageForCommand } from '../parser/args.ts';
 
 vi.mock('@agent-device/host-kit/version', async (importOriginal) => {
   const original = await importOriginal<typeof import('@agent-device/host-kit/version')>();
@@ -43,6 +44,7 @@ test('connect names a missing provider plugin and returns installation guidance 
 });
 
 test('connect browserstack without its plugin names the package, even with credentials set', async () => {
+  vi.mocked(readVersion).mockReturnValue('0.22.0-dev');
   const { home, env } = pluginHome();
   const result = await runCliCapture(
     ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
@@ -60,7 +62,7 @@ test('connect browserstack without its plugin names the package, even with crede
     reason: 'plugin-not-installed',
     provider: 'browserstack',
     package: '@agent-device/browserstack',
-    installCommand: 'agent-device plugins add @agent-device/browserstack',
+    installCommand: 'agent-device plugins add @agent-device/browserstack@nightly-0.22',
   });
   assert.match(error.hint, /agent-device plugins add @agent-device\/browserstack/);
 });
@@ -150,10 +152,12 @@ test('a 0.22 nightly core prescribes the matching channel plugin release', async
   });
   assert.match(error.hint, new RegExp(`plugins add @agent-device/browserstack@${NIGHTLY_0_22}`));
   assert.match(error.hint, /If a local daemon is already running/);
+  const help = await usageForCommand('remote');
+  assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
 test('a stable core prescribes the plain package for the same plugin', async () => {
-  vi.mocked(readVersion).mockReturnValue('0.21.39');
+  vi.mocked(readVersion).mockReturnValue('0.22.0');
   const { home, env } = pluginHome();
   const result = await runCliCapture(
     ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
@@ -162,6 +166,8 @@ test('a stable core prescribes the plain package for the same plugin', async () 
   assert.equal(result.code, 1);
   const { error } = JSON.parse(result.stdout);
   assert.equal(error.details.installCommand, 'agent-device plugins add @agent-device/browserstack');
+  const help = await usageForCommand('remote');
+  assert.ok(help?.includes(`${error.details.installCommand}\n`));
 });
 
 test('a 0.22 nightly core still prescribes the plain package for a full-channel plugin', async () => {

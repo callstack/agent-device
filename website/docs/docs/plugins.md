@@ -13,12 +13,9 @@ agent-device plugins remove @example/agent-device-provider
 
 `agent-device help connect` and `agent-device help remote` identify known optional providers as
 `plugin, install separately` and show their installation commands, even before you install them.
-For example, BrowserStack requires `agent-device plugins add @agent-device/browserstack@nightly-0.22`, AWS Device Farm requires `agent-device plugins add @agent-device/aws-device-farm@nightly-0.22`, and TestMu AI requires `agent-device plugins add @agent-device/testmu`.
-
-BrowserStack and AWS Device Farm publish only on the `nightly-0.22` tag, so their `latest` tag is a
-placeholder that exports no plugin factory. Install them with `@nightly-0.22`, or with the exact
-version the missing-plugin error of your pinned `agent-device` release prints. Omitting the selector
-fails the install with `incompatible_plugin`.
+On a 0.22 nightly, install BrowserStack or AWS Device Farm with the selector printed by your
+running CLI. This pairs the plugin with your installed core. On stable 0.22 releases, install by
+package name. TestMu AI uses `agent-device plugins add @agent-device/testmu`.
 
 If you run `agent-device connect browserstack`, `agent-device connect aws-device-farm`, or `agent-device connect testmu` without its plugin, the error gives that installation
 command and tells you to retry your original command. With `--json`, the error has

@@ -26,15 +26,15 @@ test('a 0.22 nightly core names the plugin release built with it', () => {
   }
 });
 
-test('the named release carries the date and run, so a stale build cannot return', () => {
-  assert.match(
-    providerPluginInstallCommand(declaration('browserstack'), NIGHTLY_0_22),
-    /@agent-device\/browserstack@0\.22\.0-nightly-0-22\.20261118\.187$/,
+test('a 0.22 source checkout names the nightly tag', () => {
+  assert.equal(
+    providerPluginInstallCommand(declaration('browserstack'), '0.22.0-dev'),
+    'agent-device plugins add @agent-device/browserstack@nightly-0.22',
   );
 });
 
 test('a core outside the 0.22 nightly channel keeps the plain package selector', () => {
-  for (const coreVersion of ['0.22.0-dev', '0.21.40-nightly.20261118.186', '0.21.39', '0.0.0']) {
+  for (const coreVersion of ['0.21.40-nightly.20261118.186', '0.22.0', '0.0.0']) {
     assert.equal(
       providerPluginInstallCommand(declaration('aws-device-farm'), coreVersion),
       'agent-device plugins add @agent-device/aws-device-farm',
@@ -56,16 +56,12 @@ test('a plugin that ships every release ignores the channel of the core', () => 
   }
 });
 
-test('help names the tag a channel plugin installs from, and the plain name for the rest', () => {
-  const help = providerPluginHelp();
-  assert.match(
-    help,
-    /AWS Device Farm \(connect aws-device-farm; @agent-device\/aws-device-farm@nightly-0\.22\)/,
-  );
-  assert.match(
-    help,
-    /BrowserStack \(connect browserstack; @agent-device\/browserstack@nightly-0\.22\)/,
-  );
-  assert.match(help, /TestMu AI \(connect testmu; @agent-device\/testmu\)/);
-  assert.doesNotMatch(help, /unpublished/);
+test('help gives nightly and stable users the same plugin selectors as recovery', () => {
+  const nightly = providerPluginHelp(NIGHTLY_0_22);
+  const stable = providerPluginHelp('0.22.0');
+  for (const provider of ['browserstack', 'aws-device-farm']) {
+    assert.ok(nightly.includes(`connect ${provider}; @agent-device/${provider}@${NIGHTLY_0_22})`));
+    assert.ok(stable.includes(`connect ${provider}; @agent-device/${provider})`));
+  }
+  assert.match(nightly, /TestMu AI \(connect testmu; @agent-device\/testmu\)/);
 });
