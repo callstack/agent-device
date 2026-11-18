@@ -552,6 +552,27 @@ test('verifyHarmonyOpenForeground reports probe-failed without reading when the 
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
+test('verifyHarmonyOpenForeground names the deadline, not the connection, when the clamp spent the budget', async () => {
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() - 1_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(error.details?.hint ?? '', /deadline is too tight/i);
+      return true;
+    },
+  );
+});
+
 test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {
   vi.useFakeTimers();
   mockRunCmd.mockResolvedValue({
