@@ -220,3 +220,61 @@ test.each(
     );
   },
 );
+
+test.each(
+  [
+    String.raw`\\server\IPC$`,
+    String.raw`\\server\pipe\work`,
+    String.raw`\\?\UNC\server\IPC$`,
+    String.raw`\\?\UNC\server\mailslot\work`,
+  ].flatMap((cwd) => [false, true].map((force) => ({ cwd, force }))),
+)(
+  'a root-relative path on the IPC base $cwd is refused before anything else (force=$force)',
+  async ({ cwd, force }) => {
+    // `\journey.ad` reads as absolute, but it stands on the working directory's root: an IPC share here.
+    await expectRefusedBeforeAnything(
+      { saveScript: String.raw`\journey.ad`, ...(force ? { force: true } : {}) },
+      createTestHostEnvironment(),
+      cwd,
+    );
+  },
+);
+
+test.each(
+  [
+    { cwd: String.raw`\\server\share\work`, expected: String.raw`\\server\share\journey.ad` },
+    {
+      cwd: String.raw`\\?\UNC\server\share\work`,
+      expected: String.raw`\\?\UNC\server\share\journey.ad`,
+    },
+    { cwd: String.raw`C:\work`, expected: String.raw`C:\journey.ad` },
+    { cwd: String.raw`\\?\C:\work`, expected: String.raw`\\?\C:\journey.ad` },
+  ].flatMap((base) => [false, true].map((force) => ({ ...base, force }))),
+)(
+  'a root-relative path on $cwd is probed and recorded as $expected (force=$force)',
+  async ({ cwd, expected, force }) => {
+    const probe = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    try {
+      const result = await onWindowsRules(() =>
+        prepareRemoteRequestArtifacts(
+          {
+            session: 'owned',
+            command: 'open',
+            positionals: ['Demo'],
+            flags: { saveScript: String.raw`\journey.ad`, ...(force ? { force: true } : {}) },
+            meta: { cwd },
+          },
+          REMOTE,
+          signal,
+          createTestHostEnvironment(),
+        ),
+      );
+
+      expect(result.clientArtifactPaths?.savedScript).toBe(expected);
+      if (force) expect(probe).not.toHaveBeenCalled();
+      else expect(probe.mock.calls).toEqual([[expected]]);
+    } finally {
+      probe.mockRestore();
+    }
+  },
+);

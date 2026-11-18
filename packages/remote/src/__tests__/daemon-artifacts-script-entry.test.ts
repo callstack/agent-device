@@ -835,3 +835,94 @@ test('a version an interrupted commit never put in place is downloaded even afte
   expect(delivered).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
+
+/** Another delivery's version 2, renamed into place; `committed` says whether it also recorded the commit. */
+function otherDeliveryLands(stateDir: string, destination: string, committed: boolean): void {
+  fs.writeFileSync(destination, 'v2\n');
+  const stat = fs.statSync(destination, { bigint: true });
+  const { file: recordFile, record } = soleRecord(stateDir);
+  const next = committed
+    ? { ...record, revision: 2, committedDigest: sha256('v2\n') }
+    : {
+        ...record,
+        publishing: {
+          revision: 2,
+          file: `${stat.dev}:${stat.ino}`,
+          staging: path.join(path.dirname(destination), '.agent-device-script-other'),
+          digest: sha256('v2\n'),
+        },
+      };
+  fs.writeFileSync(recordFile, JSON.stringify(next));
+}
+
+test('a delivery whose first read went stale settles from the record under the lock', async () => {
+  // This client reads the record at revision 1; the other delivery then puts version 2 in place and stops
+  // before recording it.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  // Version 2 stays served, and every fetch of it is counted: settling from the locked record answers it
+  // from disk, so it is never fetched; a stale snapshot would stage and fetch it first.
+  let fetches = 0;
+  const v2 = { body: 'v2\n' };
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' } };
+  Object.defineProperty(served, 'v2', {
+    enumerable: true,
+    get: () => {
+      fetches += 1;
+      return v2;
+    },
+  });
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file: recordFile } = soleRecord(stateDir);
+  const read = fs.readFileSync.bind(fs) as (...args: unknown[]) => string | Buffer;
+  let landed = false;
+  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((...args: unknown[]) => {
+    const contents = read(...args);
+    if (!landed && args[0] === recordFile) {
+      landed = true;
+      otherDeliveryLands(stateDir, destination, false);
+    }
+    return contents;
+  }) as typeof fs.readFileSync);
+
+  try {
+    const late = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v2', 2, id)],
+    });
+
+    expect(landed).toBe(true);
+    expect(fetches).toBe(0);
+    expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
+    expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test.each([
+  { name: 'commits', committed: true },
+  { name: 'is interrupted after its rename', committed: false },
+])(
+  'a failed download after another delivery $name between settlement and staging reports the file',
+  async ({ committed }) => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+    const baseUrl = await artifactServer(served);
+    const { id } = await open(baseUrl, stateDir, destination);
+    delete served.v2;
+    vi.mocked(file.prepareScriptDestination).mockImplementationOnce((spelled) => {
+      otherDeliveryLands(stateDir, destination, committed);
+      return actual.prepareScriptDestination(spelled);
+    });
+
+    const late = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v2', 2, id)],
+    });
+
+    expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
+    expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
+    expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+  },
+);

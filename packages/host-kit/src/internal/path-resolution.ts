@@ -2,17 +2,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { scriptEntryNameOrRefuse } from './atomic-file.ts';
+import { hostPathRules, scriptEntryNameOrRefuse } from './atomic-file.ts';
 
 type PathResolutionOptions = {
   cwd?: string;
   env?: EnvMap;
 };
-
-/** The host's path rules, read when asked, so a path is joined the way the platform it runs on joins it. */
-function hostPath(): path.PlatformPath {
-  return process.platform === 'win32' ? path.win32 : path.posix;
-}
 
 function resolveHomeDirectory(env?: EnvMap): string {
   return env?.HOME?.trim() || os.homedir();
@@ -21,7 +16,7 @@ function resolveHomeDirectory(env?: EnvMap): string {
 export function expandUserHomePath(inputPath: string, options: PathResolutionOptions = {}): string {
   if (inputPath === '~') return resolveHomeDirectory(options.env);
   if (inputPath.startsWith('~/')) {
-    return hostPath().join(resolveHomeDirectory(options.env), inputPath.slice(2));
+    return hostPathRules().join(resolveHomeDirectory(options.env), inputPath.slice(2));
   }
   return inputPath;
 }
@@ -31,7 +26,7 @@ export function resolveUserPath(
   options: PathResolutionOptions & { cwd: string },
 ): string {
   const expandedPath = expandUserHomePath(inputPath, options);
-  const rules = hostPath();
+  const rules = hostPathRules();
   if (rules.isAbsolute(expandedPath)) return expandedPath;
   return rules.resolve(options.cwd, expandedPath);
 }
@@ -48,9 +43,28 @@ export function resolveScriptDestination(
   scriptEntryNameOrRefuse(spelled);
   // The working directory or home it is joined to can bring a namespace the spelling did not show, such as a
   // pipe root, so the resolved path is judged by the same gate before anything probes or records it.
-  const resolved = resolveUserPath(spelled, options);
+  const resolved = qualifyRootRelative(resolveUserPath(spelled, options), options.cwd);
   scriptEntryNameOrRefuse(resolved);
   return resolved;
+}
+
+/**
+ * A Windows path with ONE leading separator, such as `\\journey.ad`, is relative to the working directory's
+ * root, though `isAbsolute` calls it absolute; it is qualified against that root, so the gate, the probe, the
+ * record and the publish all see the path the system would open. Node's own resolve drops the server and share
+ * of an extended UNC root, so the root is read here.
+ */
+function qualifyRootRelative(resolved: string, cwd: string): string {
+  const rules = hostPathRules();
+  if (rules.sep !== '\\' || !/^[\\/](?![\\/])/.test(resolved)) return resolved;
+  return `${windowsRootOf(rules.normalize(cwd), rules)}${resolved.replace(/^[\\/]+/, '')}`;
+}
+
+/** The root a Windows path stands on, with its trailing separator: a drive, a share, or their extended forms. */
+function windowsRootOf(normalized: string, rules: path.PlatformPath): string {
+  const extended = /^\\\\\?\\(?:UNC\\[^\\]+\\[^\\]+|[A-Z]:)/i.exec(normalized);
+  const root = extended ? extended[0] : rules.parse(normalized).root;
+  return root.endsWith('\\') ? root : `${root}\\`;
 }
 
 /**

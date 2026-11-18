@@ -417,28 +417,36 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    // A version that is committed, or that an interrupted commit may already have put in place, is settled
-    // under the record lock before anything is staged: a repeat is judged against the state a commit writes,
+    // The record as read under the lock, never the snapshot read above, decides whether the version is
+    // already committed or may already be in place: a repeat is judged against the state a commit writes,
     // and a version already on disk needs no fresh download.
-    if ((revision as number) <= Math.max(record.revision, record.publishing?.revision ?? 0)) {
-      const repeated = await withRecordLock(file, async () =>
-        settledRepeat(file, revision as number),
-      );
-      if (repeated) return { published: repeated.published };
-    }
+    const repeated = await withRecordLock(file, async () =>
+      settledRepeat(file, revision as number),
+    );
+    if (repeated) return { published: repeated.published };
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
     staging = allocated;
     if (!allocated) return { published: undefined };
     const staged = path.join(allocated, 'script.ad');
-    await context.download({
-      ...endpoint,
-      artifactId: artifactId as string,
-      destinationPath: staged,
-      requestScope: req.meta,
-      privateFile: { maxBytes: MAX_SCRIPT_BYTES },
-    });
+    try {
+      await context.download({
+        ...endpoint,
+        artifactId: artifactId as string,
+        destinationPath: staged,
+        requestScope: req.meta,
+        privateFile: { maxBytes: MAX_SCRIPT_BYTES },
+      });
+    } catch (error) {
+      // Another delivery may have committed this version since the record was settled; a failed fetch is
+      // only this client's failure while the version is not on disk.
+      const committed = await withRecordLock(file, async () =>
+        settledRepeat(file, revision as number),
+      ).catch(() => undefined);
+      if (committed?.published !== undefined) return { published: committed.published };
+      throw error;
+    }
     const version = {
       revision: revision as number,
       staging: allocated,
@@ -603,6 +611,10 @@ function settledRepeat(
   file: string,
   revision: number,
 ): Readonly<{ published: string | undefined }> | undefined {
+  const record = readRecord(file);
+  if (!record) return { published: undefined };
+  // Only a version the record says is committed or being published can be on disk already.
+  if (revision > Math.max(record.revision, record.publishing?.revision ?? 0)) return undefined;
   let settled: ReturnType<typeof settleUnderLock>;
   try {
     settled = settleUnderLock(file, revision, (destination) => judgeScriptDestination(destination));

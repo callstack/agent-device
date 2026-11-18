@@ -273,7 +273,7 @@ export function scriptEntryNameOrRefuse(spelled: string): string {
 }
 
 /** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */
-function hostPathRules(): path.PlatformPath {
+export function hostPathRules(): path.PlatformPath {
   return process.platform === 'win32' ? path.win32 : path.posix;
 }
 
