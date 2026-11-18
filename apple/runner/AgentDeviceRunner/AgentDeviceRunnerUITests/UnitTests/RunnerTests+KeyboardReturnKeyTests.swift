@@ -3,8 +3,20 @@ import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  func testKeyboardStatusRequiresMeasuredDisplayBounds() {
+    let keyboard = CGRect(x: 0, y: 925, width: 834, height: 282)
+    XCTAssertNil(RunnerKeyboardStatus.observed(
+      keyboardFrame: keyboard, keys: [], nativeDisplaySize: nil,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait
+    ))
+    XCTAssertNil(RunnerKeyboardStatus.observed(
+      keyboardFrame: keyboard, keys: [], nativeDisplaySize: CGSize(width: 834, height: 1210),
+      interfaceOrientation: RunnerInterfaceOrientation.unknown
+    ))
+  }
+
   func testKeyboardStatusUsesTheLocalizedAXLabelWithTheObservedReturnIdentifier() {
-    let viewport = CGRect(x: 0, y: 0, width: 951, height: 669)
+    let display = CGSize(width: 669, height: 951)
     let keyboard = CGRect(x: 75, y: 449, width: 801, height: 219)
     let keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = [
       .init(label: "A", identifier: "", frame: CGRect(x: 125, y: 501, width: 76, height: 52), isKey: true),
@@ -12,7 +24,7 @@ extension RunnerTests {
       .init(label: "szukaj", identifier: "Search", frame: CGRect(x: 763, y: 609, width: 111, height: 51), isKey: false),
     ]
     XCTAssertEqual(
-      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, viewport: .reported(box: viewport)),
+      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, nativeDisplaySize: display, interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft),
       RunnerKeyboardStatus(visible: true, returnKey: "search", returnKeyLabel: "szukaj")
     )
   }
@@ -24,13 +36,15 @@ extension RunnerTests {
       .init(label: "Search", identifier: "", frame: CGRect(x: 282, y: 609, width: 110, height: 51), isKey: false),
     ]
     XCTAssertEqual(
-      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, viewport: .reported(box: CGRect(x: 0, y: 0, width: 393, height: 852))),
+      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys,
+        nativeDisplaySize: CGSize(width: 393, height: 852),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait),
       RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
   }
 
   func testKeyboardStatusIgnoresOffscreenKeysBelowAnAccessory() {
-    let viewport = CGRect(x: 0, y: 0, width: 820, height: 1180)
+    let display = CGSize(width: 820, height: 1180)
     let bar = CGRect(x: 0, y: 1136, width: 820, height: 44)
     let keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = [
       .init(label: "Done", identifier: "Done", frame: CGRect(x: 730, y: 1140, width: 66, height: 36), isKey: false),
@@ -38,10 +52,10 @@ extension RunnerTests {
       .init(label: "return", identifier: "Return", frame: CGRect(x: 691, y: 1251, width: 126, height: 63), isKey: false),
     ]
     XCTAssertEqual(
-      RunnerKeyboardStatus.observed(keyboardFrame: bar, keys: keys, viewport: .reported(box: viewport)),
+      RunnerKeyboardStatus.observed(keyboardFrame: bar, keys: keys, nativeDisplaySize: display, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       .hidden
     )
-    XCTAssertNil(RunnerKeyboardStatus.observed(keyboardFrame: .zero, keys: keys, viewport: .reported(box: viewport)))
+    XCTAssertNil(RunnerKeyboardStatus.observed(keyboardFrame: .zero, keys: keys, nativeDisplaySize: display, interfaceOrientation: RunnerInterfaceOrientation.portrait))
   }
 
   func testKeyboardStatusUsesTheVisibleFrameWhenNoKeysAreExposed() {
@@ -49,14 +63,15 @@ extension RunnerTests {
       RunnerKeyboardStatus.observed(
         keyboardFrame: CGRect(x: 0, y: 561, width: 393, height: 233),
         keys: [],
-        viewport: .reported(box: CGRect(x: 0, y: 0, width: 393, height: 852))
+        nativeDisplaySize: CGSize(width: 393, height: 852),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
       ),
       RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
   }
 
   func testKeyboardStatusDoesNotTreatAnAccessoryOrNumericKeyAsReturn() {
-    let viewport = CGRect(x: 0, y: 0, width: 393, height: 852)
+    let display = CGSize(width: 393, height: 852)
     let keyboard = CGRect(x: 0, y: 531, width: 393, height: 263)
     let keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = [
       .init(label: "Done", identifier: "Done", frame: CGRect(x: 300, y: 533, width: 80, height: 25), isKey: false),
@@ -64,7 +79,7 @@ extension RunnerTests {
       .init(label: "Delete", identifier: "delete", frame: CGRect(x: 262, y: 730, width: 131, height: 54), isKey: true),
     ]
     XCTAssertEqual(
-      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, viewport: .reported(box: viewport)),
+      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, nativeDisplaySize: display, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
   }

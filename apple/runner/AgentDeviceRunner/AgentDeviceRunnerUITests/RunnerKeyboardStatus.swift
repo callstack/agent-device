@@ -17,17 +17,20 @@ struct RunnerKeyboardStatus: Equatable {
     let isKey: Bool
   }
 
-  /// An iPad accessory can appear as the keyboard while its keys sit below the viewport.
+  /// An iPad accessory can appear as the keyboard while its keys sit below the display.
   static func observed(
     keyboardFrame: CGRect,
     keys: [ObservedKeyboardKey],
-    viewport: SnapshotViewport
+    nativeDisplaySize: CGSize?,
+    interfaceOrientation: Int
   ) -> RunnerKeyboardStatus? {
     guard SnapshotGeometry.isPositiveFinite(keyboardFrame),
-      let bounds = viewport.rect
+      let nativeDisplaySize,
+      let frame = SurfaceGeometry.panelFrame(nativeSize: nativeDisplaySize, orientation: interfaceOrientation),
+      case .reported(let bounds, _) = SnapshotViewport.reported(box: frame)
     else { return nil }
-    let space = keyboardSpace(keyboardFrame, viewport: viewport)
-    let visibleFrame = space.orientedFrame(of: keyboardFrame).intersection(bounds)
+    let space = keyboardSpace(keyboardFrame, displayBounds: bounds, interfaceOrientation: interfaceOrientation)
+    let visibleFrame = space.orientedFrame(of: keyboardFrame).intersection(bounds.rect)
     guard SnapshotGeometry.isPositiveFinite(visibleFrame) else { return .hidden }
 
     let measuredKeys = keys.compactMap { key -> ObservedKeyboardKey? in
@@ -51,13 +54,15 @@ struct RunnerKeyboardStatus: Equatable {
   }
 
   /// A landscape iPhone can report a vertical key plane in portrait display coordinates.
-  private static func keyboardSpace(_ frame: CGRect, viewport: SnapshotViewport) -> SnapshotGeometrySpace {
-    guard case .reported(let box, let orientation) = viewport,
-      SnapshotGeometrySpace.namesQuarterTurn(orientation),
-      box.rect.origin == .zero, box.rect.width > box.rect.height,
-      frame.height > frame.width, !box.rect.contains(frame),
-      CGRect(x: 0, y: 0, width: box.rect.height, height: box.rect.width).contains(frame)
+  private static func keyboardSpace(
+    _ frame: CGRect, displayBounds: SnapshotViewport.Box, interfaceOrientation: Int
+  ) -> SnapshotGeometrySpace {
+    let bounds = displayBounds.rect
+    guard SnapshotGeometrySpace.namesQuarterTurn(interfaceOrientation),
+      bounds.width > bounds.height,
+      frame.height > frame.width, !bounds.contains(frame),
+      CGRect(x: 0, y: 0, width: bounds.height, height: bounds.width).contains(frame)
     else { return .appOrientation }
-    return .deviceNative(appFrame: box, interfaceOrientation: orientation)
+    return .deviceNative(appFrame: displayBounds, interfaceOrientation: interfaceOrientation)
   }
 }

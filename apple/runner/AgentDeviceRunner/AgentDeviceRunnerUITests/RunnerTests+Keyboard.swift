@@ -159,6 +159,7 @@ extension RunnerTests {
     visibleKeyboardFrame(app: app) != nil
   }
 
+  @MainActor
   func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus? {
 #if os(iOS)
     var result: RunnerKeyboardStatus?
@@ -168,14 +169,23 @@ extension RunnerTests {
         result = .hidden
         return
       }
-      guard let snapshot = try? keyboard.snapshot(),
-        let viewport = try? safeSnapshotViewport(app: app, readingOrientation: true)
-      else { return }
+      guard let snapshot = try? keyboard.snapshot() else { return }
+      let displaySize: CGSize?
+      let orientation: Int
+      if requestLitPanel != nil {
+        guard let panel = try? requireRequestLitPanelSurface(app: app) else { return }
+        displaySize = panel.geometry.panelNativeSize
+        orientation = panel.geometry.orientation
+      } else {
+        displaySize = soleDisplayPortraitSize()
+        orientation = capturedInterfaceOrientation(app: app)
+      }
       let keys = observedKeyboardKeys(in: snapshot)
       result = RunnerKeyboardStatus.observed(
         keyboardFrame: snapshot.frame,
         keys: keys,
-        viewport: viewport
+        nativeDisplaySize: displaySize,
+        interfaceOrientation: orientation
       )
     }
     for issue in issues {
