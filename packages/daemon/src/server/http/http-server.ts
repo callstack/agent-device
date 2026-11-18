@@ -80,8 +80,9 @@ const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 /**
  * Explicit ingress ceilings (#4441): 30 seconds to receive a request's headers and
  * 600 seconds to receive its body, instead of the Node defaults. They bound socket
- * ingress only; command execution keeps its own per-request deadlines, and upload
- * transfers add their own aggregate on top (upload-ingress.ts).
+ * ingress only. Uploads have a separate aggregate from request admission through
+ * finalization (upload-ingress.ts). A socket timeout can close an incomplete request
+ * before the upload owner can answer. RPC execution keeps its own deadlines.
  */
 const DAEMON_HTTP_HEADERS_TIMEOUT_MS = 30_000;
 const DAEMON_HTTP_REQUEST_TIMEOUT_MS = 600_000;

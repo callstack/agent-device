@@ -150,9 +150,12 @@ test('resolveIngressFailure maps an abort-owned generic failure to the typed rea
 
   // Node's pipeline rejects an aborted signal with a generic AbortError; the owner's
   // typed reason is restored.
-  const genericAbort = new Error('The operation was aborted') as Error & { name: string };
-  genericAbort.name = 'AbortError';
+  const genericAbort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
   assert.equal(resolveIngressFailure(aborted, genericAbort), typed);
+  const codedAbort = Object.assign(new Error('Different diagnostic'), { code: 'ABORT_ERR' });
+  assert.equal(resolveIngressFailure(aborted, codedAbort), typed);
+  const unrelated = new Error(genericAbort.message);
+  assert.equal(resolveIngressFailure(aborted, unrelated), unrelated);
   assert.equal(resolveIngressFailure(aborted, typed), typed);
 
   // An earlier classified failure is preserved even when the signal aborted afterwards.

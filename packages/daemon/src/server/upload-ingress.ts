@@ -125,6 +125,6 @@ export function throwIfIngressAborted(signal: AbortSignal | undefined): void {
 
 function isGenericAbortError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const { name, message } = error as { name?: unknown; message?: unknown };
-  return name === 'AbortError' || message === 'The operation was aborted' || message === 'Aborted';
+  const { name, code } = error as { name?: unknown; code?: unknown };
+  return name === 'AbortError' || code === 'ABORT_ERR';
 }
