@@ -15,13 +15,14 @@ permissions:
   actions: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A Flex job can still be queued when the next run starts.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'schedule' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   full-suite:
     name: iOS Runner Full XCTest Suite (${{ matrix.leg.name }})
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: blacksmith-6vcpu-macos-26${{ github.event_name == 'schedule' && ';scheduling=flex' || '' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
