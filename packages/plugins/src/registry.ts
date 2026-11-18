@@ -22,7 +22,7 @@ import type {
   WebDriverDescriptor,
 } from './contract.ts';
 import type { RegisteredConnection } from './connection.ts';
-import { createPluginHost } from './host.ts';
+import { createPluginHost, type ProviderHostCapabilities } from './host.ts';
 import {
   NO_PLUGIN_CREDENTIALS,
   type PluginCleanupOutcome,
@@ -74,7 +74,9 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
 
 /**
  * What the composing root decides for every registry, so this package names no provider: how a
- * plugin's `{ webDriver }` descriptor becomes a runtime.
+ * plugin's `{ webDriver }` descriptor becomes a runtime, and which host capabilities a setup
+ * receives. The drivers come from the root rather than an import: ADR-0019 and ADR-0034 keep
+ * platform and provider implementation out of this package, so the registry only asks the policy.
  */
 export type PluginRegistryPolicy = Readonly<{
   assertReplaySelectionCurrent?(packageName: string): void;
@@ -82,6 +84,14 @@ export type PluginRegistryPolicy = Readonly<{
     descriptor: WebDriverDescriptor,
     context: Readonly<{ clientVersion: string }>,
   ): Promise<Pick<ProviderRegistration, 'runtime' | 'platformModule'>>;
+  /**
+   * Builds the capability facets `startProviderRegistry` adds to every `setup` host it creates for
+   * this policy. The registry never interprets the facets; it hands the host environment over and
+   * awaits. The replay scope never calls it: no provider runtime is set up there.
+   */
+  hostCapabilities?(
+    host: HostEnvironment,
+  ): ProviderHostCapabilities | Promise<ProviderHostCapabilities>;
 }>;
 
 export type ProviderRegistration = Readonly<{
@@ -184,11 +194,16 @@ export async function startProviderRegistry(
   policy: PluginRegistryPolicy,
   scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
+  // Only a provider setup reads the facets, so the policy builds them at most once, and only now.
+  let capabilities: Promise<ProviderHostCapabilities> | undefined;
+  const resolveCapabilities = () =>
+    (capabilities ??= Promise.resolve(policy.hostCapabilities?.(host) ?? {}));
   for (const slot of resolved.slots) {
     if (slot.failure !== undefined) continue;
     try {
       if (slot.replayPlugin) await setUpReplaySlot(slot, slot.replayPlugin, host);
-      else if (slot.plugin && scope === 'all') await setUpSlot(slot, slot.plugin, host, policy);
+      else if (slot.plugin && scope === 'all')
+        await setUpSlot(slot, slot.plugin, host, policy, resolveCapabilities);
     } catch (error) {
       slot.failure = asPluginFailure(error, 'plugin_setup_failed');
       slot.registration = undefined;
@@ -424,8 +439,9 @@ async function setUpSlot(
   plugin: AgentDevicePlugin,
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
+  capabilities: () => Promise<ProviderHostCapabilities>,
 ): Promise<void> {
-  const pluginHost = createPluginHost(host, slot.candidate.hostOptions);
+  const pluginHost = createPluginHost(host, slot.candidate.hostOptions, await capabilities());
   const result = await plugin.setup(pluginHost);
   try {
     const { runtime, platformModule } = await buildRegistration(

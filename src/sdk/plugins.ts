@@ -8,6 +8,9 @@ import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdr
 
 export type {
   HostCommandResult,
+  ProviderAndroidHost,
+  ProviderAppleHost,
+  ProviderHostCapabilities,
   ProviderPluginHost,
   RunHostCommand,
 } from '@agent-device/plugins/host';

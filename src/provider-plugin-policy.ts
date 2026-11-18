@@ -13,6 +13,11 @@ export const PROVIDER_PLUGIN_POLICY: PluginRegistryPolicy = Object.freeze({
     const runtime = await createCloudWebDriverRuntime({ ...options, clientVersion });
     return { runtime, platformModule: runtime.platformRuntimeModule };
   },
+  hostCapabilities: async (host) => {
+    const { createProviderHostCapabilities } =
+      await import('./provider-plugin-host-capabilities.ts');
+    return createProviderHostCapabilities(host);
+  },
 });
 
 type WebDriverDescriptorOptions = Omit<CloudWebDriverRuntimeOptions, 'clientVersion'>;
