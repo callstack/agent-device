@@ -31,6 +31,7 @@ Two guarantees establish this invariant.
 
 **1. Capture scope.** The capture uses the same `captureSnapshot` wrapper as the plain command's backend.
 It does not use a parallel single-shot dispatch.
+It captures through the request's admitted capture, the same one the commands the replay dispatches use, so the tree is the producer's that recorded the target evidence.
 It inherits full-window scope:
 
 - Android uses the snapshot-helper route.

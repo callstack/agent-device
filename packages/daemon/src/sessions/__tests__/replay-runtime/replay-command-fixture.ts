@@ -2,6 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
+import type { ReplayCaptureAdmission } from '../../handlers/session-replay-command.ts';
 import {
   createReplaySession,
   replayDaemonDependencies,
@@ -21,6 +22,8 @@ export type ReplayCommandTestInput = Readonly<{
   invoke: DaemonInvokeFn;
   tracePath?: string;
   onStep?: ReplayTestAttemptStepSink;
+  /** The admission facts the handler passes on a live request (#4622). */
+  capture?: ReplayCaptureAdmission;
 }>;
 
 /**
@@ -29,11 +32,11 @@ export type ReplayCommandTestInput = Readonly<{
  * test's `invoke` sees the same `DaemonRequest` the daemon would.
  */
 export function replayCommandForTest(params: ReplayCommandTestInput): ReplayCommand {
-  const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep } = params;
+  const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep, capture } = params;
   return {
     ...splitReplayCommandRequest(req),
     host: sessionStore.host,
-    session: createReplaySession(sessionName, logPath, sessionStore),
+    session: createReplaySession(sessionName, logPath, sessionStore, capture),
     invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,
     ...(tracePath === undefined ? {} : { tracePath }),

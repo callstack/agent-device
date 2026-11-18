@@ -2,6 +2,7 @@ import { resolveSessionTestArtifactsRoot } from '@agent-device/daemon-contracts/
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { deviceIdentity, deviceIdentityKey } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -11,6 +12,7 @@ import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
+  RuntimeAdmissionBindings,
 } from '../../core/request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import { runReplayCommand } from '@agent-device/replay-port/native-command';
@@ -29,6 +31,9 @@ import { assertSessionSelectorMatches } from '../../core/session-selector.ts';
 import { resolveSessionScope } from '../session-routing.ts';
 import { resolveEffectiveOpenRuntimeHints } from '../session-runtime.ts';
 import { captureSnapshot } from '../../core/snapshot-capture.ts';
+import { buildRuntimeCaptureInput } from '../../core/snapshot-runtime-capture-input.ts';
+import type { BoundSnapshotCapture } from '../../core/snapshot-runtime-binding.ts';
+import { resolveObservationCapture } from '../../core/observation-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
 import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
@@ -36,6 +41,21 @@ import type { SessionCommandHandler } from './session-command-input.ts';
 
 /** The daemon policy replay consults without owning. */
 export const replayDaemonDependencies: ReplayDaemonDependencies = { resolveSessionScope };
+
+/**
+ * The request's admission seams (#4622), which let replay bind the SAME request-bound capture the
+ * commands it dispatches bind. `meta` rides along so the capture's execution metadata carries this
+ * request's identity, runner overrides, and lease context like any other request-bound capture.
+ *
+ * A caller that composes no admission at all — the seam of a unit test that never binds a device —
+ * leaves every capture on the owner's own snapshot path. Root composition always supplies one, so
+ * a replay run driven through the daemon never takes that branch.
+ */
+export type ReplayCaptureAdmission = Readonly<{ meta?: DaemonRequest['meta'] }> &
+  RuntimeAdmissionBindings;
+
+/** What a replay run with no composed admission resolves every capture cell to. */
+const NO_REPLAY_CAPTURE: Promise<BoundSnapshotCapture | undefined> = Promise.resolve(undefined);
 
 export const handleReplayCommand: SessionCommandHandler = async ({
   req,
@@ -45,11 +65,19 @@ export const handleReplayCommand: SessionCommandHandler = async ({
   sessionStore,
   invoke,
   invokeReplayAction,
+  inspectFacts,
+  bindDevice,
+  platformServices,
 }) =>
   await runReplayCommand({
     ...splitReplayCommandRequest(req),
     host,
-    session: createReplaySession(sessionName, logPath, sessionStore),
+    session: createReplaySession(sessionName, logPath, sessionStore, {
+      meta: req.meta,
+      inspectFacts,
+      bindDevice,
+      platformServices,
+    }),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
   });
@@ -90,6 +118,12 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     retainDeviceExecutionLock,
     throwIfCanceled,
   });
+  const capture: ReplayCaptureAdmission = {
+    meta: req.meta,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  };
   const suiteRequest = req.internal?.publicNetworkOnly
     ? {
         ...req,
@@ -104,9 +138,9 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   return await runReplayTestCommand({
     ...splitReplayCommandRequest(suiteRequest),
     host,
-    session: createReplaySession(sessionName, logPath, sessionStore),
+    session: createReplaySession(sessionName, logPath, sessionStore, capture),
     createSession: (testSessionName, testLogPath) =>
-      createReplaySession(testSessionName, testLogPath, sessionStore),
+      createReplaySession(testSessionName, testLogPath, sessionStore, capture),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
@@ -136,6 +170,7 @@ export function createReplaySession(
   name: string,
   logPath: string,
   store: SessionStore,
+  capture?: ReplayCaptureAdmission,
 ): ReplaySession {
   const updateSession = (mutate: (session: SessionState) => void): boolean => {
     const session = store.get(name);
@@ -150,6 +185,32 @@ export function createReplaySession(
     lookup: () => store.lookup(name),
     getRuntimeHints: () => store.getRuntimeHints(name),
     ensureSessionDir: () => store.ensureSessionDir(name),
+  };
+  // One admission and one bind per capture cell (device, active-app split) for this replay run:
+  // the SAME request-bound capture the commands this replay dispatches bind, so target verification
+  // compares recorded evidence against a tree from the SAME producer (#4622). The legacy interactor
+  // and the request-bound owner are two projections of one screen on an iOS simulator — the XCTest
+  // runner's tree inserts an `other "<screen title>"` wrapper the Simulator AX bridge's tree does
+  // not have — so an unbound verification reported `identity-mismatch` on `ancestry[...]` for a
+  // screen nobody changed. A cell is re-admitted only when the plan could actually change: the
+  // session's device, or whether it has an app at all.
+  const boundCaptures = new Map<string, Promise<BoundSnapshotCapture | undefined>>();
+  const bindCaptureFor = (session: SessionState): Promise<BoundSnapshotCapture | undefined> => {
+    if (!capture?.platformServices) return NO_REPLAY_CAPTURE;
+    const cell = `${deviceIdentityKey(deviceIdentity(session.device))}|${
+      session.appBundleId === undefined ? 'no-app' : 'app'
+    }`;
+    const existing = boundCaptures.get(cell);
+    if (existing) return existing;
+    const binding = resolveObservationCapture({
+      command: 'replay',
+      session,
+      inspectFacts: capture.inspectFacts,
+      platformServices: capture.platformServices,
+      bindDevice: capture.bindDevice,
+    });
+    boundCaptures.set(cell, binding);
+    return binding;
   };
   return bindReplaySession(name, logPath, reads, {
     createCoordinator: () =>
@@ -185,12 +246,28 @@ export function createReplaySession(
           if (!session) {
             throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
           }
+          const bound = await bindCaptureFor(session);
           return await captureSnapshot({
             device: session.device,
             session,
             flags,
             logPath: captureLogPath,
             signal,
+            ...(bound
+              ? {
+                  captureData: async () =>
+                    await bound(
+                      buildRuntimeCaptureInput({
+                        flags,
+                        logPath: captureLogPath,
+                        meta: capture?.meta,
+                        session,
+                        snapshotScope: undefined,
+                        signal,
+                      }),
+                    ),
+                }
+              : {}),
           });
         },
       };
