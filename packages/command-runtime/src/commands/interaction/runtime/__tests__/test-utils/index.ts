@@ -239,6 +239,7 @@ export function coveredByAnonymousTabBarScanSnapshot(
             depth: 1,
             parentIndex: 0,
             type: options.horizontal ? 'android.widget.HorizontalScrollView' : 'ScrollView',
+            hiddenContentBelow: options.scrollable ? true : undefined,
             rect: options.horizontal
               ? { x: 0, y: 800, width: 402, height: 65 }
               : { x: 0, y: 0, width: 402, height: 874 },

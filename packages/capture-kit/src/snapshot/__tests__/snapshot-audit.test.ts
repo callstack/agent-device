@@ -363,6 +363,7 @@ function scannedCoverTree(cover: CoverPublication): SnapshotNode[] {
       parentIndex: 1,
       depth: 2,
       type: 'ScrollView',
+      hiddenContentBelow: true,
       rect: { x: 0, y: 0, width: 402, height: 874 },
     },
     {

@@ -735,7 +735,7 @@ test('a full-viewport bottom navigation bar is not viewport chrome: it still cov
 
   assert.equal(annotated[1]?.interactionBlocked, 'covered');
   assert.equal(annotated[1]?.coveredBy?.persistentBar, true);
-  assert.match(annotated[1]?.coveredBy?.kind ?? '', /bottomnavigation/);
+  assert.equal(annotated[1]?.coveredBy?.kind, 'bottom-navigation');
 });
 
 test.for([
