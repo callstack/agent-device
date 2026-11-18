@@ -224,22 +224,27 @@ export function coveredByScanSnapshot(): SnapshotState {
 /**
  * An unnamed bar published as type `Other` with its UIKit class in `role`, run through the real
  * annotation pass: the scan reads the bar identity from the role, not the generic type. The Save draft
- * button is fixed beside the bar by default; `scrollable` puts it inside a scroll view instead.
+ * button is fixed beside the bar by default; `scrollable` puts it inside a scroll view instead;
+ * `horizontal` puts it inside a horizontal scroller whose viewport the bar contains entirely, so no
+ * scroll can reveal it.
  */
 export function coveredByAnonymousTabBarScanSnapshot(
-  options: { scrollable?: boolean } = {},
+  options: { scrollable?: boolean; horizontal?: boolean } = {},
 ): SnapshotState {
-  const scroller: RawSnapshotNode[] = options.scrollable
-    ? [
-        {
-          index: 1,
-          depth: 1,
-          parentIndex: 0,
-          type: 'ScrollView',
-          rect: { x: 0, y: 0, width: 402, height: 874 },
-        },
-      ]
-    : [];
+  const scroller: RawSnapshotNode[] =
+    options.scrollable || options.horizontal
+      ? [
+          {
+            index: 1,
+            depth: 1,
+            parentIndex: 0,
+            type: options.horizontal ? 'android.widget.HorizontalScrollView' : 'ScrollView',
+            rect: options.horizontal
+              ? { x: 0, y: 800, width: 402, height: 65 }
+              : { x: 0, y: 0, width: 402, height: 874 },
+          },
+        ]
+      : [];
   const buttonIndex = scroller.length + 1;
   return makeSnapshotState(
     annotateCoveredSnapshotNodes([
@@ -257,7 +262,9 @@ export function coveredByAnonymousTabBarScanSnapshot(
         parentIndex: scroller.length > 0 ? 1 : 0,
         type: 'Button',
         label: 'Save draft',
-        rect: { x: 16, y: 800, width: 140, height: 44 },
+        rect: options.horizontal
+          ? { x: 16, y: 810, width: 140, height: 44 }
+          : { x: 16, y: 800, width: 140, height: 44 },
         hittable: true,
       },
       {

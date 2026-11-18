@@ -88,9 +88,10 @@ function coveredInteractionHint(coveredBy: SnapshotCoveringNode | undefined): st
   if (!coveredBy) {
     return 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.';
   }
-  // Persistent bar chrome cannot be dismissed, and a scroll moves only a target in scrollable content.
+  // Persistent bar chrome cannot be dismissed, and only a target the scan proved scroll-revealable
+  // can be scrolled clear of it.
   if (coveredBy.persistentBar) {
-    const recovery = coveredBy.targetInScrollableContent
+    const recovery = coveredBy.scrollCanReveal
       ? 'Scroll the target clear of it'
       : 'Use a different visible target';
     return (

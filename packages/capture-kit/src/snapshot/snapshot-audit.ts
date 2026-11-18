@@ -305,11 +305,9 @@ function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-/** Persistent bar chrome over scrollable content is a scroll position, not a covered control. */
+/** Persistent bar chrome over a target a scroll can reveal is a scroll position, not a covered control. */
 function isScrollableChromeOcclusion(node: SnapshotNode): boolean {
-  return (
-    node.coveredBy?.persistentBar === true && node.coveredBy.targetInScrollableContent === true
-  );
+  return node.coveredBy?.persistentBar === true && node.coveredBy.scrollCanReveal === true;
 }
 
 function auditGuidance(

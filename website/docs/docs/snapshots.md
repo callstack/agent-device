@@ -168,11 +168,10 @@ and subrole, so a bar with a generic type and no name still publishes `coveredBy
 the bar kind (`tab-bar`, `toolbar`, `navigation-bar`, or `bottom-navigation`).
 
 A `click`/`press`/`fill`/`find ... focus` refused on that node repeats the same description in
-`error.details.coveredBy` and names it in `error.hint`. When the covered node sits inside scrollable
-content, `coveredBy` also carries `targetInScrollableContent: true`. A persistent bar cannot be
-dismissed. Its hint tells you to scroll the target clear of it only when the target is in scrollable
-content. For a fixed target, the hint tells you to use a different visible target or to inspect with
-snapshot or screenshot. `coveredBy` is diagnosis only: it carries no
+`error.details.coveredBy` and names it in `error.hint`. For a persistent bar, follow the scroll
+suggestion when `coveredBy.scrollCanReveal` is true. If the bar covers the whole scroll viewport
+or blocks every reachable tap point, use a different visible target or inspect with a snapshot or
+screenshot. The same recovery applies to a fixed target. `coveredBy` is diagnostic and has no
 ref, so the cover is not an actionable target. It is absent when nothing nameable covers — an
 anonymous container with no accessible name that is not a persistent bar, or a backend policy that reports only the boolean, such
 as an Android replacement surface — and those refusals say only that the target is covered.

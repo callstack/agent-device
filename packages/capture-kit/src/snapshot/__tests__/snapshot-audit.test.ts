@@ -415,11 +415,54 @@ test.for<CoverPublication>([
   const nodes = scannedCoverTree(cover);
   expect(nodes[3]).toMatchObject({
     interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true, targetInScrollableContent: true },
+    coveredBy: { persistentBar: true, scrollCanReveal: true },
   });
   expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
-  expect(nodes[4]?.coveredBy?.targetInScrollableContent).toBeUndefined();
+  expect(nodes[4]?.coveredBy?.scrollCanReveal).toBeUndefined();
   expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
+});
+
+test('keeps the covered-control finding for a button in a horizontal scroller wholly behind a bottom bar', () => {
+  // The bar contains the scroller's whole usable viewport (400x65 inside the 400x75 bar), so no
+  // scroll can reveal the button: the audit keeps the finding instead of excluding it as scroll
+  // chrome. The occlusion scan produces the `coveredBy`, as in a real capture.
+  const raw: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'android.widget.HorizontalScrollView',
+      rect: { x: 0, y: 725, width: 400, height: 65 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      label: 'Buy now',
+      hittable: true,
+      rect: { x: 20, y: 735, width: 120, height: 50 },
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      depth: 1,
+      type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+      hittable: true,
+      rect: { x: 0, y: 725, width: 400, height: 75 },
+    },
+  ];
+  const nodes = annotateCoveredSnapshotNodes(raw).map((scanned) => ({
+    ...scanned,
+    ref: `e${scanned.index}`,
+  }));
+  expect(nodes[2]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { persistentBar: true },
+  });
+  expect(nodes[2]?.coveredBy?.scrollCanReveal).toBeUndefined();
+  expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e2']);
 });
 
 test.for<CoverPublication>([
@@ -471,7 +514,7 @@ test('keeps a child under an overlay when its covered row is excluded as scroll 
       type: 'Cell',
       parentIndex: 0,
       interactionBlocked: 'covered',
-      coveredBy: { kind: 'tab-bar', persistentBar: true, targetInScrollableContent: true },
+      coveredBy: { kind: 'tab-bar', persistentBar: true, scrollCanReveal: true },
     }),
     node(2, {
       parentIndex: 1,

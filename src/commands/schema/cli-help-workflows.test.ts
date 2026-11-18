@@ -75,10 +75,7 @@ test('usageForCommand resolves manual QA help topic', async () => {
     help,
     /under a persistent bar \(tab bar, toolbar, navigation bar, bottom navigation\) use a different visible target or inspect with snapshot\/screenshot/,
   );
-  assert.match(
-    help,
-    /scrolling past the bar only when coveredBy\.targetInScrollableContent is true/,
-  );
+  assert.match(help, /scrolling past the bar only when coveredBy\.scrollCanReveal is true/);
   assert.doesNotMatch(help, /Dismiss\/close it or scroll the target clear/);
 });
 

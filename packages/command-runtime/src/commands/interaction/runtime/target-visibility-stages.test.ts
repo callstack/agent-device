@@ -212,7 +212,7 @@ test('runtime covered refusal names an unnamed generic-typed bar and never says 
   );
 });
 
-test('runtime covered refusal suggests a scroll for a scrollable target under a scanned bar', async () => {
+test('runtime covered refusal suggests a scroll for a scroll-revealable target under a scanned bar', async () => {
   const device = createInteractionDevice(
     coveredByAnonymousTabBarScanSnapshot({ scrollable: true }),
     {
@@ -229,13 +229,43 @@ test('runtime covered refusal suggests a scroll for a scrollable target under a 
         kind: 'tab-bar',
         rect: { x: 0, y: 791, width: 402, height: 83 },
         persistentBar: true,
-        targetInScrollableContent: true,
+        scrollCanReveal: true,
       });
       assert.match(
         String(details?.hint),
         /^Covered by the tab-bar at \(0, 791 402x83\)\. Scroll the target clear of it/,
       );
       assert.doesNotMatch(String(details?.hint), /dismiss|close/i);
+      return true;
+    },
+  );
+});
+
+test('runtime covered refusal keeps the fixed-target recovery for a horizontal scroller wholly behind a scanned bar', async () => {
+  // The bar contains the horizontal scroller's whole 402x65 viewport, so no scroll can reveal the
+  // button: the hint must not suggest scrolling, which could never clear the bar.
+  const device = createInteractionDevice(
+    coveredByAnonymousTabBarScanSnapshot({ horizontal: true }),
+    {
+      tap: async () => {},
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e3'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+      });
+      assert.equal(
+        String(details?.hint),
+        'Covered by the tab-bar at (0, 791 402x83). Use a different visible target, or inspect with snapshot/screenshot before retrying.',
+      );
+      assert.doesNotMatch(String(details?.hint), /scroll/i);
       return true;
     },
   );
