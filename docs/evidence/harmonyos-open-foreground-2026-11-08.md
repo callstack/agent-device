@@ -100,3 +100,30 @@ ledger.
 `packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 26 tests
 pass on this branch's build; the full `check:unit` suite is green (20109
 tests, lint clean) with `origin/main` pointed at the upstream base.
+
+## 2026-11-19 re-attempt at head d295556df
+
+The keyguard re-check: with the screen suspended the mission list shows the
+no-foreground shape again (11 missions, zero `state #FOREGROUND`), and the
+`open --relaunch` dispatch again wakes this unit past the suspended state —
+the poll confirmed on its first read and two missions went FOREGROUND. The
+end-to-end `no-foreground` open keeps needing the secure keyguard; a
+maintainer run at this head remains the path.
+
+## The failed-probe path re-captured at head d295556df
+
+The shim-hdc protocol (every `aa dump -l` answers exit 1; the dispatch is
+the real dispatch on the real device):
+
+```json
+{"success": false, "error": {"code": "COMMAND_FAILED",
+  "message": "The launch dispatch for com.stringzhao.moonwell succeeded,
+  but the foreground probe could not read the device within 5s",
+  "hint": "Check the device connection, then run the open again.",
+  "details": {"reason": "open-foreground-probe-unreadable"}}}
+```
+
+The window text stays "within 5s" here because the CLI request's deadline
+left the full budget — the deadline wording fires only when the deadline
+actually clamped the poll (pinned by the partly-clamped and spent-deadline
+tests).
