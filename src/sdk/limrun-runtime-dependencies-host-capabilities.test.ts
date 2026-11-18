@@ -88,6 +88,54 @@ test('the Android adapter serves shared operations through the host capabilities
   );
 });
 
+test('a binary stdout answer from the capabilities reaches the provider as a buffer', async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const capabilities: ProviderHostCapabilities = {
+    android: {
+      ...recordingAndroid([]),
+      runAdb: async () => ({ exitCode: 0, stdout: '', stderr: '', stdoutBuffer: png }),
+    },
+  };
+  const dependencies = createLimrunRuntimeDependencies(
+    { env: process.env, cwd: process.cwd() },
+    capabilities,
+  );
+  const result = await dependencies.host.runAdb(
+    androidAdbInvocation(androidAdbHostTarget(), ['exec-out', 'screencap', '-p']),
+    { binaryStdout: true },
+  );
+  // The provider's own contract reads the binary answer as a Node buffer, and the platform's bytes
+  // reach it whole: this is the call path `adb exec-out` capture takes through the boundary.
+  assert.ok(Buffer.isBuffer(result.stdoutBuffer));
+  assert.deepEqual([...result.stdoutBuffer!], [...png]);
+});
+
+test('execution options the capabilities hand back reach this adapter executors as buffers', async () => {
+  const payload = new Uint8Array([0x70, 0x69, 0x70, 0x65]);
+  const seen: unknown[] = [];
+  const capabilities: ProviderHostCapabilities = {
+    android: {
+      ...recordingAndroid([]),
+      runShell: async (adb, words, options) => {
+        // A capability that pipes a payload through the shell hands the executor the contract's own
+        // byte array; this adapter's executors take a Node buffer.
+        await adb(words.map(String), { ...options, stdin: payload });
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    },
+  };
+  const dependencies = createLimrunRuntimeDependencies(
+    { env: process.env, cwd: process.cwd() },
+    capabilities,
+  );
+  await dependencies.android.forceStopApp(async (_args, options) => {
+    seen.push(options?.stdin);
+    return { exitCode: 0, stdout: '', stderr: '' };
+  }, 'com.example.app');
+  assert.ok(Buffer.isBuffer(seen[0]));
+  assert.deepEqual([...(seen[0] as Buffer)], [...payload]);
+});
+
 test('without capabilities the adapter keeps its own lazy platform edges', async () => {
   const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const seen: string[][] = [];

@@ -195,9 +195,7 @@ export async function startProviderRegistry(
   scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
   // Only a provider setup reads the facets, so the policy builds them at most once, and only now.
-  let capabilities: Promise<ProviderHostCapabilities> | undefined;
-  const resolveCapabilities = () =>
-    (capabilities ??= Promise.resolve(policy.hostCapabilities?.(host) ?? {}));
+  const resolveCapabilities = createHostCapabilitiesResolver(policy, host);
   for (const slot of resolved.slots) {
     if (slot.failure !== undefined) continue;
     try {
@@ -268,6 +266,34 @@ export async function startProviderRegistry(
       return [...providers, ...backends.flat()];
     }),
   });
+}
+
+/**
+ * The `setup` host capabilities, built at most once per registry. Host capabilities are optional:
+ * a policy that fails to build them must not be diagnosed as each plugin's own setup failure, so a
+ * rejection is kept as the facet's typed failure, the build is attempted once, and every setup
+ * proceeds without the facets.
+ */
+function createHostCapabilitiesResolver(
+  policy: PluginRegistryPolicy,
+  host: HostEnvironment,
+): () => Promise<ProviderHostCapabilities> {
+  if (!policy.hostCapabilities) return async () => ({});
+  let building: Promise<ProviderHostCapabilities> | undefined;
+  return () =>
+    (building ??= Promise.resolve()
+      .then(() => policy.hostCapabilities!(host))
+      .catch(async (error: unknown) => {
+        // The diagnostics module stays implementation-lazy so loading the registry evaluates no
+        // more modules than it did before (the eager-closure budget).
+        const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'plugin.host_capabilities_unavailable',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+        return {};
+      }));
 }
 
 async function loadSlot(slot: Slot): Promise<void> {

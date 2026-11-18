@@ -119,6 +119,62 @@ describe('registry hosts', () => {
     await registry.close();
   });
 
+  test('a policy that fails to build its facets sets every plugin up without them', async () => {
+    const { resolveProviderPlugins, startProviderRegistry } = await import('./registry.ts');
+    const { countDiagnosticEventsByPhase, withDiagnosticsScope } =
+      await import('@agent-device/host-kit/diagnostics');
+    let attempts = 0;
+    const setupHosts: ProviderPluginHost[] = [];
+    const plugin = (provider: string) => ({
+      apiVersion: 2 as const,
+      provider,
+      credentials: { variables: [] },
+      setup: async (host: ProviderPluginHost) => {
+        setupHosts.push(host);
+        return { webDriver: { provider } };
+      },
+    });
+    const resolved = await resolveProviderPlugins([
+      { source: 'embedder', package: '@agent-device/first', load: () => plugin('first') },
+      { source: 'embedder', package: '@agent-device/second', load: () => plugin('second') },
+    ]);
+    const registry = await withDiagnosticsScope({ debug: false }, async () => {
+      const started = await startProviderRegistry(
+        resolved,
+        { env: {}, cwd: '/' },
+        {
+          adaptWebDriver: async (descriptor) => ({
+            runtime: { provider: descriptor.provider } as never,
+            platformModule: {} as never,
+          }),
+          hostCapabilities: async () => {
+            attempts += 1;
+            throw new Error('the platform wiring is unavailable');
+          },
+        },
+      );
+      return {
+        started,
+        diagnostics: countDiagnosticEventsByPhase(['plugin.host_capabilities_unavailable']),
+      };
+    });
+    // The rejection belongs to the facet, not to a plugin: both set up, both register, both report
+    // as active, and the build is attempted once rather than once per plugin.
+    expect(attempts).toBe(1);
+    expect(setupHosts).toHaveLength(2);
+    for (const host of setupHosts) {
+      expect('android' in host).toBe(false);
+      expect('apple' in host).toBe(false);
+    }
+    expect(registry.started.registrations.map((registration) => registration.provider)).toEqual([
+      'first',
+      'second',
+    ]);
+    expect(registry.started.inventory.map((entry) => entry.state)).toEqual(['active', 'active']);
+    expect(registry.diagnostics).toBe(1);
+    await registry.started.close();
+  });
+
   test('a policy without hostCapabilities sets plugins up without facets', async () => {
     const { resolveProviderPlugins, startProviderRegistry } = await import('./registry.ts');
     let observed: ProviderPluginHost | undefined;

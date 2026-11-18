@@ -96,3 +96,76 @@ void missingCwd;
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('compiled plugin host declarations keep the provider-scoped facets', () => {
+  ensureBuiltPackage();
+
+  const tempRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp-plugin-host-types-'));
+  try {
+    fs.writeFileSync(
+      path.join(tempRoot, 'tsconfig.json'),
+      JSON.stringify(
+        {
+          compilerOptions: {
+            module: 'NodeNext',
+            moduleResolution: 'NodeNext',
+            noEmit: true,
+            strict: true,
+            types: ['node'],
+          },
+          include: ['fixture.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+    fs.writeFileSync(
+      path.join(tempRoot, 'fixture.ts'),
+      `import type { ProviderAndroidHost, ProviderPluginHost } from 'agent-device/plugins';
+
+// The Apple facet a plugin's \`setup\` receives carries no daemon-wide Apple shutdown authority.
+type AppleTools = NonNullable<ProviderPluginHost['apple']>['applicationTools'];
+declare const appleTools: AppleTools;
+void appleTools.resolveOpenTarget;
+void appleTools.prepareRunner;
+// @ts-expect-error handing runner sessions to the next daemon is not a plugin's authority.
+void appleTools.detachRunnerSessionsForShutdown;
+// @ts-expect-error stopping every runner session this process holds is not a plugin's authority.
+void appleTools.finalizeRunnerSessionsForShutdown;
+
+// The binary contract is nameable without a Node buffer in either direction.
+declare const android: ProviderAndroidHost;
+const invocation = {
+  target: { selector: { kind: 'unspecified' as const }, server: { kind: 'ambient' as const } },
+  command: ['exec-out', 'screencap', '-p'],
+};
+const options = { binaryStdout: true, stdin: new Uint8Array([112, 105, 112, 101]) };
+async function capture() {
+  const result = await android.runAdb(invocation, options);
+  // The platform's own answer, read as the contract names it: bytes, not a decoded string.
+  const bytes: Uint8Array | undefined = result.stdoutBuffer;
+  return bytes;
+}
+void capture();
+`,
+    );
+
+    const result = runCmdSync(
+      TSC_BIN,
+      ['--noEmit', '-p', path.join(tempRoot, 'tsconfig.json'), '--pretty', 'false'],
+      {
+        cwd: tempRoot,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        allowFailure: true,
+      },
+    );
+
+    assert.equal(
+      result.exitCode,
+      0,
+      `The compiled agent-device plugin host declarations no longer preserve the downstream contract:\n${result.stdout}${result.stderr}`,
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});

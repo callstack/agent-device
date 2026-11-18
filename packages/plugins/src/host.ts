@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { AppleApplicationToolsForProvider } from '@agent-device/contracts/application-lifecycle-runtime';
 
 export type HostCommandResult = Readonly<{ stdout: string }>;
 
@@ -47,24 +47,30 @@ export type ProviderAndroidAdbInvocation = Readonly<{
 }>;
 
 /**
- * Execution options, mirrored from the platform minus `stdin`: a Node buffer is not nameable in
- * the published contract. The root passes the caller's options object through, so a stdin an
- * adapter still carries reaches the platform at runtime.
+ * Execution options, mirrored from the platform. `stdin` and the binary answer are named as
+ * `Uint8Array`: the published contract has no Node buffer to name, and every platform buffer is a
+ * `Uint8Array`, so the root hands the caller's options to the platform's mechanics unchanged and
+ * converts only where a buffer of its own must be produced.
  */
 export type ProviderAndroidExecutorOptions = Readonly<{
   allowFailure?: boolean;
   timeoutMs?: number;
   binaryStdout?: boolean;
+  stdin?: string | Uint8Array;
   signal?: AbortSignal;
   env?: Record<string, string | undefined>;
   serverPort?: number;
 }>;
 
-/** One adb answer, mirrored from the platform minus the binary stdout buffer for the same reason. */
+/**
+ * One adb answer, mirrored from the platform. `stdout` is the decoded text, empty when the command
+ * asked for binary stdout; `stdoutBuffer` carries the bytes `binaryStdout` captured.
+ */
 export type ProviderAndroidExecutorResult = Readonly<{
   exitCode: number;
   stdout: string;
   stderr: string;
+  stdoutBuffer?: Uint8Array;
   signal?: string;
 }>;
 
@@ -180,11 +186,13 @@ export type ProviderAndroidKeyboardDismissResult = ProviderAndroidKeyboardState 
 
 /**
  * The Apple host capabilities a provider plugin drives a simulator through. `applicationTools` is
- * the root-composed Apple tool port: open-target resolution and runner-session mechanics, bound to
- * the host these capabilities were created for.
+ * the root-composed Apple tool port: open-target resolution, runner-session mechanics, and runtime
+ * hints, bound to the host these capabilities were created for. The daemon's own Apple shutdown
+ * members are absent here and are removed from the value the root builds, so a plugin cannot stop
+ * runner sessions its leases do not own.
  */
 export type ProviderAppleHost = Readonly<{
-  applicationTools: AppleApplicationTools;
+  applicationTools: AppleApplicationToolsForProvider;
 }>;
 
 /** The platform facets a host may make available to a plugin's `setup`. Each is absent when this host does not serve that family. */

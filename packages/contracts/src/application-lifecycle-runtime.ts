@@ -438,6 +438,40 @@ export type AppleApplicationTools = Readonly<{
   finalizeRunnerSessionsForShutdown(): Promise<readonly string[]>;
 }>;
 
+/**
+ * The daemon-wide Apple shutdown members. They hand off or stop every runner session this process
+ * holds, so the daemon's own durable-resource lifecycle is their only caller: a provider's
+ * authority ends at the sessions its own leases own.
+ */
+const appleDaemonShutdownMembers = [
+  'detachRunnerSessionsForShutdown',
+  'finalizeRunnerSessionsForShutdown',
+] as const;
+
+/**
+ * The Apple mechanics a host may place in a provider plugin's hands: open-target resolution,
+ * runner-session mechanics, and runtime hints. The daemon shutdown members are absent by
+ * declaration, and a host omits them from the value it hands over.
+ */
+export type AppleApplicationToolsForProvider = Omit<
+  AppleApplicationTools,
+  (typeof appleDaemonShutdownMembers)[number]
+>;
+
+/**
+ * Projects Apple tools to {@link AppleApplicationToolsForProvider}. The omitted members are removed
+ * from the runtime value, not only from its type, so a holder of the projection cannot reach them
+ * through an unchecked reference.
+ */
+export function availableAppleApplicationToolsForProvider(
+  tools: AppleApplicationToolsForProvider,
+): AppleApplicationToolsForProvider {
+  const omitted: readonly string[] = appleDaemonShutdownMembers;
+  return Object.freeze(
+    Object.fromEntries(Object.entries(tools).filter(([key]) => !omitted.includes(key))),
+  ) as AppleApplicationToolsForProvider;
+}
+
 /** Lazy Android mechanics used by the Android package's own lifecycle binding. */
 export type AndroidApplicationTools = Readonly<{
   resolveOpenTarget(

@@ -2,7 +2,7 @@ import { limrunRunnerError, withLimrunRunnerErrors } from './limrun-ios-runner-e
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { Deadline, type DeadlineClock, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
-import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { AppleApplicationToolsForProvider } from '@agent-device/contracts/application-lifecycle-runtime';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { createLimrunAppleApplicationTools } from './limrun-ios-application-tools.ts';
 import { randomInt } from 'node:crypto';
@@ -23,11 +23,16 @@ import {
 type LimrunIosRunner = Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>>;
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 
-/** Owns the lease’s XCTest runs; closing an attached lease never terminates its simulator. */
+/**
+ * Owns the lease’s XCTest runs; closing an attached lease never terminates its simulator.
+ * `appleApplications` is the provider projection: the runner consumes open-target resolution and
+ * runtime hints, and builds its own lease-scoped tools, whose shutdown members stop only this
+ * lease's runner. The daemon's whole-process Apple shutdown is never handed to a lease.
+ */
 export async function createLimrunIosRunner(
   session: Session,
   host: HostEnvironment,
-  appleApplications: AppleApplicationTools,
+  appleApplications: AppleApplicationToolsForProvider,
 ): Promise<LimrunIosRunner> {
   const {
     createAppleRunnerRuntime,

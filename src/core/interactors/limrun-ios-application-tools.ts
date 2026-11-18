@@ -1,4 +1,7 @@
-import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  AppleApplicationTools,
+  AppleApplicationToolsForProvider,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -24,7 +27,7 @@ export function createLimrunAppleApplicationTools(
   device: DeviceInfo,
   runner: RunnerLifecycle,
   hostTools: Pick<
-    AppleApplicationTools,
+    AppleApplicationToolsForProvider,
     'resolveOpenTarget' | 'applyRuntimeHints' | 'clearRuntimeHints'
   >,
 ): AppleApplicationTools {
