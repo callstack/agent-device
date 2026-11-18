@@ -290,9 +290,10 @@ jobs:
 
   # Runs the full unit + provider-integration suites under coverage with
   # thresholds, so a separate unit-tests job would rerun the same tests.
+  # Sixteen vCPU: the suite is CPU-bound, and eight cores left half the wall time queueing.
   coverage:
     name: Coverage
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
       - name: Checkout
