@@ -13,7 +13,7 @@ agent-device plugins remove @example/agent-device-provider
 
 `agent-device help connect` and `agent-device help remote` identify known optional providers as
 `plugin, install separately` and show their installation commands, even before you install them.
-For example, BrowserStack requires `agent-device plugins add @agent-device/browserstack`, AWS Device Farm will require `agent-device plugins add @agent-device/aws-device-farm` after that private package is published, and TestMu AI requires `agent-device plugins add @agent-device/testmu`.
+Use the install command shown for your provider. TestMu AI uses `agent-device plugins add @agent-device/testmu`.
 
 If you run `agent-device connect browserstack`, `agent-device connect aws-device-farm`, or `agent-device connect testmu` without its plugin, the error gives that installation
 command and tells you to retry your original command. With `--json`, the error has
@@ -31,17 +31,13 @@ A failed install keeps the previous selection. A running daemon keeps the plugin
 
 ## Install replay and test support
 
-The 0.22 `@agent-device/replay` and `@agent-device/maestro` packages are private and not yet published. The npm commands below apply after publication. Native replay and suites cannot be installed from npm until then.
-
-In 0.22, install the native replay plugin on the daemon host:
+Install the native replay plugin on the daemon host.
 
 ```bash
 agent-device plugins add @agent-device/replay
 ```
 
 Finish your sessions and restart that daemon, then retry the original invocation with all its arguments. Native `.ad` scripts keep their syntax, variables, target verification, resume and repair behavior. Ordinary script recording stays in core.
-
-The plugin uses API version 2 and supports core `>=0.22.0-0 <0.23.0`, plus the pinned `0.21.38-dev` extraction host. A mismatched release returns `incompatible_plugin`.
 
 A remote daemon needs its own installation. A local plugin store does not make an engine available remotely. An embedded host imports the factory from `@agent-device/replay/agent-device` and supplies `plugins: [replay()]` to `startAgentDevice`. Supplied plugins are authoritative; the embedded runtime does not read the store.
 
@@ -78,7 +74,7 @@ A lease that names a provider this daemon has no runtime for refuses with `UNSUP
 
 ## Install Maestro support
 
-The 0.22 Maestro plugin is private and unavailable from npm. After publication, `agent-device plugins add @agent-device/maestro` installs the optional Maestro engine for `replay --maestro`, `test --maestro`, and `replay export`. [Run Maestro flows](/docs/run-maestro-flows) explains client and daemon installation. `help maestro` remains available without the plugin.
+`agent-device plugins add @agent-device/maestro` installs the optional Maestro engine for `replay --maestro`, `test --maestro`, and `replay export`. [Run Maestro flows](/docs/run-maestro-flows) explains client and daemon installation. `help maestro` remains available without the plugin.
 
 Replay backends appear in plugin inventories with `backend` instead of `provider`. A daemon keeps its plugin set until it stops. Installing a package on a client does not change a remote or embedded daemon's plugin set.
 
