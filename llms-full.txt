@@ -5935,6 +5935,7 @@ This reports **XCUIApplication state, not verified foreground ownership**: XCTes
 
 * iOS and Android produce the same kind of snapshot: visible elements first, refs you can act on now, and hints that point to hidden list content.
 * Use `snapshot -i` by default in agent loops.
+* On tvOS, regular snapshots can mark the outer tile as focused when duplicate accessibility wrappers collapse. Use `snapshot --raw` to see which wrapper the app reports as focused.
 * On Android, `snapshot -i` also keeps the title and message of a standard alert dialog, so you can see what its buttons confirm.
 * When the Android snapshot helper captures the tree, the `Page:` and `App:` lines (`appName` and `appBundleId` in `--json`) name the foreground application window: active or focused, at the highest layer, and not a system UI or keyboard window. After a failed `open`, for example, they name the launcher. An app other than the session app shows its package name in both lines. `androidSnapshot.foregroundWindowPackage` in `--json` carries it, and the session keeps its app. The UIAutomator fallback names the session app.
 * On Android, repeating an unfiltered snapshot when nothing on screen changed (content or bounds) returns a short acknowledgement instead of the tree. `-i`, `-d`, `-s`, `--json`, and `--raw` always print full output. Add `--force-full` to get the full tree anyway.
