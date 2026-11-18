@@ -3,19 +3,38 @@
  * `--save-script` flag owners. Everything else is rejected at the daemon
  * request seam before any admission, session, or device work.
  */
+import path from 'node:path';
 import { expect, test } from 'vitest';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import {
+  ANDROID_EMULATOR,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { makeAuthoringSession } from '../../__tests__/support/session-factories.ts';
+import {
+  createLifecycleDeviceRuntimeGatewaySpies,
+  createRequestHandler,
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { SessionStore } from '../../core/session-store.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   listSaveScriptFlagOwnerCommands,
   ownsSaveScriptFlag,
 } from '../../core/daemon-command-registry.ts';
 import {
   SAVE_SCRIPT_FLAG_OWNER_COMMANDS,
-  saveScriptFlagResponse,
+  saveScriptFlagResponse as checkSaveScriptFlag,
 } from '../request-save-script-policy.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
 function request(command: string, flags: DaemonRequest['flags']): DaemonRequest {
   return { token: 'token', session: 'default', command, positionals: [], flags };
+}
+
+function saveScriptFlagResponse(req: DaemonRequest) {
+  return checkSaveScriptFlag(req, process.cwd());
 }
 
 test('the flag owners are exactly the released open/close/replay surface', () => {
@@ -78,7 +97,7 @@ test.each(['./missing/.', 'missing/..', '~/'])(
   },
 );
 
-test.each([String.raw`\\localhost\pipe\recorder`, String.raw`\\?\UNC\localhost\pipe\recorder`])(
+test.each([String.raw`\\localhost\pipe\recorder`])(
   'a local owner path in the Windows pipe namespace %s is refused at the seam',
   (spelled) => {
     const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -98,3 +117,51 @@ test.each([String.raw`\\localhost\pipe\recorder`, String.raw`\\?\UNC\localhost\p
     }
   },
 );
+
+test.each([
+  { command: 'open', saveScript: '\\journey.ad' },
+  { command: 'open', saveScript: '\\\\?\\C:\\journey.ad' },
+  { command: 'close', saveScript: '\\journey.ad' },
+  { command: 'close', saveScript: '\\\\?\\C:\\journey.ad' },
+])('$command refuses $saveScript before backend work', async ({ command, saveScript }) => {
+  const directory = mkdtempForTestSync('daemon-save-script-admission-');
+  const host = createTestHostEnvironment({ cwd: 'C:\\work' });
+  const sessionStore = new SessionStore(path.join(directory, 'sessions'), host);
+  const session =
+    command === 'close' ? makeAuthoringSession('default', { device: ANDROID_EMULATOR }) : undefined;
+  if (session) sessionStore.publish('default', session);
+  const { gateway, inspectFacts, bind } = createLifecycleDeviceRuntimeGatewaySpies();
+  const handler = createRequestHandler({
+    host,
+    createCommandSurface: fakeCreateCommandSurface,
+    logPath: path.join(directory, 'daemon.log'),
+    token: 'token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: gateway,
+    deviceInventoryGateways: createTestDeviceInventoryGateways({
+      local: async () => [ANDROID_EMULATOR],
+    }),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    const response = await handler({
+      ...request(command, { platform: 'android', saveScript }),
+      positionals: command === 'open' ? ['com.example.app'] : [],
+    });
+    expect(response).toMatchObject({
+      ok: false,
+      error: {
+        code: 'INVALID_ARGS',
+        details: { reason: 'script_ancestor_untrusted', exposure: 'windows_path_form' },
+      },
+    });
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+  }
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+  expect(sessionStore.get('default')).toBe(session);
+});

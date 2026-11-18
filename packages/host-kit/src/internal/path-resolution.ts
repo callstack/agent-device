@@ -2,7 +2,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { hostPathRules, scriptEntryNameOrRefuse } from './atomic-file.ts';
+import {
+  hostPathRules,
+  requireWindowsScriptVolume,
+  scriptEntryNameOrRefuse,
+} from './atomic-file.ts';
 
 type PathResolutionOptions = {
   cwd?: string;
@@ -40,41 +44,27 @@ export function resolveScriptDestination(
   spelled: string,
   options: Readonly<{ cwd: string; env?: EnvMap }>,
 ): string {
-  refuseUnqualifiedWindowsForm(spelled, spelled);
-  if (spelled.startsWith('~/')) {
-    refuseUnqualifiedWindowsForm(spelled, resolveHomeDirectory(options.env));
-  } else if (!hostPathRules().isAbsolute(spelled)) {
-    refuseUnqualifiedWindowsForm(spelled, options.cwd);
-  }
+  const rules = hostPathRules();
   scriptEntryNameOrRefuse(spelled);
-  // The working directory or home it is joined to can bring a namespace the spelling did not show, such as a
-  // pipe root, so the resolved path is judged by the same gate before anything probes or records it.
-  const resolved = resolveUserPath(spelled, options);
+  if (rules !== path.win32) {
+    const resolved = resolveUserPath(spelled, options);
+    scriptEntryNameOrRefuse(resolved);
+    return resolved;
+  }
+
+  let expanded = spelled;
+  if (spelled.startsWith('~/')) {
+    const home = resolveHomeDirectory(options.env);
+    if (rules.isAbsolute(home) || /^[a-z]:/i.test(home)) requireWindowsScriptVolume(spelled, home);
+    expanded = rules.join(home, spelled.slice(2));
+    scriptEntryNameOrRefuse(expanded);
+  }
+  if (rules.isAbsolute(expanded)) return expanded;
+
+  requireWindowsScriptVolume(spelled, options.cwd);
+  const resolved = rules.resolve(options.cwd, expanded);
   scriptEntryNameOrRefuse(resolved);
   return resolved;
-}
-
-/**
- * Refuses a Windows script destination, or the base it is joined to, that is not a drive-letter or UNC share
- * path: a root-relative path depends on which drive the process stands on, and an extended-length path is
- * folded differently by the gate and by the system. The caller names the same file in a plain form instead.
- */
-function refuseUnqualifiedWindowsForm(spelled: string, candidate: string): void {
-  if (hostPathRules().sep !== '\\') return;
-  const rootRelative = /^[\\/](?![\\/])/.test(candidate);
-  const extended = /^[\\/]{2}\?[\\/]/.test(candidate);
-  if (!rootRelative && !extended) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    `Refusing to save the script at ${spelled}: ${candidate === spelled ? 'the path' : `the directory it is joined to, ${candidate},`} is ${extended ? 'an extended-length path' : 'relative to the current drive'}.`,
-    {
-      reason: 'script_ancestor_untrusted',
-      exposure: 'windows_path_form',
-      path: spelled,
-      ancestor: candidate,
-      hint: 'Use a drive-letter path such as C:\\recordings\\journey.ad, or a \\\\server\\share path.',
-    },
-  );
 }
 
 /**

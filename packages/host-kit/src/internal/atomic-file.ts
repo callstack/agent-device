@@ -233,14 +233,22 @@ function scriptDestination(
   create: boolean,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
+  if (process.platform === 'win32') {
+    const rules = path.win32;
+    const root = requireWindowsScriptVolume(destination, destination);
+    const name = entryNameOrRefuse(destination, rules);
+    const directory = rules.dirname(rules.normalize(destination));
+    if (!fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+      throw scriptAncestryFailure(destination, root, 'unresolvable_parent');
+    }
+    if (create && rules.relative(root, directory) !== '') {
+      fs.mkdirSync(directory, { recursive: true, mode: SCRIPT_DIR_MODE });
+    }
+    return authorizedEntry(directory, 'windows', name);
+  }
   // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
   const name = scriptEntryNameOrRefuse(destination);
-  if (process.platform === 'win32') {
-    // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
-    if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
-    return authorizedEntry(spelled, 'windows', name);
-  }
   const trust = scriptTrust(options);
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
@@ -257,7 +265,7 @@ function authorizedEntry(
   identity: string | undefined,
   name: string,
 ): ScriptDestination {
-  return { directory, identity, name, entry: path.join(directory, name) };
+  return { directory, identity, name, entry: hostPathRules().join(directory, name) };
 }
 
 /**
@@ -267,9 +275,40 @@ function authorizedEntry(
  */
 export function scriptEntryNameOrRefuse(spelled: string): string {
   const rules = hostPathRules();
+  if (rules === path.win32 && /^[\\/]|^[a-z]:/i.test(spelled)) {
+    requireWindowsScriptVolume(spelled, spelled);
+  }
+  return entryNameOrRefuse(spelled, rules);
+}
+
+function entryNameOrRefuse(spelled: string, rules: path.PlatformPath): string {
   const name = scriptEntryName(spelled, rules);
   if (name === undefined) throw unnamedEntryFailure(spelled, rules);
   return name;
+}
+
+/** Returns the drive or complete ordinary UNC root of a Windows script path. */
+export function requireWindowsScriptVolume(spelled: string, candidate: string): string {
+  const drive = /^[a-z]:[\\/]/i.test(candidate);
+  const unc = /^[\\/]{2}([^\\/]+)[\\/]+([^\\/]+)/.exec(candidate);
+  if (
+    drive ||
+    (unc &&
+      unc.slice(1).every((part) => !/[:?*<>"|]|[. ]$/.test(part) && !hasControlCharacter(part)))
+  ) {
+    return path.win32.parse(path.win32.normalize(candidate)).root;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    `Refusing to save the script at ${spelled}: ${candidate} lacks a supported Windows volume.`,
+    {
+      reason: 'script_ancestor_untrusted',
+      exposure: 'windows_path_form',
+      path: spelled,
+      ancestor: candidate,
+      hint: 'Use an absolute drive-letter path or an ordinary Windows network share path.',
+    },
+  );
 }
 
 /** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */

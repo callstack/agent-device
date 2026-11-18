@@ -13,6 +13,7 @@ import {
 import {
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
+  judgeScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,
   scriptEntryName,
@@ -112,22 +113,76 @@ test('a relative destination is refused as relative, whatever its last segment',
   );
 });
 
-test('a Windows confirmation refuses a different directory under the one identity Windows answers', () => {
-  // No walk runs on Windows, so every directory answers the identity `windows`; only the path tells two apart.
-  const directory = root();
+function onWindows<T>(task: () => T): T {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value: 'win32' });
   try {
-    const prepared = prepareScriptDestination(path.join(directory, 'judged', 'journey.ad'));
-
-    expectUntrustedReplaced(
-      () => confirmScriptDestination(path.join(directory, 'other', 'journey.ad'), prepared),
-      path.join(directory, 'other'),
-    );
+    return task();
   } finally {
     Object.defineProperty(process, 'platform', original!);
   }
+}
+
+test('a Windows confirmation refuses a different directory under the one identity Windows answers', () => {
+  const volume = fs.statSync(root());
+  vi.spyOn(fs, 'statSync').mockReturnValue(volume);
+  vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
+  onWindows(() => {
+    const prepared = prepareScriptDestination(String.raw`C:\judged\journey.ad`);
+    expectUntrustedReplaced(
+      () => confirmScriptDestination(String.raw`C:\other\journey.ad`, prepared),
+      String.raw`C:\other`,
+    );
+  });
 });
+
+test('a script publishes at a Windows drive root without creating the volume', () => {
+  const volume = fs.statSync(root());
+  const stat = vi.spyOn(fs, 'statSync').mockReturnValue(volume);
+  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+    throw Object.assign(new Error('Cannot create the Windows volume root'), { code: 'EPERM' });
+  });
+  const destination = String.raw`C:\journey.ad`;
+  vi.spyOn(fs, 'writeFileSync').mockReturnValue(undefined);
+  vi.spyOn(fs, 'chmodSync').mockReturnValue(undefined);
+  vi.spyOn(fs, 'rmSync').mockReturnValue(undefined);
+  const rename = vi.spyOn(fs, 'renameSync').mockReturnValue(undefined);
+  onWindows(() => {
+    publishScriptFileSync({ destination, contents: 'journey\n' });
+    expect(stat).toHaveBeenCalledExactlyOnceWith('C:\\', { throwIfNoEntry: false });
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(rename).toHaveBeenCalledExactlyOnceWith(expect.any(String), destination);
+  });
+});
+
+test.each(['///journey.ad', '//server', 'C:journey.ad', String.raw`\\?\C:\journey.ad`])(
+  'all Windows publication boundaries refuse the unqualified path %s',
+  (destination) => {
+    const stat = vi.spyOn(fs, 'statSync');
+    const mkdir = vi.spyOn(fs, 'mkdirSync');
+    onWindows(() => {
+      const prepared = {
+        directory: 'C:\\',
+        entry: 'C:\\journey.ad',
+        name: 'journey.ad',
+        identity: 'windows',
+      };
+      for (const attempt of [
+        () => prepareScriptDestination(destination),
+        () => judgeScriptDestination(destination),
+        () => confirmScriptDestination(destination, prepared),
+      ]) {
+        expect(attempt).toThrow(
+          expect.objectContaining({
+            details: expect.objectContaining({ exposure: 'windows_path_form' }),
+          }),
+        );
+      }
+    });
+    expect(stat).not.toHaveBeenCalled();
+    expect(mkdir).not.toHaveBeenCalled();
+  },
+);
 
 test.each([
   { spelled: '\\\\server\\share\\', name: undefined },

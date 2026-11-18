@@ -2,7 +2,6 @@
 // destination (ADR 0016): the name a publisher creates is decided in one place, and an interrupted commit is
 // settled from that same entry.
 import { execFileSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -15,6 +14,8 @@ import {
   open,
   request,
   script,
+  sha256,
+  soleRecord,
 } from './support/script-publication-fixtures.ts';
 
 vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
@@ -92,14 +93,6 @@ test('an interrupted commit spelled with a trailing separator is settled from th
   expect(fs.readFileSync(path.join(directory, 'journey.ad'), 'utf8')).toBe('v2\n');
   expect(fs.readdirSync(directory)).toEqual(['journey.ad']);
 });
-
-/** The single record this client keeps for the open, and its parsed contents. */
-function soleRecord(stateDir: string) {
-  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
-  const [name] = fs.readdirSync(directory).filter((entry) => entry.endsWith('.json'));
-  const file = path.join(directory, name as string);
-  return { file, record: JSON.parse(fs.readFileSync(file, 'utf8')) };
-}
 
 test('a record naming an unrelated file cannot pass that file off as the interrupted version', async () => {
   const { root, stateDir, directory } = caller();
@@ -268,30 +261,44 @@ async function onWindowsRules<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
-test.each([
-  { rules: 'native', within: <T>(task: () => Promise<T>) => task() },
-  { rules: 'Windows', within: onWindowsRules },
-])(
-  'a version delivered again after its file was deleted discloses the change ($rules rules)',
-  async ({ within }) => {
-    const { stateDir, directory } = caller();
-    const destination = path.join(directory, 'journey.ad');
-    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
-    const { id } = await open(baseUrl, stateDir, destination);
-    fs.rmSync(destination);
+test('a version delivered again after its file was deleted discloses the change', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  fs.rmSync(destination);
 
-    const again = await within(() =>
-      answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
-    );
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
 
-    expect(again).toMatchObject({
-      ok: true,
-      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
-    });
-    expect(again.ok && again.data?.savedScript).not.toBe(destination);
-    expect(fs.existsSync(destination)).toBe(false);
-  },
-);
+  expect(again).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+  });
+  expect(again.ok && again.data?.savedScript).not.toBe(destination);
+  expect(fs.existsSync(destination)).toBe(false);
+});
+
+test('a retained record cannot use an unqualified Windows destination', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file: recordFile, record } = soleRecord(stateDir);
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, destination: '///journey.ad' }));
+
+  const again = await onWindowsRules(() =>
+    answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
+  );
+
+  expect(again).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_ancestor_untrusted' } },
+  });
+  expect(again.ok && again.data).not.toHaveProperty('savedScript');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});
 
 test.skipIf(process.platform === 'win32')(
   'a version delivered again through a retargeted link never reports the unrelated file there',
@@ -348,10 +355,6 @@ test('a record from an earlier release answers a repeated version as unverifiabl
   });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
-
-function sha256(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
-}
 
 test('a copy that became a repeat while it downloaded is checked like an early repeat', async () => {
   // Another copy of version 2 commits while this one downloads, and the file is then replaced; the late copy

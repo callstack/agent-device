@@ -153,7 +153,6 @@ async function expectRefusedBeforeAnything(
     exposure?: string;
   }> = {},
 ): Promise<void> {
-  const root = mkdtempForTestSync('script-ipc-');
   const probe = vi.spyOn(fs, 'existsSync');
   try {
     await onWindowsRules(() =>
@@ -182,7 +181,6 @@ async function expectRefusedBeforeAnything(
   } finally {
     probe.mockRestore();
   }
-  expect(fs.readdirSync(root)).toEqual([]);
 }
 
 const withForce = <T extends object>(cases: readonly T[]) =>
@@ -230,7 +228,10 @@ test.each(
 test.each(
   withForce([
     { name: 'a root-relative destination', spelled: String.raw`\journey.ad` },
+    { name: 'a drive-relative destination', spelled: 'C:journey.ad' },
     { name: 'a forward-slash root-relative destination', spelled: '/nested/journey.ad' },
+    { name: 'three leading separators', spelled: '///journey.ad' },
+    { name: 'an incomplete UNC volume', spelled: '//server' },
     { name: 'a root-relative destination stepping up', spelled: String.raw`\..\other\journey.ad` },
     { name: 'an extended drive destination', spelled: String.raw`\\?\C:\recordings\journey.ad` },
     {
@@ -265,6 +266,12 @@ test.each(
       spelled: 'journey.ad',
     },
     {
+      name: 'a relative HOME on an extended drive working directory',
+      cwd: String.raw`\\?\C:\work`,
+      home: 'profiles',
+      spelled: '~/journey.ad',
+    },
+    {
       name: 'a home path on an extended UNC HOME',
       home: String.raw`\\?\UNC\server\share`,
       spelled: '~/journey.ad',
@@ -296,6 +303,12 @@ test.each(
       expected: String.raw`C:\recordings\journey.ad`,
     },
     { spelled: 'journey.ad', cwd: String.raw`C:\work`, expected: String.raw`C:\work\journey.ad` },
+    { spelled: 'journey.ad', cwd: 'C:\\', expected: String.raw`C:\journey.ad` },
+    {
+      spelled: String.raw`C:\journey.ad`,
+      cwd: String.raw`\\?\C:\work`,
+      expected: String.raw`C:\journey.ad`,
+    },
     {
       spelled: String.raw`\\server\share\journey.ad`,
       expected: String.raw`\\server\share\journey.ad`,

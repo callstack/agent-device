@@ -7,7 +7,6 @@ export {
   publishFileSync,
   publishScriptFileSync,
   scriptAncestryReason,
-  scriptEntryNameOrRefuse,
   type DurableFilePublishMode,
   type ScriptDestination,
   type ScriptDestinationOptions,

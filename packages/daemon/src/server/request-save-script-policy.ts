@@ -5,7 +5,7 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
-import { scriptEntryNameOrRefuse } from '@agent-device/host-kit/file';
+import { resolveScriptDestination } from '@agent-device/host-kit/file';
 import {
   listSaveScriptFlagOwnerCommands,
   ownsSaveScriptFlag,
@@ -45,11 +45,12 @@ const UNSUPPORTED_SAVE_SCRIPT_HINT =
  * `saveScript: false` is just as unsupported on `record` as `true` is, and
  * mirrors the maestro replay guard's `!== undefined` reading of the same flag.
  *
- * An owner's path is judged here as the caller SPELLED it, before the daemon
- * expands it: an expansion folds a final `.` or `..` away, and the publish
- * would then create a file under a directory's name (ADR 0016).
+ * Validate the spelling and any base it uses against the recorder's working directory (ADR 0016).
  */
-export function saveScriptFlagResponse(req: DaemonRequest): DaemonResponse | undefined {
+export function saveScriptFlagResponse(
+  req: DaemonRequest,
+  hostCwd: string,
+): DaemonResponse | undefined {
   const requested = req.flags?.saveScript;
   if (requested === undefined) return undefined;
   if (!ownsSaveScriptFlag(req.command)) {
@@ -62,7 +63,7 @@ export function saveScriptFlagResponse(req: DaemonRequest): DaemonResponse | und
   }
   if (typeof requested !== 'string') return undefined;
   try {
-    scriptEntryNameOrRefuse(requested);
+    resolveScriptDestination(requested, { cwd: hostCwd });
     return undefined;
   } catch (error) {
     return rejectedSaveScript(req, error);

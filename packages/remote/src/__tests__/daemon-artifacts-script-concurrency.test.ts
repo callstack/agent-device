@@ -1,6 +1,5 @@
 // Another delivery of the same recording lands while this one settles, downloads, or cleans up: the answer
 // is decided against the record under the lock, never against a stale read (ADR 0016).
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -12,11 +11,18 @@ import {
   open,
   request,
   script,
+  sha256,
+  soleRecord,
 } from './support/script-publication-fixtures.ts';
 
 vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/file')>();
-  return { ...actual, prepareScriptDestination: vi.fn(actual.prepareScriptDestination) };
+  return {
+    ...actual,
+    prepareScriptDestination: vi.fn(actual.prepareScriptDestination),
+    withProcessLock: vi.fn(actual.withProcessLock),
+    openVerifiedFileForRead: vi.fn(actual.openVerifiedFileForRead),
+  };
 });
 
 const actual = await vi.importActual<typeof import('@agent-device/host-kit/file')>(
@@ -25,23 +31,13 @@ const actual = await vi.importActual<typeof import('@agent-device/host-kit/file'
 
 afterEach(() => {
   vi.mocked(file.prepareScriptDestination).mockImplementation(actual.prepareScriptDestination);
+  vi.mocked(file.withProcessLock).mockImplementation(actual.withProcessLock);
+  vi.mocked(file.openVerifiedFileForRead).mockImplementation(actual.openVerifiedFileForRead);
 });
 
 function caller() {
   const root = fs.realpathSync(mkdtempForTestSync('script-concurrency-'));
   return { root, stateDir: path.join(root, 'state'), directory: path.join(root, 'caller') };
-}
-
-/** The single record this client keeps for the open, and its parsed contents. */
-function soleRecord(stateDir: string) {
-  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
-  const [name] = fs.readdirSync(directory).filter((entry) => entry.endsWith('.json'));
-  const file = path.join(directory, name as string);
-  return { file, record: JSON.parse(fs.readFileSync(file, 'utf8')) };
-}
-
-function sha256(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
 }
 
 /** Another delivery's version 2, renamed into place; `committed` says whether it also recorded the commit. */
@@ -144,12 +140,36 @@ test('a commit that lands while a failed download cleans up its staging is still
   const baseUrl = await artifactServer(served);
   const { id } = await open(baseUrl, stateDir, destination);
   delete served.v2;
+  let acquisition = 0;
+  let activeAcquisition: number | undefined;
+  let cleanupAcquisition: number | undefined;
+  const verificationAcquisitions: Array<number | undefined> = [];
+  vi.mocked(file.withProcessLock).mockImplementation((options) =>
+    actual.withProcessLock({
+      ...options,
+      task: async () => {
+        activeAcquisition = ++acquisition;
+        try {
+          return await options.task();
+        } finally {
+          activeAcquisition = undefined;
+        }
+      },
+    }),
+  );
+  vi.mocked(file.openVerifiedFileForRead).mockImplementation((...args) => {
+    if (args[0] === destination) {
+      verificationAcquisitions.push(activeAcquisition);
+    }
+    return actual.openVerifiedFileForRead(...args);
+  });
   const rm = fs.rmSync.bind(fs) as (...args: unknown[]) => void;
   let landed = false;
   const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((...args: unknown[]) => {
     const target = String(args[0]);
     if (!landed && path.basename(target).startsWith('.agent-device-script-')) {
       landed = true;
+      cleanupAcquisition = activeAcquisition;
       otherDeliveryLands(stateDir, destination, true);
     }
     rm(...args);
@@ -161,11 +181,45 @@ test('a commit that lands while a failed download cleans up its staging is still
     });
 
     expect(landed).toBe(true);
+    expect(cleanupAcquisition).toBeDefined();
+    expect(verificationAcquisitions).toEqual([cleanupAcquisition]);
     expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
     expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
   } finally {
     spy.mockRestore();
   }
+});
+
+test('a transient failure acquiring the final record lock still releases staging', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  delete served.v2;
+  let failedAcquisition = false;
+  vi.mocked(file.withProcessLock).mockImplementation((options) =>
+    actual.withProcessLock({
+      ...options,
+      acquire: async () => {
+        if (!failedAcquisition && soleRecord(stateDir).record.staging?.length) {
+          failedAcquisition = true;
+          throw new Error('Transient record lock acquisition failure');
+        }
+        return await options.acquire();
+      },
+    }),
+  );
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(failedAcquisition).toBe(true);
+  expect(late.ok && late.data).toHaveProperty('scriptDeliveryFailure');
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 1, staging: [] });
+  expect(fs.readdirSync(directory)).toEqual(['journey.ad']);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
 
 test.skipIf(process.platform === 'win32').each([

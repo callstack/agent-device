@@ -443,8 +443,8 @@ async function publishScriptVersion(
       // only this client's failure while the version is not on disk. The staging cleanup and that decision
       // take ONE lock, the decision after the cleanup, so no commit can land between them. A settlement
       // that refuses or cannot verify the committed version is that refusal, not the fetch error.
-      staging = undefined;
       const committed = await withRecordLock(file, async () => {
+        staging = undefined;
         releaseStagingQuietly(file, allocated);
         return settledRepeat(file, revision as number);
       });
