@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import { commandDeveloperDir, runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
@@ -23,9 +23,15 @@ const SWIFTC_STOP = { signal: 'SIGINT', graceMs: 2_000 } as const;
 // would otherwise choose the `xcrun` that runs as this user.
 const XCRUN = '/usr/bin/xcrun';
 const COMPILER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
-// Inherited overrides that would choose another loader, SDK or toolchain; the helpers build against the default
-// macOS SDK.
-const COMPILER_ENV_OVERRIDES = /^(DYLD_.*|SDKROOT|TOOLCHAINS)$/;
+// Inherited overrides that would choose another loader, SDK, toolchain, search path or driver tool; the helpers
+// build against the macOS SDK named on the command line. Trace and diagnostic settings stay.
+const COMPILER_ENV_OVERRIDES =
+  /^(DYLD_.*|SDKROOT|TOOLCHAINS|DEVELOPER_DIR|CPATH|C_INCLUDE_PATH|OBJC_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJCPLUS_INCLUDE_PATH|LIBRARY_PATH|SWIFT_DRIVER_SWIFT_FRONTEND_EXEC|SWIFT_DRIVER_CLANG_EXEC|ADDITIONAL_SWIFT_DRIVER_FLAGS|SWIFT_OVERLOAD_PREBUILT_MODULE_CACHE_PATH)$/;
+// Without an explicit SDK, xcrun adds /usr/local/include and /usr/local/lib to the search paths, which another
+// account may own on a shared Mac.
+const COMPILER_ARGS = ['--sdk', 'macosx', 'swiftc'] as const;
+// The admin group on macOS, which may write /Applications itself on a stock install.
+const MACOS_ADMIN_GID = 80;
 const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
 
 /**
@@ -323,17 +329,21 @@ export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 /**
  * The environment the compiler runs with: the cache's own home and module cache, a fixed PATH, no inherited
- * loader, SDK or toolchain override, and this compile's private staging directory as every temp directory, so
- * no intermediate lands where another user could replace it mid-build.
+ * loader, SDK, toolchain, search-path or driver override, and this compile's private staging directory as every
+ * temp directory, so no intermediate lands where another user could replace it mid-build. The toolchain is the
+ * effective selection, resolved and judged here, and passed on exactly as judged.
  */
-function swiftCompilerEnv(env: NodeJS.ProcessEnv, stagingDirectory: string): NodeJS.ProcessEnv {
+function swiftCompilerEnv(
+  env: NodeJS.ProcessEnv,
+  stagingDirectory: string,
+  developerDir: string | undefined,
+): NodeJS.ProcessEnv {
   const inherited = Object.entries(buildSwiftToolEnv(env)).filter(
     ([name]) => !COMPILER_ENV_OVERRIDES.test(name),
   );
-  const developerDir = env.DEVELOPER_DIR?.trim();
-  if (developerDir) refuseUntrustedDeveloperDir(developerDir);
   return {
     ...Object.fromEntries(inherited),
+    ...(developerDir === undefined ? {} : { DEVELOPER_DIR: trustedDeveloperDir(developerDir) }),
     PATH: COMPILER_PATH,
     TMPDIR: stagingDirectory,
     TEMP: stagingDirectory,
@@ -342,28 +352,55 @@ function swiftCompilerEnv(env: NodeJS.ProcessEnv, stagingDirectory: string): Nod
 }
 
 /**
- * Refuses a `DEVELOPER_DIR` that is not an absolute, real directory owned by root or this uid that the group and
- * others cannot write. Only that directory is judged, not its ancestry: `/Applications` is admin-group-writable on
- * a stock macOS install, and holds a normal Xcode.
+ * The toolchain selection a command spawned for `host` gets: a request's own `DEVELOPER_DIR` for the same host wins
+ * over the host's, and an explicitly empty one selects `xcode-select`.
  */
-function refuseUntrustedDeveloperDir(developerDir: string): void {
-  const stats = path.isAbsolute(developerDir)
-    ? fs.lstatSync(developerDir, { throwIfNoEntry: false })
-    : undefined;
-  const owner = stats !== undefined && (stats.uid === 0 || stats.uid === process.getuid?.());
-  if (stats?.isDirectory() && owner && (stats.mode & 0o022) === 0) return;
+async function selectedDeveloperDir(host: HostEnvironment): Promise<string | undefined> {
+  return await withCommandHost({ host, requestEnv: undefined }, async () => commandDeveloperDir());
+}
+
+/**
+ * The selected Developer directory, resolved once: an absolute path whose resolved directory and every directory
+ * above it are owned by root or this uid and closed to the group and others. The one exception is `/Applications`
+ * itself as a stock macOS install leaves it: root-owned, writable by the admin group.
+ */
+function trustedDeveloperDir(selection: string): string {
+  const resolved = path.isAbsolute(selection) ? realpathIfPresent(selection) : undefined;
+  const ancestor = resolved === undefined ? selection : untrustedDeveloperDirLevel(resolved);
+  if (resolved !== undefined && ancestor === undefined) return resolved;
   throw new AppError(
     'COMMAND_FAILED',
-    `Refusing to compile Swift helpers with DEVELOPER_DIR=${developerDir}: it is not a directory only root or this user can change.`,
+    `Refusing to compile Swift helpers with DEVELOPER_DIR=${selection}: ${ancestor} is not a directory only root or this user can change.`,
     {
       reason: SWIFT_CACHE_UNTRUSTED_REASON,
       exposure: 'untrusted_developer_dir',
-      ancestor: developerDir,
+      ancestor,
       hint:
         'Unset DEVELOPER_DIR so the selected Xcode is used, or point it at an Xcode Developer directory, given ' +
-        'as an absolute path, that root or you own and only its owner can write.',
+        'as an absolute path, that root or you own along with every directory above it.',
     },
   );
+}
+
+function realpathIfPresent(selection: string): string | undefined {
+  try {
+    return fs.realpathSync(selection);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The first level, from the resolved directory up, that another user could change, or `undefined`. */
+function untrustedDeveloperDirLevel(resolved: string): string | undefined {
+  for (let level = resolved; ; level = path.dirname(level)) {
+    const stats = fs.lstatSync(level);
+    const owned = stats.uid === 0 || stats.uid === process.getuid?.();
+    const stockApplications =
+      level === '/Applications' && stats.uid === 0 && stats.gid === MACOS_ADMIN_GID;
+    const writableMask = stockApplications ? 0o002 : 0o022;
+    if (!stats.isDirectory() || !owned || stats.mode & writableMask) return level;
+    if (level === path.dirname(level)) return undefined;
+  }
 }
 
 export async function compileSwiftSourceFile(params: {
@@ -459,12 +496,23 @@ async function ensureSwiftExecutable(params: {
             'paths' in params.source
               ? params.source.paths
               : [writeSourceText(tempDir, params.source.fileName, params.source.text)];
-          await runCmd(XCRUN, ['swiftc', ...sourcePaths, '-o', tempExecutablePath], {
-            timeoutMs,
-            signal: params.signal,
-            kill: SWIFTC_STOP,
-            env: swiftCompilerEnv(params.host.env, tempDir),
-          });
+          const env = swiftCompilerEnv(
+            params.host.env,
+            tempDir,
+            await selectedDeveloperDir(params.host),
+          );
+          // An empty request overlay: the request's own DEVELOPER_DIR was judged above, and must not replace
+          // the judged value after the fact.
+          await withCommandHost(
+            { host: params.host, requestEnv: {} },
+            async () =>
+              await runCmd(XCRUN, [...COMPILER_ARGS, ...sourcePaths, '-o', tempExecutablePath], {
+                timeoutMs,
+                signal: params.signal,
+                kill: SWIFTC_STOP,
+                env,
+              }),
+          );
           publishableExecutable(tempExecutablePath);
           fs.renameSync(tempExecutablePath, entryIn(confirmSwiftCacheDirectory(bin)));
         } catch (error) {

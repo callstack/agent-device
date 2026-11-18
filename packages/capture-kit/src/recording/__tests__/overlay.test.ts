@@ -79,7 +79,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
 
   const compileCalls = mockRunCmd.mock.calls.filter(([cmd, args]) => {
-    return cmd === '/usr/bin/xcrun' && args[0] === 'swiftc';
+    return cmd === '/usr/bin/xcrun' && args.includes('swiftc');
   });
   const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== '/usr/bin/xcrun');
 

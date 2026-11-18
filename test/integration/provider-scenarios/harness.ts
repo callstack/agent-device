@@ -272,7 +272,7 @@ export async function createProviderScenarioHarness(
           (command, args) => {
             if (
               command !== '/usr/bin/xcrun' ||
-              args[0] !== 'swiftc' ||
+              !args.includes('swiftc') ||
               !args.some((arg) => path.basename(arg).startsWith('video-validator-'))
             )
               return undefined;

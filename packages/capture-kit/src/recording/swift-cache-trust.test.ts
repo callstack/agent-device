@@ -13,7 +13,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   }),
 }));
 
-import { runCmd } from '@agent-device/host-kit/command';
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 
@@ -612,21 +612,36 @@ test('the compiler gets this compile private staging directory as every temp dir
   });
 });
 
-test('the compiler is /usr/bin/xcrun with a fixed PATH and no inherited loader, SDK or toolchain override', async () => {
+const STRIPPED_COMPILER_OVERRIDES = {
+  DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
+  DYLD_LIBRARY_PATH: '/tmp/planted',
+  SDKROOT: '/tmp/planted.sdk',
+  TOOLCHAINS: 'planted',
+  CPATH: '/usr/local/include',
+  C_INCLUDE_PATH: '/tmp/planted',
+  OBJC_INCLUDE_PATH: '/tmp/planted',
+  CPLUS_INCLUDE_PATH: '/tmp/planted',
+  OBJCPLUS_INCLUDE_PATH: '/tmp/planted',
+  LIBRARY_PATH: '/usr/local/lib',
+  SWIFT_DRIVER_SWIFT_FRONTEND_EXEC: '/tmp/planted-frontend',
+  SWIFT_DRIVER_CLANG_EXEC: '/tmp/planted-clang',
+  ADDITIONAL_SWIFT_DRIVER_FLAGS: '-Xlinker -planted',
+  SWIFT_OVERLOAD_PREBUILT_MODULE_CACHE_PATH: '/tmp/planted-modules',
+};
+
+test('the compiler is /usr/bin/xcrun --sdk macosx with a fixed PATH and no inherited search-path or tool override', async () => {
   await compile({
     AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
     PATH: `${path.join(tmpDir, 'planted-bin')}:/usr/bin`,
-    DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
-    DYLD_LIBRARY_PATH: '/tmp/planted',
-    SDKROOT: '/tmp/planted.sdk',
-    TOOLCHAINS: 'planted',
+    ...STRIPPED_COMPILER_OVERRIDES,
     KEPT: 'yes',
   });
 
   const { cmd, env } = compilerLaunch();
   expect(cmd).toBe('/usr/bin/xcrun');
+  expect(mockRunCmd.mock.calls[0]![1].slice(0, 3)).toEqual(['--sdk', 'macosx', 'swiftc']);
   expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
-  expect(Object.keys(env).filter((name) => /^(DYLD_|SDKROOT$|TOOLCHAINS$)/.test(name))).toEqual([]);
+  expect(Object.keys(env).filter((name) => name in STRIPPED_COMPILER_OVERRIDES)).toEqual([]);
   expect(env.KEPT).toBe('yes');
 });
 
@@ -674,4 +689,124 @@ test('a DEVELOPER_DIR only this user can write reaches the compiler', async () =
   await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: developerDir });
 
   expect(compilerLaunch().env.DEVELOPER_DIR).toBe(developerDir);
+});
+
+const hostWith = (env: NodeJS.ProcessEnv) => ({
+  env: { AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, ...env },
+  cwd: tmpDir,
+});
+
+function developerDirectory(name: string, mode = 0o755): string {
+  const directory = path.join(tmpDir, name);
+  fs.mkdirSync(directory);
+  fs.chmodSync(directory, mode);
+  return directory;
+}
+
+test('a request-scoped DEVELOPER_DIR others can write is refused on a cold cache', async () => {
+  const open = developerDirectory('open-request-developer', 0o777);
+  const host = hostWith({});
+
+  await expect(
+    withCommandHost({ host, requestEnv: { DEVELOPER_DIR: open } }, () =>
+      compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'helper' }),
+    ),
+  ).rejects.toMatchObject(
+    untrusted({ exposure: 'untrusted_developer_dir', ancestor: open, hint: expect.any(String) }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a valid request-scoped DEVELOPER_DIR wins over an invalid host one, and an empty one drops it', async () => {
+  const trusted = developerDirectory('request-developer');
+  const host = hostWith({ DEVELOPER_DIR: developerDirectory('open-host-developer', 0o777) });
+
+  await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: trusted } }, () =>
+    compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'with-request' }),
+  );
+  expect(compilerLaunch().env.DEVELOPER_DIR).toBe(trusted);
+
+  vi.clearAllMocks();
+  await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: '' } }, () =>
+    compileSwiftSourceText({ host, source: 'print(2)', cacheName: 'xcode-select' }),
+  );
+  expect(compilerLaunch().env).not.toHaveProperty('DEVELOPER_DIR');
+});
+
+test('the compiler process gets the judged DEVELOPER_DIR, which the request overlay cannot replace', async () => {
+  const trusted = developerDirectory('resolved-developer');
+  const linked = path.join(tmpDir, 'linked-developer');
+  fs.symlinkSync(trusted, linked);
+  const host = hostWith({});
+  const { runCmd: spawnForReal } = await vi.importActual<
+    typeof import('@agent-device/host-kit/command')
+  >('@agent-device/host-kit/command');
+  let childDeveloperDir: string | undefined;
+  mockRunCmd.mockImplementationOnce(async (_cmd, args, options) => {
+    // A real spawn under the same scope, so host-kit applies whatever request overlay is in force.
+    const { stdout } = await spawnForReal('/usr/bin/env', [], { env: options?.env });
+    childDeveloperDir = /^DEVELOPER_DIR=(.*)$/m.exec(stdout)?.[1];
+    fs.writeFileSync(args[args.indexOf('-o') + 1]!, 'compiled');
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: linked } }, () =>
+    compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'overlay' }),
+  );
+
+  expect(childDeveloperDir).toBe(trusted);
+});
+
+test.each([
+  [
+    'below a group-writable directory',
+    () => {
+      const shared = developerDirectory('shared-parent', 0o775);
+      const developer = path.join(shared, 'Developer');
+      fs.mkdirSync(developer, { mode: 0o755 });
+      return { selection: developer, ancestor: shared };
+    },
+  ],
+  [
+    'owned by another local user',
+    () => {
+      const developer = developerDirectory('foreign-developer');
+      reportForeignOwner(developer);
+      return { selection: developer, ancestor: developer };
+    },
+  ],
+  [
+    'a link to a directory others can write, judged as its target',
+    () => {
+      const target = developerDirectory('open-link-target', 0o777);
+      const link = path.join(tmpDir, 'developer-link');
+      fs.symlinkSync(target, link);
+      return { selection: link, ancestor: target };
+    },
+  ],
+  [
+    'a regular file',
+    () => {
+      const file = path.join(tmpDir, 'developer-file');
+      fs.writeFileSync(file, '', { mode: 0o644 });
+      return { selection: file, ancestor: file };
+    },
+  ],
+])('a DEVELOPER_DIR %s is refused before the compiler runs', async (_kind, plant) => {
+  const { selection, ancestor } = plant();
+
+  await expect(
+    compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: selection }),
+  ).rejects.toMatchObject(
+    untrusted({ exposure: 'untrusted_developer_dir', ancestor, hint: expect.any(String) }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a DEVELOPER_DIR spelled with a trailing /. reaches the compiler as the resolved directory', async () => {
+  const trusted = developerDirectory('dotted-developer');
+
+  await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: `${trusted}/.` });
+
+  expect(compilerLaunch().env.DEVELOPER_DIR).toBe(trusted);
 });

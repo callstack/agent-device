@@ -97,8 +97,14 @@ test('extra source paths participate in the cache key and reach the compiler', a
   const compiledPaths = mockRunCmd.mock.calls.map((call) =>
     call[1].slice(0, call[1].indexOf('-o')),
   );
-  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, supportPath]);
-  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, changedSupportPath]);
+  expect(compiledPaths).toContainEqual(['--sdk', 'macosx', 'swiftc', sourcePath, supportPath]);
+  expect(compiledPaths).toContainEqual([
+    '--sdk',
+    'macosx',
+    'swiftc',
+    sourcePath,
+    changedSupportPath,
+  ]);
 });
 
 test('cache locks with a proven dead owner are recovered before compiling', async () => {
