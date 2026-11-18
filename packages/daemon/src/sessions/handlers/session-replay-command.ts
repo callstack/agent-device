@@ -2,9 +2,8 @@ import { resolveSessionTestArtifactsRoot } from '@agent-device/daemon-contracts/
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { deviceIdentity, deviceIdentityKey } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import type { SessionState } from '../../core/session-state.ts';
+import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { bindInternalObservationAuthority } from '../../execution/internal-observation.ts';
 import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
@@ -186,30 +185,48 @@ export function createReplaySession(
     getRuntimeHints: () => store.getRuntimeHints(name),
     ensureSessionDir: () => store.ensureSessionDir(name),
   };
-  // One admission and one bind per capture cell (device, active-app split) for this replay run:
-  // the SAME request-bound capture the commands this replay dispatches bind, so target verification
-  // compares recorded evidence against a tree from the SAME producer (#4622). The legacy interactor
-  // and the request-bound owner are two projections of one screen on an iOS simulator — the XCTest
-  // runner's tree inserts an `other "<screen title>"` wrapper the Simulator AX bridge's tree does
-  // not have — so an unbound verification reported `identity-mismatch` on `ancestry[...]` for a
-  // screen nobody changed. A cell is re-admitted only when the plan could actually change: the
-  // session's device, or whether it has an app at all.
-  const boundCaptures = new Map<string, Promise<BoundSnapshotCapture | undefined>>();
-  const bindCaptureFor = (session: SessionState): Promise<BoundSnapshotCapture | undefined> => {
-    if (!capture?.platformServices) return NO_REPLAY_CAPTURE;
-    const cell = `${deviceIdentityKey(deviceIdentity(session.device))}|${
-      session.appBundleId === undefined ? 'no-app' : 'app'
-    }`;
-    const existing = boundCaptures.get(cell);
-    if (existing) return existing;
+  let captureCell:
+    | {
+        lifetime: SessionRef['lifetime'];
+        device: SessionState['device'];
+        booted: boolean;
+        hasApp: boolean;
+        binding: Promise<BoundSnapshotCapture | undefined>;
+      }
+    | undefined;
+  const bindDevice = capture?.bindDevice;
+  const bindCaptureDevice: BindDeviceRuntime | undefined = bindDevice
+    ? (device, use) => bindDevice(device, use, 'bypass')
+    : undefined;
+  const bindCaptureFor = (
+    lifetime: SessionRef['lifetime'],
+    session: SessionState,
+  ): Promise<BoundSnapshotCapture | undefined> => {
+    if (!capture) return NO_REPLAY_CAPTURE;
+    const { device } = session;
+    const booted = device.booted === true;
+    const hasApp = session.appBundleId !== undefined;
+    // Open can publish a refreshed device in the same lifetime. Ordinary snapshot and action
+    // updates preserve both. Replay owns reuse here because the request device key can outlive close.
+    if (
+      captureCell?.lifetime === lifetime &&
+      captureCell.device === device &&
+      captureCell.booted === booted &&
+      captureCell.hasApp === hasApp
+    ) {
+      return captureCell.binding;
+    }
     const binding = resolveObservationCapture({
       command: 'replay',
       session,
       inspectFacts: capture.inspectFacts,
       platformServices: capture.platformServices,
-      bindDevice: capture.bindDevice,
+      bindDevice: bindCaptureDevice,
+    }).then((bound) => {
+      if (!bound && captureCell?.binding === binding) captureCell = undefined;
+      return bound;
     });
-    boundCaptures.set(cell, binding);
+    captureCell = { lifetime, device, booted, hasApp, binding };
     return binding;
   };
   return bindReplaySession(name, logPath, reads, {
@@ -242,11 +259,11 @@ export function createReplaySession(
       return {
         ...bindInternalObservationAuthority({ sessionStore: store, ref, signal }),
         capture: async ({ flags, logPath: captureLogPath }) => {
-          const session = ref ? store.requireCurrent(ref) : undefined;
-          if (!session) {
+          if (!ref) {
             throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
           }
-          const bound = await bindCaptureFor(session);
+          const session = store.requireCurrent(ref);
+          const bound = await bindCaptureFor(ref.lifetime, session);
           return await captureSnapshot({
             device: session.device,
             session,

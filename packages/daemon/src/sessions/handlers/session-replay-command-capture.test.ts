@@ -14,6 +14,14 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { createRequestRuntimeBindings } from '../../core/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../../core/request-dispatch-ledger.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableBinding,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
+import { publishOpenSession } from '../session-lifecycle/internal/session-open-state.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
@@ -73,6 +81,8 @@ function disclosures() {
     );
 }
 
+const verifiedClick = [SAVE_ANNOTATION, 'click id="save"'];
+
 beforeEach(() => {
   vi.mocked(emitDiagnostic).mockClear();
   resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor));
@@ -82,7 +92,7 @@ test('target verification captures through the request-bound capture and records
   const fixture = selectorCaptureFixture({ snapshot: bridgeSaveButton });
   const scene = replayScriptScene(
     'agent-device-replay-capture-bound-',
-    [SAVE_ANNOTATION, 'click id="save"'],
+    [...verifiedClick, ...verifiedClick],
     {
       meta: { requestId: REQUEST_ID, cwd: '/work' },
       inspectFacts: fixture.inspectFacts,
@@ -94,11 +104,11 @@ test('target verification captures through the request-bound capture and records
   const response = await scene.replay();
 
   expect(response.ok).toBe(true);
-  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click', 'click']);
   // ADR 0019 §9 shape: the whole replay run admits once and binds once, on the session's device.
   expect(fixture.inspections).toEqual([IOS_SIMULATOR]);
   expect(fixture.binds).toEqual([IOS_SIMULATOR]);
-  expect(fixture.captures).toHaveLength(1);
+  expect(fixture.captures).toHaveLength(2);
   // The legacy interactor leaf is no longer the route a verification takes: nothing reached it.
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
 
@@ -123,6 +133,110 @@ test('target verification captures through the request-bound capture and records
   });
   expect(disclosures()).toEqual([]);
 });
+
+test.each(['close and reopen', 'open with refreshed device'])(
+  'replay verifies with a fresh runtime after %s on the same booted device',
+  async (lifecycle) => {
+    const { inspectFacts } = selectorCaptureFixture();
+    let generation = 0;
+    const captures: number[] = [];
+    const bind = vi.fn<typeof unavailableDeviceRuntimeGateway.bind>(async ({ device }) => {
+      const attachedGeneration = generation;
+      return {
+        ...(await unavailableBinding(device)),
+        facts: await inspectFacts(device),
+        operations: {
+          captureSnapshot: async () => {
+            captures.push(attachedGeneration);
+            if (attachedGeneration !== generation) throw new Error('Stale attachment');
+            return bridgeSaveButton();
+          },
+        },
+      };
+    });
+    const bindings = createRequestRuntimeBindings({
+      gateway: { ...unavailableDeviceRuntimeGateway, inspectFacts, bind },
+      dispatchLedger: createRequestDispatchLedger(),
+      scope: platformRequestScopeFixture(),
+      admitDeviceClaim: async () => {},
+    });
+    const closes = lifecycle === 'close and reopen';
+    const scene = replayScriptScene(
+      'agent-device-replay-capture-lifecycle-',
+      [...verifiedClick, ...(closes ? ['close'] : []), 'open "Demo"', ...verifiedClick],
+      { ...bindings, platformServices: daemonPlatformServicesFixture() },
+    );
+    try {
+      const initial = scene.sessionStore.lookup(scene.sessionName)!;
+      expect(initial.session.device.booted).toBe(true);
+      const response = await scene.replay({
+        invoke: async (req) => {
+          if (req.command === 'close') scene.sessionStore.retire(initial);
+          if (req.command === 'open') {
+            generation++;
+            publishOpenSession({
+              req,
+              sessionStore: scene.sessionStore,
+              sessionName: scene.sessionName,
+              existingRef: scene.sessionStore.lookup(scene.sessionName),
+              device: closes ? initial.session.device : { ...initial.session.device },
+              surface: 'app',
+              appBundleId: initial.session.appBundleId,
+            });
+          }
+          return { ok: true, data: {} };
+        },
+      });
+      expect(response.ok).toBe(true);
+      expect(scene.invoked.map((req) => req.command)).toEqual([
+        'click',
+        ...(closes ? ['close'] : []),
+        'open',
+        'click',
+      ]);
+      expect(bind).toHaveBeenCalledTimes(2);
+      expect(captures).toEqual([0, 1]);
+      expect(legacyDispatchCapture).not.toHaveBeenCalled();
+      expect(disclosures()).toEqual([]);
+    } finally {
+      await bindings[Symbol.asyncDispose]();
+    }
+  },
+);
+
+test.each(['admission-probe-failed', 'bind-failed'] as const)(
+  'replay re-admits at the next verification after %s',
+  async (outcome) => {
+    const fixture = selectorCaptureFixture({ snapshot: bridgeSaveButton });
+    const inspectFacts = vi.fn(fixture.inspectFacts);
+    const beforeBind = vi.fn(async () => {});
+    (outcome === 'admission-probe-failed' ? inspectFacts : beforeBind).mockRejectedValueOnce(
+      new TypeError('Unavailable'),
+    );
+    legacyDispatchCapture.mockResolvedValue({ ...bridgeSaveButton(), producer: 'apple-runner' });
+    const scene = replayScriptScene(
+      'agent-device-replay-capture-retry-',
+      [...verifiedClick, ...verifiedClick, ...verifiedClick],
+      {
+        inspectFacts,
+        bindDevice: async (device, use) => {
+          await beforeBind();
+          return await fixture.bindDevice(device, use);
+        },
+        platformServices: daemonPlatformServicesFixture(),
+      },
+    );
+
+    expect((await scene.replay()).ok).toBe(true);
+    expect(scene.invoked.map((req) => req.command)).toEqual(['click', 'click', 'click']);
+    expect(inspectFacts).toHaveBeenCalledTimes(2);
+    expect(legacyDispatchCapture).toHaveBeenCalledTimes(1);
+    expect(fixture.captures).toHaveLength(2);
+    expect(disclosures()).toEqual([
+      { level: 'warn', data: { command: 'replay', outcome, errorName: 'TypeError' } },
+    ]);
+  },
+);
 
 test('an owner that refuses the capture keeps verification on its own path and says so', async () => {
   const fixture = selectorCaptureFixture({
