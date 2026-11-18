@@ -17,9 +17,9 @@ export function pinOwnProcessStartTime(hostProcess: HostProcessModule): void {
 }
 
 function installPin(hostProcess: HostProcessModule): void {
-  // A C-form `ps -o lstart` rendering: the one verified format host-kit reads on macOS, so a
-  // different C-form token in a record still proves PID reuse while legacy renderings do not.
-  const ownStartTime = 'Tue Nov 17 19:42:27 2026';
+  // A canonical POSIX birth token: the provenanced format host-kit reads on macOS, so a
+  // different `posix:` token in a record still proves PID reuse while raw renderings do not.
+  const ownStartTime = 'posix:1763493000000';
   vi.spyOn(hostProcess, 'readCurrentOwnerIdentity').mockImplementation(() => ({
     pid: process.pid,
     startTime: ownStartTime,

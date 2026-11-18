@@ -1,5 +1,6 @@
 import {
   isProcessAlive,
+  isProvenancedBirthToken,
   processStartTimesDiffer,
   isProcessPid,
   readHostProcessIdentityObservations,
@@ -33,6 +34,9 @@ export function isAgentDeviceDaemonProcess(
   expectedStartTime: string | undefined,
 ): boolean {
   if (!expectedStartTime) return false;
+  // A raw historical rendering (pre-canonicalization lstart) has no comparable provenance, so it
+  // can neither be confirmed against a canonical read nor authorize a signal on its own.
+  if (!isProvenancedBirthToken(expectedStartTime)) return false;
   if (!isProcessAlive(pid)) return false;
   const actualStartTime = readProcessStartTime(pid);
   if (!actualStartTime || actualStartTime !== expectedStartTime) return false;

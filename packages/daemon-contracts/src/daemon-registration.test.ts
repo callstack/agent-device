@@ -55,25 +55,30 @@ test('a different published pid proves the owner no longer serves its state dir'
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4141, startTime: 'owner-start' }), true);
 });
 
-test('a published start time proves supersession only when both sides are readable', () => {
+test('a published start time proves supersession only when both sides are provenanced', () => {
   const stateDir = useStateDir();
-  // Two C-form renderings one second apart are the same verified format with different values,
-  // so the difference proves the pid changed hands.
-  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'Tue Nov 17 19:42:28 2026' });
+  // Two `posix:` tokens with different values are the same provenanced format, so the difference
+  // proves the pid changed hands.
+  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'posix:1763493001000' });
   assert.equal(
-    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'posix:1763493000000' }),
     true,
   );
-  // A legacy localized rendering beside a C-form read is unverified, not a proved supersession.
+  // Raw historical renderings — a localized one, and even the C form — are unqualified, so they
+  // are unverified, never a proved supersession.
   assert.equal(
     isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'mar. 17 nov. 19:42:28 2026' }),
+    false,
+  );
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
     false,
   );
   // An unreadable start time on either side leaves the identity unproven.
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: null }), false);
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: null });
   assert.equal(
-    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'posix:1763493000000' }),
     false,
   );
 });

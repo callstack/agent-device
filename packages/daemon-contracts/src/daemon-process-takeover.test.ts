@@ -65,58 +65,12 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
   return spawnFakeDaemon('repair-evidence-');
 }
 
-/** A start time in the same verified format as `live` but naming a different lifetime. */
+/** A start time in the same provenanced format as `live` but naming a different lifetime. */
 function staleStartTimeLike(live: string): string {
   if (live.startsWith('linux:')) return 'linux:00000000-0000-4000-8000-000000000000:999999999';
+  if (live.startsWith('posix:')) return 'posix:1';
   if (/^\d{21}$/.test(live)) return '00000000000000000000';
-  return live.replace(/\d{4}$/, '1970');
-}
-
-const FRENCH_MONTHS: Record<string, string> = {
-  Jan: 'janv.',
-  Feb: 'févr.',
-  Mar: 'mars',
-  Apr: 'avr.',
-  May: 'mai',
-  Jun: 'juin',
-  Jul: 'juil.',
-  Aug: 'août',
-  Sep: 'sept.',
-  Oct: 'oct.',
-  Nov: 'nov.',
-  Dec: 'déc.',
-};
-const FRENCH_WEEKDAYS: Record<string, string> = {
-  Mon: 'lun.',
-  Tue: 'mar.',
-  Wed: 'mer.',
-  Thu: 'jeu.',
-  Fri: 'ven.',
-  Sat: 'sam.',
-  Sun: 'dim.',
-};
-const C_FORM_LSTART = /^(\w{3}) (\w{3}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/;
-
-/** The fr_FR `ps -o lstart` rendering of a C-form start time, clock included. */
-function frenchLstart(cForm: string): string {
-  const match = C_FORM_LSTART.exec(cForm);
-  assert.ok(match, `expected a C-form lstart, got ${cForm}`);
-  const weekday = match[1]!;
-  const month = match[2]!;
-  const day = match[3]!;
-  const clock = match[4]!;
-  const year = match[5]!;
-  return `${FRENCH_WEEKDAYS[weekday] ?? weekday} ${day} ${FRENCH_MONTHS[month] ?? month} ${clock} ${year}`;
-}
-
-/** A localized rendering with no colon-separated clock, as locales that omit HH:mm:ss print. */
-function frenchDateOnlyLstart(cForm: string): string {
-  const match = C_FORM_LSTART.exec(cForm);
-  assert.ok(match, `expected a C-form lstart, got ${cForm}`);
-  const month = match[2]!;
-  const day = match[3]!;
-  const year = match[5]!;
-  return `${day} ${FRENCH_MONTHS[month] ?? month} ${year}`;
+  return 'posix:1';
 }
 
 // #1545: a reachable daemon with a code-signature mismatch is replaced. If a
@@ -176,18 +130,24 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
   assert.equal(isProcessAlive(pid), true);
 });
 
-// #4656: a record written before the C-locale pin may hold a localized `lstart` rendering. At
-// the daemon stop boundary it must yield unverified identity — never `already-exited`, and
-// never a signal — so a live daemon is not retired while it still runs.
+// #4656: a record written before the provenance pin holds a raw `lstart` rendering — fr_FR prints
+// `mar. 17 nov. 19:42:27 2026`, locales that omit HH:mm:ss print no clock, and an earlier pinned
+// build stored the raw C form. All are unqualified, so at the daemon stop boundary they yield
+// unverified identity — never `already-exited`, and never a signal — so a live daemon is not
+// retired while it still runs.
 test.skipIf(process.platform !== 'darwin')(
-  'a legacy-locale record yields unverified identity at daemon stop, not an exited daemon',
+  'a legacy raw record yields unverified identity at daemon stop, not an exited daemon',
   async () => {
     const { pid } = spawnFakeDaemonFromBranchNamedCheckout();
     const startTime = readProcessStartTime(pid);
     assert.ok(startTime, 'expected the spawned daemon to report a start time');
-    assert.ok(C_FORM_LSTART.test(startTime), `expected a C-form lstart, got ${startTime}`);
+    assert.ok(startTime.startsWith('posix:'), `expected a posix birth token, got ${startTime}`);
 
-    for (const legacy of [frenchLstart(startTime), frenchDateOnlyLstart(startTime)]) {
+    for (const legacy of [
+      'mar. 17 nov. 19:42:27 2026',
+      '17 nov. 2026',
+      'Tue Nov 17 19:42:27 2026',
+    ]) {
       const result = await stopDaemonProcess(
         { pid, startTime: legacy },
         { mode: 'graceful', termTimeoutMs: 200, killTimeoutMs: 100 },

@@ -387,9 +387,11 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
   const liveStartTime = readProcessStartTime(process.pid);
   const staleStartTime = liveStartTime?.startsWith('linux:')
     ? 'linux:00000000-0000-0000-0000-000000000000:0'
-    : liveStartTime !== null && /^\d{21}$/.test(liveStartTime)
-      ? '00000000000000000000'
-      : 'Thu Jan  1 00:00:00 1970';
+    : liveStartTime?.startsWith('posix:')
+      ? 'posix:1'
+      : liveStartTime !== null && /^\d{21}$/.test(liveStartTime)
+        ? '00000000000000000000'
+        : 'posix:1';
   const stale = tryAcquireProcessLock({
     lockDirPath: paths.lockPath,
     owner: { pid: process.pid, startTime: staleStartTime, acquiredAtMs: Date.now() },

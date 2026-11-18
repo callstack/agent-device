@@ -186,13 +186,15 @@ test.for(['existing', 'missing'])(
   },
 );
 
-// A start time in the same verified format as the live owner's but a different value, so the
-// registration proves replacement; a legacy-format token would be unverified, not proof.
+// A start time in the same provenanced format as the live owner's but a different value, so the
+// registration proves replacement; a raw legacy rendering would be unverified, not proof.
 const recycledStartTime = ownIdentity.startTime?.startsWith('linux:')
   ? 'linux:00000000-0000-0000-0000-000000000000:0'
-  : ownIdentity.startTime !== null && /^\d{21}$/.test(ownIdentity.startTime)
-    ? '00000000000000000000'
-    : 'Thu Jan  1 00:00:00 1970';
+  : ownIdentity.startTime?.startsWith('posix:')
+    ? 'posix:1'
+    : ownIdentity.startTime !== null && /^\d{21}$/.test(ownIdentity.startTime)
+      ? '00000000000000000000'
+      : 'posix:1';
 
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],

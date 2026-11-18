@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import {
   isProcessAlive,
   isProcessZombie,
+  processStartTimesDiffer,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
   readProcessIdentityFacts,
   readProcessStartTime,
   type HostProcessIdentityObservation,
 } from './host-process.ts';
-import { processStartTimesDiffer } from './ps-start-time.ts';
 
 export type OwnerIdentity = {
   pid: number;

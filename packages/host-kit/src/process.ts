@@ -19,8 +19,10 @@ export {
   isProcessAlive,
   isProcessGroupAlive,
   isProcessZombie,
+  isProvenancedBirthToken,
   judgeProcessIdentity,
   listHostProcesses,
+  processStartTimesDiffer,
   type ProcessIdentityVerdict,
   type ProcessStopBudget,
   type ProcessStopIdentity,
@@ -40,7 +42,6 @@ export {
   waitForProcessExit,
   writeHostStderr,
 } from './internal/host-process.ts';
-export { processStartTimesDiffer } from './internal/ps-start-time.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {

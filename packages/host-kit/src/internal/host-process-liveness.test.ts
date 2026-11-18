@@ -21,12 +21,17 @@ import {
   readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
+  processStartTimesDiffer,
 } from './host-process.ts';
-import { processStartTimesDiffer } from './ps-start-time.ts';
 import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
+}
+
+/** The canonical token a pinned C-form lstart parses to, in the reader's zone. */
+function posixToken(y: number, mo: number, d: number, h: number, mi: number, s: number): string {
+  return `posix:${new Date(y, mo, d, h, mi, s).getTime()}`;
 }
 
 /** Answers the two batched identity reads: state and start time, and the command line. */
@@ -85,11 +90,11 @@ test('reads many process identities from one ps snapshot', () => {
 
   assert.deepEqual(observations.get(4242), {
     state: 'Ss',
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
   });
   assert.deepEqual(observations.get(4343), {
     state: 'ZN',
-    startTime: 'Mon Aug 10 20:01:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 1, 0),
   });
   assert.equal(mockRunCmdSync.mock.calls.length, 1);
   assert.ok(PINNED_PS_COMMANDS.includes(mockRunCmdSync.mock.calls[0]?.[0]));
@@ -117,11 +122,11 @@ test('the async snapshot answers the same observations from one awaited ps run',
 
   assert.deepEqual(observations.get(4242), {
     state: 'Ss',
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
   });
   assert.deepEqual(observations.get(4343), {
     state: 'ZN',
-    startTime: 'Mon Aug 10 20:01:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 1, 0),
   });
   assert.equal(mockRunCmd.mock.calls.length, 1);
   assert.equal(mockRunCmdSync.mock.calls.length, 0, 'the async probe never blocks the loop');
@@ -150,7 +155,7 @@ test('the ownership read spends the budget its caller names on both batched read
   const facts = await readProcessIdentityFacts(4242, 5_000);
 
   assert.deepEqual(facts, {
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
     command: '/bin/simctl io recordVideo out.mp4',
     zombie: false,
   });
@@ -190,12 +195,19 @@ test('one identity read answers a whole fleet from two ps runs, on Linux and mac
       [
         101,
         {
-          startTime: 'Mon Nov  9 10:00:00 2026',
+          startTime: posixToken(2026, 10, 9, 10, 0, 0),
           command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless',
           zombie: false,
         },
       ],
-      [202, { startTime: 'Tue Nov 10 08:30:00 2026', command: '[chrome] <defunct>', zombie: true }],
+      [
+        202,
+        {
+          startTime: posixToken(2026, 10, 10, 8, 30, 0),
+          command: '[chrome] <defunct>',
+          zombie: true,
+        },
+      ],
       [303, { startTime: null, command: null, zombie: null }],
     ],
   );
@@ -248,7 +260,7 @@ test('a host without /bin/ps reads identity through the NixOS system profile pro
 
   assert.equal(
     readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
-    'Mon Aug 10 20:00:00 2026',
+    posixToken(2026, 7, 10, 20, 0, 0),
   );
   assert.equal((await readProcessIdentityFacts(4242)).startTime, 'x');
   assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/run/current-system/sw/bin/ps');
@@ -410,7 +422,7 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   readHostProcessIdentityObservations([4242]);
   await readHostProcessIdentityObservationsAsync([4242]);
   await readProcessIdentityFacts(4242);
-  assert.equal(readProcessStartTime(4242), 'Mon Aug 10 20:00:00 2026');
+  assert.equal(readProcessStartTime(4242), posixToken(2026, 7, 10, 20, 0, 0));
   assert.equal(
     readProcessCommand(4242),
     utf8Command,
@@ -448,26 +460,26 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   assert.ok(sawCommandRead, 'the pid=,command= batch read must have run');
 });
 
-test('only two start times in the same verified format prove different lifetimes', () => {
+test('only two start times in the same provenanced format prove different lifetimes', () => {
   const cForm = 'Tue Nov 17 19:42:27 2026';
   const french = 'mar. 17 nov. 19:42:27 2026'; // fr_FR rendering, with a clock
   const frenchNoClock = '17 nov. 2026'; // locales that omit HH:mm:ss entirely
   const norwegian = 'tir. 17. nov. 19:42:27 2026'; // nb_NO renders the clock with dots
-  // A legacy rendering beside a C-form read is unverified, never a different lifetime.
+  // Raw historical renderings are unqualified: none proves a different lifetime, not even two
+  // raw C-form values one second apart.
+  assert.equal(processStartTimesDiffer(cForm, 'Tue Nov 17 19:42:28 2026'), false);
   assert.equal(processStartTimesDiffer(french, cForm), false);
-  assert.equal(processStartTimesDiffer(cForm, french), false);
-  assert.equal(processStartTimesDiffer(frenchNoClock, cForm), false);
   assert.equal(processStartTimesDiffer(cForm, frenchNoClock), false);
-  // Two different legacy renderings are not comparable either.
   assert.equal(processStartTimesDiffer(french, norwegian), false);
   assert.equal(processStartTimesDiffer(french, frenchNoClock), false);
-  // Two values in one verified format still prove a difference.
-  assert.equal(processStartTimesDiffer(cForm, 'Tue Nov 17 19:42:28 2026'), true);
+  // Two tokens in one provenanced format still prove a difference.
+  assert.equal(processStartTimesDiffer('posix:1763493000000', 'posix:1763493001000'), true);
   assert.equal(processStartTimesDiffer('linux:boot:1', 'linux:boot:2'), true);
   assert.equal(processStartTimesDiffer('202610081234567890129', '202701010000000000009'), true);
   // Mixed formats and unreadable values prove nothing.
+  assert.equal(processStartTimesDiffer(cForm, 'posix:1763493000000'), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', cForm), false);
   assert.equal(processStartTimesDiffer(cForm, 'linux:boot:1'), false);
-  assert.equal(processStartTimesDiffer(french, 'linux:boot:1'), false);
-  assert.equal(processStartTimesDiffer(cForm, null), false);
-  assert.equal(processStartTimesDiffer(cForm, cForm), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', null), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', 'posix:1763493000000'), false);
 });

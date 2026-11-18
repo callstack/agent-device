@@ -382,7 +382,7 @@ test('PID reuse is uncertain ownership and never authorizes reconciliation', asy
   const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
   fs.writeFileSync(
     claimPath(root),
-    JSON.stringify({ ...stored, ownerStartTime: 'Tue Nov 17 19:42:28 2026' }),
+    JSON.stringify({ ...stored, ownerStartTime: 'posix:1763493001000' }),
   );
   const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
 

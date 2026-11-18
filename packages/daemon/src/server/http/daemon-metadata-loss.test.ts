@@ -11,8 +11,8 @@ import {
 
 const OWN_PID = process.pid;
 const FOREIGN_PID = 999_999_999;
-// A C-form `lstart` rendering: the verified format, so a different C-form token proves a recycle.
-const OWN = { pid: OWN_PID, startTime: 'Tue Nov 17 19:42:27 2026' } as const;
+// A provenanced POSIX birth token: the verified format, so a different token proves a recycle.
+const OWN = { pid: OWN_PID, startTime: 'posix:1763493000000' } as const;
 
 function scratch(): { stateDir: string; infoPath: string } {
   const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-loss-');
@@ -43,7 +43,7 @@ describe('readDaemonMetadataLoss', () => {
 
   test('a record recycling this pid under a different start time is a loss', () => {
     const { stateDir, infoPath } = scratch();
-    publish(stateDir, OWN_PID, 'Tue Nov 17 19:42:28 2026');
+    publish(stateDir, OWN_PID, 'posix:1763493001000');
 
     assert.deepEqual(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), {
       state: 'replaced',
@@ -91,6 +91,15 @@ describe('readDaemonMetadataLoss', () => {
     // one verdict, and neither gets to default in its own direction.
     const { stateDir, infoPath } = scratch();
     publish(stateDir, OWN_PID, null);
+
+    assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
+  });
+
+  test('a legacy raw record under this pid is unverified, not a reported loss', () => {
+    // A record written before the provenance pin holds a raw `lstart` rendering, which cannot
+    // prove a different lifetime, so the daemon does not announce a takeover on it.
+    const { stateDir, infoPath } = scratch();
+    publish(stateDir, OWN_PID, 'Tue Nov 17 19:42:27 2026');
 
     assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
   });

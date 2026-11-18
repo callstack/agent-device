@@ -18,12 +18,13 @@ import {
 
 pinOwnProcessStartTime(hostProcess);
 
-/** A start time in the same verified format as `live` but naming a different lifetime. */
+/** A start time in the same provenanced format as `live` but naming a different lifetime. */
 function staleStartTimeLike(live: string | null): string {
-  if (live === null) return 'Thu Jan  1 00:00:00 1970';
+  if (live === null) return 'posix:1';
   if (live.startsWith('linux:')) return 'linux:00000000-0000-4000-8000-000000000000:999999999';
+  if (live.startsWith('posix:')) return 'posix:1';
   if (/^\d{21}$/.test(live)) return '00000000000000000000';
-  return live.replace(/\d{4}$/, '1970');
+  return 'posix:1';
 }
 
 test('device status is daemonless and does not send a daemon request', async () => {

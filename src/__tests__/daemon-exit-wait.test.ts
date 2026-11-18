@@ -5,8 +5,8 @@ import {
 } from '@agent-device/daemon-contracts/daemon-process';
 
 const DAEMON_COMMAND = '/opt/checkout/dist/src/internal/daemon.js';
-const OURS = 'Mon Aug 24 10:00:00 2026';
-const RECYCLED = 'Mon Aug 24 10:00:07 2026';
+const OURS = 'posix:1000';
+const RECYCLED = 'posix:2000';
 const PID = 4242;
 const TIMEOUT_MS = 1_000;
 const POLL_MS = 5;

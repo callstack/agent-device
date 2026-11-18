@@ -53,25 +53,26 @@ test('a failed start-time read is not proof of death for an alive pid', () => {
 });
 
 test('a definite start-time mismatch classifies as owner-process-reused', () => {
-  // The mismatch must be proven in one verified format: two C-form renderings one second apart.
-  mockReadProcessStartTime.mockReturnValue('Tue Nov 17 19:42:28 2026');
+  // The mismatch must be proven in one provenanced format: two `posix:` tokens one second apart.
+  mockReadProcessStartTime.mockReturnValue('posix:1763493001000');
   assert.equal(
-    classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'Tue Nov 17 19:42:27 2026' } }),
+    classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: 'posix:1763493000000' } }),
     'owner-process-reused',
   );
 });
 
-test('a legacy-locale record beside a C-locale read stays live, never reused', () => {
-  // `mar. 17 nov. 19:42:27 2026` (fr_FR) and `17 nov. 2026` (no colon-separated clock) are
-  // renderings an older build could have recorded; neither proves the pid changed hands.
-  for (const legacy of ['mar. 17 nov. 19:42:27 2026', '17 nov. 2026']) {
-    mockReadProcessStartTime.mockReturnValue('Tue Nov 17 19:42:27 2026');
+test('a legacy raw record beside a provenanced read stays live, never reused', () => {
+  // `mar. 17 nov. 19:42:27 2026` (fr_FR), `17 nov. 2026` (no colon-separated clock), and the raw
+  // C form are renderings an older build could have recorded; none proves the pid changed hands.
+  for (const legacy of ['mar. 17 nov. 19:42:27 2026', '17 nov. 2026', 'Tue Nov 17 19:42:27 2026']) {
+    mockReadProcessStartTime.mockReturnValue('posix:1763493000000');
     assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime: legacy } }), 'live');
   }
 });
 
 test.each([
   ['Mon Aug 10 20:00:00 2026', 'linux:11111111-1111-4111-8111-111111111111:12345'],
+  ['posix:1763493000000', 'linux:11111111-1111-4111-8111-111111111111:12345'],
   ['linux:11111111-1111-4111-8111-111111111111:12345', 'Mon Aug 10 20:00:00 2026'],
 ])('an owner with an incomparable start-time format retains its resource', (recorded, observed) => {
   mockReadProcessStartTime.mockReturnValue(observed);
