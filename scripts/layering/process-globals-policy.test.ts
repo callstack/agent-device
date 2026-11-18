@@ -137,7 +137,7 @@ test('SDK adapters cannot capture a process host', () => {
     'src/sdk/artifacts.ts',
     'src/sdk/metro.ts',
     'src/sdk/remote-config.ts',
-    'src/provider-limrun-runtime.ts',
+    'src/sdk/limrun-runtime-dependencies.ts',
   ]) {
     assert.equal(check('captureHostEnvironment(process);', file).length, 1, file);
   }
