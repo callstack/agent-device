@@ -355,42 +355,50 @@ export async function verifyHarmonyOpenForeground(
         );
   const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
-  if (verification.state === 'probe-failed') {
-    // A budget whose every read failed is a probe that never ran to an
-    // answer, not evidence the app stayed backgrounded, so it carries its
-    // own reason.
-    if (input.execution.foreground === true) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        clampedByDeadline
-          ? `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`
-          : `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
-        {
-          reason: 'open-foreground-probe-unreadable',
-          hint: clampedByDeadline
-            ? 'The request deadline is too tight for a foreground read: run the open again with more budget.'
-            : 'Check the device connection, then run the open again.',
-        },
-      );
-    }
+  if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
   }
-  if (input.execution.foreground === true) {
-    throw new AppError(
+  throw openForegroundHardFailure(bundleId, verification, clampedByDeadline);
+}
+
+/**
+ * The `--foreground` hard failure: a probe whose every read failed is a probe
+ * that never ran to an answer, so it carries the unreadable reason and the
+ * connection hint; an answered read that never named the launched app carries
+ * `open-not-foreground` and the unlock hint.
+ */
+function openForegroundHardFailure(
+  bundleId: string,
+  verification: OpenForegroundVerification,
+  clampedByDeadline: boolean,
+): AppError {
+  if (verification.state === 'probe-failed') {
+    return new AppError(
       'COMMAND_FAILED',
       clampedByDeadline
-        ? `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground before the request deadline`
-        : `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
+        ? `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`
+        : `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
       {
-        reason: 'open-not-foreground',
-        hint: 'Unlock the device screen, then run the open again.',
-        ...(verification.state === 'other-foreground'
-          ? { foregroundPackage: verification.foregroundPackage }
-          : {}),
+        reason: 'open-foreground-probe-unreadable',
+        hint: clampedByDeadline
+          ? 'The request deadline is too tight for a foreground read: run the open again with more budget.'
+          : 'Check the device connection, then run the open again.',
       },
     );
   }
-  return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
+  return new AppError(
+    'COMMAND_FAILED',
+    clampedByDeadline
+      ? `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground before the request deadline`
+      : `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
+    {
+      reason: 'open-not-foreground',
+      hint: 'Unlock the device screen, then run the open again.',
+      ...(verification.state === 'other-foreground'
+        ? { foregroundPackage: verification.foregroundPackage }
+        : {}),
+    },
+  );
 }
 
 export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {
