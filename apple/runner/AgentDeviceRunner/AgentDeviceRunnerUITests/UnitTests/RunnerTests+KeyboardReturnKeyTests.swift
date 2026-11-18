@@ -17,6 +17,18 @@ extension RunnerTests {
     )
   }
 
+  func testKeyboardStatusOmitsReturnMetadataForALabelOnlySearchKey() {
+    let keyboard = CGRect(x: 0, y: 449, width: 393, height: 219)
+    let keys: [RunnerKeyboardStatus.ObservedKeyboardKey] = [
+      .init(label: "A", identifier: "", frame: CGRect(x: 15, y: 501, width: 36, height: 52), isKey: true),
+      .init(label: "Search", identifier: "", frame: CGRect(x: 282, y: 609, width: 110, height: 51), isKey: false),
+    ]
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(keyboardFrame: keyboard, keys: keys, viewport: .reported(box: CGRect(x: 0, y: 0, width: 393, height: 852))),
+      RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
+    )
+  }
+
   func testKeyboardStatusIgnoresOffscreenKeysBelowAnAccessory() {
     let viewport = CGRect(x: 0, y: 0, width: 820, height: 1180)
     let bar = CGRect(x: 0, y: 1136, width: 820, height: 44)

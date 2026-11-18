@@ -325,12 +325,14 @@ extension RunnerTests {
   /// context its record is routed through, so a tree with no window whose app provably fills its
   /// sole screen plans on that screen, the same route a synthesized tap or scroll takes.
   @MainActor
-  func gestureViewportFrame(app: XCUIApplication) throws -> CGRect {
+  func gestureViewportFrame(app: XCUIApplication, includesKeyboard: Bool = false) throws -> CGRect {
 #if os(iOS)
     if let context = try synthesizedCoordinateContext(app: app) {
-      return context.geometry.windowOnScreen.rect
+      let frame = context.geometry.windowOnScreen.rect
+      return includesKeyboard || context.resolvedWindow == nil ? frame : frameAvoidingKeyboard(app: app, frame: frame)
     }
-    return try readableAppFrame(app: app)
+    let frame = try readableAppFrame(app: app)
+    return includesKeyboard ? frame : frameAvoidingKeyboard(app: app, frame: frame)
 #else
     return try resolvedTouchReferenceFrame(app: app)
 #endif

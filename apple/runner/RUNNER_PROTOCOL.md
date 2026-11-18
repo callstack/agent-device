@@ -304,6 +304,10 @@ The host maps it to `UNSUPPORTED_OPERATION` with `details.reason: "keyboard_dism
 and `details.dispatched: "no"`. When the keyboard state is unreadable, `keyboard status` and
 `keyboard dismiss` return `OBSERVATION_UNAVAILABLE`.
 
+When the runner recognizes a visible Return key's accessibility identifier, `keyboard status`
+returns its action and available localized label. A visible keyboard with a label-only Return key
+returns `unknown` and omits the label.
+
 When the runner cannot confirm that Return reached the focused input, `keyboard enter` returns
 `KEYBOARD_RETURN_UNAVAILABLE`. The host reports `details.dispatched: "unknown"` because the
 event may have reached the app.

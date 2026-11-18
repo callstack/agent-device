@@ -26,6 +26,7 @@ export type GesturePlanInput = Readonly<{
 
 /** Reading the gesture coordinate frame needs no plan — only the owner's authority. */
 export type GestureViewportInput = Readonly<{
+  includesKeyboard?: true;
   options?: Readonly<{ appBundleId?: string }>;
   execution?: SnapshotRuntimeExecution;
 }>;
@@ -151,7 +152,9 @@ function bindGestureOperations(
                 'Runtime owner advertised gestureViewport without an interactor implementation',
               );
             }
-            return await interactor.gestureViewport();
+            return input.includesKeyboard
+              ? await interactor.gestureViewport(true)
+              : await interactor.gestureViewport();
           },
         }
       : {}),

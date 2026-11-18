@@ -135,7 +135,7 @@ export type RunnerCommand = {
   allowNonHittableCoordinateFallback?: boolean;
   delayMs?: number;
   textEntryMode?: 'append' | 'replace';
-  action?: 'get' | 'accept' | 'dismiss';
+  action?: 'get' | 'accept' | 'dismiss' | 'include-keyboard';
   x?: number;
   y?: number;
   button?: ClickButton;

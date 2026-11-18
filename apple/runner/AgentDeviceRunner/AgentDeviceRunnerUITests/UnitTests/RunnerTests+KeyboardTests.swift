@@ -359,7 +359,8 @@ extension RunnerTests {
   func testExplicitGestureViewportIncludesTheKeyboard() throws {
     try withDoneReturnField { _ in
       let window = try onScreenWindowFrame(app: app)
-      XCTAssertEqual(try gestureViewportFrame(app: app), window)
+      XCTAssertEqual(try gestureViewportFrame(app: app, includesKeyboard: true), window)
+      XCTAssertLessThan(try gestureViewportFrame(app: app).height, window.height)
     }
   }
 
