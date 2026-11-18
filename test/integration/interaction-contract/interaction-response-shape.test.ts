@@ -83,160 +83,196 @@ test(
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
 
-test('interaction response shape: fill @ref uses the canonical ref envelope', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({})],
-    async (daemon, transcript) => {
-      assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
+test(
+  'interaction response shape: fill @ref uses the canonical ref envelope',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({})],
+      async (daemon, transcript) => {
+        assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
 
-      const data = assertRpcOk(await daemon.callCommand('fill', ['@e2', 'Hello']));
-      assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(200, 322, 'Hello'));
+        const data = assertRpcOk(await daemon.callCommand('fill', ['@e2', 'Hello']));
+        assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(200, 322, 'Hello'));
 
-      assertCanonicalRef(data, {
-        message: 'Filled 5 chars',
-        x: 200,
-        y: 322,
-        extra: {
-          delayMs: 0,
-          text: 'Hello',
-          warning: 'fill target @e2 resolved to "Button", attempting fill anyway.',
-        },
+        assertCanonicalRef(data, {
+          message: 'Filled 5 chars',
+          x: 200,
+          y: 322,
+          extra: {
+            delayMs: 0,
+            text: 'Hello',
+            warning: 'fill target @e2 resolved to "Button", attempting fill anyway.',
+          },
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: longpress @ref uses the canonical ref envelope',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerLongPressEntry({})],
+      async (daemon, transcript) => {
+        assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
+
+        const data = assertRpcOk(await daemon.callCommand('longpress', ['@e2', '700']));
+        assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(200, 322, 700));
+
+        assertCanonicalRef(data, {
+          message: 'Long pressed @e2 (200, 322)',
+          x: 200,
+          y: 322,
+          extra: { durationMs: 700, gesture: 'longpress' },
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: press selector uses the canonical selector envelope',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({})],
+      async (daemon, transcript) => {
+        const data = assertRpcOk(await daemon.callCommand('press', ['label=Continue']));
+        assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(200, 322));
+
+        assertCanonicalSelector(data, {
+          message: 'Tapped label=Continue (200, 322)',
+          x: 200,
+          y: 322,
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: fill selector uses the canonical selector envelope',
+  async () => {
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+        runnerTypeEntry({ ...NOISY_DEFAULT_TAP_RESULT, x: 200, y: 322 }),
+      ],
+      async (daemon, transcript) => {
+        const data = assertRpcOk(await daemon.callCommand('fill', ['label=Continue', 'Hello']));
+        assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(200, 322, 'Hello'));
+
+        assertCanonicalSelector(data, {
+          message: 'Filled 5 chars',
+          x: 200,
+          y: 322,
+          extra: {
+            delayMs: 0,
+            text: 'Hello',
+            warning: 'fill target label=Continue resolved to "Button", attempting fill anyway.',
+          },
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: longpress selector uses the canonical selector envelope',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerLongPressEntry({})],
+      async (daemon, transcript) => {
+        const data = assertRpcOk(await daemon.callCommand('longpress', ['label=Continue', '700']));
+        assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(200, 322, 700));
+
+        assertCanonicalSelector(data, {
+          message: 'Long pressed label=Continue (200, 322)',
+          x: 200,
+          y: 322,
+          extra: { durationMs: 700, gesture: 'longpress' },
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: press point uses the canonical point envelope',
+  async () => {
+    await withIosContractDaemon([runnerTapEntry({})], async (daemon, transcript) => {
+      const data = assertRpcOk(await daemon.callCommand('press', ['100', '200']));
+      assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(100, 200));
+
+      assertCanonicalPoint(data, {
+        message: 'Tapped (100, 200)',
+        x: 100,
+        y: 200,
       });
-    },
-  );
-});
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
-test('interaction response shape: longpress @ref uses the canonical ref envelope', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerLongPressEntry({})],
-    async (daemon, transcript) => {
-      assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
+test(
+  'interaction response shape: fill point uses the canonical point envelope',
+  async () => {
+    await withIosContractDaemon([runnerTypeEntry({})], async (daemon, transcript) => {
+      const data = assertRpcOk(await daemon.callCommand('fill', ['100', '200', 'Hello']));
+      assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(100, 200, 'Hello'));
 
-      const data = assertRpcOk(await daemon.callCommand('longpress', ['@e2', '700']));
-      assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(200, 322, 700));
+      assertCanonicalPoint(data, {
+        message: 'Filled 5 chars',
+        x: 100,
+        y: 200,
+        extra: { delayMs: 0, text: 'Hello' },
+      });
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
-      assertCanonicalRef(data, {
-        message: 'Long pressed @e2 (200, 322)',
-        x: 200,
-        y: 322,
+test(
+  'interaction response shape: type tolerates a zero-sized runner reference frame',
+  async () => {
+    await withIosContractDaemon(
+      [runnerTypeEntry({ referenceWidth: 0, referenceHeight: 0 })],
+      async (daemon) => {
+        const data = assertRpcOk(await daemon.callCommand('type', ['Hello']));
+
+        // A zero-sized runner frame is unusable coordinate evidence. The daemon
+        // drops it instead of normalizing through zero or rejecting bare type.
+        assert.equal(data.referenceWidth, undefined);
+        assert.equal(data.referenceHeight, undefined);
+        assert.equal(data.text, 'Hello');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'interaction response shape: longpress point uses the canonical point envelope',
+  async () => {
+    await withIosContractDaemon([runnerLongPressEntry({})], async (daemon, transcript) => {
+      const data = assertRpcOk(await daemon.callCommand('longpress', ['100', '200', '700']));
+      assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(100, 200, 700));
+
+      assertCanonicalPoint(data, {
+        message: 'Long pressed (100, 200)',
+        x: 100,
+        y: 200,
         extra: { durationMs: 700, gesture: 'longpress' },
       });
-    },
-  );
-});
-
-test('interaction response shape: press selector uses the canonical selector envelope', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({})],
-    async (daemon, transcript) => {
-      const data = assertRpcOk(await daemon.callCommand('press', ['label=Continue']));
-      assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(200, 322));
-
-      assertCanonicalSelector(data, {
-        message: 'Tapped label=Continue (200, 322)',
-        x: 200,
-        y: 322,
-      });
-    },
-  );
-});
-
-test('interaction response shape: fill selector uses the canonical selector envelope', async () => {
-  await withIosContractDaemon(
-    [
-      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
-      runnerTypeEntry({ ...NOISY_DEFAULT_TAP_RESULT, x: 200, y: 322 }),
-    ],
-    async (daemon, transcript) => {
-      const data = assertRpcOk(await daemon.callCommand('fill', ['label=Continue', 'Hello']));
-      assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(200, 322, 'Hello'));
-
-      assertCanonicalSelector(data, {
-        message: 'Filled 5 chars',
-        x: 200,
-        y: 322,
-        extra: {
-          delayMs: 0,
-          text: 'Hello',
-          warning: 'fill target label=Continue resolved to "Button", attempting fill anyway.',
-        },
-      });
-    },
-  );
-});
-
-test('interaction response shape: longpress selector uses the canonical selector envelope', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerLongPressEntry({})],
-    async (daemon, transcript) => {
-      const data = assertRpcOk(await daemon.callCommand('longpress', ['label=Continue', '700']));
-      assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(200, 322, 700));
-
-      assertCanonicalSelector(data, {
-        message: 'Long pressed label=Continue (200, 322)',
-        x: 200,
-        y: 322,
-        extra: { durationMs: 700, gesture: 'longpress' },
-      });
-    },
-  );
-});
-
-test('interaction response shape: press point uses the canonical point envelope', async () => {
-  await withIosContractDaemon([runnerTapEntry({})], async (daemon, transcript) => {
-    const data = assertRpcOk(await daemon.callCommand('press', ['100', '200']));
-    assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(100, 200));
-
-    assertCanonicalPoint(data, {
-      message: 'Tapped (100, 200)',
-      x: 100,
-      y: 200,
     });
-  });
-});
-
-test('interaction response shape: fill point uses the canonical point envelope', async () => {
-  await withIosContractDaemon([runnerTypeEntry({})], async (daemon, transcript) => {
-    const data = assertRpcOk(await daemon.callCommand('fill', ['100', '200', 'Hello']));
-    assertRunnerRequest(transcript, 'ios.runner.type', typeRequest(100, 200, 'Hello'));
-
-    assertCanonicalPoint(data, {
-      message: 'Filled 5 chars',
-      x: 100,
-      y: 200,
-      extra: { delayMs: 0, text: 'Hello' },
-    });
-  });
-});
-
-test('interaction response shape: type tolerates a zero-sized runner reference frame', async () => {
-  await withIosContractDaemon(
-    [runnerTypeEntry({ referenceWidth: 0, referenceHeight: 0 })],
-    async (daemon) => {
-      const data = assertRpcOk(await daemon.callCommand('type', ['Hello']));
-
-      // A zero-sized runner frame is unusable coordinate evidence. The daemon
-      // drops it instead of normalizing through zero or rejecting bare type.
-      assert.equal(data.referenceWidth, undefined);
-      assert.equal(data.referenceHeight, undefined);
-      assert.equal(data.text, 'Hello');
-    },
-  );
-});
-
-test('interaction response shape: longpress point uses the canonical point envelope', async () => {
-  await withIosContractDaemon([runnerLongPressEntry({})], async (daemon, transcript) => {
-    const data = assertRpcOk(await daemon.callCommand('longpress', ['100', '200', '700']));
-    assertRunnerRequest(transcript, 'ios.runner.longPress', longPressRequest(100, 200, 700));
-
-    assertCanonicalPoint(data, {
-      message: 'Long pressed (100, 200)',
-      x: 100,
-      y: 200,
-      extra: { durationMs: 700, gesture: 'longpress' },
-    });
-  });
-});
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 function assertCanonicalRef(
   data: WireData,

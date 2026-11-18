@@ -3,10 +3,11 @@ import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { COORDINATE_COVERAGE } from './coordinate.coverage.ts';
 import { settledWelcomeSnapshot, viewportOnlySnapshot } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
+import { createContractClock, createContractDevice } from './runtime-harness.ts';
 import { runnerTapEntry, runnerTapErrorEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, coordinate path: raw x/y tap, intentionally minimal
@@ -63,6 +64,7 @@ test(scenario('settleObservation'), async () => {
       return { snapshot: settledWelcomeSnapshot() };
     },
     tap: async () => ({ ok: true }),
+    clock: createContractClock(),
   });
 
   const result = await device.interactions.press(
@@ -77,38 +79,50 @@ test(scenario('settleObservation'), async () => {
   assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
 });
 
-test(scenario('errorTaxonomy'), async () => {
-  await withIosContractDaemon(
-    [runnerTapErrorEntry(new Error('runner tap crashed'))],
-    async (daemon) => {
-      const press = await daemon.callCommand('press', ['100', '200']);
-      // An unclassified backend failure gets the shared fallback classification
-      // from normalizeError: stable code, original message, actionable hint.
-      const error = assertRpcError(press, 500, 'UNKNOWN', /runner tap crashed/);
-      assert.ok(typeof error.hint === 'string' && error.hint.length > 0);
-      assert.ok(typeof error.diagnosticId === 'string');
-    },
-  );
-});
+test(
+  scenario('errorTaxonomy'),
+  async () => {
+    await withIosContractDaemon(
+      [runnerTapErrorEntry(new Error('runner tap crashed'))],
+      async (daemon) => {
+        const press = await daemon.callCommand('press', ['100', '200']);
+        // An unclassified backend failure gets the shared fallback classification
+        // from normalizeError: stable code, original message, actionable hint.
+        const error = assertRpcError(press, 500, 'UNKNOWN', /runner tap crashed/);
+        assert.ok(typeof error.hint === 'string' && error.hint.length > 0);
+        assert.ok(typeof error.diagnosticId === 'string');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
-test(scenario('responseConstruction'), async () => {
-  await withIosContractDaemon([runnerTapEntry({ x: 100, y: 200 })], async (daemon) => {
-    const press = await daemon.callCommand('press', ['100', '200']);
-    const data = assertRpcOk(press);
-    // Canonical point response set: the tapped coordinates, no fabricated
-    // identity fields (the path has no resolved node by design).
-    assert.equal(data.x, 100);
-    assert.equal(data.y, 200);
-    assert.equal(data.ref, undefined);
-    assert.equal(data.selector, undefined);
-  });
-});
+test(
+  scenario('responseConstruction'),
+  async () => {
+    await withIosContractDaemon([runnerTapEntry({ x: 100, y: 200 })], async (daemon) => {
+      const press = await daemon.callCommand('press', ['100', '200']);
+      const data = assertRpcOk(press);
+      // Canonical point response set: the tapped coordinates, no fabricated
+      // identity fields (the path has no resolved node by design).
+      assert.equal(data.x, 100);
+      assert.equal(data.y, 200);
+      assert.equal(data.ref, undefined);
+      assert.equal(data.selector, undefined);
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 // Inapplicable cell (ADR 0012), so intentionally absent from the coverage manifest.
-test('coordinate resolutionDisclosure: inapplicable — no resolution field is attached', async () => {
-  await withIosContractDaemon([runnerTapEntry({ x: 100, y: 200 })], async (daemon) => {
-    const press = await daemon.callCommand('press', ['100', '200']);
-    const data = assertRpcOk(press);
-    assert.equal(data.resolution, undefined);
-  });
-});
+test(
+  'coordinate resolutionDisclosure: inapplicable — no resolution field is attached',
+  async () => {
+    await withIosContractDaemon([runnerTapEntry({ x: 100, y: 200 })], async (daemon) => {
+      const press = await daemon.callCommand('press', ['100', '200']);
+      const data = assertRpcOk(press);
+      assert.equal(data.resolution, undefined);
+    });
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);

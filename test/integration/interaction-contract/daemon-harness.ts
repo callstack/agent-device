@@ -22,7 +22,11 @@ import {
 export const CONTRACT_APP = 'com.example.app';
 const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
-const SETTLING_CAPTURE_READS = 2;
+// The open opts out of post-open stabilization: the lane proves dispatch shape, and the stabilization
+// loop would poll the first capture on a 200ms schedule for a screen nothing here watches. The
+// harness's own snapshot is then the first capture after the open and reads the first screen once.
+// Each scenario's conversation with the runner follows, exactly as scripted.
+const SETTLING_CAPTURE_READS = 1;
 
 /**
  * Provider-transcript harness for contract scenarios whose path involves the
@@ -37,9 +41,6 @@ export async function withIosContractDaemon(
   run: (daemon: ProviderScenarioHarness, transcript: ProviderScenarioTranscript) => Promise<void>,
   options: { saveScript?: boolean | string } = {},
 ): Promise<void> {
-  // The scripted open is not read back, so the first capture after it settles over a quiet pair of
-  // reads and pauses the direct selector path. A snapshot consumes that pair here, keeping each
-  // scenario's own conversation with the runner exactly as scripted.
   const transcript = createProviderTranscript([
     ...Array.from({ length: SETTLING_CAPTURE_READS }, () =>
       runnerSnapshotEntry(FIRST_SCREEN_NODES),
@@ -74,6 +75,7 @@ export async function withIosContractDaemon(
       const open = await daemon.callCommand('open', [CONTRACT_APP], {
         platform: 'ios',
         udid: CONTRACT_DEVICE_ID,
+        postGestureStabilization: false,
         ...(options.saveScript !== undefined ? { saveScript: options.saveScript } : {}),
       });
       assertRpcOk(open);

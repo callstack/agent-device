@@ -211,6 +211,7 @@ test(scenario('settleObservation'), async () => {
   const device = createContractDevice(continueButtonSnapshot(), {
     captureSnapshot: async () => ({ snapshot: settledWelcomeSnapshot() }),
     tap: async () => ({ ok: true }),
+    clock: createContractClock(),
   });
 
   const result = await device.interactions.press(ref('@e1'), {

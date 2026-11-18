@@ -69,55 +69,63 @@ test(
 // dispatch that RAN — a runtime fill the fallback never touched still
 // discloses how the daemon resolved it, whether or not the request carried the
 // Maestro permission.
-test('runtime fill the coordinate fallback did not execute keeps its resolution disclosure', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({ x: 200, y: 322 })],
-    async (daemon) => {
-      const data = assertRpcOk(
-        await daemon.callCommand('fill', ['label=Continue', '1234'], MAESTRO_FLAGS),
-      );
+test(
+  'runtime fill the coordinate fallback did not execute keeps its resolution disclosure',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTypeEntry({ x: 200, y: 322 })],
+      async (daemon) => {
+        const data = assertRpcOk(
+          await daemon.callCommand('fill', ['label=Continue', '1234'], MAESTRO_FLAGS),
+        );
 
-      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
-      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
-      assert.deepEqual(data.resolution, {
-        source: 'runtime',
-        phase: 'pre-action',
-        kind: 'unique',
-      });
-    },
-  );
-});
+        assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
+        assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
+        assert.deepEqual(data.resolution, {
+          source: 'runtime',
+          phase: 'pre-action',
+          kind: 'unique',
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
-test('Maestro fill of a non-hittable input resolves through the runtime path', async () => {
-  await withIosContractDaemon(
-    [
-      runnerSnapshotEntry(RUNNER_NON_HITTABLE_TEXT_INPUT_NODES),
-      runnerTypeEntry({
-        x: 100,
-        y: 60,
-        maestroNonHittableCoordinateFallbackUsed: true,
-      }),
-    ],
-    async (daemon, transcript) => {
-      const data = assertRpcOk(
-        await daemon.callCommand('fill', ['label=Pin', '1234'], MAESTRO_FLAGS),
-      );
+test(
+  'Maestro fill of a non-hittable input resolves through the runtime path',
+  async () => {
+    await withIosContractDaemon(
+      [
+        runnerSnapshotEntry(RUNNER_NON_HITTABLE_TEXT_INPUT_NODES),
+        runnerTypeEntry({
+          x: 100,
+          y: 60,
+          maestroNonHittableCoordinateFallbackUsed: true,
+        }),
+      ],
+      async (daemon, transcript) => {
+        const data = assertRpcOk(
+          await daemon.callCommand('fill', ['label=Pin', '1234'], MAESTRO_FLAGS),
+        );
 
-      assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
-      assert.equal(transcript.calls[1]?.command, 'ios.runner.type');
-      const typeRequest = transcript.calls[1]?.request as Record<string, unknown> | undefined;
-      assert.equal(typeRequest?.selectorKey, undefined);
-      assert.equal(typeRequest?.x, 100);
-      assert.equal(typeRequest?.y, 60);
-      assert.equal(typeRequest?.allowNonHittableCoordinateFallback, true);
-      assert.equal(data.resolution, undefined);
-      assert.equal(data.targetHittable, false);
-      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
-      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, true);
-      assert.equal(data.maestroFallbackReason, 'non-hittable-coordinate');
-    },
-  );
-});
+        assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
+        assert.equal(transcript.calls[1]?.command, 'ios.runner.type');
+        const typeRequest = transcript.calls[1]?.request as Record<string, unknown> | undefined;
+        assert.equal(typeRequest?.selectorKey, undefined);
+        assert.equal(typeRequest?.x, 100);
+        assert.equal(typeRequest?.y, 60);
+        assert.equal(typeRequest?.allowNonHittableCoordinateFallback, true);
+        assert.equal(data.resolution, undefined);
+        assert.equal(data.targetHittable, false);
+        assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
+        assert.equal(data.maestroNonHittableCoordinateFallbackUsed, true);
+        assert.equal(data.maestroFallbackReason, 'non-hittable-coordinate');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(
   scenario('offscreen'),

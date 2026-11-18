@@ -347,6 +347,7 @@ test(scenario('settleObservation'), async () => {
     // the (already stable) post-action tree.
     captureSnapshot: async () => ({ snapshot: captures++ === 0 ? before : after }),
     tap: async () => ({ ok: true }),
+    clock: createContractClock(),
   });
 
   const result = await device.interactions.press(selector('label=Continue'), {
