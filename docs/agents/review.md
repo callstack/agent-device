@@ -18,7 +18,6 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - Routing and surfaces: trace through daemon and backend to the affected entrypoints.
   Helper tests that bypass the router do not prove dispatch.
 - Typed errors: follow reasons from producers through normalization, transport, and consumers.
-  Never replace them with text matching.
 - Interaction paths: verify the claims in `packages/contracts/src/interaction-guarantees.ts` against native code.
   Error-path delegation does not prove success-path parity.
   Before you compare performance, prove that both paths are reachable.

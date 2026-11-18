@@ -4,12 +4,10 @@ After validation, a request to open or ship a PR authorizes branch creation, com
 
 ## Validate
 
-Follow [validation](testing.md).
 Record the `check:affected --run --head` receipt in the PR body. A serialized gate stage can validate the pushed head instead.
 An authorized incomplete draft can record a blocker. A blocker is not a pass.
 Push once per review round. Each push restarts CI. Drafts skip device lanes.
 
-For device-facing changes, follow [device verification](device-verification.md).
 Report missing devices or commands.
 
 - Published: the branch is pushed, the PR is open, and validation status is recorded at a named commit.
@@ -20,10 +18,7 @@ Do not report skipped integration or coverage as passed.
 
 ## New public package
 
-A new public package under `packages/` needs a safe transition on npm before its PR merges.
-First, the maintainer publishes an empty placeholder version, for example `0.0.0`, under a dist-tag other than `latest`.
-Then the maintainer configures the npm trusted publisher for the release workflow.
-Only after these steps does the PR remove `"private": true`.
+Before a PR removes `"private": true` from a package, the maintainer completes the npm onboarding in `CONTRIBUTING.md`.
 
 ## Self-review
 

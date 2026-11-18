@@ -1,6 +1,6 @@
 # Verify on a device
 
-Use this for Apple runner changes or manual device runs. For foldables, also read [foldable verification](device-foldable.md).
+For foldables, also read [foldable verification](device-foldable.md).
 
 ## Prepare
 

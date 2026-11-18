@@ -16,7 +16,6 @@ For pure logic, types, or exhaustive cases, use focused tests.
 If an existing scenario covers the regression, extend it.
 Do not add test-only production exports or dependency injection.
 Without the fix, a regression test must fail for the intended reason.
-Use [isolated experiments](test-experiments.md).
 Pure moves retain their tests. Verify discovery at the new path.
 Pair classifier positives with the closest negative.
 Prove identical error text without the typed reason cannot trigger recovery.
@@ -27,7 +26,6 @@ Reject assertion-free probes, self-comparisons, subject-derived expectations, du
 
 Match test names to exercised inputs.
 Type-only checks do not prove runtime behavior.
-Retain compile-time `@ts-expect-error` pins. An unused directive fails typechecking.
 
 ## Fixtures and seams
 
@@ -51,7 +49,6 @@ Use existing clocks or tool seams instead of production-time waits.
 Slow-test pins only shrink.
 For a new pin, give measured justification.
 Split tests by behavior.
-Keep split files beside their source module.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test

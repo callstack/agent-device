@@ -11,8 +11,6 @@ Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Wait for the owner to finish.
 Do not add lock wrappers.
-A wait ends after two hours.
-Focused tests do not lock.
 Avoid subprocess-heavy tests beside a broad gate.
 
 The runner stops at failure.

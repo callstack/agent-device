@@ -15,8 +15,6 @@ conditions, and dependencies. For a boundary change, include an API, data shape,
 If sandboxed `gh` fails with an authentication error, run the same command with host access, if permitted.
 Do not reconfigure credentials. If it fails again, report the command and blocker.
 
-For label meanings and state flow, see `docs/agents/triage-labels.md`.
-
 ## Current state
 
 When you change a decision or the scope of your issue, post a comment that starts with `Decision: <topic>:`.

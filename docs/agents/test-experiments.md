@@ -1,6 +1,5 @@
 # Isolated test experiments
 
-Use this for manual mutations, regression proof, or base comparisons. For scheduled mutation sweeps, follow [gate maintenance](gates.md).
 Do not change the reviewed or implementation checkout.
 
 ## Prepare
@@ -14,11 +13,9 @@ experiment_dir=$(mktemp -d "${TMPDIR:-/tmp}/agent-device-experiment.XXXXXX")
 git worktree add --detach "$experiment_dir" "$reviewed_sha"
 ```
 
-3. In that checkout, run `pnpm install --frozen-lockfile && pnpm build`.
-   Do not use the `node_modules` of a different checkout.
-4. For a base comparison, create the checkout at the named base SHA. Record that SHA before you run.
+3. For a base comparison, create the checkout at the named base SHA. Record that SHA before you run.
    Use the same command, environment, and worker limit. Run in sequence, with no competing test processes.
-5. If the change is uncommitted, apply only its patch and the necessary untracked files to the disposable checkout.
+4. If the change is uncommitted, apply only its patch and the necessary untracked files to the disposable checkout.
    Record the patch input. It is not exact-commit evidence.
 
 ## Prove detection

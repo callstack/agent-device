@@ -8,9 +8,6 @@ Pass a flag only through layers that consume it:
    Update the command family metadata/schema that exposes the flag.
    To find the owner, run `rg -n "<command>|helpDescription|summary|supportedFlags|allowedFlags" packages/command-surface/src src/commands src/cli/parser`.
    For schema-only CLI commands, use `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `packages/command-surface/src/schema/command-overrides.ts`.
-   Each flag declaration requires `projectConfig` and `recorded`.
-   `projectConfig` permits a project `agent-device.json` to set the flag.
-   `recorded` makes the session recorder copy it into `SessionAction.flags`.
    Only when repository control is safe, set `projectConfig: true`. Otherwise, a new flag is operator-only.
    Only when a `.ad` recording must carry the flag, set `recorded: true`.
 2. In `packages/command-surface/src/cli-grammar/*`, read the CLI flag into command input.
@@ -31,7 +28,6 @@ Pass a flag only through layers that consume it:
 ## Where CLI help and schema live
 
 - Long help prose is in `src/commands/schema/cli-help.ts`.
-  CLI input readers are in `packages/command-surface/src/cli-grammar/`.
 - `src/commands/schema/usage.ts` generates the synopsis `[label]` flag tail from `allowedFlags`.
   Only when the command synopsis names fewer options, declare `usageFlags`.
   For pure grammar or grammar with its own mutually-exclusive brackets, use `[]`.
@@ -39,10 +35,5 @@ Pass a flag only through layers that consume it:
   For an opt-in across commands, set `usageHidden: true` on its flag definition. This excludes it from every synopsis.
 - If the first positional selects an action, declare `flagsByAction` on the CLI schema.
   Map each action to the options it reads. Derive `allowedFlags` from that table.
-  From caller-supplied keys, the parser rejects typed options that the action never reads.
-  Options the selected action ignores stay out of its request, even when config, env, or remote-config defaults set them. Thus, `AGENT_DEVICE_FPS=30` never breaks `record stop`.
   Exclude options that every action reads from the table.
-  The parser rejects only options in rows. If it rejected `--json`, it would reject the command.
-- Keep command-specific usage/flag metadata with the command family metadata that owns the command.
 - Keep argument parsing in `src/cli/parser/`. Keep help rendering in `src/commands/schema/`.
-  Command schema metadata derives from command metadata, family declarations, and the schema-only merge in `packages/command-surface/src/schema/command-overrides.ts`.
