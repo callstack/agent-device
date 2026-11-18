@@ -135,3 +135,59 @@ test('a wait whose captures keep failing reports the last capture error at the d
     },
   });
 });
+
+test('no capture outlives the remaining deadline', async () => {
+  const start = Date.now();
+  let failedAt = 0;
+  const result = await settle(
+    waitForSurfaceChange(
+      CONTEXT,
+      baselinePath,
+      outputPath,
+      'capture surface',
+      'surface never changed',
+      (_output, _attempt, remainingMs) =>
+        new Promise((_resolve, reject) =>
+          setTimeout(() => {
+            failedAt = Date.now();
+            reject(new Error('capture timed out'));
+          }, remainingMs),
+        ),
+    ),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: {
+      message: expect.stringMatching(/surface never changed within 10000ms.*capture timed out/s),
+    },
+  });
+  expect(failedAt - start).toBeLessThanOrEqual(10_000);
+});
+
+test('a capture that resolves after the deadline is rejected as a late observation', async () => {
+  const result = await settle(
+    waitForSurfaceChange(
+      CONTEXT,
+      baselinePath,
+      outputPath,
+      'capture surface',
+      'surface never changed',
+      async (output, _attempt, remainingMs) => {
+        await new Promise((resolve) => setTimeout(resolve, remainingMs + 500));
+        fs.writeFileSync(output, HOME_SURFACE);
+      },
+    ),
+  );
+
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: {
+      message: expect.stringMatching(
+        /surface never changed within 10000ms.*resolved after the deadline/s,
+      ),
+    },
+  });
+  // The final observed image is still kept, even when it arrives late.
+  expect(fs.readFileSync(outputPath).equals(HOME_SURFACE)).toBe(true);
+});

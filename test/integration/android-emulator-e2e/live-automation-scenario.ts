@@ -221,7 +221,7 @@ async function assertOrientationFixtureState(
   await assertElementText(context, 'id="automation-window"', expectedWindow);
 }
 
-async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<void> {
+export async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<void> {
   const foreground = path.join(context.artifactDir, 'foreground.png');
   await capturePng(context, 'capture Android fixture foreground', foreground);
   await runStep(context, 'send Android fixture Home', ['home']);

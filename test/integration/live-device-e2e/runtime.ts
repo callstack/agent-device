@@ -22,6 +22,12 @@ export type ScenarioTiming = {
   id: string;
 };
 
+export type LiveRunCli = (
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  options?: { timeoutMs?: number },
+) => Promise<CliJsonResult>;
+
 export type LiveDeviceContext<BehaviorId extends string> = {
   artifactDir: string;
   behaviorEvidence: Partial<Record<BehaviorId, string[]>>;
@@ -34,6 +40,11 @@ export type LiveDeviceContext<BehaviorId extends string> = {
   startedAtMs: number;
   stepHistory: StepRecord[];
   timings: ScenarioTiming[];
+  /**
+   * Per-context CLI override, ahead of the harness-wide `runCli`. Lets one scenario run against a
+   * scripted device (delayed captures, scripted appstate) without touching the shared harness.
+   */
+  runCli?: LiveRunCli;
 };
 
 export type LiveScenario<Context> = {
@@ -61,7 +72,7 @@ type HarnessOptions<Context, BehaviorId extends string> = {
   writeCoverageReport: (context: Context) => void;
 };
 
-type RunStepOptions = {
+export type RunStepOptions = {
   allowFailure?: boolean;
   commonFlags?: boolean;
   expectFailure?: boolean;
@@ -235,7 +246,8 @@ export function createLiveDeviceHarness<
   ): Promise<{ result: CliJsonResult; fullArgs: string[] }> {
     const fullArgs = buildStepArgs(context, args, stepOptions);
     const startedAt = Date.now();
-    const result = await (options.runCli ?? runBuiltCliJson)(fullArgs, context.env, {
+    const runCli = context.runCli ?? options.runCli ?? runBuiltCliJson;
+    const result = await runCli(fullArgs, context.env, {
       timeoutMs: stepOptions.timeoutMs,
     });
     const failedAsExpected = stepOptions.expectFailure === true && result.status !== 0;
@@ -294,7 +306,7 @@ export function createLiveDeviceHarness<
   }
 
   function captureFailedStepEvidence(context: Context): Promise<FailedStepEvidence> {
-    const runCli = options.runCli ?? runBuiltCliJson;
+    const runCli = context.runCli ?? options.runCli ?? runBuiltCliJson;
     const deviceEvidence = options.deviceEvidence;
     return collectFailedStepEvidence({
       stem: path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`),

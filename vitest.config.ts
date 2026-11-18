@@ -247,6 +247,9 @@ export default defineConfig({
             // The Home/Recents surface-transition wait (#4710): replays scripted captures through
             // the capture seam under fake timers, so the deadline and delayed change need no emulator.
             'test/integration/android-emulator-e2e/live-surface-transition.test.ts',
+            // The same wait driven through the real scenario wiring with a scripted device (#4710
+            // review): proves Home and Recents poll via the scenario, not just the helper.
+            'test/integration/android-emulator-e2e/live-automation-scenario.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
