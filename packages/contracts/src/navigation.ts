@@ -82,6 +82,16 @@ export type ActionButtonCommandResult = {
   message: string;
 };
 
+/**
+ * `shake` — `{ action: 'shake', message: 'Shook the device' }`.
+ *
+ * The result reports that the shake was sent; what the app did with it is not observed.
+ */
+export type ShakeCommandResult = {
+  action: 'shake';
+  message: string;
+};
+
 /** `tv-remote` — `{ action: 'tv-remote', button, durationMs?, message }`. */
 export type TvRemoteCommandResult = {
   action: 'tv-remote';

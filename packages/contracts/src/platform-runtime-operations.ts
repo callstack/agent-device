@@ -128,6 +128,7 @@ export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
+export const shakeRuntimeUse = defineUse({ required: ['shake'] });
 // `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
 // positional names, never all of them (#3848).
 export const volumeUpRuntimeUse = defineUse({ required: ['volumeUp'] });

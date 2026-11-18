@@ -109,6 +109,7 @@ const EXPECTED_CELLS = {
   sendTelephonyEvent: 'mode',
   setFoldPose: 'mode',
   setViewport: 'mode',
+  shake: 'mode',
   shutdownTarget: 'mode',
   sleep: 'mode',
   tapElementSelector: 'mode',

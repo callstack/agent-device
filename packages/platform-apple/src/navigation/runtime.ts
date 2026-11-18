@@ -164,6 +164,26 @@ function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
     : actionButtonOsUnavailable;
 }
 
+const shakeKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'shake is supported on iPhone and iPad simulators; a physical device has no host control that shakes it.',
+} as const);
+const shakeOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'shake is supported on iPhone and iPad simulators only.',
+} as const);
+/**
+ * The shake is the Darwin notification the Simulator app's Device > Shake menu posts, sent with
+ * `simctl spawn notifyutil`. Only a simulator has that control, and this owner admits it on the
+ * iPhone and iPad leaf, read through {@link isHandheldAppleDevice}.
+ */
+function appleShakeFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!isHandheldAppleDevice(device)) return shakeOsUnavailable;
+  return device.kind === 'simulator' ? available : shakeKindUnavailable;
+}
+
 const volumeButtonOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -187,7 +207,7 @@ function appleVolumeButtonFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 /**
- * The navigation cells: back, home, app-switcher, action-button, orientation, tv-remote, and
+ * The navigation cells: back, home, app-switcher, action-button, shake, orientation, tv-remote, and
  * keyboard status/dismiss/enter.
  */
 export function appleNavigationFacts(device: DeviceInfo) {
@@ -198,6 +218,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
       home: appleSpringboardFact(device, homeKindUnavailable),
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
+      shake: appleShakeFact(device),
       // Power is the family denial: Apple exposes no public power/lock button press to XCUITest,
       // on any kind or OS, so no cell overrides it.
       volumeUp: appleVolumeButtonFact(device),

@@ -448,6 +448,8 @@ export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, st
     [C.fold]: 'iPhone Duo only; the suite device has one panel.',
     [C.telephony]: 'The iOS simulator runtime refuses simulated calls and SMS.',
     [C.hardwareButton]: 'The iOS simulator runtime refuses hardware-button presses.',
+    [C.shake]:
+      'What a shake does is app-defined, and the fixture handles none, so there is no outcome to wait on.',
   },
   android: {
     ...COMPOSITE_RUNNERS,
@@ -462,6 +464,7 @@ export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, st
     [C.prepare]:
       'prepare has only the ios-runner action; the snapshot helper installs on first use.',
     [C.actionButton]: 'Android has no key event for the Action button.',
+    [C.shake]: 'The Android runtime refuses shake; adb has no shake control.',
     [C.clipboard]:
       'The API 35 and 36 emulator images ship no shell clipboard service, so adb cannot read or write the clipboard.',
     [C.audio]:

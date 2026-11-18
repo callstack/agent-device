@@ -81,6 +81,7 @@ const ORIENTATION_COMMAND_NAME = 'orientation';
 const FOLD_COMMAND_NAME = 'fold';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const ACTION_BUTTON_COMMAND_NAME = 'action-button';
+const SHAKE_COMMAND_NAME = 'shake';
 const HARDWARE_BUTTON_COMMAND_NAME = 'hardware-button';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
@@ -158,6 +159,10 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
     ['action', 'pose', 'hingeAngleDegrees', 'message'],
   ),
   'action-button': objectSchema({ action: constSchema('action-button'), message: stringSchema() }, [
+    'action',
+    'message',
+  ]),
+  shake: objectSchema({ action: constSchema('shake'), message: stringSchema() }, [
     'action',
     'message',
   ]),
@@ -293,6 +298,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'app-switcher'
   | 'fold'
   | 'action-button'
+  | 'shake'
   | 'tv-remote'
   | 'hardware-button'
   | 'telephony'
@@ -324,6 +330,8 @@ const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
   'Press the iPhone, iPad, or Apple Watch Ultra Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone. A model with no Action Button refuses with UNSUPPORTED_OPERATION, error.details.reason hardware_control_unavailable and dispatched: no.';
+const shakeCommandDescription =
+  'Shake an iOS simulator once. Posts the shake notification that Device > Shake in the Simulator app posts, which UIKit delivers to the app as a motion-shake event; it injects no accelerometer data, so an app that detects shakes through CoreMotion does not see it. The shake is sent without activating the session app and nothing is re-observed afterwards, so take a snapshot to see what the app did with it. Works on iPhone and iPad simulators the daemon host reaches through simctl; physical devices, provider-owned simulators, Android, and every other platform refuse this command.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote button on Android TV, tvOS, or Vega OS. Android TV also supports volume, power, media, channel, guide, captions, input, color keys, and android-keycode:N. tvOS and Vega OS support up, down, left, right, select, menu, home, and back. Phones and WebDriver sessions are unsupported. The aliases ok, center, and enter map to select.';
 
@@ -759,6 +767,19 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
   run: (client, input) => client.command.actionButton(input),
 });
 
+const shakeCommandFacet = defineParameterlessCommandFacet({
+  name: SHAKE_COMMAND_NAME,
+  effect: 'write',
+  description: shakeCommandDescription,
+  text: {
+    summary: 'Shake an iOS simulator',
+    searchHint: 'jiggle rattle wobble',
+    cliDetail:
+      'iPhone and iPad simulators on the daemon host only. Posts the Simulator shake notification; snapshot afterwards to see what the app did with it.',
+  },
+  run: (client, input) => client.command.shake(input),
+});
+
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
   effect: 'destructive',
@@ -817,6 +838,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     foldCommandFacet,
     appSwitcherCommandFacet,
     actionButtonCommandFacet,
+    shakeCommandFacet,
     keyboardCommandFacet,
     clipboardCommandFacet,
     tvRemoteCommandFacet,

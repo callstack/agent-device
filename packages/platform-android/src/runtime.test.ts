@@ -277,6 +277,25 @@ test('Android refuses the action-button fact on every kind', async () => {
   }
 });
 
+test('Android refuses the shake fact on every kind', async () => {
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    expect(binding.facts.operations.shake).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'shake is supported on iOS simulators; adb has no control that shakes an Android device.',
+    });
+    expect(binding.operations.shake).toBeUndefined();
+  }
+});
+
 test('Android admits the fold fact on emulators and refuses every other kind', async () => {
   const emulator = await bindOrdinary(
     createAndroidPlatformRuntime(androidNavigationHost()),

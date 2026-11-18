@@ -20,6 +20,7 @@ import {
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE,
   ANDROID_LIFECYCLE_CONTRACT_EVIDENCE,
+  ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
@@ -28,6 +29,7 @@ import {
   APPLE_HARDWARE_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
   APPLE_NAVIGATION_FACTS_EVIDENCE,
+  APPLE_SHAKE_FACT_EVIDENCE,
   LINUX_HOVER_DENIAL_EVIDENCE,
   LINUX_PROVIDER_EVIDENCE,
   LINUX_RUNTIME_EVIDENCE,
@@ -1427,6 +1429,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'the exact-owner runtime fact refuses an Action Button press on the Linux desktop',
+    ),
+  },
+  [C.shake]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android runtime fact refuses shake on every kind, because adb has no shake control',
+    ),
+    iosSimulator: iosSimulator.contract(
+      APPLE_SHAKE_FACT_EVIDENCE.path,
+      APPLE_SHAKE_FACT_EVIDENCE.test,
+      'the iOS simulator leaf advertises the simctl shake notification and binds it',
+    ),
+    macos: macos.contract(
+      APPLE_SHAKE_FACT_EVIDENCE.path,
+      APPLE_SHAKE_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses shake on the macOS host leaf',
+    ),
+    tvos: tvos.contract(
+      APPLE_SHAKE_FACT_EVIDENCE.path,
+      APPLE_SHAKE_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses shake on the tvOS leaf, which has no shake motion event',
+    ),
+    web: web.contract(
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
+      'the exact-owner runtime fact refuses shake on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses shake on the Linux desktop',
     ),
   },
   [C.hardwareButton]: {

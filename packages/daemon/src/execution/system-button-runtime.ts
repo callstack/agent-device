@@ -9,6 +9,7 @@ import {
   mediaRewindRuntimeUse,
   muteRuntimeUse,
   powerRuntimeUse,
+  shakeRuntimeUse,
   sleepRuntimeUse,
   volumeDownRuntimeUse,
   volumeUpRuntimeUse,
@@ -62,14 +63,15 @@ const SYSTEM_BUTTON_COMMANDS = {
   home: { use: homeRuntimeUse, message: 'Home' },
   'app-switcher': { use: appSwitcherRuntimeUse, message: 'Opened app switcher' },
   'action-button': { use: actionButtonRuntimeUse, message: 'Pressed Action Button' },
+  shake: { use: shakeRuntimeUse, message: 'Shook the device' },
 } as const satisfies Record<string, SystemButtonCommandRow>;
 
 export type SystemButtonCommand = keyof typeof SYSTEM_BUTTON_COMMANDS;
 
 /**
- * Every generic-route command the shared press route below serves: the three argumentless presses
+ * Every generic-route command the shared press route below serves: the argumentless rows above
  * plus the positional-selected `hardware-button`, whose first positional names the cell (#3848).
- * The dispatcher's one guard covers the whole family, so a fourth button row grows this module's
+ * The dispatcher's one guard covers the whole family, so another row grows this module's
  * table only — never the dispatcher's switch.
  */
 export type SystemButtonRouteCommand = SystemButtonCommand | 'hardware-button';
