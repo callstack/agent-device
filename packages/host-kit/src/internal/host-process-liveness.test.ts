@@ -380,10 +380,10 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   const utf8Command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
   const escapeLikeCLocalePs = (text: string) =>
     text.replaceAll(/[^\u0020-\u007E]/g, (ch) => `M-C${ch}`);
-  const commandFor = (options?: { env?: NodeJS.ProcessEnv }) =>
-    options?.env?.LC_ALL === 'C' ? escapeLikeCLocalePs(utf8Command) : utf8Command;
+  const commandFor = (options?: { envOverrides?: NodeJS.ProcessEnv }) =>
+    options?.envOverrides?.LC_ALL === 'C' ? escapeLikeCLocalePs(utf8Command) : utf8Command;
   mockRunCmdSync.mockImplementation(
-    (_cmd: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+    (_cmd: string, args: readonly string[], options?: { envOverrides?: NodeJS.ProcessEnv }) => {
       const field = psFieldOf(args);
       if (field === 'pid=,state=,lstart=')
         return { stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
@@ -395,7 +395,11 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
     },
   );
   mockRunCmd.mockImplementation(
-    async (_cmd: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+    async (
+      _cmd: string,
+      args: readonly string[],
+      options?: { envOverrides?: NodeJS.ProcessEnv },
+    ) => {
       const field = psFieldOf(args);
       if (field.includes('command='))
         return { stdout: `4242 ${commandFor(options)}\n`, stderr: '', exitCode: 0 };
@@ -421,36 +425,27 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   for (const call of calls) {
     const field = psFieldOf(call[1] ?? []);
     if (field.includes('lstart=')) {
-      assert.equal(call[2]?.env?.LC_ALL, 'C', `lstart-bearing read (${field}) must pin LC_ALL=C`);
+      assert.equal(
+        call[2]?.envOverrides?.LC_ALL,
+        'C',
+        `lstart-bearing read (${field}) must pin LC_ALL=C`,
+      );
+      assert.equal(call[2]?.env, undefined, 'the pin must be an override, not a whole env');
     } else {
       sawCommandRead ||= field.includes('command=');
       assert.equal(
         call[2]?.env,
         undefined,
-        `non-lstart read (${field}) must carry no env pin, so command text keeps one encoding`,
+        `non-lstart read (${field}) must carry no env, so command text keeps one encoding`,
+      );
+      assert.equal(
+        call[2]?.envOverrides,
+        undefined,
+        `non-lstart read (${field}) must carry no locale pin, so command text keeps one encoding`,
       );
     }
   }
   assert.ok(sawCommandRead, 'the pid=,command= batch read must have run');
-});
-
-test('the pinned lstart read overrides only LC_ALL on top of the effective child environment', () => {
-  vi.stubEnv('TZ', 'Pacific/Kiritimati');
-  try {
-    psReturns('Mon Aug 10 20:00:00 2026\n');
-    readProcessStartTime(4242);
-
-    const env = mockRunCmdSync.mock.calls[0]?.[2]?.env;
-    assert.equal(env?.LC_ALL, 'C');
-    assert.equal(
-      env?.TZ,
-      'Pacific/Kiritimati',
-      'dropping TZ would render lstart in the wrong zone under the pin',
-    );
-    assert.deepEqual(env, { ...process.env, LC_ALL: 'C' });
-  } finally {
-    vi.unstubAllEnvs();
-  }
 });
 
 test('only two start times in the same verified format prove different lifetimes', () => {

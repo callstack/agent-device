@@ -1,4 +1,4 @@
-import { effectiveChildEnv, type ExecOptions } from './exec.ts';
+import type { ExecOptions } from './exec.ts';
 
 /**
  * `ps -o lstart` spells weekday and month names in the caller's locale, so one start time reads
@@ -23,7 +23,7 @@ export function psReadOptions(timeoutMs: number): ExecOptions {
  * keep the same encoding as `listHostProcesses`, which runs unpinned.
  */
 export function psLstartReadOptions(timeoutMs: number): ExecOptions {
-  return { allowFailure: true, timeoutMs, env: effectiveChildEnv(PS_LSTART_LOCALE_PIN) };
+  return { allowFailure: true, timeoutMs, envOverrides: PS_LSTART_LOCALE_PIN };
 }
 
 /**

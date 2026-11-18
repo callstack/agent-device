@@ -21,6 +21,12 @@ export type ExecResult = {
 export type ExecOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Applied as the final word over the resolved spawn environment, so one child variable can be
+   * pinned without dropping the rest of the effective environment — `TZ` picks the zone a
+   * `ps -o lstart` read renders in, so replacing the whole `env` would move the identity clock.
+   */
+  envOverrides?: NodeJS.ProcessEnv;
   allowFailure?: boolean;
   binaryStdout?: boolean;
   stdin?: string | Buffer;
@@ -164,23 +170,18 @@ export function commandDeveloperDir(): string | undefined {
   return scope?.host.env.DEVELOPER_DIR || undefined;
 }
 
-function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {
+function resolveSpawnEnv(
+  env: NodeJS.ProcessEnv | undefined,
+  overrides: NodeJS.ProcessEnv | undefined,
+): NodeJS.ProcessEnv | undefined {
   const scope = commandHostScope.getStore();
-  if (!scope) return env;
-  return { ...(env ?? scope.host.env), ...scope.requestEnv };
-}
-
-/**
- * The environment a command spawned without an explicit `env` receives — the bound host scope's
- * environment with the request's values on top, or the process's own outside a scope — with
- * `overrides` applied as the final word. Use this to pin one child variable, such as the C locale
- * of a `ps -o lstart` read, without dropping the rest: `TZ` picks the zone `lstart` renders in, so
- * replacing the whole environment would move the identity clock under the pin.
- */
-export function effectiveChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  const scope = commandHostScope.getStore();
-  if (!scope) return { ...process.env, ...overrides };
-  return { ...scope.host.env, ...scope.requestEnv, ...overrides };
+  if (!scope) {
+    // Outside a host scope there is no captured environment to merge into: an explicit `env` is
+    // still honored with the overrides on top, and with neither the child inherits natively.
+    if (env === undefined) return overrides;
+    return { ...env, ...overrides };
+  }
+  return { ...(env ?? scope.host.env), ...scope.requestEnv, ...overrides };
 }
 
 export async function runCmd(
@@ -237,7 +238,7 @@ function runSpawnedCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd,
-      env: resolveSpawnEnv(options.env),
+      env: resolveSpawnEnv(options.env, options.envOverrides),
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: options.detached,
       windowsHide: true,
@@ -434,7 +435,7 @@ export function runCmdSync(
   const executable = normalizeExecutableCommand(cmd);
   const result = spawnSync(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: ['pipe', 'pipe', 'pipe'],
     encoding: options.binaryStdout ? undefined : 'utf8',
     input: options.stdin,
@@ -501,7 +502,7 @@ export function runCmdDetachedMonitored(
   const executable = normalizeExecutableCommand(cmd);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: options.stdio ?? 'ignore',
     detached: true,
     windowsHide: true,
@@ -543,7 +544,7 @@ export function runCmdBackground(
   const execTrace = createExecTraceContext(cmd, undefined, commandHostScope.getStore()?.host.env);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: resolveSpawnEnv(options.env),
+    env: resolveSpawnEnv(options.env, options.envOverrides),
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
     detached: options.detached,
     windowsHide: true,
