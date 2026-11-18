@@ -294,26 +294,21 @@ Successful and failed responses use the same top-level envelope:
   "ok": false,
   "error": {
     "code": "KEYBOARD_DISMISS_UNAVAILABLE",
-    "message": "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)"
+    "message": "The Apple runner cannot dismiss this keyboard automatically"
   }
 }
 ```
 
-The example is a `keyboard dismiss` the keyboard would not come down for; a refusal that can name a
-next step also carries `hint`, omitted here. A keyboard that stayed up answers one of two codes:
-`KEYBOARD_DISMISS_UNAVAILABLE` when it found no dismiss control and so sent nothing, or
-`UNSUPPORTED_OPERATION` when a dismiss control was tapped, or the tvOS remote's Menu press was sent,
-and the keyboard stayed visible. The host reports both under `UNSUPPORTED_OPERATION` and publishes the
-first one's `details.reason`. The first one adds `error.cause: "tree_unreadable"`, which the host
-publishes as `details.cause`, when the app tree could not be read and the keyboard's own read held no
-dismiss control.
+When the software keyboard is visible, `keyboard dismiss` returns `KEYBOARD_DISMISS_UNAVAILABLE`.
+The host maps it to `UNSUPPORTED_OPERATION` with `details.reason: "keyboard_dismiss_unavailable"`
+and `details.dispatched: "no"`. When the keyboard state is unreadable, `keyboard status` and
+`keyboard dismiss` return `OBSERVATION_UNAVAILABLE`.
 
-Three more refusals name the control the target could not supply, so a caller never reads the refusal
-off `message`. `KEYBOARD_RETURN_UNAVAILABLE` is a `keyboard enter` whose keyboard exposed no return-like
-key and for which no text field could be found; it proves no submission, not that nothing ran, because
-typing the return can fail after XCTest sent it. A sole text field that was found and tapped but would
-not take the return answers `UNSUPPORTED_OPERATION` with no code, since the control exists and the tap
-may have landed. `HARDWARE_CONTROL_UNAVAILABLE` is a press the runner answers that its target cannot
+When the runner cannot confirm that Return reached the focused input, `keyboard enter` returns
+`KEYBOARD_RETURN_UNAVAILABLE`. The host reports `details.dispatched: "unknown"` because the
+event may have reached the app.
+
+`HARDWARE_CONTROL_UNAVAILABLE` is a press the runner answers that its target cannot
 perform. The runner emits it for the Action Button on an iPhone or iPad model that has none, for a
 volume press on a simulator, and for a Siri Remote press off tvOS. Runtime admission refuses the last
 two before the runner is asked, so through the daemon only the Action Button case reaches a caller.

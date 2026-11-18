@@ -58,7 +58,7 @@ Protocol and maintenance references:
 
 ### Busy keyboard regression tests
 
-Run the two `testKeyboard*WhileTheAppIsBusy` tests with the simulator software keyboard enabled.
+Run `testKeyboardEnterPressesReturnWhileTheAppIsBusy` with the simulator software keyboard enabled.
 Before you boot a throwaway simulator, save the current hardware-keyboard preference:
 
 ```sh
@@ -78,8 +78,7 @@ fi
 ```
 
 If the software keyboard does not appear, the tests fail instead of skipping.
-The tests assert command success and the fixture's `Done while busy` or `Return while busy` label.
-The Return test also asserts the keyboard visibility reported after submission.
+The test asserts successful Return, the fixture's `Return while busy` label, and keyboard visibility after submission.
 
 ## Snapshot Strategy
 

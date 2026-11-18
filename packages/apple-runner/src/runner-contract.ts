@@ -296,23 +296,10 @@ export function resolveRunnerStartupSignal(
  */
 export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
 
-/**
- * The runner's own code refusing a `keyboard dismiss` whose visible keyboard exposes no dismiss key
- * (#1606). Background taps are never attempted, so no geometry can prove a tap outside the keys is
- * side-effect-free; the refusal is the runner's decision and it answers before dispatching anything.
- * It is the runner's vocabulary, so it is declared here beside the set that keeps it off the wire,
- * and consumers read `details.reason`, never the message prose.
- */
+/** The Apple runner left the visible keyboard alone. */
 export const KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_DISMISS_UNAVAILABLE';
 
-/**
- * The runner's own code refusing a `keyboard enter` whose keyboard exposes no return-like key and for
- * which no text field could be found to submit through. Unlike the dismiss refusal it cannot prove
- * nothing ran: typing the return can fail after XCTest sent it, so the disclosure stays `unknown`. A
- * sole field that was found and tapped but would not take the return is not this refusal. It is the
- * runner's vocabulary, declared here beside the set that keeps it off the wire, and consumers read
- * `details.reason`.
- */
+/** A Return attempt on the focused input could not be confirmed. */
 export const KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_RETURN_UNAVAILABLE';
 
 /**
@@ -560,7 +547,6 @@ export type RunnerResponsePayload = {
     message?: unknown;
     hint?: unknown;
     dismissControls?: unknown;
-    cause?: unknown;
   };
   data?: unknown;
 };
@@ -664,17 +650,10 @@ export function buildRunnerResponseError(
   const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
   const classification = classifyRunnerReportedError(runnerErrorCode);
   const dismissControls = readBackDismissControls(runnerErrorCode, payload.error);
-  // Only the dismiss refusal carries a cause: `tree_unreadable`, the screen could not be read.
-  const cause =
-    runnerErrorCode === KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE &&
-    payload.error?.cause === 'tree_unreadable'
-      ? 'tree_unreadable'
-      : undefined;
   return new AppError(classification.code, errorMessage ?? 'Runner error', {
     runner: payload,
     ...classification.details,
     ...(dismissControls.length > 0 ? { dismissControls } : {}),
-    ...(cause === undefined ? {} : { cause }),
     xcodebuild: {
       exitCode: 1,
       stdout: '',

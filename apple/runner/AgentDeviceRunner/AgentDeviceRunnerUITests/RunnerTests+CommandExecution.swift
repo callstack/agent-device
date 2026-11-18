@@ -593,72 +593,48 @@ extension RunnerTests {
         )
       }
       return Response(ok: true, data: DataPayload(message: command.command.rawValue))
-    case .keyboardDismiss:
-      var dismissal: RunnerKeyboardDismissOutcome?
-      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
-        dismissal = dismissKeyboard(app: activeApp)
-      }
-      guard let result = dismissal else {
-        return Response(ok: false, error: ErrorPayload(message: "keyboardDismiss produced no result"))
-      }
-      if result.wasVisible && !result.dismissed {
-        return Response(
-          ok: false,
-          error: keyboardDismissRefusal(
-            dispatchedDismissal: result.dispatchedDismissal,
-            treeUnreadable: result.treeUnreadable
-          )
-        )
-      }
-      return Response(
-        ok: true,
-        data: DataPayload(
-          message: "keyboardDismiss",
-          visible: result.visible,
-          wasVisible: result.wasVisible,
-          dismissed: result.dismissed,
-          keyboardDismissMechanism: result.mechanism?.rawValue
-        )
-      )
-    case .keyboardReturn:
-      var press: (wasVisible: Bool, pressed: Bool, visible: Bool, fieldAttempted: Bool)?
-      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .preEventSkipped) {
-        press = pressKeyboardReturn(app: activeApp)
-      }
-      guard let result = press else {
-        return Response(ok: false, error: ErrorPayload(message: "keyboardReturn produced no result"))
-      }
-      if !result.pressed {
-        return Response(
-          ok: false,
-          error: result.fieldAttempted ? keyboardReturnFieldAttemptFailure : keyboardReturnRefusal
-        )
-      }
-      return Response(
-        ok: true,
-        data: DataPayload(
-          message: "keyboardReturn",
-          visible: result.visible,
-          wasVisible: result.wasVisible
-        )
-      )
-    case .keyboardStatus:
+    case .keyboardDismiss, .keyboardStatus:
       var status: RunnerKeyboardStatus?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
         status = keyboardStatus(app: activeApp)
       }
-      guard let result = status else {
-        return Response(ok: false, error: ErrorPayload(message: "keyboardStatus produced no result"))
+      guard let status else {
+        return Response(ok: false, error: ErrorPayload(
+          code: "OBSERVATION_UNAVAILABLE",
+          message: "Could not determine whether the software keyboard is visible",
+          hint: "Take a screenshot or try keyboard status again."
+        ))
       }
-      return Response(
-        ok: true,
-        data: DataPayload(
-          message: "keyboardStatus",
-          visible: result.visible,
-          keyboardReturnKey: result.returnKey,
-          keyboardReturnKeyLabel: result.returnKeyLabel
+      if command.command == .keyboardDismiss {
+        guard !status.visible else {
+          return Response(ok: false, error: keyboardDismissRefusal())
+        }
+        return Response(ok: true, data: DataPayload(
+          message: "keyboardDismiss", visible: false, wasVisible: false, dismissed: false
+        ))
+      }
+      return Response(ok: true, data: DataPayload(
+        message: "keyboardStatus",
+        visible: status.visible,
+        keyboardReturnKey: status.returnKey,
+        keyboardReturnKeyLabel: status.returnKeyLabel
+      ))
+    case .keyboardReturn:
+      var result: DataPayload?
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .preEventSkipped) {
+        let wasVisible = keyboardStatus(app: activeApp)?.visible
+        guard pressKeyboardReturn(app: activeApp) else { return }
+        sleepFor(0.2)
+        result = DataPayload(
+          message: "keyboardReturn",
+          visible: keyboardStatus(app: activeApp)?.visible,
+          wasVisible: wasVisible
         )
-      )
+      }
+      guard let result else {
+        return Response(ok: false, error: keyboardReturnRefusal)
+      }
+      return Response(ok: true, data: result)
     case .alert:
       let action = (command.action ?? "get").lowercased()
       let deadline = alertDeadline ?? Date().addingTimeInterval(

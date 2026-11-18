@@ -11,6 +11,7 @@
 #import "AgentDeviceRunnerApp.h"
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <WebKit/WebKit.h>
 #import "UnitTests/AgentDeviceTextEntryFields.h"
 
 // Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
@@ -988,14 +989,29 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
     self.keyboardBusyAnswer = answer;
   }
 
-  // A field whose return key reads "Done" and submits, which `keyboard dismiss` must never press. The
-  // optional `accessory` argument adds a Done toolbar above the keys, the one control it may press.
   NSArray<NSString *> *launchArguments = NSProcessInfo.processInfo.arguments;
+  if ([launchArguments containsObject:@"--agent-device-keyboard-webview"]) {
+    WKWebView *webView = [[WKWebView alloc] init];
+    webView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:webView];
+    UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+      [webView.topAnchor constraintEqualToAnchor:safeArea.topAnchor],
+      [webView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor],
+      [webView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor],
+      [webView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor],
+    ]];
+    [webView loadHTMLString:@"<meta name='viewport' content='width=device-width'>"
+      "<input aria-label='Web Search' enterkeyhint='search'>"
+      "<p id='result'>No Return</p>"
+      "<script>let count = 0; const input = document.querySelector('input');"
+      "input.onkeydown = (event) => { if (event.key === 'Enter') {"
+      "document.querySelector('#result').textContent = 'Return ' + ++count; } };</script>"
+      baseURL:nil];
+  }
   NSUInteger doneReturnFlag = [launchArguments indexOfObject:@"--agent-device-keyboard-done-return"];
   if (doneReturnFlag != NSNotFound) {
     NSString *accessoryShape = doneReturnFlag + 1 < launchArguments.count ? launchArguments[doneReturnFlag + 1] : @"";
-    BOOL plainAccessory = [accessoryShape isEqualToString:@"plain-accessory"];
-    BOOL withAccessory = plainAccessory || [accessoryShape isEqualToString:@"accessory"];
     UITextField *field = [[UITextField alloc] init];
     field.accessibilityIdentifier = @"agent-device-keyboard-done-return-input";
     field.placeholder = @"Return key is Done";
@@ -1011,22 +1027,7 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
             [weakField resignFirstResponder];
           }]
         forControlEvents:UIControlEventEditingDidEndOnExit];
-    if (plainAccessory) {
-      // An accessory that is no toolbar: a plain view holding a button, as a custom or React Native
-      // input accessory is.
-      UIView *accessory = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
-      accessory.backgroundColor = UIColor.systemGray5Color;
-      UIButton *accessoryDone = [UIButton buttonWithType:UIButtonTypeSystem];
-      [accessoryDone setTitle:@"Done" forState:UIControlStateNormal];
-      accessoryDone.frame = CGRectMake(240, 0, 70, 44);
-      [accessoryDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
-                       weakAnswer.text = @"Accessory";
-                       [weakField resignFirstResponder];
-                     }]
-              forControlEvents:UIControlEventTouchUpInside];
-      [accessory addSubview:accessoryDone];
-      field.inputAccessoryView = accessory;
-    } else if (withAccessory) {
+    if ([accessoryShape isEqualToString:@"accessory"]) {
       UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
       accessory.items = @[
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
@@ -1044,19 +1045,19 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
       field.inputAccessoryView = accessory;
     }
     AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
-    if (withAccessory) {
-      // A screen-level Done with the toolbar Done's label and no identifier, far from the keyboard, as a
-      // navigation bar's would be: dismiss must still press the toolbar's, never this one.
+    if ([accessoryShape isEqualToString:@"adjacent-app-button"]) {
       UIButton *screenDone = [UIButton buttonWithType:UIButtonTypeSystem];
+      screenDone.accessibilityIdentifier = @"agent-device-adjacent-done";
       [screenDone setTitle:@"Done" forState:UIControlStateNormal];
       [screenDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
                        weakAnswer.text = @"Screen";
+                       [weakField resignFirstResponder];
                      }]
             forControlEvents:UIControlEventTouchUpInside];
       screenDone.translatesAutoresizingMaskIntoConstraints = NO;
       [self.view addSubview:screenDone];
       [NSLayoutConstraint activateConstraints:@[
-        [screenDone.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [screenDone.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor constant:-6],
         [screenDone.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
       ]];
     }

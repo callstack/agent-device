@@ -327,13 +327,10 @@ extension RunnerTests {
   @MainActor
   func gestureViewportFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
-    guard let context = try synthesizedCoordinateContext(app: app) else {
-      return frameAvoidingKeyboard(app: app, frame: try readableAppFrame(app: app))
+    if let context = try synthesizedCoordinateContext(app: app) {
+      return context.geometry.windowOnScreen.rect
     }
-    // The sole-screen route means the windows query just failed, so a keyboard probe would too.
-    return context.resolvedWindow == nil
-      ? context.geometry.windowOnScreen.rect
-      : frameAvoidingKeyboard(app: app, frame: context.geometry.windowOnScreen.rect)
+    return try readableAppFrame(app: app)
 #else
     return try resolvedTouchReferenceFrame(app: app)
 #endif

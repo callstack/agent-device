@@ -44,11 +44,7 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_REASON = 'tap_keyboard_occludes_target
 
 /**
  * The hint every owner publishes beside the reason, naming the recovery that actually works.
- * `keyboard dismiss` taps the keyboard's own dismiss control and refuses when it exposes none
- * (#1598/#1606), so an app control that ends editing, or `keyboard enter` when submitting is the
- * goal, come first. Nothing here dismisses the keyboard for the caller: dropping focus commits or
- * cancels edit state, which is the caller's decision rather than a side effect of a tap — the same
- * stance `scroll-gesture.ts` takes for the surface it refuses to swipe.
+ * Editing ends through an explicit action from the caller.
  *
  * The verdict is read from the tree the command measured against, and no owner re-probes the
  * keyboard to confirm it: `keyboard status`/`get` answer only what a visible keyboard's return key
@@ -60,8 +56,8 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS = Object.freeze({
   reason: TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
   hint:
     'The visible keyboard covers this target, so the tap would land on a key instead of on it. ' +
-    "End editing first: tap the app's own Done/Cancel/close control, or run `keyboard enter` when submitting is what you want " +
-    '(`keyboard dismiss` works only when the keyboard exposes its own dismiss key). ' +
+    'End editing first. Press a visible dismiss key such as Hide Keyboard, or the app control that ends editing. ' +
+    'On Android, use `keyboard dismiss`. Use `keyboard enter` when you intend to send Return. ' +
     'This reads the snapshot the command measured against, so if the keyboard closed since it was taken, ' +
     'run `snapshot -i` and retry.',
 });

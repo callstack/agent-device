@@ -231,11 +231,6 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /retry with --delay-ms before clipboard paste/);
   assert.match(
     help,
-    /keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION/,
-  );
-  assert.match(help, /prefer type "\\n" to submit/);
-  assert.match(
-    help,
     /iOS paste-prompt limits and Android IME\/handwriting capture quirks: help debugging/,
   );
   assert.match(help, /run serially within one session/);

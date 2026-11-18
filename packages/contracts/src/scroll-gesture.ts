@@ -467,7 +467,7 @@ export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS = Object.freeze({
   reason: SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
   hint:
     'The on-screen keyboard covers the surface this scroll would swipe, so it cannot reach it. ' +
-    'Run `keyboard dismiss` and retry, accepting that it drops focus (re-tap the field to keep typing), or scroll before focusing the field.',
+    'End editing with a visible dismissal control, or use `keyboard dismiss` on Android. You can also scroll before focusing the field.',
 });
 
 export type ScrollKeyboardClip =
