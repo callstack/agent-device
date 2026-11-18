@@ -359,7 +359,7 @@ test('the cache root and tool environment come from the host it is given, not th
 
   const executablePath = await compileSwiftSourceText({
     host: {
-      env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, FROM_HOST: 'yes' },
+      env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, LANG: 'host-locale' },
       cwd: tmpDir,
     },
     source: 'print("host")',
@@ -368,7 +368,7 @@ test('the cache root and tool environment come from the host it is given, not th
 
   expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'v3', 'bin'));
   expect(mockRunCmd.mock.calls[0]?.[2]?.env).toMatchObject({
-    FROM_HOST: 'yes',
+    LANG: 'host-locale',
     HOME: path.join(hostCacheDir, 'v3', 'home'),
   });
 });

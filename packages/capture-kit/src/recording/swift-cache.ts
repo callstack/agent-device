@@ -23,10 +23,6 @@ const SWIFTC_STOP = { signal: 'SIGINT', graceMs: 2_000 } as const;
 // would otherwise choose the `xcrun` that runs as this user.
 const XCRUN = '/usr/bin/xcrun';
 const COMPILER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
-// Inherited overrides that would choose another loader, SDK, toolchain, search path or driver tool; the helpers
-// build against the macOS SDK named on the command line. Trace and diagnostic settings stay.
-const COMPILER_ENV_OVERRIDES =
-  /^(DYLD_.*|SDKROOT|TOOLCHAINS|DEVELOPER_DIR|CPATH|C_INCLUDE_PATH|OBJC_INCLUDE_PATH|CPLUS_INCLUDE_PATH|OBJCPLUS_INCLUDE_PATH|LIBRARY_PATH|SWIFT_DRIVER_SWIFT_FRONTEND_EXEC|SWIFT_DRIVER_CLANG_EXEC|ADDITIONAL_SWIFT_DRIVER_FLAGS|SWIFT_OVERLOAD_PREBUILT_MODULE_CACHE_PATH)$/;
 // Without an explicit SDK, xcrun adds /usr/local/include and /usr/local/lib to the search paths, which another
 // account may own on a shared Mac.
 const COMPILER_ARGS = ['--sdk', 'macosx', 'swiftc'] as const;
@@ -113,21 +109,21 @@ function prepareSwiftCacheVersionDirectory(cacheRoot: string): string {
   const versionName = `v${SWIFT_CACHE_VERSION}`;
   // The walk judges and creates the PARENT of the name it is given; the version directory is never resolved by it.
   const { directory: root } = prepareScriptDestination(path.join(cacheRoot, versionName));
-  for (let ancestor = root; ; ancestor = path.dirname(ancestor)) {
+  const ancestor = untrustedLevelFrom(root);
+  if (ancestor !== undefined) {
     const stats = fs.lstatSync(ancestor);
-    if (!stats.isDirectory() || stats.mode & 0o022) {
-      const exposure = !stats.isDirectory()
-        ? 'not_a_directory'
-        : stats.mode & 0o002
-          ? 'world_writable'
-          : 'shared_group_writable';
-      throw untrustedSwiftCache(cacheRoot, undefined, {
-        exposure,
-        ancestor,
-        hint: swiftCacheHint(exposure, ancestor),
-      });
-    }
-    if (ancestor === path.dirname(ancestor)) break;
+    const exposure = !stats.isDirectory()
+      ? 'not_a_directory'
+      : stats.mode & 0o002
+        ? 'world_writable'
+        : stats.mode & 0o020
+          ? 'shared_group_writable'
+          : 'foreign_owned';
+    throw untrustedSwiftCache(cacheRoot, undefined, {
+      exposure,
+      ancestor,
+      hint: swiftCacheHint(exposure, ancestor),
+    });
   }
   const versionDirectory = path.join(root, versionName);
   createPrivateDirectory(versionDirectory);
@@ -318,33 +314,34 @@ export function resolveRecordingScriptPath(
   });
 }
 
-/** The environment `swiftc` and the compiled helpers run with: their home and module cache are the cache's own. */
+/**
+ * The environment a compiled helper runs with, constructed rather than inherited: the cache's own home and module
+ * cache, a fixed PATH and the host's locale. No other inherited variable reaches a helper, so no loader variable
+ * (`DYLD_*`) can make a private, unchanged binary load someone else's code, on a cache hit or a fresh compile.
+ */
 export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const locale = Object.entries(env).filter(([name]) => name === 'LANG' || name.startsWith('LC_'));
   return {
-    ...env,
+    ...Object.fromEntries(locale),
     HOME: prepareSwiftCacheDirectory(env, 'home').directory,
     CLANG_MODULE_CACHE_PATH: prepareSwiftCacheDirectory(env, 'module-cache').directory,
+    PATH: COMPILER_PATH,
   };
 }
 
 /**
- * The environment the compiler runs with: the cache's own home and module cache, a fixed PATH, no inherited
- * loader, SDK, toolchain, search-path or driver override, and this compile's private staging directory as every
- * temp directory, so no intermediate lands where another user could replace it mid-build. The toolchain is the
- * effective selection, resolved and judged here, and passed on exactly as judged.
+ * The environment the compiler runs with, built from an allowlist: the helper environment, this compile's private
+ * staging directory as every temp directory, and the judged toolchain selection. Nothing else inherited reaches
+ * xcrun, swiftc, clang or ld, so no variable can choose a loader, search path, linker or driver library.
  */
 function swiftCompilerEnv(
   env: NodeJS.ProcessEnv,
   stagingDirectory: string,
   developerDir: string | undefined,
 ): NodeJS.ProcessEnv {
-  const inherited = Object.entries(buildSwiftToolEnv(env)).filter(
-    ([name]) => !COMPILER_ENV_OVERRIDES.test(name),
-  );
   return {
-    ...Object.fromEntries(inherited),
+    ...buildSwiftToolEnv(env),
     ...(developerDir === undefined ? {} : { DEVELOPER_DIR: trustedDeveloperDir(developerDir) }),
-    PATH: COMPILER_PATH,
     TMPDIR: stagingDirectory,
     TEMP: stagingDirectory,
     TMP: stagingDirectory,
@@ -370,7 +367,7 @@ function trustedDeveloperDir(selection: string): string {
     ? realpathIfPresent(effectiveDeveloperDir(selection))
     : undefined;
   const resolved = spelled && realpathIfPresent(effectiveDeveloperDir(spelled));
-  const ancestor = resolved === undefined ? selection : untrustedDeveloperDirLevel(resolved);
+  const ancestor = resolved === undefined ? selection : untrustedLevelFrom(resolved);
   if (resolved !== undefined && ancestor === undefined) return resolved;
   throw new AppError(
     'COMMAND_FAILED',
@@ -408,9 +405,13 @@ function realpathIfPresent(selection: string): string | undefined {
   }
 }
 
-/** The first level, from the resolved directory up, that another user could change, or `undefined`. */
-function untrustedDeveloperDirLevel(resolved: string): string | undefined {
-  for (let level = resolved; ; level = path.dirname(level)) {
+/**
+ * The first level, from `directory` up to `/`, that another user could change, or `undefined`: every level must be
+ * a directory root or this uid owns that the group and others cannot write, sticky or not. The one exception is
+ * `/Applications` itself as a stock macOS install leaves it: root-owned, writable by the admin group.
+ */
+function untrustedLevelFrom(directory: string): string | undefined {
+  for (let level = directory; ; level = path.dirname(level)) {
     const stats = fs.lstatSync(level);
     const owned = stats.uid === 0 || stats.uid === process.getuid?.();
     const stockApplications =

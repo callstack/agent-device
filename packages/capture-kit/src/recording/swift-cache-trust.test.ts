@@ -15,7 +15,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
+import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -612,37 +612,79 @@ test('the compiler gets this compile private staging directory as every temp dir
   });
 });
 
-const STRIPPED_COMPILER_OVERRIDES = {
+// Variables the compiler toolchain or the loader would honor, and names nobody has thought of yet.
+const UNNAMED_HOST_VARIABLES = {
+  COMPILER_PATH: '/tmp/planted-bin',
+  CCC_OVERRIDE_OPTIONS: '+-fuse-ld=/tmp/planted-ld',
+  SWIFT_DRIVER_SWIFTSCAN_LIB: '/tmp/planted-swiftscan.dylib',
+  SWIFT_DRIVER_TOOLCHAIN_CASPLUGIN_LIB: '/tmp/planted-cas.dylib',
   DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
-  DYLD_LIBRARY_PATH: '/tmp/planted',
   SDKROOT: '/tmp/planted.sdk',
-  TOOLCHAINS: 'planted',
-  CPATH: '/usr/local/include',
-  C_INCLUDE_PATH: '/tmp/planted',
-  OBJC_INCLUDE_PATH: '/tmp/planted',
-  CPLUS_INCLUDE_PATH: '/tmp/planted',
-  OBJCPLUS_INCLUDE_PATH: '/tmp/planted',
-  LIBRARY_PATH: '/usr/local/lib',
-  SWIFT_DRIVER_SWIFT_FRONTEND_EXEC: '/tmp/planted-frontend',
-  SWIFT_DRIVER_CLANG_EXEC: '/tmp/planted-clang',
-  ADDITIONAL_SWIFT_DRIVER_FLAGS: '-Xlinker -planted',
-  SWIFT_OVERLOAD_PREBUILT_MODULE_CACHE_PATH: '/tmp/planted-modules',
+  SOME_FUTURE_TOOLCHAIN_OVERRIDE: 'planted',
 };
 
-test('the compiler is /usr/bin/xcrun --sdk macosx with a fixed PATH and no inherited search-path or tool override', async () => {
+test('the compiler environment is exactly the allowlist, whatever the host sets', async () => {
   await compile({
     AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
     PATH: `${path.join(tmpDir, 'planted-bin')}:/usr/bin`,
-    ...STRIPPED_COMPILER_OVERRIDES,
-    KEPT: 'yes',
+    LANG: 'en_US.UTF-8',
+    LC_ALL: 'en_US.UTF-8',
+    ...UNNAMED_HOST_VARIABLES,
   });
 
   const { cmd, env } = compilerLaunch();
   expect(cmd).toBe('/usr/bin/xcrun');
   expect(mockRunCmd.mock.calls[0]![1].slice(0, 3)).toEqual(['--sdk', 'macosx', 'swiftc']);
+  expect(Object.keys(env).sort()).toEqual(
+    ['CLANG_MODULE_CACHE_PATH', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'TEMP', 'TMP', 'TMPDIR'].sort(),
+  );
   expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
-  expect(Object.keys(env).filter((name) => name in STRIPPED_COMPILER_OVERRIDES)).toEqual([]);
-  expect(env.KEPT).toBe('yes');
+});
+
+/**
+ * Launches a cached helper the way the validator, overlay and frame decoder do, at the real subprocess boundary,
+ * and answers the variable names the helper process saw. The stand-in helper is a script run by this test's own
+ * Node, not a shell or /usr/bin/env, which macOS strips loader variables from before they could show.
+ */
+async function helperProcessEnvNames(
+  executablePath: string,
+  hostEnv: NodeJS.ProcessEnv,
+): Promise<string[]> {
+  const { runCmd: spawnForReal } = await vi.importActual<
+    typeof import('@agent-device/host-kit/command')
+  >('@agent-device/host-kit/command');
+  const { stdout } = await spawnForReal(executablePath, [], { env: buildSwiftToolEnv(hostEnv) });
+  return JSON.parse(stdout) as string[];
+}
+
+test('a cold and a warm helper launch never pass loader or other unnamed host variables to the helper', async () => {
+  const hostEnv = {
+    AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot,
+    DYLD_INSERT_LIBRARIES: '/tmp/planted.dylib',
+    DYLD_LIBRARY_PATH: '/tmp/planted',
+    COMPILER_PATH: '/tmp/planted-bin',
+  };
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    fs.writeFileSync(
+      args[args.indexOf('-o') + 1]!,
+      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify(Object.keys(process.env)));\n`,
+    );
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  const cold = await compile(hostEnv);
+  const coldNames = await helperProcessEnvNames(cold, hostEnv);
+  const warm = await compile(hostEnv);
+  const warmNames = await helperProcessEnvNames(warm, hostEnv);
+
+  expect(warm).toBe(cold);
+  expect(mockRunCmd).toHaveBeenCalledOnce();
+  for (const names of [coldNames, warmNames]) {
+    expect(names.filter((name) => name.startsWith('DYLD_') || name === 'COMPILER_PATH')).toEqual(
+      [],
+    );
+    expect(names).toEqual(expect.arrayContaining(['HOME', 'PATH']));
+  }
 });
 
 test.each([
