@@ -256,6 +256,13 @@ function buildUnscopedConnectWorkflow(
   if (connectionProviderCapabilities(verification?.provider, env).supportsDeferredAppSelection) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
+      ...(requiresInstall(verification)
+        ? {
+            notes: [
+              `For a local app file, run ${scopeNextSteps(state, installThenOpenWorkflow(state)).join(' then ')}.`,
+            ],
+          }
+        : {}),
     };
   }
   const appMissing = verification?.app?.status === 'missing';
@@ -313,10 +320,7 @@ function openWorkflow(state: RemoteConnectionState): Pick<ConnectReadiness, 'nex
 
 function installThenOpenWorkflow(state: RemoteConnectionState): string[] {
   const appId = appIdPlaceholder(state.platform);
-  return [
-    `agent-device install ${appId} <app-path-or-url>`,
-    `agent-device open ${appId} --relaunch`,
-  ];
+  return [`agent-device install ${appId} <app-path>`, `agent-device open ${appId} --relaunch`];
 }
 
 function connectionVerificationStatus(

@@ -63,11 +63,11 @@ On an attached Android instance, agent-device does not replace an existing port 
 
 If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
-`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
+`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. For a signed asset URL, use `install-from-source <url>` in the active session. This path does not need `LIMRUN_API_KEY`.
 
 ## Keep idle sessions alive
 
-Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default. In the Node.js runtime, pass `keepAlive: true`.
+Limrun ends an instance after its inactivity timeout, which an idle session can reach while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. Keep-alive is off by default.
 
 Two timers can end an idle Limrun session.
 
@@ -78,7 +78,7 @@ Two timers can end an idle Limrun session.
 
 ## Run a session from the CLI
 
-A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path-or-url>` before `open`. `install` allocates the instance when needed, so you do not need to run `devices` first.
+A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path>` before `open`. `install` allocates the instance when needed, so you do not need to run `devices` first.
 
 ```bash
 export LIMRUN_API_KEY=...
@@ -119,7 +119,7 @@ On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use th
 
 Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner. The runner reads snapshots with the same accessibility reader as a local iOS simulator, so snapshot output, selectors, and refs match local runs. When that reader cannot serve the screen, for example while a system sign-in sheet is open, the snapshot uses XCTest instead and says so in a warning. `fill` replaces text and `type` appends it; both support `--delay-ms`.
 
-Use a stable agent-device release. It downloads and starts the matching runner automatically. You do not need local Xcode or any runner network configuration. Stop Appium or other XCTest sessions on the simulator before you start, because only one XCTest run can use it at a time. Limrun limits each XCTest run to one hour; close and reopen your session when it reaches that limit.
+Stop Appium or other XCTest sessions on the simulator before you start, because only one XCTest run can use it at a time. Limrun limits each XCTest run to one hour; close and reopen your session when it reaches that limit.
 
 If startup fails with `limrun_xctest_slot_occupied`, stop the agent-device or Appium session that owns the simulator and wait for its XCTest run to end. If that client has exited and the slot remains occupied, recreate the Limrun instance. If a snapshot fails with `limrun_runner_snapshot_unavailable`, close and reopen your agent-device session. Recreate the instance if captures still fail. Do not reuse snapshot references after a failed capture.
 
@@ -127,7 +127,7 @@ Open your app before taking a snapshot. Snapshots target the app you opened in t
 
 `install` leaves your app stopped. Use `open` to launch it. To change launch arguments on an app that is already running, use `open --relaunch --launch-args`. Screenshots download as lossless PNG files, and recording downloads the finished MP4 when you stop it. Push notifications use the same command and payload format as local simulators.
 
-If you use a nightly or unpublished agent-device build, obtain a matching packaged iOS runner from the build's maintainer. Set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 27, because Limrun runs XCTest with Xcode 27. agent-device refuses a runner built with an older Xcode. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
+To supply the packaged iOS runner from your build, set `AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP` to the extracted `.app` path before starting agent-device. The runner must be built with Xcode 27, because Limrun runs XCTest with Xcode 27. agent-device refuses a runner built with an older Xcode. If the daemon is already running, stop it with `agent-device daemon stop` using the same `--state-dir`, then reconnect.
 
 ## Use an iPad simulator
 
@@ -229,26 +229,47 @@ The count includes these kinds: `request-failed` (the host didn't resolve, refus
 
 Now and then, a request skips the capture: it is missing from the HAR and from the failure count. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
 
-## Embed the Node.js runtime
+## Drive Limrun from a Node.js integration
 
-A Node.js bridge, such as agent-device-cloud, can embed agent-device's Limrun runtime:
+The `agent-device/limrun` SDK subpath was removed in 0.22. A Node.js bridge, such as agent-device-cloud, drives Limrun through the typed client against the daemon that hosts the provider.
+
+### Allocate an iOS instance
+
+Start the daemon with `LIMRUN_API_KEY`. Allocate a lease and install an iOS simulator build before opening the app. If you attach to an instance that already has the app, skip installation.
 
 ```ts
-import { LimrunRuntime } from 'agent-device/limrun';
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
-const apiKey = process.env.LIMRUN_API_KEY;
-if (!apiKey) throw new Error('LIMRUN_API_KEY is required');
-
-const host = { env: { ...process.env }, cwd: process.cwd() };
-const runtime = new LimrunRuntime(
-  { apiKey, region: process.env.LIMRUN_REGION },
-  host,
-);
+await ensureDaemon();
+const scope = {
+  session: 'checkout-ios',
+  tenant: 'limrun',
+  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
+  leaseBackend: 'ios-instance',
+  leaseProvider: 'limrun',
+} as const;
+const control = createAgentDeviceClient(scope);
+const lease = await control.leases.allocate({ ...scope, platform: 'ios', retainOnClose: true });
+try {
+  const client = createAgentDeviceClient({
+    ...scope,
+    leaseId: lease.leaseId,
+    sessionIsolation: 'tenant',
+  });
+  await client.apps.install({
+    app: 'com.example.app',
+    appPath: './build/Build/Products/Debug-iphonesimulator/Example.app',
+    platform: 'ios',
+  });
+  await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+} finally {
+  await control.leases.release({ ...scope, leaseId: lease.leaseId });
+}
 ```
 
-To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. The runtime never creates or deletes instances for a platform listed there.
+### Attach to a harness-owned instance
 
-A provider that reaches a harness-owned instance through the Node.js client allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
+A provider that reaches a harness-owned instance allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -278,7 +299,7 @@ const provider = {
 };
 ```
 
-After allocating a lease, call `runtime.getDeviceSession(device)` to get the allocated device's capabilities: app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the interactor. On Android it also exposes agent-device's `AndroidAdbProvider` for helpers and reversible port forwarding. On iOS it exposes a typed `simctl` execution handle so your bridge can own runner lifecycle and launch policy. The runtime does not expose raw Limrun clients.
+After allocating a lease, use the client commands for that session. App inventory, foreground state, key input, log reads, recording, remote asset installation, and interaction all run through the same typed client methods as on a local device. The client does not expose raw Limrun clients.
 
 ## Record the screen
 

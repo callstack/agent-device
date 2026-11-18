@@ -7,7 +7,6 @@ export const buildEntries = {
   'remote-config': 'src/sdk/remote-config.ts',
   'install-source': 'src/sdk/install-source.ts',
   'android-adb': 'src/sdk/android-adb.ts',
-  limrun: 'src/sdk/limrun.ts',
   plugins: 'src/sdk/plugins.ts',
   'plugins/webdriver': 'src/sdk/plugin-webdriver.ts',
   contracts: 'src/sdk/contracts.ts',
