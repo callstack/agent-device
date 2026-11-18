@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   findBestMatchesByLocator,
+  narrowFindMatches,
   type FindLocator,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
@@ -64,11 +65,11 @@ export function resolveFindMatch(params: {
     // assert that rather than assuming, so a future row edit cannot silently
     // turn this into first-match.
     assertRejectsCandidates(policy);
-    const narrowed = narrowMultipleMatches(matches, flags);
+    const narrowed = narrowFindMatches(matches, flags);
     if (!narrowed) {
       return { ok: false, response: buildAmbiguousMatchError(matches, locator, query) };
     }
-    matches = narrowed;
+    matches = [narrowed];
   }
 
   const node = matches[0] ?? null;
@@ -79,13 +80,4 @@ export function resolveFindMatch(params: {
     };
   }
   return { ok: true, node };
-}
-
-function narrowMultipleMatches(
-  matches: SnapshotState['nodes'],
-  flags: DaemonRequest['flags'],
-): SnapshotState['nodes'] | null {
-  if (flags?.findFirst) return [matches[0]!];
-  if (flags?.findLast) return [matches.at(-1)!];
-  return null;
 }

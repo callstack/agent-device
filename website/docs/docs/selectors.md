@@ -39,13 +39,15 @@ Actions:
 matches before you act. `find` has no `longpress` or `swipe` action; run `list`, then run the gesture
 on the ref you picked, for example `longpress @e14`.
 
-When more than one element matches, the mutating actions (`click`, `focus`, `fill`, `type`) reject
-the query and list the candidates. This applies to text queries and selector expressions alike.
-Read-only actions (`exists`, `wait`, `get`) use the first match, and `list` returns every match. Add `--first` or `--last` to pick a match by
+When more than one element matches, the actions that bind one element (`click`, `focus`, `fill`,
+`type`, `get text`, `get attrs`) reject the query and list the candidates. This applies to text
+queries and selector expressions alike. `exists` and `wait` only ask whether something matches, so
+they accept any match, and `list` returns every match. Add `--first` or `--last` to pick a match by
 position instead.
 
 ```bash
 agent-device find "Follow" click --first
+agent-device find "Follow" get text --last
 ```
 
 A read-only `find` that prints a ref (`get text`, `get attrs`, `list`) publishes only the refs it

@@ -1,6 +1,8 @@
 import {
   FIND_VALUE_REQUIRED_MESSAGE,
+  findAmbiguousMatchMessage,
   findBestMatchesByLocator,
+  narrowFindMatches,
   buildSelectorChainForNode,
   parseFindSelectorExpression,
   type FindAction,
@@ -14,6 +16,7 @@ import {
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
@@ -57,6 +60,9 @@ export type FindReadCommandOptions = CommandContext & {
   query: string;
   action: Extract<FindAction['kind'], 'exists' | 'wait' | 'get_text' | 'get_attrs' | 'list'>;
   timeoutMs?: number;
+  /** `--first`/`--last`: the explicit narrowing a value read (`get text`/`get attrs`) accepts. */
+  findFirst?: boolean;
+  findLast?: boolean;
 } & SelectorSnapshotOptions;
 
 export type FindReadCommandResult = FindReadResult;
@@ -117,12 +123,13 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
     return await listFindMatches(runtime, options, locator);
   }
 
-  const { capture, match } = await findFirstLocatorMatch(runtime, options, locator);
-  if (!match) {
-    throw new AppError('COMMAND_FAILED', 'find did not match any element');
+  if (options.action === 'exists') {
+    const { match } = await findFirstLocatorMatch(runtime, options, locator);
+    if (!match) throw new AppError('COMMAND_FAILED', 'find did not match any element');
+    return { kind: 'found', found: true };
   }
 
-  if (options.action === 'exists') return { kind: 'found', found: true };
+  const { capture, match } = await findValueReadMatch(runtime, options, locator);
   if (options.action === 'get_attrs') return { kind: 'attrs', ...refAddress(match), node: match };
   const text = await readText(runtime, capture, match);
   return { kind: 'text', ...refAddress(match), text, node: match };
@@ -241,10 +248,47 @@ async function listFindMatches(
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<Extract<FindReadCommandResult, { kind: 'list' }>> {
+  const { matched } = await captureFindMatches(runtime, options, locator);
+  return {
+    kind: 'list',
+    matches: matched.map((node) => ({ ...refAddress(node), node })),
+  };
+}
+
+/**
+ * `find <q> get text|attrs` (#4685): a value read binds ONE node, so it shares the mutating find's
+ * ambiguity contract (#1625) — several matches refuse with the candidate list unless `--first` or
+ * `--last` picks one. Presence (`exists`, `wait`) stays first-match.
+ */
+async function findValueReadMatch(
+  runtime: AgentDeviceRuntime,
+  options: FindReadCommandOptions,
+  locator: FindLocator,
+): Promise<{ capture: CapturedSnapshot; match: SnapshotNode }> {
+  const { capture, matched } = await captureFindMatches(runtime, options, locator);
+  if (matched.length === 0) throw new AppError('COMMAND_FAILED', 'find did not match any element');
+  if (matched.length === 1) return { capture, match: matched[0]! };
+  const narrowed = narrowFindMatches(matched, options);
+  if (!narrowed) {
+    throw new AppError(
+      'AMBIGUOUS_MATCH',
+      findAmbiguousMatchMessage(matched.length, locator, options.query),
+      { locator, query: options.query, ...elementMatchCandidateDetails(matched) },
+    );
+  }
+  return { capture, match: narrowed };
+}
+
+/** Every match on one stored capture: the candidate set `list` returns and a value read narrows. */
+async function captureFindMatches(
+  runtime: AgentDeviceRuntime,
+  options: FindReadCommandOptions,
+  locator: FindLocator,
+): Promise<{ capture: CapturedSnapshot; matched: SnapshotNode[] }> {
   const selectorExpression = parseFindSelectorExpression(locator, options.query);
-  // Deliberately UNSCOPED: findSnapshotScope narrows the capture to the first
-  // label match, which is exactly wrong for an action whose purpose is to show
-  // every match.
+  // CONSERVATIVE: Deliberately UNSCOPED. findSnapshotScope narrows the capture to the first label
+  // match's subtree, which hides every other match, so neither a list nor an ambiguity check could
+  // see them. Revisit only if scoped capture can keep every matching subtree.
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
     ...deriveSelectorCapturePolicy(),
@@ -260,10 +304,7 @@ async function listFindMatches(
         { platform: runtime.backend.platform },
       ).list?.matchedNodes ?? [])
     : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
-  return {
-    kind: 'list',
-    matches: matched.map((node) => ({ ...refAddress(node), node })),
-  };
+  return { capture, matched };
 }
 
 /**

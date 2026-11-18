@@ -152,7 +152,7 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: 'none',
   },
-  /** `is exists`/`absent` and find's read-only actions. */
+  /** `is exists`/`absent` and `find <q> exists`. */
   readAny: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readAny,
     occlusion: 'ignore',
@@ -176,7 +176,10 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: WAIT_POLL_BUDGET,
   },
-  /** `find <q> list`: enumerate matches; never narrows, never acts. */
+  /**
+   * `find <q> list`: enumerate matches; never narrows, never acts. `find <q> get text|attrs` reads
+   * the same set and refuses several matches unless `--first`/`--last` picks one (#4685).
+   */
   readList: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readList,
     occlusion: 'ignore',

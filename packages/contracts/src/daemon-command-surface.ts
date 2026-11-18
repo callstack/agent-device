@@ -113,6 +113,9 @@ export type DaemonFindOptions = CommandContext &
     query: string;
     action: 'exists' | 'wait' | 'get_text' | 'get_attrs' | 'list';
     timeoutMs?: number;
+    /** `--first`/`--last`: narrow an ambiguous `get text`/`get attrs` by position. */
+    findFirst?: boolean;
+    findLast?: boolean;
   }>;
 
 export type DaemonGetOptions = CommandContext &

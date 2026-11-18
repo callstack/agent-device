@@ -298,23 +298,38 @@ test('is exists tolerates the ambiguity its sibling predicates refuse (readAny r
   assert.equal(result.matches, 2);
 });
 
-test('find takes the document-order head on the same tree (readAny row)', async () => {
+test('find get attrs refuses the ambiguity exists tolerates on the same tree (#4685)', async () => {
   const device = createSelectorDevice(ambiguousSelectorReadSnapshot());
 
-  // `get_attrs`, not `exists`: WHICH node the row selected has to be
-  // observable, or the assertion cannot separate `readAny` from the
-  // disambiguating row — `found: true` holds either way while the selection
-  // silently moves to the tiebreak winner (#1715 review).
-  const attrs = await device.selectors.find({
+  // A value read binds one node, so it shares the mutating find's contract (#1625): the candidate
+  // set refuses instead of the document-order head answering silently.
+  const error = await device.selectors
+    .find({ session: 'default', query: AMBIGUOUS_SELECTOR, action: 'get_attrs' })
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+  assert.ok(error instanceof AppError, 'find get attrs must refuse rather than take a duplicate');
+  assert.equal(error.code, 'AMBIGUOUS_MATCH');
+  assert.equal((error.details as { matches?: number } | undefined)?.matches, 2);
+
+  // `--first`/`--last` are the explicit opt-in: each picks its end of the candidate set.
+  const first = await device.selectors.find({
     session: 'default',
     query: AMBIGUOUS_SELECTOR,
     action: 'get_attrs',
+    findFirst: true,
   });
-  assert.equal(attrs.kind, 'attrs');
-  assert.equal(attrs.kind === 'attrs' ? attrs.ref : undefined, FIRST_MATCH_REF);
+  assert.equal(first.kind === 'attrs' ? first.ref : undefined, FIRST_MATCH_REF);
+  const last = await device.selectors.find({
+    session: 'default',
+    query: AMBIGUOUS_SELECTOR,
+    action: 'get_attrs',
+    findLast: true,
+  });
+  assert.equal(last.kind === 'attrs' ? last.ref : undefined, DISAMBIGUATED_REF);
 
-  // The presence contract rides the same resolution, so a row that refuses an
-  // ambiguous screen would fail here rather than answering `found: true`.
+  // Presence keeps the readAny row: an ambiguous screen still answers `found: true`.
   const exists = await device.selectors.find({
     session: 'default',
     query: AMBIGUOUS_SELECTOR,
