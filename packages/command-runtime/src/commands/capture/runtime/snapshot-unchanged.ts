@@ -170,6 +170,7 @@ function areCoveringNodesEquivalent(
     previous.kind === current.kind &&
     previous.label === current.label &&
     previous.persistentBar === current.persistentBar &&
+    previous.targetInScrollableContent === current.targetInScrollableContent &&
     areRectsEquivalent(previous.rect, current.rect)
   );
 }

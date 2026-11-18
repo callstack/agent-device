@@ -203,9 +203,39 @@ test('runtime covered refusal names an unnamed generic-typed bar and never says 
       });
       assert.match(
         String(details?.hint),
+        /^Covered by the tab-bar at \(0, 791 402x83\)\. Use a different visible target/,
+      );
+      // The fixed button has no scrollable ancestor, so no scroll can move it clear of the bar.
+      assert.doesNotMatch(String(details?.hint), /dismiss|close|scroll|the other/i);
+      return true;
+    },
+  );
+});
+
+test('runtime covered refusal suggests a scroll for a scrollable target under a scanned bar', async () => {
+  const device = createInteractionDevice(
+    coveredByAnonymousTabBarScanSnapshot({ scrollable: true }),
+    {
+      tap: async () => {},
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e3'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+        targetInScrollableContent: true,
+      });
+      assert.match(
+        String(details?.hint),
         /^Covered by the tab-bar at \(0, 791 402x83\)\. Scroll the target clear of it/,
       );
-      assert.doesNotMatch(String(details?.hint), /dismiss|close|the other/i);
+      assert.doesNotMatch(String(details?.hint), /dismiss|close/i);
       return true;
     },
   );

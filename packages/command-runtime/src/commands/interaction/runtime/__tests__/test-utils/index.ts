@@ -2,6 +2,7 @@ import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/co
 import { annotateCoveredSnapshotNodes } from '@agent-device/capture-kit/snapshot-occlusion';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { createAgentDevice } from '../../../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
@@ -222,9 +223,24 @@ export function coveredByScanSnapshot(): SnapshotState {
 
 /**
  * An unnamed bar published as type `Other` with its UIKit class in `role`, run through the real
- * annotation pass: the scan reads the bar identity from the role, not the generic type.
+ * annotation pass: the scan reads the bar identity from the role, not the generic type. The Save draft
+ * button is fixed beside the bar by default; `scrollable` puts it inside a scroll view instead.
  */
-export function coveredByAnonymousTabBarScanSnapshot(): SnapshotState {
+export function coveredByAnonymousTabBarScanSnapshot(
+  options: { scrollable?: boolean } = {},
+): SnapshotState {
+  const scroller: RawSnapshotNode[] = options.scrollable
+    ? [
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'ScrollView',
+          rect: { x: 0, y: 0, width: 402, height: 874 },
+        },
+      ]
+    : [];
+  const buttonIndex = scroller.length + 1;
   return makeSnapshotState(
     annotateCoveredSnapshotNodes([
       {
@@ -234,17 +250,18 @@ export function coveredByAnonymousTabBarScanSnapshot(): SnapshotState {
         label: 'Example',
         rect: { x: 0, y: 0, width: 402, height: 874 },
       },
+      ...scroller,
       {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
+        index: buttonIndex,
+        depth: scroller.length + 1,
+        parentIndex: scroller.length > 0 ? 1 : 0,
         type: 'Button',
         label: 'Save draft',
         rect: { x: 16, y: 800, width: 140, height: 44 },
         hittable: true,
       },
       {
-        index: 2,
+        index: buttonIndex + 1,
         depth: 1,
         parentIndex: 0,
         type: 'Other',

@@ -415,8 +415,10 @@ test.for<CoverPublication>([
   const nodes = scannedCoverTree(cover);
   expect(nodes[3]).toMatchObject({
     interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true },
+    coveredBy: { persistentBar: true, targetInScrollableContent: true },
   });
+  expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
+  expect(nodes[4]?.coveredBy?.targetInScrollableContent).toBeUndefined();
   expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
 });
 
@@ -469,7 +471,7 @@ test('keeps a child under an overlay when its covered row is excluded as scroll 
       type: 'Cell',
       parentIndex: 0,
       interactionBlocked: 'covered',
-      coveredBy: { kind: 'tab-bar', persistentBar: true },
+      coveredBy: { kind: 'tab-bar', persistentBar: true, targetInScrollableContent: true },
     }),
     node(2, {
       parentIndex: 1,
