@@ -63,7 +63,7 @@ On an attached Android instance, agent-device does not replace an existing port 
 
 If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
-`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. `install` also takes a signed asset URL, which needs no API key.
+`install` and `reinstall` sync local app files directly to the instance. An attached iOS instance needs its URL and token. An attached Android instance also needs `LIM_ANDROID_INSTANCE_ADB_URL` to connect the provider; the app upload itself uses HTTP. `apps` before the first `open` needs `LIMRUN_API_KEY` to list stored assets. After `open`, `apps` lists the apps installed on the instance without the key. For a signed asset URL, use `install-from-source <url>` in the active session. This path does not need `LIMRUN_API_KEY`.
 
 ## Keep idle sessions alive
 
@@ -78,7 +78,7 @@ Two timers can end an idle Limrun session.
 
 ## Run a session from the CLI
 
-A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path-or-url>` before `open`. `install` allocates the instance when needed, so you do not need to run `devices` first.
+A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path>` before `open`. `install` allocates the instance when needed, so you do not need to run `devices` first.
 
 ```bash
 export LIMRUN_API_KEY=...
