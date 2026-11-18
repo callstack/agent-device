@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath } from '@agent-device/host-kit/file';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -58,8 +58,25 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
     return resolveDefaultDaemonStateDir(options);
   }
   const expanded = expandUserHomePath(value, { env: options.env });
-  if (path.isAbsolute(expanded)) return expanded;
+  // A step back out is refused HERE rather than passed on, because nothing downstream can keep it intact: the
+  // record names are derived with `path.join`, which folds a `..` away, so a route that survives this call
+  // would be JUDGED as one directory and written into as another. A `..` is also the one name whose meaning
+  // depends on what the route physically stands in — through a symbolic link, `link/..` lands beside the link,
+  // not inside its target — so the state rule could not establish where the daemon's records would land even
+  // if the spelling survived (#4649). Refusing the spelling is the one answer that is true of every route it
+  // could mean, and the fix is to spell the directory plainly.
+  if (stepsBackOut(expanded)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `State dir "${value}" steps back out of a directory, so where the daemon's records land is not ` +
+        'established. Name the state directory without a ".." step.',
+      {
+        reason: 'state_dir_parent_escape',
+      },
+    );
+  }
   if (options.cwd === undefined) {
+    if (path.isAbsolute(expanded)) return expanded;
     throw new AppError(
       'INVALID_ARGS',
       `State dir "${value}" is relative and no working directory was given.`,
@@ -68,20 +85,12 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       },
     );
   }
-  // Joined TEXTUALLY, not with `path.resolve`: `resolve` folds a `..` away, and a step back out is exactly the
-  // one name whose meaning depends on what the route physically stands in — through a symbolic link,
-  // `link/..` lands beside the link, not inside its target. The state rule judges the route it is handed, so
-  // this one is passed on with its `..` intact and refused there (#4649) rather than being judged as the
-  // directory a text substitution would have meant. A leading `./` is the only thing dropped, since it names
-  // the directory already stood in and no link can change that.
-  return joinSpelledUnderCwd(options.cwd, expanded);
+  return resolveUserPath(value, { env: options.env, cwd: options.cwd });
 }
 
-/** Puts a spelled relative path under `cwd` without resolving any name away. */
-function joinSpelledUnderCwd(cwd: string, spelled: string): string {
-  const relative = spelled.replace(/^\.\//, '');
-  if (!relative) return cwd;
-  return cwd.endsWith(path.sep) ? `${cwd}${relative}` : `${cwd}${path.sep}${relative}`;
+/** Whether a spelled path asks for a step back out of the directory it is in, under either separator. */
+function stepsBackOut(spelled: string): boolean {
+  return spelled.split(/[\\/]/).some((name) => name === '..');
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

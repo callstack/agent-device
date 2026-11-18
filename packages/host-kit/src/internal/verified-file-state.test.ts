@@ -369,7 +369,7 @@ skipOnWindows(
       fs.closeSync(handle);
     }
 
-    expect(fs.readFileSync(log, 'utf8')).toBe('earlier\n', 'the refusal writes nothing');
+    expect(fs.readFileSync(log, 'utf8'), 'the refusal writes nothing').toBe('earlier\n');
   },
 );
 

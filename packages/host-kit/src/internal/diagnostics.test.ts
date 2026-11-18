@@ -251,6 +251,7 @@ test('a line the sink setup itself emits never travels through the sink being bu
               fs.appendFileSync(sinkFile, line, 'utf8');
               return true;
             },
+            close: () => {},
           };
         },
       },
@@ -292,6 +293,7 @@ test('a sink whose owner cannot answer costs the line to stderr and is asked aga
               fs.appendFileSync(sinkFile, line, 'utf8');
               return true;
             },
+            close: () => {},
           };
         },
       },
