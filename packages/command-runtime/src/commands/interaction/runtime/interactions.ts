@@ -179,9 +179,9 @@ async function tapCommand(
   const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
-  const tap = runtime.backend.tap;
+  const dispatchTap = runtime.backend.tap;
   const dispatch = () =>
-    tap.call(runtime.backend, toBackendContext(runtime, options), point, {
+    dispatchTap(toBackendContext(runtime, options), point, {
       button: options.button,
       count: options.count,
       intervalMs: options.intervalMs,

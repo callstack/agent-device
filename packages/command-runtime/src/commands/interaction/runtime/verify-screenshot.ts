@@ -17,7 +17,7 @@ export async function withScreenshotVerification<T>(
     const result = await dispatch();
     if (!before) return { result };
     // Give the tap's first visual update time to reach the display.
-    await sleep(runtime, 150, signal).catch(() => {});
+    await sleep(runtime, VERIFY_AFTER_FRAME_SETTLE_MS, signal).catch(() => {});
     const after = await captureFrame(runtime, signal);
     if (!after) return { result };
     try {
@@ -47,6 +47,9 @@ async function captureFrame(runtime: AgentDeviceRuntime, signal: AbortSignal | u
   }
   await file?.cleanup().catch(() => {});
 }
+
+/** The after frame waits this long past the dispatch reply before it is captured. */
+const VERIFY_AFTER_FRAME_SETTLE_MS = 150;
 
 async function compareFrames(
   before: { file: TemporaryFile; ignoreTopHeightShare: number },

@@ -73,7 +73,13 @@ export async function applyPostActionObservation<T extends object>(
     screenshot && observed.evidence
       ? {
           ...observed.evidence,
-          changedFromBefore: observed.evidence.surfaceChange ? true : screenshot.changedFromBefore,
+          // Any comparison that verification made saw a change: the tree
+          // digest, the settle surface, or the pixel pair. The pixel-only
+          // answer stays in screenshotDiff beside it.
+          changedFromBefore:
+            observed.evidence.surfaceChange !== undefined ||
+            observed.evidence.changedFromBefore === true ||
+            screenshot.changedFromBefore,
           screenshotDiff: screenshot,
         }
       : observed.evidence;
