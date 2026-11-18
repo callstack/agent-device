@@ -5,11 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ClientOptions } from '@limrun/api';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
-import {
-  createLimrunRuntime,
-  type LimrunRuntime,
-  type LimrunRuntimeOptions,
-} from '@agent-device/provider-limrun';
+import { createLimrunRuntime, type LimrunRuntimeOptions } from '@agent-device/provider-limrun';
 import { createLimrunRuntimeDependencies } from '../sdk/limrun-runtime-dependencies.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -23,7 +19,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 function createTestRuntime(
   options: LimrunRuntimeOptions,
   host: HostEnvironment = { env: process.env, cwd: process.cwd() },
-): LimrunRuntime {
+): ReturnType<typeof createLimrunRuntime> {
   return createLimrunRuntime(options, createLimrunRuntimeDependencies(host));
 }
 
@@ -388,7 +384,7 @@ function iosLease(leaseId: string): DeviceLease {
 }
 
 async function allocateLimrunDevice(
-  runtime: LimrunRuntime,
+  runtime: ReturnType<typeof createLimrunRuntime>,
   lease: DeviceLease,
 ): Promise<DeviceInfo> {
   const allocateLease = runtime.leaseLifecycle.allocate;

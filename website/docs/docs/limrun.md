@@ -206,7 +206,7 @@ Now and then, a request skips the capture: it is missing from the HAR and from t
 
 ## Drive Limrun from a Node.js integration
 
-`agent-device/limrun` and its `LimrunRuntime` class were removed in 0.22. A Node.js bridge, such as agent-device-cloud, drives Limrun through the typed client against the daemon that hosts the provider.
+The `agent-device/limrun` SDK subpath was removed in 0.22. A Node.js bridge, such as agent-device-cloud, drives Limrun through the typed client against the daemon that hosts the provider.
 
 A provider that reaches a harness-owned instance allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
 

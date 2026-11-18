@@ -313,10 +313,7 @@ function openWorkflow(state: RemoteConnectionState): Pick<ConnectReadiness, 'nex
 
 function installThenOpenWorkflow(state: RemoteConnectionState): string[] {
   const appId = appIdPlaceholder(state.platform);
-  return [
-    `agent-device install ${appId} <app-path-or-url>`,
-    `agent-device open ${appId} --relaunch`,
-  ];
+  return [`agent-device install ${appId} <app-path>`, `agent-device open ${appId} --relaunch`];
 }
 
 function connectionVerificationStatus(

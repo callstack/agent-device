@@ -2,20 +2,31 @@
 'agent-device': minor
 ---
 
-Remove the `agent-device/limrun` export and its `LimrunRuntime` class, `LimrunRuntimeOptions`, and session types. Part of #3759 section 4 and #3311; `@agent-device/limrun` will ship as a plugin.
+Remove the `agent-device/limrun` SDK subpath and its public runtime and session types as part of #3311. Drive Limrun through the typed client against the daemon that hosts the provider.
 
-Removing the subpath means `import { LimrunRuntime } from 'agent-device/limrun'` no longer resolves. Keep the `LIMRUN_API_KEY` or `LIM_*_INSTANCE_*` environment variables and drive the session through the typed client against a daemon that hosts the provider. After the plugin is published, install it on that host with `agent-device plugins add @agent-device/limrun`:
+Start the daemon with `LIMRUN_API_KEY` or the corresponding `LIM_*_INSTANCE_*` credentials. After the plugin is published, install it on the daemon host with `agent-device plugins add @agent-device/limrun`. Allocate the lease before opening the app:
 
 ```ts
 import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
 
 await ensureDaemon();
-const client = createAgentDeviceClient({
+const scope = {
   session: 'checkout-ios',
   tenant: 'limrun',
   runId: process.env.GITHUB_RUN_ID ?? 'local-run',
   leaseBackend: 'ios-instance',
   leaseProvider: 'limrun',
-});
-await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+} as const;
+const control = createAgentDeviceClient(scope);
+const lease = await control.leases.allocate({ ...scope, platform: 'ios', retainOnClose: true });
+try {
+  const client = createAgentDeviceClient({
+    ...scope,
+    leaseId: lease.leaseId,
+    sessionIsolation: 'tenant',
+  });
+  await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+} finally {
+  await control.leases.release({ ...scope, leaseId: lease.leaseId });
+}
 ```
