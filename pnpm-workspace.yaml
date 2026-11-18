@@ -18,11 +18,9 @@ overrides:
   minimatch@10: 11.0.1
   postcss: 8.5.23
   qs@6: ^6.16.1
-  react-router: 7.18.2
-  react-router-dom: 7.18.2
   # @limrun/api hard-pins undici 7.29.1, even in its newest release. The exact
   # scoped override raises it to the patched 7.30.1 (GHSA-xjj6-f33q-929c).
-  # Update the root, maestro, and provision-kit exact pins with this override.
+  # Update the maestro and provision-kit exact pins with this override.
   undici@7: 7.30.1
   zod@4: ^4.6.6
 patchedDependencies:
