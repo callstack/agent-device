@@ -10,6 +10,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
+import { beginUploadTransferIngress } from './upload-ingress.ts';
 import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 
 const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
@@ -99,6 +100,9 @@ async function handleUpload(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
+  // Finite transfer budgets admitted at the callback (#4441): a 600-second
+  // aggregate plus a 120-second body-inactivity ceiling.
+  const ingress = beginUploadTransferIngress({ req, res });
   try {
     const auth = await authorize({
       req,
@@ -110,9 +114,18 @@ async function handleUpload(
     });
     if (!auth) return;
 
-    sendUploadedArtifactResponse(res, await receiveUpload(req), auth.tenantId);
+    sendUploadedArtifactResponse(
+      res,
+      await receiveUpload(req, {
+        signal: ingress.signal,
+        onBodyBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+      }),
+      auth.tenantId,
+    );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
+  } finally {
+    ingress.dispose();
   }
 }
 
@@ -123,6 +136,7 @@ async function handleUploadPreflight(
   token: string,
   origin: string,
 ): Promise<void> {
+  const ingress = beginUploadTransferIngress({ req, res });
   try {
     const auth = await authorize({
       req,
@@ -146,6 +160,8 @@ async function handleUploadPreflight(
     sendJson(res, { ok: true, ...upload });
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
+  } finally {
+    ingress.dispose();
   }
 }
 
@@ -155,6 +171,9 @@ async function handleResumableUpload(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
+  // Finite transfer budgets admitted at the callback (#4441): a 600-second
+  // aggregate plus a 120-second body-inactivity ceiling.
+  const ingress = beginUploadTransferIngress({ req, res });
   try {
     const auth = await authorize({
       req,
@@ -166,7 +185,13 @@ async function handleResumableUpload(
     });
     if (!auth) return;
 
-    const result = await receiveResumableUploadChunk({ uploadId, req, tenantId: auth.tenantId });
+    const result = await receiveResumableUploadChunk({
+      uploadId,
+      req,
+      tenantId: auth.tenantId,
+      signal: ingress.signal,
+      onAcceptedBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+    });
     if (result.complete) {
       res.statusCode = 200;
       res.end('ok');
@@ -181,6 +206,8 @@ async function handleResumableUpload(
     res.end();
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
+  } finally {
+    ingress.dispose();
   }
 }
 
@@ -189,6 +216,7 @@ async function handleUploadFinalize(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
+  const ingress = beginUploadTransferIngress({ req, res });
   try {
     const auth = await authorize({
       req,
@@ -209,6 +237,8 @@ async function handleUploadFinalize(
     );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
+  } finally {
+    ingress.dispose();
   }
 }
 

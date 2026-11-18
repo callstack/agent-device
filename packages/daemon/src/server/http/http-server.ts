@@ -77,6 +77,15 @@ import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
+/**
+ * Explicit ingress ceilings (#4441): 30 seconds to receive a request's headers and
+ * 600 seconds to receive its body, instead of the Node defaults. They bound socket
+ * ingress only; command execution keeps its own per-request deadlines, and upload
+ * transfers add their own aggregate on top (upload-ingress.ts).
+ */
+const DAEMON_HTTP_HEADERS_TIMEOUT_MS = 30_000;
+const DAEMON_HTTP_REQUEST_TIMEOUT_MS = 600_000;
+
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
@@ -239,7 +248,10 @@ export async function createDaemonHttpServer(options: {
       });
     });
   });
-  return http.createServer(onRequest);
+  const server = http.createServer(onRequest);
+  server.headersTimeout = DAEMON_HTTP_HEADERS_TIMEOUT_MS;
+  server.requestTimeout = DAEMON_HTTP_REQUEST_TIMEOUT_MS;
+  return server;
 }
 
 /** Accumulates one `/rpc` body and hands it to the flow once the stream ends. */

@@ -183,6 +183,158 @@ test('an ignored un-ranged retry does not extend upload expiry', async () => {
   }
 });
 
+test('accepted body progress renews the ticket idle lifetime mid-chunk', async () => {
+  // Fake only the ticket clock; real stream I/O keeps running (repo fake-timer pattern).
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const flushIO = async () => {
+    for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
+  };
+  try {
+    const bytes = Buffer.from('ABC');
+    const options = uploadOptions(bytes);
+    const uploadId = beginResumableUpload(options).uploadId;
+    const body = requestStream();
+    const receiving = receiveResumableUploadChunk({ uploadId, req: body });
+    body.write('A');
+    await flushIO();
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+    body.write('B');
+    await flushIO();
+    // 8 minutes since the ticket was created, but only 4 since accepted bytes:
+    // the idempotent preflight still resolves to the same live ticket.
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+    assert.equal(beginResumableUpload(options).uploadId, uploadId);
+    body.end('C');
+    assert.deepEqual(await receiving, { complete: true, offset: 3 });
+    // Idle after the last accepted byte: the ticket expires on schedule.
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('finalize is not expired by the idle timer during its post-write checks', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const bytes = Buffer.from('AB');
+    const options = uploadOptions(bytes);
+    const uploadId = beginResumableUpload(options).uploadId;
+    await receiveResumableUploadChunk({ uploadId, req: request(bytes) });
+    const finalizing = finalizeResumableUpload(uploadId);
+    // The idle timer armed at the last accepted chunk must not fire mid-finalize:
+    // past the deadline the ticket still resolves to the finalizing entry.
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+    assert.equal(beginResumableUpload(options).uploadId, uploadId);
+    const finalized = await finalizing;
+    try {
+      assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'AB');
+    } finally {
+      fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+    }
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an incomplete finalize leaves the original idle lifetime intact', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const bytes = Buffer.from('AB');
+    const uploadId = beginUpload(bytes).uploadId;
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+    // The incomplete finalize is not terminal and must not disarm the idle timer:
+    // the ticket still expires at the original deadline, 5 minutes after creation.
+    await assert.rejects(finalizeResumableUpload(uploadId), /incomplete/i);
+    await vi.advanceTimersByTimeAsync(60 * 1000 + 1);
+    await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an aborted ingress signal maps to its owned typed reason and rolls back the chunk', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const flushIO = async () => {
+    for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
+  };
+  try {
+    const bytes = Buffer.from('ABCD');
+    const uploadId = beginUpload(bytes).uploadId;
+    const controller = new AbortController();
+    const body = requestStream({ 'content-range': 'bytes 0-3/4' });
+    const receiving = receiveResumableUploadChunk({
+      uploadId,
+      req: body,
+      signal: controller.signal,
+    });
+    body.write('AB');
+    await flushIO();
+    controller.abort(
+      new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+        reason: 'transfer_ingress_deadline_exceeded',
+        transferPhase: 'request-body',
+        timeoutMs: 600_000,
+      }),
+    );
+    const error = (await receiving.then(
+      () => null,
+      (error: unknown) => error,
+    )) as AppError | null;
+    assert.equal(error instanceof AppError, true);
+    assert.equal(error?.details?.reason, 'transfer_ingress_deadline_exceeded');
+    assert.equal(error?.details?.timeoutMs, 600_000);
+    // The chunk rolled back to the pre-chunk offset and the ticket stays resumable:
+    // a full retry completes the upload.
+    assert.deepEqual(
+      await receiveResumableUploadChunk({
+        uploadId,
+        req: request(bytes, { 'content-range': 'bytes 0-3/4' }),
+      }),
+      { complete: true, offset: 4 },
+    );
+    const finalized = await finalizeResumableUpload(uploadId);
+    try {
+      assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'ABCD');
+    } finally {
+      fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an earlier classified pipeline failure survives a later abort of the same signal', async () => {
+  const bytes = Buffer.from('AB');
+  const uploadId = beginUpload(bytes).uploadId;
+  const controller = new AbortController();
+  const body = requestStream({ 'content-range': 'bytes 0-0/2' });
+  const receiving = receiveResumableUploadChunk({
+    uploadId,
+    req: body,
+    signal: controller.signal,
+  });
+  body.once('error', () => {});
+  body.write('A');
+  body.destroy(
+    new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
+      reason: 'RESOURCE_EXPIRED',
+    }),
+  );
+  controller.abort(
+    new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+      reason: 'transfer_ingress_deadline_exceeded',
+    }),
+  );
+  const error = (await receiving.then(
+    () => null,
+    (error: unknown) => error,
+  )) as AppError | null;
+  assert.equal(error instanceof AppError, true);
+  assert.equal(error?.details?.reason, 'RESOURCE_EXPIRED');
+});
+
 test('idempotent preflight does not extend upload expiry', async () => {
   vi.useFakeTimers();
   try {

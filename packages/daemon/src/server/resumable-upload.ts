@@ -107,13 +107,22 @@ export async function receiveResumableUploadChunk(params: {
   uploadId: string;
   req: IncomingMessage;
   tenantId?: string;
+  signal?: AbortSignal;
+  onAcceptedBytes?: (bytes: number) => void;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
   return await runExclusive(entry, 'receive', params.req, async () => {
     const { appended, ...result } = await receiveResumableTransfer({
       entry,
       req: params.req,
+      signal: params.signal,
       invalidate: async () => await terminateEntry(entry),
+      onAcceptedBytes: (bytes) => {
+        // Accepted (flushed) body bytes renew the ticket's idle lifetime during
+        // actual progress, not only when a whole chunk completes (#4441).
+        if (!entry.closed) refreshResumableUploadTimer(entry);
+        params.onAcceptedBytes?.(bytes);
+      },
     });
     if (appended && !entry.closed) refreshResumableUploadTimer(entry);
     return result;
@@ -128,12 +137,18 @@ export async function finalizeResumableUpload(
   return await runExclusive(entry, 'finalize', undefined, async () => {
     const offset = fs.statSync(entry.payloadPath).size;
     if (offset !== entry.sizeBytes) {
+      // An incomplete finalize is not terminal: the ticket stays resumable and keeps
+      // its original idle lifetime, so the timer is left armed exactly as it was (#4441).
       throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
         uploadId,
         offset,
         sizeBytes: entry.sizeBytes,
       });
     }
+    // A complete finalize is active work that owns the entry: disarm the idle timer so
+    // expiry cannot fire during the post-write checks (hash, extraction, rename). Both
+    // terminal outcomes close the entry and clean up through closeEntry (#4441).
+    disarmResumableUploadTimer(entry);
     try {
       const actualHash = await computeUploadHash(entry.payloadPath);
       if (actualHash !== entry.sha256) {
@@ -191,6 +206,16 @@ function refreshResumableUploadTimer(entry: ResumableUploadEntry): void {
     RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS,
   );
   entry.timer.unref();
+}
+
+/**
+ * Stops the idle timer without arming a new one and invalidates any in-flight fire,
+ * for an operation (finalize) that owns the entry until it closes it.
+ */
+function disarmResumableUploadTimer(entry: ResumableUploadEntry): void {
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = undefined;
+  entry.generation += 1;
 }
 
 function expireEntry(entry: ResumableUploadEntry, generation: number): void {

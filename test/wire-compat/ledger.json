@@ -134,10 +134,10 @@
     "packages/daemon/src/server/upload-http.ts#UploadHttpRoute": "sha256:3fee66976292bedc9587e266f7f584ff27574e939329bb3ecb98f100c4c54b2e",
     "packages/daemon/src/server/upload-http.ts#UploadPreflightBody": "sha256:05b5e8bd75887f821c44cd54b027f09de1ea08c6e41c44d4dc9ec7cf09fc1ea5",
     "packages/daemon/src/server/upload-http.ts#buildUploadTicketAuthHeaders": "sha256:04d65207c440424257ea04a86fa50fd27f5e6b62e8cede884d9af1db4fb86475",
-    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:b1e1cfd79f13470a1111a377b87975ed5c721500d99f3160a8b631194af37ce5",
-    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:bba7347a32f53b265cded1c7d73f943431ba3b5a0c8b347d621266ea20c10cd6",
-    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:f6879ce6b62d916265d98f6b6aa5f99650c82a9d391a7d5873015036d9289a24",
-    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
+    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:ead39f341f039ccddbebdb65e0244fac4acd6012745e216e3de3116529cfcc8c",
+    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:e10184409309630b580a5bd75ea290d0a922e62c4ad86d2bd1c67a149a1718a7",
+    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:0ae5d2cc2ae926e3f296f6ad3d74e6421301bb37a4909454637667ee6ee2fbe0",
+    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:a2d99503afe852d91a82f4a6e1f5904471c310d8295678306d24cc672c32fac3",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
     "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
@@ -567,8 +567,23 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
-      "digest": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
-      "rationale": "#4434 passes the origin validated by the HTTP ingress owner, or the explicitly configured publicOrigin, into the existing ticket producer. Protocol-2 clients receive the same uploadId and upload URL/header object, use the returned absolute URL, and keep the existing byte, range, authentication and finalize contracts. Forwarding headers no longer select authority under the documented operator migration; no wire field becomes required or changes interpretation."
+      "digest": "sha256:a2d99503afe852d91a82f4a6e1f5904471c310d8295678306d24cc672c32fac3",
+      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, plus explicit 30s/600s header and body ceilings on the daemon listener. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleUpload",
+      "digest": "sha256:e10184409309630b580a5bd75ea290d0a922e62c4ad86d2bd1c67a149a1718a7",
+      "rationale": "#4441 bounds the single-shot upload's inbound body with the same finite ingress budgets; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleResumableUpload",
+      "digest": "sha256:ead39f341f039ccddbebdb65e0244fac4acd6012745e216e3de3116529cfcc8c",
+      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadFinalize",
+      "digest": "sha256:0ae5d2cc2ae926e3f296f6ad3d74e6421301bb37a4909454637667ee6ee2fbe0",
+      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifact",

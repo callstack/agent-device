@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
 import { parseUploadContentLength, parseUploadContentRange } from './resumable-upload-range.ts';
+import { resolveIngressFailure } from './upload-ingress.ts';
 
 export type ResumableTransferEntry = {
   payloadPath: string;
@@ -15,6 +16,8 @@ export async function receiveResumableTransfer(params: {
   entry: ResumableTransferEntry;
   req: IncomingMessage;
   invalidate: (error: unknown) => Promise<void>;
+  signal?: AbortSignal;
+  onAcceptedBytes?: (bytes: number) => void;
 }): Promise<{ complete: boolean; offset: number; appended: boolean }> {
   const oldSize = await currentOffset(params.entry);
   const range = parseUploadContentRange(
@@ -40,12 +43,10 @@ export async function receiveResumableTransfer(params: {
     createLimitError: () =>
       new AppError('INVALID_ARGS', 'Upload chunk exceeds its permitted byte range'),
   });
+  const payloadStream = fs.createWriteStream(params.entry.payloadPath, { flags: 'a' });
+  observeAcceptedWrites(payloadStream, params.onAcceptedBytes);
   try {
-    await pipeline(
-      params.req,
-      limiter,
-      fs.createWriteStream(params.entry.payloadPath, { flags: 'a' }),
-    );
+    await pipeline(params.req, limiter, payloadStream, { signal: params.signal });
     if (range && limiter.bytesSeen !== range.span) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-range');
     }
@@ -53,11 +54,45 @@ export async function receiveResumableTransfer(params: {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-length');
     }
   } catch (error) {
-    await rollback(params.entry.payloadPath, oldSize, error, params.invalidate);
-    throw error;
+    // An aborted ingress signal owns the failure with its typed reason; an earlier
+    // classified failure (limiter, ticket expiry) is preserved unchanged (#4441).
+    const failure = resolveIngressFailure(params.signal, error);
+    await rollback(params.entry.payloadPath, oldSize, failure, params.invalidate);
+    throw failure;
   }
   const offset = await currentOffset(params.entry);
   return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
+}
+
+/**
+ * Reports each nonempty chunk only after its write to the payload file completed
+ * without error: completed-byte progress, never bytes merely read from the socket.
+ * The wrapper preserves the caller's arguments and callback.
+ */
+export function observeAcceptedWrites(
+  stream: fs.WriteStream,
+  onAcceptedBytes: ((bytes: number) => void) | undefined,
+): void {
+  if (!onAcceptedBytes) return;
+  const originalWrite = stream.write.bind(stream);
+  stream.write = function (
+    chunk: unknown,
+    encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
+    callback?: (error?: Error | null) => void,
+  ): boolean {
+    const encoding = typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined;
+    const callerCallback = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+    const bytes =
+      typeof chunk === 'string'
+        ? Buffer.byteLength(chunk, encoding ?? 'utf8')
+        : Buffer.isBuffer(chunk) || ArrayBuffer.isView(chunk)
+          ? chunk.byteLength
+          : 0;
+    return originalWrite(chunk as never, encoding as never, (error?: Error | null) => {
+      if (!error && bytes > 0) onAcceptedBytes(bytes);
+      callerCallback?.(error);
+    });
+  } as typeof stream.write;
 }
 
 export async function computeUploadHash(filePath: string): Promise<string> {
