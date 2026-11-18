@@ -3,12 +3,32 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseSync } from 'oxc-parser';
-import type { BinaryExpression, Expression, PrivateIdentifier } from 'oxc-parser';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 test('cli.ts command dispatch checks are recognized by parser-level unknown-command handling', () => {
   const commands = collectCliDispatchCommandLiterals();
-  assert.notEqual(commands.size, 0);
+  // The exact set, so a reader that collects nothing, or stops collecting, fails here instead
+  // of passing over an empty loop.
+  assert.deepEqual([...commands].sort(), [
+    'auth',
+    'batch',
+    'cdp',
+    'close',
+    'connect',
+    'connection',
+    'daemon',
+    'device',
+    'disconnect',
+    'help',
+    'mcp',
+    'open',
+    'plugins',
+    'proxy',
+    'react-devtools',
+    'runtime',
+    'test',
+    'web',
+  ]);
   for (const command of commands) {
     assert.equal(
       isKnownCliCommandName(command),
@@ -32,7 +52,24 @@ function collectCliDispatchCommandLiterals(): Set<string> {
   return commands;
 }
 
-type AstNode = { type: string };
+/**
+ * The node fields this reader walks, declared locally instead of taken from `oxc-parser`. The
+ * range gate classifies every parameter type it meets, and `oxc-parser`'s `Expression` union is
+ * every AST kind, each a record of further such unions. No function here takes that union.
+ */
+type AstNode = {
+  type: string;
+  name?: string;
+  operator?: string;
+  computed?: boolean;
+  value?: unknown;
+  left?: AstNode;
+  right?: AstNode;
+  expression?: AstNode;
+  expressions?: AstNode[];
+  property?: AstNode;
+  quasis?: { value: { cooked?: string } }[];
+};
 
 function isAstNode(value: unknown): value is AstNode {
   return (
@@ -58,49 +95,45 @@ function visitAstNodes(root: AstNode, visit: (node: AstNode) => void): void {
 
 function readBinaryComparisonCommandLiteral(node: AstNode): string | null {
   if (node.type !== 'BinaryExpression') return null;
-  const binary = node as unknown as BinaryExpression;
-  if (binary.operator !== '===' && binary.operator !== '!==') return null;
+  if (node.operator !== '===' && node.operator !== '!==') return null;
+  if (node.left == null || node.right == null) return null;
   return (
-    readCommandComparisonLiteral(binary.left, binary.right) ??
-    readCommandComparisonLiteral(binary.right, binary.left)
+    readCommandComparisonLiteral(node.left, node.right) ??
+    readCommandComparisonLiteral(node.right, node.left)
   );
 }
 
-function readCommandComparisonLiteral(
-  commandSide: Expression | PrivateIdentifier,
-  literalSide: Expression | PrivateIdentifier,
-): string | null {
+function readCommandComparisonLiteral(commandSide: AstNode, literalSide: AstNode): string | null {
   if (!isCommandExpression(commandSide)) return null;
   return readStringLiteralText(unwrapParenthesizedExpression(literalSide));
 }
 
-function isCommandExpression(expression: Expression | PrivateIdentifier): boolean {
+function isCommandExpression(expression: AstNode): boolean {
   const unwrapped = unwrapParenthesizedExpression(expression);
   if (unwrapped.type === 'Identifier') return unwrapped.name === 'command';
   return (
     unwrapped.type === 'MemberExpression' &&
     !unwrapped.computed &&
-    unwrapped.property.type === 'Identifier' &&
+    unwrapped.property?.type === 'Identifier' &&
     unwrapped.property.name === 'command'
   );
 }
 
 // Mirrors ts.isStringLiteralLike: string literals plus substitution-free templates.
-function readStringLiteralText(expression: Expression | PrivateIdentifier): string | null {
+function readStringLiteralText(expression: AstNode): string | null {
   if (expression.type === 'Literal' && typeof expression.value === 'string') {
     return expression.value;
   }
-  if (expression.type === 'TemplateLiteral' && expression.expressions.length === 0) {
-    return expression.quasis[0]?.value.cooked ?? null;
+  if (expression.type === 'TemplateLiteral' && expression.expressions?.length === 0) {
+    const cooked = expression.quasis?.[0]?.value.cooked;
+    return typeof cooked === 'string' ? cooked : null;
   }
   return null;
 }
 
-function unwrapParenthesizedExpression(
-  expression: Expression | PrivateIdentifier,
-): Expression | PrivateIdentifier {
+function unwrapParenthesizedExpression(expression: AstNode): AstNode {
   let current = expression;
-  while (current.type === 'ParenthesizedExpression') {
+  while (current.type === 'ParenthesizedExpression' && current.expression != null) {
     current = current.expression;
   }
   return current;
