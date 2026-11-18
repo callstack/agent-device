@@ -600,8 +600,27 @@ extension RunnerTests {
 
   @MainActor
   func testKeyboardCommandsUseTheDisplayBelowAPlacedWindow() throws {
+    try assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: true)
+  }
+
+  @MainActor
+  func testKeyboardCommandsUseTheSoleDisplayBelowAPlacedWindow() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "the fixture requires a single-display host")
+    let cached = mainOwned.soleDisplayPortraitSize
+    defer { mainOwned.soleDisplayPortraitSize = cached }
+    let restore = try overrideSoleScreenValues([
+      "bounds": NSValue(cgRect: CGRect(x: 0, y: 0, width: 1668, height: 2420)),
+      "scale": NSNumber(value: 2),
+    ])
+    defer { restore() }
+    try assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: false)
+  }
+
+  @MainActor
+  private func assertKeyboardCommandsUseTheDisplayBelowAPlacedWindow(litPanel: Bool) throws {
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let keyboardFrame = CGRect(x: 0, y: 925, width: 834, height: 282)
+    let panelField = litPanel ? #","litPanel":{"displayId":3,"widthPt":834,"heightPt":1210}"# : ""
     let originalProbeOrientation = LitPanelBookingProbe.orientation
     defer { LitPanelBookingProbe.orientation = originalProbeOrientation }
     try withLitPanelBookingProbe(composed: true) { _ in
@@ -624,7 +643,7 @@ extension RunnerTests {
 
       for name in ["keyboardStatus", "keyboardDismiss"] {
         let command = try runnerCommandFixture(
-          #"{"command":"\#(name)","litPanel":{"displayId":3,"widthPt":834,"heightPt":1210}}"#
+          #"{"command":"\#(name)"\#(panelField)}"#
         )
         let requestID = setRequestLitPanel(from: command)
         defer { endRequestLitPanel(requestID) }
