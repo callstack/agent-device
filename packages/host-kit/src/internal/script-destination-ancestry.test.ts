@@ -10,6 +10,7 @@ import {
   expectUntrustedReplaced,
   modeOf,
   publish,
+  serveOwnership,
 } from './script-destination-host.fixtures.ts';
 import {
   confirmScriptDestination,
@@ -48,28 +49,6 @@ const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-/** The unmocked lookups, so serving an owner never wraps a previously served one. */
-const realLstatSync = fs.lstatSync.bind(fs);
-const realStatSync = fs.statSync.bind(fs);
-
-/**
- * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
- * the fixture's and not the CI image's directory tree. Only the ids move: modes and inode numbers stay
- * what they are on disk. Both lookups are served, because the walk `lstat`s an entry to learn whether it
- * is a link and `stat`s the directory it stands in.
- */
-function serveOwnership(owners: Readonly<Record<string, number>>): void {
-  const withUid = (stats: fs.Stats, pathname: string): fs.Stats => {
-    const uid = owners[pathname];
-    if (uid === undefined || stats.uid === uid) return stats;
-    return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { uid }) as fs.Stats;
-  };
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: never, ...rest: never[]) =>
-    withUid(realLstatSync(pathname, ...rest), String(pathname))) as typeof fs.lstatSync);
-  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: never, ...rest: never[]) =>
-    withUid(realStatSync(pathname, ...rest), String(pathname))) as typeof fs.statSync);
-}
 
 // --- a directory another user owns, or that others can write, is refused ---
 
@@ -364,11 +343,14 @@ skipOnWindows(
     const destination = `${home}/work/../y/journey.ad`;
 
     const staged: string[] = [];
-    const realWriteFileSync = fs.writeFileSync;
-    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+    // The sibling is OPENED in the staging directory, so the open is where the assertion reads the
+    // directory from. (The bytes then go through that descriptor, which is what keeps a planted name from
+    // being followed or emptied.)
+    const realOpenSync = fs.openSync;
+    vi.spyOn(fs, 'openSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
       if (typeof file === 'string') staged.push(path.dirname(file));
-      return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
-    }) as typeof fs.writeFileSync);
+      return (realOpenSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.openSync);
     publish(destination);
 
     expect(staged).toEqual([privY]);

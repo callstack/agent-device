@@ -102,7 +102,7 @@ test('publication is atomic, binds identity and paths, and excludes a second acq
   assert.deepEqual(await owner.finish(report), { state: 'removed' });
   assert.equal(fs.existsSync(paths.infoPath), false);
   assert.equal(fs.existsSync(paths.lockPath), false);
-  assert.deepEqual(readDaemonShutdownReport(paths.baseDir), report);
+  assert.deepEqual(await readDaemonShutdownReport(paths.baseDir), report);
 });
 
 test('publication truncates the log the daemon is already appending to', async () => {

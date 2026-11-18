@@ -8,6 +8,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
+import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
@@ -411,6 +412,47 @@ test('a host refused a held state directory leaves its provider lease records un
     await held.host.close();
     removeStateDir(held.stateDir);
   }
+});
+
+test('an embedded startup establishes its state directory at the private mode before its first record', async () => {
+  // The detached launcher creates the state chain, and the executable does too, but an embedder that calls
+  // `startAgentDevice` reaches the runtime through NEITHER. A state directory made by the first `mkdir` to
+  // reach it would then carry the process's umask, and every record below it — the startup marker, the
+  // registration, the shutdown report — would sit in ground another local user can add a name to.
+  //
+  // umask 002 is not hypothetical: it is what a group-writable home directory carries, and the state rule
+  // would then refuse its own state directory on the next startup.
+  const parent = fs.realpathSync(mkdtempForTestSync('agent-device-host-umask-'));
+  const stateDir = path.join(parent, 'state');
+  const previous = process.umask(0o002);
+  let host: Awaited<ReturnType<typeof startAgentDevice>>;
+  try {
+    host = await startAgentDevice({
+      stateDir,
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        },
+      }),
+    });
+
+    // Asked while the runtime is up, so nothing later can have fixed the mode.
+    expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
+    expect(fs.existsSync(resolveDaemonPaths(stateDir).infoPath)).toBe(true);
+  } finally {
+    process.umask(previous);
+    await host!.close();
+  }
+
+  // And the state records survive that close: the report is what an outside stop reads to learn what the
+  // host released, so a startup that established its chain has to be able to write one.
+  const paths = resolveDaemonPaths(stateDir);
+  await expect(readDaemonShutdownReport(paths.baseDir)).resolves.toMatchObject({
+    providerReleases: expect.any(Object),
+  });
+  expect(fs.statSync(path.join(paths.baseDir, 'daemon-shutdown.json')).mode & 0o777).toBe(0o600);
+  fs.rmSync(parent, { recursive: true, force: true });
 });
 
 /**

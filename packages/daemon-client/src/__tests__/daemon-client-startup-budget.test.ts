@@ -4,10 +4,12 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ExecDetachedExit } from '@agent-device/host-kit/command';
-import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  recordDaemonStartupMarker,
+  DAEMON_STARTUP_EXIT_CODES,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   readDaemonStartupPhaseMarkers,
-  recordDaemonStartupMarker,
   resolveDaemonStartupPhasesPath,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';

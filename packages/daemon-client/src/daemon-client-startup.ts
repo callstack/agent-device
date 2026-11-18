@@ -1,7 +1,10 @@
-import fs from 'node:fs';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
+import {
+  inspectProcessLock,
+  readPrivateStateFileSync,
+  type ProcessLockInspection,
+} from '@agent-device/host-kit/file';
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -686,21 +689,10 @@ function readRecentLogTail(logPath: string): string | undefined {
 }
 
 function readRecentFileTail(filePath: string, maxBytes: number): string | undefined {
-  try {
-    if (!fs.existsSync(filePath)) return undefined;
-    const stats = fs.statSync(filePath);
-    if (stats.size <= 0) return undefined;
-    const length = Math.min(stats.size, maxBytes);
-    const fd = fs.openSync(filePath, 'r');
-    try {
-      const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, stats.size - length);
-      const text = buffer.toString('utf8').trim();
-      return text.length > 0 ? text : undefined;
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return undefined;
-  }
+  // host-kit's state reader, not a `stat` plus an `open` of the name. A marker is a per-pid name inside a
+  // state directory the daemon picked, and the client has no way to know who else could write there: the
+  // same rule that keeps the daemon from writing through a planted link keeps this reader from BELIEVING
+  // one, and its non-blocking open keeps a FIFO at that name from stopping a startup (#4649). A record the
+  // rule will not vouch for is read as the absence it is.
+  return readPrivateStateFileSync(filePath, maxBytes)?.trim() || undefined;
 }

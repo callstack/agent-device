@@ -6,6 +6,7 @@ import type {
   OwnedProcessRecordWriter,
 } from '@agent-device/contracts/platform-runtime-host';
 import { withAtomicPublishTempPathSync } from './atomic-publish.ts';
+import { identityOf } from './script-destination.ts';
 
 const RECORD_FILE_NAME = 'owned-processes.json';
 const RECORD_VERSION = 1;
@@ -58,8 +59,9 @@ export function createOwnedProcessRecordStore(options: {
       }
       const directory = path.dirname(recordPath);
       fs.mkdirSync(directory, { recursive: true });
-      withAtomicPublishTempPathSync(recordPath, (temporaryPath) => {
+      withAtomicPublishTempPathSync(recordPath, (temporaryPath, siblingIsOurs) => {
         const descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
+        siblingIsOurs(identityOf(fs.fstatSync(descriptor, { bigint: true })));
         try {
           fs.writeFileSync(
             descriptor,

@@ -15,7 +15,13 @@ import {
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import {
+  appendPrivateStateFileSync,
+  ensurePrivateDirectoryChain,
+  privateDirectoryWordingOf,
   publishFileSync,
+  publishPrivateStateFileSync,
+  tryOpenPrivateStateFileForAppendSync,
+  writePrivateStateLineSync,
   inspectProcessLock,
   tryAcquireProcessLock,
   acquireProcessLockAcquisition,
@@ -46,7 +52,10 @@ import {
   resolveDaemonShutdownReportPath,
   type DaemonShutdownOutcome,
 } from './daemon-shutdown-report.ts';
-import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
+import {
+  sweepDeadDaemonStartupPhasesFiles,
+  type DaemonStartupPhase,
+} from './daemon-startup-phases.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
 export type DaemonRegistrationFields = Readonly<{
@@ -154,19 +163,51 @@ export async function tryAcquireDaemonRegistration(
     if (!outcome) return;
     try {
       acquisition.assertHeld();
-      publishFileSync({
-        destination: resolveDaemonShutdownReportPath(boundPaths.baseDir),
-        contents: `${JSON.stringify(buildDaemonShutdownReport(outcome))}\n`,
-        mode: 0o600,
-      });
+      // The report is a state diagnostic: judged chain, a sibling this call creates exclusively at 0600,
+      // and a rename over whatever name stands there (#4649). A chain that fails the rule costs the
+      // report, never the shutdown.
+      publishPrivateStateFileSync(
+        resolveDaemonShutdownReportPath(boundPaths.baseDir),
+        `${JSON.stringify(buildDaemonShutdownReport(outcome))}\n`,
+      );
     } catch (error) {
-      await recordRegistrationWarning(
-        boundPaths.logPath,
-        'daemon_shutdown_record_failed',
-        error,
-      ).catch(() => {});
+      reportStateRecordFailure(boundPaths.logPath, 'daemon_shutdown_record_failed', error);
     }
   }
+}
+
+/**
+ * Writes down a state record this process refused or failed to write.
+ *
+ * Never by going back to the refused path's NAME. The verified handle is tried first, and a chain that
+ * refuses the record refuses that handle too — a FIFO planted at `daemon.log` would block this append and a
+ * link would redirect the very warning about being planted. Then the line goes to this process's stderr,
+ * which the launcher already holds open on the log: an already-trusted descriptor that no name in the
+ * refused directory can steer.
+ */
+function reportStateRecordFailure(logPath: string, phase: string, error: unknown): void {
+  const opened = tryOpenPrivateStateFileForAppendSync(logPath);
+  if (opened.descriptor !== undefined) {
+    try {
+      writePrivateStateLineSync(
+        opened.descriptor,
+        `${JSON.stringify({ level: 'warn', phase, error: normalizeError(error) })}\n`,
+      );
+      return;
+    } catch {
+      // The handle was refused after all; stderr is where this goes.
+    } finally {
+      try {
+        fs.closeSync(opened.descriptor);
+      } catch {
+        // Nothing is left to do with a descriptor the host will not close.
+      }
+    }
+  }
+  // For a detached daemon this stream is the log already: the launcher holds this process's stdout and
+  // stderr open on the verified log descriptor. For an embedded runtime it is the host's own stream. Either
+  // way it is a descriptor no entry inside the refused directory can steer.
+  process.stderr.write(`Daemon ${phase}: ${normalizeError(error).message}\n`);
 }
 
 function removeRegistrationUnderLock(
@@ -184,6 +225,49 @@ function removeRegistrationUnderLock(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   return { state: 'removed' };
+}
+
+/**
+ * Establishes the daemon's state chain and says out loud what it found, in the one order both callers use.
+ *
+ * The line goes to this process's stderr, which the launcher redirects into the daemon log. Nothing here
+ * refuses a startup: an exposed state directory is a fact about the host, and the per-file rule is what
+ * withholds a record from it (#4649).
+ */
+export function establishPrivateDaemonStateDir(stateDir: string): void {
+  const chain = ensurePrivateDirectoryChain(stateDir);
+  if (chain.exposure) {
+    process.stderr.write(
+      `Daemon state dir ${chain.directory} is not private: ${privateDirectoryWordingOf(chain.exposure)}\n`,
+    );
+  }
+}
+
+/**
+ * Appends one startup phase marker, or reports the refusal and carries on.
+ *
+ * This is the DAEMON side of the marker: whoever writes one comes through here, because a marker is a state
+ * diagnostic and a state diagnostic goes only into a chain this process owns (#4649). The chain is
+ * established first, so a daemon started without {@link launchDaemonProcess} still gets a state directory at
+ * the private mode rather than one its `mkdir` priced down with the umask. The append then asks the chain for
+ * ITSELF and refuses on ANY exposure — establishment is best effort and can report a chain it does not own,
+ * and the check that decides is the one made as the bytes go out. A refusal is a typed
+ * `state_dir_untrusted` failure sent to `reportFailure`: never fatal, and never a silent success.
+ */
+export function recordDaemonStartupMarker(
+  startupPhasesPath: string,
+  phase: DaemonStartupPhase,
+  reportFailure?: (error: NormalizedError) => void,
+): void {
+  try {
+    ensurePrivateDirectoryChain(path.dirname(startupPhasesPath));
+    appendPrivateStateFileSync(
+      startupPhasesPath,
+      `${JSON.stringify({ data: { startupPhase: phase, timestampMs: Date.now() } })}\n`,
+    );
+  } catch (error) {
+    reportFailure?.(normalizeError(error));
+  }
 }
 
 async function releaseRegistrationAfterFailure(
@@ -276,26 +360,6 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
-/**
- * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
- * only toggles the read-only bit, so it cannot make the path private. The repair never decides
- * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
- */
-function repairStateMode(target: string, mode: number): void {
-  try {
-    fs.chmodSync(target, mode);
-  } catch (error) {
-    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_state_mode_repair_skipped',
-      data: { path: target, error: normalizeError(error) },
-    });
-  }
-}
-
-const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
-
 /** Launches and monitors the actual child before recording its private-directory authority. */
 export function launchDaemonProcess(
   input: Readonly<{
@@ -314,11 +378,21 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
-  repairStateMode(input.paths.baseDir, 0o700);
-  const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
+  // One call owns the boundary: 0700 creation whatever the umask, and the narrowest best-effort repair
+  // of a level this user already owns, said on the judged inode. The answer is a fact about the host, never
+  // a reason to refuse a startup, so a chain the daemon does not own is written down and left as it is.
+  establishPrivateDaemonStateDir(input.paths.baseDir);
+  // The log the child's stdout and stderr become is opened the way every state file is: judged chain,
+  // link-free open, mode said on the descriptor. A host that refuses that open still gets the append it
+  // has always gotten, because a launch is not a state record and a missing log would be its own loss.
+  const opened = tryOpenPrivateStateFileForAppendSync(input.paths.logPath);
+  if (opened.failure !== undefined) {
+    process.stderr.write(
+      `Daemon log ${input.paths.logPath} is not a verified state file: ${normalizeError(opened.failure).message}\n`,
+    );
+  }
+  const logFd = opened.descriptor ?? fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
-    repairStateMode(input.paths.logPath, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {

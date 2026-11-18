@@ -16,12 +16,23 @@ export {
 export { scriptAncestryReason } from './internal/script-destination-refusal.ts';
 export { resolveScriptDestination } from './internal/entry-name.ts';
 export {
+  appendPrivateStateFileSync,
   assertScriptTargetVacant,
+  ensurePrivateDirectoryChain,
+  judgePrivateDirectoryChain,
+  privateDirectoryWordingOf,
+  PRIVATE_STATE_DIR_REASON,
+  type PrivateDirectoryChain,
+  type PrivateDirectoryExposure,
   lstatIfPresent,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
+  publishPrivateStateFileSync,
+  readPrivateStateFileSync,
+  tryOpenPrivateStateFileForAppendSync,
+  writePrivateStateLineSync,
 } from './internal/verified-file.ts';
 export {
   expandUserHomePath,

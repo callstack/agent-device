@@ -2,7 +2,7 @@
 // directories it builds them on. The ancestry rule reads the real host for its own identity, so a test that
 // leaves that alone is asserting against whatever account the machine it runs on happens to have.
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -42,17 +42,48 @@ export function ancestryRoot(): string {
 /**
  * A directory carrying `mode`, owned by this user. The ownership is set explicitly because a scratch
  * directory inherits one from its parent, not necessarily this user's.
+ *
+ * The mode is set with the host's real `chmod`, captured before any test installs a spy: a test that mocks
+ * `chmodSync` to make a repair fail would otherwise be unable to build the directory it is testing.
  */
 export function directoryWith(directory: string, mode: number): string {
   fs.mkdirSync(directory);
   fs.chownSync(directory, currentUid, currentGid);
-  fs.chmodSync(directory, mode);
+  realChmodSync(directory, mode);
   return directory;
 }
+
+/** Captured at import, so a test's `chmodSync` spy cannot reach a fixture's own setup. */
+const realChmodSync = fs.chmodSync.bind(fs);
 
 /** A publication of fixed contents, so a test says which destination and not what bytes. */
 export function publish(destination: string): void {
   publishScriptFileSync({ destination, contents: 'context\n' });
+}
+
+/** The unmocked lookups, so serving an owner never wraps a previously served one. */
+const realLstatSync = fs.lstatSync.bind(fs);
+const realStatSync = fs.statSync.bind(fs);
+
+/**
+ * Reports `owners` for the named paths and the real host for everything else, so the ownership rule is
+ * the fixture's and not the CI image's directory tree. Only the ids move: modes and inode numbers stay
+ * what they are on disk. Both lookups are served, because a rule `lstat`s an entry to learn whether it is
+ * a link and `stat`s the directory it stands in. Ids come back as bigint or number depending on the
+ * caller, so a moved id keeps that type.
+ */
+export function serveOwnership(owners: Readonly<Record<string, number>>): void {
+  const reuid = <S extends { uid: number | bigint }>(stats: S, pathname: string): S => {
+    const uid = owners[pathname];
+    if (uid === undefined || BigInt(stats.uid) === BigInt(uid)) return stats;
+    return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
+      uid: typeof stats.uid === 'bigint' ? BigInt(uid) : uid,
+    }) as S;
+  };
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: never, ...rest: never[]) =>
+    reuid(realLstatSync(pathname, ...rest), String(pathname))) as typeof fs.lstatSync);
+  vi.spyOn(fs, 'statSync').mockImplementation(((pathname: never, ...rest: never[]) =>
+    reuid(realStatSync(pathname, ...rest), String(pathname))) as typeof fs.statSync);
 }
 
 /** Runs `run` under `process.umask(0o002)` — the umask of a shared checkout that breaks a mode-less `mkdir`. */

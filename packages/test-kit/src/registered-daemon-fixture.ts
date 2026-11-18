@@ -115,7 +115,8 @@ export function createRegisteredDaemonFixtures<
       `import fs from 'node:fs';
 import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(composition.registrationOwnerUrl)};
-import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(composition.startupPhasesUrl)};
+import { removeDaemonStartupPhasesFile, resolveDaemonStartupPhasesPath } from ${JSON.stringify(composition.startupPhasesUrl)};
+import { recordDaemonStartupMarker } from ${JSON.stringify(composition.registrationOwnerUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};

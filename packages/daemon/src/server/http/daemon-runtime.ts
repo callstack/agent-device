@@ -84,12 +84,13 @@ import {
   resolveDaemonCodeSignature,
 } from './server-lifecycle.ts';
 import {
+  establishPrivateDaemonStateDir,
+  recordDaemonStartupMarker,
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
   type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
@@ -207,6 +208,14 @@ async function startDaemonRuntimeOnHost(
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
+  // The chain is established BEFORE this runtime's first state write, from inside the runtime itself rather
+  // than only from its executable. That covers every route in: a detached daemon started through
+  // `launchDaemonProcess`, an embedder that calls `startDaemonRuntime` directly (the SDK's
+  // `startAgentDevice`), and a test fixture entry. A state directory created by the first `mkdir` to reach
+  // it is created here at 0700 whatever the umask, and a chain this process does not own is reported and
+  // left as it is — no startup is refused over it, and every record that would land there is refused on its
+  // own (#4649).
+  establishPrivateDaemonStateDir(baseDir);
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs

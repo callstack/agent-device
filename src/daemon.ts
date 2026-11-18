@@ -2,8 +2,11 @@ import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import {
-  removeDaemonStartupPhasesFile,
+  establishPrivateDaemonStateDir,
   recordDaemonStartupMarker,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -16,10 +19,17 @@ const reportMarkerFailure = (error: unknown): void => {
 // Captured once: the earliest marker and the runtime resolve the state dir from this one host,
 // so a relative AGENT_DEVICE_STATE_DIR cannot land the markers beside another directory's lock.
 const host = captureHostEnvironment(process);
-const ownPhasesPath = resolveDaemonStartupPhasesPath(
-  resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, { env: host.env, cwd: host.cwd }).baseDir,
-  process.pid,
-);
+const ownStateDir = resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, {
+  env: host.env,
+  cwd: host.cwd,
+}).baseDir;
+// Every state diagnostic this process writes from here on goes into that chain, so it is established
+// before the first one: 0700 at every level whatever the umask, and the narrowest best-effort repair of a
+// level this user owns, said on the judged inode. A chain the daemon does not own is written down and left
+// as it is: a fact about the host never refuses a startup, and each record that would land there is refused
+// on its own (#4649).
+establishPrivateDaemonStateDir(ownStateDir);
+const ownPhasesPath = resolveDaemonStartupPhasesPath(ownStateDir, process.pid);
 // The claim first: after pid reuse it is the only defense against a dead lifetime's phases.
 removeDaemonStartupPhasesFile(ownPhasesPath, reportMarkerFailure);
 recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);

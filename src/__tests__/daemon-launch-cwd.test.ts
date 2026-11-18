@@ -52,12 +52,20 @@ test.skipIf(process.platform === 'win32').for(['fresh', 'loose'])(
 );
 
 test.for(['EPERM', 'EROFS'])(
-  'a launched daemon starts when chmod on its state paths fails with %s',
+  'a launched daemon starts when the mode update on its state paths fails with %s',
   async (code) => {
+    // The real path: the state rule resolves the route it judges, and macOS's scratch directory rides the
+    // `/var` to `/private/var` alias, so a name the walk answered and a name the test spells differ here.
     const paths = resolveDaemonPaths(
-      path.join(mkdtempForTestSync('agent-device-launch-chmod-'), 'state'),
+      path.join(fs.realpathSync(mkdtempForTestSync('agent-device-launch-chmod-')), 'state'),
     );
+    // Both seams a state mode is said on. A level this call CREATED takes its mode at the name; a level that
+    // already stands, and the log this call opened, take it on the OPEN DESCRIPTOR, because `chmod` by name
+    // follows a link planted there.
     const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw Object.assign(new Error(code), { code });
+    });
+    const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {
       throw Object.assign(new Error(code), { code });
     });
     try {
@@ -68,13 +76,16 @@ test.for(['EPERM', 'EROFS'])(
         args: ['-e', ''],
         serverMode: 'socket',
       });
+
       await launch.exited;
-      assert.deepEqual(
-        chmod.mock.calls.map(([target]) => target),
-        [paths.baseDir, paths.logPath],
-      );
+
+      // The mode update was asked for, and it did not decide anything: a state directory this process could
+      // not narrow is reported and left as it stands, and the daemon is still launched.
+      assert.ok(chmod.mock.calls.length + fchmod.mock.calls.length > 0);
+      assert.equal(fs.existsSync(paths.logPath), true);
     } finally {
       chmod.mockRestore();
+      fchmod.mockRestore();
     }
   },
 );

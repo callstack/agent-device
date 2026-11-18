@@ -22,6 +22,6 @@ export async function stopRecordedDaemon(
   });
   return mergeDaemonShutdownReport(
     stopped,
-    stopped.mode === 'graceful' ? readDaemonShutdownReport(target.paths.baseDir) : null,
+    stopped.mode === 'graceful' ? await readDaemonShutdownReport(target.paths.baseDir) : null,
   );
 }

@@ -243,7 +243,7 @@ test.each(['intentional', 'unlink failure'] as const)(
     else assert.deepEqual(await finished, { state: 'retained' });
     assert.equal(fs.existsSync(paths.infoPath), true);
     assert.equal(fs.existsSync(paths.lockPath), true);
-    assert.equal(readDaemonShutdownReport(paths.baseDir), null);
+    assert.equal(await readDaemonShutdownReport(paths.baseDir), null);
     assert.equal((await tryAcquireDaemonRegistration(paths)).status, 'busy');
   },
 );
@@ -264,7 +264,7 @@ test('a spent embedded owner cannot overwrite a same-host successor report', asy
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   await assert.rejects(owner.finish(outcome));
   assert.equal(fs.readFileSync(file, 'utf8'), before);
-  assert.deepEqual(readDaemonShutdownReport(paths.baseDir), outcome);
+  assert.deepEqual(await readDaemonShutdownReport(paths.baseDir), outcome);
   assert.equal(fs.existsSync(paths.infoPath), true);
   assert.equal(fs.existsSync(paths.lockPath), true);
 });

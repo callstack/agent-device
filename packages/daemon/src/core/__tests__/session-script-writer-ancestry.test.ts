@@ -162,11 +162,13 @@ test.skipIf(process.platform === 'win32').each([false, true])(
     const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o700);
     fs.symlinkSync(privX, path.join(home, 'work'));
     const staged: string[] = [];
-    const realWriteFileSync = fs.writeFileSync;
-    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+    // The sibling is OPENED in the staging directory and written through that descriptor, so the open is
+    // where the assertion reads the directory from.
+    const realOpenSync = fs.openSync;
+    vi.spyOn(fs, 'openSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
       if (typeof file === 'string' && file.endsWith('.tmp')) staged.push(path.dirname(file));
-      return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
-    }) as typeof fs.writeFileSync);
+      return (realOpenSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.openSync);
 
     const destination = `${home}/work/../y/journey.ad`;
     const result = writerFor(directory).write(recordingTo(destination, force), { force });

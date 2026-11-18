@@ -108,7 +108,9 @@ describe('publishFileSync', () => {
     const target = destination('permission-update-failed.png');
     fs.writeFileSync(target, 'old bytes');
     const failure = new Error('permission update failed');
-    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+    // The mode is said on the OPEN sibling descriptor, never at a name, so this is the seam a host's
+    // permission update fails at.
+    const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {
       throw failure;
     });
     try {
@@ -124,7 +126,7 @@ describe('publishFileSync', () => {
           ),
       ).toEqual([]);
     } finally {
-      chmod.mockRestore();
+      fchmod.mockRestore();
     }
   });
 });

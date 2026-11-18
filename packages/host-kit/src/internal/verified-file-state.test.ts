@@ -1,0 +1,272 @@
+// The state-file owners (#4649): the one append, the one publish, and the one read that every daemon and
+// client route goes through. What each one refuses, and what a refusal costs, is the subject; the chain rule
+// itself is `verified-file-state-dir.test.ts`.
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  FOREIGN_UID,
+  ancestryRoot as root,
+  directoryWith,
+  modeOf,
+  serveOwnership,
+} from './atomic-file-host.fixtures.ts';
+import {
+  appendPrivateStateFileSync,
+  openPrivateStateFileForAppendSync,
+  publishPrivateStateFileSync,
+  readPrivateStateFileSync,
+  writePrivateStateLineSync,
+} from './verified-file.ts';
+
+const skipOnWindows = process.platform === 'win32' ? test.skip : test;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/** The state directory this suite writes into: this user's own, at the mode the rule creates. */
+function stateDir(name = 'state'): string {
+  return directoryWith(path.join(root(), name), 0o700);
+}
+
+// --- the append ---
+
+skipOnWindows('appends a record a caller can read back, and creates it at 0600', () => {
+  const marker = path.join(stateDir(), 'daemon-startup-phases-1.jsonl');
+  const previous = process.umask(0o022);
+  try {
+    appendPrivateStateFileSync(marker, '{"a":1}\n');
+    appendPrivateStateFileSync(marker, '{"a":2}\n');
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(modeOf(marker)).toBe(0o600);
+  expect(fs.readFileSync(marker, 'utf8')).toBe('{"a":1}\n{"a":2}\n');
+});
+
+skipOnWindows('an append after a crashed one glues the seam instead of joining two records', () => {
+  // A crash mid-append can leave a half-written line with no newline. Appending straight onto it makes BOTH
+  // lines unparsable, so the writer looks at the last byte and pays for a newline when one is missing.
+  const marker = path.join(stateDir(), 'daemon-startup-phases-2.jsonl');
+  fs.writeFileSync(marker, '{"data":{"startupPhase":"modules-lo', { mode: 0o600 });
+
+  appendPrivateStateFileSync(marker, '{"data":{"startupPhase":"listening"}}\n');
+
+  expect(fs.readFileSync(marker, 'utf8')).toBe(
+    '{"data":{"startupPhase":"modules-lo\n{"data":{"startupPhase":"listening"}}\n',
+  );
+});
+
+skipOnWindows('an append reaches the entry, never a link planted at its name', () => {
+  // Another local user who can write the state directory picks the marker's name. An `appendFile` would
+  // resolve that name and write into THEIRS.
+  const state = stateDir();
+  const outside = path.join(state, 'theirs.log');
+  fs.writeFileSync(outside, 'theirs\n', { mode: 0o600 });
+  const marker = path.join(state, 'daemon-startup-phases-3.jsonl');
+  fs.symlinkSync(outside, marker);
+
+  expect(() => appendPrivateStateFileSync(marker, '{"a":1}\n')).toThrow(/regular file/i);
+
+  expect(fs.readFileSync(outside, 'utf8')).toBe('theirs\n');
+  expect(fs.lstatSync(marker).isSymbolicLink()).toBe(true);
+});
+
+skipOnWindows('a refusal says so typed, and names the state directory it refused', () => {
+  const state = path.join(root(), 'loose');
+  directoryWith(state, 0o777);
+
+  try {
+    appendPrivateStateFileSync(path.join(state, 'marker.jsonl'), '{}\n');
+    expect.unreachable('a world-writable state directory is refused');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).details).toMatchObject({
+      reason: 'state_dir_untrusted',
+      exposure: 'world_writable',
+    });
+  }
+});
+
+skipOnWindows('an append lands in the directory the chain judged, not the caller spelling', () => {
+  // `state/alias` is a link this user's own 0700 directory holds, so the walk judges through it (ADR 0016)
+  // and the entry has to land beside the target, where the bytes actually go. Staging beside the SPELLING
+  // would put a state file, or its temporary sibling, in ground the judgment never read.
+  const directory = root();
+  const real = directoryWith(path.join(directory, 'real'), 0o700);
+  const state = directoryWith(path.join(real, 'state'), 0o700);
+  const alias = path.join(directory, 'alias');
+  fs.symlinkSync(real, alias, 'dir');
+
+  appendPrivateStateFileSync(path.join(alias, 'state', 'marker.jsonl'), '{}\n');
+
+  expect(fs.readdirSync(state)).toEqual(['marker.jsonl']);
+});
+
+// --- the publish ---
+
+skipOnWindows('publishing replaces a link at the name instead of writing through it', () => {
+  const state = stateDir();
+  const outside = path.join(state, 'theirs.json');
+  fs.writeFileSync(outside, 'theirs\n', { mode: 0o600 });
+  const report = path.join(state, 'daemon-shutdown.json');
+  fs.symlinkSync(outside, report);
+
+  publishPrivateStateFileSync(report, '{"a":1}\n');
+
+  expect(fs.readFileSync(outside, 'utf8')).toBe('theirs\n');
+  expect(fs.lstatSync(report).isFile()).toBe(true);
+  expect(readPrivateStateFileSync(report, 4096)).toBe('{"a":1}\n');
+});
+
+skipOnWindows('publishing creates at 0600 whatever the umask, and leaves no sibling behind', () => {
+  const state = stateDir();
+  const report = path.join(state, 'daemon-shutdown.json');
+
+  const previous = process.umask(0o022);
+  try {
+    publishPrivateStateFileSync(report, '{"a":1}\n');
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(modeOf(report)).toBe(0o600);
+  expect(fs.readdirSync(state)).toEqual(['daemon-shutdown.json']);
+});
+
+skipOnWindows('a temporary sibling already standing is not this call to write', () => {
+  // The sibling's name carries this pid and a random id, so one that is already there is not a leftover of
+  // a crash: it is somebody else's entry, and opening it NON-EXCLUSIVELY would follow a link or empty a
+  // file they are reading. The create answers EEXIST, refuses the publish, and leaves their entry alone.
+  const state = stateDir();
+  const report = path.join(state, 'daemon-shutdown.json');
+  // Captured before the spy, and used only through a DESCRIPTOR: `fs.writeFileSync(name)` reaches
+  // `fs.openSync` by name, which is the call being mocked here.
+  const realOpenSync = fs.openSync.bind(fs);
+  const realWriteSync = fs.writeSync.bind(fs);
+  const realCloseSync = fs.closeSync.bind(fs);
+  let planted: string | undefined;
+  vi.spyOn(fs, 'openSync').mockImplementation(((name: unknown, ...rest: unknown[]) => {
+    if (planted === undefined && typeof name === 'string' && name.endsWith('.tmp')) {
+      planted = name;
+      const fd = realOpenSync(name, 'wx', 0o600);
+      realWriteSync(fd, 'theirs\n');
+      realCloseSync(fd);
+    }
+    return (realOpenSync as (...args: unknown[]) => unknown)(name, ...rest);
+  }) as typeof fs.openSync);
+
+  expect(() => publishPrivateStateFileSync(report, '{"a":1}\n')).toThrow(/EEXIST/);
+
+  expect(planted).toBeDefined();
+  expect(fs.readFileSync(planted as string, 'utf8')).toBe('theirs\n');
+  expect(fs.existsSync(report)).toBe(false);
+});
+
+skipOnWindows('a publish refused by the chain writes nothing and creates no sibling', () => {
+  const state = path.join(root(), 'foreign');
+  directoryWith(state, 0o700);
+  serveOwnership({ [state]: FOREIGN_UID });
+
+  expect(() =>
+    publishPrivateStateFileSync(path.join(state, 'daemon-shutdown.json'), '{}\n'),
+  ).toThrow(/Refusing to write/);
+
+  expect(fs.readdirSync(state)).toEqual([]);
+});
+
+// --- the read ---
+
+skipOnWindows(
+  'reads the tail of a record, and refuses a link rather than reading through it',
+  () => {
+    const state = stateDir();
+    const report = path.join(state, 'daemon-shutdown.json');
+    fs.writeFileSync(report, '{"a":1}\n', { mode: 0o600 });
+    expect(readPrivateStateFileSync(report, 4096)).toBe('{"a":1}\n');
+
+    const outside = path.join(state, 'theirs.json');
+    fs.writeFileSync(outside, '{"planted":true}\n', { mode: 0o600 });
+    const link = path.join(state, 'daemon-shutdown-link.json');
+    fs.symlinkSync(outside, link);
+
+    // A refusal reads exactly like absence: a caller that believed this record would be believing what
+    // another local user wrote.
+    expect(readPrivateStateFileSync(link, 4096)).toBeUndefined();
+    expect(fs.readFileSync(outside, 'utf8')).toBe('{"planted":true}\n');
+  },
+);
+
+skipOnWindows('reads only the bound it is given', () => {
+  // A huge file planted at a state name must not be able to exhaust a reader that is only after a tail.
+  const state = stateDir();
+  const log = path.join(state, 'daemon.log');
+  fs.writeFileSync(log, 'x'.repeat(100_000), { mode: 0o600 });
+
+  expect(readPrivateStateFileSync(log, 64)).toBe('x'.repeat(64));
+});
+
+skipOnWindows('a FIFO at a state name is refused, and never blocks the reader', () => {
+  // The open is verified as a regular file and non-blocking, so a special file planted at a state name
+  // answers "no record" instead of parking the client that is trying to report a shutdown.
+  const state = stateDir();
+  const report = path.join(state, 'daemon-shutdown.json');
+  const made = spawnSync('mkfifo', [report], { encoding: 'utf8' });
+  expect(made.status).toBe(0);
+
+  expect(readPrivateStateFileSync(report, 4096)).toBeUndefined();
+});
+
+skipOnWindows('a read of ground another local user owns is the same answer as no record', () => {
+  const state = path.join(root(), 'foreign-read');
+  directoryWith(state, 0o700);
+  fs.writeFileSync(path.join(state, 'daemon-shutdown.json'), '{"planted":true}\n', { mode: 0o600 });
+  serveOwnership({ [state]: FOREIGN_UID });
+
+  expect(readPrivateStateFileSync(path.join(state, 'daemon-shutdown.json'), 4096)).toBeUndefined();
+});
+
+// --- writing through a handle this process already holds ---
+
+skipOnWindows('a handle opened for append is the log, at the mode a state record carries', () => {
+  const state = stateDir();
+  const log = path.join(state, 'daemon.log');
+  fs.writeFileSync(log, 'earlier\n', { mode: 0o644 });
+
+  const previous = process.umask(0o022);
+  let descriptor: number;
+  try {
+    descriptor = openPrivateStateFileForAppendSync(log);
+    writePrivateStateLineSync(descriptor, '{"level":"warn"}\n');
+  } finally {
+    process.umask(previous);
+    fs.closeSync(descriptor!);
+  }
+
+  // The mode is said on the OPEN descriptor, so an existing file the host left loose is narrowed by the
+  // same call that appends to it, and no reader ever sees the wider entry.
+  expect(modeOf(log)).toBe(0o600);
+  expect(fs.readFileSync(log, 'utf8')).toBe('earlier\n{"level":"warn"}\n');
+});
+
+skipOnWindows(
+  'a handle cannot be had for ground this process does not own, and asks for nothing',
+  () => {
+    const state = path.join(root(), 'foreign-handle');
+    directoryWith(state, 0o700);
+    serveOwnership({ [state]: FOREIGN_UID });
+    const chmod = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+      throw new Error('a mode said at a NAME would reach here');
+    });
+
+    expect(() => openPrivateStateFileForAppendSync(path.join(state, 'daemon.log'))).toThrow(
+      /Refusing to write/,
+    );
+
+    expect(chmod.mock.calls).toEqual([]);
+  },
+);

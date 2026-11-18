@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
 
@@ -64,17 +63,53 @@ export function buildDaemonShutdownReport(outcome: DaemonShutdownOutcome): Daemo
   };
 }
 
-export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport | null {
+/**
+ * Reads one shutdown report's TEXT as a report, or `null` for a record it cannot vouch for.
+ *
+ * The parse is given text rather than a path on purpose. The report is a state record, and reading one starts
+ * with the state chain and a verified, non-blocking, size-bounded open — `readPrivateStateFileSync` in
+ * host-kit owns that, and a caller that read this name with `readFileSync` would believe a record another
+ * local user planted, or stop on a FIFO at it (#4649). Absence and refusal are the same answer here: there
+ * is no report.
+ */
+export function parseDaemonShutdownReport(text: string | undefined): DaemonShutdownReport | null {
+  if (text === undefined) return null;
   try {
-    const parsed: unknown = JSON.parse(
-      fs.readFileSync(resolveDaemonShutdownReportPath(stateDir), 'utf8'),
-    );
+    const parsed: unknown = JSON.parse(text);
     return isProviderReleaseReport(parsed)
       ? { providerReleases: parsed.providerReleases, claims: readClaimSection(parsed) }
       : null;
   } catch {
     return null;
   }
+}
+
+/** The most a shutdown report is ever read for: it names leases and claims, and a bounded read is what keeps
+ * a huge file planted at this name from exhausting the process that stops a daemon. */
+const DAEMON_SHUTDOWN_REPORT_MAX_BYTES = 1_048_576;
+
+/**
+ * Reads a state directory's shutdown report, or `null` when there is none to believe.
+ *
+ * A state record is read through the state boundary, never by opening its name: the chain rule decides who
+ * else could have written that directory, and host-kit's verified reader then refuses a link, a special
+ * file, or anything beyond the bound. Both refusals answer as absence, which is the same answer a client
+ * gives for a daemon that wrote no report — a report another local user planted would otherwise hand this
+ * stop plausible claim results that are not its own (#4649).
+ *
+ * The reader enters behind a function-scoped `await import` so this entry surface keeps the eager closure
+ * the budget pins for it (ADR 0019): a client that only parses a text it already holds pays nothing.
+ */
+export async function readDaemonShutdownReport(
+  stateDir: string,
+): Promise<DaemonShutdownReport | null> {
+  const { readPrivateStateFileSync } = await import('@agent-device/host-kit/file');
+  return parseDaemonShutdownReport(
+    readPrivateStateFileSync(
+      resolveDaemonShutdownReportPath(stateDir),
+      DAEMON_SHUTDOWN_REPORT_MAX_BYTES,
+    ),
+  );
 }
 
 export function resolveDaemonShutdownReportPath(stateDir: string): string {

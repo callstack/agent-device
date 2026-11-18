@@ -1,12 +1,23 @@
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  recordDaemonStartupMarker,
+  tryAcquireDaemonRegistration,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   readDaemonStartupPhaseMarkers,
-  recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
@@ -54,10 +65,12 @@ test('the producer lifetime claim empties a same-pid leftover', async () => {
   const stateDir = await mkdtempForTest('agent-device-markers-');
   writeFileSync(path.join(stateDir, 'package.json'), '{"type":"module"}');
   const entry = path.join(stateDir, 'claim-producer.js');
-  const registrationUrl = new URL('./daemon-startup-phases.ts', import.meta.url).href;
+  const phasesUrl = new URL('./daemon-startup-phases.ts', import.meta.url).href;
+  const ownerUrl = new URL('./daemon-registration-owner.ts', import.meta.url).href;
   writeFileSync(
     entry,
-    `import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
+    `import { removeDaemonStartupPhasesFile, resolveDaemonStartupPhasesPath } from ${JSON.stringify(phasesUrl)};
+import { recordDaemonStartupMarker } from ${JSON.stringify(ownerUrl)};
 const file = resolveDaemonStartupPhasesPath(${JSON.stringify(stateDir)}, process.pid);
 recordDaemonStartupMarker(file, 'listening');
 recordDaemonStartupMarker(file, 'registered');
@@ -133,6 +146,47 @@ test('a crash-replay append keeps the file valid JSONL', async () => {
   recordDaemonStartupMarker(markerPath, 'composition-loaded');
   const tail = await readFile(markerPath, 'utf8');
   expect(Object.keys(readDaemonStartupPhaseMarkers(tail))).toEqual(['composition-loaded']);
+});
+
+test.skipIf(process.platform === 'win32')(
+  'a symbolic link planted at the marker name costs the record, never the file it points at',
+  async () => {
+    // Another local user who can write the state directory picks the marker's name, and an `appendFile`
+    // would resolve it and write into THEIRS. The append answers ELOOP instead, and startup goes on.
+    const stateDir = await mkdtempForTest('agent-device-marker-link-');
+    const outside = path.join(stateDir, 'theirs.log');
+    writeFileSync(outside, 'theirs\n', { mode: 0o600 });
+    const markerPath = resolveDaemonStartupPhasesPath(stateDir, 555);
+    symlinkSync(outside, markerPath);
+
+    const reported: unknown[] = [];
+    expect(() =>
+      recordDaemonStartupMarker(markerPath, 'listening', (error) => {
+        reported.push(error);
+      }),
+    ).not.toThrow();
+
+    expect(reported).toHaveLength(1);
+    expect(readFileSync(outside, 'utf8')).toBe('theirs\n');
+    expect(readlinkSync(markerPath)).toBe(outside);
+  },
+);
+
+test.skipIf(process.platform === 'win32')('a marker this call creates stands at 0600', async () => {
+  // The state directory is 0700, so a record readable by others is only there because the create asked
+  // for a looser file mode. A mode-less `open` would answer 0644 here.
+  const stateDir = await mkdtempForTest('agent-device-marker-mode-');
+  chmodSync(stateDir, 0o700);
+  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 600);
+
+  const previous = process.umask(0o022);
+  try {
+    recordDaemonStartupMarker(markerPath, 'listening');
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(lstatSync(markerPath).mode & 0o777).toBe(0o600);
 });
 
 function spawnDeadPid(): number {

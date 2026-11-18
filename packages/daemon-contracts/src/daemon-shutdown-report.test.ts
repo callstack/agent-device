@@ -12,7 +12,7 @@ const claim = {
   deviceId: 'emulator-5554',
 };
 
-test('round-trips provider release and device claim records without lease credentials', () => {
+test('round-trips provider release and device claim records without lease credentials', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const lease: DeviceLease = {
     leaseId: 'lease-1',
@@ -32,7 +32,7 @@ test('round-trips provider release and device claim records without lease creden
     });
 
     fs.writeFileSync(path.join(stateDir, 'daemon-shutdown.json'), JSON.stringify(report));
-    expect(readDaemonShutdownReport(stateDir)).toEqual({
+    expect(await readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: {
         released: [{ leaseId: lease.leaseId, provider: 'limrun' }],
         pending: [{ leaseId: lease.leaseId, provider: 'limrun' }],
@@ -44,7 +44,7 @@ test('round-trips provider release and device claim records without lease creden
   }
 });
 
-test('a report written before claim reporting still reads its provider releases', () => {
+test('a report written before claim reporting still reads its provider releases', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const reportPath = path.join(stateDir, 'daemon-shutdown.json');
 
@@ -54,7 +54,7 @@ test('a report written before claim reporting still reads its provider releases'
       JSON.stringify({ providerReleases: { released: [], pending: [] } }),
     );
 
-    expect(readDaemonShutdownReport(stateDir)).toEqual({
+    expect(await readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: { released: [], pending: [] },
       claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
     });
@@ -63,26 +63,26 @@ test('a report written before claim reporting still reads its provider releases'
   }
 });
 
-test('ignores malformed shutdown reports', () => {
+test('ignores malformed shutdown reports', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const reportPath = path.join(stateDir, 'daemon-shutdown.json');
 
   try {
-    expect(readDaemonShutdownReport(stateDir)).toBeNull();
+    expect(await readDaemonShutdownReport(stateDir)).toBeNull();
     fs.writeFileSync(reportPath, JSON.stringify({ providerReleases: { released: [] } }));
-    expect(readDaemonShutdownReport(stateDir)).toBeNull();
+    expect(await readDaemonShutdownReport(stateDir)).toBeNull();
 
     fs.writeFileSync(
       reportPath,
       JSON.stringify({ providerReleases: { released: [{}], pending: [] } }),
     );
-    expect(readDaemonShutdownReport(stateDir)).toBeNull();
+    expect(await readDaemonShutdownReport(stateDir)).toBeNull();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
-test('a report written before unattributable claims were separated still reads its three buckets', () => {
+test('a report written before unattributable claims were separated still reads its three buckets', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const reportPath = path.join(stateDir, 'daemon-shutdown.json');
   const claim = {
@@ -103,7 +103,7 @@ test('a report written before unattributable claims were separated still reads i
       }),
     );
 
-    expect(readDaemonShutdownReport(stateDir)).toEqual({
+    expect(await readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: { released: [], pending: [] },
       claims: { released: [claim], orphaned: [claim], superseded: [claim], unattributable: [] },
     });
