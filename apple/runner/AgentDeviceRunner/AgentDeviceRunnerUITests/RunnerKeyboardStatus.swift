@@ -24,6 +24,25 @@ extension RunnerKeyboardStatus {
   struct ObservedKeyboardKey {
     let text: String?
     let frame: CGRect
+    /// The control's accessibility identifier, where the read carries it. A return key can show
+    /// `done` as its label and `Done` as its identifier, so dismiss matches either.
+    var identifier: String? = nil
+    /// Whether the tree carries the control as a key or as a button. Only keys are character keys: a
+    /// QuickType candidate or an accessory toolbar's control is a button, whatever its wording.
+    var kind: Kind = .key
+    enum Kind: Equatable {
+      case key
+      case button
+    }
+  }
+
+  /// One snapshot of the keyboard: its frame and every key's wording and frame, taken together so a
+  /// decision never mixes two reads of a keyboard that may be sliding. The dismiss read also carries,
+  /// as buttons, the dismiss-worded controls the app holds outside the keyboard, such as
+  /// an input accessory's `Done`, from the same snapshot.
+  struct ObservedKeyboard {
+    let frame: CGRect
+    let keys: [ObservedKeyboardKey]
   }
 
   /// What identifies Apple's space bar in the accessibility tree: wording that is whitespace and
@@ -91,13 +110,92 @@ extension RunnerKeyboardStatus {
     guard visible else {
       return RunnerKeyboardStatus(visible: false, returnKey: nil, returnKeyLabel: nil)
     }
-    let worded = keyboardKeys.filter { key in
-      !(key.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    return observed(visible: true, returnControlText: returnControl(in: keyboardKeys)?.text)
+  }
+
+  /// The top edge of the first row of character keys: the highest single-character control of key type.
+  /// It anchors where the key rows start, so a control wholly above it is an input accessory's, not a
+  /// key. A button never anchors, however short its wording: a QuickType candidate such as `I` or `A`
+  /// is a button above the key rows and would pull the anchor up to the prediction bar. `nil` when no
+  /// character key was read with wording and a frame, and then nothing can be placed relative to the
+  /// key rows.
+  static func characterKeyRowTop(in keys: [ObservedKeyboardKey]) -> CGFloat? {
+    keys
+      .filter {
+        $0.kind == .key && $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).count == 1
+          && !$0.frame.isEmpty
+      }
+      .map { $0.frame.minY }
+      .min()
+  }
+
+  /// The one decision that a control is the visible keyboard's return key, by wording first and by
+  /// slot otherwise (see `observed(visible:keyboardKeys:)`). `keyboard status` reports it, and
+  /// `keyboard dismiss` presses nothing that could be it, so the two commands cannot disagree about
+  /// which key is the return key.
+  ///
+  /// A wording match is the return key only when it is placed inside the key rows: below the top of
+  /// the first row of character keys. A control above that line is an input accessory's `Next` or
+  /// `Done`, and with no character key to anchor on, nothing can be placed, so no wording names it.
+  static func returnControl(in keys: [ObservedKeyboardKey]) -> ObservedKeyboardKey? {
+    let rowTop = characterKeyRowTop(in: keys)
+    let named = keys.first { key in
+      guard RunnerKeyboardReturnKey.kind(of: key.text ?? "") != .unknown, let rowTop else { return false }
+      return !key.frame.isEmpty && key.frame.maxY > rowTop
     }
-    if let named = worded.first(where: { RunnerKeyboardReturnKey.kind(of: $0.text ?? "") != .unknown }) {
-      return observed(visible: true, returnControlText: named.text)
+    return named ?? returnKeySlot(in: keys)
+  }
+
+  /// Wording of the controls that only hide the keyboard. Neither can be a return key.
+  static let hideKeyboardLabels = ["Hide keyboard", "Dismiss keyboard"]
+
+  /// The dismiss controls `keyboard dismiss` may press, in the order it tries them.
+  static let dismissLabels = hideKeyboardLabels + ["Done"]
+
+  /// How far above the keyboard an accessory's button can sit and still belong to it.
+  static let accessoryReach: CGFloat = 80
+
+  /// True when `frame` belongs to the keyboard: it has a frame, it does not start below the keyboard,
+  /// and it is inside the keyboard or no more than `accessoryReach` above it. An app button with the
+  /// same wording elsewhere on screen is not the keyboard's.
+  static func isNearKeyboard(_ frame: CGRect, keyboardFrame: CGRect) -> Bool {
+    !frame.isEmpty && !keyboardFrame.isEmpty
+      && frame.minY < keyboardFrame.maxY
+      && keyboardFrame.minY - frame.maxY <= accessoryReach
+  }
+
+  /// Whether a refusal should say the screen could not be read: the app tree was unreadable and the
+  /// keyboard's own read, the only one left, held no dismiss candidate. A fallback that held a candidate
+  /// the live lookup then rejected, as covered or ambiguous, is a keyboard whose key could not be pressed,
+  /// which is a different cause.
+  static func refusalIsTreeUnreadable(treeReadable: Bool, surface: ObservedKeyboard?) -> Bool {
+    !treeReadable && (surface.map { dismissControls(in: $0).isEmpty } ?? true)
+  }
+
+  /// Every control `keyboard dismiss` may press, in dismiss-label order then tree order, all read from
+  /// one snapshot so no decision mixes two reads of a keyboard that may be sliding.
+  ///
+  /// A candidate carries dismiss wording as its label or identifier and is near the keyboard. A
+  /// hide-keyboard control is never a return key. A `Done` is pressed only when it cannot be the return
+  /// key: wholly above the keyboard, which holds an input accessory of any shape, or inside the keyboard
+  /// and above the first row of character keys, which needs that row as an anchor and so fails closed
+  /// without one. A candidate whose type, label and identifier name another control near the keyboard is
+  /// left out, because a live lookup could not tell the two apart; a same-wording button far from the
+  /// keyboard, such as a header `Done`, does not count.
+  static func dismissControls(in keyboard: ObservedKeyboard) -> [ObservedKeyboardKey] {
+    let near = keyboard.keys.filter { isNearKeyboard($0.frame, keyboardFrame: keyboard.frame) }
+    let rowTop = characterKeyRowTop(in: keyboard.keys)
+    return dismissLabels.flatMap { label in
+      near.filter { key in
+        guard key.text == label || key.identifier == label else { return false }
+        let canBeReturnKey = !hideKeyboardLabels.contains(label)
+          && key.frame.maxY > keyboard.frame.minY && key.frame.maxY > (rowTop ?? -.infinity)
+        let identity = near.filter {
+          $0.kind == key.kind && $0.text == key.text && ($0.identifier ?? "") == (key.identifier ?? "")
+        }
+        return !canBeReturnKey && identity.count == 1
+      }
     }
-    return observed(visible: true, returnControlText: returnKeySlot(in: keyboardKeys)?.text)
   }
 
   /// The worded control in the return key's slot, or `nil` when the keyboard exposes no space bar to

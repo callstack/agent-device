@@ -555,7 +555,13 @@ export function classifyRunnerReportedError(
 
 export type RunnerResponsePayload = {
   ok?: unknown;
-  error?: { code?: unknown; message?: unknown; hint?: unknown; dismissControls?: unknown };
+  error?: {
+    code?: unknown;
+    message?: unknown;
+    hint?: unknown;
+    dismissControls?: unknown;
+    cause?: unknown;
+  };
   data?: unknown;
 };
 
@@ -658,10 +664,17 @@ export function buildRunnerResponseError(
   const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
   const classification = classifyRunnerReportedError(runnerErrorCode);
   const dismissControls = readBackDismissControls(runnerErrorCode, payload.error);
+  // Only the dismiss refusal carries a cause: `tree_unreadable`, the screen could not be read.
+  const cause =
+    runnerErrorCode === KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE &&
+    payload.error?.cause === 'tree_unreadable'
+      ? 'tree_unreadable'
+      : undefined;
   return new AppError(classification.code, errorMessage ?? 'Runner error', {
     runner: payload,
     ...classification.details,
     ...(dismissControls.length > 0 ? { dismissControls } : {}),
+    ...(cause === undefined ? {} : { cause }),
     xcodebuild: {
       exitCode: 1,
       stdout: '',

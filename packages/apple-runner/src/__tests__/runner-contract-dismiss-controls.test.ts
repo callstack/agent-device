@@ -64,3 +64,24 @@ test('only the no-change refusal publishes dismiss controls', () => {
   assert.equal(error.details?.dismissControls, undefined);
   assert.equal(error.details?.hint, RUNNER_HINT);
 });
+
+test('a keyboard dismiss refusal says when the screen could not be read, and only then', () => {
+  const refusal = (code: string, cause?: unknown) =>
+    buildRunnerResponseError({
+      ok: false,
+      error: { code, message: 'Unable to dismiss the keyboard.', cause },
+    });
+  const unreadable = refusal('KEYBOARD_DISMISS_UNAVAILABLE', 'tree_unreadable');
+  assert.equal(unreadable.details?.reason, 'keyboard_dismiss_unavailable');
+  assert.equal(unreadable.details?.dispatched, 'no');
+  assert.equal(unreadable.details?.cause, 'tree_unreadable');
+  assert.equal('cause' in (refusal('KEYBOARD_DISMISS_UNAVAILABLE').details ?? {}), false);
+  assert.equal(
+    'cause' in (refusal('KEYBOARD_DISMISS_UNAVAILABLE', 'something_else').details ?? {}),
+    false,
+  );
+  assert.equal(
+    'cause' in (refusal('KEYBOARD_RETURN_UNAVAILABLE', 'tree_unreadable').details ?? {}),
+    false,
+  );
+});

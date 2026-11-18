@@ -304,7 +304,9 @@ next step also carries `hint`, omitted here. A keyboard that stayed up answers o
 `KEYBOARD_DISMISS_UNAVAILABLE` when it found no dismiss control and so sent nothing, or
 `UNSUPPORTED_OPERATION` when a dismiss control was tapped, or the tvOS remote's Menu press was sent,
 and the keyboard stayed visible. The host reports both under `UNSUPPORTED_OPERATION` and publishes the
-first one's `details.reason`.
+first one's `details.reason`. The first one adds `error.cause: "tree_unreadable"`, which the host
+publishes as `details.cause`, when the app tree could not be read and the keyboard's own read held no
+dismiss control.
 
 Three more refusals name the control the target could not supply, so a caller never reads the refusal
 off `message`. `KEYBOARD_RETURN_UNAVAILABLE` is a `keyboard enter` whose keyboard exposed no return-like

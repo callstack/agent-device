@@ -101,7 +101,7 @@ export function FormScreen(props: FormScreenProps) {
       ) : null}
 
       <SectionCard
-        subtitle="Use fill for replacement and keyboard dismiss when the next control is blocked."
+        subtitle="Use fill for replacement and keyboard enter to submit the field and hide the keyboard when the next control is blocked."
         title="Contact details"
       >
         <TextField

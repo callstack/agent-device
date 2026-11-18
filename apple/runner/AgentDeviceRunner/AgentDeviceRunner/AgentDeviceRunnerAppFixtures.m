@@ -436,6 +436,23 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   self.alertActivationBusyBackstop = nil;
 }
 
+// Places a keyboard fixture's field below `above`, and the label that answers what its controls did
+// below the field.
+static void AgentDeviceAddKeyboardFieldWithAnswer(UIView *view, UITextField *field, UILabel *answer, UIView *above) {
+  field.translatesAutoresizingMaskIntoConstraints = NO;
+  answer.translatesAutoresizingMaskIntoConstraints = NO;
+  [view addSubview:field];
+  [view addSubview:answer];
+  [NSLayoutConstraint activateConstraints:@[
+    [field.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
+    [field.topAnchor constraintEqualToAnchor:above.bottomAnchor constant:24],
+    [field.widthAnchor constraintEqualToConstant:240],
+    [field.heightAnchor constraintEqualToConstant:44],
+    [answer.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
+    [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
+  ]];
+}
+
 // The keyboard counterpart of the busy alert: the field starts the same never-ending UIView animation
 // when it takes focus, so XCTest sees work in flight for as long as the keyboard is up. Its Done
 // accessory and its return key record whether they landed while the app was still busy. The backstop
@@ -963,23 +980,104 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
     [field addTarget:self
                   action:@selector(keyboardBusyReturnPressed)
         forControlEvents:UIControlEventEditingDidEndOnExit];
-    field.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:field];
     UILabel *answer = [[UILabel alloc] init];
     answer.text = @"Unanswered";
     answer.accessibilityIdentifier = @"agent-device-keyboard-busy-answer";
-    answer.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:answer];
-    [NSLayoutConstraint activateConstraints:@[
-      [field.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [field.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
-      [field.widthAnchor constraintEqualToConstant:240],
-      [field.heightAnchor constraintEqualToConstant:44],
-      [answer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [answer.topAnchor constraintEqualToAnchor:field.bottomAnchor constant:12],
-    ]];
+    AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
     self.keyboardBusyField = field;
     self.keyboardBusyAnswer = answer;
+  }
+
+  // A field whose return key reads "Done" and submits, which `keyboard dismiss` must never press. The
+  // optional `accessory` argument adds a Done toolbar above the keys, the one control it may press.
+  NSArray<NSString *> *launchArguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger doneReturnFlag = [launchArguments indexOfObject:@"--agent-device-keyboard-done-return"];
+  if (doneReturnFlag != NSNotFound) {
+    NSString *accessoryShape = doneReturnFlag + 1 < launchArguments.count ? launchArguments[doneReturnFlag + 1] : @"";
+    BOOL plainAccessory = [accessoryShape isEqualToString:@"plain-accessory"];
+    BOOL withAccessory = plainAccessory || [accessoryShape isEqualToString:@"accessory"];
+    UITextField *field = [[UITextField alloc] init];
+    field.accessibilityIdentifier = @"agent-device-keyboard-done-return-input";
+    field.placeholder = @"Return key is Done";
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    field.returnKeyType = UIReturnKeyDone;
+    UILabel *answer = [[UILabel alloc] init];
+    answer.text = @"Unanswered";
+    answer.accessibilityIdentifier = @"agent-device-keyboard-done-return-answer";
+    __weak UITextField *weakField = field;
+    __weak UILabel *weakAnswer = answer;
+    [field addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+            weakAnswer.text = @"Submitted";
+            [weakField resignFirstResponder];
+          }]
+        forControlEvents:UIControlEventEditingDidEndOnExit];
+    if (plainAccessory) {
+      // An accessory that is no toolbar: a plain view holding a button, as a custom or React Native
+      // input accessory is.
+      UIView *accessory = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+      accessory.backgroundColor = UIColor.systemGray5Color;
+      UIButton *accessoryDone = [UIButton buttonWithType:UIButtonTypeSystem];
+      [accessoryDone setTitle:@"Done" forState:UIControlStateNormal];
+      accessoryDone.frame = CGRectMake(240, 0, 70, 44);
+      [accessoryDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                       weakAnswer.text = @"Accessory";
+                       [weakField resignFirstResponder];
+                     }]
+              forControlEvents:UIControlEventTouchUpInside];
+      [accessory addSubview:accessoryDone];
+      field.inputAccessoryView = accessory;
+    } else if (withAccessory) {
+      UIToolbar *accessory = [[UIToolbar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+      accessory.items = @[
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                                                      target:nil
+                                                      action:nil],
+        [[UIBarButtonItem alloc]
+            initWithPrimaryAction:[UIAction actionWithTitle:@"Done"
+                                                      image:nil
+                                                 identifier:nil
+                                                    handler:^(__kindof UIAction *action) {
+                                                      weakAnswer.text = @"Accessory";
+                                                      [weakField resignFirstResponder];
+                                                    }]],
+      ];
+      field.inputAccessoryView = accessory;
+    }
+    AgentDeviceAddKeyboardFieldWithAnswer(self.view, field, answer, label);
+    if (withAccessory) {
+      // A screen-level Done with the toolbar Done's label and no identifier, far from the keyboard, as a
+      // navigation bar's would be: dismiss must still press the toolbar's, never this one.
+      UIButton *screenDone = [UIButton buttonWithType:UIButtonTypeSystem];
+      [screenDone setTitle:@"Done" forState:UIControlStateNormal];
+      [screenDone addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
+                       weakAnswer.text = @"Screen";
+                     }]
+            forControlEvents:UIControlEventTouchUpInside];
+      screenDone.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:screenDone];
+      [NSLayoutConstraint activateConstraints:@[
+        [screenDone.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [screenDone.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+      ]];
+    }
+  }
+
+  // A text field nested far deeper than XCTest's whole-app snapshot can read, so the keyboard's own
+  // snapshot is the only read that works while its field has focus.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-keyboard-deep-tree"]) {
+    UIView *parent = self.view;
+    for (NSUInteger depth = 0; depth < 70; depth++) {
+      UIView *group = [[UIView alloc] initWithFrame:parent.bounds];
+      group.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+      group.accessibilityContainerType = UIAccessibilityContainerTypeSemanticGroup;
+      [parent addSubview:group];
+      parent = group;
+    }
+    UITextField *deepField = [[UITextField alloc] initWithFrame:CGRectMake(40, 140, 260, 44)];
+    deepField.accessibilityIdentifier = @"agent-device-keyboard-deep-input";
+    deepField.placeholder = @"Deep field";
+    deepField.borderStyle = UITextBorderStyleRoundedRect;
+    [parent addSubview:deepField];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {

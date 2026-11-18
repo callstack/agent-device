@@ -31,6 +31,14 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
+/// What looking for a dismiss control to tap came to: one was tapped, none exists, or none was found
+/// because the app tree could not be read and the keyboard's own read held none.
+enum KeyboardDismissTap {
+  case tapped
+  case notFound
+  case treeUnreadable
+}
+
 /// One `keyboard dismiss` attempt, plus the fact that decides how a refusal is classified:
 /// `dispatchedDismissal` says whether the runner ever dispatched a dismissal.
 struct RunnerKeyboardDismissOutcome {
@@ -41,6 +49,9 @@ struct RunnerKeyboardDismissOutcome {
   /// Whether a dismissal was dispatched — the keyboard's own control was tapped, or the tvOS remote's
   /// Menu press landed. Only its absence proves the command sent nothing.
   let dispatchedDismissal: Bool
+  /// Whether the app tree could not be read and the keyboard's own read found no dismiss control, so
+  /// the refusal can say it could not see the screen instead of claiming the keyboard has no key.
+  var treeUnreadable = false
 }
 
 /// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
@@ -213,11 +224,10 @@ extension RunnerTests {
   /// is one round trip instead of one per key.
   func keyboardStatus(app: XCUIApplication) -> RunnerKeyboardStatus {
 #if os(iOS)
-    let snapshot = safely("KEYBOARD_STATUS_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
-    guard let snapshot, !snapshot.frame.isEmpty else {
+    guard let keyboard = readKeyboard(app: app) else {
       return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
     }
-    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: observedKeyboardKeys(in: snapshot))
+    return RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keyboard.keys)
 #else
     guard isKeyboardVisible(app: app) else {
       return RunnerKeyboardStatus.observed(visible: false, returnControlText: nil)
@@ -238,11 +248,86 @@ extension RunnerTests {
     var pending = Array(keyboard.children.reversed())
     while let node = pending.popLast() {
       pending.append(contentsOf: node.children.reversed())
-      guard node.elementType == .key || node.elementType == .button, !node.label.isEmpty else { continue }
-      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(text: node.label, frame: node.frame)
+      guard node.elementType == .key || node.elementType == .button,
+        !node.label.isEmpty || !node.identifier.isEmpty
+      else { continue }
+      let observed = RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: node.label,
+        frame: node.frame,
+        identifier: node.identifier.isEmpty ? nil : node.identifier,
+        kind: node.elementType == .key ? .key : .button
+      )
       if node.elementType == .key { keys.append(observed) } else { buttons.append(observed) }
     }
     return keys + buttons
+  }
+#endif
+
+  /// The visible keyboard as one snapshot read, or `nil` when there is none to read: the read failed or
+  /// came back empty, or the platform has no software keyboard. `nil` is not "a keyboard with no keys",
+  /// and a decision that needs the keys must not treat it as one.
+  func readKeyboard(app: XCUIApplication) -> RunnerKeyboardStatus.ObservedKeyboard? {
+#if os(iOS)
+    let snapshot = safely("KEYBOARD_SNAPSHOT") { try? app.keyboards.firstMatch.snapshot() }
+    guard let snapshot, !snapshot.frame.isEmpty else { return nil }
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: snapshot.frame, keys: observedKeyboardKeys(in: snapshot))
+#else
+    return nil
+#endif
+  }
+
+#if os(iOS)
+  /// The keyboard and the dismiss-worded buttons outside it, such as an input accessory's `Done`, from
+  /// one snapshot of the app. The keyboard's own snapshot does not hold an accessory's buttons, and the
+  /// keyboard and an accessory must be judged from one read.
+  func readKeyboardSurface(app: XCUIApplication) -> (
+    surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool
+  ) {
+    resolveKeyboardSurface(
+      appRoot: safely("KEYBOARD_SURFACE_SNAPSHOT", { try? app.snapshot() }),
+      keyboardRead: { self.readKeyboard(app: app) }
+    )
+  }
+
+  /// The surface when the app snapshot holds a keyboard with a frame. When it does not, because the read
+  /// failed or a tree too deep to serialize came back without its keyboard node, the keyboard's own read
+  /// answers instead, so its dismiss key still works, and the tree counts as unreadable: a refusal that
+  /// finds nothing there says so. Callers ask only while the keyboard is up.
+  func resolveKeyboardSurface(
+    appRoot: XCUIElementSnapshot?,
+    keyboardRead: () -> RunnerKeyboardStatus.ObservedKeyboard?
+  ) -> (surface: RunnerKeyboardStatus.ObservedKeyboard?, treeReadable: Bool) {
+    if let appRoot, let surface = keyboardSurface(in: appRoot) { return (surface, true) }
+    return (keyboardRead(), false)
+  }
+
+  private func keyboardSurface(in root: XCUIElementSnapshot) -> RunnerKeyboardStatus.ObservedKeyboard? {
+    var keyboard: XCUIElementSnapshot?
+    var outside: [RunnerKeyboardStatus.ObservedKeyboardKey] = []
+    var pending = [root]
+    while let node = pending.popLast() {
+      if node.elementType == .keyboard, keyboard == nil {
+        keyboard = node
+        continue
+      }
+      pending.append(contentsOf: node.children.reversed())
+      let wording = RunnerKeyboardStatus.dismissLabels
+      if node.elementType == .button, wording.contains(node.label) || wording.contains(node.identifier) {
+        outside.append(
+          RunnerKeyboardStatus.ObservedKeyboardKey(
+            text: node.label,
+            frame: node.frame,
+            identifier: node.identifier.isEmpty ? nil : node.identifier,
+            kind: .button
+          )
+        )
+      }
+    }
+    guard let keyboard, !keyboard.frame.isEmpty else { return nil }
+    return RunnerKeyboardStatus.ObservedKeyboard(
+      frame: keyboard.frame,
+      keys: observedKeyboardKeys(in: keyboard) + outside
+    )
   }
 #endif
 
@@ -273,7 +358,8 @@ extension RunnerTests {
       dispatchedDismissal: true
     )
 #else
-    if tapKeyboardDismissControl(app: app) {
+    let tap = tapKeyboardDismissControl(app: app)
+    if tap == .tapped {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
       waitForScreenshotStability(
         app: app,
@@ -302,7 +388,8 @@ extension RunnerTests {
       dismissed: false,
       visible: isKeyboardVisible(app: app),
       mechanism: nil,
-      dispatchedDismissal: false
+      dispatchedDismissal: false,
+      treeUnreadable: tap == .treeUnreadable
     )
 #endif
   }
@@ -312,7 +399,7 @@ extension RunnerTests {
   /// nothing and is the runner's own typed refusal (`KEYBOARD_DISMISS_UNAVAILABLE`, so the host
   /// publishes its `details.reason` instead of leaving callers to read the prose), while a control
   /// that was tapped and left the keys up did dispatch and keeps the generic code.
-  func keyboardDismissRefusal(dispatchedDismissal: Bool) -> ErrorPayload {
+  func keyboardDismissRefusal(dispatchedDismissal: Bool, treeUnreadable: Bool = false) -> ErrorPayload {
     if dispatchedDismissal {
       return ErrorPayload(
         code: "UNSUPPORTED_OPERATION",
@@ -322,8 +409,11 @@ extension RunnerTests {
     }
     return ErrorPayload(
       code: RunnerWireErrorCode.keyboardDismissUnavailable,
-      message: "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
-      hint: keyboardDismissRefusalHint
+      message: treeUnreadable
+        ? "Unable to dismiss the keyboard: the screen could not be read and the keyboard itself exposes no dismiss key, and background taps are never attempted"
+        : "Unable to dismiss the keyboard: it exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
+      hint: keyboardDismissRefusalHint,
+      cause: treeUnreadable ? "tree_unreadable" : nil
     )
   }
 
@@ -501,40 +591,40 @@ extension RunnerTests {
 #endif
   }
 
-  private func tapKeyboardDismissControl(app: XCUIApplication) -> Bool {
-#if os(tvOS)
-    return false
-#else
-    guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
-      return false
+  /// Taps a dismiss control `RunnerKeyboardStatus.dismissControls` admits, and nothing else: never the
+  /// return key, which submits the focused field, and nothing at all when the keyboard cannot be read.
+  ///
+  /// One read decides which controls are candidates. Each candidate is then looked up live by type,
+  /// label and identifier, the matches kept are those near the keyboard, and the control is tapped only
+  /// when exactly one remains and it is hittable. A candidate that does not meet that is passed over
+  /// for the next; when none does, nothing is tapped. No snapshot coordinate is ever tapped.
+  private func tapKeyboardDismissControl(app: XCUIApplication) -> KeyboardDismissTap {
+#if os(iOS)
+    let read = readKeyboardSurface(app: app)
+    let none: KeyboardDismissTap =
+      RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: read.treeReadable, surface: read.surface)
+      ? .treeUnreadable : .notFound
+    guard let surface = read.surface else {
+      return none
     }
-    for label in ["Hide keyboard", "Dismiss keyboard", "Done"] {
-      let candidates = [
-        app.keyboards.buttons[label],
-        app.keyboards.keys[label],
-        app.keyboards.toolbars.buttons[label],
-      ]
-      if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
-        hittable.tap()
-        return true
-      }
-
-      let toolbarButtonPredicate = NSPredicate(
-        format: "label == %@ OR identifier == %@",
-        label,
-        label
-      )
-      let toolbarButtons = app.descendants(matching: .button)
-        .matching(toolbarButtonPredicate)
+    for control in RunnerKeyboardStatus.dismissControls(in: surface) {
+      let identifier = control.identifier ?? ""
+      let predicate =
+        identifier.isEmpty
+        ? NSPredicate(format: "label == %@", control.text ?? "")
+        : NSPredicate(format: "label == %@ AND identifier == %@", control.text ?? "", identifier)
+      let near = app.descendants(matching: control.kind == .key ? .key : .button)
+        .matching(predicate)
         .allElementsBoundByIndex
-      if let hittable = toolbarButtons.first(where: {
-        $0.exists && $0.isHittable && isKeyboardAccessoryControl($0, keyboardFrame: keyboardFrame)
-      }) {
-        hittable.tap()
-        return true
+        .filter { RunnerKeyboardStatus.isNearKeyboard($0.frame, keyboardFrame: surface.frame) }
+      if near.count == 1, near[0].exists, near[0].isHittable {
+        near[0].tap()
+        return .tapped
       }
     }
-    return false
+    return none
+#else
+    return .notFound
 #endif
   }
 
@@ -566,14 +656,6 @@ extension RunnerTests {
 #else
     return false
 #endif
-  }
-
-  private func isKeyboardAccessoryControl(_ element: XCUIElement, keyboardFrame: CGRect) -> Bool {
-    let frame = element.frame
-    guard !frame.isEmpty && !keyboardFrame.isEmpty else {
-      return false
-    }
-    return frame.intersects(keyboardFrame) || abs(frame.maxY - keyboardFrame.minY) <= 80
   }
 }
 

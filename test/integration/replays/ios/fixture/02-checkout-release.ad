@@ -9,7 +9,7 @@ click "label=\"Form\""
 wait "Checkout form" 5000
 fill id="field-name" "Ada Lovelace"
 fill id="field-email" "ada@example.com"
-keyboard dismiss
+keyboard enter
 wait "Checkout form" 5000
 swipe 190 480 190 180
 is visible id="shipping-pickup"

@@ -154,6 +154,22 @@ extension RunnerTests {
     XCTAssertNotEqual(dispatched.code, notDispatched.code)
   }
 
+  /// When the app tree could not be read and the keyboard's own read held no dismiss control, the refusal
+  /// keeps its code and says so with a typed `cause`, so a caller can tell "no dismiss key" from
+  /// "could not read the screen". A refusal that read the screen, and one that dispatched, carry none.
+  func testKeyboardDismissRefusalNamesAnUnreadableTree() throws {
+    let unreadable = keyboardDismissRefusal(dispatchedDismissal: false, treeUnreadable: true)
+    XCTAssertEqual(unreadable.code, "KEYBOARD_DISMISS_UNAVAILABLE")
+    XCTAssertEqual(unreadable.cause, "tree_unreadable")
+    let encoded = try JSONEncoder().encode(unreadable)
+    XCTAssertEqual(
+      (try JSONSerialization.jsonObject(with: encoded) as? [String: Any])?["cause"] as? String,
+      "tree_unreadable"
+    )
+    XCTAssertNil(keyboardDismissRefusal(dispatchedDismissal: false).cause)
+    XCTAssertNil(keyboardDismissRefusal(dispatchedDismissal: true, treeUnreadable: true).cause)
+  }
+
   /// `keyboard enter` refusing for having nothing to submit is its own typed refusal, and the host
   /// reads this code's literal to publish `details.reason`. The wire code alone is the contract.
   func testKeyboardReturnRefusalNamesItsOwnCode() {
@@ -395,6 +411,85 @@ extension RunnerTests {
       XCTAssertEqual(answer, "Return while busy")
       NSLog("AGENT_DEVICE_KEYBOARD_BUSY command=enter response.ok=%@ visible=%@ answer=%@", response.ok ? "true" : "false", String(describing: response.data?.visible), answer)
     }
+  }
+
+  /// A return key labelled `Done` submits the form, so `keyboard dismiss` refuses it as it refuses a
+  /// keyboard with no dismiss key: nothing is tapped, the field keeps focus, and nothing is submitted.
+  @MainActor
+  func testKeyboardDismissNeverPressesADoneReturnKey() throws {
+    try withDoneReturnField { answer in
+      XCTAssertEqual(keyboardStatus(app: app).returnKey, "done")
+      let response = try execute(
+        command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-return"}"#)
+      )
+
+      XCTAssertFalse(response.ok)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.keyboardDismissUnavailable)
+      XCTAssertEqual(answer.label, "Unanswered")
+      XCTAssertTrue(isKeyboardVisible(app: app))
+    }
+  }
+
+  /// The `Done` toolbar above the keys is a real dismiss key even when the return key is also `Done`:
+  /// dismiss presses the toolbar and never submits through the return key.
+  @MainActor
+  func testKeyboardDismissPressesTheDoneToolbarNotTheDoneReturnKey() throws {
+    try assertDismissPressesTheAccessoryDone(shape: "accessory")
+  }
+
+  /// The same holds for an accessory that is no toolbar, a plain view holding a button as a custom or
+  /// React Native input accessory is, with the screen's far `Done` carrying the same label.
+  @MainActor
+  func testKeyboardDismissPressesAPlainViewAccessoryDone() throws {
+    try assertDismissPressesTheAccessoryDone(shape: "plain-accessory")
+  }
+
+  @MainActor
+  private func assertDismissPressesTheAccessoryDone(shape: String) throws {
+    try withDoneReturnField(accessory: shape) { answer in
+      // The return key is identified as the keyboard's own Done key, and the toolbar's Done is a
+      // different control, so only the toolbar can be pressed.
+      XCTAssertEqual(keyboardStatus(app: app).returnKey, "done")
+      let keyboard = try XCTUnwrap(readKeyboard(app: app))
+      let returnControl = try XCTUnwrap(RunnerKeyboardStatus.returnControl(in: keyboard.keys))
+      let surface = try XCTUnwrap(readKeyboardSurface(app: app).surface)
+      let toolbarDone = try XCTUnwrap(RunnerKeyboardStatus.dismissControls(in: surface).first)
+      XCTAssertNotEqual(toolbarDone.frame, returnControl.frame)
+      let response = try execute(
+        command: try runnerCommandFixture(#"{"command":"keyboardDismiss","commandId":"dismiss-done-accessory"}"#)
+      )
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertEqual(answer.label, "Accessory")
+      XCTAssertFalse(isKeyboardVisible(app: app))
+    }
+  }
+
+  @MainActor
+  private func withDoneReturnField(accessory: String? = nil, _ body: (XCUIElement) throws -> Void) throws {
+    app.launchArguments = ["--agent-device-keyboard-done-return"] + (accessory.map { [$0] } ?? [])
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-keyboard-done-return-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    field.tap()
+    let keyboardDeadline = Date().addingTimeInterval(5)
+    while !isKeyboardVisible(app: app) && Date() < keyboardDeadline {
+      sleepFor(0.2)
+    }
+    XCTAssertTrue(
+      isKeyboardVisible(app: app),
+      "Enable the simulator software keyboard before running the keyboard dismiss tests; see apple/runner/README.md"
+    )
+    let answer = app.staticTexts["agent-device-keyboard-done-return-answer"]
+    XCTAssertEqual(answer.label, "Unanswered")
+    try body(answer)
   }
 
   @MainActor

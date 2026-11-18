@@ -209,11 +209,165 @@ extension RunnerTests {
   /// populated here, which is what makes this a real preference rather than the only candidate.
   func testKeyboardStatusPrefersNamedWordingOverTheSlot() {
     let keys = observedKeyboardKeysFixture([
-      ("Done", 5, 959, 39), (" ", 5, 1121, 197), ("ż", 202, 1121, 198),
+      ("Q", 5, 959, 39), ("Done", 50, 1067, 39), (" ", 5, 1121, 197), ("ż", 202, 1121, 198),
     ])
     XCTAssertEqual(
       RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keys),
       RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "Done")
+    )
+  }
+
+  /// One keyboard snapshot for the dismiss decision: a phone-sized keyboard unless `frame` says otherwise.
+  /// `outside` are dismiss-worded buttons the app tree holds beside the keyboard, such as an accessory's.
+  private func dismissSurface(
+    keys: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)],
+    outside: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat, identifier: String?)] = [],
+    identifiers: [String: String] = [:],
+    frame: CGRect = CGRect(x: 0, y: 609, width: 440, height: 240)
+  ) -> RunnerKeyboardStatus.ObservedKeyboard {
+    let inside = observedKeyboardKeysFixture(keys).map { key in
+      RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: key.text,
+        frame: key.frame,
+        identifier: key.text.flatMap { identifiers[$0] }
+      )
+    }
+    let beside = outside.map {
+      RunnerKeyboardStatus.ObservedKeyboardKey(
+        text: $0.text,
+        frame: CGRect(x: $0.x, y: $0.y, width: $0.width, height: 38),
+        identifier: $0.identifier,
+        kind: .button
+      )
+    }
+    return RunnerKeyboardStatus.ObservedKeyboard(frame: frame, keys: inside + beside)
+  }
+
+  private func dismissControlFrames(_ surface: RunnerKeyboardStatus.ObservedKeyboard) -> [CGFloat] {
+    RunnerKeyboardStatus.dismissControls(in: surface).map(\.frame.minY)
+  }
+
+  /// `keyboard dismiss` never presses a `Done` that could be the return key, which submits the field:
+  /// a `Done` inside the key rows is refused whether its wording is its label or only its identifier,
+  /// and the iPad hide-keyboard key is pressed.
+  func testKeyboardDismissNeverPressesADoneInsideTheKeyRows() {
+    let phone = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)],
+      identifiers: ["done": "Done"]
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: phone).isEmpty)
+
+    let pad = dismissSurface(
+      keys: [
+        ("Tab", 6, 905, 81), ("Q", 87, 905, 65), ("Done", 691, 969, 126), ("numbers", 622, 1096, 97),
+        ("Hide keyboard", 720, 1096, 98),
+      ],
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300)
+    )
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.text), ["Hide keyboard"])
+  }
+
+  /// An accessory is pressed whatever view it is built from, because it is judged by where it sits:
+  /// a button wholly above the keyboard, with or without character keys to anchor on, or inside the
+  /// keyboard's frame between the prediction bar and the letter row. A same-wording `Done` far from the
+  /// keyboard, such as a header or a top toolbar, is not the keyboard's and does not make it ambiguous.
+  func testKeyboardDismissPressesAnAccessoryBesideAFarAwayDoneWithTheSameIdentity() {
+    let keys: [(text: String, x: CGFloat, y: CGFloat, width: CGFloat)] = [
+      ("Q", 5, 666, 41), ("space", 108, 784, 207), ("done", 314, 784, 103),
+    ]
+    let withHeaders = dismissSurface(
+      keys: keys,
+      outside: [("Done", 330, 60, 63, nil), ("Done", 330, 524, 63, nil), ("Done", 20, 110, 63, nil)],
+      identifiers: ["done": "Done"]
+    )
+    XCTAssertEqual(dismissControlFrames(withHeaders), [524])
+
+    let noCharacterKeys = dismissSurface(keys: [("space", 108, 784, 207)], outside: [("Done", 330, 524, 63, nil)])
+    XCTAssertEqual(dismissControlFrames(noCharacterKeys), [524])
+
+    let betweenQuickTypeAndLetters = dismissSurface(
+      keys: keys, outside: [("Done", 330, 610, 63, nil)], frame: CGRect(x: 0, y: 549, width: 440, height: 300)
+    )
+    XCTAssertEqual(dismissControlFrames(betweenQuickTypeAndLetters), [610])
+    let unanchored = dismissSurface(
+      keys: [("space", 108, 784, 207)], outside: [("Done", 330, 610, 63, nil)],
+      frame: CGRect(x: 0, y: 549, width: 440, height: 300)
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: unanchored).isEmpty)
+  }
+
+  /// A key whose label is empty and whose identifier is `Hide keyboard` is still a hide-keyboard control.
+  func testKeyboardDismissPressesAnIdentifierOnlyHideKey() {
+    let pad = dismissSurface(
+      keys: [("Q", 87, 905, 65), ("", 720, 1096, 98)],
+      identifiers: ["": "Hide keyboard"],
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300)
+    )
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.identifier), ["Hide keyboard"])
+  }
+
+  /// Two controls that cannot be told apart near the keyboard are both left out, and the next eligible
+  /// control is still pressed. A hide-keyboard control far from the keyboard is not the keyboard's.
+  func testKeyboardDismissSkipsTwinsAndKeepsTheNextControl() {
+    let pad = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98)],
+      outside: [("Done", 330, 524, 63, nil), ("Hide keyboard", 20, 40, 98, nil)],
+      frame: CGRect(x: 0, y: 609, width: 834, height: 600)
+    )
+    XCTAssertEqual(RunnerKeyboardStatus.dismissControls(in: pad).map(\.text), ["Done"])
+    let onlyTwins = dismissSurface(
+      keys: [("Q", 5, 616, 41), ("Hide keyboard", 700, 1096, 98), ("Hide keyboard", 20, 1096, 98)],
+      frame: CGRect(x: 0, y: 609, width: 834, height: 600)
+    )
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: onlyTwins).isEmpty)
+  }
+
+  /// A QuickType candidate is a button in the prediction bar above the key rows, so a one-letter one
+  /// such as `I` or `A` must not pull the key-row anchor up to the bar: only keys anchor. With it
+  /// anchored on the bar, a `Done` in the key rows could look like an accessory button.
+  func testKeyboardRowAnchorIgnoresAOneLetterQuickTypeCandidate() {
+    let candidate = RunnerKeyboardStatus.ObservedKeyboardKey(
+      text: "I", frame: CGRect(x: 150, y: 560, width: 60, height: 40), kind: .button
+    )
+    let keys =
+      [candidate]
+      + observedKeyboardKeysFixture([("Q", 5, 666, 41), ("space", 108, 784, 207), ("done", 314, 784, 103)])
+    XCTAssertEqual(RunnerKeyboardStatus.characterKeyRowTop(in: keys), 666)
+    let keyboard = RunnerKeyboardStatus.ObservedKeyboard(frame: CGRect(x: 0, y: 549, width: 440, height: 300), keys: keys)
+    XCTAssertTrue(RunnerKeyboardStatus.dismissControls(in: keyboard).isEmpty)
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: keys),
+      RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
+    )
+    XCTAssertNil(RunnerKeyboardStatus.characterKeyRowTop(in: [candidate]))
+  }
+
+  /// An input accessory toolbar's `Next` or `Done` that the keyboard exposes beside its keys sits above
+  /// the first key row, so it is never the return key: the real return key is still named. With no
+  /// character key to place it against, wording alone names nothing, so a pad whose only `Done` is a
+  /// toolbar button, and a keyboard read without character keys, have no return key.
+  func testKeyboardReturnControlIgnoresAnAccessoryToolbarAboveTheKeys() {
+    let phone = observedKeyboardKeysFixture([
+      ("Next", 20, 524, 60), ("Q", 5, 616, 41), ("W", 46, 616, 41), (" ", 108, 784, 207),
+      ("done", 314, 784, 103),
+    ])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: phone),
+      RunnerKeyboardStatus(visible: true, returnKey: "done", returnKeyLabel: "done")
+    )
+
+    let pad = observedKeyboardKeysFixture([
+      ("Done", 300, 524, 90), ("1", 5, 881, 132), ("2", 136, 881, 132), ("Delete", 268, 1043, 132),
+    ])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: pad),
+      RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
+    )
+
+    let unanchored = observedKeyboardKeysFixture([("Done", 300, 524, 90), ("space", 108, 784, 207)])
+    XCTAssertEqual(
+      RunnerKeyboardStatus.observed(visible: true, keyboardKeys: unanchored),
+      RunnerKeyboardStatus(visible: true, returnKey: "unknown", returnKeyLabel: nil)
     )
   }
 
@@ -267,6 +421,52 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// An app snapshot that carries no keyboard node, as a tree too deep to serialize comes back, is an
+  /// unreadable tree, not a keyboard without keys: the keyboard's own read answers, its hide-keyboard key
+  /// is the control pressed, and with nothing there the tree is reported unreadable so the refusal says so.
+  @MainActor
+  func testAppSnapshotWithoutAKeyboardFallsBackToTheKeyboardsOwnRead() throws {
+    let screen = CGRect(x: 0, y: 0, width: 834, height: 1194)
+    let appWithoutKeyboard = ElementAttributesFixture(.application, screen, children: [
+      ElementAttributesFixture(.button, CGRect(x: 700, y: 40, width: 80, height: 40), label: "Done")
+    ])
+    let ownRead = RunnerKeyboardStatus.ObservedKeyboard(
+      frame: CGRect(x: 0, y: 880, width: 834, height: 300),
+      keys: observedKeyboardKeysFixture([("Q", 87, 905, 65), ("Hide keyboard", 720, 1096, 98)])
+    )
+    let fallback = resolveKeyboardSurface(appRoot: appWithoutKeyboard, keyboardRead: { ownRead })
+    XCTAssertFalse(fallback.treeReadable)
+    XCTAssertEqual(fallback.surface.map { RunnerKeyboardStatus.dismissControls(in: $0).map(\.text) }, ["Hide keyboard"])
+
+    let nothing = resolveKeyboardSurface(appRoot: appWithoutKeyboard, keyboardRead: { nil })
+    XCTAssertNil(nothing.surface)
+    XCTAssertFalse(nothing.treeReadable)
+
+    let withKeyboard = ElementAttributesFixture(.application, screen, children: [
+      ElementAttributesFixture(.keyboard, ownRead.frame, children: [
+        ElementAttributesFixture(.key, CGRect(x: 87, y: 905, width: 65, height: 54), label: "Q")
+      ])
+    ])
+    var fellBack = false
+    let read = resolveKeyboardSurface(appRoot: withKeyboard, keyboardRead: { fellBack = true; return nil })
+    XCTAssertTrue(read.treeReadable)
+    XCTAssertFalse(fellBack)
+    XCTAssertEqual(read.surface?.frame, ownRead.frame)
+
+    // The refusal blames the tree only when the keyboard's own read held no candidate to try: an empty
+    // fallback does, a fallback holding a hide key the live lookup then rejects does not, and a readable
+    // tree never does.
+    XCTAssertTrue(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: false, surface: nil))
+    XCTAssertTrue(
+      RunnerKeyboardStatus.refusalIsTreeUnreadable(
+        treeReadable: false,
+        surface: RunnerKeyboardStatus.ObservedKeyboard(frame: ownRead.frame, keys: observedKeyboardKeysFixture([("Q", 87, 905, 65)]))
+      )
+    )
+    XCTAssertFalse(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: false, surface: ownRead))
+    XCTAssertFalse(RunnerKeyboardStatus.refusalIsTreeUnreadable(treeReadable: true, surface: nil))
+  }
+
   /// One snapshot of the keyboard answers the whole read, so the walk has to reach keys nested below
   /// the keyboard's own children, answer keys before buttons the way two per-type queries did, keep the
   /// whitespace-only space bar, and drop what carries no wording or is not a key or a button.
