@@ -21,6 +21,32 @@ type DiagnosticEvent = {
   data?: Record<string, unknown>;
 };
 
+/**
+ * A log line handed to the owner that appends it, plus the seam that lets go of whatever it holds.
+ *
+ * The sink owns the write and everything a write needs to be safe at that path: the handle the bytes
+ * travel through, and where a line goes when that route is refused or breaks. `write` never raises — a
+ * diagnostic that cannot land is a lost line, never a failed request — and answers whether the sink is
+ * still usable. One that reports otherwise has already routed the line somewhere safe, and the next line
+ * asks for a fresh judgment instead of pushing bytes at a dead route forever.
+ */
+export type DiagnosticLineSink = Readonly<{
+  write: (line: string) => boolean;
+  close: () => void;
+}>;
+
+/**
+ * Asks where lines for `logPath` are to go, and writes them THERE rather than at the name.
+ *
+ * A scope that names a log path does not always own the right to append at that name, and the ground
+ * can change while the scope runs. `appendDiagnosticLine` therefore asks on the FIRST line and keeps
+ * the sink that answer produced, so an idle scope writes nothing — it never opens a path merely to
+ * decide whether it may log — and every line, including the final forced flush, travels through the
+ * handle the answer checked. A sink that fails is closed and dropped, and the next line re-asks, so a
+ * route that stopped being usable costs one line and does not reopen a refused name by itself.
+ */
+type DiagnosticLineSinkFactory = (logPath: string) => DiagnosticLineSink;
+
 type DiagnosticsScopeOptions = {
   session?: string;
   requestId?: string;
@@ -28,6 +54,12 @@ type DiagnosticsScopeOptions = {
   debug?: boolean;
   flushOnSuccess?: boolean;
   logPath?: string;
+  /**
+   * Set with `logPath` when appending at that path must be judged rather than assumed — the
+   * daemon's log is a state record, and a sink over it is only owed to a line while the state
+   * rule accepts it. Lines go through the sink this produces, never through `fs.appendFileSync`.
+   */
+  logSinkFactory?: DiagnosticLineSinkFactory;
   /**
    * Set together with `logPath` whenever that path is a session request
    * diagnostics record — the locator a remote caller fetches the same record
@@ -41,6 +73,8 @@ type DiagnosticsScopeOptions = {
 type DiagnosticsScope = DiagnosticsScopeOptions & {
   diagnosticId: string;
   flushedLogPath?: string;
+  /** The sink the last answer produced for `logPath`, kept until the next failure re-asks. */
+  logSink?: DiagnosticLineSink;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
@@ -81,12 +115,27 @@ export async function withDiagnosticsScope<T>(
     sensitiveValues: new Set(),
     ensuredDirectories: new Set(),
   };
-  return await diagnosticsStorage.run(scope, fn);
+  try {
+    return await diagnosticsStorage.run(scope, fn);
+  } finally {
+    // The sink is owed to this scope and no longer: its descriptor must not outlive the body that
+    // earned it. Anything the body's own final flush wrote has already gone through it.
+    closeDiagnosticLineSink(scope);
+  }
 }
 
 export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
+  if ('logPath' in options && options.logPath !== scope.logPath) {
+    // A scope that moves to another log lets go of the handle it held for the old one, AND of the judge that
+    // produced it: a sink is asked for one path and answers for no other, and the next path is a different
+    // owner's ground. A caller that moves the log without a new factory gets the plain append it had before
+    // any sink existed — which is what a session request record does here.
+    closeDiagnosticLineSink(scope);
+    scope.logSink = undefined;
+    if (!('logSinkFactory' in options)) scope.logSinkFactory = undefined;
+  }
   Object.assign(scope, options);
 }
 
@@ -348,10 +397,39 @@ function sanitizePathPart(value: string): string {
 }
 
 function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): void {
-  const dir = path.dirname(logPath);
-  if (!scope.ensuredDirectories.has(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    scope.ensuredDirectories.add(dir);
+  // A judged sink is owed only to the path its owner named, and only while that is still the path in
+  // play: a scope that moved on to another log asks that one with a sink of its own.
+  const factory = logPath === scope.logPath ? scope.logSinkFactory : undefined;
+  if (!factory) {
+    const dir = path.dirname(logPath);
+    if (!scope.ensuredDirectories.has(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      scope.ensuredDirectories.add(dir);
+    }
+    fs.appendFileSync(logPath, line, 'utf8');
+    return;
   }
-  fs.appendFileSync(logPath, line, 'utf8');
+  // Asked at the FIRST line, never before one exists: a scope that logs nothing creates nothing,
+  // changes no mode, and holds no descriptor. Every line after that answer, the forced final flush
+  // included, goes through the handle the answer checked and never through the name again.
+  let sink = scope.logSink;
+  if (!sink) {
+    sink = factory(logPath);
+    scope.logSink = sink;
+  }
+  if (!sink.write(line)) {
+    closeDiagnosticLineSink(scope);
+  }
+}
+
+/** Lets go of the sink a scope holds so its descriptor cannot outlive the scope that earned it. */
+function closeDiagnosticLineSink(scope: DiagnosticsScope): void {
+  const sink = scope.logSink;
+  if (!sink) return;
+  scope.logSink = undefined;
+  try {
+    sink.close();
+  } catch {
+    // Nothing is left to do with a handle the host will not close.
+  }
 }

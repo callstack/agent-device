@@ -166,7 +166,7 @@ export async function tryAcquireDaemonRegistration(
       // report, never the shutdown.
       publishPrivateStateFileSync(
         resolveDaemonShutdownReportPath(boundPaths.baseDir),
-        `${JSON.stringify(buildDaemonShutdownReport(outcome))}\n`,
+        `${JSON.stringify(buildDaemonShutdownReport(outcome, identity))}\n`,
       );
     } catch (error) {
       reportStateRecordFailure(boundPaths.logPath, 'daemon_shutdown_record_failed', error);
@@ -252,6 +252,16 @@ function removeRegistrationUnderLock(
 }
 
 /**
+ * The state chains this process has established, so the create-and-repair walk is asked ONCE per directory.
+ *
+ * Establishment is the ACTION half of the rule: it makes missing levels at 0700 and narrows a loose level this
+ * user owns, and says what it found. Nothing about a later write trusts its answer — every state open judges
+ * the chain again and proves the descriptor it got (#4649) — so asking the action a dozen times in one startup,
+ * once per phase marker, buys no safety and re-opens ground the first ask already settled.
+ */
+const establishedStateDirs = new Set<string>();
+
+/**
  * Establishes the daemon's state chain and says out loud what it found, in the one order both callers use.
  *
  * The line goes to this process's stderr, which the launcher redirects into the daemon log. Nothing here
@@ -259,6 +269,11 @@ function removeRegistrationUnderLock(
  * withholds a record from it (#4649).
  */
 export function establishPrivateDaemonStateDir(stateDir: string): void {
+  // `path.join(..., '.')` normalizes the spelling without resolving links, so two callers that name one
+  // directory differently ask once, and a `..` cannot smuggle a second walk of the same route.
+  const asked = path.join(stateDir, '.');
+  if (establishedStateDirs.has(asked)) return;
+  establishedStateDirs.add(asked);
   const chain = ensurePrivateDirectoryChain(stateDir);
   if (chain.exposure) {
     process.stderr.write(
@@ -271,12 +286,11 @@ export function establishPrivateDaemonStateDir(stateDir: string): void {
  * Appends one startup phase marker, or reports the refusal and carries on.
  *
  * This is the DAEMON side of the marker: whoever writes one comes through here, because a marker is a state
- * diagnostic and a state diagnostic goes only into a chain this process owns (#4649). The chain is
- * established first, so a daemon started without {@link launchDaemonProcess} still gets a state directory at
- * the private mode rather than one its `mkdir` priced down with the umask. The append then asks the chain for
- * ITSELF and refuses on ANY exposure — establishment is best effort and can report a chain it does not own,
- * and the check that decides is the one made as the bytes go out. A refusal is a typed
- * `state_dir_untrusted` failure sent to `reportFailure`: never fatal, and never a silent success.
+ * diagnostic and a state diagnostic goes only into a chain this process owns (#4649). The caller establishes
+ * the chain at its own entry point, once, and this function asks the chain for ITSELF on every write: the
+ * judgment that decides is the one made as the bytes go out, and it is never inherited from an earlier repair.
+ * A refusal is a typed `state_dir_untrusted` failure sent to `reportFailure`: never fatal, and never a silent
+ * success.
  */
 export function recordDaemonStartupMarker(
   startupPhasesPath: string,
@@ -284,7 +298,7 @@ export function recordDaemonStartupMarker(
   reportFailure?: (error: NormalizedError) => void,
 ): void {
   try {
-    ensurePrivateDirectoryChain(path.dirname(startupPhasesPath));
+    establishPrivateDaemonStateDir(path.dirname(startupPhasesPath));
     appendPrivateStateFileSync(
       startupPhasesPath,
       `${JSON.stringify({ data: { startupPhase: phase, timestampMs: Date.now() } })}\n`,

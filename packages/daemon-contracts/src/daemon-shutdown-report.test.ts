@@ -12,6 +12,48 @@ const claim = {
   deviceId: 'emulator-5554',
 };
 
+/** The lifetime a report of this suite states, and a different run of the same pid. */
+const AUTHOR = { pid: 4242, startTime: 'Mon Jan 1 00:00:00 2026' };
+const SAME_PID_LATER_RUN = { pid: 4242, startTime: 'Tue Jan 2 00:00:00 2026' };
+
+test("a report left by an earlier run of the same pid is not this stop's cleanup record", async () => {
+  // The state directory outlives every daemon run in it, and pids come round. A stop reads the report
+  // AFTER the process is gone, so the only thing that says whose cleanup a record describes is the
+  // lifetime it names. Reading an older run's report would tell the caller devices were released by the
+  // daemon that just exited, when in truth this run's own write was refused and left the old one standing.
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
+  const reportPath = path.join(stateDir, 'daemon-shutdown.json');
+
+  try {
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify(
+        buildDaemonShutdownReport(
+          {
+            providerReleases: { released: [], pending: [] },
+            claims: { released: [claim], orphaned: [], superseded: [], unattributable: [] },
+          },
+          AUTHOR,
+        ),
+      ),
+    );
+
+    expect(await readDaemonShutdownReport(stateDir, AUTHOR)).toEqual({
+      providerReleases: { released: [], pending: [] },
+      claims: { released: [claim], orphaned: [], superseded: [], unattributable: [] },
+    });
+    expect(await readDaemonShutdownReport(stateDir, SAME_PID_LATER_RUN)).toBeNull();
+    // A report that predates the field states no author, which is the additive case: its known parts
+    // are still read, and a caller that asks for none is not asking for a lifetime.
+    expect(await readDaemonShutdownReport(stateDir)).toEqual({
+      providerReleases: { released: [], pending: [] },
+      claims: { released: [claim], orphaned: [], superseded: [], unattributable: [] },
+    });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('round-trips provider release and device claim records without lease credentials', async () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
   const lease: DeviceLease = {
@@ -26,10 +68,13 @@ test('round-trips provider release and device claim records without lease creden
   };
 
   try {
-    const report = buildDaemonShutdownReport({
-      providerReleases: { released: [lease], pending: [lease] },
-      claims: { released: [claim], orphaned: [], superseded: [claim], unattributable: [] },
-    });
+    const report = buildDaemonShutdownReport(
+      {
+        providerReleases: { released: [lease], pending: [lease] },
+        claims: { released: [claim], orphaned: [], superseded: [claim], unattributable: [] },
+      },
+      AUTHOR,
+    );
 
     fs.writeFileSync(path.join(stateDir, 'daemon-shutdown.json'), JSON.stringify(report));
     expect(await readDaemonShutdownReport(stateDir)).toEqual({

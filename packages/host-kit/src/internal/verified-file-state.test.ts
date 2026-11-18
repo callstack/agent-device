@@ -275,6 +275,36 @@ skipOnWindows(
   },
 );
 
+skipOnWindows('a truncation asked for a record with a second name leaves those bytes alone', () => {
+  // `O_TRUNC` said at the open would empty the bytes a moment before anything said whose they are: a
+  // record given a second name by a hard link stands verified at the open and is refused only when its
+  // names come to be counted. So the truncate purpose opens read-write and empties on the PROVED
+  // descriptor, and a refusal here costs a log line and never somebody else's file.
+  const state = stateDir();
+  const victim = path.join(state, 'theirs.log');
+  const log = path.join(state, 'daemon.log');
+  fs.writeFileSync(victim, 'not yours\n', { mode: 0o600 });
+  fs.linkSync(victim, log);
+
+  const message = refusalMessage(tryOpenPrivateStateFileSync(log, 'truncate'));
+
+  expect(message).toMatch(/2 names/);
+  expect(fs.readFileSync(victim, 'utf8')).toBe('not yours\n');
+});
+
+skipOnWindows('a record with a second name is refused as a read too, not just as a write', () => {
+  // Reading is not harmless once a verdict is made from the bytes: a report or a marker standing under two
+  // names is a record somebody else can change behind this reader's back, and "the daemon released these
+  // claims" would then be an answer about another party's file.
+  const state = stateDir();
+  const victim = path.join(state, 'theirs.json');
+  const report = path.join(state, 'daemon-shutdown.json');
+  fs.writeFileSync(victim, '{"planted":true}\n', { mode: 0o600 });
+  fs.linkSync(victim, report);
+
+  expect(readPrivateStateFileTailSync(report, 4096).status).toBe('refused');
+});
+
 /** The bytes a state read answered, or `undefined` for absence and refusal alike. */
 function readOf(read: PrivateStateRead): string | undefined {
   return read.status === 'read' ? read.text : undefined;

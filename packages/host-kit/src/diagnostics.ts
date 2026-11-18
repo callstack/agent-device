@@ -1,6 +1,7 @@
 export {
   countDiagnosticEventsByPhase,
   createRequestId,
+  type DiagnosticLineSink,
   DIAGNOSTIC_STDERR_PREFIX,
   type DiagnosticEventInput,
   type DiagnosticLevel,

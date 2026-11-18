@@ -41,9 +41,19 @@ export function openVerifiedFileForAppend(pathname: string): number {
   return openVerifiedFile(pathname, fs.constants.O_WRONLY | fs.constants.O_APPEND, true)!;
 }
 
+/**
+ * Opens or creates a verified regular final-path file for writing, and empties NOTHING.
+ *
+ * The state truncate purpose asks for this rather than for `O_TRUNC`: an open flag would empty the bytes
+ * before anything said whose they are.
+ */
+function openVerifiedFileForWrite(pathname: string): number {
+  return openVerifiedFile(pathname, fs.constants.O_RDWR, true)!;
+}
+
 /** Opens or creates a verified regular final-path file, then truncates only through that fd. */
 export function openVerifiedFileForTruncate(pathname: string): number {
-  const descriptor = openVerifiedFile(pathname, fs.constants.O_RDWR, true)!;
+  const descriptor = openVerifiedFileForWrite(pathname);
   try {
     fs.ftruncateSync(descriptor, 0);
     return descriptor;
@@ -308,10 +318,13 @@ function stateRefusal(
  * Every state write goes through here so no opener is left that asks less. `purpose` is the one thing the caller
  * says about the entry. `append` is a record line going to the end; `append-readable` is the same for a writer
  * that reads the tail through the same handle; `truncate` is the daemon's log, where the daemon's own stdout and
- * stderr already stand open on the inode and the file must be emptied WITHOUT being replaced. A truncate is done
- * THROUGH the descriptor the judgment produced: `O_TRUNC` said at a NAME would empty whatever that name
- * describes — the file a planted link points at, or the FIFO another local user left — before any rule got a
- * look at it.
+ * stderr already stand open on the inode and the file must be emptied WITHOUT being replaced.
+ *
+ * NOTHING is emptied or written before the proof. A truncation asked as an open flag (`O_TRUNC`) would empty the
+ * bytes a moment before this function says whose they are: a record given a second name by a hard link would
+ * stand verified at the open and then be refused for its names, with its contents already gone. So the truncate
+ * purpose opens `O_RDWR`, and the emptying is `ftruncate` on the proved descriptor — after the entry's uid, its
+ * one name and the directory's identity are all established, and pinned to that one inode either way.
  *
  * A refusal closes the descriptor it had already opened: a rule that walked away from a handle in a long-lived
  * daemon leaked one per refusal.
@@ -323,6 +336,7 @@ function openStateEntrySync(pathname: string, purpose: PrivateStateOpenPurpose):
   try {
     assertPrivateStateDescriptor(descriptor, asked.destination);
     assertStateDirectoryJudged(asked);
+    if (purpose === 'truncate') fs.ftruncateSync(descriptor, 0);
     return descriptor;
   } catch (error) {
     try {
@@ -363,49 +377,62 @@ export type PrivateStateOpenPurpose = 'append' | 'append-readable' | 'truncate';
  * about to append to, to see whether a crashed run left the file without its newline. One handle cannot carry
  * two access modes, so the seam reader asks both at once, and `readSync` at an explicit offset is what reads the
  * tail while `O_APPEND` is still what makes the write go to the end.
+ *
+ * `truncate` opens read-write and empties NOTHING: the caller empties it on the proved descriptor, so a record
+ * this call goes on to refuse keeps the bytes it had.
  */
 const OPEN_STATE_ENTRY: Record<PrivateStateOpenPurpose, (destination: string) => number> = {
   append: openVerifiedFileForAppend,
   'append-readable': (destination) =>
     openVerifiedFile(destination, fs.constants.O_RDWR | fs.constants.O_APPEND, true)!,
-  truncate: openVerifiedFileForTruncate,
+  truncate: openVerifiedFileForWrite,
 };
+
+/**
+ * What the bytes behind a state descriptor are, answered as the exposure the state rule speaks, or
+ * `undefined` when they are this process's own to use.
+ *
+ * A verified open says the NAME is a regular file this call reached without following anything. It does not
+ * say who ELSE holds those bytes: a record planted by an earlier attacker, or given a second name by a hard
+ * link, is content this process did not establish — writing to it would answer a question about this run out
+ * of somebody else's file, and reading it would answer one with bytes that run did not place. So the
+ * descriptor's own `fstat` is asked two things: the uid is this process's, and the entry has one name.
+ */
+function privateStateDescriptorExposure(
+  held: fs.BigIntStats,
+): PrivateDirectoryExposure | undefined {
+  const uid = process.getuid?.();
+  if (uid !== undefined && Number(held.uid) !== uid) return 'foreign_owned';
+  // A second name is not something `fchmod` can take away, and not something a reader can attribute.
+  if (Number(held.nlink) !== 1) return 'shared_parent';
+  return undefined;
+}
 
 /**
  * Proves the bytes behind a state descriptor are this process's own to write, and narrows their mode.
  *
- * A verified open says the NAME is a regular file this call reached without following anything. It does not say
- * who ELSE holds those bytes: a record planted by an earlier attacker, or given a second name by a hard link,
- * is content this process did not establish, and writing to it would answer a question about this run out of
- * somebody else's file. So the descriptor's own `fstat` is asked three things: the uid is this process's, the
- * entry has exactly one name, and the mode is the state mode — the last said on the descriptor, which is the
- * only seam where no link can stand between the ask and the change.
- *
  * An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
- * narrowed rather than refused. A second name is not something `fchmod` can take away, and is refused.
+ * narrowed rather than refused — on the DESCRIPTOR, the one seam where no link can stand between the ask and
+ * the change.
  */
 function assertPrivateStateDescriptor(descriptor: number, destination: string): void {
   const held = fs.fstatSync(descriptor, { bigint: true });
-  const uid = process.getuid?.();
-  if (uid !== undefined && Number(held.uid) !== uid) {
+  const exposure = privateStateDescriptorExposure(held);
+  if (exposure === 'foreign_owned') {
     throw stateRefusal(
       destination,
-      'foreign_owned',
+      exposure,
       'another local user owns that record. Remove the record at that name; agent-device will make its own.',
     );
   }
-  // A second name is not something `fchmod` can take away.
-  if (Number(held.nlink) !== 1) {
+  if (exposure === 'shared_parent') {
     throw stateRefusal(
       destination,
-      'shared_parent',
+      exposure,
       `that record has ${String(held.nlink)} names. Remove the record at that name; ` +
         'agent-device will make its own.',
     );
   }
-  // An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
-  // narrowed rather than refused — on the DESCRIPTOR, the one seam where no link can stand between the ask and
-  // the change.
   try {
     fs.fchmodSync(descriptor, PRIVATE_STATE_FILE_MODE);
   } catch (error) {
@@ -466,6 +493,11 @@ function lastByteEndsALine(descriptor: number): boolean {
  * A rename replaces a symbolic link at the destination instead of writing through it, the sibling goes beside
  * the entry spelled FROM the judged directory, and the sibling is cleaned up only while it is still the entry
  * this call created.
+ *
+ * The judged directory is re-asserted at BOTH seams the staging owner asks its destination guard — once
+ * before the sibling is first written and once immediately before the rename commits. A state directory
+ * renamed away and made again while the sibling was being written is a different directory's ground by commit
+ * time, and a rename onto it would move bytes judged in one directory into another's names.
  */
 export function publishPrivateStateFileSync(pathname: string, contents: string): void {
   const asked = requiredStateEntry(pathname);
@@ -475,6 +507,7 @@ export function publishPrivateStateFileSync(pathname: string, contents: string):
     contents,
     mode: PRIVATE_STATE_FILE_MODE,
     exactMode: true,
+    assertDestination: () => assertStateDirectoryJudged(asked),
   });
 }
 
@@ -508,8 +541,17 @@ function readStateEntrySync(pathname: string, maxBytes: number, whole: boolean):
   if (asked.destination === undefined) return { status: 'refused' };
   let descriptor: number | undefined;
   try {
+    assertStateDirectoryJudged(asked);
     descriptor = openVerifiedFileForRead(asked.destination);
     if (descriptor === undefined) return { status: 'absent' };
+    // Parent AND descriptor authority are asked of a read too, AFTER the open. A directory renamed away
+    // and made again between the walk and this open would hand back bytes from some other directory's
+    // records; bytes another local user owns, or that stand under a second name, would answer a question
+    // about this daemon with a record this daemon did not place. A verified read proves the NAME is a
+    // regular file reached without following anything, which is less than this asks of the handle.
+    assertStateDirectoryJudged(asked);
+    if (privateStateDescriptorExposure(fs.fstatSync(descriptor, { bigint: true })))
+      return { status: 'refused' };
     const size = fs.fstatSync(descriptor).size;
     if (size === 0) return { status: 'absent' };
     // A WHOLE read's bound is a rule about the entry, not a cost cap: an entry too long to be one record is not

@@ -3,13 +3,106 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  type DiagnosticLineSink,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   registerDiagnosticSensitiveValue,
+  updateDiagnosticsScope,
   withDiagnosticsScope,
   withDiagnosticTimer,
 } from './diagnostics.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+
+test('a log path with no line never asks for a sink, and every line after one goes through it', async () => {
+  // The question "may this path be written" is answered by the sink's owner, and asking it costs an open.
+  // A scope that emits nothing must therefore cost nothing at the path, and once a line exists, that
+  // line and the forced flush both travel through the sink the answer produced — never through the name.
+  const directory = mkdtempForTestSync('agent-device-diag-sink-');
+  const logPath = path.join(directory, 'daemon.log');
+  const sinkFile = path.join(directory, 'through-the-sink.ndjson');
+  const asked: string[] = [];
+  let closed = 0;
+  const factory = (pathname: string): DiagnosticLineSink => {
+    asked.push(pathname);
+    return {
+      write: (line) => {
+        fs.appendFileSync(sinkFile, line, 'utf8');
+        return true;
+      },
+      close: () => {
+        closed += 1;
+      },
+    };
+  };
+
+  await withDiagnosticsScope({ debug: true, logPath, logSinkFactory: factory }, () => 'quiet');
+  assert.deepEqual(asked, [], 'a scope that logged nothing must not have asked for a sink');
+  assert.equal(fs.existsSync(logPath), false, 'a quiet scope creates no log');
+  assert.equal(fs.existsSync(sinkFile), false);
+
+  await withDiagnosticsScope({ debug: true, logPath, logSinkFactory: factory }, async () => {
+    emitDiagnostic({ phase: 'one' });
+    emitDiagnostic({ phase: 'two' });
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+  assert.deepEqual(asked, [logPath], 'one judgment serves the whole scope, the flush included');
+  assert.deepEqual(
+    fs
+      .readFileSync(sinkFile, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => (JSON.parse(line) as { phase: string }).phase),
+    ['one', 'two'],
+  );
+  assert.equal(closed, 1, 'the sink is let go of when the scope ends');
+  assert.equal(fs.existsSync(logPath), false, 'no byte was ever written at the name');
+});
+
+test('a log path that moves on takes its own judge with it', async () => {
+  // A daemon scope can hand off to a session request record. That new path is a different owner's ground:
+  // the handle judged for the old one, and the judge itself, must not follow the scope across.
+  const directory = mkdtempForTestSync('agent-device-diag-sink-move-');
+  const first = path.join(directory, 'daemon.log');
+  const second = path.join(directory, 'request.ndjson');
+  const sinkFile = path.join(directory, 'through-the-sink.ndjson');
+  let closed = 0;
+  const asked: string[] = [];
+
+  await withDiagnosticsScope(
+    {
+      debug: true,
+      logPath: first,
+      logSinkFactory: (pathname) => {
+        asked.push(pathname);
+        return {
+          write: (line) => {
+            fs.appendFileSync(sinkFile, line, 'utf8');
+            return true;
+          },
+          close: () => {
+            closed += 1;
+          },
+        };
+      },
+    },
+    () => {
+      emitDiagnostic({ phase: 'as-daemon-log' });
+      updateDiagnosticsScope({ logPath: second });
+      emitDiagnostic({ phase: 'as-request-log' });
+    },
+  );
+
+  assert.deepEqual(asked, [first], 'only the path the factory was named for is judged');
+  assert.equal(closed, 1, "the old path's handle is released at the move");
+  assert.match(fs.readFileSync(sinkFile, 'utf8'), /as-daemon-log/);
+  const moved = fs.readFileSync(second, 'utf8');
+  assert.match(moved, /as-request-log/, 'the new path is written plainly, as it always was');
+  assert.equal(
+    moved.includes('as-daemon-log'),
+    false,
+    'no line is replayed through a stale handle',
+  );
+});
 
 test('diagnostics redacts sensitive fields', async () => {
   const previousHome = process.env.HOME;

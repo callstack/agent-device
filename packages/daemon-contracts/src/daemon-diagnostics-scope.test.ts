@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import { mkdtempForTestSync, withCapturedStderrAsync } from '@agent-device/test-kit';
@@ -70,6 +70,97 @@ test('keeps the record of a failed body and still rethrows', async () => {
     ['kept'],
   );
 });
+
+test.skipIf(process.platform === 'win32')(
+  'a scope that logs nothing opens the log for nothing',
+  async () => {
+    // The judgment used to be an append open asked at every scope entry, so a state directory with no
+    // daemon.log gained a 0600 one, and an existing log had its mode said, because some code merely
+    // opened a scope. A sink is owed to a LINE, so no line means no open, no create, no mode change.
+    const existing = path.join(dir, 'sibling.log');
+    fs.writeFileSync(existing, 'bytes\n', { mode: 0o644 });
+    fs.chmodSync(existing, 0o644);
+
+    await withDaemonDiagnosticsScope({ logPath }, () => 'quiet');
+
+    assert.equal(fs.existsSync(logPath), false, 'a quiet scope must not create the log');
+    assert.equal(fs.statSync(existing).mode & 0o777, 0o644);
+
+    const before = fs.statSync(existing);
+    await withDaemonDiagnosticsScope({ logPath: existing }, () => 'quiet again');
+    const after = fs.statSync(existing);
+    assert.equal(after.mode & 0o777, 0o644, 'a quiet scope must not re-mode an existing log');
+    assert.equal(after.ino, before.ino);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a line that is written travels through the judged handle and narrows the log',
+  async () => {
+    // The other half of the same rule: when a line DOES exist, the open happens, the event goes through
+    // that descriptor, and the state mode is said on it — an event is never written at the name.
+    fs.writeFileSync(logPath, '', { mode: 0o644 });
+    fs.chmodSync(logPath, 0o644);
+
+    await withDaemonDiagnosticsScope({ logPath }, () => {
+      emitDiagnostic({ level: 'warn', phase: 'logged' });
+    });
+
+    const events = readLoggedEvents();
+    assert.deepEqual(
+      events.map((event) => event.phase),
+      ['logged'],
+    );
+    assert.equal(fs.statSync(logPath).mode & 0o777, 0o600);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a log route that breaks costs one line to stderr and is re-judged for the next',
+  async () => {
+    // The warning sink is an optional diagnostic in both directions: a descriptor that stops taking
+    // bytes must not lose the event, and must not end the scope's logging either. The failed line goes
+    // to stderr, the sink is dropped, and the next line asks the state rule again.
+    fs.writeFileSync(logPath, '', { mode: 0o600 });
+    // The sink writes through a DESCRIPTOR, so a descriptor write is the seam that breaks. One throw,
+    // then the route works again: the question this row answers is whether the scope keeps logging.
+    const realAppend = fs.appendFileSync.bind(fs) as (
+      target: unknown,
+      ...rest: unknown[]
+    ) => unknown;
+    let brokeOnce = false;
+    const spy = vi.spyOn(fs, 'appendFileSync').mockImplementation(((
+      target: unknown,
+      ...rest: unknown[]
+    ) => {
+      if (!brokeOnce && typeof target === 'number') {
+        brokeOnce = true;
+        throw Object.assign(new Error('EDQUOT'), { code: 'EDQUOT' });
+      }
+      return realAppend(target, ...rest);
+    }) as unknown as typeof fs.appendFileSync);
+
+    let said = '';
+    try {
+      said = await withCapturedStderrAsync(async () => {
+        await withDaemonDiagnosticsScope({ logPath }, () => {
+          emitDiagnostic({ level: 'warn', phase: 'first' });
+          emitDiagnostic({ level: 'warn', phase: 'second' });
+        });
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    assert.match(said, /daemon_log_sink_failed/);
+    assert.match(said, /"phase":"first"/, 'the failed line itself must reach stderr');
+    assert.deepEqual(
+      readLoggedEvents().map((event) => event.phase),
+      ['second'],
+      'the sink is re-judged, so later events keep landing in the log',
+    );
+  },
+);
 
 test.skipIf(process.platform === 'win32')(
   'runs the body with no log sink when the state rule refuses that log',
