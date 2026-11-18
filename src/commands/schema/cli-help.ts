@@ -724,7 +724,10 @@ Rules:
   Keep browser plans session-scoped: open a URL, inspect refs, act on refs/selectors, verify with wait/get/is/snapshot, capture screenshot only when visual evidence is needed, then close. Each --session name is its own browser (cookies and storage) and its own device (agent-browser-chrome:session:p_<name>, or t_<tenant hash>_<name> under tenant isolation so tenants never share a browser): web sessions with different names run in parallel, and the same name in the same tenant conflicts while different tenants may reuse a name. Without --session under local workspace scoping, each workspace uses its own browser and device (agent-browser-chrome:session:w_<workspace scope>); different workspaces can run in parallel, while the same workspace conflicts across daemons sharing a claims directory. A request without a workspace scope (no cwd) uses the default session's browser and device (p_default, or t_<tenant hash>_default under tenant isolation). A name matches case-insensitively and must be 1 to 30 characters of letters, digits, "_" and "-" (1 to 17 under tenant isolation); anything else, including surrounding whitespace or an empty --session "", is refused with web_session_name_invalid.`,
   },
   ...qaReportHelpTopics,
-} as const satisfies Record<string, { summary: string; body: string }>;
+} as const satisfies Record<
+  string,
+  { summary: string; body: string | ((coreVersion: string) => string) }
+>;
 
 function formatCommandListArg(commandName: string, schema: CommandSchema, arg: string): string {
   const optional = arg.endsWith('?');
