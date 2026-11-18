@@ -136,6 +136,13 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Follow Apple',
     'React Native warning/error overlays can be real findings or test blockers. Capture them, use react-native dismiss-overlay',
   ],
+  accessibility: [
+    'Audit findings are advisory heuristics',
+    'This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance',
+    '2. Run agent-device audit, then agent-device snapshot -i',
+    'Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state',
+    'Large text: first run agent-device settings text-size to record the current size.',
+  ],
   validate: [
     'Prove the changed behavior through public agent-device surfaces. Do not validate against stale dist output',
     'For a TypeScript runtime or CLI output change, start with pnpm build',

@@ -153,6 +153,28 @@ export const CASES = [
     ],
   },
   {
+    id: 'accessibility-review',
+    docs: ['--help:first30', 'accessibility'],
+    task: 'Review the accessibility of the installed iOS shop app com.example.shop. Cover the Home and Cart tabs, including large text, and capture evidence for each finding. The simulator starts at text size large in light mode. Plan commands only.',
+    allowedExternalCommands: ['mkdir'],
+    expectations: ['validPlanCommands', 'fullPrefix', 'usesSnapshotI', 'opensAndCloses'],
+    matchers: [
+      { id: 'runsAudit', pattern: /\bagent-device\s+audit\b/i },
+      // More than one screen: at least two audit runs, because the topic runs audit on
+      // each screen. A screen change without a second audit does not count.
+      {
+        id: 'auditsMoreThanOneScreen',
+        test: ({ joined }) => (joined.match(/\bagent-device\s+audit\b/gi) ?? []).length >= 2,
+      },
+      { id: 'changesTextSize', pattern: /\bagent-device\s+settings\s+text-size\s+accessibility-/i },
+      {
+        id: 'relaunchesAfterTextSize',
+        pattern:
+          /\bsettings\s+text-size\s+accessibility-[\s\S]*\bagent-device\s+open\s+[^\n]*--relaunch\b/i,
+      },
+    ],
+  },
+  {
     id: 'engineering-validate-mode',
     docs: ['--help:first30', 'validate'],
     task: 'Plan commands to validate a TypeScript-only CLI/runtime change to settled press output against the already installed iOS Settings app. Use the known General control, prove current built output is running, and clean up. Swift runner code did not change.',
