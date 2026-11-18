@@ -27,5 +27,4 @@ Versioned corpora, schemas, fixtures, and golden tables remain source inputs.
 If TypeScript helpers cannot load, plain `.mjs` packaging fixtures keep child-process use local.
 Prefer `execFile`.
 
-For a startup-path import, stage it and new entry files, then run `pnpm exec vitest run --project unit-core scripts/__tests__/eager-closure-budgets.test.ts` (ADR 0027).
-For a wire change, run `pnpm exec vitest run --project unit-core test/wire-compat` and `pnpm check:daemon-wire-compat` (`test/wire-compat/README.md`).
+Stage new entry files first, then follow ADR 0027 for startup imports and `test/wire-compat/README.md` for wire changes.
