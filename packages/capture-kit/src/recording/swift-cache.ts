@@ -365,7 +365,9 @@ async function selectedDeveloperDir(host: HostEnvironment): Promise<string | und
  * itself as a stock macOS install leaves it: root-owned, writable by the admin group.
  */
 function trustedDeveloperDir(selection: string): string {
-  const resolved = path.isAbsolute(selection) ? realpathIfPresent(selection) : undefined;
+  const resolved = path.isAbsolute(selection)
+    ? realpathIfPresent(effectiveDeveloperDir(selection))
+    : undefined;
   const ancestor = resolved === undefined ? selection : untrustedDeveloperDirLevel(resolved);
   if (resolved !== undefined && ancestor === undefined) return resolved;
   throw new AppError(
@@ -382,9 +384,23 @@ function trustedDeveloperDir(selection: string): string {
   );
 }
 
+/**
+ * The directory xcrun actually uses for a selection: an Xcode bundle (`…/Xcode.app`) selects its
+ * `Contents/Developer`, so that whole path, `Contents` included, is what gets judged and passed on.
+ */
+function effectiveDeveloperDir(selection: string): string {
+  return path.basename(selection).endsWith('.app')
+    ? path.join(selection, 'Contents', 'Developer')
+    : selection;
+}
+
+/**
+ * The canonical path, from the filesystem's own spelling: on a case-insensitive volume `/applications` and
+ * `/Applications` are one directory, and only the native answer spells it the way the exact checks expect.
+ */
 function realpathIfPresent(selection: string): string | undefined {
   try {
-    return fs.realpathSync(selection);
+    return fs.realpathSync.native(selection);
   } catch {
     return undefined;
   }

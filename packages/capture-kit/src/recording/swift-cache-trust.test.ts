@@ -810,3 +810,44 @@ test('a DEVELOPER_DIR spelled with a trailing /. reaches the compiler as the res
 
   expect(compilerLaunch().env.DEVELOPER_DIR).toBe(trusted);
 });
+
+test('an Xcode bundle selection is judged at its Contents/Developer, so a group-writable Contents is refused', async () => {
+  const bundle = developerDirectory('Shared.app');
+  const contents = path.join(bundle, 'Contents');
+  fs.mkdirSync(path.join(contents, 'Developer'), { recursive: true, mode: 0o755 });
+  fs.chmodSync(contents, 0o775);
+
+  await expect(
+    compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: bundle }),
+  ).rejects.toMatchObject(
+    untrusted({
+      exposure: 'untrusted_developer_dir',
+      ancestor: contents,
+      hint: expect.any(String),
+    }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('an Xcode bundle selection reaches the compiler as its Contents/Developer directory', async () => {
+  const bundle = developerDirectory('Private.app');
+  const developer = path.join(bundle, 'Contents', 'Developer');
+  fs.mkdirSync(developer, { recursive: true, mode: 0o755 });
+
+  await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: bundle });
+
+  expect(compilerLaunch().env.DEVELOPER_DIR).toBe(developer);
+});
+
+test('the selection is canonicalized by the filesystem native spelling, which the exact checks then judge', async () => {
+  // A case-insensitive alias such as /applications resolves to the native spelling; this stands it in with a
+  // directory the native answer names.
+  const alias = developerDirectory('alias-spelling');
+  const canonical = developerDirectory('Canonical-Spelling');
+  vi.spyOn(fs.realpathSync, 'native').mockImplementation(((name: fs.PathLike) =>
+    String(name) === alias ? canonical : String(name)) as typeof fs.realpathSync.native);
+
+  await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: alias });
+
+  expect(compilerLaunch().env.DEVELOPER_DIR).toBe(canonical);
+});
