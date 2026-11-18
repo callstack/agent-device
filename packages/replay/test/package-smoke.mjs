@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,11 +15,38 @@ function run(command, args, cwd) {
     maxBuffer: 16 * 1024 * 1024,
   }).stdout;
 }
+function runCli(cli, args, cwd, env, expectedExitCode = 0) {
+  const result = runCmdSync(process.execPath, [cli, ...args], {
+    cwd,
+    env,
+    timeoutMs: 120_000,
+    maxBuffer: 16 * 1024 * 1024,
+    allowFailure: true,
+  });
+  assert.equal(result.exitCode, expectedExitCode, result.stderr || result.stdout);
+  return JSON.parse(result.stdout);
+}
 function files(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
     return entry.isDirectory() ? files(file) : [file];
   });
+}
+
+/**
+ * Stops the detached daemon the packed CLI started for this state dir and proves from the
+ * daemon's own status that none survives. `--clean` is allowed only on proven detached ownership,
+ * so a live record refusing that stop would mean the CLI held something this test does not own.
+ */
+function assertIsolatedDaemonStopped(cli, cwd, env, stateDir) {
+  const stop = runCli(
+    cli,
+    ['daemon', 'stop', '--clean', '--state-dir', stateDir, '--json'],
+    cwd,
+    env,
+  );
+  const status = runCli(cli, ['daemon', 'status', '--state-dir', stateDir, '--json'], cwd, env);
+  assert.equal(status.data.state, 'stopped', JSON.stringify({ stop, status }));
 }
 
 test('packed core excludes native execution and a standalone replay plugin uses the real host', () => {
@@ -82,6 +110,126 @@ test('packed core excludes native execution and a standalone replay plugin uses 
       ),
       /Packed native replay/,
     );
+
+    // The managed route: the same packed core CLI selects the archive through its own public
+    // `plugins add`, with no embedded factory and no workspace to borrow an engine from.
+    const cli = path.join(core, 'bin/agent-device.mjs');
+    const managedHome = path.join(scratch, 'managed-home');
+    const managedStateDir = path.join(scratch, 'managed-state');
+    const unclaimedHome = path.join(scratch, 'unclaimed-home');
+    const managedEnv = {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => !name.startsWith('AGENT_DEVICE_')),
+      ),
+      AGENT_DEVICE_HOME: managedHome,
+      AGENT_DEVICE_STATE_DIR: managedStateDir,
+      AGENT_DEVICE_CLAIMS_DIR: path.join(scratch, 'managed-claims'),
+      HOME: unclaimedHome,
+    };
+    const script = path.join(consumer, 'noop.ad');
+    fs.writeFileSync(script, '# managed CLI replay entrypoint and suite transport\n');
+    let primaryError;
+    try {
+      // Before the selection exists, the CLI's own daemon has no ad engine to borrow.
+      const unselected = runCli(
+        cli,
+        ['replay', script, '--session', 'package-managed-unselected', '--json'],
+        consumer,
+        managedEnv,
+        1,
+      );
+      assert.equal(unselected.success, false);
+      assert.equal(unselected.error.code, 'INVALID_ARGS');
+      const details = unselected.error.details;
+      assert.equal(details.reason, 'plugin-not-installed');
+      assert.equal(details.backend, 'ad');
+      assert.equal(details.package, '@agent-device/replay');
+      assert.equal(details.installCommand, 'agent-device plugins add @agent-device/replay');
+      assertIsolatedDaemonStopped(cli, consumer, managedEnv, managedStateDir);
+
+      const added = runCli(cli, ['plugins', 'add', pluginTarball, '--json'], consumer, managedEnv);
+      const expectedIntegrity = `sha512-${crypto
+        .createHash('sha512')
+        .update(fs.readFileSync(pluginTarball))
+        .digest('base64')}`;
+      assert.equal(added.data.artifact.name, '@agent-device/replay');
+      assert.equal(added.data.artifact.integrity, expectedIntegrity);
+      assert.equal(added.data.artifact.compatibility, 'unchecked');
+      assert.equal(added.data.restartRequired, true);
+      assert.equal(fs.existsSync(path.join(unclaimedHome, '.agent-device', 'config.json')), false);
+      assert.equal(fs.existsSync(path.join(unclaimedHome, '.agent-device', 'plugins')), false);
+      const inventory = runCli(cli, ['plugins', 'list', '--json'], consumer, managedEnv);
+      const selected = inventory.data.plugins.find(
+        (entry) => entry.name === '@agent-device/replay',
+      );
+      assert.equal(typeof added.data.artifact.installation, 'string');
+      assert.equal(selected?.installation, added.data.artifact.installation);
+      assert.equal(selected?.integrity, expectedIntegrity);
+      assert.equal(selected?.backend, 'ad');
+      assert.equal(selected?.compatible, true);
+
+      const replay = runCli(
+        cli,
+        ['replay', script, '--session', 'package-managed-replay', '--json'],
+        consumer,
+        managedEnv,
+      );
+      assert.equal(replay.success, true);
+      assert.equal(replay.data.replayed, 0);
+      assert.equal(replay.data.sessionActive, false);
+      assert.deepEqual(replay.data.artifactPaths, []);
+
+      const suite = runCli(
+        cli,
+        [
+          'test',
+          script,
+          '--session',
+          'package-managed-suite',
+          '--artifacts-dir',
+          path.join(scratch, 'managed-artifacts'),
+          '--json',
+        ],
+        consumer,
+        managedEnv,
+      );
+      assert.equal(suite.success, true);
+      assert.equal(suite.data.executed, 1);
+      assert.equal(suite.data.passed, 1);
+      assert.equal(suite.data.failed, 0);
+      assert.deepEqual(suite.data.failures, []);
+      const [suiteTest] = suite.data.tests;
+      assert.equal(suiteTest.status, 'passed');
+      assert.equal(suiteTest.replayed, 0);
+      assert.ok(fs.existsSync(suiteTest.artifactsDir));
+
+      // The daemon that served both commands came from the store selection in this scratch home.
+      const running = runCli(
+        cli,
+        ['daemon', 'status', '--state-dir', managedStateDir, '--json'],
+        consumer,
+        managedEnv,
+      );
+      assert.equal(running.data.state, 'running');
+      assert.equal(running.data.ownership, 'detached');
+      const served = running.data.plugins.find((entry) => entry.package === '@agent-device/replay');
+      assert.equal(served?.source, 'store');
+      assert.equal(served?.state, 'active');
+    } catch (error) {
+      primaryError = error;
+    }
+    try {
+      assertIsolatedDaemonStopped(cli, consumer, managedEnv, managedStateDir);
+    } catch (cleanupError) {
+      if (primaryError !== undefined) {
+        throw new AggregateError(
+          [primaryError, cleanupError],
+          'Replay smoke and daemon cleanup failed',
+        );
+      }
+      throw cleanupError;
+    }
+    if (primaryError !== undefined) throw primaryError;
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
