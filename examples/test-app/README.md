@@ -356,22 +356,27 @@ Run the lane with the sheet's page served by the same script that owns its lifec
 pnpm test-app:maestro:auth:ios -- --udid "<simulator udid>"
 ```
 
-That starts `examples/test-app/scripts/serve-auth-idp.mjs`, runs
-`examples/test-app/maestro-ios/auth-session-sheet.yaml`
-through `agent-device test --maestro`. The launcher stops the provider when the flow ends or you
-cancel the lane. Start the provider yourself when you drive the sheet by hand. Add `--delay-ms <n>`
-to hold the loading page so you can read the sheet while its page is still loading. The flow lives
-in `maestro-ios/` rather than `maestro/` because the shared directory is also run on Android.
+The launcher starts the provider at `127.0.0.1:4593` and runs
+`examples/test-app/maestro-ios/auth-session-sheet.yaml` through `agent-device test --maestro`. When
+the flow ends or you cancel it, the launcher closes the provider.
+
+To drive the sheet by hand and see its loading state, start the provider from the repo root:
+
+```bash
+node --experimental-strip-types examples/test-app/scripts/serve-auth-idp.mjs --delay-ms 6000
+```
+
+Omit `--delay-ms` to show the form immediately.
 
 The committed flow reads the sheet and stops at its form controls. Driving past that point is not
 committed, because on iOS 27.0 the same steps alternate between passing and refusing the capture,
 which is the intermittency #4593 reports. Fill the sheet's fields and submit it when you want that
 state, and expect to see one of three capture refusals on the step that follows the first `inputText`
 or the submit: `regular iOS snapshot presentation requires a valid viewport`, `regular iOS snapshot
-node escaped its cumulative clip`, or `main thread execution timed out`. All three come from
-`packages/capture-kit/src/ios-snapshot-engine/invariants.ts`, and the first carries no `retriable`, so
-the step's own stability re-capture does not poll and the step aborts. A build of the fixture app
-without the module shows `unavailable` in `auth-session-status` instead of opening a sheet.
+node escaped its cumulative clip`, or `main thread execution timed out`. The first two come from
+`packages/capture-kit/src/ios-snapshot-engine/invariants.ts`. The XCTest runner reports the third, which
+`packages/apple-runner/src/runner-failure-diagnostics.ts` classifies. The viewport refusal carries no
+`retriable` flag, so the step aborts during stability re-capture.
 
 The app needs a build that includes the module: a development client (`pnpm test-app:ios`) or a
 Release build (`pnpm --dir examples/test-app exec expo run:ios --configuration Release --device
