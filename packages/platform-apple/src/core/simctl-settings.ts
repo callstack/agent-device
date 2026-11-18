@@ -46,18 +46,85 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
   await runSimctl(['ui', udid, 'appearance', target]);
 }
 
-async function setPermission(request: SimctlSettingRequest): Promise<void> {
+async function setPermission(
+  request: SimctlSettingRequest,
+): Promise<Record<string, unknown> | void> {
   const { runSimctl, udid, deviceId, state, options } = request;
   const permissionAction = parsePermissionAction(state);
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
   const appBundleId = await requireAppBundleId(request);
+  if (target === 'all' && action !== 'reset') {
+    return await setEveryIosPrivacyService(request, action, appBundleId);
+  }
   try {
     await runSimctl(['privacy', udid, action, target, appBundleId]);
   } catch (error) {
     if (!isIosPrivacyServiceRefusal(error)) throw error;
     throw iosPrivacyServiceRefusedError(action, target, appBundleId, deviceId, error);
   }
+}
+
+/**
+ * The services a grant or revoke of `all` changes one by one, in the widest access each takes:
+ * full contacts and photos, and location always, which `simctl privacy grant all` gave too.
+ * `notifications` is last because current runtimes refuse it.
+ */
+const IOS_ALL_PRIVACY_SERVICES = [
+  'calendar',
+  'camera',
+  'contacts',
+  'location-always',
+  'media-library',
+  'microphone',
+  'motion',
+  'photos',
+  'reminders',
+  'siri',
+  'notifications',
+] as const;
+
+/**
+ * What a revoke of `all` also takes back: limited photo access (`photos-add`) is a service of
+ * its own, so revoking `photos` leaves it in place. Limited contacts share the `contacts` row.
+ */
+const IOS_ALL_REVOKED_PRIVACY_SERVICES = [
+  ...IOS_ALL_PRIVACY_SERVICES.slice(0, -1),
+  'photos-add',
+  'notifications',
+] as const;
+
+/**
+ * `all` for grant and revoke, as one `simctl privacy` call per service. The simulator records
+ * `simctl privacy grant all` as a single `kTCCServiceAll` row that iOS 27 does not consult, so the
+ * app still prompts, and a revoke of `all` leaves every per-service grant in place. A service the
+ * runtime refuses is skipped with a warning, as Android skips a permission it cannot change;
+ * any other failure stops the sequence. A reset of `all` stays one call: it removes every row.
+ */
+async function setEveryIosPrivacyService(
+  { runSimctl, udid, deviceId }: SimctlSettingRequest,
+  action: 'grant' | 'revoke',
+  appBundleId: string,
+): Promise<Record<string, unknown>> {
+  const applied: string[] = [];
+  const warnings: string[] = [];
+  let lastRefusal: unknown;
+  const services =
+    action === 'revoke' ? IOS_ALL_REVOKED_PRIVACY_SERVICES : IOS_ALL_PRIVACY_SERVICES;
+  for (const service of services) {
+    try {
+      await runSimctl(['privacy', udid, action, service, appBundleId]);
+      applied.push(service);
+    } catch (error) {
+      if (!isIosPrivacyServiceRefusal(error)) throw error;
+      lastRefusal = error;
+      warnings.push(`Skipped ${service}: this iOS runtime does not let simctl privacy change it.`);
+    }
+  }
+  if (applied.length === 0) {
+    throw iosPrivacyServiceRefusedError(action, 'all', appBundleId, deviceId, lastRefusal);
+  }
+  return { permission: 'all', permissions: applied, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 async function setLocation(request: SimctlSettingRequest): Promise<Record<string, unknown> | void> {
@@ -135,12 +202,13 @@ function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | 
  * EPERM, whether or not it is spelled in the help text. The help text is not a capability
  * list — Xcode 26 omits `camera`, which it does change — so the verdict is read from the
  * command that would have made the change rather than from a probe that can only guess.
+ * iOS 27 words the refusal `Failed to create TCC authorization record`.
  */
 function isIosPrivacyServiceRefusal(error: unknown): boolean {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return false;
   const stderr = String(error.details?.stderr ?? '').toLowerCase();
   return (
-    /failed to (set|grant|revoke|reset) access/.test(stderr) &&
+    /failed to ((set|grant|revoke|reset) access|create tcc authorization record)/.test(stderr) &&
     stderr.includes('operation not permitted')
   );
 }
@@ -170,7 +238,10 @@ function iosPrivacyServiceRefusedError(
     {
       deviceId,
       appBundleId,
-      hint: 'Privacy support varies by Xcode runtime: run `xcrun simctl privacy help` for its documented services, or use the `all` target, which applies the action to every service this runtime can change.',
+      hint:
+        target === 'all'
+          ? 'This runtime refused every privacy service. Run `xcrun simctl privacy help` for its documented services, or reset simulator content and settings.'
+          : 'Privacy support varies by Xcode runtime: run `xcrun simctl privacy help` for its documented services, or use the `all` target, which applies the action to every service this runtime can change.',
     },
     cause,
   );
