@@ -21,8 +21,8 @@ import {
   readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
-  processStartTimesDiffer,
 } from './host-process.ts';
+import { processStartTimesDiffer } from './ps-start-time.ts';
 import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 function psReturns(stdout: string, exitCode = 0): void {
@@ -379,7 +379,7 @@ test('only lstart-bearing ps reads pin LC_ALL=C; command and state reads keep th
   // and no command-text read is.
   const utf8Command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
   const escapeLikeCLocalePs = (text: string) =>
-    text.replaceAll(/[^\x20-\x7E]/g, (ch) => `M-C${ch}`);
+    text.replaceAll(/[^\u0020-\u007E]/g, (ch) => `M-C${ch}`);
   const commandFor = (options?: { env?: NodeJS.ProcessEnv }) =>
     options?.env?.LC_ALL === 'C' ? escapeLikeCLocalePs(utf8Command) : utf8Command;
   mockRunCmdSync.mockImplementation(

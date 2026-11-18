@@ -101,7 +101,11 @@ const C_FORM_LSTART = /^(\w{3}) (\w{3}) +(\d{1,2}) (\d{2}:\d{2}:\d{2}) (\d{4})$/
 function frenchLstart(cForm: string): string {
   const match = C_FORM_LSTART.exec(cForm);
   assert.ok(match, `expected a C-form lstart, got ${cForm}`);
-  const [, weekday, month, day, clock, year] = match;
+  const weekday = match[1]!;
+  const month = match[2]!;
+  const day = match[3]!;
+  const clock = match[4]!;
+  const year = match[5]!;
   return `${FRENCH_WEEKDAYS[weekday] ?? weekday} ${day} ${FRENCH_MONTHS[month] ?? month} ${clock} ${year}`;
 }
 
@@ -109,7 +113,9 @@ function frenchLstart(cForm: string): string {
 function frenchDateOnlyLstart(cForm: string): string {
   const match = C_FORM_LSTART.exec(cForm);
   assert.ok(match, `expected a C-form lstart, got ${cForm}`);
-  const [, , month, day, , year] = match;
+  const month = match[2]!;
+  const day = match[3]!;
+  const year = match[5]!;
   return `${day} ${FRENCH_MONTHS[month] ?? month} ${year}`;
 }
 

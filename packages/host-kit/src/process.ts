@@ -34,13 +34,13 @@ export {
   readProcessIdentities,
   readProcessIdentityFacts,
   readProcessStartTime,
-  processStartTimesDiffer,
   signalPidsBestEffort,
   stopProcessAndConfirmExit,
   uniquePositivePids,
   waitForProcessExit,
   writeHostStderr,
 } from './internal/host-process.ts';
+export { processStartTimesDiffer } from './internal/ps-start-time.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {
