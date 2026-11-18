@@ -23,6 +23,7 @@ type AppleStep = {
   env?: Record<string, string>;
   with?: Record<string, string>;
   'continue-on-error'?: boolean;
+  parallel?: AppleStep[];
 };
 
 function appleWorkflow() {
@@ -323,6 +324,9 @@ test.each([
     MACOS_OUTCOME: '${{ steps.macos.outcome }}',
     IOS_CLEANUP_OUTCOME: '${{ steps.ios-cleanup.outcome }}',
     MACOS_CLEANUP_OUTCOME: '${{ steps.macos-cleanup.outcome }}',
+    // A background step that fails leaves the phase skipped, so the summary names the members.
+    IOS_SETUP_OUTCOMES:
+      'boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}',
   });
   const result = spawnSync('/bin/bash', ['-c', guard.run!], {
     env: {
@@ -333,6 +337,7 @@ test.each([
       MACOS_OUTCOME: 'success',
       IOS_CLEANUP_OUTCOME: 'success',
       MACOS_CLEANUP_OUTCOME: 'success',
+      IOS_SETUP_OUTCOMES: 'boot=success runner=success fixture=success',
       ...overrides,
       GITHUB_STEP_SUMMARY: path.join(mkdtempForTestSync('apple-smoke-status-'), 'summary.md'),
     },
@@ -666,26 +671,57 @@ test('a shallow PR merge still yields a known change set for all Apple selectors
   }
 });
 
-test('iOS boot overlaps the native build and readiness remains mandatory before XCTest', () => {
+// None of these needs a booted simulator, so they overlap as one parallel group and the phase
+// pays the slowest instead of all three. The readiness barrier stays inside the phase: overlapping
+// the boot must never let a step reach a simulator that is still starting.
+test('device-free iOS setup overlaps as one group and readiness stays mandatory before XCTest', () => {
+  const group = appleJob().steps.find((step) => step.parallel !== undefined)!;
+  const members = group.parallel!;
+  expect(members.map((step) => step.uses)).toEqual([
+    './.github/actions/boot-ios-test-simulator',
+    './.github/actions/setup-apple-runner-build',
+    './.github/actions/setup-fixture-app',
+  ]);
+  expect(
+    members.find((step) => step.uses === './.github/actions/boot-ios-test-simulator')!.with?.[
+      'wait-for-boot'
+    ],
+  ).toBe('false');
+
   const document = parse(
     fs.readFileSync(path.join(repoRoot, '.github/actions/smoke-ios-run/action.yml'), 'utf8'),
   ) as { runs: { steps: AppleStep[] } };
   const steps = document.runs.steps;
-  const boot = steps.findIndex((step) => step.id === 'ios-simulator');
-  const build = steps.findIndex(
-    (step) => step.uses === './.github/actions/setup-apple-runner-build',
+  expect(steps.some((step) => step.uses === './.github/actions/boot-ios-test-simulator')).toBe(
+    false,
   );
+  expect(steps.some((step) => step.uses === './.github/actions/setup-fixture-app')).toBe(false);
   const wait = steps.findIndex((step) => step.run?.includes('scripts/wait-for-ios-simulator.sh'));
   const tests = steps.findIndex((step) => step.id === 'ios-xctest');
-  expect(boot).toBeGreaterThanOrEqual(0);
-  expect(build).toBeGreaterThan(boot);
-  expect(wait).toBeGreaterThan(build);
+  expect(wait).toBeGreaterThanOrEqual(0);
   expect(tests).toBeGreaterThan(wait);
-  expect(steps[boot]!.with?.['wait-for-boot']).toBe('false');
-  expect(steps[wait]!.run).toContain('steps.ios-simulator.outputs.simulator-udid');
-  expect(steps[wait]!.run).toContain('steps.ios-simulator.outputs.boot-timeout-seconds');
+  expect(steps[wait]!.run).toContain('inputs.simulator-udid');
+  expect(steps[wait]!.run).toContain('inputs.boot-timeout-seconds');
   expect(steps[wait]!.if).toBeUndefined();
   expect(steps[wait]!['continue-on-error']).not.toBe(true);
+});
+
+// The group's outputs cross into the phase as inputs, and a group member that failed would leave
+// the phase running on empty paths: `!cancelled()` does not see a sibling's failure.
+test('the iOS phase requires every device-free setup member to have succeeded', () => {
+  const ios = appleJob().steps.find((step) => step.id === 'ios')!;
+  expect(ios.with).toEqual(
+    expect.objectContaining({
+      'simulator-udid': '${{ steps.ios-simulator.outputs.simulator-udid }}',
+      'boot-timeout-seconds': '${{ steps.ios-simulator.outputs.boot-timeout-seconds }}',
+      'fixture-app-path': '${{ steps.fixture-app.outputs.app-path }}',
+      'fixture-app-id': '${{ steps.fixture-app.outputs.app-id }}',
+      'fixture-source': '${{ steps.fixture-app.outputs.source }}',
+    }),
+  );
+  for (const member of ['ios-simulator', 'ios-runner-build', 'fixture-app']) {
+    expect(ios.if).toContain(`steps.${member}.outcome == 'success'`);
+  }
 });
 
 function simulatorBootFixture(mode: 'ready' | 'failed' | 'stalled') {

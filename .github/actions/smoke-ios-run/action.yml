@@ -1,19 +1,29 @@
 name: Run iOS smoke tests
 description: Run iOS smoke tests
+
+# The caller boots the simulator, builds the runner, and restores the fixture app as one parallel
+# group before it calls this action, because none of those three needs a booted simulator. Their
+# outputs arrive as inputs: a composite cannot read the caller's step context.
+inputs:
+  simulator-udid:
+    description: 'UDID of the iOS simulator the caller booted'
+    required: true
+  boot-timeout-seconds:
+    description: 'Boot wait budget the caller-owned readiness check must honor'
+    required: true
+  fixture-app-path:
+    description: 'Path to the restored fixture app bundle'
+    required: true
+  fixture-app-id:
+    description: 'Bundle identifier of the restored fixture app'
+    required: true
+  fixture-source:
+    description: 'Where the fixture binary came from: artifact or build'
+    required: true
+
 runs:
   using: composite
   steps:
-    - name: Set fixture producer wait policy
-      id: fixture-producer
-      run: |
-        set -euo pipefail
-        WAIT_SECONDS=1800
-        if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-          echo "Fork pull request cannot publish the shared fixture artifact; a cache miss will build inline."
-          WAIT_SECONDS=0
-        fi
-        echo "wait-seconds=$WAIT_SECONDS" >> "$GITHUB_OUTPUT"
-      shell: bash
     - name: Select iOS runner XCTests
       id: xctest-impact
       env:
@@ -21,38 +31,16 @@ runs:
       run: |
         node --experimental-strip-types scripts/apple-ci-impact.ts xctest
       shell: bash
-    - name: Establish host focus canary
-      id: host-focus-canary
-      run: |
-        set -euo pipefail
-        osascript -e 'tell application "Finder" to activate'
-        sleep 1
-        FRONTMOST="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true')"
-        test "$FRONTMOST" = "com.apple.finder"
-        mkdir -p .tmp
-        echo "$FRONTMOST" > .tmp/ios-host-focus-before
-      shell: bash
-    - name: Boot iOS test simulator
-      id: ios-simulator
-      uses: ./.github/actions/boot-ios-test-simulator
-      with:
-        runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
-        preferred-device-name: iPhone 17 Pro
-        wait-for-boot: 'false'
-    - name: Restore and build iOS XCTest runner
-      uses: ./.github/actions/setup-apple-runner-build
-      with:
-        derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
-        cache-key-prefix: ios-runner-prebuilt
-        cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-arm64
-        gate: swift-runner-ios
-        xcuitest-platform: ios
-        xcuitest-destination: generic/platform=iOS Simulator
+    # The caller recorded the host focus canary before its boot started, so a simulator that takes
+    # focus during boot is still measured against the pre-boot frontmost app.
+    # The caller booted this simulator and built this runner alongside the fixture restore, so
+    # both are already in flight when this action starts. Readiness stays mandatory here: no step
+    # below may reach the device before it boots.
     - name: Wait for iOS test simulator
       run: |
         bash scripts/wait-for-ios-simulator.sh \
-          "${{ steps.ios-simulator.outputs.simulator-udid }}" \
-          "${{ steps.ios-simulator.outputs.boot-timeout-seconds }}"
+          "${{ inputs.simulator-udid }}" \
+          "${{ inputs.boot-timeout-seconds }}"
       shell: bash
     - name: Run iOS runner platform checks
       id: ios-xctest
@@ -70,7 +58,7 @@ runs:
         mkdir -p "$GITHUB_WORKSPACE/test/artifacts"
         xcodebuild test-without-building \
           -xctestrun "$XCTESTRUN_PATH" \
-          -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+          -destination "platform=iOS Simulator,id=${{ inputs.simulator-udid }}" \
           -resultBundlePath "$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions.xcresult" \
           "${IOS_PR_TEST_ARGS[@]}" 2>&1 | tee /tmp/agent-device-runner-regressions.log
         xcrun xcresulttool get test-results summary \
@@ -92,34 +80,28 @@ runs:
           const c = await ensureDaemon({ stateDir: process.env.AGENT_DEVICE_STATE_DIR });
           console.log(JSON.stringify({ phase: "daemon_cold_startup", started: c.started, pid: c.daemon.pid, durationMs: Math.round(performance.now() - t0) }));
         '
-        node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
+        node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ inputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
       shell: bash
     - name: Run iOS Settings replay smoke test
       run: |
-        node bin/agent-device.mjs test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --debug --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
+        node bin/agent-device.mjs test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ inputs.simulator-udid }}" --retries 2 --debug --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
       shell: bash
-    - name: Fetch current fixture app
-      id: fixture-app
-      uses: ./.github/actions/setup-fixture-app
-      with:
-        install: 'false'
-        wait-for-artifact-seconds: ${{ steps.fixture-producer.outputs.wait-seconds }}
     - name: Report fixture cache source
       run: |
-        echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
+        echo "Fixture app source: ${{ inputs.fixture-source }}" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - name: Run gesture pan-duration smoke replay
       run: |
-        xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
-        node bin/agent-device.mjs test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
+        xcrun simctl install "${{ inputs.simulator-udid }}" "${{ inputs.fixture-app-path }}"
+        node bin/agent-device.mjs test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ inputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
       shell: bash
     - name: Run fixture-backed iOS simulator E2E smoke
       env:
-        AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
-        AGENT_DEVICE_FIXTURE_APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
+        AGENT_DEVICE_FIXTURE_APP_ID: ${{ inputs.fixture-app-id }}
+        AGENT_DEVICE_FIXTURE_APP_PATH: ${{ inputs.fixture-app-path }}
         AGENT_DEVICE_IOS_E2E: '1'
         AGENT_DEVICE_IOS_E2E_TIER: smoke
-        AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
+        AGENT_DEVICE_IOS_UDID: ${{ inputs.simulator-udid }}
       run: |
         xcrun simctl spawn "$AGENT_DEVICE_IOS_UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
         node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
