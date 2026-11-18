@@ -418,8 +418,14 @@ async function publishScriptVersion(
   let staging: string | undefined;
   try {
     if ((revision as number) <= record.revision) {
-      const { entry } = judgeRepeat(() => judgeScriptDestination(record.destination), true);
-      return { published: committedVersionEntry(record, entry) };
+      // A repeat is judged against the record as settled under the record lock, the state a commit writes.
+      const answer = await withRecordLock(file, async () => {
+        const settled = settleUnderLock(file, revision as number, (destination) =>
+          judgeScriptDestination(destination),
+        );
+        return settled && committedVersionEntry(settled.current, settled.entry);
+      });
+      return { published: answer };
     }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
@@ -557,26 +563,19 @@ function publishStaged(
   }>,
 ): string | undefined {
   const { revision, staging, staged, prepared, pending } = version;
-  const record = readRecord(file);
-  if (!record) return undefined;
   // Confirmed here, under the record lock, because the download ran since host-kit answered. The entry it
   // returns is the only path this commit creates or probes: the destination's own spelling never reaches the
   // filesystem, and nothing the record stores can point recovery elsewhere (ADR 0016).
-  const confirm = () => confirmScriptDestination(record.destination, prepared);
-  // A copy whose revision is already committed, or interrupted mid-commit, is a repeat; its judgment is
-  // classified exactly as an early repeat's is.
-  const repeat = revision <= Math.max(record.revision, record.publishing?.revision ?? 0);
-  const { entry } = repeat ? judgeRepeat(confirm, revision <= record.revision) : confirm();
-  let current = settlePublishing(record, entry);
-  if (record.publishing) {
-    // Once the settled record is written, its staging directory can no longer be named.
-    writeRecord(file, current);
-    releaseStaging(file, record.publishing.staging);
-    current = withoutStaging(current, record.publishing.staging);
-  }
+  const settled = settleUnderLock(file, revision, (destination) =>
+    confirmScriptDestination(destination, prepared),
+  );
+  if (!settled) return undefined;
+  const { current, entry } = settled;
   // A copy that became a repeat while it downloaded is answered exactly as an early repeat is.
   if (revision <= current.revision) return committedVersionEntry(current, entry);
+  // A version whose staged bytes cannot be digested could never be verified later, so it is not committed.
   const digest = contentDigest(staged);
+  if (digest === undefined) throw new Error('The staged script could not be digested.');
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging, digest };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
@@ -596,13 +595,41 @@ function publishStaged(
   return entry;
 }
 
+/**
+ * Runs under the record lock, for a repeat and for a commit alike: re-reads the record, judges its destination,
+ * and settles an interrupted version against the entry judged, writing the settled record. A repeat's judgment
+ * is classified as a repeat's is. Nothing, when the record went away.
+ */
+function settleUnderLock(
+  file: string,
+  revision: number,
+  judge: (destination: string) => ScriptDestination,
+): Readonly<{ current: ScriptRecord; entry: string }> | undefined {
+  const record = readRecord(file);
+  if (!record) return undefined;
+  const judged = () => judge(record.destination);
+  const repeat = revision <= Math.max(record.revision, record.publishing?.revision ?? 0);
+  const { entry } = repeat ? judgeRepeat(judged, revision <= record.revision) : judged();
+  let current = settlePublishing(record, entry);
+  if (record.publishing) {
+    // Once the settled record is written, its staging directory can no longer be named.
+    writeRecord(file, current);
+    releaseStaging(file, record.publishing.staging);
+    current = withoutStaging(current, record.publishing.staging);
+  }
+  return { current, entry };
+}
+
 /** An interrupted version counts as published only when the entry host-kit authorized is that very file. */
 function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
   const settled = withoutPublishing(record);
   const { publishing } = record;
   if (!publishing || fileIdentity(entry) !== publishing.file) return settled;
+  // The promoted version's digest replaces the previous one, and a version that carries none clears it, so a
+  // repeat never verifies the new file against an older version's bytes.
+  const { committedDigest: _previous, ...promoted } = settled;
   return {
-    ...settled,
+    ...promoted,
     revision: Math.max(settled.revision, publishing.revision),
     ...(publishing.digest === undefined ? {} : { committedDigest: publishing.digest }),
   };
@@ -654,7 +681,8 @@ function contentDigest(file: string): string | undefined {
   }
   if (descriptor === undefined) return undefined;
   try {
-    const { size } = fs.fstatSync(descriptor);
+    const opened = fs.fstatSync(descriptor, { bigint: true });
+    const size = Number(opened.size);
     if (size > MAX_SCRIPT_BYTES) return undefined;
     const hash = crypto.createHash('sha256');
     const chunk = Buffer.allocUnsafe(DIGEST_CHUNK_BYTES);
@@ -666,7 +694,14 @@ function contentDigest(file: string): string | undefined {
       if (total > MAX_SCRIPT_BYTES) return undefined;
       hash.update(chunk.subarray(0, read));
     }
-    if (total !== size || fs.fstatSync(descriptor).size !== size) return undefined;
+    if (total !== size) return undefined;
+    // The bytes hashed belong to the entry only while the descriptor is still that entry, unchanged since it
+    // was opened: a replacement, or a same-length write after the read, moves one of these.
+    const read = fs.fstatSync(descriptor, { bigint: true });
+    const current = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+    if (!current || !sameUnchangedFile(opened, read) || !sameUnchangedFile(read, current)) {
+      return undefined;
+    }
     return hash.digest('hex');
   } finally {
     fs.closeSync(descriptor);
@@ -674,6 +709,16 @@ function contentDigest(file: string): string | undefined {
 }
 
 const DIGEST_CHUNK_BYTES = 64 * 1024;
+
+function sameUnchangedFile(left: fs.BigIntStats, right: fs.BigIntStats): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  );
+}
 
 /**
  * A repeated version this client cannot vouch for: its committed file changed or is gone, or a record from

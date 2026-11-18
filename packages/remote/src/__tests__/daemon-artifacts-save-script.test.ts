@@ -132,3 +132,37 @@ test.each([
   probe.mockRestore();
   expect(fs.readdirSync(root)).toEqual([]);
 });
+
+test.each([String.raw`\\localhost\pipe\recorder`, String.raw`\\?\UNC\localhost\pipe\recorder`])(
+  'a forced remote open to the Windows pipe namespace %s is refused before anything else',
+  async (spelled) => {
+    const root = mkdtempForTestSync('script-pipe-');
+    const original = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const probe = vi.spyOn(fs, 'existsSync');
+    try {
+      await expect(
+        prepareRemoteRequestArtifacts(
+          {
+            session: 'owned',
+            command: 'open',
+            positionals: ['Demo'],
+            flags: { saveScript: spelled, force: true },
+            meta: { cwd: root },
+          },
+          REMOTE,
+          signal,
+          createTestHostEnvironment(),
+        ),
+      ).rejects.toMatchObject({
+        code: 'INVALID_ARGS',
+        details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+      });
+      expect(probe).not.toHaveBeenCalled();
+    } finally {
+      probe.mockRestore();
+      Object.defineProperty(process, 'platform', original!);
+    }
+    expect(fs.readdirSync(root)).toEqual([]);
+  },
+);

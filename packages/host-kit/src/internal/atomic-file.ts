@@ -266,9 +266,15 @@ function authorizedEntry(
  * before anything touches the filesystem (ADR 0016).
  */
 export function scriptEntryNameOrRefuse(spelled: string): string {
-  const name = scriptEntryName(spelled, path);
-  if (name === undefined) throw unnamedEntryFailure(spelled, path);
+  const rules = hostPathRules();
+  const name = scriptEntryName(spelled, rules);
+  if (name === undefined) throw unnamedEntryFailure(spelled, rules);
   return name;
+}
+
+/** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */
+function hostPathRules(): path.PlatformPath {
+  return process.platform === 'win32' ? path.win32 : path.posix;
 }
 
 /**
@@ -341,6 +347,8 @@ function windowsEntryName(normalized: string, rules: path.PlatformPath): string 
   if (/^\\\\\?\\/.test(normalized) && !/^\\\\\?\\(?:[A-Z]:\\|UNC\\)/i.test(normalized))
     return undefined;
   if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
+  // A share named `pipe` is the named-pipe namespace, ordinary or extended, and opens a pipe, not a file.
+  if (/^\\\\(?:\?\\UNC\\)?[^\\]+\\pipe(?:\\|$)/i.test(normalized)) return undefined;
   const { base } = rules.parse(normalized);
   if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
   // Microsoft's naming rules: no reserved character or control character, no trailing dot or space, and no
@@ -349,7 +357,9 @@ function windowsEntryName(normalized: string, rules: path.PlatformPath): string 
     return undefined;
   // Only ASCII spaces fall away before the comparison; a no-break space is part of the name.
   const stem = base.split('.')[0]?.replace(/ +$/, '') ?? '';
-  return /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$/i.test(stem) ? undefined : base;
+  return /^(?:CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$)$/i.test(stem)
+    ? undefined
+    : base;
 }
 
 /**

@@ -77,3 +77,24 @@ test.each(['./missing/.', 'missing/..', '~/'])(
     });
   },
 );
+
+test.each([String.raw`\\localhost\pipe\recorder`, String.raw`\\?\UNC\localhost\pipe\recorder`])(
+  'a local owner path in the Windows pipe namespace %s is refused at the seam',
+  (spelled) => {
+    const original = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      expect(
+        saveScriptFlagResponse(request('open', { saveScript: spelled, force: true })),
+      ).toMatchObject({
+        ok: false,
+        error: {
+          code: 'INVALID_ARGS',
+          details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+        },
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', original!);
+    }
+  },
+);

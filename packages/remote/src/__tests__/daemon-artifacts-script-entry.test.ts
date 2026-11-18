@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as file from '@agent-device/host-kit/file';
+import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   answer,
@@ -22,6 +23,7 @@ vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
     ...actual,
     confirmScriptDestination: vi.fn(actual.confirmScriptDestination),
     prepareScriptDestination: vi.fn(actual.prepareScriptDestination),
+    openVerifiedFileForRead: vi.fn(actual.openVerifiedFileForRead),
     publishFileSync: vi.fn(actual.publishFileSync),
   };
 });
@@ -33,6 +35,7 @@ const actual = await vi.importActual<typeof import('@agent-device/host-kit/file'
 afterEach(() => {
   vi.mocked(file.confirmScriptDestination).mockImplementation(actual.confirmScriptDestination);
   vi.mocked(file.prepareScriptDestination).mockImplementation(actual.prepareScriptDestination);
+  vi.mocked(file.openVerifiedFileForRead).mockImplementation(actual.openVerifiedFileForRead);
   vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
 });
 
@@ -619,3 +622,150 @@ test('an interrupted first save whose directory is gone says it was never confir
     message: expect.stringMatching(/saved earlier/),
   });
 });
+
+/** Fails the record write that records a committed revision, leaving the version interrupted mid-commit. */
+function interruptNextCommit(): void {
+  let writes = 0;
+  vi.mocked(file.publishFileSync).mockImplementation((options) => {
+    // Record writes of one version: listing the staging directory, naming the version, its revision.
+    if (options.destination.endsWith('.json') && writes++ === 2) throw new Error('crashed');
+    actual.publishFileSync(options);
+  });
+}
+
+test('an older repeat over a newer version interrupted mid-commit reports the file there', async () => {
+  // Version 2 renamed into place, but its revision was never recorded. Version 1 arriving again is judged
+  // against the record as the lock settles it, where version 2 is the committed one.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  interruptNextCommit();
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 1, publishing: { revision: 2 } });
+
+  const older = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(older).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(older.ok && older.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+});
+
+test('a promoted version that carries no digest clears the older one instead of judging by it', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  interruptNextCommit();
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+  // An interrupted version from an earlier release named no digest.
+  const { file: recordFile, record } = soleRecord(stateDir);
+  const { digest: _digest, ...publishing } = record.publishing;
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, publishing }));
+
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(again).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_unverified' } },
+  });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('committedDigest');
+});
+
+test('a version whose staged bytes cannot be digested is not committed', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  vi.mocked(file.openVerifiedFileForRead).mockImplementation((target) => {
+    if (target.endsWith(`${path.sep}script.ad`)) throw new AppError('COMMAND_FAILED', 'unreadable');
+    return actual.openVerifiedFileForRead(target);
+  });
+
+  const { response } = await open(baseUrl, stateDir, destination);
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_download_failed' } },
+  });
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 0 });
+});
+
+/** Runs `change` at the digest's `call`-th chunked read of the file, before that read happens. */
+function onDigestRead(call: number, change: () => void) {
+  const read = fs.readSync.bind(fs) as (...args: unknown[]) => number;
+  let calls = 0;
+  return vi.spyOn(fs, 'readSync').mockImplementation(((...args: unknown[]) => {
+    const chunked = (args[1] as Buffer | undefined)?.length === 64 * 1024 && args[4] === null;
+    if (chunked && ++calls === call) change();
+    return read(...args);
+  }) as typeof fs.readSync);
+}
+
+test.skipIf(process.platform === 'win32').each([
+  {
+    name: 'the entry is replaced, with the committed bytes, after the open',
+    call: 1,
+    change: (destination: string) => {
+      fs.writeFileSync(`${destination}.new`, 'v1\n');
+      fs.renameSync(`${destination}.new`, destination);
+    },
+  },
+  {
+    name: 'the file is rewritten in place at the same length after its bytes were read',
+    call: 2,
+    change: (destination: string) => fs.writeFileSync(destination, 'v9\n'),
+  },
+])('a repeat whose $name discloses the change', async ({ call, change }) => {
+  // The descriptor still hashes to the committed digest; only the entry that stands there now counts.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const spy = onDigestRead(call, () => change(destination));
+
+  try {
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test.skipIf(process.platform === 'win32')(
+  'the real walk through a linked parent creates and reports the entry it judged',
+  async () => {
+    // No mocks: the parent is spelled through a symbolic link, and the walk's own answer is where the
+    // script lands and what is reported.
+    const { stateDir, directory } = caller();
+    const real = path.join(directory, 'real');
+    fs.mkdirSync(real, { recursive: true, mode: 0o700 });
+    fs.symlinkSync(real, path.join(directory, 'linked'));
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+
+    const { response } = await open(
+      baseUrl,
+      stateDir,
+      path.join(directory, 'linked', 'journey.ad'),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      data: { savedScript: path.join(real, 'journey.ad') },
+    });
+    expect(fs.readFileSync(path.join(real, 'journey.ad'), 'utf8')).toBe('v1\n');
+    expect(fs.lstatSync(path.join(directory, 'linked')).isSymbolicLink()).toBe(true);
+  },
+);

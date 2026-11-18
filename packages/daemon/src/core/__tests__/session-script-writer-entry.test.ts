@@ -1,5 +1,7 @@
 // What a local recording does at the final entry the destination rule authorizes: a name too long to hold, a
-// directory or a hard link already standing there, under each overwrite mode (ADR 0016).
+// directory or a hard link already standing there, under each overwrite mode (ADR 0016). The overlong name is
+// what this rule refuses; the directory and hard-link rows are behavior pins that held before it and must keep
+// holding through the single owner.
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
