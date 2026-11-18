@@ -12,8 +12,11 @@ import {
 } from './atomic-file-host.fixtures.ts';
 import {
   confirmScriptDestination,
+  isAtomicPublishTemporaryPath,
   prepareScriptDestination,
   scriptEntryName,
+  unnamedEntryFailure,
+  withAtomicPublishTempPathSync,
 } from './atomic-file.ts';
 import { resolveScriptDestination } from './path-resolution.ts';
 
@@ -200,3 +203,32 @@ test("an unnamed entry is the caller's input to correct, and hints at a file nam
   expect(failure?.code).toBe('INVALID_ARGS');
   expect(failure?.details?.hint).toMatch(/valid file name/);
 });
+
+test('a temp sibling belongs to its own destination even when another name shares its first 64 bytes', () => {
+  const shared = 'a'.repeat(64);
+  const first = path.join('/recordings', `${shared}-first.ad`);
+  const second = path.join('/recordings', `${shared}-second.ad`);
+  const sibling = withAtomicPublishTempPathSync(first, (temporaryPath) => temporaryPath);
+
+  expect(isAtomicPublishTemporaryPath(sibling, first)).toBe(true);
+  expect(isAtomicPublishTemporaryPath(sibling, second)).toBe(false);
+  expect(Buffer.byteLength(path.basename(sibling))).toBeLessThan(128);
+});
+
+test.each([
+  { spelled: 'C:\\di:r\\journey.ad', blames: 'path' },
+  { spelled: 'C:\\dir\\a:b.ad', blames: 'name' },
+])(
+  'a Windows colon in the $blames is refused with a hint about the $blames',
+  ({ spelled, blames }) => {
+    const failure = unnamedEntryFailure(spelled, path.win32);
+
+    expect(failure.code).toBe('INVALID_ARGS');
+    expect(failure.details).toMatchObject({
+      exposure: 'unnamed_entry',
+      ancestor: path.win32.dirname(spelled),
+    });
+    if (blames === 'path') expect(failure.details?.hint).toMatch(/directory names/);
+    else expect(failure.details?.hint).toMatch(/valid file name/);
+  },
+);

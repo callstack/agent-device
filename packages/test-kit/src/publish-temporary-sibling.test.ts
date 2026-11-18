@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -29,7 +30,7 @@ skipOnWindows('matches a temp sibling reached through a .. that steps back from 
   fs.mkdirSync(privY);
   fs.symlinkSync(privX, path.join(home, 'work'));
   const destination = `${home}/work/../y/journey.ad`;
-  const named = `.journey.ad.${process.pid}-0000.tmp`;
+  const named = temporaryName('journey.ad');
   const realSibling = path.join(privY, named);
   const lookAlike = path.join(homeY, named);
 
@@ -50,7 +51,7 @@ skipOnWindows(
     const alias = path.join(root, 'alias');
     fs.symlinkSync(physical, alias);
     const destination = path.join(alias, 'report.json');
-    const staged = path.join(fs.realpathSync(physical), `.report.json.${process.pid}-0000.tmp`);
+    const staged = path.join(fs.realpathSync(physical), temporaryName('report.json'));
 
     expect(isPublishTemporarySiblingOf(staged, destination)).toBe(true);
     // Still one directory's worth of names: a sibling that is not this destination's temp file is not it.
@@ -62,6 +63,12 @@ skipOnWindows(
     ).toBe(false);
   },
 );
+
+/** A temp sibling's name as host-kit spells it: a readable stem, a hash of the whole name, then a random tail. */
+function temporaryName(name: string): string {
+  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 12);
+  return `.${name}.${digest}.${process.pid}-0000.tmp`;
+}
 
 function fixtureRoot(label: string): string {
   return mkdtempForTestSync(`agent-device-temp-sibling-${label}-`);

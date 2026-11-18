@@ -26,16 +26,25 @@ test('remote open separates the caller output from the daemon target', async () 
   expect(result.flags?.saveScript).toBe(true);
 });
 
-test.each(['replay', 'close'])('remote %s save-script stays unsupported', async (command) => {
-  await expect(
-    prepareRemoteRequestArtifacts(
-      { session: 'owned', command, positionals: [], flags: { saveScript: true } },
-      REMOTE,
-      signal,
-      createTestHostEnvironment(),
-    ),
-  ).rejects.toMatchObject({ details: { reason: 'remote_script_lifecycle_unsupported' } });
-});
+test.each(
+  ['replay', 'close'].flatMap((command) =>
+    [true, '', './missing/.'].map((saveScript) => ({ command, saveScript })),
+  ),
+)(
+  'remote $command save-script stays unsupported for $saveScript',
+  async ({ command, saveScript }) => {
+    // The lifecycle is refused before the spelling is judged: a malformed path does not hide that the command
+    // cannot save a script remotely at all.
+    await expect(
+      prepareRemoteRequestArtifacts(
+        { session: 'owned', command, positionals: [], flags: { saveScript } },
+        REMOTE,
+        signal,
+        createTestHostEnvironment(),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'remote_script_lifecycle_unsupported' } });
+  },
+);
 
 test('existing client target refuses before dispatch unless force was granted', async () => {
   const root = mkdtempForTestSync('script-existing-');

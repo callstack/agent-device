@@ -170,16 +170,21 @@ function createAtomicPublishTempPath(directory: string, destination: string): st
 }
 
 /** How many bytes of the destination's name a temp sibling repeats, so a reader can still tell whose it is. */
-const TEMP_NAME_STEM_BYTES = 64;
+const TEMP_NAME_STEM_BYTES = 32;
 
-/** The start every temp sibling of `destination` shares: a dot, at most 64 bytes of its name, and a dot. */
+/**
+ * The start every temp sibling of `destination` shares, and no other destination's: at most 32 bytes of its
+ * name for a reader, then a hash of the WHOLE name, so two names that share their first bytes never share it.
+ */
 function temporaryNamePrefix(destination: string): string {
+  const name = path.basename(destination);
   let stem = '';
-  for (const character of path.basename(destination)) {
+  for (const character of name) {
     if (Buffer.byteLength(stem + character) > TEMP_NAME_STEM_BYTES) break;
     stem += character;
   }
-  return `.${stem}.`;
+  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 12);
+  return `.${stem}.${digest}.`;
 }
 
 function removeTempBestEffort(destination: string, temporaryPath: string | undefined): void {
@@ -262,10 +267,35 @@ function authorizedEntry(
  */
 export function scriptEntryNameOrRefuse(spelled: string): string {
   const name = scriptEntryName(spelled, path);
-  if (name === undefined) {
-    throw scriptAncestryFailure(spelled, path.dirname(spelled), 'unnamed_entry');
-  }
+  if (name === undefined) throw unnamedEntryFailure(spelled, path);
   return name;
+}
+
+/**
+ * The refusal for a spelling {@link scriptEntryName} names no entry for. A Windows directory holding a `:` is
+ * the PATH's fault, not its last name's, so that refusal names the directory and says what to change there.
+ */
+export function unnamedEntryFailure(spelled: string, rules: path.PlatformPath): AppError {
+  const parent = rules.dirname(spelled);
+  if (rules.sep === '\\' && holdsColonAfterRoot(rules.normalize(parent), rules)) {
+    return new AppError(
+      'INVALID_ARGS',
+      `Refusing to save the script under ${parent}: a Windows path cannot hold \`:\` after its drive, and a directory in it does.`,
+      {
+        reason: SCRIPT_ANCESTRY_REASONS[0],
+        exposure: 'unnamed_entry',
+        path: spelled,
+        ancestor: parent,
+        hint: 'Remove the `:` from the directory names in the script path.',
+      },
+    );
+  }
+  return scriptAncestryFailure(spelled, parent, 'unnamed_entry');
+}
+
+/** Whether a Windows path holds a `:` past its root, where only a stream separator would put one. */
+function holdsColonAfterRoot(normalized: string, rules: path.PlatformPath): boolean {
+  return normalized.slice(rules.parse(normalized).root.length).includes(':');
 }
 
 /**
@@ -300,8 +330,8 @@ const NAME_MAX = 255;
 function windowsEntryName(normalized: string, rules: path.PlatformPath): string | undefined {
   if (/^\\\\(?:\.\\|\?\\GLOBALROOT(?:\\|$))/i.test(normalized)) return undefined;
   if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
-  const { root, base } = rules.parse(normalized);
-  if (base === '' || normalized.slice(root.length).includes(':')) return undefined;
+  const { base } = rules.parse(normalized);
+  if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
   const stem = base.split('.')[0]?.trimEnd() ?? '';
   return /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(stem) ? undefined : base;
 }
