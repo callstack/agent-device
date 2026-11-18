@@ -1,23 +1,20 @@
 # Security
 
-A client trusts its caller for local paths, and a remote daemon only for data and checked IDs.
-A daemon trusts its state directory. Nobody trusts the network or other local users.
-Out of scope: same uid, root as adversary, ACLs, mounts, untrusted filesystems.
+Clients trust callers for local paths and remote daemons only for data and checked IDs. Daemons trust their state directory. Nobody trusts the network or other users.
+Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 
-ADR 0016 judges caller-named script destinations on POSIX against the writer's uid.
-Remote publication IDs bind to endpoint, tenant, and session.
+ADR 0016 checks caller-named script destinations on POSIX against the writer's uid.
 
-New or migrated write sites:
+New or migrated writes (#4669):
 
-- Authorize a destination where it is written. Authentication is identity only.
-- Authorize a privileged write against the caller's uid.
-- Accept from a peer only data, a locally bound ID, or one entry name under an authorized root.
+- Authorize a destination where it is written, against the caller's uid, not by identity.
+- Accept from a peer only data, an ID bound to a local record (endpoint, tenant, session), or one entry name under an authorized root.
 - Validate entry names: type, NUL, empty, `.`, `..`, separators, platform rules.
-- Use explicit `path.posix` or `path.win32`. Never fold a kernel-resolved path lexically.
+- Use explicit `path.posix`/`path.win32`. Never fold kernel-resolved paths.
 - For caller output, judge each directory as ADR 0016 does.
-- Commit into the judged parent. After async work, re-walk and compare identity.
-- Commit by exclusive create, no-clobber link, same-filesystem rename, or descriptor append, at the restrictive mode.
+- Stage inside the judged parent. After async work, re-walk and compare identity.
+- Before you append or truncate, verify the opened file descriptor.
+- Overwrite only when the caller asked for it.
+- Commit by exclusive create, link, or same-filesystem rename, at the restrictive mode.
 - Bound remote bytes. Clean up only what you created.
-- Before commit, a failed delivery keeps the previous file. Disclose it with a typed reason. Keep the action result where required.
-
-#4669 proposes destination classes. Prior art: `openat2(RESOLVE_BENEATH)`, Go `os.Root`.
+- If delivery fails before commit, keep the previous file and, where required, the action result. Disclose a typed reason.
