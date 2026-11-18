@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
-import { streamReadableToFile, validateArtifactContentLength } from '../artifact-download.ts';
+import { validateArtifactContentLength } from '../artifact-download.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -212,20 +212,24 @@ test('receiveUpload extracts gzip-compressed app bundle archives', async () => {
   }
 });
 
-test('streamReadableToFile removes partial files after stream errors', async () => {
+test('receiveUpload removes its partial file when the request stream fails', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-upload-error-');
-  const destPath = path.join(tempRoot, 'partial.bin');
-  const source = new Readable({
-    read() {
-      this.push('partial');
-      this.destroy(new Error('source failed'));
-    },
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  const source = Object.assign(new PassThrough(), {
+    headers: { 'x-artifact-type': 'file', 'x-artifact-filename': 'partial.bin' },
   });
-
   try {
-    await assert.rejects(async () => await streamReadableToFile(source, destPath), /source failed/);
-    assert.equal(fs.existsSync(destPath), false);
+    const failure = new Error('source failed');
+    const receiving = receiveUpload(source as unknown as IncomingMessage, {
+      onBodyBytes: () => source.destroy(failure),
+    });
+    source.write('partial');
+    await assert.rejects(receiving, (error: unknown) => error === failure);
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
   } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
