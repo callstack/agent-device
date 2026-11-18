@@ -169,7 +169,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
 } satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'audit'>;
 
 const auditCommandDescription =
-  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, and covered controls. Each finding shows its role and includes the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers. UIKit sheet grabbers are skipped. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
+  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, and covered controls. Each finding shows its role. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
 
 export const auditCommandFacet = defineParameterlessCommandFacet({
   name: AUDIT_COMMAND_NAME,
