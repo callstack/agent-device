@@ -230,14 +230,14 @@ A destination a caller names — `--save-script=<path>` on the local route, or t
 
 **Sticky directories.** The sticky bit excuses a directory the walk passes THROUGH when the current user or root owns it, because only an entry's owner or root can then replace that entry. A sticky directory another user owns is refused: those bits shield other users from that owner, not the reverse. Inside a sticky directory this user or root owns, the walk may create a missing private subdirectory, but it refuses to create the script entry in any parent that admits entries from others, because anyone could create that name first. Every followed link is judged with `untrustedLinkExposure` against the directory that holds it, at any depth: the link is accepted when that directory keeps others from adding entries, or when that directory is sticky and this user or root owns the link. The link's own mode is never consulted, because a link's bits say nothing about access on Linux. Root-owned system aliases (macOS `/tmp` to `/private/tmp`, `/var` to `/private/var`) keep working.
 
-**Group-writable directories.** A group-writable directory is refused (`shared_group_writable`, with a `chmod g-w` hint), whoever owns it and whatever its group holds. The sticky bit excuses it for passing through, and nothing else does. This refuses a stock Ubuntu or Debian home at 0775 with a private group named after its user, because membership cannot be proven. On a systemd host, `systemd-userdbd` and `userdbctl` serve users and memberships that `/etc/passwd` and `/etc/group` never show, even when `nsswitch.conf` names only `files systemd`. Reading the account files would also make the answer depend on the host's name service, which no other part of this rule does. `chmod g-w <directory>` is the recovery, and it costs one command.
+**Group-writable directories.** The exposure checks run in order: ownership, sticky bit, world write, group write. A directory another user owns is refused as `foreign_owned` first. A non-sticky directory this user or root owns is refused as `world_writable` when others can write it, and otherwise as `shared_group_writable` (with a `chmod g-w` hint) when its group can, whatever that group holds. The sticky bit excuses a writable directory for passing through, and nothing else does. This refuses a stock Ubuntu or Debian home at 0775 with a private group named after its user, because membership cannot be proven. On a systemd host, `systemd-userdbd` and `userdbctl` serve users and memberships that `/etc/passwd` and `/etc/group` never show, even when `nsswitch.conf` names only `files systemd`. Reading the account files would also make the answer depend on the host's name service, which no other part of this rule does. `chmod g-w <directory>` is the recovery, and it costs one command.
 
 **Platform limits.** The rule is POSIX-only. On Windows the walk does not run: owners, mode bits and link shape are not read, `chmod` toggles only the read-only bit, creation is a recursive `mkdir`, and access is the ACL of the directory the operator chose.
 
 | Case | Result | Permitted side effects |
 | --- | --- | --- |
 | A route through a non-sticky world-writable directory this user or root owns, reached directly or through a link target | Refused, `world_writable` | None |
-| A route through a link another user owns in a sticky shared directory | Refused, `planted_link` | None |
+| A route through a link that neither this user nor root owns, in a shared sticky directory this user or root owns | Refused, `planted_link` | None |
 | A `..` applied, as the kernel applies it, to the physical directory reached, landing in a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
 | A relative link target, resolved from the directory that holds the link, that crosses a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
 | A `..` queued behind a missing directory | Refused, `unresolvable_parent` | None |
@@ -245,10 +245,10 @@ A destination a caller names — `--save-script=<path>` on the local route, or t
 | A missing parent below a sticky directory this user or root owns | Accepted | The parent, at 0700, and the published entry in it |
 | A missing parent below a non-sticky world-writable directory this user or root owns | Refused, `world_writable` | None |
 | A missing level created meanwhile as this user's private directory | Accepted | The entry |
-| A missing level created meanwhile foreign-owned, group-writable, or sticky and world-writable | Refused, `foreign_owned`, `shared_group_writable`, or `shared_parent` | Directories this call already created |
-| The entry directly inside a shared sticky directory | Refused, `shared_parent` | None |
+| A missing level created meanwhile: foreign-owned; or owned by this user or root and non-sticky world-writable, non-sticky group-writable only, or sticky with either write bit | Refused, `foreign_owned`, `world_writable`, `shared_group_writable`, or `shared_parent` respectively | Directories this call already created |
+| The entry directly inside a shared sticky directory this user or root owns (a foreign-owned one is `foreign_owned` first) | Refused, `shared_parent` | None |
 | A directory another user created first in sticky `/tmp` | Refused, `foreign_owned` | None |
-| A group-writable directory the current user owns | Refused, `shared_group_writable` | None |
+| A non-sticky directory this user or root owns that only its group can write | Refused, `shared_group_writable` | None |
 | A link loop, or a file as a path component | Refused, `link_loop_exceeded` or `not_a_directory` | None |
 | A relative destination at host-kit's entry | Refused, `relative_destination` | None |
 | A remote destination directory replaced while a version downloads | Refused when the confirming walk rejects the replacement or finds a different `dev:ino` (`parent_replaced`) | No entry |
