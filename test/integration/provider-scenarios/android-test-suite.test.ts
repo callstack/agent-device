@@ -194,11 +194,13 @@ test(
           world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
           ['shell', 'input', 'tap', '180', '330'],
         );
+        // Each flow's launchApp stops the app, and the suite's close of each flow's session
+        // stops the session app again.
         assert.equal(
           world.adbCalls.filter(
             (call) => call.join(' ') === 'shell am force-stop com.android.settings',
           ).length,
-          2,
+          4,
         );
         // The second flow's open finds the helper the first flow installed, so its launch probe
         // adds one capture.

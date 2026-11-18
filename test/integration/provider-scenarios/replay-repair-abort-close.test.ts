@@ -6,12 +6,11 @@ import { test } from 'vitest';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
 import {
-  androidImeLifecycleAdbResult,
   createAndroidProviderShellState,
   updateAndroidProviderImeShellState,
 } from './android-ime-lifecycle-world.ts';
+import { androidRepairAdbResult } from './replay-repair-world.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -109,33 +108,3 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 }, 30_000);
-
-function androidRepairAdbResult(
-  args: readonly string[],
-  shellState: ReturnType<typeof createAndroidProviderShellState>,
-): {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-} {
-  const ime = androidImeLifecycleAdbResult(args.join(' '), args, shellState);
-  if (ime) return ime;
-  if (args.join(' ') === 'shell getprop sys.boot_completed') {
-    return { stdout: '1\n', stderr: '', exitCode: 0 };
-  }
-  if (args.join(' ') === 'shell dumpsys window windows') {
-    return {
-      stdout: 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n',
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  if (args.join(' ').startsWith('shell am instrument ')) {
-    return {
-      stdout: androidSnapshotHelperOutput(androidSettingsXml('Display')),
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  return { stdout: '', stderr: '', exitCode: 0 };
-}
