@@ -212,7 +212,8 @@ Scope:
 Loop for each screen:
   1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
   2. Run agent-device audit, then agent-device snapshot -i. Audit captures the screen itself, so it goes first.
-  3. Record each finding with its ref, element name, and kind. Act on the pinned refs (@eN~sG) that audit prints, or on refs from that snapshot.
+  3. Record each finding with its element name and kind. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
+     To act on a finding, use the ref from that snapshot -i. Match the finding to the snapshot by element name, not by ref number.
   4. Capture evidence: agent-device screenshot ./a11y-output/<screen>.png --overlay-refs
 
 Coverage:
@@ -225,9 +226,11 @@ Checks audit cannot do:
     At the end, set the recorded size again with agent-device settings text-size <recorded-size>.
   Dark mode: first note the current mode from a screenshot. Then run agent-device settings appearance dark, then screenshot each key screen. Look for low-contrast text and icons by eye.
     At the end, set the noted mode again with agent-device settings appearance <light|dark>.
+  If settings refuses on this device, such as a physical iPhone, list large text and dark mode as not done.
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
     A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
+    Run agent-device snapshot -i --actions to list the accessibility actions of each element.
 
 Fix loop (only when the user asks to fix):
   Change the app source, then reload (Fast Refresh, or agent-device open <app> --relaunch).
@@ -235,7 +238,7 @@ Fix loop (only when the user asks to fix):
 
 Report:
   Group findings by screen. For each finding, give the kind, element name, ref, screenshot path, and suggested fix.
-  List the checks you could not do.`,
+  List the checks you could not do. Include audit's limitation lines in that list.`,
   },
   dogfood: {
     summary: 'Exploratory QA workflow with reproducible evidence',
@@ -257,7 +260,7 @@ Loop:
   Keep stateful commands serial within the same session. Parallel runs can pollute text fields, focus, alerts, and navigation state.
 
 Platform checks:
-  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Act on the refs from that snapshot, or on the pinned refs (@eN~sG) audit prints. Report audit's findings as accessibility findings.
+  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i, matched by element name. Report audit's findings as accessibility findings.
   For a whole-app accessibility review, read help accessibility.
   On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
