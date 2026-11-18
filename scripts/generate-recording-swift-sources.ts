@@ -10,8 +10,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const scriptsDir = path.join(repoRoot, 'apple/runner/AgentDeviceRunner/RecordingScripts');
 const output = path.join(repoRoot, 'packages/capture-kit/src/recording/recording-swift-sources.ts');
 
-const read = (fileName: string) =>
-  JSON.stringify(fs.readFileSync(path.join(scriptsDir, fileName), 'utf8'));
+// Only a regular file in the checkout is embedded: a link could carry any file's bytes into the build.
+function read(fileName: string): string {
+  const source = path.join(scriptsDir, fileName);
+  if (!fs.lstatSync(source).isFile())
+    throw new Error(`${source} is not a regular file; refusing to embed it.`);
+  return JSON.stringify(fs.readFileSync(source, 'utf8'));
+}
 
 fs.writeFileSync(
   output,

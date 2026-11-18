@@ -88,6 +88,29 @@ test('every embedded source participates in the cache key and reaches the compil
   expect(staged).toContainEqual(['recording-overlay.swift', 'RecordingExportSupport.swift']);
 });
 
+test('staged sources are written owner-only, whatever the umask', async () => {
+  const previousUmask = process.umask(0o022);
+  const modes: number[] = [];
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    for (const sourcePath of args.slice(3, args.indexOf('-o'))) {
+      modes.push(fs.statSync(sourcePath).mode & 0o777);
+    }
+    fs.writeFileSync(args[args.indexOf('-o') + 1]!, 'compiled');
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  try {
+    await compileSwiftSources({
+      host: createTestHost(),
+      sources: [embedded()],
+      cacheName: 'recording-overlay',
+    });
+  } finally {
+    process.umask(previousUmask);
+  }
+
+  expect(modes).toEqual([0o600]);
+});
+
 test('cache locks with a proven dead owner are recovered before compiling', async () => {
   const { sources, executablePath, lockDir } = await createBlockedCacheEntry();
   fs.writeFileSync(

@@ -378,6 +378,8 @@ test.each([
       }),
     );
     expect(mockRunCmd).not.toHaveBeenCalled();
+    // Refused before anything was created: no level of the cache was made under that ground.
+    expect(fs.readdirSync(shared)).toEqual([]);
   },
 );
 
@@ -924,8 +926,9 @@ test('the selection is canonicalized by the filesystem native spelling, which th
   // directory the native answer names.
   const alias = developerDirectory('alias-spelling');
   const canonical = developerDirectory('Canonical-Spelling');
+  const realNative = fs.realpathSync.native.bind(fs.realpathSync);
   vi.spyOn(fs.realpathSync, 'native').mockImplementation(((name: fs.PathLike) =>
-    String(name) === alias ? canonical : String(name)) as typeof fs.realpathSync.native);
+    String(name) === alias ? canonical : realNative(name)) as typeof fs.realpathSync.native);
 
   await compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: cacheRoot, DEVELOPER_DIR: alias });
 

@@ -111,9 +111,30 @@ function prepareSwiftCacheDirectory(
  */
 function prepareSwiftCacheVersionDirectory(cacheRoot: string): string {
   const versionName = `v${SWIFT_CACHE_VERSION}`;
+  // Judged before anything is created, so no level is made under ground the cache would then refuse.
+  refuseUntrustedCacheAncestry(cacheRoot, untrustedLevelFrom(nearestExistingDirectory(cacheRoot)));
   // The walk judges and creates the PARENT of the name it is given; the version directory is never resolved by it.
   const { directory: root } = prepareScriptDestination(path.join(cacheRoot, versionName));
-  const ancestor = untrustedLevelFrom(root);
+  // Judged again over the completed chain the walk answers.
+  refuseUntrustedCacheAncestry(cacheRoot, untrustedLevelFrom(root));
+  const versionDirectory = path.join(root, versionName);
+  createPrivateDirectory(versionDirectory);
+  judgeOwnedDirectory(versionDirectory);
+  return versionDirectory;
+}
+
+/** The physical path of the nearest directory at or above `directory` that already exists. */
+function nearestExistingDirectory(directory: string): string {
+  for (let level = directory; ; level = path.dirname(level)) {
+    try {
+      return fs.realpathSync.native(level);
+    } catch {
+      if (level === path.dirname(level)) return level;
+    }
+  }
+}
+
+function refuseUntrustedCacheAncestry(cacheRoot: string, ancestor: string | undefined): void {
   if (ancestor !== undefined) {
     const stats = fs.lstatSync(ancestor);
     const exposure = !stats.isDirectory()
@@ -129,10 +150,6 @@ function prepareSwiftCacheVersionDirectory(cacheRoot: string): string {
       hint: swiftCacheHint(exposure, ancestor),
     });
   }
-  const versionDirectory = path.join(root, versionName);
-  createPrivateDirectory(versionDirectory);
-  judgeOwnedDirectory(versionDirectory);
-  return versionDirectory;
 }
 
 /** Creates a directory at 0700 when it is missing; what already stands there is judged by the caller. */
@@ -586,7 +603,7 @@ async function acquireSwiftCacheLock(
 
 function writeSourceText(directory: string, fileName: string, text: string): string {
   const sourcePath = path.join(directory, fileName);
-  fs.writeFileSync(sourcePath, text, { flag: 'wx' });
+  fs.writeFileSync(sourcePath, text, { flag: 'wx', mode: 0o600 });
   return sourcePath;
 }
 
