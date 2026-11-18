@@ -40,31 +40,41 @@ export function resolveScriptDestination(
   spelled: string,
   options: Readonly<{ cwd: string; env?: EnvMap }>,
 ): string {
+  refuseUnqualifiedWindowsForm(spelled, spelled);
+  if (spelled.startsWith('~/')) {
+    refuseUnqualifiedWindowsForm(spelled, resolveHomeDirectory(options.env));
+  } else if (!hostPathRules().isAbsolute(spelled)) {
+    refuseUnqualifiedWindowsForm(spelled, options.cwd);
+  }
   scriptEntryNameOrRefuse(spelled);
   // The working directory or home it is joined to can bring a namespace the spelling did not show, such as a
   // pipe root, so the resolved path is judged by the same gate before anything probes or records it.
-  const resolved = qualifyRootRelative(resolveUserPath(spelled, options), options.cwd);
+  const resolved = resolveUserPath(spelled, options);
   scriptEntryNameOrRefuse(resolved);
   return resolved;
 }
 
 /**
- * A Windows path with ONE leading separator, such as `\\journey.ad`, is relative to the working directory's
- * root, though `isAbsolute` calls it absolute; it is qualified against that root, so the gate, the probe, the
- * record and the publish all see the path the system would open. Node's own resolve drops the server and share
- * of an extended UNC root, so the root is read here.
+ * Refuses a Windows script destination, or the base it is joined to, that is not a drive-letter or UNC share
+ * path: a root-relative path depends on which drive the process stands on, and an extended-length path is
+ * folded differently by the gate and by the system. The caller names the same file in a plain form instead.
  */
-function qualifyRootRelative(resolved: string, cwd: string): string {
-  const rules = hostPathRules();
-  if (rules.sep !== '\\' || !/^[\\/](?![\\/])/.test(resolved)) return resolved;
-  return `${windowsRootOf(rules.normalize(cwd), rules)}${resolved.replace(/^[\\/]+/, '')}`;
-}
-
-/** The root a Windows path stands on, with its trailing separator: a drive, a share, or their extended forms. */
-function windowsRootOf(normalized: string, rules: path.PlatformPath): string {
-  const extended = /^\\\\\?\\(?:UNC\\[^\\]+\\[^\\]+|[A-Z]:)/i.exec(normalized);
-  const root = extended ? extended[0] : rules.parse(normalized).root;
-  return root.endsWith('\\') ? root : `${root}\\`;
+function refuseUnqualifiedWindowsForm(spelled: string, candidate: string): void {
+  if (hostPathRules().sep !== '\\') return;
+  const rootRelative = /^[\\/](?![\\/])/.test(candidate);
+  const extended = /^[\\/]{2}\?[\\/]/.test(candidate);
+  if (!rootRelative && !extended) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Refusing to save the script at ${spelled}: ${candidate === spelled ? 'the path' : `the directory it is joined to, ${candidate},`} is ${extended ? 'an extended-length path' : 'relative to the current drive'}.`,
+    {
+      reason: 'script_ancestor_untrusted',
+      exposure: 'windows_path_form',
+      path: spelled,
+      ancestor: candidate,
+      hint: 'Use a drive-letter path such as C:\\recordings\\journey.ad, or a \\\\server\\share path.',
+    },
+  );
 }
 
 /**

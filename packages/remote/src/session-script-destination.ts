@@ -440,10 +440,14 @@ async function publishScriptVersion(
       });
     } catch (error) {
       // Another delivery may have committed this version since the record was settled; a failed fetch is
-      // only this client's failure while the version is not on disk.
-      const committed = await withRecordLock(file, async () =>
-        settledRepeat(file, revision as number),
-      ).catch(() => undefined);
+      // only this client's failure while the version is not on disk. The staging cleanup and that decision
+      // take ONE lock, the decision after the cleanup, so no commit can land between them. A settlement
+      // that refuses or cannot verify the committed version is that refusal, not the fetch error.
+      staging = undefined;
+      const committed = await withRecordLock(file, async () => {
+        releaseStagingQuietly(file, allocated);
+        return settledRepeat(file, revision as number);
+      });
       if (committed?.published !== undefined) return { published: committed.published };
       throw error;
     }
@@ -485,6 +489,13 @@ function allocateStaging(file: string, prepared: ScriptDestination): string | un
     throw error;
   }
   return staging;
+}
+
+/** Releases a staging directory; one that cannot be removed stays listed, for retirement or the sweep. */
+function releaseStagingQuietly(file: string, staging: string): void {
+  try {
+    releaseStaging(file, staging);
+  } catch {}
 }
 
 /**

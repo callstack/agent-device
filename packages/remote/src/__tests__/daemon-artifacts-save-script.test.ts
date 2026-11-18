@@ -144,11 +144,14 @@ async function onWindowsRules<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
-/** A remote open refused as an unnamed entry before any existence probe, record, or dispatch. */
+/** A remote open refused, under Windows rules, before any existence probe, record, or dispatch. */
 async function expectRefusedBeforeAnything(
   flags: Record<string, unknown>,
-  host = createTestHostEnvironment(),
-  cwd?: string,
+  options: Readonly<{
+    host?: ReturnType<typeof createTestHostEnvironment>;
+    cwd?: string;
+    exposure?: string;
+  }> = {},
 ): Promise<void> {
   const root = mkdtempForTestSync('script-ipc-');
   const probe = vi.spyOn(fs, 'existsSync');
@@ -161,15 +164,18 @@ async function expectRefusedBeforeAnything(
             command: 'open',
             positionals: ['Demo'],
             flags,
-            meta: { cwd: cwd ?? root },
+            meta: { cwd: options.cwd ?? String.raw`C:\work` },
           },
           REMOTE,
           signal,
-          host,
+          options.host ?? createTestHostEnvironment(),
         ),
       ).rejects.toMatchObject({
         code: 'INVALID_ARGS',
-        details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+        details: {
+          reason: 'script_ancestor_untrusted',
+          exposure: options.exposure ?? 'unnamed_entry',
+        },
       }),
     );
     expect(probe).not.toHaveBeenCalled();
@@ -179,15 +185,15 @@ async function expectRefusedBeforeAnything(
   expect(fs.readdirSync(root)).toEqual([]);
 }
 
+const withForce = <T extends object>(cases: readonly T[]) =>
+  cases.flatMap((entry) => [false, true].map((force) => ({ ...entry, force })));
+
 test.each(
-  [
-    String.raw`\\localhost\pipe\recorder`,
-    String.raw`\\?\UNC\localhost\pipe\recorder`,
-    String.raw`\\server\IPC$\recorder`,
-    String.raw`\\?\UNC\server\ipc$\recorder`,
-    String.raw`\\server\mailslot\recorder`,
-    String.raw`\\?\UNC\server\MAILSLOT\recorder`,
-  ].flatMap((spelled) => [false, true].map((force) => ({ spelled, force }))),
+  withForce([
+    { spelled: String.raw`\\localhost\pipe\recorder` },
+    { spelled: String.raw`\\server\IPC$\recorder` },
+    { spelled: String.raw`\\server\mailslot\recorder` },
+  ]),
 )(
   'a remote open to the Windows IPC namespace $spelled (force=$force) is refused before anything else',
   async ({ spelled, force }) => {
@@ -195,64 +201,111 @@ test.each(
   },
 );
 
-test.each([false, true])(
-  'a relative path joined to a pipe-root working directory is refused before anything else (force=%s)',
-  async (force) => {
-    await expectRefusedBeforeAnything(
-      { saveScript: 'journey.ad', ...(force ? { force: true } : {}) },
-      createTestHostEnvironment(),
-      String.raw`\\localhost\pipe`,
-    );
-  },
-);
-
 test.each(
-  [String.raw`\\localhost\pipe`, String.raw`\\server\IPC$`].flatMap((home) =>
-    [false, true].map((force) => ({ home, force })),
-  ),
-)(
-  'a home path joined to the IPC-root HOME $home is refused before anything else (force=$force)',
-  async ({ home, force }) => {
-    // `~/recorder` passes the raw check; only the path it expands to names the namespace.
-    await expectRefusedBeforeAnything(
-      { saveScript: '~/recorder', ...(force ? { force: true } : {}) },
-      createTestHostEnvironment({ env: { HOME: home } }),
-    );
-  },
-);
-
-test.each(
-  [
-    String.raw`\\server\IPC$`,
-    String.raw`\\server\pipe\work`,
-    String.raw`\\?\UNC\server\IPC$`,
-    String.raw`\\?\UNC\server\mailslot\work`,
-  ].flatMap((cwd) => [false, true].map((force) => ({ cwd, force }))),
-)(
-  'a root-relative path on the IPC base $cwd is refused before anything else (force=$force)',
-  async ({ cwd, force }) => {
-    // `\journey.ad` reads as absolute, but it stands on the working directory's root: an IPC share here.
-    await expectRefusedBeforeAnything(
-      { saveScript: String.raw`\journey.ad`, ...(force ? { force: true } : {}) },
-      createTestHostEnvironment(),
-      cwd,
-    );
-  },
-);
-
-test.each(
-  [
-    { cwd: String.raw`\\server\share\work`, expected: String.raw`\\server\share\journey.ad` },
+  withForce([
     {
-      cwd: String.raw`\\?\UNC\server\share\work`,
-      expected: String.raw`\\?\UNC\server\share\journey.ad`,
+      name: 'a pipe-root working directory',
+      cwd: String.raw`\\localhost\pipe`,
+      spelled: 'journey.ad',
     },
-    { cwd: String.raw`C:\work`, expected: String.raw`C:\journey.ad` },
-    { cwd: String.raw`\\?\C:\work`, expected: String.raw`\\?\C:\journey.ad` },
-  ].flatMap((base) => [false, true].map((force) => ({ ...base, force }))),
+    { name: 'an IPC$-root HOME', home: String.raw`\\server\IPC$`, spelled: '~/recorder' },
+    { name: 'a pipe-root HOME', home: String.raw`\\localhost\pipe`, spelled: '~/recorder' },
+  ]),
 )(
-  'a root-relative path on $cwd is probed and recorded as $expected (force=$force)',
-  async ({ cwd, expected, force }) => {
+  'a path joined to $name is refused before anything else (force=$force)',
+  async ({ cwd, home, spelled, force }) => {
+    // The spelling passes the raw check; only the path it expands to names the namespace.
+    await expectRefusedBeforeAnything(
+      { saveScript: spelled, ...(force ? { force: true } : {}) },
+      {
+        cwd,
+        ...(home === undefined ? {} : { host: createTestHostEnvironment({ env: { HOME: home } }) }),
+      },
+    );
+  },
+);
+
+// A root-relative path depends on the current drive, and an extended-length path is folded differently by the
+// gate and by the system: neither is accepted as a script destination, nor as the base one is joined to.
+test.each(
+  withForce([
+    { name: 'a root-relative destination', spelled: String.raw`\journey.ad` },
+    { name: 'a forward-slash root-relative destination', spelled: '/nested/journey.ad' },
+    { name: 'a root-relative destination stepping up', spelled: String.raw`\..\other\journey.ad` },
+    { name: 'an extended drive destination', spelled: String.raw`\\?\C:\recordings\journey.ad` },
+    {
+      name: 'an extended UNC destination',
+      spelled: String.raw`\\?\UNC\server\share\journey.ad`,
+    },
+    {
+      name: 'an extended UNC destination stepping out of its share',
+      spelled: String.raw`\\?\UNC\server\share\..\other\journey.ad`,
+    },
+    {
+      name: 'an extended UNC IPC destination',
+      spelled: String.raw`\\?\UNC\server\IPC$\..\other\journey.ad`,
+    },
+    {
+      name: 'an extended destination with nested forward slashes',
+      spelled: '//?/UNC/server/share/nested/journey.ad',
+    },
+    {
+      name: 'a relative path on an extended UNC working directory',
+      cwd: String.raw`\\?\UNC\server\share`,
+      spelled: String.raw`..\other\journey.ad`,
+    },
+    {
+      name: 'a relative path on an extended drive working directory',
+      cwd: String.raw`\\?\C:\work`,
+      spelled: 'journey.ad',
+    },
+    {
+      name: 'a relative path on a root-relative working directory',
+      cwd: String.raw`\work`,
+      spelled: 'journey.ad',
+    },
+    {
+      name: 'a home path on an extended UNC HOME',
+      home: String.raw`\\?\UNC\server\share`,
+      spelled: '~/journey.ad',
+    },
+    {
+      name: 'a home path on a root-relative HOME',
+      home: String.raw`\home`,
+      spelled: '~/journey.ad',
+    },
+  ]),
+)('$name is refused for its Windows form before anything else (force=$force)', async (entry) => {
+  const { spelled, force } = entry;
+  const cwd = 'cwd' in entry ? entry.cwd : undefined;
+  const home = 'home' in entry ? entry.home : undefined;
+  await expectRefusedBeforeAnything(
+    { saveScript: spelled, ...(force ? { force: true } : {}) },
+    {
+      cwd,
+      exposure: 'windows_path_form',
+      ...(home === undefined ? {} : { host: createTestHostEnvironment({ env: { HOME: home } }) }),
+    },
+  );
+});
+
+test.each(
+  withForce([
+    {
+      spelled: String.raw`C:\recordings\journey.ad`,
+      expected: String.raw`C:\recordings\journey.ad`,
+    },
+    { spelled: 'journey.ad', cwd: String.raw`C:\work`, expected: String.raw`C:\work\journey.ad` },
+    {
+      spelled: String.raw`\\server\share\journey.ad`,
+      expected: String.raw`\\server\share\journey.ad`,
+    },
+  ]),
+)(
+  'a plain Windows destination $spelled is probed and recorded as $expected (force=$force)',
+  async (entry) => {
+    const { spelled, expected, force } = entry;
+    const cwd = 'cwd' in entry ? entry.cwd : String.raw`C:\work`;
     const probe = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
     try {
       const result = await onWindowsRules(() =>
@@ -261,7 +314,7 @@ test.each(
             session: 'owned',
             command: 'open',
             positionals: ['Demo'],
-            flags: { saveScript: String.raw`\journey.ad`, ...(force ? { force: true } : {}) },
+            flags: { saveScript: spelled, ...(force ? { force: true } : {}) },
             meta: { cwd },
           },
           REMOTE,
