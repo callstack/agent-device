@@ -7,7 +7,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createLiveTestHostEnvironment,
   mkdtempForTestSync,
-  mkdtempUnsharedForTestSync,
+  UNSHARED_TEST_DIR_MISSING,
+  unsharedTestRunDir,
 } from '@agent-device/test-kit';
 import * as video from '@agent-device/capture-kit/recording-video';
 import { runtimeModule } from '@agent-device/platform-apple';
@@ -43,8 +44,9 @@ afterEach(() => {
 
 async function harness(device: DeviceInfo, launch = () => {}) {
   const root = mkdtempForTestSync('warm-video-validator-');
-  // The Swift helper cache refuses a sticky shared directory such as /tmp anywhere above it.
-  const swiftCache = mkdtempUnsharedForTestSync('warm-video-validator-cache-');
+  // Only a path: the Swift helper cache creates it privately on the first compile, so a case that never compiles
+  // needs nothing from the run's checkout-local directory. A case that does skips without one.
+  const swiftCache = path.join(unsharedTestRunDir() ?? root, `swift-cache-${path.basename(root)}`);
   swiftCaches.push(swiftCache);
   const unused = async (): Promise<never> => {
     throw new Error('unused');
@@ -112,9 +114,10 @@ async function harness(device: DeviceInfo, launch = () => {}) {
   return { input, start: () => binding.operations.screenRecordingStart!(input) };
 }
 
-test.each(devices)(
+test.for(devices)(
   'warms before $kind capture and starts while preparation is pending',
-  async (device) => {
+  async (device, { skip }) => {
+    if (!unsharedTestRunDir()) skip(UNSHARED_TEST_DIR_MISSING);
     let resolvePreparation!: (value: string) => void;
     const pending = new Promise<string>((resolve) => {
       resolvePreparation = resolve;
@@ -146,9 +149,10 @@ test.each(devices)(
   },
 );
 
-test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
+test.for(['COMMAND_FAILED', 'TOOL_MISSING'])(
   'a %s compiler failure preserves capture and main stop semantics',
-  async (code) => {
+  async (code, { skip }) => {
+    if (!unsharedTestRunDir()) skip(UNSHARED_TEST_DIR_MISSING);
     const { start, input } = await harness(devices[1]!);
     const failure = new AppError(code, 'xcrun exited with code 72', {
       stderr:

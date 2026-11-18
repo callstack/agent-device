@@ -37,10 +37,13 @@ const SWIFT_CACHE_OVERRIDE_HINT =
   'such as /tmp. Only owner and mode bits are checked, not ACLs: keeping ACLs on the cache directory closed is ' +
   'your responsibility.';
 
-/** What to do about a refusal. A group-writable directory is the one the caller can close in place. */
+/**
+ * What to do about a refusal. A group-writable cache root or ancestor is the one the caller can close in place.
+ * The path is named as text, never pasted into a command, where a space in it would name another directory.
+ */
 function swiftCacheHint(exposure: unknown, ancestor: unknown): string {
   if (exposure === 'shared_group_writable' && typeof ancestor === 'string') {
-    return `Close the directory to its group with \`chmod g-w ${ancestor}\`, or ${SWIFT_CACHE_OVERRIDE_HINT}`;
+    return `Remove group write access (chmod g-w) from this directory: ${ancestor}. Or ${SWIFT_CACHE_OVERRIDE_HINT}`;
   }
   return `Use a cache directory nobody else can change: ${SWIFT_CACHE_OVERRIDE_HINT}`;
 }

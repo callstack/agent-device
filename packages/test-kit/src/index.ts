@@ -131,7 +131,11 @@ export {
 } from './target-classification-fixtures.ts';
 export { makeTempWorkspace } from './temp-workspace.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
-export { mkdtempUnsharedForTestSync } from './unshared-tmp-dir.ts';
+export {
+  mkdtempUnsharedForTestSync,
+  UNSHARED_TEST_DIR_MISSING,
+  unsharedTestRunDir,
+} from './unshared-tmp-dir.ts';
 export {
   STUBBED_APPLE_TOOLCHAIN,
   stubbedAppleDeveloperDir,

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTestHost } from '../host-environment.fixtures.ts';
-import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
+import {
+  mkdtempUnsharedForTestSync,
+  UNSHARED_TEST_DIR_MISSING,
+} from '../unshared-tmp-dir.fixtures.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -26,13 +29,15 @@ const mockRunCmd = vi.mocked(runCmd);
  */
 const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 
-let tmpDir: string;
+let tmpDir = '';
 let cacheRoot: string;
 let versionDir: string;
 let binDir: string;
 
-beforeEach(() => {
-  tmpDir = mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-');
+beforeEach((context) => {
+  const directory = mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-');
+  if (directory === undefined) return context.skip(UNSHARED_TEST_DIR_MISSING);
+  tmpDir = directory;
   cacheRoot = path.join(tmpDir, 'swift-cache');
   versionDir = path.join(cacheRoot, 'v3');
   binDir = path.join(versionDir, 'bin');
@@ -42,7 +47,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  tmpDir = '';
 });
 
 const compile = (env?: NodeJS.ProcessEnv) =>
@@ -365,7 +371,7 @@ test.each([
         ancestor: shared,
         hint: expect.stringContaining(
           exposure === 'shared_group_writable'
-            ? `chmod g-w ${shared}`
+            ? `Remove group write access (chmod g-w) from this directory: ${shared}.`
             : 'AGENT_DEVICE_SWIFT_CACHE_DIR',
         ),
       }),
@@ -559,6 +565,26 @@ test('a regular file planted at home is refused, never used as the compiler home
 
   await expect(compile()).rejects.toMatchObject(
     untrusted({ exposure: 'not_a_directory', ancestor: home }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a group-writable ancestor whose path holds a space and a quote is named exactly, with no command built from it', async () => {
+  const shared = path.join(tmpDir, "Shared Dir 'q'");
+  fs.mkdirSync(shared);
+  fs.chmodSync(shared, 0o770);
+
+  await expect(
+    compile({ AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(shared, 'swift-cache') }),
+  ).rejects.toMatchObject(
+    untrusted({
+      exposure: 'shared_group_writable',
+      ancestor: shared,
+      hint: expect.toSatisfy(
+        (hint: string) =>
+          hint.includes(`directory: ${shared}.`) && !hint.includes(`chmod g-w ${shared}`),
+      ),
+    }),
   );
   expect(mockRunCmd).not.toHaveBeenCalled();
 });

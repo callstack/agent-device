@@ -2,7 +2,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
+import {
+  mkdtempUnsharedForTestSync,
+  UNSHARED_TEST_DIR_MISSING,
+} from '../unshared-tmp-dir.fixtures.ts';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
@@ -24,16 +27,19 @@ import {
 
 const mockRunCmd = vi.mocked(runCmd);
 
-let tmpDir: string;
+let tmpDir = '';
 
-beforeEach(() => {
-  tmpDir = mkdtempUnsharedForTestSync('agent-device-swift-cache-test-');
+beforeEach((context) => {
+  const directory = mkdtempUnsharedForTestSync('agent-device-swift-cache-test-');
+  if (directory === undefined) return context.skip(UNSHARED_TEST_DIR_MISSING);
+  tmpDir = directory;
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  tmpDir = '';
 });
 
 test('compileSwiftSourceFile compiles to a unique temp executable before publishing cache entry', async () => {

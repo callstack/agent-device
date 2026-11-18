@@ -52,6 +52,10 @@ export function setup(): void {
   reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT, { consumers }));
   const unshared = sweepUnsharedRunDirectories(CHECKOUT_ROOT, UNSHARED_TEST_ROOT, { consumers });
   if (unshared.swept) reportPrunedRunDirectories(unshared.pruned);
+  // CI owns a private checkout. There, a skipped sweep would quietly skip every Swift cache test, which hides
+  // exactly what those tests guard, so it fails the run instead.
+  else if (process.env.CI)
+    throw new Error(`The checkout-local test directory is unavailable on CI: ${unshared.reason}`);
   else console.warn(`Skipping the checkout-local test directory sweep: ${unshared.reason}`);
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in

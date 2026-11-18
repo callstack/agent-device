@@ -31,7 +31,12 @@ import {
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { runCmdBackground, withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { createTestHostEnvironment, mkdtempUnsharedForTestSync } from '@agent-device/test-kit';
+import { beforeEach, type TestContext } from 'vitest';
+import {
+  createTestHostEnvironment,
+  UNSHARED_TEST_DIR_MISSING,
+  unsharedTestRunDir,
+} from '@agent-device/test-kit';
 import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
@@ -100,12 +105,24 @@ type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRout
     env?: Readonly<Record<string, string>>;
   };
 
+// The test the harness serves, so a scenario that needs the Swift cache can skip itself from inside a command.
+// Each test file evaluates this module on its own, so the hook is registered once per file.
+let scenarioTest: TestContext | undefined;
+beforeEach((context) => {
+  scenarioTest = context;
+});
+
 export async function createProviderScenarioHarness(
   deps: ProviderScenarioDependencies,
 ): Promise<ProviderScenarioHarness> {
   const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-scenario-'));
-  // The Swift helper cache refuses a sticky shared directory such as /tmp anywhere above it.
-  const swiftCacheRoot = mkdtempUnsharedForTestSync('provider-scenario-swift-cache-');
+  // Only a path: the Swift helper cache creates it, privately, the first time a scenario compiles a helper, so a
+  // scenario that never does needs nothing from the run's checkout-local directory. That directory is the place
+  // the cache accepts, since it refuses a sticky shared one such as /tmp; without it, a compile there is refused.
+  const swiftCacheRoot = path.join(
+    unsharedTestRunDir() ?? testRoot,
+    `provider-scenario-swift-cache-${path.basename(testRoot)}`,
+  );
   const removeScenarioDirs = async () => {
     fs.rmSync(swiftCacheRoot, { recursive: true, force: true });
     await removeProviderScenarioTempDir(testRoot);
@@ -249,6 +266,8 @@ export async function createProviderScenarioHarness(
     callCommand: async (command, positionals = [], flags = {}, options = {}) => {
       // The validator compiles only on macOS hosts; elsewhere record stop keeps container-only MP4 completion.
       if (command === 'record' && process.platform === 'darwin') {
+        // That compile needs the run's checkout-local directory: without one, the scenario is skipped, not failed.
+        if (!unsharedTestRunDir()) scenarioTest?.skip(UNSHARED_TEST_DIR_MISSING);
         await withCommandExecutorOverride(
           (command, args) => {
             if (
