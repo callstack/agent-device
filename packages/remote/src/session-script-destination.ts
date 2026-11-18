@@ -54,6 +54,11 @@ type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
+  /**
+   * The device and inode of the file the newest version was committed as. It only verifies a repeated
+   * delivery against the entry host-kit judges; it never names where anything is written.
+   */
+  committed?: string;
   publishing?: Readonly<{ revision: number; file: string; staging: string }>;
   staging?: readonly string[];
   retired?: true;
@@ -411,8 +416,19 @@ async function publishScriptVersion(
   let staging: string | undefined;
   try {
     // A version already published is answered as the entry it was committed to, never the spelling.
+    // A version already published is answered as the entry it was committed to, and only while that entry
+    // is still the very file committed; a record from before the identity was kept answers the same way.
     if ((revision as number) <= record.revision) {
-      return { published: judgeScriptDestination(record.destination).entry };
+      const { entry } = judgeScriptDestination(record.destination);
+      // The same device and inode is the committed file itself, so nothing else can pass as it.
+      if (record.committed !== undefined && fileIdentity(entry) === record.committed) {
+        return { published: entry };
+      }
+      const error = new Error(`The committed script is no longer at ${entry}.`);
+      return {
+        failure: committedEntryFailure(record.destination, id as string, closesRecording),
+        error,
+      };
     }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
@@ -580,7 +596,7 @@ function publishStaged(
     pending.named = false;
     throw error;
   }
-  writeRecord(file, { ...current, revision });
+  writeRecord(file, { ...current, revision, committed: publishing.file });
   pending.named = false;
   return entry;
 }
@@ -590,7 +606,28 @@ function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
   const settled = withoutPublishing(record);
   const { publishing } = record;
   if (!publishing || fileIdentity(entry) !== publishing.file) return settled;
-  return { ...settled, revision: Math.max(settled.revision, publishing.revision) };
+  return {
+    ...settled,
+    revision: Math.max(settled.revision, publishing.revision),
+    committed: publishing.file,
+  };
+}
+
+/** The disclosure for a repeated version whose committed file is gone or was replaced since. */
+function committedEntryFailure(
+  destination: string,
+  publicationId: string,
+  closing: boolean,
+): ScriptDeliveryFailure {
+  return {
+    reason: 'script_delivery_failed',
+    cause: 'script_entry_changed',
+    publicationId,
+    message: `The script saved earlier is no longer at ${destination}.`,
+    hint: closing
+      ? 'The session is closed, so no later version follows.'
+      : 'The next recorded action or close writes the full recording there again.',
+  };
 }
 
 function withoutPublishing(record: ScriptRecord): ScriptRecord {
@@ -718,6 +755,7 @@ function parseRecord(file: string): ScriptRecord | undefined {
     typeof record.destination === 'string' &&
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
+    (record.committed === undefined || typeof record.committed === 'string') &&
     (record.publishing === undefined || isPublishing(record.publishing)) &&
     (record.retired === undefined || record.retired === true) &&
     (record.staging === undefined ||

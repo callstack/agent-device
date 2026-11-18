@@ -350,6 +350,7 @@ skipOnWindows(
         destination: world.destination,
         force: false,
         revision: 2,
+        committed: fileIdentityOf(world.destination),
         staging: [],
       },
     ]);
@@ -411,6 +412,7 @@ skipOnWindows(
           destination: world.destination,
           force: false,
           revision: 1,
+          committed: fileIdentityOf(world.destination),
           staging: [],
         },
       ]);
@@ -528,3 +530,9 @@ skipOnWindows(
     expect(nothingEscaped(world, ['../../../../tmp/etc/passwd'])).toEqual([]);
   },
 );
+
+/** The device and inode a record keeps for the file its newest version was committed as. */
+function fileIdentityOf(file: string): string {
+  const stat = fs.statSync(file, { bigint: true });
+  return `${stat.dev}:${stat.ino}`;
+}

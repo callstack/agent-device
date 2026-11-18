@@ -222,6 +222,16 @@ test('retrying the interrupted version itself reports the entry it settled', asy
   });
   expect(retried.ok && retried.data).not.toHaveProperty('scriptDeliveryFailure');
   expect(fs.readFileSync(path.join(directory, 'journey.ad'), 'utf8')).toBe('v1\n');
+
+  // The settled version is now the committed one, so a further repeat still reports it.
+  const repeated = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+  expect(repeated).toMatchObject({
+    ok: true,
+    data: { savedScript: path.join(directory, 'journey.ad') },
+  });
+  expect(repeated.ok && repeated.data).not.toHaveProperty('scriptDeliveryFailure');
 });
 
 test('a version delivered twice reports the committed entry both times', async () => {
@@ -238,4 +248,90 @@ test('a version delivered twice reports the committed entry both times', async (
   expect(response).toMatchObject({ ok: true, data: { savedScript: entry } });
   expect(again).toMatchObject({ ok: true, data: { savedScript: entry } });
   expect(fs.readFileSync(entry, 'utf8')).toBe('v1\n');
+});
+
+/** Runs `task` with the Windows branch of host-kit's destination rule, where no walk runs. */
+async function onWindowsRules<T>(task: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    return await task();
+  } finally {
+    Object.defineProperty(process, 'platform', original!);
+  }
+}
+
+test.each([
+  { rules: 'native', within: <T>(task: () => Promise<T>) => task() },
+  { rules: 'Windows', within: onWindowsRules },
+])(
+  'a version delivered again after its file was deleted discloses the change ($rules rules)',
+  async ({ within }) => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    fs.rmSync(destination);
+
+    const again = await within(() =>
+      answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
+    );
+
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+    expect(again.ok && again.data?.savedScript).not.toBe(destination);
+    expect(fs.existsSync(destination)).toBe(false);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a version delivered again through a retargeted link never reports the unrelated file there',
+  async () => {
+    const { stateDir, directory } = caller();
+    const first = path.join(directory, 'first');
+    const second = path.join(directory, 'second');
+    fs.mkdirSync(first, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(second, { mode: 0o700 });
+    const alias = path.join(directory, 'alias');
+    fs.symlinkSync(first, alias);
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, path.join(alias, 'journey.ad'));
+    fs.unlinkSync(alias);
+    fs.symlinkSync(second, alias);
+    fs.writeFileSync(path.join(second, 'journey.ad'), 'unrelated\n');
+
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+    expect(again.ok && again.data?.savedScript).not.toBe(path.join(second, 'journey.ad'));
+    expect(fs.readFileSync(path.join(first, 'journey.ad'), 'utf8')).toBe('v1\n');
+    expect(fs.readFileSync(path.join(second, 'journey.ad'), 'utf8')).toBe('unrelated\n');
+  },
+);
+
+test('a record kept before the committed identity answers a repeated version with a typed failure', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file, record } = soleRecord(stateDir);
+  const { committed: _committed, ...older } = record;
+  fs.writeFileSync(file, JSON.stringify(older));
+
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(again).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+  });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
