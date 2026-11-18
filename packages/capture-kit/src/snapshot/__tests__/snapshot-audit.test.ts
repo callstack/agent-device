@@ -451,7 +451,7 @@ test.each([
     'missing-name':
       'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
     'covered-control':
-      'Move the control out from under the overlay, or dismiss the overlay before you use it.',
+      'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
   });
   expect(
     audit([node(1, { label: 'Large', rect: { x: 0, y: 0, width: 100, height: 100 } })], context)

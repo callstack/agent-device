@@ -323,7 +323,7 @@ function auditGuidance(
     'missing-name':
       'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
     'covered-control':
-      'Move the control out from under the overlay, or dismiss the overlay before you use it.',
+      'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
   };
   return Object.fromEntries(findings.map(({ kind }) => [kind, sentences[kind]]));
 }
