@@ -28,9 +28,8 @@ permissions:
   actions: read
 
 concurrency:
-  # A Flex job can still be queued when the next run starts.
-  group: ci-${{ github.workflow }}-${{ github.event_name == 'schedule' && github.run_id || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 env:
   # Entry script and node flags are separate on purpose: one variable cannot
