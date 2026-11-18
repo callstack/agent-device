@@ -37,6 +37,7 @@ jobs:
     timeout-minutes: 90
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      IOS_RUNTIME_VERSION: '26.2'
       IOS_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
       MACOS_STATE_DIR: ${{ github.workspace }}/.tmp/macos-agent-device-state
       IOS_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
@@ -83,13 +84,95 @@ jobs:
         uses: ./.github/actions/run-gate
         with:
           gate: build
+      # The canary records the frontmost app before anything can take focus. It stays ahead of the
+      # group because one of its members starts the simulator boot, which can raise the Simulator
+      # app. A host that cannot hand focus to Finder is not a usable automation host, so the iOS
+      # phase below requires its success: it no longer fails the phase by running inside it.
+      - name: Establish host focus canary
+        id: host-focus-canary
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+        run: |
+          set -euo pipefail
+          osascript -e 'tell application "Finder" to activate'
+          sleep 1
+          FRONTMOST="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true')"
+          test "$FRONTMOST" = "com.apple.finder"
+          mkdir -p .tmp
+          echo "$FRONTMOST" > .tmp/ios-host-focus-before
+        shell: bash
+      # The fixture wait policy decides how long the restore polls for a concurrently produced
+      # artifact, and a background step's outputs reach only the steps after its group, so this
+      # cheap decision stays sequential ahead of the group.
+      - name: Set fixture producer wait policy
+        id: fixture-producer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+        run: |
+          set -euo pipefail
+          WAIT_SECONDS=1800
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "Fork pull request cannot publish the shared fixture artifact; a cache miss will build inline."
+            WAIT_SECONDS=0
+          fi
+          echo "wait-seconds=$WAIT_SECONDS" >> "$GITHUB_OUTPUT"
+        shell: bash
+      # None of these needs a booted simulator, and the iOS phase cannot start XCTest, preflight,
+      # or the fixture replays until all three finish. The phase ran them in sequence, so the
+      # runner paid the boot, the native build, and the fixture restore one after another while the
+      # simulator sat idle. They share no outputs and write disjoint paths (the simulator, the
+      # runner DerivedData, and .tmp/fixture-app through examples/test-app/node_modules), so they
+      # run as one parallel group and the phase pays the slowest instead of all three. The boot
+      # keeps its deferred readiness so it still overlaps the build it now starts beside.
+      - parallel:
+          - name: Boot iOS test simulator
+            id: ios-simulator
+            if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+            uses: ./.github/actions/boot-ios-test-simulator
+            with:
+              runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+              preferred-device-name: iPhone 17 Pro
+              wait-for-boot: 'false'
+
+          - name: Restore and build iOS XCTest runner
+            id: ios-runner-build
+            if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+            uses: ./.github/actions/setup-apple-runner-build
+            with:
+              derived-path: ${{ env.IOS_DERIVED_PATH }}
+              cache-key-prefix: ios-runner-prebuilt
+              cache-key-suffix: -ios-${{ env.IOS_RUNTIME_VERSION }}-arm64
+              gate: swift-runner-ios
+              xcuitest-platform: ios
+              xcuitest-destination: generic/platform=iOS Simulator
+            # The build variant is part of the cache key, so these must stay exactly as the phase
+            # passed them while the build ran inside it.
+            env:
+              AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
+              AGENT_DEVICE_XCUITEST_ARCHS: arm64
+
+          - name: Restore fixture app
+            id: fixture-app
+            if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+            uses: ./.github/actions/setup-fixture-app
+            with:
+              install: 'false'
+              wait-for-artifact-seconds: ${{ steps.fixture-producer.outputs.wait-seconds }}
+
+      # A background step publishes its outputs only after the group's wait, which is why the
+      # phase reads them as inputs rather than as its own steps. It also takes each member's
+      # outcome: a member that failed would otherwise leave the phase skipped, and the phase
+      # guard would report an unexplained skip instead of the member that caused it.
       - name: iOS smoke tests
         id: ios
         uses: ./.github/actions/smoke-ios-run
         continue-on-error: true
         timeout-minutes: 80
+        with:
+          simulator-udid: ${{ steps.ios-simulator.outputs.simulator-udid }}
+          boot-timeout-seconds: ${{ steps.ios-simulator.outputs.boot-timeout-seconds }}
+          fixture-app-path: ${{ steps.fixture-app.outputs.app-path }}
+          fixture-app-id: ${{ steps.fixture-app.outputs.app-id }}
+          fixture-source: ${{ steps.fixture-app.outputs.source }}
         env:
-          IOS_RUNTIME_VERSION: '26.2'
           IOS_UDID: ${{ vars.IOS_UDID }}
           AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ env.IOS_DERIVED_PATH }}
@@ -97,7 +180,7 @@ jobs:
           AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
           AGENT_DEVICE_XCUITEST_ARCHS: arm64
           AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.host-focus-canary.outcome == 'success' && steps.ios-simulator.outcome == 'success' && steps.ios-runner-build.outcome == 'success' && steps.fixture-app.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
       - name: Clean the iOS host
         id: ios-cleanup
         if: ${{ always() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
@@ -120,7 +203,9 @@ jobs:
           XCTEST_LANE: host
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
       - name: Diagnose the Apple host after a phase failure
-        if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure') }}
+        # The canary, boot, runner build, and fixture restore can now fail outside the phase, where
+        # the phase's own outcome reads as skipped rather than failed.
+        if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure' || steps.host-focus-canary.outcome == 'failure' || steps.ios-simulator.outcome == 'failure' || steps.ios-runner-build.outcome == 'failure' || steps.fixture-app.outcome == 'failure') }}
         continue-on-error: true
         shell: bash
         run: |
@@ -145,10 +230,14 @@ jobs:
           MACOS_OUTCOME: ${{ steps.macos.outcome }}
           IOS_CLEANUP_OUTCOME: ${{ steps.ios-cleanup.outcome }}
           MACOS_CLEANUP_OUTCOME: ${{ steps.macos-cleanup.outcome }}
+          IOS_SETUP_OUTCOMES: 'canary=${{ steps.host-focus-canary.outcome }} boot=${{ steps.ios-simulator.outcome }} runner=${{ steps.ios-runner-build.outcome }} fixture=${{ steps.fixture-app.outcome }}'
         shell: bash
         run: |
           set -euo pipefail
           printf "### Apple smoke phases\n\n| Phase | Outcome |\n| --- | --- |\n| iOS | %s |\n| macOS | %s |\n" "$IOS_OUTCOME" "$MACOS_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          # A step hoisted out of the phase shows up below only as a skipped phase. Name them so the
+          # skip has a cause.
+          printf 'iOS setup outside the phase: %s\n' "$IOS_SETUP_OUTCOMES" >> "$GITHUB_STEP_SUMMARY"
           if [ "$IOS_SELECTED" = false ]; then
             test "$IOS_OUTCOME" = skipped
             test "$IOS_CLEANUP_OUTCOME" = skipped
