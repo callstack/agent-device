@@ -418,7 +418,7 @@ async function publishScriptVersion(
   let staging: string | undefined;
   try {
     if ((revision as number) <= record.revision) {
-      const { entry } = judgeRepeat(() => judgeScriptDestination(record.destination));
+      const { entry } = judgeRepeat(() => judgeScriptDestination(record.destination), true);
       return { published: committedVersionEntry(record, entry) };
     }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
@@ -566,7 +566,7 @@ function publishStaged(
   // A copy whose revision is already committed, or interrupted mid-commit, is a repeat; its judgment is
   // classified exactly as an early repeat's is.
   const repeat = revision <= Math.max(record.revision, record.publishing?.revision ?? 0);
-  const { entry } = repeat ? judgeRepeat(confirm) : confirm();
+  const { entry } = repeat ? judgeRepeat(confirm, revision <= record.revision) : confirm();
   let current = settlePublishing(record, entry);
   if (record.publishing) {
     // Once the settled record is written, its staging directory can no longer be named.
@@ -623,12 +623,13 @@ function committedVersionEntry(record: ScriptRecord, entry: string): string {
  * Judges the destination of a repeated version. A directory removed since means the committed file is gone,
  * which is what the caller is told, on the early path and on the locked one alike.
  */
-function judgeRepeat(judge: () => ScriptDestination): ScriptDestination {
+function judgeRepeat(judge: () => ScriptDestination, confirmed: boolean): ScriptDestination {
   try {
     return judge();
   } catch (error) {
     if (error instanceof AppError && error.details?.exposure === 'unreachable_parent') {
-      throw new CommittedVersionUnverified('changed');
+      // An interrupted publication that no commit ever confirmed was never known to be saved.
+      throw new CommittedVersionUnverified(confirmed ? 'changed' : 'unconfirmed');
     }
     throw error;
   }
@@ -644,7 +645,11 @@ function contentDigest(file: string): string | undefined {
   try {
     descriptor = openVerifiedFileForRead(file);
   } catch (error) {
-    if (error instanceof AppError) return undefined;
+    // Every refusal of the verified open is the same answer: a symbolic link swapped in after the look is
+    // refused by O_NOFOLLOW as ELOOP, and anything else that is not the file looked at by the helper's check.
+    if (error instanceof AppError || (error as NodeJS.ErrnoException).code === 'ELOOP') {
+      return undefined;
+    }
     throw error;
   }
   if (descriptor === undefined) return undefined;
@@ -675,14 +680,10 @@ const DIGEST_CHUNK_BYTES = 64 * 1024;
  * before digests were kept leaves nothing to verify it against.
  */
 class CommittedVersionUnverified extends Error {
-  readonly kind: 'changed' | 'unverifiable';
+  readonly kind: 'changed' | 'unconfirmed' | 'unverifiable';
 
-  constructor(kind: 'changed' | 'unverifiable') {
-    super(
-      kind === 'changed'
-        ? 'The committed script changed.'
-        : 'The committed script is unverifiable.',
-    );
+  constructor(kind: 'changed' | 'unconfirmed' | 'unverifiable') {
+    super(`The committed script is ${kind}.`);
     this.kind = kind;
   }
 }
@@ -694,14 +695,16 @@ function committedVersionFailure(
   error: CommittedVersionUnverified,
   closing: boolean,
 ): ScriptDeliveryFailure {
-  const changed = error.kind === 'changed';
+  const messages = {
+    changed: `The script saved earlier is no longer at ${destination}.`,
+    unconfirmed: `A save to ${destination} was interrupted before it was confirmed, and its directory is gone.`,
+    unverifiable: `The script saved earlier at ${destination} could not be verified, because it was saved by an earlier release.`,
+  } as const;
   return {
     reason: 'script_delivery_failed',
-    cause: changed ? 'script_entry_changed' : 'script_entry_unverified',
+    cause: error.kind === 'unverifiable' ? 'script_entry_unverified' : 'script_entry_changed',
     publicationId,
-    message: changed
-      ? `The script saved earlier is no longer at ${destination}.`
-      : `The script saved earlier at ${destination} could not be verified, because it was saved by an earlier release.`,
+    message: messages[error.kind],
     hint: closing
       ? 'The session is closed, so no later version follows.'
       : 'The next recorded action or close writes the full recording there again.',

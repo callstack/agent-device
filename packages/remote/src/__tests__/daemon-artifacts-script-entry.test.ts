@@ -447,10 +447,12 @@ test('a repeat whose file was overwritten in place, keeping its inode, discloses
 });
 
 test.skipIf(process.platform === 'win32')(
-  'a repeat whose file is swapped for a FIFO after it was looked at never blocks or reads it',
+  'a repeat whose file is swapped for a symbolic link after it was looked at discloses the change',
   async () => {
-    const { stateDir, directory } = caller();
+    const { root, stateDir, directory } = caller();
     const destination = path.join(directory, 'journey.ad');
+    const elsewhere = path.join(root, 'elsewhere.ad');
+    fs.writeFileSync(elsewhere, 'v1\n');
     const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
     const { id } = await open(baseUrl, stateDir, destination);
     const lstat = fs.lstatSync.bind(fs);
@@ -461,10 +463,10 @@ test.skipIf(process.platform === 'win32')(
     ) => {
       const seen = lstat(target, options);
       if (!swapped && target === destination) {
-        // Between the look and the open: the regular file goes, and a FIFO no writer holds takes its name.
+        // Between the look and the open: a link to a file holding the very bytes committed takes the name.
         swapped = true;
         fs.rmSync(destination);
-        execFileSync('mkfifo', [destination]);
+        fs.symlinkSync(elsewhere, destination);
       }
       return seen;
     }) as typeof fs.lstatSync);
@@ -482,6 +484,27 @@ test.skipIf(process.platform === 'win32')(
     } finally {
       spy.mockRestore();
     }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a repeat whose file was replaced by a FIFO discloses the change without opening it',
+  async () => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    fs.rmSync(destination);
+    execFileSync('mkfifo', [destination]);
+
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
   },
 );
 
@@ -555,4 +578,44 @@ test('a copy that became a repeat while its output directory was removed says th
     data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
   });
   expect(fs.existsSync(output)).toBe(false);
+});
+
+test('an interrupted first save whose directory is gone says it was never confirmed', async () => {
+  // The record names version 1 as being published, but no commit confirmed it, and nothing was ever saved.
+  const { stateDir, directory } = caller();
+  const output = path.join(directory, 'out');
+  const destination = path.join(output, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination, {
+    respond: (publicationId) => ({ ok: true, data: { scriptPublicationId: publicationId } }),
+  });
+  const { file: recordFile, record } = soleRecord(stateDir);
+  fs.writeFileSync(
+    recordFile,
+    JSON.stringify({
+      ...record,
+      publishing: { revision: 1, file: '0:0', staging: path.join(directory, 'gone') },
+    }),
+  );
+  vi.mocked(file.confirmScriptDestination).mockImplementationOnce((spelled, prepared) => {
+    fs.rmSync(output, { recursive: true, force: true });
+    return actual.confirmScriptDestination(spelled, prepared);
+  });
+
+  const retried = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(retried).toMatchObject({
+    ok: true,
+    data: {
+      scriptDeliveryFailure: {
+        cause: 'script_entry_changed',
+        message: expect.stringMatching(/interrupted before it was confirmed/),
+      },
+    },
+  });
+  expect(retried.ok && retried.data?.scriptDeliveryFailure).not.toMatchObject({
+    message: expect.stringMatching(/saved earlier/),
+  });
 });

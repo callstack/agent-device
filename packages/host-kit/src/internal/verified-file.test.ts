@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import path from 'node:path';
@@ -129,3 +130,64 @@ function assertThrowsAppError(
     return true;
   });
 }
+
+/**
+ * Swaps the regular file at argv[2] for a FIFO between the helper's `lstat` and its open, then reports
+ * whether the verified open refused it. Run in a child, so a blocking open fails the test at a deadline
+ * instead of hanging the worker.
+ */
+const FIFO_SWAP_PROBE = `
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+const [helper, target] = process.argv.slice(1);
+const lstat = fs.lstatSync.bind(fs);
+let swapped = false;
+fs.lstatSync = (pathname, options) => {
+  const seen = lstat(pathname, options);
+  if (!swapped && pathname === target) {
+    swapped = true;
+    fs.rmSync(target);
+    execFileSync('mkfifo', [target]);
+  }
+  return seen;
+};
+const { openVerifiedFileForRead } = await import(pathToFileURL(helper).href);
+try {
+  const descriptor = openVerifiedFileForRead(target);
+  console.log(JSON.stringify({ swapped, outcome: 'opened', descriptor }));
+} catch (error) {
+  console.log(JSON.stringify({ swapped, outcome: 'refused', name: error?.constructor?.name, code: error?.code }));
+}
+`;
+
+test.skipIf(process.platform === 'win32')(
+  'a FIFO swapped in after the lstat is refused at once instead of waiting for a writer',
+  () => {
+    const directory = mkdtempForTestSync('verified-file-fifo-');
+    const target = path.join(directory, 'journey.ad');
+    fs.writeFileSync(target, 'v1\n');
+
+    const probe = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        FIFO_SWAP_PROBE,
+        path.join(import.meta.dirname, 'verified-file.ts'),
+        target,
+      ],
+      { encoding: 'utf8', timeout: 20_000 },
+    );
+
+    // A blocking open never returns: the deadline kills the child and the signal says so.
+    expect(probe.signal).toBeNull();
+    expect(probe.status, probe.stderr).toBe(0);
+    expect(JSON.parse(probe.stdout.trim())).toMatchObject({
+      swapped: true,
+      outcome: 'refused',
+      name: 'AppError',
+    });
+  },
+);

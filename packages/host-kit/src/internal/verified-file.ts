@@ -11,8 +11,8 @@ const CONCURRENT_REPLACEMENT_HINT =
   'Another process replaced the file at this path while it was being opened. Stop the concurrent writer, then retry.';
 
 /**
- * Opens a regular final-path file for verified reads, or returns absent. The open never blocks: a FIFO swapped
- * in after the `lstat` opens at once and is refused by the identity check, instead of waiting for a writer.
+ * Opens a regular final-path file for verified reads, or returns absent. A FIFO swapped in after the `lstat`
+ * opens at once with O_NONBLOCK and is refused by the identity check, instead of waiting for a writer.
  */
 export function openVerifiedFileForRead(pathname: string): number | undefined {
   return openVerifiedFile(pathname, fs.constants.O_RDONLY | optionalNonBlockFlag(), false);
