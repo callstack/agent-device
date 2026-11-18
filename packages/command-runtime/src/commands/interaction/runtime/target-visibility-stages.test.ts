@@ -212,7 +212,7 @@ test('runtime covered refusal names an unnamed generic-typed bar and never says 
   );
 });
 
-test('runtime covered refusal suggests a scroll for a scroll-revealable target under a scanned bar', async () => {
+test('runtime covered refusal suggests inspection for a covered target in a scroll view', async () => {
   const device = createInteractionDevice(
     coveredByAnonymousTabBarScanSnapshot({ scrollable: true }),
     {
@@ -229,13 +229,12 @@ test('runtime covered refusal suggests a scroll for a scroll-revealable target u
         kind: 'tab-bar',
         rect: { x: 0, y: 791, width: 402, height: 83 },
         persistentBar: true,
-        scrollCanReveal: true,
       });
       assert.match(
         String(details?.hint),
-        /^Covered by the tab-bar at \(0, 791 402x83\)\. Scroll the target clear of it/,
+        /^Covered by the tab-bar at \(0, 791 402x83\)\. Use a different visible target/,
       );
-      assert.doesNotMatch(String(details?.hint), /dismiss|close/i);
+      assert.doesNotMatch(String(details?.hint), /dismiss|close|scroll/i);
       return true;
     },
   );

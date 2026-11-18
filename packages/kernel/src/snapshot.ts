@@ -263,7 +263,7 @@ export type SnapshotPresentation = SnapshotOptionFields<
  * issues refs for, and naming it is diagnosis, not an invitation to target it.
  */
 export type SnapshotCoveringNode = {
-  /** The cover's presented role, from the same table the text presenter reads (`formatRole`). */
+  /** The canonical persistent-bar kind or the cover's presented role. */
   kind: string;
   /** The cover's accessible name, trimmed and clipped to {@link SNAPSHOT_COVERING_LABEL_MAX_LENGTH}. */
   label?: string;
@@ -274,8 +274,6 @@ export type SnapshotCoveringNode = {
    * navigation), read from the cover's type, role, and subrole. Absent for any other cover.
    */
   persistentBar?: true;
-  /** The target's scroll viewport and axis leave a possible tap point clear of the persistent bar. */
-  scrollCanReveal?: true;
 };
 
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */

@@ -5,11 +5,8 @@ import {
   SNAPSHOT_COVERING_LABEL_MAX_LENGTH,
 } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
-import { containsPoint, intersectRects, rectContains } from '@agent-device/kernel/rect';
+import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
-  collectViewportRects,
-  findNearestScrollableAncestor,
-  resolveViewportRect,
   isScrollableNodeLike,
   snapshotBarKind,
   snapshotNodeKindIncludesAny as nodeKindIncludesAny,
@@ -222,78 +219,18 @@ function annotateCoveredPositions(
   coveredPositions: ReadonlyArray<{ position: number; coveredBy?: SnapshotCoveringNode }>,
 ): RawSnapshotNode[] {
   if (coveredPositions.length === 0) return nodes;
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const annotated = [...nodes];
-  let viewportRects: Rect[] | undefined;
   for (const { position, coveredBy } of coveredPositions) {
     const node = nodes[position]!;
-    const scrollCanReveal =
-      coveredBy?.persistentBar &&
-      coveredBy.rect &&
-      canScrollingRevealTarget(
-        node,
-        coveredBy.rect,
-        byIndex,
-        nodes,
-        (viewportRects ??= collectViewportRects(nodes)),
-      );
     annotated[position] = {
       ...node,
       hittable: false,
       interactionBlocked: 'covered' as const,
-      ...(coveredBy
-        ? { coveredBy: scrollCanReveal ? { ...coveredBy, scrollCanReveal: true } : coveredBy }
-        : {}),
+      ...(coveredBy ? { coveredBy } : {}),
       presentationHints: mergeCoveredHint(node.presentationHints),
     };
   }
   return annotated;
-}
-
-function canScrollingRevealTarget(
-  target: RawSnapshotNode,
-  cover: Rect,
-  byIndex: ReadonlyMap<number, RawSnapshotNode>,
-  nodes: RawSnapshotNode[],
-  viewportRects: readonly Rect[],
-): boolean {
-  const scroller = findNearestScrollableAncestor(target, byIndex);
-  const scrollRect = positiveRect(scroller?.rect);
-  const targetRect = positiveRect(target.rect);
-  if (!scroller || !scrollRect || !targetRect) return false;
-
-  const screen =
-    viewportRects.length > 0 ? resolveViewportRect(nodes, targetRect, viewportRects) : null;
-  const viewport = screen ? intersectRects(scrollRect, screen) : scrollRect;
-  if (!viewport) return false;
-
-  const path = scrollTapPath(scroller, viewport, centerOfRect(targetRect));
-  return path !== undefined && !rectContains(cover, path);
-}
-
-function scrollTapPath(
-  scroller: RawSnapshotNode,
-  viewport: Rect,
-  { x, y }: Pick<Rect, 'x' | 'y'>,
-): Rect | undefined {
-  const horizontal = nodeKindIncludesAny(scroller, ['horizontal']);
-  const vertical = nodeKindIncludesAny(scroller, ['vertical']);
-
-  // The tap point's perpendicular coordinate stays fixed in a one-axis scroller.
-  if (horizontal && !vertical) {
-    if (y < viewport.y || y > viewport.y + viewport.height) return undefined;
-    return { ...viewport, y, height: 0 };
-  }
-  if (vertical && !horizontal) {
-    if (x < viewport.x || x > viewport.x + viewport.width) return undefined;
-    return { ...viewport, x, width: 0 };
-  }
-
-  if (!containsPoint(viewport, x, y)) return undefined;
-  // Revealing content below moves the target up, and revealing content above moves it down.
-  const top = scroller.hiddenContentBelow ? viewport.y : y;
-  const bottom = scroller.hiddenContentAbove ? viewport.y + viewport.height : y;
-  return bottom > top ? { x, y: top, width: 0, height: bottom - top } : undefined;
 }
 
 export function isSnapshotNodeInteractionBlocked(

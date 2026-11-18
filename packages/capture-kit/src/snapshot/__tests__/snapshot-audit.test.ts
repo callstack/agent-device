@@ -412,15 +412,14 @@ test.for<CoverPublication>([
     name: 'Android bottom navigation',
     type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
   },
-])('ignores a scanned bar from the $name publication over a scrolled row only', (cover) => {
+])('reports both covered controls under a scanned bar from the $name publication', (cover) => {
   const nodes = scannedCoverTree(cover);
   expect(nodes[3]).toMatchObject({
     interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true, scrollCanReveal: true },
+    coveredBy: { persistentBar: true },
   });
   expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
-  expect(nodes[4]?.coveredBy?.scrollCanReveal).toBeUndefined();
-  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
+  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
 });
 
 test('keeps the covered-control finding for a button in a horizontal scroller wholly behind a bottom bar', () => {
@@ -462,7 +461,6 @@ test('keeps the covered-control finding for a button in a horizontal scroller wh
     interactionBlocked: 'covered',
     coveredBy: { persistentBar: true },
   });
-  expect(nodes[2]?.coveredBy?.scrollCanReveal).toBeUndefined();
   expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e2']);
 });
 
@@ -506,25 +504,6 @@ test.each([
       audit([node(1, { rect: { x: 0, y: 0, width: 100, height: 100 } })], context).guidance,
     ),
   ).toEqual(['missing-name']);
-});
-
-test('keeps a child under an overlay when its covered row is excluded as scroll chrome', () => {
-  const findings = audit([
-    node(0, { type: 'ScrollView', hittable: false }),
-    node(1, {
-      type: 'Cell',
-      parentIndex: 0,
-      interactionBlocked: 'covered',
-      coveredBy: { kind: 'tab-bar', persistentBar: true, scrollCanReveal: true },
-    }),
-    node(2, {
-      parentIndex: 1,
-      label: 'Pay',
-      interactionBlocked: 'covered',
-      coveredBy: { kind: 'sheet' },
-    }),
-  ]).findings;
-  expect(summarize(findings)).toEqual(['covered-control @e2']);
 });
 
 test('skips UIKit sheet grabbers by captured class without matching their label', () => {

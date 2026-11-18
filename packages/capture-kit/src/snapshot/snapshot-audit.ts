@@ -241,7 +241,6 @@ function missingNameFinding(node: SnapshotNode, role: string): AuditFinding {
 function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
   const role = coveredRole(node);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
-  if (isScrollableChromeOcclusion(node)) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
   return { ...findingBase(node, role), kind: 'covered-control', severity: 'observation' };
 }
@@ -258,7 +257,7 @@ function isRow(node: SnapshotNode): boolean {
 function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditScan): boolean {
   const parent = parentOf(node, scan);
   if (!parent || parent.ref === undefined || coveredRole(parent) === undefined) return false;
-  return !isScrollableChromeOcclusion(parent) && scan.children.get(parent.index)?.length === 1;
+  return scan.children.get(parent.index)?.length === 1;
 }
 
 function findingBase(node: SnapshotNode, role: string) {
@@ -303,11 +302,6 @@ function typedContent(node: SnapshotNode): string | undefined {
 
 function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
-}
-
-/** Persistent bar chrome over a target a scroll can reveal is a scroll position, not a covered control. */
-function isScrollableChromeOcclusion(node: SnapshotNode): boolean {
-  return node.coveredBy?.persistentBar === true && node.coveredBy.scrollCanReveal === true;
 }
 
 function auditGuidance(

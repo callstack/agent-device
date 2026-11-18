@@ -170,7 +170,6 @@ function areCoveringNodesEquivalent(
     previous.kind === current.kind &&
     previous.label === current.label &&
     previous.persistentBar === current.persistentBar &&
-    previous.scrollCanReveal === current.scrollCanReveal &&
     areRectsEquivalent(previous.rect, current.rect)
   );
 }

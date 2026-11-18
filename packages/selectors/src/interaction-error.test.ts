@@ -84,20 +84,15 @@ test('the hint falls back to the bare kind when the label sanitizes to nothing',
   assert.match(hint, /^Covered by the tab-bar at \(0, 760 390x84\)/);
 });
 
-test('the hint for a persistent bar suggests a scroll only when the scan proved scrolling can reveal the target', () => {
+test('the hint for a persistent bar suggests a visible target or inspection', () => {
   const bar = {
     kind: 'navigation-bar',
     rect: { x: 0, y: 0, width: 390, height: 96 },
     persistentBar: true,
   } as const;
-  const hint = (coveredBy: typeof bar & { scrollCanReveal?: true }) =>
-    String(coveredInteractionDetails({ ref: 'e2', interactionBlocked: 'covered', coveredBy }).hint);
   assert.equal(
-    hint({ ...bar, scrollCanReveal: true }),
-    'Covered by the navigation-bar at (0, 0 390x96). Scroll the target clear of it, or inspect with snapshot/screenshot before retrying.',
-  );
-  assert.equal(
-    hint(bar),
+    coveredInteractionDetails({ ref: 'e2', interactionBlocked: 'covered', coveredBy: bar }).hint,
+
     'Covered by the navigation-bar at (0, 0 390x96). Use a different visible target, or inspect with snapshot/screenshot before retrying.',
   );
 });

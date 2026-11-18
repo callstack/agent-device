@@ -244,9 +244,6 @@ test('unchanged metadata compares covering-node descriptions by value', () => {
   current.nodes[0]!.coveredBy = { ...cover, persistentBar: true };
   expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
 
-  current.nodes[0]!.coveredBy = { ...cover, scrollCanReveal: true };
-  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
-
   current.nodes[0]!.coveredBy = undefined;
   expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
 });
