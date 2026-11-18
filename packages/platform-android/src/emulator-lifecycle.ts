@@ -95,7 +95,12 @@ function androidBootCancellation(signal: AbortSignal): AppError {
     : createRequestCanceledError(undefined, signal.reason);
 }
 
-function isTransientAndroidBootFailure(error: unknown): boolean {
+/**
+ * Whether a boot-poll observation is transient and may be retried inside the aggregate budget.
+ * Consumes only typed `details` evidence; wording never decides. Shared by every Android boot
+ * poller so the verdicts stay identical across owners.
+ */
+export function isTransientAndroidBootFailure(error: unknown): boolean {
   const details = asAppError(error).details;
   return (
     details?.bootObservation === 'not_ready' ||
@@ -104,7 +109,8 @@ function isTransientAndroidBootFailure(error: unknown): boolean {
   );
 }
 
-function androidBootFailureReason(error: unknown): BootFailureReason {
+/** The typed boot failure reason for a terminal boot-poll observation; wording never decides. */
+export function androidBootFailureReason(error: unknown): BootFailureReason {
   const appError = asAppError(error);
   if (
     appError.code === 'TOOL_MISSING' ||

@@ -3,6 +3,7 @@ import {
   type EnsureReadyInput,
 } from '@agent-device/contracts/device-readiness-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
 export type AndroidReadinessHost = Pick<
@@ -11,7 +12,10 @@ export type AndroidReadinessHost = Pick<
 >;
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { bootFailureHint } from '@agent-device/provision-kit/boot-diagnostics';
+import { androidAdbResultError, attachAdbFailureHint } from '../adb-executor.ts';
+import { androidBootFailureReason, isTransientAndroidBootFailure } from '../emulator-lifecycle.ts';
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
@@ -117,8 +121,31 @@ async function waitForBoot(
   deadline: number,
   signal: AbortSignal,
 ): Promise<void> {
+  const startedAtMs = host.clock.now();
   while (host.clock.now() < deadline) {
-    const result = await host.commands.run(
+    signal.throwIfAborted();
+    const observation = await observeBootProbe(host, serial, deadline, signal);
+    if (observation.booted) return;
+    // Retry/stop decisions consume the typed probe evidence, never message or stdout wording.
+    if (observation.failure && !isTransientAndroidBootFailure(observation.failure)) {
+      throwBootProbeFailure(host, observation.failure, serial, startedAtMs);
+    }
+    await host.clock.sleep(POLL_MS, signal);
+  }
+  throw bootTimeoutError('Android device failed to finish booting', { serial });
+}
+
+type BootProbeObservation = Readonly<{ booted: boolean; failure?: AppError }>;
+
+async function observeBootProbe(
+  host: AndroidReadinessHost,
+  serial: string,
+  deadline: number,
+  signal: AbortSignal,
+): Promise<BootProbeObservation> {
+  let result: HostCommandResult;
+  try {
+    result = await host.commands.run(
       {
         executable: 'adb',
         args: deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed'], ['-s', serial]),
@@ -127,10 +154,56 @@ async function waitForBoot(
       },
       signal,
     );
-    if (result.stdout.trim() === '1') return;
-    await host.clock.sleep(POLL_MS, signal);
+  } catch (error) {
+    // Cancellation stays immediate and keeps the abort owner's typed reason.
+    signal.throwIfAborted();
+    return { booted: false, failure: attachAdbFailureHint(asAppError(error)) };
   }
-  throw bootTimeoutError('Android device failed to finish booting', { serial });
+  if (result.stdout.trim() === '1') return { booted: true };
+  if (result.exitCode === 0) {
+    return {
+      booted: false,
+      // exec-guard-allow: getprop exits 0 while the device is still booting;
+      // the trio is diagnostic context for the poll miss, not an exec-exit wrap.
+      failure: new AppError('COMMAND_FAILED', 'Android device is still booting', {
+        serial,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        bootObservation: 'not_ready',
+      }),
+    };
+  }
+  // The shared adb construction point stamps the typed failure evidence on the failed result.
+  // A signal kill reports a null exit code; the adb result shape wants a concrete failure code.
+  return {
+    booted: false,
+    failure: androidAdbResultError(
+      'Android boot probe failed',
+      { ...result, exitCode: result.exitCode ?? 1 },
+      { serial },
+    ),
+  };
+}
+
+function throwBootProbeFailure(
+  host: AndroidReadinessHost,
+  failure: AppError,
+  serial: string,
+  startedAtMs: number,
+): never {
+  const reason = androidBootFailureReason(failure);
+  const details = {
+    serial,
+    elapsedMs: host.clock.now() - startedAtMs,
+    hint: bootFailureHint(reason),
+    ...(failure.details ?? {}),
+    reason,
+  };
+  if (failure.code === 'TOOL_MISSING') {
+    throw new AppError('TOOL_MISSING', failure.message, details);
+  }
+  throw new AppError('COMMAND_FAILED', failure.message, details);
 }
 
 function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {

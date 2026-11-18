@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { ensureAndroidReady } from './runtime.ts';
 
 test('cancellation interrupts Android boot polling and terminates the emulator launched by the request', async () => {
@@ -153,6 +154,185 @@ test('without a deadline the default 120s boot wait applies', async () => {
     ensureAndroidReady(host, runningEmulator(), { headless: false }, new AbortController().signal),
   ).rejects.toMatchObject({ details: { reason: 'boot_timeout' } });
   expect(elapsed()).toBeGreaterThanOrEqual(120_000);
+});
+
+type ProbeResult = { stdout: string; stderr: string; exitCode: number };
+
+/** A host whose boot probe replays the given results in order, then keeps returning the last one. */
+function probeHost(sequence: readonly (ProbeResult | Error)[]) {
+  let now = 1_000;
+  const queue = [...sequence];
+  const run = vi.fn(async () => {
+    const next = queue.length > 1 ? queue.shift() : queue[0];
+    if (next instanceof Error) throw next;
+    return next as ProbeResult;
+  });
+  const host = {
+    commands: { which: async () => 'tool', run },
+    toolchains: { prepare: async () => {} },
+    clock: {
+      now: () => now,
+      sleep: async (ms: number) => {
+        now += ms;
+      },
+    },
+    deviceReadiness: {
+      androidEmulator: {
+        discover: async () => [runningEmulator()],
+        launch: async () => 4242,
+        terminate: async () => {},
+      },
+    },
+  } as unknown as PlatformRuntimeHost;
+  return { host, run };
+}
+
+const BOOTED_PROBE: ProbeResult = { stdout: '1\n', stderr: '', exitCode: 0 };
+const STILL_BOOTING_PROBE: ProbeResult = { stdout: '', stderr: '', exitCode: 0 };
+
+test.each(['error: device offline', 'device offline'])(
+  'a retriable typed adb observation (%s) retries until the device reports booted',
+  async (stderr) => {
+    const { host, run } = probeHost([{ stdout: '', stderr, exitCode: 1 }, BOOTED_PROBE]);
+
+    await expect(
+      ensureAndroidReady(
+        host,
+        runningEmulator(),
+        { headless: false, deadlineAtMs: 30_000 },
+        new AbortController().signal,
+      ),
+    ).resolves.toMatchObject({ booted: true });
+    expect(run).toHaveBeenCalledTimes(2);
+  },
+);
+
+test.each(['error: device unauthorized', 'device unauthorized'])(
+  'a terminal typed unauthorized observation (%s) fails after one poll, not at the deadline',
+  async (stderr) => {
+    const { host, run } = probeHost([{ stdout: '', stderr, exitCode: 1 }]);
+
+    await expect(
+      ensureAndroidReady(
+        host,
+        runningEmulator(),
+        { headless: false, deadlineAtMs: 30_000 },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: {
+        adbFailure: 'device_unauthorized',
+        reason: 'ADB_TRANSPORT_UNAVAILABLE',
+        serial: 'emulator-5554',
+      },
+    });
+    expect(run).toHaveBeenCalledTimes(1);
+  },
+);
+
+test('a retriable device-not-found host refusal stays terminal', async () => {
+  const { host, run } = probeHost([
+    { stdout: '', stderr: "error: device 'emulator-5554' not found", exitCode: 1 },
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    details: {
+      adbFailure: 'device_not_found',
+      retriable: true,
+      adbHostRefusal: true,
+      reason: 'ADB_TRANSPORT_UNAVAILABLE',
+    },
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('an unclassified nonzero probe exit stays terminal instead of becoming boot_timeout', async () => {
+  const { host, run } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    details: { reason: 'BOOT_COMMAND_FAILED', serial: 'emulator-5554' },
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('offline wording on stdout carries no typed evidence and stays terminal', async () => {
+  const { host, run } = probeHost([{ stdout: 'device offline', stderr: '', exitCode: 1 }]);
+
+  const failure = await ensureAndroidReady(
+    host,
+    runningEmulator(),
+    { headless: false, deadlineAtMs: 30_000 },
+    new AbortController().signal,
+  ).then(
+    () => {
+      throw new Error('expected readiness to fail');
+    },
+    (error: unknown) => error,
+  );
+  expect(failure).toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  expect((failure as { details?: Record<string, unknown> }).details?.adbFailure).toBeUndefined();
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('a probe-level timeout is a typed ANDROID_BOOT_TIMEOUT terminal, not a raw exec timeout', async () => {
+  const { host, run } = probeHost([
+    new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 }),
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    details: { adbFailure: 'timeout', reason: 'ANDROID_BOOT_TIMEOUT', serial: 'emulator-5554' },
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('a thrown offline wording without typed details does not retry, proving text cannot drive the verdict', async () => {
+  const { host, run } = probeHost([new AppError('COMMAND_FAILED', 'device offline')]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('still-booting exit 0 observations retry inside the deadline and then report boot_timeout', async () => {
+  const { host, run } = probeHost([STILL_BOOTING_PROBE]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 3_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'boot_timeout', serial: 'emulator-5554' } });
+  expect(run.mock.calls.length).toBeGreaterThan(1);
 });
 
 function stoppedAvd(): DeviceInfo {
