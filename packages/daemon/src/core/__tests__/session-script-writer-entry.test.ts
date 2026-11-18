@@ -27,7 +27,9 @@ function root(): string {
   return directory;
 }
 
-type Outcome = Readonly<{ written: true } | { written: false; reason?: string; exposure?: string }>;
+type Outcome = Readonly<
+  { written: true } | { written: false; reason?: string; exposure?: string; notReason?: string }
+>;
 
 const CASES: ReadonlyArray<{
   name: string;
@@ -48,7 +50,11 @@ const CASES: ReadonlyArray<{
   {
     name: 'a directory at the entry',
     force,
-    outcome: force ? { written: false } : { written: false, reason: 'script_target_exists' },
+    // A forced save renames over the entry, which a directory refuses; only an exclusive link answers that a
+    // file already exists there.
+    outcome: force
+      ? { written: false, notReason: 'script_target_exists' }
+      : { written: false, reason: 'script_target_exists' },
     arrange: (directory: string) => {
       const destination = path.join(directory, 'journey.ad');
       fs.mkdirSync(destination);
@@ -91,6 +97,10 @@ skipOnWindows.each(CASES)(
     const result = writer.write(recordingTo(destination, force), { force });
 
     expect(result.written).toBe(outcome.written);
+    if (!result.written && !outcome.written && outcome.notReason) {
+      expect(result.error).toBeDefined();
+      expect(result.error?.details?.reason).not.toBe(outcome.notReason);
+    }
     if (!result.written && !outcome.written && outcome.reason) {
       expect(result.error?.details).toMatchObject({
         reason: outcome.reason,

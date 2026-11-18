@@ -14,6 +14,7 @@ import {
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
   prepareScriptDestination,
+  publishScriptFileSync,
   scriptEntryName,
   unnamedEntryFailure,
   withAtomicPublishTempPathSync,
@@ -160,6 +161,24 @@ test.each([
   { spelled: 'C:\\dir\\COM10.ad', name: 'COM10.ad' },
   { spelled: 'C:journey.ad', name: 'journey.ad' },
   { spelled: '//server//share//journey.ad', name: 'journey.ad' },
+  { spelled: 'C:\\new\\bad?.ad', name: undefined },
+  { spelled: 'C:\\new\\a<b.ad', name: undefined },
+  { spelled: 'C:\\new\\a>b.ad', name: undefined },
+  { spelled: 'C:\\new\\a"b.ad', name: undefined },
+  { spelled: 'C:\\new\\a|b.ad', name: undefined },
+  { spelled: 'C:\\new\\a*b.ad', name: undefined },
+  { spelled: 'C:\\new\\a\u0001b.ad', name: undefined },
+  { spelled: 'C:\\new\\a\u001fb.ad', name: undefined },
+  { spelled: 'C:\\new\\trailing.', name: undefined },
+  { spelled: 'C:\\new\\trailing ', name: undefined },
+  { spelled: 'C:\\new\\COM¹.ad', name: undefined },
+  { spelled: 'C:\\new\\com²', name: undefined },
+  { spelled: 'C:\\new\\LPT³.log', name: undefined },
+  { spelled: '\\\\?\\PIPE\\recorder', name: undefined },
+  { spelled: '\\\\?\\Volume{0}\\journey.ad', name: undefined },
+  { spelled: '\\\\?\\C:\\dir\\journey.ad', name: 'journey.ad' },
+  { spelled: 'C:\\new\\COM⁴.ad', name: 'COM⁴.ad' },
+  { spelled: 'C:\\new\\a b.c.ad', name: 'a b.c.ad' },
   { spelled: `C:\\dir\\${'a'.repeat(256)}`, name: undefined },
   { spelled: `C:\\dir\\${'é'.repeat(255)}`, name: 'é'.repeat(255) },
 ])('Windows rules name $name for $spelled', ({ spelled, name }) => {
@@ -175,6 +194,9 @@ test.each([
   { spelled: 'dir/~', name: '~' },
   { spelled: '~/journey.ad', name: 'journey.ad' },
   { spelled: 'journey.ad/', name: 'journey.ad' },
+  { spelled: 'script\uD800.ad', name: undefined },
+  { spelled: 'dir\uDC00/journey.ad', name: undefined },
+  { spelled: 'script😀.ad', name: 'script😀.ad' },
 ])('POSIX rules name $name for $spelled', ({ spelled, name }) => {
   expect(scriptEntryName(spelled, path.posix)).toBe(name);
 });
@@ -230,5 +252,55 @@ test.each([
     });
     if (blames === 'path') expect(failure.details?.hint).toMatch(/directory names/);
     else expect(failure.details?.hint).toMatch(/valid file name/);
+  },
+);
+
+test('a short name keeps its temp sibling no longer than the release format made it', () => {
+  // The release format was `.<name>.<pid>-<uuid>.tmp`; a deep directory near PATH_MAX left no room for more.
+  const destination = path.join('/recordings', 'x.png');
+  const release = `.x.png.${process.pid}-${'0'.repeat(36)}.tmp`;
+  const sibling = withAtomicPublishTempPathSync(destination, (temporaryPath) => temporaryPath);
+
+  expect(Buffer.byteLength(path.basename(sibling))).toBeLessThanOrEqual(Buffer.byteLength(release));
+});
+
+test('a temp sibling repeats at most 32 bytes of a long name', () => {
+  const sibling = withAtomicPublishTempPathSync(
+    path.join('/recordings', `${'a'.repeat(64)}.ad`),
+    (temporaryPath) => temporaryPath,
+  );
+
+  expect(path.basename(sibling).split('.')[1]).toBe('a'.repeat(32));
+});
+
+test('two names whose hashes agree in their first 12 hex digits keep separate temp siblings', () => {
+  const first = path.join('/recordings', `${'a'.repeat(32)}001b3611.ad`);
+  const second = path.join('/recordings', `${'a'.repeat(32)}013aae72.ad`);
+  const sibling = withAtomicPublishTempPathSync(first, (temporaryPath) => temporaryPath);
+
+  expect(isAtomicPublishTemporaryPath(sibling, first)).toBe(true);
+  expect(isAtomicPublishTemporaryPath(sibling, second)).toBe(false);
+});
+
+skipOnWindows(
+  'a lone surrogate is refused before it can replace the file its replacement character names',
+  () => {
+    // Node writes an unpaired surrogate as U+FFFD, so a forced save would land on a different, existing file.
+    const directory = root();
+    const dir = directoryWith(path.join(directory, 'dir'), 0o700);
+    fs.writeFileSync(path.join(dir, 'script\uFFFD.ad'), 'theirs\n');
+
+    expectUntrusted(
+      () =>
+        publishScriptFileSync({
+          destination: `${dir}/script\uD800.ad`,
+          contents: 'x\n',
+          publish: 'replace',
+        }),
+      'unnamed_entry',
+      dir,
+    );
+    expect(fs.readFileSync(path.join(dir, 'script\uFFFD.ad'), 'utf8')).toBe('theirs\n');
+    expect(tree(dir)).toEqual(['script\uFFFD.ad']);
   },
 );

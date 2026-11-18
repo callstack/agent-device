@@ -76,7 +76,11 @@ test('an interrupted commit spelled with a trailing separator is settled from th
     artifacts: [script('v2', 2, id)],
   });
 
-  expect(next).toMatchObject({ ok: true });
+  // The path reported is the file written, without the separator the spelling carried.
+  expect(next).toMatchObject({
+    ok: true,
+    data: { savedScript: path.join(directory, 'journey.ad') },
+  });
   expect(next.ok && next.data).not.toHaveProperty('scriptDeliveryFailure');
   expect(fs.readFileSync(path.join(directory, 'journey.ad'), 'utf8')).toBe('v2\n');
   expect(fs.readdirSync(directory)).toEqual(['journey.ad']);

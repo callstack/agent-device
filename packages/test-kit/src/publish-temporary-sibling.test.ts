@@ -66,7 +66,7 @@ skipOnWindows(
 
 /** A temp sibling's name as host-kit spells it: a readable stem, a hash of the whole name, then a random tail. */
 function temporaryName(name: string): string {
-  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 12);
+  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 16);
   return `.${name}.${digest}.${process.pid}-0000.tmp`;
 }
 

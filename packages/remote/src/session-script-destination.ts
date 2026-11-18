@@ -559,7 +559,9 @@ function publishStaged(
     releaseStaging(file, record.publishing.staging);
     current = withoutStaging(current, record.publishing.staging);
   }
-  if (revision <= current.revision) return current.destination;
+  // Answered as the entry host-kit confirmed, which a caller can open; the spelling can carry a trailing
+  // separator that no lookup of a file accepts.
+  if (revision <= current.revision) return entry;
   const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
@@ -576,7 +578,7 @@ function publishStaged(
   }
   writeRecord(file, { ...current, revision });
   pending.named = false;
-  return current.destination;
+  return entry;
 }
 
 /** An interrupted version counts as published only when the entry host-kit authorized is that very file. */

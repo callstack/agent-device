@@ -165,7 +165,7 @@ export function publishScriptFileSync(options: {
 function createAtomicPublishTempPath(directory: string, destination: string): string {
   return path.join(
     directory,
-    `${temporaryNamePrefix(destination)}${process.pid}-${crypto.randomUUID()}.tmp`,
+    `${temporaryNamePrefix(destination)}${process.pid}-${crypto.randomBytes(8).toString('hex')}.tmp`,
   );
 }
 
@@ -183,7 +183,7 @@ function temporaryNamePrefix(destination: string): string {
     if (Buffer.byteLength(stem + character) > TEMP_NAME_STEM_BYTES) break;
     stem += character;
   }
-  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 12);
+  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 16);
   return `.${stem}.${digest}.`;
 }
 
@@ -293,6 +293,11 @@ export function unnamedEntryFailure(spelled: string, rules: path.PlatformPath): 
   return scriptAncestryFailure(spelled, parent, 'unnamed_entry');
 }
 
+/** Whether a name holds a character below U+0020, which Windows refuses in a file name. */
+function hasControlCharacter(name: string): boolean {
+  return [...name].some((character) => character.charCodeAt(0) < 0x20);
+}
+
 /** Whether a Windows path holds a `:` past its root, where only a stream separator would put one. */
 function holdsColonAfterRoot(normalized: string, rules: path.PlatformPath): boolean {
   return normalized.slice(rules.parse(normalized).root.length).includes(':');
@@ -305,7 +310,10 @@ function holdsColonAfterRoot(normalized: string, rules: path.PlatformPath): bool
  * basename would turn the share of a bare UNC root into a file name.
  */
 export function scriptEntryName(spelled: string, rules: path.PlatformPath): string | undefined {
-  if (spelled.includes('\0') || /^~\/*$/.test(spelled)) return undefined;
+  // A lone surrogate is written as U+FFFD, so the file created would be another name than the one judged.
+  if (spelled.includes('\0') || /\p{Surrogate}/u.test(spelled) || /^~\/*$/.test(spelled)) {
+    return undefined;
+  }
   // The raw last segment first: a normalization folds a final `.` or `..` away.
   const { base } = rules.parse(spelled);
   if (base === '' || base === '.' || base === '..' || exceedsNameMax(base, rules)) return undefined;
@@ -328,12 +336,19 @@ const NAME_MAX = 255;
  * device name, and a stream after a `:` all name something other than one file.
  */
 function windowsEntryName(normalized: string, rules: path.PlatformPath): string | undefined {
-  if (/^\\\\(?:\.\\|\?\\GLOBALROOT(?:\\|$))/i.test(normalized)) return undefined;
+  // The device namespace, and an extended prefix that names anything but a drive or a UNC share.
+  if (/^\\\\\.\\/.test(normalized)) return undefined;
+  if (/^\\\\\?\\/.test(normalized) && !/^\\\\\?\\(?:[A-Z]:\\|UNC\\)/i.test(normalized))
+    return undefined;
   if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
   const { base } = rules.parse(normalized);
   if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
+  // Microsoft's naming rules: no reserved character or control character, no trailing dot or space, and no
+  // reserved device name, with or without an extension.
+  if (/[<>:"/\\|?*]/.test(base) || hasControlCharacter(base) || /[. ]$/.test(base))
+    return undefined;
   const stem = base.split('.')[0]?.trimEnd() ?? '';
-  return /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(stem) ? undefined : base;
+  return /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$/i.test(stem) ? undefined : base;
 }
 
 /**
