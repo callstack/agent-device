@@ -19,6 +19,7 @@ import {
   acquireProcessLock,
   confirmScriptDestination,
   judgeScriptDestination,
+  openVerifiedFileForRead,
   scriptAncestryReason,
   prepareScriptDestination,
   publishFileSync,
@@ -417,7 +418,8 @@ async function publishScriptVersion(
   let staging: string | undefined;
   try {
     if ((revision as number) <= record.revision) {
-      return { published: committedVersionEntry(record, judgedCommittedEntry(record.destination)) };
+      const { entry } = judgeRepeat(() => judgeScriptDestination(record.destination));
+      return { published: committedVersionEntry(record, entry) };
     }
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
@@ -560,7 +562,11 @@ function publishStaged(
   // Confirmed here, under the record lock, because the download ran since host-kit answered. The entry it
   // returns is the only path this commit creates or probes: the destination's own spelling never reaches the
   // filesystem, and nothing the record stores can point recovery elsewhere (ADR 0016).
-  const { entry } = confirmScriptDestination(record.destination, prepared);
+  const confirm = () => confirmScriptDestination(record.destination, prepared);
+  // A copy whose revision is already committed, or interrupted mid-commit, is a repeat; its judgment is
+  // classified exactly as an early repeat's is.
+  const repeat = revision <= Math.max(record.revision, record.publishing?.revision ?? 0);
+  const { entry } = repeat ? judgeRepeat(confirm) : confirm();
   let current = settlePublishing(record, entry);
   if (record.publishing) {
     // Once the settled record is written, its staging directory can no longer be named.
@@ -613,10 +619,13 @@ function committedVersionEntry(record: ScriptRecord, entry: string): string {
   return entry;
 }
 
-/** The entry host-kit judges for a repeat; a directory removed since means the committed file is gone. */
-function judgedCommittedEntry(destination: string): string {
+/**
+ * Judges the destination of a repeated version. A directory removed since means the committed file is gone,
+ * which is what the caller is told, on the early path and on the locked one alike.
+ */
+function judgeRepeat(judge: () => ScriptDestination): ScriptDestination {
   try {
-    return judgeScriptDestination(destination).entry;
+    return judge();
   } catch (error) {
     if (error instanceof AppError && error.details?.exposure === 'unreachable_parent') {
       throw new CommittedVersionUnverified('changed');
@@ -626,14 +635,40 @@ function judgedCommittedEntry(destination: string): string {
 }
 
 /**
- * The SHA-256 of a regular file no larger than a delivery can be, or nothing: anything else cannot be a
- * version this client committed.
+ * The SHA-256 of a regular file no larger than a delivery can be, read through ONE verified descriptor, or
+ * nothing: a link, a special file, an entry swapped while it was opened, a file past the cap, or one whose size
+ * moved while it was read cannot be a version this client committed.
  */
 function contentDigest(file: string): string | undefined {
-  const stat = fs.lstatSync(file, { throwIfNoEntry: false });
-  if (!stat?.isFile() || stat.size > MAX_SCRIPT_BYTES) return undefined;
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  let descriptor: number | undefined;
+  try {
+    descriptor = openVerifiedFileForRead(file);
+  } catch (error) {
+    if (error instanceof AppError) return undefined;
+    throw error;
+  }
+  if (descriptor === undefined) return undefined;
+  try {
+    const { size } = fs.fstatSync(descriptor);
+    if (size > MAX_SCRIPT_BYTES) return undefined;
+    const hash = crypto.createHash('sha256');
+    const chunk = Buffer.allocUnsafe(DIGEST_CHUNK_BYTES);
+    let total = 0;
+    for (;;) {
+      const read = fs.readSync(descriptor, chunk, 0, chunk.length, null);
+      if (read === 0) break;
+      total += read;
+      if (total > MAX_SCRIPT_BYTES) return undefined;
+      hash.update(chunk.subarray(0, read));
+    }
+    if (total !== size || fs.fstatSync(descriptor).size !== size) return undefined;
+    return hash.digest('hex');
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
+
+const DIGEST_CHUNK_BYTES = 64 * 1024;
 
 /**
  * A repeated version this client cannot vouch for: its committed file changed or is gone, or a record from

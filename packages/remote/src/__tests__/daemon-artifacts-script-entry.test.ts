@@ -1,6 +1,7 @@
 // The remote commit creates the entry host-kit authorized, and never spells one of its own from the record's
 // destination (ADR 0016): the name a publisher creates is decided in one place, and an interrupted commit is
 // settled from that same entry.
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -424,4 +425,134 @@ test('a repeat after its output directory was removed says the saved file is gon
     data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
   });
   expect(fs.existsSync(path.join(directory, 'out'))).toBe(false);
+});
+
+test('a repeat whose file was overwritten in place, keeping its inode, discloses the change', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const inode = fs.statSync(destination).ino;
+  fs.writeFileSync(destination, 'v9\n');
+  expect(fs.statSync(destination).ino).toBe(inode);
+
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(again).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+  });
+});
+
+test.skipIf(process.platform === 'win32')(
+  'a repeat whose file is swapped for a FIFO after it was looked at never blocks or reads it',
+  async () => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    const lstat = fs.lstatSync.bind(fs);
+    let swapped = false;
+    const spy = vi.spyOn(fs, 'lstatSync').mockImplementation(((
+      target: fs.PathLike,
+      options?: fs.StatSyncOptions,
+    ) => {
+      const seen = lstat(target, options);
+      if (!swapped && target === destination) {
+        // Between the look and the open: the regular file goes, and a FIFO no writer holds takes its name.
+        swapped = true;
+        fs.rmSync(destination);
+        execFileSync('mkfifo', [destination]);
+      }
+      return seen;
+    }) as typeof fs.lstatSync);
+
+    try {
+      const again = await answer(baseUrl, stateDir, request('click'), {
+        artifacts: [script('v1', 1, id)],
+      });
+
+      expect(swapped).toBe(true);
+      expect(again).toMatchObject({
+        ok: true,
+        data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+test.each([
+  { name: 'a few bytes', grow: 'extra\n'.length },
+  { name: 'past the delivery cap', grow: 9 * 1024 * 1024 },
+])('a repeat whose file grows by $name while it is read discloses the change', async ({ grow }) => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const read = fs.readSync.bind(fs) as (...args: unknown[]) => number;
+  let grown = false;
+  let digestBytes = 0;
+  const spy = vi.spyOn(fs, 'readSync').mockImplementation(((...args: unknown[]) => {
+    // Only the digest's own chunked reads: a 64 KiB buffer read from the current position.
+    const chunked = (args[1] as Buffer | undefined)?.length === 64 * 1024 && args[4] === null;
+    if (chunked && !grown) {
+      grown = true;
+      fs.appendFileSync(destination, Buffer.alloc(grow, 0x61));
+    }
+    const count = read(...args);
+    if (chunked) digestBytes += count;
+    return count;
+  }) as typeof fs.readSync);
+
+  try {
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+
+    expect(grown).toBe(true);
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+    // The read stops at the cap instead of following the file wherever it grows.
+    expect(digestBytes).toBeLessThanOrEqual(8 * 1024 * 1024 + 64 * 1024);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a copy that became a repeat while its output directory was removed says the file is gone', async () => {
+  const { stateDir, directory } = caller();
+  const output = path.join(directory, 'out');
+  const destination = path.join(output, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  vi.mocked(file.prepareScriptDestination).mockImplementationOnce((spelled) => {
+    // Another copy of version 2 lands while this one is in flight.
+    const { file: recordFile, record } = soleRecord(stateDir);
+    fs.writeFileSync(
+      recordFile,
+      JSON.stringify({ ...record, revision: 2, committedDigest: sha256('v2\n') }),
+    );
+    return actual.prepareScriptDestination(spelled);
+  });
+  vi.mocked(file.confirmScriptDestination).mockImplementationOnce((spelled, prepared) => {
+    // Then the output directory goes before this copy's locked commit judges it.
+    fs.rmSync(output, { recursive: true, force: true });
+    return actual.confirmScriptDestination(spelled, prepared);
+  });
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(late).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+  });
+  expect(fs.existsSync(output)).toBe(false);
 });
