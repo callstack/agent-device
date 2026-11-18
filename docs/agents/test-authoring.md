@@ -27,7 +27,7 @@ Reject assertion-free probes, self-comparisons, subject-derived expectations, du
 
 Match test names to exercised inputs.
 Type-only checks do not prove runtime behavior.
-Retain compile-time `@ts-expect-error` pins.
+Retain compile-time `@ts-expect-error` pins. An unused directive fails typechecking.
 
 ## Fixtures and seams
 

@@ -1,21 +1,21 @@
-# Security
+# Security boundaries
 
-Clients trust callers for local paths, remote daemons only for data and checked IDs. Daemons trust their state directory. Nobody trusts the network or other users.
-Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
+The CLI client trusts its caller to choose destinations on the client machine.
+The client trusts a remote daemon for data and validated identifiers, not for paths.
+The daemon trusts its state directory. Nobody trusts the network or other local users.
+This guide excludes the same uid, a hostile root, ACLs, mounts, and untrusted filesystems.
 
-ADR 0016 checks caller-named POSIX script destinations against the writer's uid.
+## Applied today
 
-New or migrated writes (#4669):
+ADR 0016 judges caller-named script destinations on POSIX against the uid of the writing process.
+Both script publishers stage and commit inside the directory that the walk judged.
+Remote script delivery limits the downloaded bytes as they arrive.
 
-- Authorize a destination where it is written. Authentication alone grants no filesystem authority.
-- When an elevated process writes for a caller, authorize the destination against the caller's uid.
-- From a peer, accept only data, an ID bound to a local record (endpoint, tenant, session), or one entry name under an authorized root.
-- Validate entry names: type, NUL, empty, `.`, `..`, separators, platform rules.
-- Use explicit `path.posix`/`path.win32`. Never fold kernel-resolved paths.
+## Proposed in #4669; applies once approved
+
 - For caller output, judge each directory as ADR 0016 does.
-- Stage and commit inside the judged parent. After async work, re-walk and compare identity.
-- Before you append or truncate, verify the opened descriptor.
-- At first publication, replace an existing destination only with the caller's overwrite grant. Later deliveries of that recording need none.
-- Commit by exclusive create, link, or same-filesystem rename at a restrictive mode.
-- Bound remote bytes. Clean up only what you made.
-- If delivery fails before commit, keep the previous file. Keep the action result where required. Disclose a typed reason.
+- Stage and commit inside the judged directory.
+- Before filesystem work, validate each single-entry name.
+- Limit remote bytes as they arrive.
+
+Screenshot `--out`, contact sheets, the JUnit reporter, trace and recording outputs, client state, and daemon state do not follow these rules yet (#4669).

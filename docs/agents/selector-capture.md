@@ -1,5 +1,6 @@
 # Selector Capture Reliability
 
+Before changes to selector capture, polling, snapshot caching, or interaction fast paths, read this.
 These requirements apply across routes.
 ADRs 0002, 0004, 0005, 0011, 0014, and 0015 own their rationale and decisions.
 

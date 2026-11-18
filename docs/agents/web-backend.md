@@ -9,8 +9,6 @@ Web automation uses a managed `agent-browser` backend as an implementation detai
 - To run the backend health check, use `agent-device web doctor`.
 - Each backend call spawns the package's declared `bin` entry with the current Node runtime.
   It never spawns the `node_modules/.bin` console shim.
-  Windows supplies that shim as `.cmd`.
-  Without a shell, `child_process.spawn` refuses it because of CVE-2024-27980 hardening.
   A shell would reintroduce hazards from argument quoting.
   Only `runManagedAgentBrowser` executes the backend.
 

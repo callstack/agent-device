@@ -32,9 +32,11 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - Changed code: flag dead code, redundant guards, casts, narrating comments, and competing owners.
 - Help and user docs: trace changed behavior claims to code paths.
   Block unsupported claims.
-- New trust boundary: before code, review a rule and case table: path chooser, kernel resolution, changes between checks, first landing, result-keeping failures, accepted cases.
-  Re-review security-contract changes in prose, tests, config, or dependencies.
-  Fix this change's regressions at every entry point. Link existing independent issues for others.
+- New trust boundary: before you write code, get a rule and a case table reviewed.
+  The table names who chooses the path, what the kernel resolves, what can change between checks, where bytes are first written, which failures keep the action result, and the accepted cases.
+  If prose, tests, configuration, or dependencies change the security contract, review again.
+  Fix a regression that this change introduces at every entry point.
+  For an unrelated finding, link an existing independent issue.
 - Bulk prose rewrites (docs, ADRs, help): get a review from another model provider.
   The reviewer compares each changed sentence with the base. A self-review is not evidence.
 

@@ -27,4 +27,4 @@ Versioned corpora, schemas, fixtures, and golden tables remain source inputs.
 If TypeScript helpers cannot load, plain `.mjs` packaging fixtures keep child-process use local.
 Prefer `execFile`.
 
-Stage new entry files first, then follow ADR 0027 for startup imports and `test/wire-compat/README.md` for wire changes.
+For a startup-path import, follow ADR 0027. For a wire change, follow `test/wire-compat/README.md`.

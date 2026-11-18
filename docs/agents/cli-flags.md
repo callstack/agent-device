@@ -38,5 +38,6 @@ Pass a flag only through layers that consume it:
   From caller-supplied keys, the parser rejects typed options that the action never reads.
   Options the selected action ignores stay out of its request, even when config, env, or remote-config defaults set them. Thus, `AGENT_DEVICE_FPS=30` never breaks `record stop`.
   Exclude options that every action reads from the table.
+  The parser rejects only options in rows. If it rejected `--json`, it would reject the command.
 - Keep command-specific usage/flag metadata with the command family metadata that owns the command.
 - Keep argument parsing in `src/cli/parser/`. Keep help rendering in `src/commands/schema/`.
