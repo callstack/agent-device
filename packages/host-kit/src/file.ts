@@ -1,5 +1,4 @@
 export {
-  assertScriptEntryNamed,
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
   prepareScriptDestination,
@@ -7,6 +6,7 @@ export {
   publishFileSync,
   publishScriptFileSync,
   scriptAncestryReason,
+  scriptEntryNameOrRefuse,
   type DurableFilePublishMode,
   type ScriptDestination,
   type ScriptDestinationOptions,

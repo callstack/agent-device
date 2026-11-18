@@ -96,15 +96,48 @@ test('a relative destination is refused as relative, whatever its last segment',
   );
 });
 
-skipOnWindows('a confirmation refuses the same directory under a different name', () => {
-  const directory = root();
-  const dir = directoryWith(path.join(directory, 'dir'), 0o700);
-  const prepared = prepareScriptDestination(path.join(dir, 'journey.ad'));
+/** The typed details a refusal carries. */
+function refusal(run: () => unknown): Record<string, unknown> | undefined {
+  try {
+    run();
+  } catch (error) {
+    return (error as { details?: Record<string, unknown> }).details;
+  }
+  return undefined;
+}
 
-  expectUntrustedReplaced(
-    () => confirmScriptDestination(path.join(dir, 'other.ad'), prepared),
-    dir,
-  );
+skipOnWindows(
+  'a confirmation refuses the same directory under a different name, as a rename',
+  () => {
+    const directory = root();
+    const dir = directoryWith(path.join(directory, 'dir'), 0o700);
+    const prepared = prepareScriptDestination(path.join(dir, 'journey.ad'));
+
+    expect(
+      refusal(() => confirmScriptDestination(path.join(dir, 'other.ad'), prepared)),
+    ).toMatchObject({
+      reason: 'script_ancestry_replaced',
+      exposure: 'entry_renamed',
+      hint: expect.stringMatching(/same --save-script path/),
+    });
+  },
+);
+
+test('a Windows confirmation refuses a different directory under the one identity Windows answers', () => {
+  // No walk runs on Windows, so every directory answers the identity `windows`; only the path tells two apart.
+  const directory = root();
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    const prepared = prepareScriptDestination(path.join(directory, 'judged', 'journey.ad'));
+
+    expectUntrustedReplaced(
+      () => confirmScriptDestination(path.join(directory, 'other', 'journey.ad'), prepared),
+      path.join(directory, 'other'),
+    );
+  } finally {
+    Object.defineProperty(process, 'platform', original!);
+  }
 });
 
 test.each([
@@ -121,6 +154,24 @@ test.each([
   { spelled: '\\\\server\\share\\journey.ad', name: 'journey.ad' },
   { spelled: '\\\\?\\UNC\\server\\share\\journey.ad', name: 'journey.ad' },
   { spelled: 'C:\\dir\\journey.ad\\', name: 'journey.ad' },
+  { spelled: '//?//UNC/server/share', name: undefined },
+  { spelled: '\\\\?\\\\UNC\\server\\share', name: undefined },
+  { spelled: '//?/UNC//server//share/', name: undefined },
+  { spelled: '\\\\.\\pipe\\recorder', name: undefined },
+  { spelled: '//./pipe/recorder', name: undefined },
+  { spelled: '\\\\?\\GLOBALROOT\\Device\\journey.ad', name: undefined },
+  { spelled: 'CON', name: undefined },
+  { spelled: 'C:\\dir\\con.txt', name: undefined },
+  { spelled: 'C:\\dir\\Lpt9.ad', name: undefined },
+  { spelled: 'C:\\dir\\nul .ad', name: undefined },
+  { spelled: 'C:\\dir\\COM1', name: undefined },
+  { spelled: 'C:\\missing\\log.ad:private', name: undefined },
+  { spelled: 'C:\\dir:x\\journey.ad', name: undefined },
+  { spelled: '\\\\server\\share\\a:b', name: undefined },
+  { spelled: 'C:\\dir\\console.ad', name: 'console.ad' },
+  { spelled: 'C:\\dir\\COM10.ad', name: 'COM10.ad' },
+  { spelled: 'C:journey.ad', name: 'journey.ad' },
+  { spelled: '//server//share//journey.ad', name: 'journey.ad' },
 ])('Windows rules name $name for $spelled', ({ spelled, name }) => {
   expect(scriptEntryName(spelled, path.win32)).toBe(name);
 });
@@ -152,12 +203,13 @@ skipOnWindows.each(['./missing/.', 'missing/..', '~/', '~'])(
   },
 );
 
-test('an unnamed entry hints at a file name, not at permissions', () => {
-  let hint: unknown;
+test("an unnamed entry is the caller's input to correct, and hints at a file name", () => {
+  let failure: { code?: unknown; details?: { hint?: unknown } } | undefined;
   try {
     prepareScriptDestination('/');
   } catch (error) {
-    hint = (error as { details?: { hint?: unknown } }).details?.hint;
+    failure = error as typeof failure;
   }
-  expect(hint).toMatch(/valid file name/);
+  expect(failure?.code).toBe('INVALID_ARGS');
+  expect(failure?.details?.hint).toMatch(/valid file name/);
 });

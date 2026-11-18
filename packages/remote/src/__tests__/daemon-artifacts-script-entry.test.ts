@@ -81,3 +81,46 @@ test('an interrupted commit spelled with a trailing separator is settled from th
   expect(fs.readFileSync(path.join(directory, 'journey.ad'), 'utf8')).toBe('v2\n');
   expect(fs.readdirSync(directory)).toEqual(['journey.ad']);
 });
+
+/** The single record this client keeps for the open, and its parsed contents. */
+function soleRecord(stateDir: string) {
+  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
+  const [name] = fs.readdirSync(directory).filter((entry) => entry.endsWith('.json'));
+  const file = path.join(directory, name as string);
+  return { file, record: JSON.parse(fs.readFileSync(file, 'utf8')) };
+}
+
+test('a record naming an unrelated file cannot pass that file off as the interrupted version', async () => {
+  const { root, stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  fs.rmSync(destination);
+  const unrelated = path.join(root, 'unrelated.ad');
+  fs.writeFileSync(unrelated, 'unrelated\n');
+  const stat = fs.statSync(unrelated, { bigint: true });
+  const { file, record } = soleRecord(stateDir);
+  const staging = path.join(directory, '.agent-device-script-tampered');
+  const publishing = { revision: 9, file: `${stat.dev}:${stat.ino}`, staging, entry: unrelated };
+  fs.writeFileSync(file, JSON.stringify({ ...record, publishing }));
+
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+
+  // Version 2 is newer than anything committed to the destination, so it is written there.
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+  expect(fs.readFileSync(unrelated, 'utf8')).toBe('unrelated\n');
+});
+
+test('a record whose interrupted version is null is no record, and the response keeps its outcome', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file, record } = soleRecord(stateDir);
+  fs.writeFileSync(file, JSON.stringify({ ...record, publishing: null }));
+
+  await expect(
+    answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] }),
+  ).resolves.toMatchObject({ ok: true });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
@@ -98,8 +98,10 @@ test('remote open expands home on the caller', async () => {
 test.each([
   { name: 'a relative `./missing/.`', spelled: () => './missing/.' },
   { name: 'an absolute `.` over a directory that exists', spelled: (root: string) => `${root}/.` },
+  { name: 'an empty path', spelled: () => '' },
 ])('remote open refuses $name as an unnamed entry before anything else', async ({ spelled }) => {
   const root = mkdtempForTestSync('script-unnamed-');
+  const probe = vi.spyOn(fs, 'existsSync');
   await expect(
     prepareRemoteRequestArtifacts(
       {
@@ -114,7 +116,10 @@ test.each([
       createTestHostEnvironment(),
     ),
   ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
     details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
   });
+  expect(probe).not.toHaveBeenCalled();
+  probe.mockRestore();
   expect(fs.readdirSync(root)).toEqual([]);
 });

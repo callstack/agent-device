@@ -5,7 +5,7 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
-import { assertScriptEntryNamed } from '@agent-device/host-kit/file';
+import { scriptEntryNameOrRefuse } from '@agent-device/host-kit/file';
 import {
   listSaveScriptFlagOwnerCommands,
   ownsSaveScriptFlag,
@@ -62,7 +62,7 @@ export function saveScriptFlagResponse(req: DaemonRequest): DaemonResponse | und
   }
   if (typeof requested !== 'string') return undefined;
   try {
-    assertScriptEntryNamed(requested);
+    scriptEntryNameOrRefuse(requested);
     return undefined;
   } catch (error) {
     return rejectedSaveScript(req, error);

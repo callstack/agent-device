@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { assertScriptEntryNamed } from './atomic-file.ts';
+import { scriptEntryNameOrRefuse } from './atomic-file.ts';
 
 type PathResolutionOptions = {
   cwd?: string;
@@ -39,7 +39,7 @@ export function resolveScriptDestination(
   spelled: string,
   options: Readonly<{ cwd: string; env?: EnvMap }>,
 ): string {
-  assertScriptEntryNamed(spelled);
+  scriptEntryNameOrRefuse(spelled);
   return resolveUserPath(spelled, options);
 }
 

@@ -70,7 +70,10 @@ test.each(['./missing/.', 'missing/..', '~/'])(
 
     expect(response).toMatchObject({
       ok: false,
-      error: { details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' } },
+      error: {
+        code: 'INVALID_ARGS',
+        details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+      },
     });
   },
 );

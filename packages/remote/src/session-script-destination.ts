@@ -53,11 +53,7 @@ type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
-  /**
-   * `entry` is the path host-kit authorized for the version, so recovery probes the file the commit created;
-   * a record written before it was kept has none, and is settled from `destination` as it always was.
-   */
-  publishing?: Readonly<{ revision: number; file: string; staging: string; entry?: string }>;
+  publishing?: Readonly<{ revision: number; file: string; staging: string }>;
   staging?: readonly string[];
   retired?: true;
 }>;
@@ -493,7 +489,7 @@ function removeRecord(file: string): void {
   const record = parseRecord(file);
   if (record && !record.retired) {
     try {
-      writeRecord(file, { ...settlePublishing(record), retired: true });
+      writeRecord(file, { ...withoutPublishing(record), retired: true });
     } catch (error) {
       removeUnretirableRecord(file, record);
       throw error;
@@ -552,7 +548,11 @@ function publishStaged(
   const { revision, staging, staged, prepared, pending } = version;
   const record = readRecord(file);
   if (!record) return undefined;
-  let current = settlePublishing(record);
+  // Confirmed here, under the record lock, because the download ran since host-kit answered. The entry it
+  // returns is the only path this commit creates or probes: the destination's own spelling never reaches the
+  // filesystem, and nothing the record stores can point recovery elsewhere (ADR 0016).
+  const { entry } = confirmScriptDestination(record.destination, prepared);
+  let current = settlePublishing(record, entry);
   if (record.publishing) {
     // Once the settled record is written, its staging directory can no longer be named.
     writeRecord(file, current);
@@ -560,10 +560,7 @@ function publishStaged(
     current = withoutStaging(current, record.publishing.staging);
   }
   if (revision <= current.revision) return current.destination;
-  // Confirmed here, under the record lock and right before the entry is created, because the download ran in
-  // between. The entry is the one host-kit authorized, never the destination's own spelling (ADR 0016).
-  const { entry } = confirmScriptDestination(current.destination, prepared);
-  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging, entry };
+  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
@@ -573,7 +570,7 @@ function publishStaged(
     if (exclusive) fs.linkSync(staged, entry);
     else fs.renameSync(staged, entry);
   } catch (error) {
-    writeRecord(file, settlePublishing({ ...current, publishing }));
+    writeRecord(file, settlePublishing({ ...current, publishing }, entry));
     pending.named = false;
     throw error;
   }
@@ -582,12 +579,17 @@ function publishStaged(
   return current.destination;
 }
 
-/** An interrupted version counts as published only when the destination is that very file. */
-function settlePublishing(record: ScriptRecord): ScriptRecord {
-  const { publishing, ...settled } = record;
-  if (!publishing) return record;
-  if (fileIdentity(publishing.entry ?? record.destination) !== publishing.file) return settled;
+/** An interrupted version counts as published only when the entry host-kit authorized is that very file. */
+function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
+  const settled = withoutPublishing(record);
+  const { publishing } = record;
+  if (!publishing || fileIdentity(entry) !== publishing.file) return settled;
   return { ...settled, revision: Math.max(settled.revision, publishing.revision) };
+}
+
+function withoutPublishing(record: ScriptRecord): ScriptRecord {
+  const { publishing: _interrupted, ...rest } = record;
+  return rest;
 }
 
 function fileIdentity(file: string): string | undefined {
@@ -698,14 +700,16 @@ function readRecord(file: string): ScriptRecord | undefined {
 }
 
 function parseRecord(file: string): ScriptRecord | undefined {
-  let record: Partial<ScriptRecord> | null = null;
+  let parsed: unknown;
   try {
-    record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return undefined;
   }
+  if (!isObject(parsed)) return undefined;
+  const record = parsed as Partial<Record<keyof ScriptRecord, unknown>>;
   const valid =
-    typeof record?.destination === 'string' &&
+    typeof record.destination === 'string' &&
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
     (record.publishing === undefined || isPublishing(record.publishing)) &&
@@ -716,12 +720,16 @@ function parseRecord(file: string): ScriptRecord | undefined {
   return valid ? (record as ScriptRecord) : undefined;
 }
 
-function isPublishing(publishing: Partial<NonNullable<ScriptRecord['publishing']>>): boolean {
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPublishing(publishing: unknown): boolean {
   return (
+    isObject(publishing) &&
     Number.isSafeInteger(publishing.revision) &&
     typeof publishing.file === 'string' &&
-    typeof publishing.staging === 'string' &&
-    (publishing.entry === undefined || typeof publishing.entry === 'string')
+    typeof publishing.staging === 'string'
   );
 }
 

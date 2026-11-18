@@ -129,7 +129,8 @@ function prepareRemoteScriptOutput(
   host: HostEnvironment,
 ): DaemonWireRequest['flags'] {
   const requested = flags?.saveScript;
-  if (!requested) return flags;
+  // An empty path is a spelling to refuse, not an absent flag.
+  if (requested === undefined || requested === false) return flags;
   if (req.command !== 'open') {
     throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
       reason: 'remote_script_lifecycle_unsupported',

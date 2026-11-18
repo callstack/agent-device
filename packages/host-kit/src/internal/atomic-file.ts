@@ -44,7 +44,8 @@ export type ScriptAncestryExposure =
   | 'unnamed_entry'
   | 'unresolvable_parent'
   | 'unreachable_parent'
-  | 'parent_replaced';
+  | 'parent_replaced'
+  | 'entry_renamed';
 
 /**
  * Whether this user can rely on a destination being inside `directory`, and why not if they cannot. The
@@ -215,7 +216,7 @@ function scriptDestination(
 ): ScriptDestination {
   // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
-  const name = finalEntryName(destination);
+  const name = scriptEntryNameOrRefuse(destination);
   if (process.platform === 'win32') {
     // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
     if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
@@ -240,15 +241,17 @@ function authorizedEntry(
   return { directory, identity, name, entry: path.join(directory, name) };
 }
 
-/** The name the entry is created under, judged before anything touches the filesystem (ADR 0016). */
-function finalEntryName(destination: string): string {
-  const name = scriptEntryName(destination, path);
-  if (name === undefined) throw unnamedEntryFailure(destination);
+/**
+ * The name a spelled script destination's entry is created under, or a refusal when its last segment names
+ * none. Both the preflight that expands a caller's spelling and the publication itself ask this one helper,
+ * before anything touches the filesystem (ADR 0016).
+ */
+export function scriptEntryNameOrRefuse(spelled: string): string {
+  const name = scriptEntryName(spelled, path);
+  if (name === undefined) {
+    throw scriptAncestryFailure(spelled, path.dirname(spelled), 'unnamed_entry');
+  }
   return name;
-}
-
-function unnamedEntryFailure(destination: string): AppError {
-  return scriptAncestryFailure(destination, path.dirname(destination), 'unnamed_entry');
 }
 
 /**
@@ -259,17 +262,24 @@ function unnamedEntryFailure(destination: string): AppError {
  */
 export function scriptEntryName(spelled: string, rules: path.PlatformPath): string | undefined {
   if (spelled.includes('\0') || /^~\/*$/.test(spelled)) return undefined;
-  // `parse` does not see an extended or device UNC prefix as a root, so its server and share would be names.
-  if (rules.sep === '\\' && /^[\\/]{2}[?.][\\/]UNC(?:[\\/]+[^\\/]+){0,2}[\\/]*$/i.test(spelled)) {
-    return undefined;
-  }
+  // The raw last segment first: a normalization folds a final `.` or `..` away.
   const { base } = rules.parse(spelled);
-  return base === '' || base === '.' || base === '..' ? undefined : base;
+  if (base === '' || base === '.' || base === '..') return undefined;
+  return rules.sep === '\\' ? windowsEntryName(rules.normalize(spelled), rules) : base;
 }
 
-/** Refuses a spelled script destination whose last segment names no entry, before anything expands it. */
-export function assertScriptEntryNamed(spelled: string): void {
-  if (scriptEntryName(spelled, path) === undefined) throw unnamedEntryFailure(spelled);
+/**
+ * The Windows answer, read from the spelling as the publisher's own joins normalize it, so a doubled separator
+ * cannot hide a root. A device-namespace path, an extended UNC root that `parse` reads as names, a reserved
+ * device name, and a stream after a `:` all name something other than one file.
+ */
+function windowsEntryName(normalized: string, rules: path.PlatformPath): string | undefined {
+  if (/^\\\\(?:\.\\|\?\\GLOBALROOT(?:\\|$))/i.test(normalized)) return undefined;
+  if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
+  const { root, base } = rules.parse(normalized);
+  if (base === '' || normalized.slice(root.length).includes(':')) return undefined;
+  const stem = base.split('.')[0]?.trimEnd() ?? '';
+  return /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(stem) ? undefined : base;
 }
 
 /**
@@ -381,8 +391,12 @@ export function confirmScriptDestination(
   prepared: ScriptDestination,
 ): ScriptDestination {
   const current = scriptDestination(destination, false);
-  if (current.identity !== prepared.identity || current.name !== prepared.name) {
+  // The directory is compared too: Windows answers one constant identity for every directory.
+  if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
     throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
+  }
+  if (current.name !== prepared.name) {
+    throw scriptAncestryFailure(destination, current.directory, 'entry_renamed');
   }
   return current;
 }
@@ -631,6 +645,8 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
     'the script path names a directory that does not exist and steps back out of it with `..`, so where the script would land is not established.',
   unreachable_parent:
     'the directory the script path names does not exist, so the script has nowhere to be written.',
+  entry_renamed:
+    'the script path no longer names the file this recording was authorized to write there.',
   parent_replaced:
     'that directory was replaced while the script was staged, so the script may not be created in what stands there now.',
 };
@@ -656,12 +672,15 @@ function scriptAncestryFailure(
   ancestor: string,
   exposure: ScriptAncestryExposure,
 ): AppError {
+  // A path that names no file is the caller's input to correct; every other refusal is about the ground.
   return new AppError(
-    'COMMAND_FAILED',
+    exposure === 'unnamed_entry' ? 'INVALID_ARGS' : 'COMMAND_FAILED',
     `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
     {
       reason:
-        exposure === 'parent_replaced' ? SCRIPT_ANCESTRY_REASONS[1] : SCRIPT_ANCESTRY_REASONS[0],
+        exposure === 'parent_replaced' || exposure === 'entry_renamed'
+          ? SCRIPT_ANCESTRY_REASONS[1]
+          : SCRIPT_ANCESTRY_REASONS[0],
       exposure,
       path: destination,
       ancestor,
@@ -672,6 +691,9 @@ function scriptAncestryFailure(
 
 /** What to do about it. A group-writable directory is the one refusal the caller can fix in place. */
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
+  if (exposure === 'entry_renamed') {
+    return 'Save again with the same --save-script path the recording was opened with.';
+  }
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
   }
