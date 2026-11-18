@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { readScriptDeliveryFailure } from '@agent-device/kernel/contracts';
+import { readScriptDeliveryFailure, type DaemonResponse } from '@agent-device/kernel/contracts';
 import { FOREIGN_UID, mkdtempForTestSync, serveHostOwnership } from '@agent-device/test-kit';
 import {
   answer,
@@ -34,7 +34,7 @@ function scratchRoot(prefix: string): string {
  * returns the disclosed warnings.
  */
 function expectDeliveryRefused(
-  result: Awaited<ReturnType<typeof open>>,
+  result: Readonly<{ response: DaemonResponse; id: string }>,
   cause: string,
 ): readonly unknown[] {
   const { response, id } = result;
@@ -164,15 +164,16 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'a remote recording creates a missing level only where the kernel lands',
+  'a remote recording creates a missing level under a sticky directory, only where the kernel lands',
   async () => {
-    // `home/work/../shared/recordings` is `priv/shared/recordings`; folded as text it is
-    // `home/shared/recordings`, which does not exist and must not be created.
+    // `home/work/../shared/recordings` is `priv/shared/recordings`, with `priv/shared` sticky and this
+    // user's, the `/tmp/recordings` shape. Folded as text it is `home/shared/recordings`, which does not
+    // exist and must not be created.
     const root = scratchRoot('script-ancestry-folded-mkdir-');
     const home = directoryWith(path.join(root, 'home'), 0o700);
     const privX = path.join(root, 'priv', 'x');
     fs.mkdirSync(privX, { recursive: true });
-    const privShared = directoryWith(path.join(root, 'priv', 'shared'), 0o700);
+    const privShared = directoryWith(path.join(root, 'priv', 'shared'), 0o1777);
     fs.symlinkSync(privX, path.join(home, 'work'));
     const destination = `${home}/work/../shared/recordings/journey.ad`;
     const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
@@ -187,12 +188,14 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test.skipIf(process.platform === 'win32')(
-  'a remote recording stages and commits every version in the directory the walk judged',
-  async () => {
+test.skipIf(process.platform === 'win32').each([
+  { force: false, publishes: ['linkSync', 'renameSync'] },
+  { force: true, publishes: ['renameSync', 'renameSync'] },
+])(
+  'a remote recording stages and commits every version in the directory the walk judged (force: $force)',
+  async ({ force, publishes }) => {
     // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`. Right before each
-    // version's entry is created (a link for the first, a rename for the replacement), `work` is swapped
-    // so the spelling resolves to `home/elsewhere/y`.
+    // version's entry is created, `work` is swapped so the spelling resolves to `home/elsewhere/y`.
     const root = scratchRoot('script-ancestry-entry-');
     const home = directoryWith(path.join(root, 'home'), 0o700);
     const foldedY = directoryWith(path.join(home, 'y'), 0o777);
@@ -230,7 +233,7 @@ test.skipIf(process.platform === 'win32')(
       v2: { body: 'open Demo\nclick Next\n' },
     });
 
-    const { id, response } = await open(baseUrl, stateDir, destination);
+    const { id, response } = await open(baseUrl, stateDir, destination, { force });
     expect(readScriptDeliveryFailure(response.ok ? response.data : undefined)).toBeUndefined();
     fs.rmSync(link);
     fs.symlinkSync(privX, link);
@@ -240,7 +243,7 @@ test.skipIf(process.platform === 'win32')(
 
     expect(replaced.ok).toBe(true);
     expect(readScriptDeliveryFailure(replaced.ok ? replaced.data : undefined)).toBeUndefined();
-    expect(swaps).toEqual(['linkSync', 'renameSync']);
+    expect(swaps).toEqual(publishes);
     expect(staged).toEqual([privY, privY]);
     expect(fs.readdirSync(privY)).toEqual(['journey.ad']);
     expect(fs.readFileSync(path.join(privY, 'journey.ad'), 'utf8')).toBe('open Demo\nclick Next\n');
@@ -249,9 +252,13 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test.skipIf(process.platform === 'win32')(
-  'a remote recording refuses a destination whose directory was swapped while the version downloaded',
-  async () => {
+test.skipIf(process.platform === 'win32').each([
+  { version: 'first', force: false },
+  { version: 'first', force: true },
+  { version: 'replacement', force: false },
+])(
+  'a remote recording refuses a $version version (force: $force) whose directory was swapped while it downloaded',
+  async ({ version, force }) => {
     // `alias -> judged`, both private. Once the staged file is open, `alias` is retargeted to `other`, a
     // private directory too, so only the parent's identity can tell. The staging directory inside
     // `judged` stays intact, so a route that skips the confirmation would publish into `judged`.
@@ -261,25 +268,51 @@ test.skipIf(process.platform === 'win32')(
     const alias = path.join(root, 'alias');
     fs.symlinkSync(judged, alias);
     const destination = path.join(alias, 'journey.ad');
-    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
-    const realOpen = fs.promises.open.bind(fs.promises);
-    let retargeted = false;
-    vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
-      const handle = await realOpen(file as never, ...(rest as unknown as never[]));
-      if (!retargeted) {
-        retargeted = true;
-        fs.rmSync(alias);
-        fs.symlinkSync(other, alias);
-      }
-      return handle;
+    const stateDir = path.join(root, 'state');
+    const baseUrl = await artifactServer({
+      v1: { body: 'open Demo\n' },
+      v2: { body: 'open Demo\nclick Next\n' },
     });
+    let retargeted = false;
+    const retargetOnDownload = () => {
+      const realOpen = fs.promises.open.bind(fs.promises);
+      vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
+        const handle = await realOpen(file as never, ...(rest as unknown as never[]));
+        if (!retargeted) {
+          retargeted = true;
+          fs.rmSync(alias);
+          fs.symlinkSync(other, alias);
+        }
+        return handle;
+      });
+    };
 
-    const result = await open(baseUrl, path.join(root, 'state'), destination);
+    let refused: { response: DaemonResponse; id: string };
+    if (version === 'first') {
+      retargetOnDownload();
+      refused = await open(baseUrl, stateDir, destination, { force });
+    } else {
+      const { id } = await open(baseUrl, stateDir, destination, { force });
+      retargetOnDownload();
+      const response = await answer(baseUrl, stateDir, request('click'), {
+        artifacts: [script('v2', 2, id)],
+      });
+      refused = { response, id };
+    }
 
     expect(retargeted).toBe(true);
-    const warnings = expectDeliveryRefused(result, 'script_ancestry_replaced');
+    const warnings = expectDeliveryRefused(refused, 'script_ancestry_replaced');
     expect(warnings).toEqual([expect.stringContaining(`under ${other}:`)]);
-    expect(fs.readdirSync(judged)).toEqual([]);
+    const failure = readScriptDeliveryFailure(
+      refused.response.ok ? refused.response.data : undefined,
+    );
+    expect(failure?.hint).toMatch(/\S/);
     expect(fs.readdirSync(other)).toEqual([]);
+    if (version === 'first') {
+      expect(fs.readdirSync(judged)).toEqual([]);
+    } else {
+      expect(fs.readdirSync(judged)).toEqual(['journey.ad']);
+      expect(fs.readFileSync(path.join(judged, 'journey.ad'), 'utf8')).toBe('open Demo\n');
+    }
   },
 );
