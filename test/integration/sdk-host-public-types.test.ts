@@ -10,7 +10,7 @@ const TSC_BIN = path.join(repoRoot, 'node_modules/.bin/tsc');
 const COMMAND_TIMEOUT_MS = 120_000;
 
 function ensureBuiltPackage(): void {
-  const declarationPath = path.join(repoRoot, 'dist', 'src', 'limrun.d.ts');
+  const declarationPath = path.join(repoRoot, 'dist', 'src', 'android-adb.d.ts');
   if (fs.existsSync(declarationPath)) return;
 
   runCmdSync('pnpm', ['build'], {
@@ -19,12 +19,12 @@ function ensureBuiltPackage(): void {
   });
 }
 
-test('compiled SDK subpaths require explicit hosts and preserve Limrun types', () => {
+test('compiled SDK subpaths require explicit hosts', () => {
   ensureBuiltPackage();
 
   // Keep the fixture under the package root so TypeScript resolves the
   // package self-reference through package.json's compiled `types` export.
-  const tempRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp-limrun-types-'));
+  const tempRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp-sdk-host-types-'));
   try {
     fs.writeFileSync(
       path.join(tempRoot, 'tsconfig.json'),
@@ -45,25 +45,12 @@ test('compiled SDK subpaths require explicit hosts and preserve Limrun types', (
     );
     fs.writeFileSync(
       path.join(tempRoot, 'fixture.ts'),
-      `import type {
-  LimrunDeviceSession,
-  LimrunIosCommandExecution,
-  LimrunIosDeviceSession,
-  LimrunRuntimeOptions,
-} from 'agent-device/limrun';
-import { LimrunRuntime } from 'agent-device/limrun';
-import { runAndroidShell, runAndroidExecOut } from 'agent-device/android-adb';
+      `import { runAndroidShell, runAndroidExecOut } from 'agent-device/android-adb';
 import { resolveAndroidArchivePackageName } from 'agent-device/artifacts';
 import { prepareMetroRuntime } from 'agent-device/metro';
 import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 import { createLocalArtifactAdapter, type LocalArtifactAdapterOptions } from 'agent-device/io';
 
-declare const runtime: LimrunRuntime;
-declare const options: LimrunRuntimeOptions;
-declare const session: LimrunDeviceSession;
-declare const iosSession: LimrunIosDeviceSession;
-declare const execution: LimrunIosCommandExecution;
-void [runtime, options, session, iosSession, execution];
 const host = { env: {}, cwd: '/workspace' };
 declare const device: Parameters<typeof runAndroidShell>[0];
 runAndroidShell(device, ['id'], host);
@@ -72,7 +59,6 @@ resolveAndroidArchivePackageName('app.apk', host);
 prepareMetroRuntime({}, host);
 resolveRemoteConfigProfile({ configPath: 'remote.json', ...host });
 createLocalArtifactAdapter({ cwd: host.cwd });
-new LimrunRuntime(options, host);
 // @ts-expect-error Android shell requires a host.
 runAndroidShell(device, ['id']);
 // @ts-expect-error Android exec-out requires a host.
@@ -88,8 +74,6 @@ createLocalArtifactAdapter();
 // @ts-expect-error Local artifact options require cwd.
 const missingCwd: LocalArtifactAdapterOptions = {};
 void missingCwd;
-// @ts-expect-error Limrun requires a host.
-new LimrunRuntime(options);
 `,
     );
 
@@ -106,7 +90,7 @@ new LimrunRuntime(options);
     assert.equal(
       result.exitCode,
       0,
-      `The compiled agent-device/limrun declarations no longer preserve the downstream contract:\n${result.stdout}${result.stderr}`,
+      `The compiled agent-device SDK declarations no longer preserve the downstream contract:\n${result.stdout}${result.stderr}`,
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });

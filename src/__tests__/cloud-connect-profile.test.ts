@@ -396,9 +396,10 @@ test('connect output makes verified configuration, deferred device allocation, a
   );
   assert.match(result.stdout, /No live device session has been created/);
   assert.match(result.stdout, /Next:/);
-  assert.match(result.stdout, /agent-device apps/);
-  assert.match(result.stdout, /agent-device open <uploaded-asset-name>/);
-  assert.doesNotMatch(result.stdout, /agent-device install/);
+  assert.match(result.stdout, /agent-device apps --session ci/);
+  assert.match(result.stdout, /agent-device open <uploaded-asset-name> --session ci/);
+  assert.match(result.stdout, /agent-device install <package-id> <app-path> --session ci/);
+  assert.match(result.stdout, /agent-device open <package-id> --relaunch --session ci/);
   assert.doesNotMatch(result.stdout, /lease pending/);
 });
 
