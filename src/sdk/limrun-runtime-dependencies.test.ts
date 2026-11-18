@@ -35,10 +35,11 @@ vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) 
 }));
 
 test('Limrun construction defers operation and opposite-platform helper modules', async () => {
-  const { LimrunRuntime } = await import('../provider-limrun-runtime.ts');
-  const runtime = new LimrunRuntime(
+  const { createLimrunRuntime } = await import('@agent-device/provider-limrun');
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key' },
-    { env: process.env, cwd: process.cwd() },
+    createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() }),
   );
 
   assert.deepEqual(moduleLoads, {
@@ -48,7 +49,6 @@ test('Limrun construction defers operation and opposite-platform helper modules'
   });
   await runtime.shutdown();
 
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const device = {
     platform: 'android' as const,

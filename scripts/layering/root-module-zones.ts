@@ -97,7 +97,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-screen-recording-web-host.ts',
     'src/platform-runtime-toolchain-host.ts',
   ],
-  sdk: ['src/finders.ts', 'src/provider-limrun-runtime.ts'],
+  sdk: ['src/finders.ts'],
 };
 
 const ZONE_BY_ROOT_MODULE: ReadonlyMap<string, string> = new Map(
