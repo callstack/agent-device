@@ -124,3 +124,73 @@ test('a record whose interrupted version is null is no record, and the response 
   ).resolves.toMatchObject({ ok: true });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
+
+type Delivery = Readonly<{ saved: true } | { saved: false; cause: string }>;
+
+const ENTRY_CASES: ReadonlyArray<{
+  name: string;
+  force: boolean;
+  delivery: Delivery;
+  arrange: (directory: string) => string;
+  verify: (directory: string, destination: string) => void;
+}> = [false, true].flatMap((force) => [
+  {
+    name: 'an overlong name',
+    force,
+    delivery: { saved: false, cause: 'script_ancestor_untrusted' },
+    arrange: (directory: string) => path.join(directory, 'new', 'a'.repeat(256)),
+    verify: (directory: string) => expect(fs.existsSync(path.join(directory, 'new'))).toBe(false),
+  },
+  {
+    name: 'a directory at the entry',
+    force,
+    delivery: { saved: false, cause: force ? 'script_download_failed' : 'script_target_exists' },
+    arrange: (directory: string) => {
+      const destination = path.join(directory, 'journey.ad');
+      fs.mkdirSync(destination, { recursive: true });
+      return destination;
+    },
+    verify: (_directory: string, destination: string) => {
+      expect(fs.lstatSync(destination).isDirectory()).toBe(true);
+      expect(fs.readdirSync(destination)).toEqual([]);
+    },
+  },
+  {
+    name: 'a hard link at the entry',
+    force,
+    delivery: force ? { saved: true } : { saved: false, cause: 'script_target_exists' },
+    arrange: (directory: string) => {
+      fs.mkdirSync(directory, { recursive: true });
+      const destination = path.join(directory, 'journey.ad');
+      fs.writeFileSync(path.join(directory, 'theirs.ad'), 'theirs\n');
+      fs.linkSync(path.join(directory, 'theirs.ad'), destination);
+      return destination;
+    },
+    verify: (directory: string, destination: string) => {
+      // Replaced as a directory entry, never written through to the file it shared.
+      expect(fs.readFileSync(path.join(directory, 'theirs.ad'), 'utf8')).toBe('theirs\n');
+      expect(fs.readFileSync(destination, 'utf8')).toBe(force ? 'v1\n' : 'theirs\n');
+    },
+  },
+]);
+
+test.skipIf(process.platform === 'win32').each(ENTRY_CASES)(
+  'a remote recording to $name with force=$force',
+  async ({ force, delivery, arrange, verify }) => {
+    const { stateDir, directory } = caller();
+    const destination = arrange(directory);
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+
+    const { response } = await open(baseUrl, stateDir, destination, { force });
+
+    if (delivery.saved) {
+      expect(response).toMatchObject({ ok: true, data: { savedScript: destination } });
+    } else {
+      expect(response).toMatchObject({
+        ok: true,
+        data: { scriptDeliveryFailure: { cause: delivery.cause } },
+      });
+    }
+    verify(directory, destination);
+  },
+);

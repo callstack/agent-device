@@ -35,6 +35,8 @@ skipOnWindows.each([
   { name: 'a `..` below a missing directory', suffix: '/sub/..' },
   { name: 'a NUL in the final name', suffix: '/journey\0.ad' },
   { name: 'a NUL in a missing directory', suffix: '/sub\0/journey.ad' },
+  { name: 'a 256-byte name below a missing directory', suffix: `/new/${'a'.repeat(256)}` },
+  { name: 'a 256-byte name of two-byte characters', suffix: `/new/${'é'.repeat(128)}` },
 ])('refuses $name before anything is created', ({ suffix }) => {
   const directory = root();
   const dir = directoryWith(path.join(directory, 'dir'), 0o700);
@@ -77,6 +79,16 @@ skipOnWindows(
   },
 );
 
+skipOnWindows.each([220, 255])('a %i-byte name publishes, its temp sibling included', (bytes) => {
+  const directory = root();
+  const dir = directoryWith(path.join(directory, 'dir'), 0o700);
+  const name = 'a'.repeat(bytes);
+
+  publish(path.join(dir, name));
+
+  expect(tree(dir)).toEqual([name]);
+});
+
 skipOnWindows('a trailing separator names the same entry it always has', () => {
   const directory = root();
   const dir = directoryWith(path.join(directory, 'dir'), 0o700);
@@ -95,33 +107,6 @@ test('a relative destination is refused as relative, whatever its last segment',
     'recordings',
   );
 });
-
-/** The typed details a refusal carries. */
-function refusal(run: () => unknown): Record<string, unknown> | undefined {
-  try {
-    run();
-  } catch (error) {
-    return (error as { details?: Record<string, unknown> }).details;
-  }
-  return undefined;
-}
-
-skipOnWindows(
-  'a confirmation refuses the same directory under a different name, as a rename',
-  () => {
-    const directory = root();
-    const dir = directoryWith(path.join(directory, 'dir'), 0o700);
-    const prepared = prepareScriptDestination(path.join(dir, 'journey.ad'));
-
-    expect(
-      refusal(() => confirmScriptDestination(path.join(dir, 'other.ad'), prepared)),
-    ).toMatchObject({
-      reason: 'script_ancestry_replaced',
-      exposure: 'entry_renamed',
-      hint: expect.stringMatching(/same --save-script path/),
-    });
-  },
-);
 
 test('a Windows confirmation refuses a different directory under the one identity Windows answers', () => {
   // No walk runs on Windows, so every directory answers the identity `windows`; only the path tells two apart.
@@ -172,6 +157,8 @@ test.each([
   { spelled: 'C:\\dir\\COM10.ad', name: 'COM10.ad' },
   { spelled: 'C:journey.ad', name: 'journey.ad' },
   { spelled: '//server//share//journey.ad', name: 'journey.ad' },
+  { spelled: `C:\\dir\\${'a'.repeat(256)}`, name: undefined },
+  { spelled: `C:\\dir\\${'é'.repeat(255)}`, name: 'é'.repeat(255) },
 ])('Windows rules name $name for $spelled', ({ spelled, name }) => {
   expect(scriptEntryName(spelled, path.win32)).toBe(name);
 });

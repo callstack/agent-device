@@ -44,8 +44,7 @@ export type ScriptAncestryExposure =
   | 'unnamed_entry'
   | 'unresolvable_parent'
   | 'unreachable_parent'
-  | 'parent_replaced'
-  | 'entry_renamed';
+  | 'parent_replaced';
 
 /**
  * Whether this user can rely on a destination being inside `directory`, and why not if they cannot. The
@@ -159,13 +158,28 @@ export function publishScriptFileSync(options: {
 
 /**
  * The canonical temp path for a destination: a sibling of the name, inside the directory the publish will
- * create the entry in — the walk's answer for a script destination, `path.dirname` for every other one.
+ * create the entry in — the walk's answer for a script destination, `path.dirname` for every other one. Its
+ * name stays bounded whatever the destination's length, so any name that fits the filesystem has a temp
+ * sibling that fits too.
  */
 function createAtomicPublishTempPath(directory: string, destination: string): string {
   return path.join(
     directory,
-    `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
+    `${temporaryNamePrefix(destination)}${process.pid}-${crypto.randomUUID()}.tmp`,
   );
+}
+
+/** How many bytes of the destination's name a temp sibling repeats, so a reader can still tell whose it is. */
+const TEMP_NAME_STEM_BYTES = 64;
+
+/** The start every temp sibling of `destination` shares: a dot, at most 64 bytes of its name, and a dot. */
+function temporaryNamePrefix(destination: string): string {
+  let stem = '';
+  for (const character of path.basename(destination)) {
+    if (Buffer.byteLength(stem + character) > TEMP_NAME_STEM_BYTES) break;
+    stem += character;
+  }
+  return `.${stem}.`;
 }
 
 function removeTempBestEffort(destination: string, temporaryPath: string | undefined): void {
@@ -264,9 +278,19 @@ export function scriptEntryName(spelled: string, rules: path.PlatformPath): stri
   if (spelled.includes('\0') || /^~\/*$/.test(spelled)) return undefined;
   // The raw last segment first: a normalization folds a final `.` or `..` away.
   const { base } = rules.parse(spelled);
-  if (base === '' || base === '.' || base === '..') return undefined;
+  if (base === '' || base === '.' || base === '..' || exceedsNameMax(base, rules)) return undefined;
   return rules.sep === '\\' ? windowsEntryName(rules.normalize(spelled), rules) : base;
 }
+
+/**
+ * Whether a name is longer than one directory entry can hold: 255 UTF-8 bytes on the common POSIX filesystems,
+ * 255 UTF-16 units on NTFS. Refused before anything is created, instead of failing after its parent was made.
+ */
+function exceedsNameMax(name: string, rules: path.PlatformPath): boolean {
+  return (rules.sep === '\\' ? name.length : Buffer.byteLength(name)) > NAME_MAX;
+}
+
+const NAME_MAX = 255;
 
 /**
  * The Windows answer, read from the spelling as the publisher's own joins normalize it, so a doubled separator
@@ -378,13 +402,13 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
   if (typeof value !== 'string') return false;
   if (path.dirname(value) !== path.dirname(destination)) return false;
   const name = path.basename(value);
-  return name.startsWith(`.${path.basename(destination)}.`) && name.endsWith('.tmp');
+  return name.startsWith(temporaryNamePrefix(destination)) && name.endsWith('.tmp');
 }
 
 /**
  * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
  * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
- * the same directory under the same name.
+ * the same directory.
  */
 export function confirmScriptDestination(
   destination: string,
@@ -394,9 +418,6 @@ export function confirmScriptDestination(
   // The directory is compared too: Windows answers one constant identity for every directory.
   if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
     throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
-  }
-  if (current.name !== prepared.name) {
-    throw scriptAncestryFailure(destination, current.directory, 'entry_renamed');
   }
   return current;
 }
@@ -638,15 +659,13 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   entry_appeared:
     'a directory the script path needs was missing when the path was checked and appeared before this save could create it.',
   unnamed_entry:
-    'the script path has to end in one file name, not `.`, `..`, `~`, a root, or nothing at all, and it cannot hold a NUL.',
+    'the script path has to end in one file name of at most 255 bytes, not `.`, `..`, `~`, a root, or nothing at all, and it cannot hold a NUL.',
   relative_destination:
     'the script path has to be absolute, so the directories it names are the ones that get checked.',
   unresolvable_parent:
     'the script path names a directory that does not exist and steps back out of it with `..`, so where the script would land is not established.',
   unreachable_parent:
     'the directory the script path names does not exist, so the script has nowhere to be written.',
-  entry_renamed:
-    'the script path no longer names the file this recording was authorized to write there.',
   parent_replaced:
     'that directory was replaced while the script was staged, so the script may not be created in what stands there now.',
 };
@@ -678,9 +697,7 @@ function scriptAncestryFailure(
     `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
     {
       reason:
-        exposure === 'parent_replaced' || exposure === 'entry_renamed'
-          ? SCRIPT_ANCESTRY_REASONS[1]
-          : SCRIPT_ANCESTRY_REASONS[0],
+        exposure === 'parent_replaced' ? SCRIPT_ANCESTRY_REASONS[1] : SCRIPT_ANCESTRY_REASONS[0],
       exposure,
       path: destination,
       ancestor,
@@ -691,9 +708,6 @@ function scriptAncestryFailure(
 
 /** What to do about it. A group-writable directory is the one refusal the caller can fix in place. */
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
-  if (exposure === 'entry_renamed') {
-    return 'Save again with the same --save-script path the recording was opened with.';
-  }
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
   }
