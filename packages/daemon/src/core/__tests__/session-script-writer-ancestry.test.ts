@@ -5,10 +5,8 @@ import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device
 import { SessionScriptWriter } from '../session-script-writer.ts';
 import { makeAuthoringSession } from '../../__tests__/support/session-factories.ts';
 
-// A destination the caller named is judged by host-kit's destination rule, which pins every path shape
-// in `atomic-file-ancestry.test.ts` and `atomic-file-parent.test.ts`. These cases pin only what the writer
-// itself can break: that it hands the caller's spelling to that rule untouched, creates nothing before
-// the rule answers, and returns the rule's typed refusal.
+// host-kit's destination rule owns the path-shape matrix (ADR 0016). These cases pin what the writer can
+// break: pass the caller's spelling untouched, create nothing before the rule answers, return its refusal.
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
@@ -68,10 +66,71 @@ skipOnWindows('a refused destination with a missing parent leaves no directories
   expect(fs.readdirSync(shared)).toEqual([]);
 });
 
+skipOnWindows('a recording refuses a private link standing on shared ground', () => {
+  // The real path is private, but the walk crosses the 0777 `shared`. Canonicalizing first hides it.
+  const directory = root();
+  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+  const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+  const privateWork = directoryWith(path.join(directory, 'private'), 0o700);
+  fs.symlinkSync(privateWork, path.join(mine, 'rec'));
+
+  const result = writerFor(directory).write(recordingTo(path.join(mine, 'rec', 'journey.ad')));
+
+  expect(result.written ? undefined : result.error?.details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: shared,
+  });
+  expect(fs.readdirSync(privateWork)).toEqual([]);
+});
+
+skipOnWindows(
+  'a recording that steps back out of a missing directory leaves no directories behind',
+  () => {
+    // A `mkdir -p` resolves the two steps up as text and builds `<root>/shared/recordings`; the kernel
+    // cannot apply them until `missing` exists.
+    const directory = root();
+    const privateDir = directoryWith(path.join(directory, 'private'), 0o700);
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const destination = `${privateDir}/missing/../../shared/recordings/journey.ad`;
+
+    const result = writerFor(directory).write(recordingTo(destination));
+
+    expect(result.written ? undefined : result.error?.details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'unresolvable_parent',
+      ancestor: privateDir,
+    });
+    expect(fs.readdirSync(privateDir)).toEqual([]);
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+skipOnWindows('a recording refuses the directory a .. steps back into', () => {
+  // `home/work -> priv/x`, `priv/y` at 0777 while `home/y` is private. Folded as text the spelling
+  // names `home/y`; the kernel lands in `priv/y`, where any local user can take the recording.
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o700);
+  directoryWith(path.join(home, 'y'), 0o700);
+  const privX = path.join(directory, 'priv', 'x');
+  fs.mkdirSync(privX, { recursive: true });
+  const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o777);
+  fs.symlinkSync(privX, path.join(home, 'work'));
+
+  const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
+
+  expect(result.written ? undefined : result.error?.details).toMatchObject({
+    reason: 'script_ancestor_untrusted',
+    exposure: 'world_writable',
+    ancestor: privY,
+  });
+  expect(fs.readdirSync(privY)).toEqual([]);
+  expect(fs.readdirSync(path.join(home, 'y'))).toEqual([]);
+  expect(fs.readdirSync(privX)).toEqual([]);
+});
+
 skipOnWindows('a recording through a link and .. lands in the directory the kernel reaches', () => {
-  // `home/work -> priv/x`, so `home/work/../y` is `priv/y` (private). Folded as text, the same spelling
-  // names `home/y`, which any local user can write: a writer that normalizes the caller's path before
-  // the rule sees it judges, and writes, a different directory.
+  // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`.
   const directory = root();
   const home = directoryWith(path.join(directory, 'home'), 0o700);
   const foldedY = directoryWith(path.join(home, 'y'), 0o777);
