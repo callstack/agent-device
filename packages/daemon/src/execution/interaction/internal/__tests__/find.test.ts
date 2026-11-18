@@ -556,6 +556,7 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
       kind: 'tab-bar',
       label: 'Media',
       rect: { x: 0, y: 760, width: 390, height: 84 },
+      persistentBar: true,
     });
     expect(response.error.details?.hint).toContain('Covered by the tab-bar "Media"');
     expect(response.error.details?.hint).not.toMatch(/@e\d/);
