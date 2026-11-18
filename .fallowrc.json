@@ -379,6 +379,11 @@
       ]
     },
     {
+      // LIMRUN_CREDENTIAL_VARIABLES is consumed only by src/__tests__/daemon-client-provider-credentials.test.ts, which unsets every credential variable between provider-credential cases; --production analysis does not see test-tree consumers.
+      "file": "packages/provider-limrun/src/internal.ts",
+      "exports": ["LIMRUN_CREDENTIAL_VARIABLES"]
+    },
+    {
       // Web process matching helpers are retained for package-owned lifecycle tests; production export analysis does not traverse those test consumers.
       "file": "packages/platform-web/src/agent-browser-lifecycle.ts",
       "exports": [

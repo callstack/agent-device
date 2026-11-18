@@ -10,7 +10,7 @@ import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-v
 
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
-import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
+import { readLimrunCredentials } from '@agent-device/provider-limrun/internal';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {

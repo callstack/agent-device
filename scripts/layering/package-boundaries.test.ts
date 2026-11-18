@@ -821,13 +821,14 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerLimrunPackage, 'provider-limrun package must exist');
   assert.deepEqual(
     [...providerLimrunPackage.exportTargets.keys()],
-    ['@agent-device/provider-limrun'],
+    ['@agent-device/provider-limrun', '@agent-device/provider-limrun/internal'],
   );
   assert.deepEqual([...providerLimrunPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
     '@agent-device/platform-android',
+    '@agent-device/plugins',
   ]);
   const rootExternalDependencies = rootExternalDependencyRanges(repoRoot);
   for (const pkg of packages) {

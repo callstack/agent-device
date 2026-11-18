@@ -51,7 +51,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime.ts',
     'src/provider-credential-fingerprint.ts',
     'src/provider-device-runtimes.ts',
-    'src/provider-limrun-credentials.ts',
     'src/provider-plugin-host-capabilities.ts',
     'src/provider-plugin-policy.ts',
   ],

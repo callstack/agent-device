@@ -13,7 +13,7 @@ import {
   limrunInstanceVariables,
   limrunPlatformForLeaseBackend,
   readLimrunCredentials,
-} from '../../provider-limrun-credentials.ts';
+} from '@agent-device/provider-limrun/internal';
 import { buildConnectClientId } from './client-id.ts';
 
 const DEFAULT_LIMRUN_TENANT = 'limrun';

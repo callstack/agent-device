@@ -2,13 +2,8 @@ import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import path from 'node:path';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  limrunCredentialDeclaration,
-  readLimrunCredentials,
-  type LimrunCredentials,
-} from './provider-limrun-credentials.ts';
+import { limrunPlugin, readLimrunCredentials } from '@agent-device/provider-limrun/internal';
 
 /**
  * The built-in providers as registry candidates, in the shape a plugin has. Their implementations
@@ -21,43 +16,32 @@ export function builtinProviderCandidates(host: HostEnvironment): PluginCandidat
 
 function limrunCandidate(host: HostEnvironment): PluginCandidate {
   const base = { source: 'builtin', provider: LIMRUN_ID } as const;
-  let credentials: LimrunCredentials | undefined;
+  // The provider owns what counts as its credentials; the candidate only asks whether this host
+  // holds them, so an unconfigured process keeps the id dormant and never loads the runtime.
+  let configured: boolean;
   try {
-    credentials = readLimrunCredentials(host.env);
+    configured = readLimrunCredentials(host.env) !== undefined;
   } catch (error) {
     return { ...base, load: () => Promise.reject(error) };
   }
-  if (!credentials) return { ...base, dormant: true, load: () => undefined };
-  const limrun = credentials;
+  if (!configured) return { ...base, dormant: true, load: () => undefined };
   return {
     ...base,
-    load: (): AgentDevicePlugin => ({
-      apiVersion: 2,
-      provider: LIMRUN_ID,
-      credentials: limrunCredentialDeclaration(),
-      setup: async (pluginHost) => {
-        const [runtime, dependencies] = await Promise.all([
-          import('@agent-device/provider-limrun'),
-          import('./sdk/limrun-runtime-dependencies.ts'),
-        ]);
-        return runtime.createLimrunRuntime(
-          {
-            ...limrun,
-            // HAR captures land beside the session files, under the daemon's own state dir.
-            networkHarDir: path.join(
-              resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, { env: host.env, cwd: host.cwd })
-                .baseDir,
-              'network-har',
-            ),
-          },
-          // The registry's host capabilities are the boundary for shared platform mechanics; the
-          // adapter keeps its own lazy edges for the provider-specific ones.
-          dependencies.createLimrunRuntimeDependencies(host, pluginHost),
-          {
-            includePlatformModule: true,
-          },
-        );
-      },
-    }),
+    load: (): AgentDevicePlugin =>
+      limrunPlugin({
+        // The host adapters are the root's own: the provider names what a runtime needs, and this
+        // composition answers with its platform owners and this host's env/cwd.
+        createDependencies: async (pluginHost) =>
+          (await import('./sdk/limrun-runtime-dependencies.ts')).createLimrunRuntimeDependencies(
+            host,
+            pluginHost,
+          ),
+        // HAR captures land beside the session files, under the daemon's own state dir. The state
+        // dir is resolved with the load, so an unconfigured process never probes for one.
+        stateDir: resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, {
+          env: host.env,
+          cwd: host.cwd,
+        }).baseDir,
+      }),
   };
 }
