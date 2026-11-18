@@ -136,7 +136,8 @@ or through a peer dependency. Their factories receive the host from `agent-devic
 When adding a public package, initialize its version from the root `package.json`; the release
 workflow stamps the release version into every public package. An optional plugin must have no
 production import from the core build or production dependency in the root manifest. Run its
-packed-install smoke before releasing. npm can only trust a package that exists, so a maintainer
+packed-install smoke before releasing: `pnpm build && pnpm check:provider-plugin packages/<plugin>`.
+npm can only trust a package that exists, so a maintainer
 publishes an empty `0.0.0` placeholder once and grants the trust before the next nightly:
 
 ```bash
