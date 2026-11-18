@@ -27,7 +27,8 @@ const mockRunCmd = vi.mocked(runCmd);
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempForTestSync('agent-device-swift-cache-test-');
+  // Physical spelling: the cache answers the paths its ancestry walk resolved, such as macOS's /private/var.
+  tmpDir = fs.realpathSync(mkdtempForTestSync('agent-device-swift-cache-test-'));
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });
@@ -49,7 +50,7 @@ test('compileSwiftSourceFile compiles to a unique temp executable before publish
   const outputPath = compileCall[1][compileCall[1].indexOf('-o') + 1]!;
 
   expect(outputPath).not.toBe(executablePath);
-  expect(path.dirname(outputPath)).toContain(path.join('swift-cache', 'bin'));
+  expect(path.dirname(outputPath)).toContain(path.join('swift-cache', 'v3', 'bin'));
   expect(path.basename(outputPath)).toBe(path.basename(executablePath));
   expect(fs.statSync(executablePath).mode & 0o111).not.toBe(0);
   expect(fs.existsSync(outputPath)).toBe(false);
@@ -194,7 +195,7 @@ test('a canceled compile kills swiftc through its signal and leaves no temp outp
     signal: cancel.signal,
     kill: { signal: 'SIGINT' },
   });
-  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
+  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'v3', 'bin'))).toEqual([]);
 });
 
 test('a canceled wait on another process compile stops waiting and leaves its lock alone', async () => {
@@ -359,9 +360,9 @@ test('the cache root and tool environment come from the host it is given, not th
     cacheName: 'host-helper',
   });
 
-  expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'bin'));
+  expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'v3', 'bin'));
   expect(mockRunCmd.mock.calls[0]?.[2]?.env).toMatchObject({
     FROM_HOST: 'yes',
-    HOME: path.join(hostCacheDir, 'home'),
+    HOME: path.join(hostCacheDir, 'v3', 'home'),
   });
 });

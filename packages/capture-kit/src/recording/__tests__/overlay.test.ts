@@ -47,7 +47,8 @@ const mockRunCmd = vi.mocked(runCmd);
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempForTestSync('agent-device-overlay-test-');
+  // Physical spelling: the Swift cache answers the paths its ancestry walk resolved, such as /private/var.
+  tmpDir = fs.realpathSync(mkdtempForTestSync('agent-device-overlay-test-'));
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });
@@ -94,9 +95,9 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   expect(path.basename(outputPath)).toMatch(/^\.recording\.agent-device-/);
   expect(fs.existsSync(outputPath)).toBe(false);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe(`processed ${path.basename(helperCmd)}`);
-  expect(helperOptions?.env?.HOME).toBe(path.join(tmpDir, 'swift-cache', 'home'));
+  expect(helperOptions?.env?.HOME).toBe(path.join(tmpDir, 'swift-cache', 'v3', 'home'));
   expect(helperOptions?.env?.CLANG_MODULE_CACHE_PATH).toBe(
-    path.join(tmpDir, 'swift-cache', 'module-cache'),
+    path.join(tmpDir, 'swift-cache', 'v3', 'module-cache'),
   );
 });
 

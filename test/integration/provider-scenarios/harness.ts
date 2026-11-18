@@ -241,7 +241,8 @@ export async function createProviderScenarioHarness(
 
   return {
     callCommand: async (command, positionals = [], flags = {}, options = {}) => {
-      if (command === 'record') {
+      // The validator compiles only on macOS hosts; elsewhere record stop keeps container-only MP4 completion.
+      if (command === 'record' && process.platform === 'darwin') {
         await withCommandExecutorOverride(
           (command, args) => {
             if (

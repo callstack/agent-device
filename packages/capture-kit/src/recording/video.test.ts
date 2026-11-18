@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
@@ -20,14 +20,29 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
-vi.mock('./swift-cache.ts', () => ({
+vi.mock('./swift-cache.ts', async () => ({
   buildSwiftToolEnv: () => ({}),
   getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR ?? '',
   compileSwiftSourceText: vi.fn(async () => '/bin/true'),
+  isUntrustedSwiftCacheError: (
+    await vi.importActual<typeof import('./swift-cache.ts')>('./swift-cache.ts')
+  ).isUntrustedSwiftCacheError,
 }));
+
+const hostPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+function runOnPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { ...hostPlatform, value: platform });
+}
 
 beforeEach(() => {
   vi.mocked(runCmd).mockClear();
+  // The validator compiles on macOS hosts only; these cases are about that host wherever the suite runs.
+  runOnPlatform('darwin');
+});
+
+afterEach(() => {
+  Object.defineProperty(process, 'platform', hostPlatform);
 });
 
 const directory = mkdtempForTestSync('agent-device-video-webm-');
@@ -57,7 +72,7 @@ const moov = mp4Atom(
   mp4Atom('mvhd', mp4MovieHeader({ version: 0, timescale: 1_000, duration: 2_000 })),
 );
 
-test('each Swift cache root compiles its own validator, and a root reuses the one it has', async () => {
+test('each validator resolution after one settles runs the cache check again, per cache root', async () => {
   const mp4 = writeFixture('validated.mp4', Buffer.concat([ftyp, moov]));
   const hostIn = (cacheDir: string) => ({
     env: { AGENT_DEVICE_SWIFT_CACHE_DIR: cacheDir },
@@ -69,11 +84,12 @@ test('each Swift cache root compiles its own validator, and a root reuses the on
   await isPlayableVideo(mp4, hostIn('/cache/one'));
   await isPlayableVideo(mp4, hostIn('/cache/two'));
 
+  // A kept path would be run later without the reuse check, after its cache directory could have changed.
   expect(
     vi
       .mocked(compileSwiftSourceText)
       .mock.calls.map(([params]) => params.host.env.AGENT_DEVICE_SWIFT_CACHE_DIR),
-  ).toEqual(['/cache/one', '/cache/two']);
+  ).toEqual(['/cache/one', '/cache/one', '/cache/two']);
 });
 
 test('callers share one validator compile, and each waits for it within its own budget', async () => {
@@ -135,8 +151,9 @@ test('an expired waiter leaves the compile running for the next stop', async () 
     await vi.advanceTimersByTimeAsync(5_000);
     await timedOut;
     expect(runCmd).not.toHaveBeenCalled();
+    const nextStop = prepareVideoValidator(host);
     resolveCompile('/bin/true');
-    await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+    await expect(nextStop).resolves.toBe('/bin/true');
     expect(compileSwiftSourceText).toHaveBeenCalledOnce();
   } finally {
     resolveCompile('/bin/true');
@@ -157,6 +174,41 @@ test('a rejected compile is evicted so the next attempt compiles and verifies', 
   await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
   expect(runCmd).toHaveBeenCalledOnce();
+});
+
+test('a Swift cache that is not private keeps its own reason through the validator', async () => {
+  const mp4 = writeFixture('untrusted-cache.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/untrusted' }, cwd: directory };
+  const refusal = new AppError(
+    'COMMAND_FAILED',
+    'Refusing to use the Swift helper cache directory',
+    {
+      reason: 'swift_cache_untrusted',
+      hint: 'Set AGENT_DEVICE_SWIFT_CACHE_DIR to a directory you own that only you can write.',
+    },
+  );
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(refusal);
+
+  await expect(isPlayableVideo(mp4, host)).rejects.toBe(refusal);
+  expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('a non-macOS host keeps the container verdict and never reaches the Swift cache', async () => {
+  const mp4 = writeFixture('non-apple-host.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/legacy-shared' }, cwd: directory };
+  runOnPlatform('linux');
+  vi.mocked(compileSwiftSourceText)
+    .mockClear()
+    .mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'Refusing to use the Swift helper cache directory', {
+        reason: 'swift_cache_untrusted',
+      }),
+    );
+
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+  expect(compileSwiftSourceText).not.toHaveBeenCalled();
+  expect(runCmd).not.toHaveBeenCalled();
+  vi.mocked(compileSwiftSourceText).mockReset().mockResolvedValue('/bin/true');
 });
 
 test('preserves compiler stderr and recovery hint without replacing the typed validator reason', async () => {

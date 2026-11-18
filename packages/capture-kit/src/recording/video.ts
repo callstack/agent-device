@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
-import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
+import {
+  buildSwiftToolEnv,
+  compileSwiftSourceText,
+  getSwiftCacheRoot,
+  isUntrustedSwiftCacheError,
+} from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
@@ -40,25 +45,42 @@ exit(exitCode)
 const VALIDATOR_COMPILE_WAIT_MS = 30_000;
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
-const videoValidatorCompiles = new Map<string, Promise<string>>();
+/** Validator resolutions still running, one per Swift cache root. A settled one is never kept. */
+const videoValidatorResolutions = new Map<string, Promise<string>>();
 
-/** Starts one cached compile per Swift cache root. Callers may warm it without awaiting it. */
+/**
+ * Resolves the validator executable, sharing one in-flight resolution per Swift cache root. Callers may warm it
+ * without awaiting it. Every later resolution runs the cache's reuse check again, so a path is never trusted
+ * after the cache directory it was judged in could have changed.
+ */
 export function prepareVideoValidator(host: HostEnvironment): Promise<string> {
+  // The validator is a Swift helper compiled with xcrun. Elsewhere there is no toolchain to compile it, so the
+  // answer is the no-toolchain one, given before the cache directory is touched or judged.
+  if (process.platform !== 'darwin') {
+    return Promise.reject(
+      unavailableVideoValidator(
+        new AppError('TOOL_MISSING', 'The video validator compiles only on macOS hosts.'),
+      ),
+    );
+  }
   const cacheRoot = getSwiftCacheRoot(host.env);
-  let compiled = videoValidatorCompiles.get(cacheRoot);
-  if (!compiled) {
-    compiled = compileSwiftSourceText({
+  let resolution = videoValidatorResolutions.get(cacheRoot);
+  if (!resolution) {
+    resolution = compileSwiftSourceText({
       host,
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
-    }).catch((error: unknown) => {
-      if (videoValidatorCompiles.get(cacheRoot) === compiled)
-        videoValidatorCompiles.delete(cacheRoot);
-      throw unavailableVideoValidator(error);
-    });
-    videoValidatorCompiles.set(cacheRoot, compiled);
+    })
+      .catch((error: unknown) => {
+        throw unavailableVideoValidator(error);
+      })
+      .finally(() => {
+        if (videoValidatorResolutions.get(cacheRoot) === resolution)
+          videoValidatorResolutions.delete(cacheRoot);
+      });
+    videoValidatorResolutions.set(cacheRoot, resolution);
   }
-  return compiled;
+  return resolution;
 }
 
 export async function waitForStableFile(
@@ -190,6 +212,8 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
 function unavailableVideoValidator(cause: unknown): AppError {
   if (cause instanceof AppError && cause.details?.reason === 'video_validator_unavailable')
     return cause;
+  // A cache the validator may not be run from keeps its own reason: the fix is the cache, not the toolchain.
+  if (isUntrustedSwiftCacheError(cause)) return cause;
   const details = cause instanceof AppError ? cause.details : undefined;
   return new AppError(
     'COMMAND_FAILED',

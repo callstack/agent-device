@@ -25,7 +25,6 @@
 // pruneAbandonedRunDirectories), since both lanes share this directory's root
 // and prefix.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
@@ -58,18 +57,6 @@ const childEnv: NodeJS.ProcessEnv = {
   // run directory, so claim files cannot leak after the child exits.
   AGENT_DEVICE_CLAIMS_DIR: path.join(testRunTmpDir, 'device-claims'),
 };
-
-// Mirrors vitest-tmpdir-global-setup.ts's own carve-out: the Swift compiler
-// cache is intentionally durable across runs (rebuilding it recompiles
-// AVFoundation helpers and can push integration scenarios past their
-// budgets), so it must NOT follow TMPDIR into the disposable run directory
-// that gets removed after every invocation. Read os.tmpdir() before the
-// TMPDIR override above takes effect in the child, so this resolves the same
-// real per-user temp root vitest's globalSetup uses — the two lanes share
-// one cache instead of each discarding and recompiling their own.
-if (!childEnv.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim()) {
-  childEnv.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(os.tmpdir(), 'agent-device-swift-cache');
-}
 
 // This wrapper is itself a node:test file's own subprocess whenever
 // node --test runs it directly (NODE_TEST_CONTEXT/NODE_TEST_WORKER_ID: set by
