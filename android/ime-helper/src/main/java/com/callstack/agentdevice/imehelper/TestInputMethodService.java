@@ -154,9 +154,9 @@ public class TestInputMethodService extends InputMethodService {
         Log.w(TAG, "clearText: no current input connection");
         return;
       }
-      clearText(clearIc);
-      pending.setResult(RESULT_COMMITTED, "utf16=0", null);
-      Log.i(TAG, "clearText code=" + RESULT_COMMITTED);
+      int code = clearText(clearIc) ? RESULT_COMMITTED : RESULT_COMMIT_RETURNED_FALSE;
+      pending.setResult(code, "utf16=0", null);
+      Log.i(TAG, "clearText code=" + code);
       return;
     }
 
@@ -221,11 +221,14 @@ public class TestInputMethodService extends InputMethodService {
     }
   }
 
-  private void clearText(InputConnection ic) {
+  private boolean clearText(InputConnection ic) {
     ic.beginBatchEdit();
-    ic.performContextMenuAction(android.R.id.selectAll);
-    ic.commitText("", 1);
-    ic.endBatchEdit();
+    try {
+      ic.performContextMenuAction(android.R.id.selectAll);
+      return ic.commitText("", 1);
+    } finally {
+      ic.endBatchEdit();
+    }
   }
 
   @Override

@@ -191,6 +191,16 @@ test('the capability probe is sent once per device and reused by later dispatche
   assert.equal(calls.filter((args) => args.includes(CLEAR_ACTION)).length, 1);
 });
 
+test('a receiver that registers after a refused probe can acknowledge the next probe', async () => {
+  const options = { probeStdout: NO_RECEIVER };
+  const { adb } = fakeAdb(options);
+  const deviceKey = 'android:emulator-5554';
+  assert.equal(await probeAndroidImeHelperAckSupport(adb, PACKAGE, deviceKey), false);
+
+  options.probeStdout = PROBE_OK;
+  assert.equal(await probeAndroidImeHelperAckSupport(adb, PACKAGE, deviceKey), true);
+});
+
 test('a malformed ack line (no result code) is no-ack, not success', async () => {
   const { adb } = fakeAdb({ probeStdout: 'Broadcasting: Intent { act=... }\n' });
   assert.equal(await probeAndroidImeHelperAckSupport(adb, PACKAGE, 'android:emulator-5554'), false);

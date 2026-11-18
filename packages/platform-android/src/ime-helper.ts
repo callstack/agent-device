@@ -209,6 +209,7 @@ export async function ensureAndroidImeHelper(options: {
     options,
   );
   if (decision.installed) {
+    imeHelperAckSupport.delete(options.deviceKey);
     await waitForAndroidImeRegistration(options.adb, options.artifact.manifest.serviceComponent);
   }
   return decision;
@@ -320,8 +321,8 @@ export function chunkAndroidImeHelperText(text: string): string[] {
 /**
  * Probes whether the running receiver supports the v2 ordered acknowledgement. A probe returning
  * result=0 cannot distinguish a pre-ack helper from no receiver — it establishes neither, so it is
- * a refusal, not a fallback. Cached per device+package: artifact metadata alone cannot prove the
- * running receiver's capability, because version policy treats a newer-installed helper as current.
+ * a refusal, not a fallback. Share the active probe and retain positive results until reinstall.
+ * A receiver can register after a failed probe, so negative results do not survive the call.
  */
 const imeHelperAckSupport = new Map<string, Promise<boolean>>();
 
@@ -337,11 +338,14 @@ export async function probeAndroidImeHelperAckSupport(
     return outcome.kind === 'probe-ok' && outcome.protocol === ANDROID_IME_HELPER_PROTOCOL;
   })();
   imeHelperAckSupport.set(cacheKey, probe);
+  let supported = false;
   try {
-    return await probe;
-  } catch (error) {
-    imeHelperAckSupport.delete(cacheKey);
-    throw error;
+    supported = await probe;
+    return supported;
+  } finally {
+    if (!supported && imeHelperAckSupport.get(cacheKey) === probe) {
+      imeHelperAckSupport.delete(cacheKey);
+    }
   }
 }
 
