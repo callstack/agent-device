@@ -253,35 +253,48 @@ test.skipIf(process.platform === 'win32').each([
 );
 
 test.skipIf(process.platform === 'win32').each([
-  { version: 'first', force: false },
-  { version: 'first', force: true },
-  { version: 'replacement', force: false },
-])(
-  'a remote recording refuses a $version version (force: $force) whose directory was swapped while it downloaded',
-  async ({ version, force }) => {
-    // `alias -> judged`, both private. Once the staged file is open, `alias` is retargeted to `other`, a
-    // private directory too, so only the parent's identity can tell. The staging directory inside
-    // `judged` stays intact, so a route that skips the confirmation would publish into `judged`.
+  { version: 'first', force: false, change: 'retarget' },
+  { version: 'first', force: true, change: 'retarget' },
+  { version: 'replacement', force: false, change: 'retarget' },
+  { version: 'first', force: false, change: 'replace' },
+  { version: 'first', force: false, change: 'group-writable' },
+] as const)(
+  'a remote recording refuses a $version version (force: $force) whose directory changed by $change while it downloaded',
+  async ({ version, force, change }) => {
+    // Once the staged file is open, the destination's directory changes: `retarget` points `alias` from
+    // `judged` to `other` (both private, so only identity tells), `replace` removes `judged` and makes a
+    // new private one at the same path, and `group-writable` opens `judged` to its group. Only the
+    // confirmation after the download catches each one.
     const root = scratchRoot('script-ancestry-');
     const judged = directoryWith(path.join(root, 'judged'), 0o700);
     const other = directoryWith(path.join(root, 'other'), 0o700);
     const alias = path.join(root, 'alias');
     fs.symlinkSync(judged, alias);
-    const destination = path.join(alias, 'journey.ad');
+    const destination = path.join(change === 'retarget' ? alias : judged, 'journey.ad');
+    const changeDirectory = {
+      retarget: () => {
+        fs.rmSync(alias);
+        fs.symlinkSync(other, alias);
+      },
+      replace: () => {
+        fs.rmSync(judged, { recursive: true, force: true });
+        directoryWith(judged, 0o700);
+      },
+      'group-writable': () => fs.chmodSync(judged, 0o770),
+    }[change];
     const stateDir = path.join(root, 'state');
     const baseUrl = await artifactServer({
       v1: { body: 'open Demo\n' },
       v2: { body: 'open Demo\nclick Next\n' },
     });
     let retargeted = false;
-    const retargetOnDownload = () => {
+    const changeOnDownload = () => {
       const realOpen = fs.promises.open.bind(fs.promises);
       vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
         const handle = await realOpen(file as never, ...(rest as unknown as never[]));
         if (!retargeted) {
           retargeted = true;
-          fs.rmSync(alias);
-          fs.symlinkSync(other, alias);
+          changeDirectory();
         }
         return handle;
       });
@@ -289,11 +302,11 @@ test.skipIf(process.platform === 'win32').each([
 
     let refused: { response: DaemonResponse; id: string };
     if (version === 'first') {
-      retargetOnDownload();
+      changeOnDownload();
       refused = await open(baseUrl, stateDir, destination, { force });
     } else {
       const { id } = await open(baseUrl, stateDir, destination, { force });
-      retargetOnDownload();
+      changeOnDownload();
       const response = await answer(baseUrl, stateDir, request('click'), {
         artifacts: [script('v2', 2, id)],
       });
@@ -301,8 +314,11 @@ test.skipIf(process.platform === 'win32').each([
     }
 
     expect(retargeted).toBe(true);
-    const warnings = expectDeliveryRefused(refused, 'script_ancestry_replaced');
-    expect(warnings).toEqual([expect.stringContaining(`under ${other}:`)]);
+    const cause =
+      change === 'group-writable' ? 'script_ancestor_untrusted' : 'script_ancestry_replaced';
+    const warnings = expectDeliveryRefused(refused, cause);
+    const ancestor = change === 'retarget' ? other : judged;
+    expect(warnings).toEqual([expect.stringContaining(`under ${ancestor}:`)]);
     const failure = readScriptDeliveryFailure(
       refused.response.ok ? refused.response.data : undefined,
     );
