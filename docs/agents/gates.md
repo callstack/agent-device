@@ -25,3 +25,11 @@ Generate it or fetch evidence artifacts.
 Versioned corpora, schemas, fixtures, and golden tables remain source inputs.
 If TypeScript helpers cannot load, plain `.mjs` packaging fixtures keep child-process use local.
 Prefer `execFile`.
+
+## Before you add a startup-path import or change the wire
+
+Read [ADR 0027](../adr/0027-descriptor-root-vs-eager-closure-budget.md).
+With `origin/main` fetched, run `pnpm exec vitest run --project unit-core scripts/__tests__/eager-closure-budgets.test.ts`.
+For a wire change, read [the wire ledger](../../test/wire-compat/README.md).
+An additive change needs a `compatibleChanges` entry with the new digest. A break needs a protocol version bump.
+With full history and release tags, run `pnpm check:daemon-wire-compat`.

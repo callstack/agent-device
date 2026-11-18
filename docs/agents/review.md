@@ -41,6 +41,13 @@ Also assess each new abstraction, dependency, seam, and ownership rule.
 
 For moves, weigh gross churn. Explain justified growth.
 
+## Trust boundaries
+
+Before code for a new trust boundary, get a rule and a case table reviewed: who selects the path, what the kernel resolves, what can change between checks, where bytes first land, which failures keep the action result, and the accepted cases.
+Review again a change to the security contract, including prose, tests, configuration, or dependencies.
+If a finding breaks the invariant of the change, fix it at every entry point.
+For another destination class or an independent invariant, file or link an issue instead.
+
 ## Report findings
 
 Report only triggering scenarios. Include `file:line`, severity, what breaks, and the fix.
