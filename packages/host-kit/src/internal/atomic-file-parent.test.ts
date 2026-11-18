@@ -75,6 +75,35 @@ skipOnWindows('creates a missing parent at 0700 on a shared umask and publishes 
   expect(modeOf(recordings)).toBe(0o700);
 });
 
+skipOnWindows('creates a missing parent this user can write into under umask 0200', () => {
+  // umask 0200 takes the OWNER write bit from a new directory, so `mkdir` at 0700 leaves 0500, and the
+  // file below it cannot be created unless the level is set to 0700 after creation.
+  const home = directoryWith(path.join(root(), 'home'), 0o700);
+  const destination = path.join(home, 'recordings', 'journey.ad');
+  const previous = process.umask(0o200);
+  try {
+    publish(destination);
+  } finally {
+    process.umask(previous);
+  }
+
+  expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+  expect(modeOf(path.join(home, 'recordings'))).toBe(0o700);
+});
+
+skipOnWindows('creates a missing parent inside a sticky shared directory this user owns', () => {
+  // `--save-script /tmp/recordings/journey.ad` with `recordings` absent. The sticky directory is passed
+  // through, and the new level is this call's own at 0700. Asking whether others can create entries in
+  // `tmp` BEFORE creating `recordings` would refuse the most ordinary destination there is.
+  const tmp = directoryWith(path.join(root(), 'tmp'), 0o1777);
+  const destination = path.join(tmp, 'recordings', 'journey.ad');
+
+  publish(destination);
+
+  expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+  expect(modeOf(path.join(tmp, 'recordings'))).toBe(0o700);
+});
+
 skipOnWindows('answers the created directory as the one to publish into', () => {
   // The creation call answers the directory the SECOND walk judged, spelled from that directory: under the
   // shared umask, that answer is what a caller that stages its own bytes must stage in.

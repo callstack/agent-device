@@ -818,6 +818,33 @@ test('C2 commit-when-complete: a repair-armed COMPLETE write publishes and marks
   expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'committed' });
 });
 
+test.skipIf(process.platform === 'win32')(
+  'C2 commit-when-complete refuses an explicit output under a directory any local user can write',
+  () => {
+    const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-complete-shared-'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const session = makeRepairCompleteSession('default', {
+      scriptPublication: repairPublication('complete', {
+        path: path.join(shared, 'flow.healed.ad'),
+      }),
+      actions: [action({ command: 'click', positionals: ['id="save"'] })],
+    });
+
+    const result = writer.write(session);
+
+    expect(result.written ? undefined : result.error?.details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'world_writable',
+      ancestor: shared,
+    });
+    expect(fs.readdirSync(shared)).toEqual([]);
+    expect(session.scriptPublication).toMatchObject({ kind: 'repair', status: 'complete' });
+  },
+);
+
 test('C2 idempotent post-commit: a second write on a COMMITTED session no-ops (no re-publish, no error)', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-idempotent-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
