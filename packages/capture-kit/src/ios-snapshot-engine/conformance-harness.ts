@@ -25,6 +25,7 @@ type DifferentialCase = Readonly<{
   scope: string | null;
   foldPolicy: 'cursor-projected' | 'plain-viewport';
   viewport: Rect;
+  regularTreePolicy?: 'fullBounds' | 'originOnly' | 'tvOS';
   nodes: readonly RawSnapshotNode[];
   requiredLabels?: readonly string[];
   absentLabels?: readonly string[];
@@ -82,7 +83,7 @@ export function compareDifferentialCases(
 /* c8 ignore stop */
 
 /* c8 ignore start */
-function runSwiftCases(cases: readonly DifferentialCase[]): DifferentialOutcome[] {
+export function runSwiftCases(cases: readonly DifferentialCase[]): DifferentialOutcome[] {
   const stdout = execFileSync(swiftConformanceExecutable(), [], {
     cwd: REPO_ROOT,
     encoding: 'utf8',

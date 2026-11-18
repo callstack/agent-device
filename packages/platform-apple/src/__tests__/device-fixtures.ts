@@ -27,6 +27,16 @@ export const IOS_DEVICE: DeviceInfo = {
   booted: true,
 };
 
+export const TVOS_SIMULATOR: DeviceInfo = {
+  platform: 'apple',
+  id: 'tv-sim-1',
+  name: 'Apple TV 4K',
+  kind: 'simulator',
+  target: 'tv',
+  appleOs: 'tvos',
+  booted: true,
+};
+
 export const MACOS_DEVICE: DeviceInfo = {
   platform: 'apple',
   id: 'host-macos-local',

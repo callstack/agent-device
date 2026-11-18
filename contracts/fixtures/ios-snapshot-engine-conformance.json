@@ -1497,6 +1497,110 @@
           }
         ]
       }
+    },
+    {
+      "name": "focus-scaled cell content survives the plain-viewport fold",
+      "swift": true,
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "plain-viewport",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "CollectionView",
+          "label": "Row",
+          "rect": { "x": 0, "y": 80, "width": 320, "height": 100 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Cell",
+          "label": "Focused tile",
+          "rect": { "x": 40, "y": 80, "width": 80, "height": 100 },
+          "enabled": true,
+          "focused": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "StaticText",
+          "label": "Focus-scaled content",
+          "rect": { "x": 38, "y": 77.5, "width": 84, "height": 105 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 3,
+          "parentIndex": 2
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "CollectionView",
+            "label": "Row",
+            "rect": { "x": 0, "y": 80, "width": 320, "height": 100 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 2,
+            "type": "Cell",
+            "label": "Focused tile",
+            "rect": { "x": 40, "y": 80, "width": 80, "height": 100 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 3,
+            "type": "StaticText",
+            "label": "Focus-scaled content",
+            "rect": { "x": 38, "y": 77.5, "width": 84, "height": 105 },
+            "depth": 3,
+            "parentIndex": 2,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
     }
   ]
 }

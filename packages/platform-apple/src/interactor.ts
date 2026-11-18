@@ -437,7 +437,7 @@ function presentRunnerSnapshotForDevice(
   // The desktop runner's nodes are already presented and carry absolute window-space rects, which
   // no single box describes (#3182); the macOS surface capture publishes its own space instead.
   if (isMacOs(device)) return { nodes: result.nodes ?? [] };
-  return presentAppleRunnerSnapshot(device.id, options, result);
+  return presentAppleRunnerSnapshot(device, options, result);
 }
 
 function acceptsEmptyScopedSnapshot(

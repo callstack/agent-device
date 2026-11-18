@@ -70,6 +70,7 @@ Before a Simulator capture uses the bridge, it proves host absence as ADR 0038 "
 If the proof fails or a host is present, use the runner for that capture without changing the app-generation circuit.
 
 Decision history: #3801 permits acquisition overflow from system alerts at large Dynamic Type sizes. Presentation clips it with one `regular-geometry-clipped` quality note instead of failing the capture.
+Decision history: #4654 states that the fold policy is producer evidence. The Apple runner compiles its policy per runtime — the projection cursor on iPhone/iPad, plain viewport intersection on tvOS and visionOS — and the host revalidation of an already presented payload reuses that policy instead of its own default, because the tvOS focus effect scales a focused cell past its row by design.
 
 ## Rationale
 
