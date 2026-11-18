@@ -664,11 +664,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
           './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
-          './limrun': async (mod) => {
-            const runtime = new mod.LimrunRuntime({ apiKey: 'lim_test_key' }, { env: process.env, cwd: process.cwd() });
-            await runtime.shutdown();
-            return runtime.provider;
-          },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
           './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
@@ -689,6 +684,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           'agent-device/commands',
           'agent-device/testing/conformance',
           'agent-device/observability',
+          'agent-device/limrun',
         ].map(async (specifier) => {
           try {
             await import(specifier);
@@ -751,7 +747,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       './finders': 0,
       './install-source': 'boolean',
       './io': 'function',
-      './limrun': 'limrun',
       './plugins': true,
       './plugins/webdriver': true,
       // Type-only subpath: resolving the module from the packed exports map is
