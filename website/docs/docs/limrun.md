@@ -208,6 +208,42 @@ Now and then, a request skips the capture: it is missing from the HAR and from t
 
 The `agent-device/limrun` SDK subpath was removed in 0.22. A Node.js bridge, such as agent-device-cloud, drives Limrun through the typed client against the daemon that hosts the provider.
 
+### Allocate an iOS instance
+
+Start the daemon with `LIMRUN_API_KEY`. Allocate a lease and install an iOS simulator build before opening the app. If you attach to an instance that already has the app, skip installation.
+
+```ts
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
+
+await ensureDaemon();
+const scope = {
+  session: 'checkout-ios',
+  tenant: 'limrun',
+  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
+  leaseBackend: 'ios-instance',
+  leaseProvider: 'limrun',
+} as const;
+const control = createAgentDeviceClient(scope);
+const lease = await control.leases.allocate({ ...scope, platform: 'ios', retainOnClose: true });
+try {
+  const client = createAgentDeviceClient({
+    ...scope,
+    leaseId: lease.leaseId,
+    sessionIsolation: 'tenant',
+  });
+  await client.apps.install({
+    app: 'com.example.app',
+    appPath: './build/Build/Products/Debug-iphonesimulator/Example.app',
+    platform: 'ios',
+  });
+  await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+} finally {
+  await control.leases.release({ ...scope, leaseId: lease.leaseId });
+}
+```
+
+### Attach to a harness-owned instance
+
 A provider that reaches a harness-owned instance allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions. On iOS, a retained lease can reuse a healthy runner between sessions in the same daemon. Releasing the lease or stopping the daemon stops the runner. A new daemon cannot adopt it.
 
 ```ts
