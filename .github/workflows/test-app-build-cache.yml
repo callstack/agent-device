@@ -11,20 +11,50 @@ name: Test App Build Cache
 # expo-build-disk-cache provider in app.config.js.
 #
 # Only builds when the fingerprint has no trusted artifact yet. Runs on every
-# push to main and every PR so a same-head consumer can wait for a scheduled
-# producer (workflow_dispatch cannot reach a workflow that is not yet on main).
+# push to main so a fingerprint is cached as soon as it lands on main, and on a
+# PR whose own diff can change that fingerprint so a same-head consumer can wait
+# for a scheduled producer (workflow_dispatch cannot reach a workflow that is not
+# yet on main). Any other PR reuses main's artifact for the same fingerprint name,
+# so a producer run there publishes a binary no consumer needs.
 
 on:
   push:
     branches:
       - main
   pull_request:
+    paths:
+      # @expo/fingerprint hashes the Expo project with examples/test-app/ as the
+      # project root, so nothing above it enters the fingerprint the artifact is
+      # named by. The rest of the list is what this job's own steps read: the root
+      # manifests (the pinned pnpm version, and the second lockfile the release
+      # job installs), the name resolver and trust rules (setup-fixture-app), the
+      # dependency graph's cache key (setup-test-app-dependencies), and the
+      # toolchain that builds the binary (setup-node-pnpm, setup-android-sdk).
+      # A producer a PR needs but does not get costs that PR an inline native
+      # build, so this list errs toward the side that builds.
+      - 'examples/test-app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/actions/setup-fixture-app/**'
+      - '.github/actions/setup-test-app-dependencies/**'
+      - '.github/actions/setup-node-pnpm/**'
+      - '.github/actions/setup-android-sdk/**'
+      - '.github/workflows/test-app-build-cache.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
   # Look up whether this fingerprint's artifact already exists across runs.
   actions: read
+
+# A new push to the same PR supersedes this producer: a consumer trusts an artifact only from
+# its own exact head or from a main push, so a binary finished for a commit no PR check still
+# runs at is never downloaded. Each main commit keeps its own group, so a main build that feeds
+# every later PR's cache always finishes.
+concurrency:
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   fingerprint:

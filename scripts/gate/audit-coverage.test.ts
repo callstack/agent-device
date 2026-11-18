@@ -58,17 +58,26 @@ test('deleting the lane that runs a gate reports exactly that gate, naming the r
 });
 
 test('a docs-only change still reaches the command-reference gate (#1420)', () => {
+  // The docs lane declares every docs gate from one checkout, so the witness stops the whole
+  // lane instead of narrowing it: naming one path would also hide the lane's other gates. What
+  // must hold is that no other lane a docs-only PR starts runs this gate — ci.yml ignores the
+  // docs paths, so this lane is the gate's only path to a PR.
+  const category = categories(base).find((entry) => entry.rule === 'own:command-docs');
+  assert.ok(category, 'the command reference must still be a category');
   const model = mutate((m) => ({
     lanes: mapLane(
       m,
-      (lane) => lane.workflow === 'docs.yml' && lane.gates.includes('command-docs'),
-      (lane) => ({ ...lane, paths: ['website/assets/**'] }),
+      (lane) => lane.workflow === 'docs.yml',
+      (lane) => ({ ...lane, pathsIgnore: ['**'] }),
     ),
   }));
   const found = messages(model);
-  assert.equal(found.length, 1);
-  assert.match(found[0] ?? '', /website\/docs\/docs\/commands\.md/);
-  assert.match(found[0] ?? '', /selects "command-docs"/);
+  assert.ok(
+    found.some(
+      (message) => message.includes(category.path) && /selects "command-docs"/.test(message),
+    ),
+    `stopping the docs lane must report command-docs for ${category.path}`,
+  );
 });
 
 test('a path filter that excludes a category fails, though the check still runs somewhere', () => {
