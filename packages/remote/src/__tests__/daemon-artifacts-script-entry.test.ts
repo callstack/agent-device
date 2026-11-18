@@ -1,6 +1,7 @@
 // The remote commit creates the entry host-kit authorized, and never spells one of its own from the record's
 // destination (ADR 0016): the name a publisher creates is decided in one place, and an interrupted commit is
 // settled from that same entry.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -19,6 +20,7 @@ vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
   return {
     ...actual,
     confirmScriptDestination: vi.fn(actual.confirmScriptDestination),
+    prepareScriptDestination: vi.fn(actual.prepareScriptDestination),
     publishFileSync: vi.fn(actual.publishFileSync),
   };
 });
@@ -29,6 +31,7 @@ const actual = await vi.importActual<typeof import('@agent-device/host-kit/file'
 
 afterEach(() => {
   vi.mocked(file.confirmScriptDestination).mockImplementation(actual.confirmScriptDestination);
+  vi.mocked(file.prepareScriptDestination).mockImplementation(actual.prepareScriptDestination);
   vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
 });
 
@@ -316,14 +319,101 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test('a record kept before the committed identity answers a repeated version with a typed failure', async () => {
+test('a record from an earlier release answers a repeated version as unverifiable', async () => {
   const { stateDir, directory } = caller();
   const destination = path.join(directory, 'journey.ad');
   const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
   const { id } = await open(baseUrl, stateDir, destination);
   const { file, record } = soleRecord(stateDir);
-  const { committed: _committed, ...older } = record;
+  const { committedDigest: _digest, ...older } = record;
   fs.writeFileSync(file, JSON.stringify(older));
+
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  // Nothing says the file moved: the client only cannot vouch for it.
+  expect(again).toMatchObject({
+    ok: true,
+    data: {
+      scriptDeliveryFailure: {
+        cause: 'script_entry_unverified',
+        message: expect.stringMatching(/could not be verified/),
+      },
+    },
+  });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});
+
+function sha256(text: string): string {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+test('a copy that became a repeat while it downloaded is checked like an early repeat', async () => {
+  // Another copy of version 2 commits while this one downloads, and the file is then replaced; the late copy
+  // reaches the locked commit with its revision already published.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  // Past this copy's early repeat check and before its locked commit: the other copy lands, then the file is
+  // replaced.
+  vi.mocked(file.prepareScriptDestination).mockImplementationOnce((spelled) => {
+    const { file: recordFile, record } = soleRecord(stateDir);
+    fs.writeFileSync(
+      recordFile,
+      JSON.stringify({ ...record, revision: 2, committedDigest: sha256('v2\n') }),
+    );
+    fs.writeFileSync(destination, 'unrelated\n');
+    return actual.prepareScriptDestination(spelled);
+  });
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(late).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+  });
+  expect(late.ok && late.data?.savedScript).not.toBe(destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('unrelated\n');
+});
+
+test.skipIf(process.platform === 'win32').each([
+  { name: 'different bytes', bytes: 'replaced\n', saved: false },
+  { name: 'the committed bytes', bytes: 'v1\n', saved: true },
+])('a repeat after the file was replaced at the same path with $name', async ({ bytes, saved }) => {
+  // A replacement can inherit the deleted file's inode, so only its content says whether it is the version.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  fs.rmSync(destination);
+  fs.writeFileSync(destination, bytes);
+
+  const again = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+
+  if (saved) {
+    expect(again).toMatchObject({ ok: true, data: { savedScript: destination } });
+    expect(again.ok && again.data).not.toHaveProperty('scriptDeliveryFailure');
+  } else {
+    expect(again).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+  }
+  expect(fs.readFileSync(destination, 'utf8')).toBe(bytes);
+});
+
+test('a repeat after its output directory was removed says the saved file is gone', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'out', 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  fs.rmSync(path.join(directory, 'out'), { recursive: true });
 
   const again = await answer(baseUrl, stateDir, request('click'), {
     artifacts: [script('v1', 1, id)],
@@ -333,5 +423,5 @@ test('a record kept before the committed identity answers a repeated version wit
     ok: true,
     data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
   });
-  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+  expect(fs.existsSync(path.join(directory, 'out'))).toBe(false);
 });

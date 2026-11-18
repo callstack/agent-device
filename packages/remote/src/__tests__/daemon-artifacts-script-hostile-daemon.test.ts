@@ -350,7 +350,7 @@ skipOnWindows(
         destination: world.destination,
         force: false,
         revision: 2,
-        committed: fileIdentityOf(world.destination),
+        committedDigest: digestOf(world.destination),
         staging: [],
       },
     ]);
@@ -412,7 +412,7 @@ skipOnWindows(
           destination: world.destination,
           force: false,
           revision: 1,
-          committed: fileIdentityOf(world.destination),
+          committedDigest: digestOf(world.destination),
           staging: [],
         },
       ]);
@@ -531,8 +531,7 @@ skipOnWindows(
   },
 );
 
-/** The device and inode a record keeps for the file its newest version was committed as. */
-function fileIdentityOf(file: string): string {
-  const stat = fs.statSync(file, { bigint: true });
-  return `${stat.dev}:${stat.ino}`;
+/** The SHA-256 a record keeps for the bytes its newest version was committed with. */
+function digestOf(file: string): string {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
