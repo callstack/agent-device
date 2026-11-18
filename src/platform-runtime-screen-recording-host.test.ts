@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -24,7 +24,16 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(),
 }));
-afterEach(() => vi.restoreAllMocks());
+const hostPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+// These cases record an iOS target, which only a macOS host does, and the validator compiles only there.
+beforeEach(() => {
+  Object.defineProperty(process, 'platform', { ...hostPlatform, value: 'darwin' });
+});
+afterEach(() => {
+  Object.defineProperty(process, 'platform', hostPlatform);
+  vi.restoreAllMocks();
+});
 
 async function harness(device: DeviceInfo, launch = () => {}) {
   const root = mkdtempForTestSync('warm-video-validator-');
