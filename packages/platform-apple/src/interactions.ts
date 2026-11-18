@@ -189,7 +189,7 @@ export function iosRunnerOverrides(
           {
             command: 'gestureViewport',
             appBundleId: ctx.appBundleId,
-            ...(includesKeyboard ? { action: 'include-keyboard' as const } : {}),
+            ...(includesKeyboard ? { includesKeyboard } : {}),
           },
           runnerOpts,
         );

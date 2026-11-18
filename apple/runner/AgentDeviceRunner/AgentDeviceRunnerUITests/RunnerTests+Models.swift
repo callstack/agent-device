@@ -253,6 +253,7 @@ struct Command: Codable {
   let delayMs: Int?
   let textEntryMode: String?
   let action: String?
+  let includesKeyboard: Bool?
   let x: Double?
   let y: Double?
   let button: String?

@@ -700,7 +700,7 @@ extension RunnerTests {
       }
       return Self.reportingSchedule(execution.schedule, in: response)
     case .gestureViewport:
-      let frame = try gestureViewportFrame(app: activeApp, includesKeyboard: command.action == "include-keyboard")
+      let frame = try gestureViewportFrame(app: activeApp, includesKeyboard: command.includesKeyboard == true)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }

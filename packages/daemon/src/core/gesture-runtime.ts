@@ -123,7 +123,11 @@ export async function resolveBoundGestureRuntime(
   if (admitted.type === 'response') return { ok: false, response: admitted.response };
   // One bind, with the exactly-typed use the tier selected (ADR 0019 §9).
   const includesKeyboard =
-    params.input.intent === 'pan' && (params.input.pointerCount ?? 1) === 1 ? true : undefined;
+    params.input.intent === 'pan' &&
+    (params.input.pointerCount ?? 1) === 1 &&
+    params.input.executionProfile !== 'endpoint-hold'
+      ? true
+      : undefined;
   return {
     ok: true,
     gestures: await bindGestureTier(admitted.bind, params.device, plan, includesKeyboard),

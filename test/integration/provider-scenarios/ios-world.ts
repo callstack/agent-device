@@ -75,7 +75,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { pinched: true },
     },
-    runnerGestureViewport('include-keyboard'),
+    runnerGestureViewport(true),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -516,7 +516,7 @@ function generalCellSnapshot(options: { y: number }) {
   };
 }
 
-function runnerGestureViewport(action?: 'include-keyboard') {
+function runnerGestureViewport(includesKeyboard?: true) {
   return {
     command: 'ios.runner.gestureViewport',
     deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -524,7 +524,7 @@ function runnerGestureViewport(action?: 'include-keyboard') {
     request: {
       command: 'gestureViewport',
       appBundleId: 'com.apple.Preferences',
-      ...(action ? { action } : {}),
+      ...(includesKeyboard ? { includesKeyboard } : {}),
     },
     result: {
       x: IOS_SETTINGS_VIEWPORT.x,
