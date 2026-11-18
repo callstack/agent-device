@@ -34,7 +34,7 @@ import { runCmdBackground, withCommandExecutorOverride } from '@agent-device/hos
 import { beforeEach, type TestContext } from 'vitest';
 import {
   createTestHostEnvironment,
-  UNSHARED_TEST_DIR_MISSING,
+  requireUnsharedTestRunDir,
   unsharedTestRunDir,
 } from '@agent-device/test-kit';
 import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
@@ -265,9 +265,9 @@ export async function createProviderScenarioHarness(
   return {
     callCommand: async (command, positionals = [], flags = {}, options = {}) => {
       // The validator compiles only on macOS hosts; elsewhere record stop keeps container-only MP4 completion.
-      if (command === 'record' && process.platform === 'darwin') {
-        // That compile needs the run's checkout-local directory: without one, the scenario is skipped, not failed.
-        if (!unsharedTestRunDir()) scenarioTest?.skip(UNSHARED_TEST_DIR_MISSING);
+      // The warm compile needs the run's checkout-local directory; without one, a scenario that compiles answers
+      // for it below, and every other recording scenario runs.
+      if (command === 'record' && process.platform === 'darwin' && unsharedTestRunDir()) {
         await withCommandExecutorOverride(
           (command, args) => {
             if (
@@ -296,7 +296,16 @@ export async function createProviderScenarioHarness(
       });
       const envelope = JSON.parse(body) as JsonRpcResponseEnvelope;
       if (envelope.result) assertNoInternalChromeProvenance(envelope.result);
-      return envelopeToRpcResult(envelope, payload.id, statusCode);
+      const result = envelopeToRpcResult(envelope, payload.id, statusCode);
+      // A command that really compiled through the cache, in a run without the checkout-local directory.
+      if (
+        scenarioTest &&
+        !unsharedTestRunDir() &&
+        result.json?.error?.data?.details?.reason === 'swift_cache_untrusted'
+      ) {
+        requireUnsharedTestRunDir(scenarioTest);
+      }
+      return result;
     },
     client: () => client,
     hasSession: async (name = 'default') =>

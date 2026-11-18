@@ -2,10 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTestHost } from '../host-environment.fixtures.ts';
-import {
-  mkdtempUnsharedForTestSync,
-  UNSHARED_TEST_DIR_MISSING,
-} from '../unshared-tmp-dir.fixtures.ts';
+import { mkdtempUnsharedForTestSync } from '../unshared-tmp-dir.fixtures.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -35,9 +32,7 @@ let versionDir: string;
 let binDir: string;
 
 beforeEach((context) => {
-  const directory = mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-');
-  if (directory === undefined) return context.skip(UNSHARED_TEST_DIR_MISSING);
-  tmpDir = directory;
+  tmpDir = mkdtempUnsharedForTestSync('agent-device-swift-cache-trust-', context);
   cacheRoot = path.join(tmpDir, 'swift-cache');
   versionDir = path.join(cacheRoot, 'v3');
   binDir = path.join(versionDir, 'bin');

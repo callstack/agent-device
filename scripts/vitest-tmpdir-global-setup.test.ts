@@ -174,3 +174,24 @@ function isAlive(pid: number): boolean {
     return false;
   }
 }
+
+test('global teardown after a setup that failed part-way leaves that failure as the only one', async () => {
+  // A fresh module instance stands for a setup that threw before it made the run directory.
+  const { teardown } = (await import(
+    `./vitest-tmpdir-global-setup.ts?partial-setup-${process.pid}`
+  )) as typeof import('./vitest-tmpdir-global-setup.ts');
+  const keys = [
+    'TMPDIR',
+    'AGENT_DEVICE_TEST_UNSHARED_DIR',
+    'AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE',
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    await assert.doesNotReject(teardown());
+  } finally {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+});

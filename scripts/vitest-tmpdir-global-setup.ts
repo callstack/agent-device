@@ -25,10 +25,11 @@ import {
 // The root/prefix live in check-tmpdir-leaks-model.ts, next to the liveness
 // classification this setup and the post-run leak check both rely on.
 
-let testRunTmpDir: string;
+let testRunTmpDir: string | undefined;
 let previousTmpDir: string | undefined;
 let unsharedRunDir: string | undefined;
 let previousUnsharedDir: string | undefined;
+let previousUnsharedUnavailable: string | undefined;
 
 // State that a sticky shared directory such as /tmp must not hold, the Swift helper cache's among them, lives
 // in the checkout's ignored .tmp/ instead. Each run gets its own directory there, named like its TMPDIR one,
@@ -48,15 +49,17 @@ const UNSHARED_TEST_ROOT = path.join(
 export function setup(): void {
   previousTmpDir = process.env.TMPDIR;
   previousUnsharedDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR;
+  previousUnsharedUnavailable = process.env.AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE;
   const consumers = liveRunDirectoryConsumers();
   reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT, { consumers }));
   const unshared = sweepUnsharedRunDirectories(CHECKOUT_ROOT, UNSHARED_TEST_ROOT, { consumers });
   if (unshared.swept) reportPrunedRunDirectories(unshared.pruned);
-  // CI owns a private checkout. There, a skipped sweep would quietly skip every Swift cache test, which hides
-  // exactly what those tests guard, so it fails the run instead.
-  else if (process.env.CI)
-    throw new Error(`The checkout-local test directory is unavailable on CI: ${unshared.reason}`);
-  else console.warn(`Skipping the checkout-local test directory sweep: ${unshared.reason}`);
+  else {
+    // Only the tests that need the directory answer for its absence, with this reason: the rest of the run is
+    // unaffected, whatever the checkout's layout.
+    console.warn(`Skipping the checkout-local test directory sweep: ${unshared.reason}`);
+    process.env.AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE = unshared.reason;
+  }
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
   // still in active use (its vitest process is alive — a concurrent run in
   // another worktree, say) apart from one actually abandoned by a killed
@@ -75,15 +78,19 @@ export function setup(): void {
 // fallow-ignore-next-line unused-export
 export async function teardown(): Promise<void> {
   try {
-    reportStoppedRunDirectoryConsumers(
-      testRunTmpDir,
-      await stopRunDirectoryConsumers(testRunTmpDir),
-    );
+    // A setup that failed part-way never made the run directory: teardown must not bury that failure.
+    if (testRunTmpDir) {
+      reportStoppedRunDirectoryConsumers(
+        testRunTmpDir,
+        await stopRunDirectoryConsumers(testRunTmpDir),
+      );
+    }
   } finally {
-    fs.rmSync(testRunTmpDir, { recursive: true, force: true });
+    if (testRunTmpDir) fs.rmSync(testRunTmpDir, { recursive: true, force: true });
     if (unsharedRunDir) fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     restoreEnv('TMPDIR', previousTmpDir);
     restoreEnv('AGENT_DEVICE_TEST_UNSHARED_DIR', previousUnsharedDir);
+    restoreEnv('AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE', previousUnsharedUnavailable);
   }
 }
 

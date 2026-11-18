@@ -1,22 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Why a test that needs the run's checkout-local directory is skipped when the run has none. */
-export const UNSHARED_TEST_DIR_MISSING = 'checkout ancestry not private; Swift cache tests skipped';
-
 /**
  * The run's own directory under the checkout's ignored `.tmp/`, for state a sticky shared directory such as
  * `/tmp` must not hold: the Swift helper cache refuses one anywhere in its chain. The Vitest global setup names
  * it only after checking every level from `/` down, and removes it after the run. A run whose checkout ancestry
- * is not private (a mount another user owns, for example) has none: a test that needs it skips with
- * {@link UNSHARED_TEST_DIR_MISSING}, and every other test runs without touching it.
+ * is not private (a mount another user owns, for example) has none. Every test that does not need it runs
+ * without touching it; one that does answers through {@link requireUnsharedTestRunDir}.
  */
 export function unsharedTestRunDir(): string | undefined {
   return process.env.AGENT_DEVICE_TEST_UNSHARED_DIR?.trim() || undefined;
 }
 
-/** A fresh directory in {@link unsharedTestRunDir}, as its physical path, which the Swift cache compares. */
-export function mkdtempUnsharedForTestSync(prefix: string): string | undefined {
+/** The part of a test context that can skip the test. */
+export type SkippableTest = Readonly<{ skip: (note: string) => never }>;
+
+/**
+ * The run's checkout-local directory, for a test that needs it. Without one the test is skipped with the
+ * ancestry reason, except on CI (`CI` set), where the test fails instead: there a skip would hide exactly what
+ * it guards.
+ */
+export function requireUnsharedTestRunDir(test: SkippableTest): string {
   const runDir = unsharedTestRunDir();
-  return runDir && fs.realpathSync(fs.mkdtempSync(path.join(runDir, prefix)));
+  if (runDir) return runDir;
+  const reason =
+    process.env.AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE ?? 'no checkout-local directory was named';
+  if (process.env.CI) throw new Error(`This test needs a private checkout ancestry: ${reason}`);
+  return test.skip(`checkout ancestry not private; Swift cache tests skipped: ${reason}`);
+}
+
+/** A fresh directory in {@link requireUnsharedTestRunDir}, as its physical path, which the Swift cache compares. */
+export function mkdtempUnsharedForTestSync(prefix: string, test: SkippableTest): string {
+  return fs.realpathSync(fs.mkdtempSync(path.join(requireUnsharedTestRunDir(test), prefix)));
 }

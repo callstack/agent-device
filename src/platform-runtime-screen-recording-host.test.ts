@@ -7,7 +7,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createLiveTestHostEnvironment,
   mkdtempForTestSync,
-  UNSHARED_TEST_DIR_MISSING,
+  requireUnsharedTestRunDir,
   unsharedTestRunDir,
 } from '@agent-device/test-kit';
 import * as video from '@agent-device/capture-kit/recording-video';
@@ -114,10 +114,9 @@ async function harness(device: DeviceInfo, launch = () => {}) {
   return { input, start: () => binding.operations.screenRecordingStart!(input) };
 }
 
-test.for(devices)(
+test.each(devices)(
   'warms before $kind capture and starts while preparation is pending',
-  async (device, { skip }) => {
-    if (!unsharedTestRunDir()) skip(UNSHARED_TEST_DIR_MISSING);
+  async (device) => {
     let resolvePreparation!: (value: string) => void;
     const pending = new Promise<string>((resolve) => {
       resolvePreparation = resolve;
@@ -151,8 +150,9 @@ test.for(devices)(
 
 test.for(['COMMAND_FAILED', 'TOOL_MISSING'])(
   'a %s compiler failure preserves capture and main stop semantics',
-  async (code, { skip }) => {
-    if (!unsharedTestRunDir()) skip(UNSHARED_TEST_DIR_MISSING);
+  async (code, context) => {
+    // The compile runs through the real cache, whose ancestry walk needs the run's checkout-local directory.
+    requireUnsharedTestRunDir(context);
     const { start, input } = await harness(devices[1]!);
     const failure = new AppError(code, 'xcrun exited with code 72', {
       stderr:
