@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -9,14 +9,17 @@ import { makeAuthoringSession } from '../../__tests__/support/session-factories.
 // break: pass the caller's spelling untouched, create nothing before the rule answers, return its refusal.
 
 const hostCwd = createLiveTestHostEnvironment().cwd;
-const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
-function recordingTo(destination: string) {
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function recordingTo(destination: string, force = false) {
   return makeAuthoringSession('journey', {
     scriptPublication: {
       kind: 'authoring',
       status: 'armed',
-      target: { kind: 'explicit', path: destination, force: false },
+      target: { kind: 'explicit', path: destination, force },
     },
     actions: [{ ts: Date.now(), command: 'open', positionals: ['Demo'], flags: {} }],
   });
@@ -36,55 +39,65 @@ function writerFor(directory: string): SessionScriptWriter {
   return new SessionScriptWriter(path.join(directory, 'sessions'), hostCwd);
 }
 
-skipOnWindows('a recording saves a private script under a chain only this user can write', () => {
-  const directory = root();
-  const destination = path.join(directory, 'workflows', 'journey.ad');
+test.skipIf(process.platform === 'win32')(
+  'a recording saves a private script under a chain only this user can write',
+  () => {
+    const directory = root();
+    const destination = path.join(directory, 'workflows', 'journey.ad');
 
-  const result = writerFor(directory).write(recordingTo(destination));
+    const result = writerFor(directory).write(recordingTo(destination));
 
-  expect(result.written).toBe(true);
-  expect(fs.readFileSync(destination, 'utf8')).toContain('open');
-  expect(fs.lstatSync(destination).mode & 0o777).toBe(0o600);
-});
+    expect(result.written).toBe(true);
+    expect(fs.readFileSync(destination, 'utf8')).toContain('open');
+    expect(fs.lstatSync(destination).mode & 0o777).toBe(0o600);
+  },
+);
 
-skipOnWindows('a refused destination with a missing parent leaves no directories behind', () => {
-  // `close --save-script /shared/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
-  // runs before the rule answers leaves `recordings` standing in ground another local user can name
-  // things in, after the publish refuses.
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
-  const destination = path.join(shared, 'recordings', 'journey.ad');
+test.skipIf(process.platform === 'win32')(
+  'a refused destination with a missing parent leaves no directories behind',
+  () => {
+    // `close --save-script /shared/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
+    // runs before the rule answers leaves `recordings` standing in ground another local user can name
+    // things in, after the publish refuses.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const destination = path.join(shared, 'recordings', 'journey.ad');
 
-  const result = writerFor(directory).write(recordingTo(destination));
+    const result = writerFor(directory).write(recordingTo(destination));
 
-  expect(result.written).toBe(false);
-  expect(result.written ? undefined : result.error?.details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'world_writable',
-    ancestor: shared,
-  });
-  expect(fs.readdirSync(shared)).toEqual([]);
-});
+    expect(result.written).toBe(false);
+    expect(result.written ? undefined : result.error?.details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'world_writable',
+      ancestor: shared,
+    });
+    expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
 
-skipOnWindows('a recording refuses a private link standing on shared ground', () => {
-  // The real path is private, but the walk crosses the 0777 `shared`. Canonicalizing first hides it.
-  const directory = root();
-  const shared = directoryWith(path.join(directory, 'shared'), 0o777);
-  const mine = directoryWith(path.join(shared, 'mine'), 0o700);
-  const privateWork = directoryWith(path.join(directory, 'private'), 0o700);
-  fs.symlinkSync(privateWork, path.join(mine, 'rec'));
+test.skipIf(process.platform === 'win32').each([false, true])(
+  'a recording refuses a private link standing on shared ground (force: %s)',
+  (force) => {
+    // The real path is private, but the walk crosses the 0777 `shared`. Canonicalizing first hides it.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
+    const mine = directoryWith(path.join(shared, 'mine'), 0o700);
+    const privateWork = directoryWith(path.join(directory, 'private'), 0o700);
+    fs.symlinkSync(privateWork, path.join(mine, 'rec'));
 
-  const result = writerFor(directory).write(recordingTo(path.join(mine, 'rec', 'journey.ad')));
+    const destination = path.join(mine, 'rec', 'journey.ad');
+    const result = writerFor(directory).write(recordingTo(destination, force), { force });
 
-  expect(result.written ? undefined : result.error?.details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'world_writable',
-    ancestor: shared,
-  });
-  expect(fs.readdirSync(privateWork)).toEqual([]);
-});
+    expect(result.written ? undefined : result.error?.details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'world_writable',
+      ancestor: shared,
+    });
+    expect(fs.readdirSync(privateWork)).toEqual([]);
+  },
+);
 
-skipOnWindows(
+test.skipIf(process.platform === 'win32')(
   'a recording that steps back out of a missing directory leaves no directories behind',
   () => {
     // A `mkdir -p` resolves the two steps up as text and builds `<root>/shared/recordings`; the kernel
@@ -106,44 +119,57 @@ skipOnWindows(
   },
 );
 
-skipOnWindows('a recording refuses the directory a .. steps back into', () => {
-  // `home/work -> priv/x`, `priv/y` at 0777 while `home/y` is private. Folded as text the spelling
-  // names `home/y`; the kernel lands in `priv/y`, where any local user can take the recording.
-  const directory = root();
-  const home = directoryWith(path.join(directory, 'home'), 0o700);
-  directoryWith(path.join(home, 'y'), 0o700);
-  const privX = path.join(directory, 'priv', 'x');
-  fs.mkdirSync(privX, { recursive: true });
-  const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o777);
-  fs.symlinkSync(privX, path.join(home, 'work'));
+test.skipIf(process.platform === 'win32')(
+  'a recording refuses the directory a .. steps back into',
+  () => {
+    // `home/work -> priv/x`, `priv/y` at 0777 while `home/y` is private. Folded as text the spelling
+    // names `home/y`; the kernel lands in `priv/y`, where any local user can take the recording.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    directoryWith(path.join(home, 'y'), 0o700);
+    const privX = path.join(directory, 'priv', 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o777);
+    fs.symlinkSync(privX, path.join(home, 'work'));
 
-  const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
+    const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
 
-  expect(result.written ? undefined : result.error?.details).toMatchObject({
-    reason: 'script_ancestor_untrusted',
-    exposure: 'world_writable',
-    ancestor: privY,
-  });
-  expect(fs.readdirSync(privY)).toEqual([]);
-  expect(fs.readdirSync(path.join(home, 'y'))).toEqual([]);
-  expect(fs.readdirSync(privX)).toEqual([]);
-});
+    expect(result.written ? undefined : result.error?.details).toMatchObject({
+      reason: 'script_ancestor_untrusted',
+      exposure: 'world_writable',
+      ancestor: privY,
+    });
+    expect(fs.readdirSync(privY)).toEqual([]);
+    expect(fs.readdirSync(path.join(home, 'y'))).toEqual([]);
+    expect(fs.readdirSync(privX)).toEqual([]);
+  },
+);
 
-skipOnWindows('a recording through a link and .. lands in the directory the kernel reaches', () => {
-  // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`.
-  const directory = root();
-  const home = directoryWith(path.join(directory, 'home'), 0o700);
-  const foldedY = directoryWith(path.join(home, 'y'), 0o777);
-  const privX = path.join(directory, 'priv', 'x');
-  fs.mkdirSync(privX, { recursive: true });
-  const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o700);
-  fs.symlinkSync(privX, path.join(home, 'work'));
+test.skipIf(process.platform === 'win32')(
+  'a recording through a link and .. lands in the directory the kernel reaches',
+  () => {
+    // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`.
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const foldedY = directoryWith(path.join(home, 'y'), 0o777);
+    const privX = path.join(directory, 'priv', 'x');
+    fs.mkdirSync(privX, { recursive: true });
+    const privY = directoryWith(path.join(directory, 'priv', 'y'), 0o700);
+    fs.symlinkSync(privX, path.join(home, 'work'));
+    const staged: string[] = [];
+    const realWriteFileSync = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((file: unknown, ...rest: unknown[]) => {
+      if (typeof file === 'string' && file.endsWith('.tmp')) staged.push(path.dirname(file));
+      return (realWriteFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.writeFileSync);
 
-  const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
+    const result = writerFor(directory).write(recordingTo(`${home}/work/../y/journey.ad`));
 
-  expect(result.written).toBe(true);
-  const landed = path.join(privY, 'journey.ad');
-  expect(fs.readFileSync(landed, 'utf8')).toContain('Demo');
-  expect(fs.lstatSync(landed).mode & 0o777).toBe(0o600);
-  expect(fs.readdirSync(foldedY)).toEqual([]);
-});
+    expect(result.written).toBe(true);
+    expect(staged).toEqual([privY]);
+    const landed = path.join(privY, 'journey.ad');
+    expect(fs.readFileSync(landed, 'utf8')).toContain('Demo');
+    expect(fs.lstatSync(landed).mode & 0o777).toBe(0o600);
+    expect(fs.readdirSync(foldedY)).toEqual([]);
+  },
+);
