@@ -14,6 +14,14 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
+function acceptedWrite(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 test('finalizing an unknown upload reports expiry with a recovery hint', async () => {
   const error = await finalizeResumableUpload('missing-upload-id').then(
     () => null,
@@ -186,26 +194,34 @@ test('an ignored un-ranged retry does not extend upload expiry', async () => {
 test('accepted body progress renews the ticket idle lifetime mid-chunk', async () => {
   // Fake only the ticket clock; real stream I/O keeps running (repo fake-timer pattern).
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-  const flushIO = async () => {
-    for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
-  };
+  const body = requestStream();
   try {
     const bytes = Buffer.from('ABC');
     const options = uploadOptions(bytes);
     const uploadId = beginResumableUpload(options).uploadId;
-    const body = requestStream();
-    const receiving = receiveResumableUploadChunk({ uploadId, req: body });
-    body.write('A');
-    await flushIO();
-    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
-    body.write('B');
-    await flushIO();
-    // 8 minutes since the ticket was created, but only 4 since accepted bytes:
-    // the idempotent preflight still resolves to the same live ticket.
-    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
-    assert.equal(beginResumableUpload(options).uploadId, uploadId);
-    body.end('C');
-    assert.deepEqual(await receiving, { complete: true, offset: 3 });
+    let accepted = acceptedWrite();
+    const receiving = receiveResumableUploadChunk({
+      uploadId,
+      req: body,
+      onAcceptedBytes: () => accepted.resolve(),
+    });
+    try {
+      body.write('A');
+      await Promise.race([accepted.promise, receiving]);
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+      accepted = acceptedWrite();
+      body.write('B');
+      await Promise.race([accepted.promise, receiving]);
+      // 8 minutes since the ticket was created, but only 4 since accepted bytes:
+      // the idempotent preflight still resolves to the same live ticket.
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+      assert.equal(beginResumableUpload(options).uploadId, uploadId);
+      body.end('C');
+      assert.deepEqual(await receiving, { complete: true, offset: 3 });
+    } finally {
+      body.destroy();
+      await receiving.catch(() => {});
+    }
     // Idle after the last accepted byte: the ticket expires on schedule.
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
     await assert.rejects(finalizeResumableUpload(uploadId), /not found or expired/i);
@@ -310,27 +326,32 @@ test('an earlier classified pipeline failure survives a later abort of the same 
   const uploadId = beginUpload(bytes).uploadId;
   const controller = new AbortController();
   const body = requestStream({ 'content-range': 'bytes 0-0/2' });
+  const accepted = acceptedWrite();
   const receiving = receiveResumableUploadChunk({
     uploadId,
     req: body,
     signal: controller.signal,
+    onAcceptedBytes: () => accepted.resolve(),
   });
-  body.once('error', () => {});
+  const outcome = receiving.then(
+    () => null,
+    (error: unknown) => error,
+  );
   body.write('A');
+  await Promise.race([accepted.promise, receiving]);
+  const closed = new Promise<void>((resolve) => body.once('close', resolve));
   body.destroy(
     new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
       reason: 'RESOURCE_EXPIRED',
     }),
   );
+  await closed;
   controller.abort(
     new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
       reason: 'transfer_ingress_deadline_exceeded',
     }),
   );
-  const error = (await receiving.then(
-    () => null,
-    (error: unknown) => error,
-  )) as AppError | null;
+  const error = (await outcome) as AppError | null;
   assert.equal(error instanceof AppError, true);
   assert.equal(error?.details?.reason, 'RESOURCE_EXPIRED');
 });
