@@ -43,7 +43,7 @@ export function isUnreadableCaptureContentError(error: unknown): boolean {
  * consume the reason instead of re-deriving it from hint text: the hint is human-facing prose
  * that may be reworded, and two readers sniffing it will drift apart (#1983).
  */
-export const ANDROID_CAPTURE_FAILURE_REASONS = ['accessibility-timeout'] as const;
+const ANDROID_CAPTURE_FAILURE_REASONS = ['accessibility-timeout'] as const;
 
 export type AndroidCaptureFailureReason = (typeof ANDROID_CAPTURE_FAILURE_REASONS)[number];
 
