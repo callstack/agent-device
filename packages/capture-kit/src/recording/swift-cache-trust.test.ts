@@ -203,15 +203,22 @@ test.skipIf(process.getuid?.() === 0)(
 );
 
 test.each(['bin', 'home', 'module-cache'])(
-  'an owned %s directory wider than 0700 is never adopted: the version directory is rebuilt',
+  'an owned group-writable %s directory is refused with a hint naming it, never rebuilt',
   async (name) => {
     await plantCachedExecutable(() => {});
-    fs.chmodSync(path.join(versionDir, name), 0o770);
+    const directory = path.join(versionDir, name);
+    fs.writeFileSync(path.join(directory, 'kept'), 'kept');
+    fs.chmodSync(directory, 0o770);
 
-    await compile();
-
-    expect(modeOf(path.join(versionDir, name))).toBe(0o700);
-    expect(mockRunCmd).toHaveBeenCalledOnce();
+    await expect(compile()).rejects.toMatchObject(
+      untrusted({
+        exposure: 'not_owner_only',
+        ancestor: directory,
+        hint: expect.stringContaining(`rm -rf ${directory}`),
+      }),
+    );
+    expect(mockRunCmd).not.toHaveBeenCalled();
+    expect(fs.readdirSync(directory)).toContain('kept');
   },
 );
 
@@ -358,26 +365,41 @@ test.each([
   },
 );
 
-test('an existing 0755 cache is rebuilt private, so a umask 002 lock is unreachable for others', async () => {
-  fs.mkdirSync(binDir, { recursive: true, mode: 0o755 });
-  for (const level of [cacheRoot, versionDir, binDir]) fs.chmodSync(level, 0o755);
+test('an existing 0755 version directory is refused, so a umask 002 lock never lands in it', async () => {
+  fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(versionDir, 0o755);
   const previousUmask = process.umask(0o002);
-  let lockDir = '';
-  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
-    const outputPath = args[args.indexOf('-o') + 1]!;
-    lockDir = path.join(binDir, `${path.basename(outputPath)}.lock`);
-    expect(fs.statSync(lockDir).isDirectory()).toBe(true);
-    fs.writeFileSync(outputPath, 'compiled');
-    return { stdout: '', stderr: '', exitCode: 0 };
-  });
   try {
-    await compile();
+    await expect(compile()).rejects.toMatchObject(
+      untrusted({
+        exposure: 'not_owner_only',
+        ancestor: versionDir,
+        hint: expect.stringContaining(`rm -rf ${versionDir}`),
+      }),
+    );
   } finally {
     process.umask(previousUmask);
   }
 
-  expect(path.relative(versionDir, lockDir).startsWith('..')).toBe(false);
-  expect(modeOf(versionDir)).toBe(0o700);
+  expect(fs.readdirSync(binDir)).toEqual([]);
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a version directory that is a link is refused, and what it names is untouched', async () => {
+  const target = path.join(tmpDir, 'linked-version');
+  fs.mkdirSync(path.join(target, 'bin'), { recursive: true, mode: 0o755 });
+  fs.chmodSync(target, 0o755);
+  fs.writeFileSync(path.join(target, 'bin', 'kept'), 'kept');
+  fs.mkdirSync(cacheRoot, { mode: 0o700 });
+  fs.symlinkSync(target, versionDir);
+
+  await expect(compile()).rejects.toMatchObject(
+    untrusted({ exposure: 'planted_link', ancestor: versionDir }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+  expect(modeOf(target)).toBe(0o755);
+  expect(fs.readdirSync(target)).toEqual(['bin']);
+  expect(fs.readdirSync(path.join(target, 'bin'))).toEqual(['kept']);
 });
 
 test('a version directory another local user owns is refused', async () => {
@@ -437,7 +459,7 @@ test('the compile output is made executable through its descriptor, never throug
   expect(fs.readdirSync(binDir)).toEqual([]);
 });
 
-test('a link planted while module-cache was group-writable is gone after the run, with nothing written through it', async () => {
+test('a group-writable module-cache holding a planted link is refused, and the link target is untouched', async () => {
   await plantCachedExecutable(() => {});
   const moduleCache = path.join(versionDir, 'module-cache');
   const outside = path.join(tmpDir, 'outside-module-cache');
@@ -446,34 +468,41 @@ test('a link planted while module-cache was group-writable is gone after the run
   fs.chmodSync(moduleCache, 0o770);
   fs.symlinkSync(outside, path.join(moduleCache, 'planted'));
 
-  await compile();
-
-  expect(fs.readdirSync(moduleCache)).toEqual([]);
-  expect(modeOf(moduleCache)).toBe(0o700);
+  await expect(compile()).rejects.toMatchObject(
+    untrusted({
+      exposure: 'not_owner_only',
+      ancestor: moduleCache,
+      hint: expect.stringContaining(`rm -rf ${moduleCache}`),
+    }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
   expect(fs.readdirSync(outside)).toEqual(['kept']);
   expect(fs.readFileSync(path.join(outside, 'kept'), 'utf8')).toBe('kept');
 });
 
-test('a lock entry left while bin was group-writable is gone after the run', async () => {
+test('a group-writable bin holding a leftover lock is refused, and the lock is left for the user', async () => {
   const executablePath = await plantCachedExecutable(() => {});
   const staleLock = `${executablePath}.lock`;
   fs.mkdirSync(staleLock);
-  fs.writeFileSync(
-    path.join(staleLock, 'owner.json'),
-    JSON.stringify({ pid: process.ppid, startTime: null, acquiredAtMs: Date.now() }),
-  );
   fs.chmodSync(binDir, 0o770);
 
-  await expect(compile()).resolves.toBe(executablePath);
-
-  expect(mockRunCmd).toHaveBeenCalledOnce();
-  expect(fs.existsSync(staleLock)).toBe(false);
+  await expect(compile()).rejects.toMatchObject(
+    untrusted({
+      exposure: 'not_owner_only',
+      ancestor: binDir,
+      hint: expect.stringContaining(`rm -rf ${binDir}`),
+    }),
+  );
+  expect(mockRunCmd).not.toHaveBeenCalled();
+  expect(fs.existsSync(staleLock)).toBe(true);
 });
 
 test.skipIf(process.getuid?.() === 0)(
   'a staging cleanup that fails keeps the compiler failure as the answer',
   async () => {
-    const compilerFailure = new AppError('COMMAND_FAILED', 'swiftc: error: build failed');
+    const compilerFailure = new AppError('COMMAND_FAILED', 'swiftc: error: build failed', {
+      reason: 'swift_compile_failed',
+    });
     let stagingDir = '';
     mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
       const outputPath = args[args.indexOf('-o') + 1]!;
@@ -487,6 +516,7 @@ test.skipIf(process.getuid?.() === 0)(
     try {
       await expect(compile()).rejects.toBe(compilerFailure);
       expect(compilerFailure.details).toMatchObject({
+        reason: 'swift_compile_failed',
         stagingCleanupError: expect.stringMatching(/EACCES|EPERM|ENOTEMPTY/),
       });
     } finally {

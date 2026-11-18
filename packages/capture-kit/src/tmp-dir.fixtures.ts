@@ -22,15 +22,15 @@ export function mkdtempForTestSync(prefix: string): string {
 export function mkdtempUnsharedForTestSync(prefix: string): string {
   const runDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR?.trim();
   if (runDir) return fs.mkdtempSync(path.join(runDir, prefix));
-  const root = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../../../.tmp/unshared-test-dirs',
-  );
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const seen = fs.lstatSync(root);
-  if (!seen.isDirectory() || seen.uid !== process.getuid?.()) {
-    throw new Error(`${root} is not a directory this user owns`);
+  // From the checkout down, every level must be a real directory this user owns that nobody else can write.
+  let level = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  for (const name of ['', '.tmp', 'unshared-test-dirs']) {
+    level = path.join(level, name);
+    if (name && !fs.existsSync(level)) fs.mkdirSync(level, { mode: 0o700 });
+    const seen = fs.lstatSync(level);
+    if (!seen.isDirectory() || seen.uid !== process.getuid?.() || seen.mode & 0o022) {
+      throw new Error(`${level} is not a real directory this user owns that only they can write`);
+    }
   }
-  fs.chmodSync(root, 0o700);
-  return fs.mkdtempSync(path.join(root, prefix));
+  return fs.mkdtempSync(path.join(level, prefix));
 }

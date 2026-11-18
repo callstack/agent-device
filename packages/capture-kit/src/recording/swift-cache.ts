@@ -30,8 +30,7 @@ const SWIFT_CACHE_VERSION = '3';
 const SWIFT_CACHE_UNTRUSTED_REASON = 'swift_cache_untrusted';
 
 /** The directories of one cache version; every one of them sits inside the private version directory. */
-const SWIFT_CACHE_DIRECTORIES = ['bin', 'home', 'module-cache'] as const;
-type SwiftCacheDirectory = (typeof SWIFT_CACHE_DIRECTORIES)[number];
+type SwiftCacheDirectory = 'bin' | 'home' | 'module-cache';
 
 const SWIFT_CACHE_OVERRIDE_HINT =
   'set AGENT_DEVICE_SWIFT_CACHE_DIR to a directory you own that only you can write, outside shared directories ' +
@@ -71,28 +70,68 @@ type PreparedSwiftCacheDirectory = Readonly<{
 }>;
 
 /**
- * Readies one directory of the current cache version: a real directory directly inside the judged version
- * directory, owned by this uid and owner-only. It is created 0700 there, and an existing one is judged by its own
- * `lstat`, so no link can send the cache's work outside the version directory.
+ * Readies one directory of the current cache version: a real directory directly inside the version directory,
+ * owned by this uid and owner-only. Nothing is ever deleted: an exposed directory is refused, and the hint names
+ * it for the user to remove.
  */
 function prepareSwiftCacheDirectory(
   env: NodeJS.ProcessEnv,
   name: SwiftCacheDirectory,
 ): PreparedSwiftCacheDirectory {
-  const versionDir = path.join(getSwiftCacheRoot(env), `v${SWIFT_CACHE_VERSION}`);
-  const spelled = path.join(versionDir, name);
+  const cacheRoot = getSwiftCacheRoot(env);
+  const spelled = path.join(cacheRoot, `v${SWIFT_CACHE_VERSION}`, name);
   return untrustedAsSwiftCacheError(spelled, () => {
-    const directory = path.join(prepareSwiftCacheVersionDirectory(versionDir), name);
-    try {
-      fs.mkdirSync(directory, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
+    const directory = path.join(prepareSwiftCacheVersionDirectory(cacheRoot), name);
+    createPrivateDirectory(directory);
     return { spelled, directory, identity: judgeOwnedDirectory(directory) };
   });
 }
 
-/** Refuses anything but an owner-only directory this uid owns, and answers its identity. */
+/**
+ * The version directory is the boundary. The cache root is judged first by the walk, and an executable cache
+ * takes no sticky pass-through there: in a sticky shared directory a cleanup can remove the cache and another
+ * account can claim its name before a helper runs. The version directory itself must then be a real directory
+ * directly beneath that judged root, never a link the walk would resolve.
+ */
+function prepareSwiftCacheVersionDirectory(cacheRoot: string): string {
+  const versionName = `v${SWIFT_CACHE_VERSION}`;
+  // The walk judges and creates the PARENT of the name it is given; the version directory is never resolved by it.
+  const { directory: root } = prepareScriptDestination(path.join(cacheRoot, versionName));
+  for (let ancestor = root; ; ancestor = path.dirname(ancestor)) {
+    const stats = fs.lstatSync(ancestor);
+    if (!stats.isDirectory() || stats.mode & 0o022) {
+      const exposure = !stats.isDirectory()
+        ? 'not_a_directory'
+        : stats.mode & 0o002
+          ? 'world_writable'
+          : 'shared_group_writable';
+      throw untrustedSwiftCache(cacheRoot, undefined, {
+        exposure,
+        ancestor,
+        hint: swiftCacheHint(exposure, ancestor),
+      });
+    }
+    if (ancestor === path.dirname(ancestor)) break;
+  }
+  const versionDirectory = path.join(root, versionName);
+  createPrivateDirectory(versionDirectory);
+  judgeOwnedDirectory(versionDirectory);
+  return versionDirectory;
+}
+
+/** Creates a directory at 0700 when it is missing; what already stands there is judged by the caller. */
+function createPrivateDirectory(directory: string): void {
+  try {
+    fs.mkdirSync(directory, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+}
+
+/**
+ * Refuses anything but an owner-only directory this uid owns, and answers its identity. This code creates every
+ * cache directory at 0700, so anything else there means someone changed it: the user removes it, never this code.
+ */
 function judgeOwnedDirectory(directory: string): string {
   const stats = fs.lstatSync(directory, { bigint: true });
   const exposure = stats.isSymbolicLink()
@@ -101,69 +140,19 @@ function judgeOwnedDirectory(directory: string): string {
       ? 'not_a_directory'
       : Number(stats.uid) !== process.getuid?.()
         ? 'foreign_owned'
-        : undefined;
+        : Number(stats.mode) & 0o077
+          ? 'not_owner_only'
+          : undefined;
   if (exposure) {
     throw untrustedSwiftCache(directory, undefined, {
       exposure,
       ancestor: directory,
-      hint: swiftCacheHint(exposure, directory),
-    });
-  }
-  // A level this call just created is 0700; a wider one here was opened while the cache was in use.
-  if (Number(stats.mode) & 0o077) {
-    throw untrustedSwiftCache(directory, undefined, {
-      exposure: Number(stats.mode) & 0o002 ? 'world_writable' : 'shared_group_writable',
-      ancestor: directory,
-      hint: swiftCacheHint(undefined, undefined),
+      hint:
+        `Remove that cache directory with \`rm -rf ${directory}\` so it is created again private, or ` +
+        SWIFT_CACHE_OVERRIDE_HINT,
     });
   }
   return `${stats.dev}:${stats.ino}`;
-}
-
-/**
- * The version directory is the boundary: judged by the walk, with no shared directory above it, and owner-only.
- * An executable cache takes no sticky pass-through: in a sticky shared directory a cleanup can remove the cache
- * and another account can claim its name before a helper runs. A version directory that is, or holds, a level
- * open to the group or others is never adopted: whatever was planted while it was open goes with it, and the
- * cache rebuilds in a fresh private one.
- */
-function prepareSwiftCacheVersionDirectory(versionDir: string): string {
-  const { directory } = prepareScriptDestination(path.join(versionDir, 'entry'));
-  for (let ancestor = path.dirname(directory); ; ancestor = path.dirname(ancestor)) {
-    const stats = fs.lstatSync(ancestor);
-    if (!stats.isDirectory() || stats.mode & 0o022) {
-      const exposure = !stats.isDirectory()
-        ? 'not_a_directory'
-        : stats.mode & 0o002
-          ? 'world_writable'
-          : 'shared_group_writable';
-      throw untrustedSwiftCache(versionDir, undefined, {
-        exposure,
-        ancestor,
-        hint: swiftCacheHint(exposure, ancestor),
-      });
-    }
-    if (ancestor === path.dirname(ancestor)) break;
-  }
-  if (!holdsSharedLevel(directory)) return directory;
-  // `rmSync` removes a link it meets, never what the link names.
-  fs.rmSync(directory, { recursive: true, force: true });
-  return prepareScriptDestination(path.join(versionDir, 'entry')).directory;
-}
-
-/**
- * Whether the version directory, or one of its cache directories, is a directory this uid owns that is open to
- * the group or others. Anything else at those names is refused when that directory is prepared.
- */
-function holdsSharedLevel(versionDirectory: string): boolean {
-  return [
-    versionDirectory,
-    ...SWIFT_CACHE_DIRECTORIES.map((name) => path.join(versionDirectory, name)),
-  ].some((level) => {
-    const stats = fs.lstatSync(level, { bigint: true, throwIfNoEntry: false });
-    if (!stats?.isDirectory() || Number(stats.uid) !== process.getuid?.()) return false;
-    return (Number(stats.mode) & 0o077) !== 0;
-  });
 }
 
 /**

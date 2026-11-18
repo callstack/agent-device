@@ -233,26 +233,37 @@ export type UnsharedSweep =
 
 /**
  * Readies and sweeps the checkout-local root for state a sticky shared directory such as /tmp must not hold, the
- * Swift helper cache's among them. Only a real directory this uid owns is touched, never what a link at the root
- * names, and a run directory whose name carries no pid is kept: this sweep never deletes on doubt.
+ * Swift helper cache's among them. Every level from `checkout` down to `root` must be a real directory this uid
+ * owns that the group and other users cannot write, or nothing is touched: a missing level is created 0700, and
+ * a run directory whose name carries no pid is kept, so this sweep never deletes on doubt.
  */
 export function sweepUnsharedRunDirectories(
+  checkout: string,
   root: string,
   liveness: RunDirectoryLiveness = {},
 ): UnsharedSweep {
-  if (fs.lstatSync(root, { throwIfNoEntry: false }) === undefined) {
-    fs.mkdirSync(path.dirname(root), { recursive: true });
-    try {
-      fs.mkdirSync(root, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  const levels = path.relative(checkout, root).split(path.sep).filter(Boolean);
+  if (levels.includes('..') || path.isAbsolute(levels[0] ?? '')) {
+    return { swept: false, reason: `${root} is not inside ${checkout}` };
+  }
+  let level = checkout;
+  for (const name of ['', ...levels]) {
+    level = path.join(level, name);
+    if (name && fs.lstatSync(level, { throwIfNoEntry: false }) === undefined) {
+      try {
+        fs.mkdirSync(level, { mode: 0o700 });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+    }
+    const stats = fs.lstatSync(level);
+    if (!stats.isDirectory() || stats.uid !== process.getuid?.() || stats.mode & 0o022) {
+      return {
+        swept: false,
+        reason: `${level} is not a real directory this user owns that only they can write`,
+      };
     }
   }
-  const stats = fs.lstatSync(root);
-  if (!stats.isDirectory() || stats.uid !== process.getuid?.()) {
-    return { swept: false, reason: `${root} is not a directory this user owns` };
-  }
-  fs.chmodSync(root, 0o700);
   const pruned = findLeakedRunDirectories(root, liveness).filter((name) => PID_SUFFIX.test(name));
   for (const name of pruned) fs.rmSync(path.join(root, name), { recursive: true, force: true });
   return { swept: true, pruned };

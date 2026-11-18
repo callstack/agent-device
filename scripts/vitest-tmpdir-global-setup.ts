@@ -33,10 +33,8 @@ let previousUnsharedDir: string | undefined;
 // State that a sticky shared directory such as /tmp must not hold, the Swift helper cache's among them, lives
 // in the checkout's ignored .tmp/ instead. Each run gets its own directory there, named like its TMPDIR one,
 // so the same liveness rule prunes what a killed run abandoned.
-const UNSHARED_TEST_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../.tmp/unshared-test-dirs',
-);
+const CHECKOUT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const UNSHARED_TEST_ROOT = path.join(CHECKOUT_ROOT, '.tmp', 'unshared-test-dirs');
 
 // setup/teardown are vitest's globalSetup contract: it imports this file by
 // the path string in vitest.config.ts and calls these by name, so nothing in
@@ -47,7 +45,7 @@ export function setup(): void {
   previousUnsharedDir = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR;
   const consumers = liveRunDirectoryConsumers();
   reportPrunedRunDirectories(pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT, { consumers }));
-  const unshared = sweepUnsharedRunDirectories(UNSHARED_TEST_ROOT, { consumers });
+  const unshared = sweepUnsharedRunDirectories(CHECKOUT_ROOT, UNSHARED_TEST_ROOT, { consumers });
   if (unshared.swept) reportPrunedRunDirectories(unshared.pruned);
   else console.warn(`Skipping the checkout-local test directory sweep: ${unshared.reason}`);
   // The pid is embedded so check-tmpdir-leaks.ts can tell a directory that's
