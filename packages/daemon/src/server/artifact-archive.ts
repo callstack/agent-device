@@ -13,8 +13,7 @@ export async function extractTarInstallableArtifact(params: {
   params.signal?.throwIfAborted();
   const outputRoot = path.join(params.tempDir, 'extracted');
   let rootName = '';
-  // detectTarArchiveType's open/read/close are inherently synchronous filesystem
-  // operations; the owner is checked again before and after them.
+  // The signature read does not accept a signal. Check the owner before and after it.
   const type = await detectTarArchiveType(params.archivePath);
   params.signal?.throwIfAborted();
   await extractArchiveSafely({

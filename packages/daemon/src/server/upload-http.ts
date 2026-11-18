@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import http from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -266,8 +267,13 @@ function sendUploadedArtifactResponse(
   tenantId: string | undefined,
   signal?: AbortSignal,
 ): void {
-  // Registration boundary: an aborted ingress owner never registers an artifact.
-  throwIfIngressAborted(signal);
+  if (signal?.aborted) {
+    try {
+      fs.rmSync(result.tempDir, { recursive: true, force: true });
+    } finally {
+      throwIfIngressAborted(signal);
+    }
+  }
   const uploadId = trackUploadedArtifact({
     artifactPath: result.artifactPath,
     tempDir: result.tempDir,
