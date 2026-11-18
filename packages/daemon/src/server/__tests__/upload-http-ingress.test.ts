@@ -17,6 +17,9 @@ type RouteResponse = {
   body: string;
 };
 
+const realSetTimeout = setTimeout;
+const realClearTimeout = clearTimeout;
+
 /** A loopback request over the real route, using the node:http client so fake timers cannot stall it. */
 function routeRequest(
   port: number,
@@ -43,12 +46,15 @@ function routeRequest(
 
 /** Bounds a promise against a real-I/O stall while the clock is faked. */
 async function withIO<T>(pending: Promise<T>): Promise<T> {
-  const guard = (async () => {
-    for (let i = 0; i < 1000; i += 1) await new Promise((r) => setImmediate(r));
-    throw new Error('loopback I/O stalled under fake timers');
-  })();
-  void guard.catch(() => {});
-  return await Promise.race([pending, guard]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_, reject) => {
+    timeout = realSetTimeout(() => reject(new Error('loopback I/O did not complete in 3s')), 3_000);
+  });
+  try {
+    return await Promise.race([pending, guard]);
+  } finally {
+    realClearTimeout(timeout);
+  }
 }
 
 async function flushIO(): Promise<void> {
