@@ -361,6 +361,12 @@ static NSString * _Nullable RunnerSynthesizeEventRecord(
   return nil;
 }
 
+/// A fresh private pointer path at `start`; nil when the path class is unavailable.
+static id RunnerNewPointerPath(const RunnerGestureEventBridge *bridge, CGPoint start) {
+  return ((RunnerMsgSendInitPath)objc_msgSend)(
+    [bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
+}
+
 static id RunnerSwipePointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
@@ -368,8 +374,7 @@ static id RunnerSwipePointerPath(
   double durationMs,
   double holdMs
 ) {
-  id path =
-    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
+  id path = RunnerNewPointerPath(bridge, start);
   if (path == nil) {
     return nil;
   }
@@ -401,8 +406,7 @@ static id RunnerControlledScrollPointerPath(
   // after pan recognition can still be classified as flings despite a slow final sample. The
   // explicit holdMs (pull-to-refresh) keeps the contact parked at the pulled position before the
   // lift, so the refresh control commits instead of springing back.
-  id path =
-    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
+  id path = RunnerNewPointerPath(bridge, start);
   if (path == nil) {
     return nil;
   }

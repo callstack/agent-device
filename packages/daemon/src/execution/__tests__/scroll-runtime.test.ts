@@ -44,7 +44,7 @@ import { activateCompleteRefFrame, expireRefFrame } from '../../core/ref-frame.t
  */
 export type ScrollCall = { direction: string; options: unknown };
 
-export function bindings(options: {
+function bindings(options: {
   scroll: (direction: string, scrollOptions: unknown) => Promise<Record<string, unknown> | void>;
   captureSnapshot?: (input: {
     options?: Record<string, unknown>;
