@@ -58,7 +58,7 @@ extension RunnerTests {
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
       // text would reach the app-level first responder, so an empty point and a lookup that cannot
       // answer both refuse here, each under its own reason.
-      let contentTranslation = liveContentTranslation(app: activeApp)
+      let contentTranslation = liveContentTranslation(app: activeApp, reusing: treeContext)
       let inputAtPoint: TextInputAtPoint
       let inputsAtPoint: [ResolvedTextEntryInput]
       switch try coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {

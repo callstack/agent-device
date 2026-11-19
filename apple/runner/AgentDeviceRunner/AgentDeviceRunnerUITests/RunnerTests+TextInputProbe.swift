@@ -232,4 +232,16 @@ extension RunnerTests {
     guard case .success(let translation) = read else { return .unknown }
     return translation
   }
+
+  /// The content vector of the window `context` already resolved for this command, so a text entry
+  /// does not query the windows twice. A context without its own resolved window (a sole-screen
+  /// frame, an unreadable tree) or one booked on a lit panel proves no window origin, so it reads.
+  func liveContentTranslation(app: XCUIApplication, reusing context: SynthesizedCoordinateContext?) -> TextEntryContentTranslation {
+    guard let context, context.resolvedWindow != nil, !context.treeUnreadable, requestLitPanel == nil else {
+      return liveContentTranslation(app: app)
+    }
+    let window = context.geometry.windowOnScreen.rect
+    return SnapshotContentTranslation.offset(reportedBox: CGRect(origin: .zero, size: window.size), viewportBox: window)
+      .map { .known($0) } ?? TextEntryContentTranslation.none
+  }
 }
