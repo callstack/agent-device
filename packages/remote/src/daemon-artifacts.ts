@@ -12,7 +12,6 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
@@ -550,7 +549,8 @@ async function downloadResponseArtifacts(
   nextData.artifacts = nextArtifacts;
   if (fallbacks.length > 0) {
     nextData.recordingDestinationWarnings = fallbacks;
-    nextData.warnings = [...readResponseWarnings(nextData), ...fallbacks.map(fallbackWarningText)];
+    const previous = Array.isArray(nextData.warnings) ? nextData.warnings : [];
+    nextData.warnings = [...previous, ...fallbacks.map(fallbackWarningText)];
   }
   return { ok: true, data: nextData };
 }
