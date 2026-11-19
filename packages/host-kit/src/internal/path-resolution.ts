@@ -49,7 +49,7 @@ export function resolveScriptDestination(
   if (rules !== path.win32) {
     const resolved = resolveUserPath(spelled, options);
     scriptEntryNameOrRefuse(resolved);
-    return resolved.replace(/\/+$/, '');
+    return stripTrailingScriptSeparators(resolved, rules.sep);
   }
 
   let expanded = spelled;
@@ -59,12 +59,18 @@ export function resolveScriptDestination(
     expanded = rules.join(home, spelled.slice(2));
     scriptEntryNameOrRefuse(expanded);
   }
-  if (rules.isAbsolute(expanded)) return expanded.replace(/[\\/]+$/, '');
+  if (rules.isAbsolute(expanded)) return stripTrailingScriptSeparators(expanded, rules.sep);
 
   requireWindowsScriptVolume(spelled, options.cwd);
   const resolved = rules.resolve(options.cwd, expanded);
   scriptEntryNameOrRefuse(resolved);
   return resolved;
+}
+
+function stripTrailingScriptSeparators(destination: string, separator: string): string {
+  let end = destination.length;
+  while (destination[end - 1] === '/' || destination[end - 1] === separator) end -= 1;
+  return destination.slice(0, end);
 }
 
 /**

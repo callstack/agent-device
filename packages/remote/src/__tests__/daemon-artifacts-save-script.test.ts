@@ -308,6 +308,10 @@ test.each(
       spelled: String.raw`C:\recordings\journey.ad`,
       expected: String.raw`C:\recordings\journey.ad`,
     },
+    {
+      spelled: String.raw`C:\recordings\journey.ad\/\/`,
+      expected: String.raw`C:\recordings\journey.ad`,
+    },
     { spelled: 'journey.ad', cwd: String.raw`C:\work`, expected: String.raw`C:\work\journey.ad` },
     { spelled: 'journey.ad', cwd: 'C:\\', expected: String.raw`C:\journey.ad` },
     {
