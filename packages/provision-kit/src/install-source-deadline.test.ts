@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import {
@@ -8,6 +9,7 @@ import {
   createRequestCanceledError,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
+import * as archive from '@agent-device/host-kit/archive';
 import { isTransferPhaseTimeoutError } from '@agent-device/host-kit/transport';
 import {
   SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS,
@@ -172,3 +174,114 @@ test('an already-aborted caller signal fails materialization fast as typed cance
     restoreLookup();
   }
 });
+
+test('a DNS approval stall reports the connect phase timeout', async () => {
+  let releaseLookup!: (error: Error) => void;
+  const pending = new Promise<Awaited<ReturnType<typeof dns.lookup>>>((_resolve, reject) => {
+    releaseLookup = reject;
+  });
+  const lookup = vi.spyOn(dns, 'lookup').mockReturnValue(pending);
+  try {
+    const outcome = materializeInstallablePath({
+      source: urlSource(),
+      ...APK_MATCHER,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    await vi.waitFor(() => assert.equal(lookup.mock.calls.length, 1));
+    await vi.advanceTimersByTimeAsync(30_000);
+    const error = await outcome;
+    assert.ok(error instanceof AppError);
+    assert.deepEqual(error.details, {
+      reason: 'transfer_phase_timeout',
+      transferPhase: 'connect',
+      timeoutMs: 30_000,
+    });
+  } finally {
+    releaseLookup(new Error('lookup fixture released'));
+    lookup.mockRestore();
+  }
+});
+
+test('a connect phase timeout survives caller cancellation during failure propagation', async () => {
+  const restoreLookup = mockApprovedLookup();
+  const caller = new AbortController();
+  const requester = vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
+    ({ signal }) =>
+      new Promise<never>((_resolve, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            caller.abort(createRequestCanceledError());
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      }),
+  );
+  try {
+    const outcome = materializeInstallablePath({
+      source: urlSource(),
+      ...APK_MATCHER,
+      signal: caller.signal,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    await vi.waitFor(() => assert.equal(requester.mock.calls.length, 1));
+    await vi.advanceTimersByTimeAsync(30_000);
+    const error = await outcome;
+    assert.ok(isTransferPhaseTimeoutError(error));
+  } finally {
+    requester.mockRestore();
+    restoreLookup();
+  }
+});
+
+test.for(['during extraction', 'after resolution', 'after cutoff before timer delivery'] as const)(
+  'materialization refuses and cleans up an archive when the aggregate expires %s',
+  async (expiry) => {
+    const tempRoot = await mkdtempForTest('agent-device-materialize-extraction-cap-');
+    const archivePath = path.join(tempRoot, 'bundle.zip');
+    await fs.writeFile(archivePath, 'owned archive fixture');
+    const aggregate = new AbortController();
+    const timer = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(aggregate.signal);
+    const now = vi.spyOn(performance, 'now');
+    let outputRoot: string | undefined;
+    const extract = vi
+      .spyOn(archive, 'extractArchiveSafely')
+      .mockImplementation(async (options) => {
+        outputRoot = options.outputRoot;
+        await fs.mkdir(outputRoot, { recursive: true });
+        await fs.writeFile(path.join(outputRoot, 'app.apk'), 'owned app fixture');
+        if (expiry === 'during extraction') {
+          aggregate.abort(new DOMException('This operation timed out', 'TimeoutError'));
+          options.signal?.throwIfAborted();
+        }
+      });
+    try {
+      const error = await materializeInstallablePath({
+        source: { kind: 'path', path: archivePath },
+        ...APK_MATCHER,
+        isInstallablePath: (candidate, stat) => {
+          if (!APK_MATCHER.isInstallablePath(candidate, stat)) return false;
+          if (expiry === 'after resolution') {
+            aggregate.abort(new DOMException('This operation timed out', 'TimeoutError'));
+          }
+          if (expiry === 'after cutoff before timer delivery') {
+            now.mockReturnValue(performance.now() + SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS);
+          }
+          return true;
+        },
+        environment: process.env,
+      }).catch((error: unknown) => error);
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'source_materialization_deadline_exceeded');
+      assert.ok(outputRoot);
+      await assert.rejects(fs.stat(outputRoot), { code: 'ENOENT' });
+      assert.equal(await fs.readFile(archivePath, 'utf8'), 'owned archive fixture');
+    } finally {
+      extract.mockRestore();
+      now.mockRestore();
+      timer.mockRestore();
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  },
+);

@@ -14,11 +14,6 @@ import {
 import { approveDownloadSourceUrl } from './install-source-network.ts';
 import { downloadInstallSource, invalidSourceUrlError } from './install-source-download.ts';
 
-type MaterializeLocalSourceResult = {
-  localPath: string;
-  cleanup: () => Promise<void>;
-};
-
 export type MaterializeInstallableOptions = {
   source: LocalInstallSource;
   isInstallablePath: (
@@ -72,31 +67,34 @@ function sourceMaterializationDeadlineError(cause?: unknown): AppError {
 export async function materializeInstallablePath(
   options: MaterializeInstallableOptions,
 ): Promise<MaterializedInstallable> {
-  const cleanupTasks: Array<() => Promise<void>> = [];
+  const deadlineAt = performance.now() + SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS;
   const aggregateSignal = AbortSignal.timeout(SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS);
   const signal = options.signal
     ? AbortSignal.any([options.signal, aggregateSignal])
     : aggregateSignal;
+  const cleanupTasks: Array<() => Promise<void>> = [];
+  const registerCleanup = (cleanup: () => Promise<void>): void => {
+    cleanupTasks.push(cleanup);
+  };
   try {
-    const localSource = await materializeLocalSource(options.source, {
+    signal.throwIfAborted();
+    const localPath = await materializeLocalSource(options.source, {
       signal,
-      callerSignal: options.signal,
-      aggregateSignal,
       environment: options.environment,
+      registerCleanup,
     });
-    cleanupTasks.push(localSource.cleanup);
-    const resolved = await resolveInstallableCandidate(localSource.localPath, {
+    const resolved = await resolveInstallableCandidate(localPath, {
       archivePath: undefined,
       isInstallablePath: options.isInstallablePath,
       installableLabel: options.installableLabel,
-      registerCleanup: (cleanup) => {
-        cleanupTasks.push(cleanup);
-      },
+      registerCleanup,
       budget: (installArtifactArchiveBudget() as ArchiveBudget | undefined) ?? new ArchiveBudget(),
       archiveDepth: 0,
       onArchiveAccepted: noteInstallArtifactArchiveDepth,
       signal,
     });
+    signal.throwIfAborted();
+    if (performance.now() >= deadlineAt) throw sourceMaterializationDeadlineError();
     return {
       archivePath: resolved.archivePath,
       ...(resolved.containingArchivePath
@@ -108,8 +106,9 @@ export async function materializeInstallablePath(
       },
     };
   } catch (error) {
+    const failure = await classifyMaterializationError(error, signal, aggregateSignal);
     await runCleanupTasks(cleanupTasks);
-    throw error;
+    throw failure;
   }
 }
 
@@ -121,81 +120,39 @@ async function materializeLocalSource(
   source: LocalInstallSource,
   options: {
     signal: AbortSignal;
-    callerSignal?: AbortSignal;
-    aggregateSignal: AbortSignal;
     environment: NodeJS.ProcessEnv;
-  },
-): Promise<MaterializeLocalSourceResult> {
-  if (source.kind === 'path') {
-    return {
-      localPath: expandSourcePath(source.path, options.environment),
-      cleanup: async () => {},
-    };
-  }
-
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-source-'));
-  try {
-    const downloadedPath = await downloadToTempFile(tempDir, source.url, source.headers, options);
-    return {
-      localPath: downloadedPath,
-      cleanup: async () => {
-        await fs.rm(tempDir, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: true });
-    throw error;
-  }
-}
-
-async function downloadToTempFile(
-  tempDir: string,
-  url: string,
-  headers: Record<string, string> | undefined,
-  options: {
-    signal: AbortSignal;
-    callerSignal?: AbortSignal;
-    aggregateSignal: AbortSignal;
-    environment: NodeJS.ProcessEnv;
+    registerCleanup: (cleanup: () => Promise<void>) => void;
   },
 ): Promise<string> {
-  if (options.signal.aborted) {
-    throw await classifyDownloadError(options.signal.reason, options);
-  }
-  try {
-    return await downloadInstallSource({
-      tempDir,
-      url,
-      headers,
-      signal: options.signal,
-      environment: options.environment,
-    });
-  } catch (error) {
-    throw await classifyDownloadError(error, options);
-  }
+  if (source.kind === 'path') return expandSourcePath(source.path, options.environment);
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-source-'));
+  options.registerCleanup(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  options.signal.throwIfAborted();
+  return await downloadInstallSource({
+    tempDir,
+    url: source.url,
+    headers: source.headers,
+    signal: options.signal,
+    environment: options.environment,
+  });
 }
 
-/**
- * Keeps the typed first failure: caller cancellation stays cancellation, a transfer phase timeout
- * keeps its phase and budget, and only a standalone aggregate expiry is reported as such.
- */
-async function classifyDownloadError(
+async function classifyMaterializationError(
   error: unknown,
-  options: { callerSignal?: AbortSignal; aggregateSignal: AbortSignal },
+  signal: AbortSignal,
+  aggregateSignal: AbortSignal,
 ): Promise<unknown> {
-  if (options.callerSignal?.aborted) {
-    return createRequestCanceledError(undefined, error);
-  }
-  // Loaded on demand: this module sits in the CLI's eager import closure, and the transport
-  // owner must stay behind a function-scoped edge (ADR 0027).
+  if (!signal.aborted) return error;
+  // Keep the transport owner outside the CLI's eager import closure (ADR 0027).
   const { isTransferPhaseTimeoutError } = await import('@agent-device/host-kit/transport');
-  if (isTransferPhaseTimeoutError(error)) {
-    return error;
-  }
-  if (options.aggregateSignal.aborted) {
+  if (isTransferPhaseTimeoutError(error)) return error;
+  if (aggregateSignal.aborted && signal.reason === aggregateSignal.reason) {
     return sourceMaterializationDeadlineError(error);
   }
-  return error;
+  return createRequestCanceledError(undefined, error);
 }
 
 export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {

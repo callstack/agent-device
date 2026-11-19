@@ -103,8 +103,8 @@ async function requestHop(
   environment: NodeJS.ProcessEnv,
 ): Promise<networkTransport.InstallSourceNetworkResponse> {
   const { watchdog } = phases;
-  const approved = await approveDownloadSourceUrl(url, watchdog.signal);
   try {
+    const approved = await approveDownloadSourceUrl(url, watchdog.signal);
     return await networkTransport.requestApprovedUrl({
       url,
       approvedAddress: approved.address,
@@ -116,8 +116,8 @@ async function requestHop(
       onConnected: () => watchdog.arm('response-headers', phases.responseHeaderTimeoutMs),
     });
   } catch (error) {
-    if (error instanceof AppError) throw error;
     if (phases.isPhaseTimeout(watchdog.signal.reason)) throw watchdog.signal.reason;
+    if (error instanceof AppError) throw error;
     const networkErrorCode = readNetworkErrorCode(error);
     throw new AppError(
       'COMMAND_FAILED',
