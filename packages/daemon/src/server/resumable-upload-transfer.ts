@@ -17,6 +17,8 @@ export async function receiveResumableTransfer(params: {
   req: IncomingMessage;
   invalidate: (error: unknown) => Promise<void>;
   signal?: AbortSignal;
+  /** Throws the owner's typed expiry when a recorded deadline passed; called before commit. */
+  ensureActive?: () => void;
   onAcceptedBytes?: (bytes: number) => void;
   onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number; appended: boolean }> {
@@ -61,6 +63,7 @@ export async function receiveResumableTransfer(params: {
     // The final offset check and the owner's last cancellation check stay inside the
     // rollback boundary: a cancelled chunk never commits its offset (#4441).
     offset = await currentOffset(params.entry);
+    params.ensureActive?.();
     throwIfIngressAborted(params.signal);
   } catch (error) {
     // An aborted ingress signal owns the failure with its typed reason; an earlier

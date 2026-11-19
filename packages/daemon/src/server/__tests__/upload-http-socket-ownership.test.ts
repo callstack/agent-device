@@ -179,7 +179,18 @@ test('a held auth hook sees the upload ingress deadline through its signal', asy
       path: '/upload/direct/held',
       headers: { authorization: `Bearer ${TOKEN}`, 'content-length': '2' },
     });
-    req.on('error', () => {});
+    const answer = new Promise<{ status: number; body: string }>((resolve, reject) => {
+      req.on('response', (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+      });
+      req.on('error', reject);
+    });
+    void answer.catch(() => {});
     req.end('AB');
     const call = await waitForHookCall();
     // The body stays unread behind the held hook, so the 120 s inactivity ceiling fires.
@@ -188,6 +199,10 @@ test('a held auth hook sees the upload ingress deadline through its signal', asy
     const reason = call.signal?.reason as AppError | undefined;
     assert.equal(reason instanceof AppError, true);
     assert.equal(reason?.details?.reason, 'transfer_phase_timeout');
+    // The route's wait on the hook settles: the exchange ends with the typed answer.
+    const answered = await withIO(answer, 'the typed answer behind the held hook');
+    assert.equal(answered.status, 500);
+    assert.equal(JSON.parse(answered.body).reason, 'transfer_phase_timeout');
   } finally {
     vi.useRealTimers();
     await closeLoopbackServer(server);

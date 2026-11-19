@@ -23,9 +23,14 @@ function fakeRes(): ServerResponse {
   const headers = new Map<string, string>();
   Object.assign(res, {
     headersSent: false,
+    statusCode: 200,
     setHeader: (name: string, value: string) => headers.set(name.toLowerCase(), value),
     removeHeader: (name: string) => headers.delete(name.toLowerCase()),
     getHeader: (name: string) => headers.get(name.toLowerCase()),
+    end: (body?: string) => {
+      Object.assign(res, { headersSent: true, writableFinished: true, body });
+      res.emit('finish');
+    },
   });
   return res;
 }
@@ -132,6 +137,28 @@ test('dispose stops both timers without aborting', async () => {
     assert.equal(req.destroyed, false);
     assert.equal(ingress.signal.aborted, false);
   } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('late progress after an overdue inactivity ceiling expires instead of renewing it', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const realNow = performance.now.bind(performance);
+  let skewMs = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => realNow() + skewMs);
+  try {
+    const req = fakeReq();
+    const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
+    req.on('error', () => {});
+    // The inactivity deadline has passed, but its timer callback has not run yet.
+    skewMs = INACTIVITY_MS + 1;
+    ingress.onAcceptedBodyBytes(1);
+    assert.equal(ingress.signal.aborted, true, 'late progress does not renew an overdue ceiling');
+    const reason = ingress.signal.reason as AppError;
+    assert.equal(reason.details?.reason, 'transfer_phase_timeout');
+    ingress.dispose();
+  } finally {
+    clock.mockRestore();
     vi.useRealTimers();
   }
 });

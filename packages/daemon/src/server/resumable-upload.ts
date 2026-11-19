@@ -110,6 +110,7 @@ export async function receiveResumableUploadChunk(params: {
   req: IncomingMessage;
   tenantId?: string;
   signal?: AbortSignal;
+  ensureActive?: () => void;
   onAcceptedBytes?: (bytes: number) => void;
   onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number }> {
@@ -123,6 +124,7 @@ export async function receiveResumableUploadChunk(params: {
         entry,
         req: params.req,
         signal: params.signal,
+        ensureActive: params.ensureActive,
         invalidate: async () => await terminateEntry(entry),
         onAcceptedBytes: (bytes) => {
           // Accepted (flushed) body bytes renew the ticket's idle lifetime during
@@ -147,6 +149,8 @@ export async function receiveResumableUploadChunk(params: {
  */
 export type FinalizeUploadIngressLink = {
   signal?: AbortSignal;
+  /** Throws the owner's typed expiry when a recorded deadline passed. */
+  ensureActive?: () => void;
 };
 
 export async function finalizeResumableUpload(
@@ -156,6 +160,11 @@ export async function finalizeResumableUpload(
 ): Promise<{ artifactPath: string; tempDir: string }> {
   const entry = requireResumableUpload(uploadId, tenantId);
   const signal = ingress?.signal;
+  // The owner's typed expiry, including a recorded deadline whose timer has not run yet.
+  const ensureActive = () => {
+    ingress?.ensureActive?.();
+    throwIfIngressAborted(signal);
+  };
   return await runExclusive(
     entry,
     'finalize',
@@ -163,7 +172,7 @@ export async function finalizeResumableUpload(
     async () => {
       // Admission of the serialized queue: an already-fired owner stays authoritative,
       // and a close/cancel that raced the wait keeps its own typed expiry error.
-      throwIfIngressAborted(signal);
+      ensureActive();
       // fs.statSync is inherently synchronous; the owner was checked immediately before.
       const offset = fs.statSync(entry.payloadPath).size;
       if (offset !== entry.sizeBytes) {
@@ -180,7 +189,7 @@ export async function finalizeResumableUpload(
       // terminal outcomes close the entry and clean up through closeEntry (#4441).
       disarmResumableUploadTimer(entry);
       try {
-        throwIfIngressAborted(signal);
+        ensureActive();
         const actualHash = await computeUploadHash(entry.payloadPath, signal);
         if (actualHash !== entry.sha256) {
           throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
@@ -189,9 +198,9 @@ export async function finalizeResumableUpload(
             actualSha256: actualHash,
           });
         }
-        throwIfIngressAborted(signal);
+        ensureActive();
         const artifactPath = await materializeFinalArtifact(entry, signal);
-        throwIfIngressAborted(signal);
+        ensureActive();
         markFinalized(entry);
         return { artifactPath, tempDir: entry.tempDir };
       } catch (error) {

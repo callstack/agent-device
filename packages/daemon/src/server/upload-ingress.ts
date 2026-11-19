@@ -1,25 +1,29 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { TRANSFER_BODY_INACTIVITY_TIMEOUT_MS } from '@agent-device/host-kit/transport';
 import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
+import { UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS } from './http/ingress-budget.ts';
+import { sendRestJsonError } from './http-errors.ts';
 
 /**
  * The finite budgets one inbound upload request runs under (#4441): a 600-second
  * aggregate armed when the request is admitted at the callback, and a 120-second
  * body-inactivity ceiling admitted at the same moment and renewed only by body
- * progress. The header phase keeps its own server-level ceiling (headersTimeout).
+ * progress. The header phase keeps its own server-level ceiling (ingress-budget.ts).
  * Progress never renews the aggregate, and client disconnect shares this owner
  * through the existing response-disconnect signal.
  */
-export const UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS = 600_000;
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 const TRANSFER_INGRESS_AGGREGATE_REASON = 'transfer_ingress_deadline_exceeded';
 
 export type UploadTransferIngress = {
   /** Aborts on aggregate expiry or client disconnect while the request is unfinished. */
   readonly signal: AbortSignal;
-  /** Renews only the inactivity ceiling; never the aggregate. */
+  /**
+   * Renews only the inactivity ceiling; never the aggregate. Progress that arrives after
+   * a deadline has passed expires the request instead of renewing it.
+   */
   onAcceptedBodyBytes(bytes: number): void;
   /**
    * Stops only the inactivity ceiling once the request body is complete, and keeps the
@@ -27,6 +31,12 @@ export type UploadTransferIngress = {
    * observes just the aggregate. Safe to call more than once; does not abort.
    */
   bodyComplete(): void;
+  /**
+   * Throws the typed expiry when the request may no longer commit work: its signal fired,
+   * or a recorded deadline has passed although its timer callback has not run yet. An
+   * overdue deadline expires the request through the same path as its timer.
+   */
+  ensureActive(): void;
   /**
    * Releases the request. With the body read, both timers stop at once. With the body
    * unread, the connection closes after the answer flushes, and both timers keep bounding
@@ -37,13 +47,20 @@ export type UploadTransferIngress = {
 
 /**
  * Admits one upload request's transfer budgets. Armed at the request callback, not
- * lazily on the first byte, so a stalled body is bounded from admission. Expiry
- * destroys the request stream and aborts owned work with a typed reason.
+ * lazily on the first byte, so a stalled body is bounded from admission. Each deadline
+ * is also recorded on the monotonic clock, so work that crosses it before the timer
+ * callback runs cannot commit or publish success.
+ *
+ * Expiry aborts owned work with a typed reason and ends the HTTP exchange whatever the
+ * request stream's state: it answers with the typed error when no answer has started,
+ * and it closes a connection whose body is unread once this request's answer flushes.
+ * A request whose answer is queued behind an earlier pipelined answer never closes the
+ * socket under that earlier answer. The handler keeps owning its in-flight filesystem
+ * work through cleanup or rollback.
  *
  * The ingress also owns the early-answer rule: every answer sent before the body is
  * consumed carries `Connection: close`, and that connection ends after the answer
- * flushes, under these timers. A failure while the body is being consumed destroys the
- * request instead. A keep-alive connection never drains an unread body
+ * flushes, under these timers. A keep-alive connection never drains an unread body
  * outside the ingress budget. The close lingers (RFC 9112 §9.6): the server half-closes
  * after the answer and discards the rest of the body until the body ends, the client
  * closes, or a timer fires. A full close with unread bytes resets the connection, and
@@ -59,15 +76,13 @@ export function beginUploadTransferIngress(params: {
   const releaseLinger = holdLingeringClose(req);
   const expiry = new AbortController();
   const signal = AbortSignal.any([expiry.signal, responseDisconnectSignal(req, res)]);
-  const aggregateTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
-    fail(
-      new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
-        reason: TRANSFER_INGRESS_AGGREGATE_REASON,
-        transferPhase: 'request-body',
-        timeoutMs: UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
-      }),
-    );
-  }, UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS);
+  const admittedAt = performance.now();
+  const aggregateDeadline = admittedAt + UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS;
+  let inactivityDeadline: number | undefined;
+  const aggregateTimer: ReturnType<typeof setTimeout> = setTimeout(
+    () => fail(aggregateExpiry()),
+    UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
+  );
   aggregateTimer.unref();
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
@@ -76,6 +91,7 @@ export function beginUploadTransferIngress(params: {
   const stopInactivity = () => {
     if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
     inactivityTimer = undefined;
+    inactivityDeadline = undefined;
   };
 
   const stopTimers = () => {
@@ -85,8 +101,21 @@ export function beginUploadTransferIngress(params: {
     stopInactivity();
   };
 
+  const overdueExpiry = (): AppError | undefined => {
+    const now = performance.now();
+    if (now >= aggregateDeadline) return aggregateExpiry();
+    if (inactivityDeadline !== undefined && now >= inactivityDeadline) return inactivityExpiry();
+    return undefined;
+  };
+
   const dispose = () => {
     if (disposed || released) return;
+    // An overdue deadline is never cleared by a release: it expires the request instead.
+    const overdue = overdueExpiry();
+    if (overdue) {
+      fail(overdue);
+      return;
+    }
     released = true;
     // A finished exchange may already have detached its socket.
     const socket = req.socket as IncomingMessage['socket'] | null;
@@ -107,20 +136,16 @@ export function beginUploadTransferIngress(params: {
     if (disposed) return;
     stopTimers();
     expiry.abort(error);
-    req.destroy(error);
+    endExchange(req, res, error);
   };
 
   const armInactivity = () => {
     if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => {
-      fail(
-        new AppError('COMMAND_FAILED', 'Upload body stalled', {
-          reason: TRANSFER_PHASE_TIMEOUT_REASON,
-          transferPhase: 'request-body',
-          timeoutMs: TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
-        }),
-      );
-    }, TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+    inactivityDeadline = performance.now() + TRANSFER_BODY_INACTIVITY_TIMEOUT_MS;
+    inactivityTimer = setTimeout(
+      () => fail(inactivityExpiry()),
+      TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+    );
     inactivityTimer.unref();
   };
 
@@ -129,15 +154,61 @@ export function beginUploadTransferIngress(params: {
   return {
     signal,
     onAcceptedBodyBytes(bytes: number) {
-      if (!disposed && bytes > 0) armInactivity();
+      if (disposed || bytes <= 0) return;
+      const overdue = overdueExpiry();
+      if (overdue) {
+        fail(overdue);
+        return;
+      }
+      armInactivity();
     },
     bodyComplete() {
       releaseLinger();
       if (!res.headersSent) res.removeHeader('connection');
       if (!disposed) stopInactivity();
     },
+    ensureActive() {
+      if (!disposed) {
+        const overdue = overdueExpiry();
+        if (overdue) fail(overdue);
+      }
+      throwIfIngressAborted(signal);
+    },
     dispose,
   };
+}
+
+function aggregateExpiry(): AppError {
+  return new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+    reason: TRANSFER_INGRESS_AGGREGATE_REASON,
+    transferPhase: 'request-body',
+    timeoutMs: UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
+  });
+}
+
+function inactivityExpiry(): AppError {
+  return new AppError('COMMAND_FAILED', 'Upload body stalled', {
+    reason: TRANSFER_PHASE_TIMEOUT_REASON,
+    transferPhase: 'request-body',
+    timeoutMs: TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+  });
+}
+
+/**
+ * Ends one expired exchange in response order. No answer started: answer with the typed
+ * error now; Node writes it after any earlier pipelined answer. Body unread: close the
+ * connection only after this request's own answer flushes, so a queued request never
+ * closes the socket under an earlier answer that is still owned.
+ */
+function endExchange(req: IncomingMessage, res: ServerResponse, error: AppError): void {
+  if (!res.headersSent) {
+    res.setHeader('connection', 'close');
+    sendRestJsonError(res, normalizeError(error));
+  }
+  if (req.complete) return;
+  const closeConnection = () => req.destroy(error);
+  if (res.writableFinished) closeConnection();
+  else res.once('finish', closeConnection);
 }
 
 /**
