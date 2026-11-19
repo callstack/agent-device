@@ -1,5 +1,5 @@
 // The daemon's OWN state directory: what it creates, what it repairs, and what it refuses to write into
-// (#4649). A caller-named destination is judged by `atomic-file-ancestry.test.ts`; this suite is the other
+// (#4649). A caller-named destination is judged by `script-destination-ancestry.test.ts`; this suite is the other
 // rule, the one that decides whether a directory the daemon picked for itself is private at all.
 //
 // It is the destination rule's own walk — the full route resolved one name at a time from `/`, with ADR
@@ -20,7 +20,7 @@ import {
   ensurePrivateDirectoryChain,
   judgePrivateDirectoryChain,
   privateDirectoryWordingOf,
-} from './verified-file.ts';
+} from './state-directory.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
@@ -494,3 +494,5 @@ skipOnWindows('a step back spelled with the host separator is still refused', ()
     'outside_state_dir',
   );
 });
+//
+// A record's own bytes, once this rule says the directory is private, are `verified-file-state.test.ts`.

@@ -15,15 +15,14 @@ import {
 } from './script-destination-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
-  ensurePrivateDirectoryChain,
   publishPrivateStateFileSync,
-  type PrivateDirectoryChain,
   readPrivateStateFileTailSync,
   tryOpenPrivateStateFileSync,
   type PrivateStateOpenPurpose,
   type PrivateStateRead,
   writePrivateStateLineSync,
 } from './verified-file.ts';
+import { ensurePrivateDirectoryChain, type PrivateDirectoryChain } from './state-directory.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 

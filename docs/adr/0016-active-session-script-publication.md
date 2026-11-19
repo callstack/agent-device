@@ -441,7 +441,7 @@ The table is normative for what a `--state-dir` value answers. `<state>` is the 
 
 A drive-relative route is anchored by a textual join, never by a second `path.resolve`: a second resolve would fold the `..` that the fold must see, and the fold is the one place that question is answered. A step back out of an ABSENT directory folds textually, because a level that does not stand cannot be a link, and `../shared-state` beside a checkout is ordinary configuration before a daemon's first start.
 
-**Standing at the name.** `judgePrivateDirectoryChain` and `ensurePrivateDirectoryChain` (`packages/host-kit/src/internal/verified-file.ts`) answer whether the resolved directory may hold another local user's records. They walk from the filesystem root, and the exposure named is the answer for the component the walk stood on.
+**Standing at the name.** `judgePrivateDirectoryChain` and `ensurePrivateDirectoryChain` (`packages/host-kit/src/internal/state-directory.ts`) answer whether the resolved directory may hold another local user's records. They walk from the filesystem root, and the exposure named is the answer for the component the walk stood on.
 
 Each component is accepted when it is owned by this user or by root and is neither group- nor world-writable, and a missing tail is accepted when every parent is accepted, so the caller creates it at `0700`. A sticky directory this user or root owns is accepted for PASSING THROUGH, as it is for a script destination.
 

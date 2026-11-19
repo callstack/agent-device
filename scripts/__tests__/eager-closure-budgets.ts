@@ -147,6 +147,17 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
   owner: string;
 }>[] = Object.freeze([
   {
+    module: 'packages/host-kit/src/internal/state-directory.ts',
+    issue: '#4704',
+    reason:
+      "The one rule that says whether the daemon's own state directory may hold its records. It is new on this " +
+      'branch and the review asked for it in its own module because `verified-file.ts` passed the 1000-line ' +
+      'rule, so this row pays for the file boundary rather than for a dependency no caller needs: every grown ' +
+      'entry reaches it through `packages/host-kit/src/file.ts`, whose state-record exports ask this rule before ' +
+      'a record is written.',
+    owner: 'thymikee',
+  },
+  {
     module: 'packages/host-kit/src/runtime-slots.ts',
     issue: '#3752',
     reason:

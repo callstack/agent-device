@@ -19,12 +19,6 @@ export {
   appendPrivateStateFileSync,
   assertScriptTargetVacant,
   lstatIfPresent,
-  ensurePrivateDirectoryChain,
-  judgePrivateDirectoryChain,
-  privateDirectoryWordingOf,
-  PRIVATE_STATE_DIR_REASON,
-  type PrivateDirectoryChain,
-  type PrivateDirectoryExposure,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,
   openVerifiedFileForRead,
@@ -37,6 +31,14 @@ export {
   tryOpenPrivateStateFileSync,
   writePrivateStateLineSync,
 } from './internal/verified-file.ts';
+export {
+  ensurePrivateDirectoryChain,
+  judgePrivateDirectoryChain,
+  privateDirectoryWordingOf,
+  PRIVATE_STATE_DIR_REASON,
+  type PrivateDirectoryChain,
+  type PrivateDirectoryExposure,
+} from './internal/state-directory.ts';
 export {
   expandUserHomePath,
   resolveUserConfigPath,
