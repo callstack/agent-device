@@ -4,7 +4,10 @@ import type { DeviceInventoryRequest } from './device-inventory.ts';
 /** Typed `details.reason` every platform reports when the boot deadline expires. */
 export const BOOT_TIMEOUT_REASON = 'boot_timeout';
 
+export type AndroidEmulatorLaunchIdentity = Readonly<{ pid: number; startTime: string }>;
+
 export type EnsureReadyInput = Readonly<{
+  onAndroidEmulatorLaunchIdentity?: (identity: AndroidEmulatorLaunchIdentity) => void;
   serial?: string;
   androidSerialAllowlist?: readonly string[];
   /**
@@ -39,6 +42,10 @@ export type DeviceReadinessRuntimeHost = Readonly<{
   androidEmulator: Readonly<{
     discover(request: DeviceInventoryRequest, signal: AbortSignal): Promise<readonly DeviceInfo[]>;
     launch(avdName: string, headless: boolean, bootBudgetMs: number): Promise<number>;
+    bindLaunchedEmulator?(
+      pid: number,
+      device: DeviceInfo,
+    ): Promise<AndroidEmulatorLaunchIdentity | undefined>;
     terminate(pid: number): Promise<void>;
   }>;
 }>;

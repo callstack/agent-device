@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
     observed: false,
     reason: 'unobserved',
   })),
+  observeAndroidEmulatorGeneration: vi.fn(
+    async (): Promise<{ pid: number; startTime: string } | undefined> => undefined,
+  ),
 }));
 
 vi.mock('@agent-device/platform-apple/simulator-boot', () => mocks);
@@ -28,6 +31,36 @@ import { deviceBootObservation } from './platform-runtime-device-boot.ts';
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+test('generation is reported only when two serial observations agree', async () => {
+  const identity = { pid: 42, startTime: 'start' };
+  mocks.observeAndroidEmulatorGeneration.mockResolvedValue(identity);
+  expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
+    'same',
+  );
+  mocks.observeAndroidEmulatorGeneration
+    .mockResolvedValueOnce(identity)
+    .mockResolvedValueOnce({ ...identity, startTime: 'replacement' });
+  expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
+    'unobserved',
+  );
+  mocks.observeAndroidEmulatorGeneration.mockResolvedValue({ pid: 43, startTime: 'replacement' });
+  expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
+    'changed',
+  );
+  expect(await deviceBootObservation.assessShutdownGeneration(LINUX_DEVICE, identity)).toBe(
+    'not-applicable',
+  );
+  expect(
+    await deviceBootObservation.assessShutdownGeneration(
+      { ...ANDROID_EMULATOR, kind: 'device' },
+      identity,
+    ),
+  ).toBe('not-applicable');
+  expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, undefined)).toBe(
+    'unobserved',
+  );
 });
 
 test('an iOS Simulator is answered by the Apple probe alone', async () => {

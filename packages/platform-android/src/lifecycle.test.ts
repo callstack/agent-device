@@ -58,7 +58,7 @@ function createLifecycle(
       device: DeviceInfo,
       input: Readonly<{ stateDir: string; shutdownTarget: boolean; signal: AbortSignal }>,
     ) => Promise<void>;
-    shutdownTarget?: () => Promise<unknown>;
+    shutdownTarget?: (...args: unknown[]) => Promise<unknown>;
     close?: Interactor['close'];
   }> = {},
 ): LifecycleFixture {
@@ -95,7 +95,8 @@ function createLifecycle(
     },
     deviceShutdown: {
       android: {
-        shutdownTarget: async () => await (params.shutdownTarget?.() ?? Promise.resolve(undefined)),
+        shutdownTarget: async (...args: unknown[]) =>
+          await (params.shutdownTarget?.(...args) ?? Promise.resolve(undefined)),
       },
     },
     androidApplications: {
@@ -476,6 +477,27 @@ test('close --shutdown restores the keyboard and only then kills the emulator (#
   const result = await finalizing;
   expect(sequence).toEqual(['restore:true', 'restored', 'shutdown']);
   expect(result.shutdown).toMatchObject({ success: true });
+});
+
+test('finalization forwards verification after restoring IME and returns retention', async () => {
+  const events: string[] = [];
+  const verify = async () => 'changed' as const;
+  const { lifecycle } = createLifecycle({
+    restoreTestIme: async () => {
+      events.push('restore');
+    },
+    shutdownTarget: async (_device, _signal, received) => {
+      events.push('shutdown');
+      expect(received).toBe(verify);
+      return { retained: await (received as typeof verify)() };
+    },
+  });
+  await expect(
+    lifecycle.finalizeApplicationClose(
+      finalizationInput({ shutdownTarget: true, verifyAndroidShutdown: verify }),
+    ),
+  ).resolves.toEqual({ androidShutdownRetained: 'changed' });
+  expect(events).toEqual(['restore', 'shutdown']);
 });
 
 test('close --shutdown is ignored for a physical Android device', async () => {

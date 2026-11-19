@@ -1,5 +1,8 @@
 import type { AppleSessionObservation } from '@agent-device/contracts/apple-session-observation';
-import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
+import type {
+  DeviceBootObservationService,
+  DeviceShutdownGenerationService,
+} from '@agent-device/contracts/device-boot';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -19,7 +22,7 @@ export type EnsureLocalDeviceReady = (device: DeviceInfo, signal: AbortSignal) =
  */
 export type DaemonPlatformServices = Readonly<{
   appleSessionObservation: AppleSessionObservation;
-  deviceBootObservation: DeviceBootObservationService;
+  deviceBootObservation: DeviceBootObservationService & DeviceShutdownGenerationService;
   ensureLocalDeviceReady: EnsureLocalDeviceReady;
   resolveRequestedOpenSurface(params: {
     device: DeviceInfo;

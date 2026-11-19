@@ -114,10 +114,11 @@ export function createAdReplayStepRuntime(params: {
    * the artifacts collected up to that point.
    */
   artifactPaths: Set<string>;
+  warnings: string[];
   onStep: ReplayTestAttemptStepSink | undefined;
   armSaveScript: () => void;
 }): { runtime: AdReplayStepRuntime; readLastResponse: () => DaemonResponse | undefined } {
-  const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
+  const { ctx, req, artifactPaths, warnings, onStep, armSaveScript } = params;
   let lastResponse: DaemonResponse | undefined;
   let lastObservation: DivergenceObservation | undefined;
 
@@ -244,7 +245,11 @@ export function createAdReplayStepRuntime(params: {
       // `createAdReplayStepRuntime`'s `artifactPaths` parameter.
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       const ledger = [...artifactPaths];
-      if (response.ok) return { status: 'ok', artifactPaths: ledger };
+      if (response.ok) {
+        const { readResponseWarnings } = await import('@agent-device/kernel/success-text');
+        warnings.push(...readResponseWarnings(response.data));
+        return { status: 'ok', artifactPaths: ledger };
+      }
       return classifyReplayDispatchFailure(response, guard, ledger);
     },
 

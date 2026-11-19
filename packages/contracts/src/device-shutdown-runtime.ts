@@ -2,6 +2,17 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleToolHost, HostCommandRunner } from './platform-runtime-host.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
+export type AndroidShutdownVerification = () => Promise<'same' | 'changed' | 'unobserved'>;
+export type AndroidShutdownRetained = Readonly<{ retained: 'changed' | 'unobserved' }>;
+export type AndroidShutdownTarget = {
+  (device: DeviceInfo, signal: AbortSignal): Promise<TargetShutdownResult>;
+  (
+    device: DeviceInfo,
+    signal: AbortSignal,
+    verify: AndroidShutdownVerification,
+  ): Promise<TargetShutdownResult | AndroidShutdownRetained>;
+};
+
 export type DeviceShutdownRuntimeOperations = Readonly<{
   shutdownTarget(
     input: Readonly<{
@@ -32,17 +43,18 @@ export type DeviceShutdownRuntimeLoaders = Readonly<{
   apple: (
     dependencies: Pick<DeviceShutdownRuntimeDependencies, 'appleTools'>,
   ) => Promise<DeviceShutdownFamilyRuntime>;
-  android: (
-    dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>,
-  ) => Promise<DeviceShutdownFamilyRuntime>;
+  android: (dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>) => Promise<
+    Readonly<{
+      canShutdownTarget(device: DeviceInfo): boolean;
+      shutdownTarget: AndroidShutdownTarget;
+    }>
+  >;
 }>;
 
 export type DeviceShutdownRuntimeHost = Readonly<{
   apple: Readonly<{
     shutdownTarget(device: DeviceInfo, signal: AbortSignal): Promise<TargetShutdownResult>;
   }>;
-  android: Readonly<{
-    shutdownTarget(device: DeviceInfo, signal: AbortSignal): Promise<TargetShutdownResult>;
-  }>;
+  android: Readonly<{ shutdownTarget: AndroidShutdownTarget }>;
   close?: DeviceShutdownCloseCapability;
 }>;

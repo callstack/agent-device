@@ -60,7 +60,16 @@ async function ensureEmulatorReady(
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
-    return { ...(refreshed ?? discovered), name: selected.name, booted: true };
+    const ready = { ...(refreshed ?? discovered), name: selected.name, booted: true };
+    if (launchedPid !== undefined && input.onAndroidEmulatorLaunchIdentity) {
+      const identity = await host.deviceReadiness.androidEmulator.bindLaunchedEmulator?.(
+        launchedPid,
+        ready,
+      );
+      signal.throwIfAborted();
+      if (identity) input.onAndroidEmulatorLaunchIdentity(identity);
+    }
+    return ready;
   } catch (error) {
     if (launchedPid !== undefined && signal.aborted) {
       await host.deviceReadiness.androidEmulator.terminate(launchedPid);

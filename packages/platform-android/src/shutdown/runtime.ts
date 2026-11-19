@@ -1,4 +1,8 @@
-import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
+import type {
+  AndroidShutdownTarget,
+  AndroidShutdownVerification,
+  DeviceShutdownRuntimeDependencies,
+} from '@agent-device/contracts/device-shutdown-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
@@ -8,7 +12,7 @@ const SHUTDOWN_TIMEOUT_MS = 15_000;
 
 export type AndroidShutdownRuntime = Readonly<{
   canShutdownTarget(device: DeviceInfo): boolean;
-  shutdownTarget(device: DeviceInfo, signal: AbortSignal): Promise<TargetShutdownResult>;
+  shutdownTarget: AndroidShutdownTarget;
 }>;
 
 export function createAndroidShutdownRuntime(
@@ -16,8 +20,17 @@ export function createAndroidShutdownRuntime(
 ): AndroidShutdownRuntime {
   return Object.freeze({
     canShutdownTarget,
-    shutdownTarget: async (device, signal) =>
-      await shutdownAndroidTarget(dependencies.commands, device, signal),
+    shutdownTarget: (async (
+      device: DeviceInfo,
+      signal: AbortSignal,
+      verify?: AndroidShutdownVerification,
+    ) =>
+      await shutdownAndroidTarget(
+        dependencies.commands,
+        device,
+        signal,
+        verify,
+      )) as AndroidShutdownTarget,
   });
 }
 
@@ -29,7 +42,8 @@ async function shutdownAndroidTarget(
   commands: DeviceShutdownRuntimeDependencies['commands'],
   device: DeviceInfo,
   signal: AbortSignal,
-): Promise<TargetShutdownResult> {
+  verify?: AndroidShutdownVerification,
+): Promise<TargetShutdownResult | { retained: 'changed' | 'unobserved' }> {
   if (device.booted === false) return stoppedTargetSuccess();
 
   signal.throwIfAborted();
@@ -40,6 +54,11 @@ async function shutdownAndroidTarget(
   // inside the window, and the timestamp stays for the retry to wait out the remainder.
   await awaitTestImeFlushWindow(device.id, signal);
   signal.throwIfAborted();
+  if (verify) {
+    const generation = await verify().catch(() => 'unobserved' as const);
+    signal.throwIfAborted();
+    if (generation !== 'same') return { retained: generation };
+  }
   try {
     const result = await commands.run(
       {

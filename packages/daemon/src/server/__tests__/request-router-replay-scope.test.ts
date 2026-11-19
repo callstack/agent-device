@@ -45,6 +45,11 @@ import {
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { toReplayTestAttemptOutcome } from '@agent-device/replay-port/session-test-outcome';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
@@ -59,6 +64,68 @@ beforeEach(() => {
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
 });
+
+test.each([false, true])(
+  'same-session replay close preserves denied-stop warnings (later failure: %s)',
+  async (laterFailure) => {
+    const root = mkdtempForTestSync('agent-device-replay-close-policy-');
+    const replayPath = path.join(root, 'close.ad');
+    fs.writeFileSync(replayPath, laterFailure ? 'close\napp-switcher\n' : 'close\n');
+    const sessionStore = makeSessionStore('agent-device-replay-close-policy-');
+    const host = createTestHostEnvironment({
+      env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: path.join(root, 'claims') },
+    });
+    const session = makeIosSession('default', {
+      bootedByOpen: true,
+      appBundleId: 'com.example.app',
+    });
+    const claim = await acquireDeviceClaim({
+      env: host.env,
+      device: session.device,
+      session: 'default',
+      workspace: host.cwd,
+      stateDir: sessionStore.resolveDaemonStateDir(),
+      reconcileOrphanedDeviceClaim: async () => ({ status: 'reconciled' as const }),
+    });
+    if (claim.status !== 'acquired') throw new Error('Expected an owned device claim');
+    session.deviceClaim = claim.ownership;
+    sessionStore.publish('default', session);
+    const cleanup = platformResourceCleanupFixture();
+    const handler = createRequestHandler({
+      host,
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(root, 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      platformResourceCleanup: cleanup,
+      daemonPolicy: parseDaemonPolicy(
+        { version: 1, capabilities: { deny: ['device-shutdown'] } },
+        path.join(root, 'policy.json'),
+      ),
+      trackDownloadableArtifact: () => 'artifact-id',
+    });
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'replay',
+      positionals: [replayPath],
+      meta: { cwd: root, requestId: 'replay-close-policy', sessionExplicit: true },
+    });
+    expect(response.ok).toBe(!laterFailure);
+    const warnings = readResponseWarnings(response.ok ? response.data : response.error.details);
+    expect(warnings).toEqual([
+      "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
+    ]);
+    expect(toReplayTestAttemptOutcome(response).warnings).toEqual(warnings);
+    expect(cleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+      expect.objectContaining({ shutdownRequested: false }),
+    );
+    expect(sessionStore.listRefs()).toHaveLength(0);
+  },
+);
 
 test('replay runs active-session actions inside the parent request provider scope', async () => {
   const root = mkdtempForTestSync('agent-device-replay-scope-');

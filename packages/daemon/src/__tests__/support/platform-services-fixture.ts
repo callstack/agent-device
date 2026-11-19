@@ -6,6 +6,8 @@ import type { DeviceBootObservation } from '@agent-device/contracts/device-boot'
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
 
+const assessShutdownGenerationFixture = async () => 'not-applicable' as const;
+
 /**
  * The `DaemonPlatformServices` port as the daemon suites answer it: every member is a plain
  * `vi.fn` spy with a canned answer, never a re-implementation of a root platform rule. A suite
@@ -26,6 +28,7 @@ export function daemonPlatformServicesFixture(
     }),
     deviceBootObservation: Object.freeze({
       observeBootTimeMs: observeBootTimeMsFixture,
+      assessShutdownGeneration: assessShutdownGenerationFixture,
     }),
     ensureLocalDeviceReady: ensureLocalDeviceReadyFixture,
     resolveRequestedOpenSurface: resolveRequestedOpenSurfaceFixture,
