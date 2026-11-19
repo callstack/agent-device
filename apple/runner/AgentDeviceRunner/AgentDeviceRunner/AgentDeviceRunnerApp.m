@@ -53,7 +53,8 @@ int main(int argc, const char *argv[]) {
   return 0;
 }
 
-#else
+// watchOS has no UIApplicationMain. Its host is AgentDeviceRunnerWatchApp.swift.
+#elif !TARGET_OS_WATCH
 #import "AgentDeviceRunnerApp.h"
 #import <UIKit/UIKit.h>
 

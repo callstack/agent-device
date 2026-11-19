@@ -36,7 +36,7 @@ test.each([
   ['ios', true],
   ['tvos', true],
   ['macos', true],
-  ['watchos', false],
+  ['watchos', true],
   ['visionos', false],
 ] as const)('back on %s is available: %s', (appleOs, availableExpected) => {
   const fact = appleNavigationFacts({

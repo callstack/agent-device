@@ -60,6 +60,7 @@ export const ALL_CHECKS = [
   'swift-runner-macos',
   'swift-runner-tvos',
   'swift-runner-visionos',
+  'swift-runner-watchos',
   'android-helpers',
   'macos-helper',
   'web-smoke',
@@ -472,6 +473,12 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     check: 'swift-runner-visionos',
     rule: 'own:swift',
     detail: 'Swift runner sources require the visionOS XCUITest build',
+    owns: ownsAppleRunnerBuildSource,
+  },
+  {
+    check: 'swift-runner-watchos',
+    rule: 'own:swift',
+    detail: 'Swift runner sources require the watchOS XCUITest build',
     owns: ownsAppleRunnerBuildSource,
   },
   // The PR lane names each runner XCTest method it runs, so renaming or deleting one

@@ -546,15 +546,16 @@ extension RunnerTests {
       return .context(ActiveCommandContext(app: mainOwned.app ?? app))
     case .presentedSurface:
       // The command is about the surface that already has focus; activating an app under it would
-      // cancel exactly what the command is about.
-#if os(iOS)
+      // cancel exactly what the command is about. On watchOS that surface is often the watch face or
+      // the app grid a Digital Crown press left.
+#if os(iOS) || os(watchOS)
       return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
 #else
-      // The platform exception, written once: `SystemSurfaceHostRegistry` registers no hosts off iOS,
-      // so nothing is ever served in place there and such a command keeps the activation route this
-      // axis found it on. The host never sends either command here on macOS — `alert` answers through
-      // the helper and `action-button` is refused by its owner fact before dispatch — so off iOS this
-      // route is reached only by the tvOS and visionOS runners.
+      // The platform exception, written once: `SystemSurfaceHostRegistry` registers no hosts on tvOS,
+      // visionOS, or macOS, so nothing is ever served in place there and such a command keeps the
+      // activation route this axis found it on. The host never sends either command here on macOS —
+      // `alert` answers through the helper and `action-button` is refused by its owner fact before
+      // dispatch — so this route is reached only by the tvOS and visionOS runners.
       return prepareActivatedTarget(command: command)
 #endif
     case .existingApp:

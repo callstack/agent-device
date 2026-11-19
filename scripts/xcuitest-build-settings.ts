@@ -13,7 +13,7 @@ import {
   resolveRunnerSigningBuildSettings,
 } from '@agent-device/platform-apple/runner/operations';
 
-const USAGE = 'Usage: xcuitest-build-settings.ts <ios|macos|tvos|visionos> <destination>';
+const USAGE = 'Usage: xcuitest-build-settings.ts <ios|macos|tvos|visionos|watchos> <destination>';
 
 /** The `xcodebuild` build settings `scripts/build-xcuitest-apple.sh` is about to run with. */
 function resolveXcuitestBuildSettings(

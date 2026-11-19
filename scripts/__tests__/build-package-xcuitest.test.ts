@@ -21,7 +21,7 @@ test('builds every platform into a scratch directory under the repo and removes 
 
   assert.deepEqual(
     seen.map(({ platform }) => platform),
-    ['ios', 'macos', 'tvos', 'visionos'],
+    ['ios', 'macos', 'tvos', 'visionos', 'watchos'],
   );
   for (const { derivedPath } of seen) {
     assert.equal(path.dirname(derivedPath), path.join(root, '.tmp', 'package-xcuitest'));

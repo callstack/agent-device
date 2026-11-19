@@ -65,7 +65,7 @@ test('canonical shutdown and close parity share one concrete teardown mechanic',
   expect(sharedHostSource).not.toContain('shutdownAndroidEmulator');
 
   expect(appleShutdownSource).toContain("tool: 'simctl'");
-  expect(appleShutdownSource).toContain("device.appleOs !== 'watchos'");
+  expect(appleShutdownSource).toContain("device.kind === 'simulator'");
   expect(androidShutdownSource).toContain("executable: 'adb'");
   expect(androidShutdownSource).toContain("device.platform === 'android'");
 });

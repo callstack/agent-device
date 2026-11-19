@@ -22,6 +22,9 @@ extension RunnerTests {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
+#if os(watchOS)
+    return try watchTypeCommandResponse(activeApp: activeApp, command: command, text: text)
+#endif
     let delaySeconds = Double(max(command.delayMs ?? 0, 0)) / 1000.0
     let textEntryMode = resolveTextEntryMode(command)
     let target: TextEntryTarget

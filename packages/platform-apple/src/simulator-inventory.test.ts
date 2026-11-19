@@ -61,7 +61,40 @@ test('simctl parser keeps available supported runtimes and their target semantic
       booted: false,
       simulatorSetPath: '/tmp/custom-set',
     },
+    {
+      platform: 'apple',
+      id: 'watch-1',
+      name: 'Apple Watch',
+      kind: 'simulator',
+      target: 'mobile',
+      appleOs: 'watchos',
+      booted: true,
+      simulatorSetPath: '/tmp/custom-set',
+    },
   ]);
+});
+
+test('simctl parser classifies a watch from its runtime, never from a user-chosen name', () => {
+  const devices = parseSimctlAppleDevices(
+    {
+      devices: {
+        'com.apple.CoreSimulator.SimRuntime.watchOS-27-0': [
+          { name: 'wrist', udid: 'watch-1', state: 'Shutdown', isAvailable: true },
+        ],
+        'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
+          { name: 'Apple Watch companion', udid: 'iphone-1', state: 'Shutdown', isAvailable: true },
+        ],
+      },
+    },
+    undefined,
+  );
+  assert.deepEqual(
+    devices.map((device) => [device.id, device.appleOs]),
+    [
+      ['watch-1', 'watchos'],
+      ['iphone-1', 'ios'],
+    ],
+  );
 });
 
 test('simctl parser classifies visionOS from the runtime when the name is not descriptive', () => {
@@ -148,9 +181,9 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
   ]);
   assert.deepEqual(
     devices.map((device) => device.id),
-    ['iphone-1', 'tv-1'],
+    ['iphone-1', 'tv-1', 'watch-1'],
   );
-  assert.deepEqual(observed, ['iphone-1']);
+  assert.deepEqual(observed, ['iphone-1', 'watch-1']);
 });
 
 test('simulator inventory classifies malformed native output as a command failure', async () => {

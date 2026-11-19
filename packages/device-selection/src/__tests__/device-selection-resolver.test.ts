@@ -321,6 +321,41 @@ test('ordinary selection remains ambiguous between equally preferred iPhones alo
   );
 });
 
+test('boot --pick newest prefers visionOS to a watch when no iPhone or iPad is available', async () => {
+  const selection = await resolveInventoryDeviceSelection({
+    devices: [
+      { ...shutDownSimulator('watch', 'Apple Watch Series 11 (46mm)', '27.0'), appleOs: 'watchos' },
+      { ...shutDownSimulator('vision', 'Apple Vision Pro', '26.5'), appleOs: 'visionos' },
+    ],
+    selector: { platform: 'ios' },
+    source: 'local',
+    boot: { pick: 'newest' },
+  });
+
+  assert.equal(selection.device.id, 'vision');
+});
+
+test('a watch simulator answers --platform ios only alone or by explicit UDID', async () => {
+  const watch = {
+    ...shutDownSimulator('watch', 'Apple Watch Series 11 (46mm)', '27.0'),
+    appleOs: 'watchos' as const,
+  };
+  const phone = shutDownSimulator('iphone', 'iPhone 17', '26.5');
+  for (const [devices, selector, expected] of [
+    [[watch], { platform: 'ios' as const }, 'watch'],
+    [[phone, watch], { platform: 'ios' as const }, 'iphone'],
+    [[phone, watch], { platform: 'ios' as const, udid: watch.id }, 'watch'],
+  ] as const) {
+    const selection = await resolveInventoryDeviceSelection({
+      devices: [...devices],
+      selector,
+      source: 'local',
+      boot: { pick: 'newest' },
+    });
+    assert.equal(selection.device.id, expected);
+  }
+});
+
 test('visionOS remains selectable alone and by explicit name or UDID', async () => {
   const vision = {
     ...shutDownSimulator('vision', 'Apple Vision Pro', '27.0'),

@@ -21,26 +21,18 @@ const backKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'back is supported on Apple simulators and physical devices.',
 } as const);
-/** watchOS has no XCUITest-driveable UI (ADR-0009): no Apple interactor can be constructed for
- * it, so every interactor-backed operation below stays unavailable there regardless of what the
- * retired per-command capability table said for it — facts are the support authority (ADR 0019),
- * not a mirror of a table that never modeled interactor constructibility. */
-const backOsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-} as const);
 /** visionOS has no back gesture or button; the runner refuses the same way if reached directly. */
 const backVisionOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'visionOS has no back command. Press the visible back control by its ref.',
 } as const);
-/** tvOS presses the remote's Menu button, macOS taps the window back control, and iOS presses the
- * navigation bar back button or swipes from the left edge. watchOS and visionOS have no back. */
+/** tvOS presses the remote's Menu button, macOS taps the window back control, iOS presses the
+ * navigation bar back button or swipes from the left edge, and watchOS presses the navigation bar
+ * back button. visionOS has no back. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return backOsUnavailable;
   return os === 'visionos' ? backVisionOsUnavailable : available;
 }
 
@@ -50,8 +42,7 @@ const homeKindUnavailable = Object.freeze({
   hint: 'home is supported on Apple simulators and physical devices.',
 } as const);
 /** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable on macOS, which
- * drives an already-running app with no springboard home; also unavailable on watchOS, whose
- * interactor cannot be constructed at all (see {@link backOsUnavailable}). */
+ * drives an already-running app with no springboard home. */
 const homeLifecycleUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -73,20 +64,19 @@ function appleSpringboardFact(
 ): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  return os === 'macos' || os === 'watchos' ? homeLifecycleUnavailable : available;
+  return os === 'macos' ? homeLifecycleUnavailable : available;
 }
 
 /**
  * The per-AppleOS mobile-input eligibility `orientation` and `keyboard` (dismiss/enter) share:
  * unavailable on tvOS (focus-only XCUIRemote navigation, no orientation or keyboard), macOS (an
- * AppKit desktop host, no device orientation or software keyboard), and watchOS (no constructible
- * interactor at all, see {@link backOsUnavailable}). Parity with the retired
+ * AppKit desktop host, no device orientation or software keyboard). Parity with the retired
  * `supportsOrientation`/`supportsKeyboard` closures, which read the same per-OS table.
  */
 function appleMobileInputEligible(device: DeviceInfo): boolean {
   if (device.kind !== 'simulator' && device.kind !== 'device') return false;
   const os = resolveDeviceAppleOs(device);
-  return os !== 'tvos' && os !== 'macos' && os !== 'watchos';
+  return os !== 'tvos' && os !== 'macos';
 }
 
 const orientationKindUnavailable = Object.freeze({
@@ -152,23 +142,26 @@ const systemButtonUnavailable = Object.freeze({
 const actionButtonKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
-  hint: 'action-button is supported on iPhone and iPad simulators and physical devices.',
+  hint: 'action-button is supported on iPhone and iPad simulators and physical devices, and on Apple Watch simulators.',
 } as const);
 const actionButtonOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
+  hint: 'The Action Button is iPhone, iPad, and Apple Watch Ultra hardware; tvOS, macOS and visionOS have no such control.',
 } as const);
 /**
  * The leaf reading is {@link isHandheldAppleDevice}, the same rule a provider owner reads; what
  * this owner adds is its kind gate. `DeviceInfo` records no model identifier, so which iPhone or
  * iPad carries the button is a hardware question the runner answers with
- * `hasHardwareButton(.action)`. iPhone and iPad is deliberately not
- * {@link appleMobileInputEligible}, which is `orientation`'s reading and admits visionOS.
+ * `hasHardwareButton(.action)`, on a watch as on a phone (Apple Watch Ultra has the button). iPhone
+ * and iPad is deliberately not {@link appleMobileInputEligible}, which is `orientation`'s reading and
+ * admits visionOS.
  */
 function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return actionButtonKindUnavailable;
-  return isHandheldAppleDevice(device) ? available : actionButtonOsUnavailable;
+  return isHandheldAppleDevice(device) || device.appleOs === 'watchos'
+    ? available
+    : actionButtonOsUnavailable;
 }
 
 const volumeButtonOsUnavailable = Object.freeze({

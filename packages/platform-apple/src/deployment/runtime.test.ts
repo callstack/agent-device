@@ -196,20 +196,6 @@ test.each([
     'unsupported-platform-leaf',
   ],
   [
-    'watchOS sentinel',
-    appleDevice({ appleOs: 'watchos' }),
-    false,
-    false,
-    'unsupported-platform-leaf',
-  ],
-  [
-    'watchOS physical sentinel',
-    appleDevice({ appleOs: 'watchos', kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
-    false,
-    false,
-    'unsupported-platform-leaf',
-  ],
-  [
     'invalid Apple emulator kind',
     appleDevice({ kind: 'emulator' }),
     false,

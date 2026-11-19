@@ -338,7 +338,17 @@ extension Command {
     case .querySelector:
       return .selectorResolution
 
-    case .mouseClick, .home, .recordStart, .activate:
+    // The watchOS Digital Crown press acts on whatever is on screen: from an app it shows the watch
+    // face, and from the face it opens the app grid. Like the other hardware presses, it must not
+    // bring the session app forward first.
+    case .home:
+#if os(watchOS)
+      return .presentedSurfaceMutation
+#else
+      return .appMutation
+#endif
+
+    case .mouseClick, .recordStart, .activate:
       return .appMutation
     }
   }

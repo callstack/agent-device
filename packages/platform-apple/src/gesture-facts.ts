@@ -46,18 +46,15 @@ export function appleGestureAndScrollFacts(device: DeviceInfo) {
 
 /** The reason this leaf refuses gestures it does not name, before any tier is consulted. */
 function appleGestureFamilyUnavailable(device: DeviceInfo): RuntimeOperationUnavailability {
-  return device.appleOs === 'watchos' || device.appleOs === 'visionos'
-    ? gestureLeafUnavailable
-    : gestureKindUnavailable;
+  return device.appleOs === 'visionos' ? gestureLeafUnavailable : gestureKindUnavailable;
 }
 
 function appleGesturePlanFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.appleOs === 'watchos' || device.appleOs === 'visionos') return gestureLeafUnavailable;
+  if (device.appleOs === 'visionos') return gestureLeafUnavailable;
   return appleTouchKind(device) ? available : gestureKindUnavailable;
 }
 
 function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.appleOs === 'watchos') return gestureLeafUnavailable;
   if (!appleTouchKind(device)) return gestureKindUnavailable;
   const appleOs = resolveDeviceAppleOs(device);
   if (appleOs !== 'ios' && appleOs !== 'ipados') {
@@ -81,7 +78,6 @@ function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 function appleGestureViewportFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.appleOs === 'watchos') return gestureLeafUnavailable;
   return appleTouchKind(device) ? available : gestureKindUnavailable;
 }
 
