@@ -231,6 +231,60 @@ test('fillAndroid batches ASCII text when the device is already on the helper IM
   );
 });
 
+test('the test IME bounds above agree with TestInputMethodService', async () => {
+  const java = await fs.readFile(
+    new URL(
+      '../../../../android/ime-helper/src/main/java/com/callstack/agentdevice/imehelper/TestInputMethodService.java',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  assert.match(java, /MAX_TEXT_LENGTH = 32_000;/);
+  assert.match(java, /encoded\.length\(\) > MAX_TEXT_LENGTH \* 2/);
+});
+
+// TestInputMethodService drops a payload over 64,000 Base64 characters and cuts text after 32,000
+// UTF-16 units, so a replacement past either bound must be refused before the field is cleared.
+test.each([
+  { label: 'over the text length', text: 'a'.repeat(32_001), refused: true },
+  { label: 'over the Base64 payload', text: '€'.repeat(21_334), refused: true },
+  { label: 'at the text length', text: 'a'.repeat(32_000), refused: false },
+])('fillAndroid with a replacement $label refused=$refused', async ({ text, refused }) => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  let currentText = 'stale value';
+  const broadcasts: string[] = [];
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      if (args[1] === 'am' && args[2] === 'broadcast') {
+        const action = args[args.indexOf('-a') + 1] ?? '';
+        broadcasts.push(action);
+        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
+          currentText = '';
+        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
+          currentText += decodeBroadcastText(args);
+        }
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    captureXml: () => androidInputXml({ text: currentText }),
+  });
+
+  const outcome = await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, text).catch((error: unknown) => error),
+  );
+
+  if (refused) {
+    assert.equal((outcome as AppError | undefined)?.details?.reason, 'android-test-ime-text-too-large');
+    assert.deepEqual(broadcasts, [], 'the field must keep its value when the IME cannot carry text');
+    assert.equal(currentText, 'stale value');
+  } else {
+    assert.equal(outcome, undefined);
+    assert.equal(currentText, text);
+  }
+});
+
 test('fillAndroid re-focuses the target when the first helper attempt fails verification', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   let currentText = 'stale value';

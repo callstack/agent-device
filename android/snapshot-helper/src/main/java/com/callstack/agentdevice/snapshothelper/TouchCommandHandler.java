@@ -36,25 +36,27 @@ final class TouchCommandHandler {
 
   static void writeSessionViewport(OutputStream output, String requestId, UiAutomation automation)
       throws IOException {
-    Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
-    try {
-      populateViewport(result, automation);
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-    }
+    SessionResponseWriter.respondOnce(
+        output,
+        () -> {
+          Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+          populateViewport(result, automation);
+          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+        },
+        error -> out -> SessionResponseWriter.writeSessionError(out, requestId, error));
   }
 
   static void writeSessionGesture(
       OutputStream output, String requestId, String payloadBase64, UiAutomation automation)
       throws IOException {
-    Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
-    try {
-      populateGesture(result, automation, payloadBase64);
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-    }
+    SessionResponseWriter.respondOnce(
+        output,
+        () -> {
+          Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+          populateGesture(result, automation, payloadBase64);
+          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+        },
+        error -> out -> SessionResponseWriter.writeSessionError(out, requestId, error));
   }
 
   private static void putViewportMetadata(Bundle result, Rect viewport) {

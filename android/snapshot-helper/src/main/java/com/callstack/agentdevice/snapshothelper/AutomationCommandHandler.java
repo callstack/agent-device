@@ -34,23 +34,26 @@ final class AutomationCommandHandler {
       throws IOException {
     Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
     InputDispatch dispatch = new InputDispatch();
-    try {
-      if ("app".equals(action)) {
-        ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
-      } else if ("screenshot".equals(action)) {
-        screenshot(result, automation, context);
-      } else if ("focus".equals(action)) {
-        focus(result, automation);
-      } else {
-        input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
-      }
-      result.putString("ok", "true");
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.putSessionError(result, error);
-      if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    }
+    SessionResponseWriter.respondOnce(
+        output,
+        () -> {
+          if ("app".equals(action)) {
+            ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
+          } else if ("screenshot".equals(action)) {
+            screenshot(result, automation, context);
+          } else if ("focus".equals(action)) {
+            focus(result, automation);
+          } else {
+            input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
+          }
+          result.putString("ok", "true");
+          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+        },
+        error -> {
+          SessionResponseWriter.putSessionError(result, error);
+          if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
+          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+        });
   }
 
   private static final class InputDispatch {

@@ -53,9 +53,39 @@ final class SessionResponseWriter {
       }
     }
     headers.append('\n');
-    output.write(headers.toString().getBytes(StandardCharsets.UTF_8));
+    writeFrame(output, headers.toString(), body);
+  }
+
+  static void writeFrame(OutputStream output, String headers, String body) throws IOException {
+    output.write(headers.getBytes(StandardCharsets.UTF_8));
     output.write(body.getBytes(StandardCharsets.UTF_8));
     output.flush();
+  }
+
+  /** One response frame, encoded and ready to write. */
+  @FunctionalInterface
+  interface Reply {
+    void writeTo(OutputStream output) throws IOException;
+  }
+
+  /** Runs a command and encodes its reply. Any failure becomes the error reply. */
+  @FunctionalInterface
+  interface Execution {
+    Reply run() throws Throwable;
+  }
+
+  @FunctionalInterface
+  interface FailureReply {
+    Reply of(Throwable error);
+  }
+
+  static void respondOnce(OutputStream output, Execution execution, FailureReply failure)
+      throws IOException {
+    try {
+      execution.run().writeTo(output);
+    } catch (Throwable error) {
+      failure.of(error).writeTo(output);
+    }
   }
 
   private static String sanitizeHeaderValue(String value) {

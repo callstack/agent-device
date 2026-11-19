@@ -12,6 +12,7 @@ public final class SnapshotHelperTestSuite {
     AccessibilityTreeXmlTest.run();
     BoundedUiAutomationConnectionTest.run();
     SessionPeerPolicyTest.run();
+    SessionResponseWriterTest.run();
     GestureViewportReaderTest.run();
     DisplayExtentTest.run();
     ScreenshotDisplayTest.run();

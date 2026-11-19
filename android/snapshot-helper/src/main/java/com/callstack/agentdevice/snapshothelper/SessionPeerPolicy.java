@@ -43,6 +43,24 @@ final class SessionPeerPolicy {
     REJECTED_UNAUTHORIZED_PEER
   }
 
+  /** Why a command read closes the connection without writing a response. */
+  enum ReadFailure {
+    /** The read deadline fixed at accept passed before the newline arrived. */
+    EXPIRED,
+    /** The stream ended before the newline that terminates every command. */
+    INCOMPLETE
+  }
+
+  /** A command read that ended without a complete frame. The connection closes without a reply. */
+  static final class SessionReadClosed extends IOException {
+    final ReadFailure reason;
+
+    SessionReadClosed(ReadFailure reason) {
+      super("session command read closed: " + reason);
+      this.reason = reason;
+    }
+  }
+
   enum LineDecision {
     ACCEPTED,
     REJECTED_EMPTY,
@@ -84,12 +102,12 @@ final class SessionPeerPolicy {
     while (bytes.size() <= maxBytes) {
       long remainingMs = deadlineAtMs - clock.nowMs();
       if (remainingMs <= 0) {
-        throw new SocketTimeoutException("session command read deadline exceeded");
+        throw new SessionReadClosed(ReadFailure.EXPIRED);
       }
       timeout.setMillis((int) remainingMs);
       int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
       if (clock.nowMs() > deadlineAtMs) {
-        throw new SocketTimeoutException("session command read deadline exceeded");
+        throw new SessionReadClosed(ReadFailure.EXPIRED);
       }
       if (count < 0) {
         if (bytes.size() == 0) return null;

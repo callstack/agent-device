@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import {
+  buildAndroidSnapshotHelperCaptureOptions,
   captureAndroidSnapshotWithHelper,
   parseAndroidSnapshotHelperOutput,
 } from '../snapshot-helper-capture.ts';
@@ -465,6 +466,29 @@ test('ensureAndroidSnapshotHelper caches successful install checks per device an
     deviceKey: 'android:emulator-5554',
   });
   assert.equal(calls.length, 6);
+});
+
+test('only an install check that reached the device verifies the selected digest', async () => {
+  const tmpDir = await mkdtempForTest('snapshot-helper-install-evidence-');
+  const apkPath = path.join(tmpDir, 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  const artifact = { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } };
+  const adb: AndroidAdbExecutor = async (args) =>
+    args.includes('--show-versioncode')
+      ? { exitCode: 1, stdout: '', stderr: 'not found' }
+      : { exitCode: 0, stdout: '', stderr: '' };
+  const verified = async () =>
+    buildAndroidSnapshotHelperCaptureOptions({
+      adb,
+      adbProvider: { exec: adb },
+      artifact,
+      install: await ensureAndroidSnapshotHelper({ adb, artifact, deviceKey: 'android:evidence' }),
+      deviceKey: 'android:evidence',
+    }).helperSha256Verified;
+
+  assert.equal(await verified(), true, 'an install that succeeded put this APK on the device');
+  // An emulator restore or an external install can replace the APK behind the memo.
+  assert.equal(await verified(), false, 'a remembered install did not inspect the device');
 });
 
 test('ensureAndroidSnapshotHelper always policy bypasses cached install result', async () => {

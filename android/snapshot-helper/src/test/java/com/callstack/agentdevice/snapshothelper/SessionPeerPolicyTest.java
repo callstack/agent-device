@@ -1,6 +1,8 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -17,6 +19,8 @@ public final class SessionPeerPolicyTest {
     incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
+    eofBeforeTheNewlineIsAnIncompleteFrame();
+    socketReadTimeoutIsAnExpiredRead();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
     acceptsCommandLinesUpToTheByteLimit();
     rejectsEmptyCommandLines();
@@ -67,7 +71,8 @@ public final class SessionPeerPolicyTest {
     try {
       SessionPeerPolicy.readSessionCommandLine(input, timeouts::add, () -> nowMs[0], 110, 8);
       throw new AssertionError("Expected the deadline to stop an unfinished command");
-    } catch (SocketTimeoutException expected) {
+    } catch (SessionPeerPolicy.SessionReadClosed expected) {
+      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
       if (!timeouts.equals(Arrays.asList(10))) {
         throw new AssertionError("Expected one bounded read and no zero timeout: " + timeouts);
       }
@@ -87,7 +92,8 @@ public final class SessionPeerPolicyTest {
     try {
       SessionPeerPolicy.readSessionCommandLine(drip, timeouts::add, () -> nowMs[0], 110, 8);
       throw new AssertionError("A command completed after its absolute deadline was accepted");
-    } catch (SocketTimeoutException expected) {
+    } catch (SessionPeerPolicy.SessionReadClosed expected) {
+      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
       if (!timeouts.equals(Arrays.asList(10, 6, 2))) {
         throw new AssertionError("The timeout must shrink before each read: " + timeouts);
       }
@@ -106,8 +112,44 @@ public final class SessionPeerPolicyTest {
             != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
       throw new AssertionError("Expected the reader to stop and reject maxBytes + 1");
     }
-    if (readFixture("", 4) != null) {
-      throw new AssertionError("Expected EOF before any byte to return null");
+  }
+
+  private static void eofBeforeTheNewlineIsAnIncompleteFrame() throws Exception {
+    // A prefix that parses as an action must never reach dispatch without its terminator.
+    for (String input : new String[] {"", "snapshot req-1", "quit req-1"}) {
+      try {
+        String command = readFixture(input, 64);
+        throw new AssertionError("EOF before the newline returned a command: " + command);
+      } catch (SessionPeerPolicy.SessionReadClosed expected) {
+        expectReason(expected, SessionPeerPolicy.ReadFailure.INCOMPLETE);
+      }
+    }
+  }
+
+  private static void socketReadTimeoutIsAnExpiredRead() throws Exception {
+    InputStream silent = new InputStream() {
+      @Override
+      public int read() throws IOException {
+        throw new SocketTimeoutException("Read timed out");
+      }
+
+      @Override
+      public int read(byte[] data, int offset, int length) throws IOException {
+        throw new SocketTimeoutException("Read timed out");
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(silent, ignored -> {}, () -> 100, 110, 8);
+      throw new AssertionError("Expected a socket read timeout to close the read");
+    } catch (SessionPeerPolicy.SessionReadClosed expected) {
+      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
+    }
+  }
+
+  private static void expectReason(
+      SessionPeerPolicy.SessionReadClosed closed, SessionPeerPolicy.ReadFailure reason) {
+    if (closed.reason != reason) {
+      throw new AssertionError("Expected read failure " + reason + ", got " + closed.reason);
     }
   }
 
@@ -140,9 +182,6 @@ public final class SessionPeerPolicyTest {
   }
 
   private static void rejectsEmptyCommandLines() {
-    if (SessionPeerPolicy.commandLineDecision(null, 64) != SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
-      throw new AssertionError("Expected an end-of-stream line to be rejected as empty");
-    }
     if (SessionPeerPolicy.commandLineDecision("", 64) != SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
       throw new AssertionError("Expected an empty line to be rejected as empty");
     }
