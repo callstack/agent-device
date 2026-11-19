@@ -11,6 +11,8 @@ extension RunnerTests {
   static let watchInputSheetTimeout: TimeInterval = 3.0
   /// The input sheet's commit button. The sheet exposes no identifier for it.
   static let watchInputSheetDoneLabel = "Done"
+  /// How long the back edge swipe's pop animation may run before the screen is compared.
+  static let watchBackSettleInterval: TimeInterval = 0.6
   /// How long a crown scroll waits for its deceleration. A tap sent while the list still moves is
   /// absorbed by the scroll view instead of reaching its target.
   static let watchCrownSettleInterval: TimeInterval = 0.35
@@ -63,8 +65,8 @@ extension RunnerTests {
         return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
       }
     }
-    // The edge swipe is not verified: on a root screen it changes nothing and still reports success.
     let surface = try resolvedTouchReferenceFrame(app: app)
+    let before = watchScreenSignature(app: app)
     var dragged: Result<RunnerInteractionOutcome, Error> = .success(.performed)
     withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
       dragged = Result {
@@ -78,7 +80,24 @@ extension RunnerTests {
         )
       }
     }
-    _ = try dragged.get()
+    if case .unsupported(let message, let hint) = try dragged.get() {
+      return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
+    }
+    RunLoop.current.run(until: Date().addingTimeInterval(Self.watchBackSettleInterval))
+    guard let before, let after = watchScreenSignature(app: app) else {
+      return .unconfirmed(ErrorPayload(
+        code: RunnerWireErrorCode.backSwipeUnverified,
+        message: "The back swipe was sent, but the screen could not be read to verify it.",
+        hint: "Check the screen with snapshot before you retry."
+      ))
+    }
+    guard before != after else {
+      return .unconfirmed(ErrorPayload(
+        code: RunnerWireErrorCode.backSwipeNoChange,
+        message: "The back swipe changed nothing.",
+        hint: "A root screen has nothing to go back to. Otherwise press the screen's close control by its ref from a fresh snapshot."
+      ))
+    }
     return .performed
   }
 
@@ -186,12 +205,44 @@ extension RunnerTests {
     withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
       done.tap()
     }
+    guard waitForWatchInputSheetToClose(app: activeApp) else {
+      return Response(ok: false, error: ErrorPayload(
+        code: TextEntryFailure.commitNotObserved.rawValue,
+        message: "the watchOS input sheet stayed open after Done",
+        hint: "Check the screen with snapshot; the text may still be in the open input sheet."
+      ))
+    }
     return Response(ok: true, data: DataPayload(
       message: "typed",
       x: point.map { Double($0.x) },
       y: point.map { Double($0.y) },
       textEntryRoute: "watch-input-sheet"
     ))
+  }
+
+  /// A cheap identity of the visible screen: the navigation bar and the first texts, read from one
+  /// snapshot so a vanishing element cannot record an XCTest failure. `nil` when it cannot be read.
+  private func watchScreenSignature(app: XCUIApplication) -> [String]? {
+    guard let root = try? app.snapshot() else { return nil }
+    var labels: [String] = []
+    func visit(_ node: any XCUIElementSnapshot) {
+      guard labels.count < 8 else { return }
+      if node.elementType == .navigationBar || node.elementType == .staticText {
+        labels.append(node.label)
+      }
+      node.children.forEach(visit)
+    }
+    visit(root)
+    return labels
+  }
+
+  private func waitForWatchInputSheetToClose(app: XCUIApplication) -> Bool {
+    let deadline = Date().addingTimeInterval(Self.watchInputSheetTimeout)
+    repeat {
+      if !app.keyboards.firstMatch.exists { return true }
+      RunLoop.current.run(until: Date().addingTimeInterval(TextEntryTiming.pollInterval * 5))
+    } while Date() < deadline
+    return false
   }
 
   private func waitForWatchInputSheet(app: XCUIApplication) -> Bool {
