@@ -579,6 +579,21 @@
       "declaration": "packages/remote/src/artifact-download.ts#RemoteArtifactDownload",
       "digest": "sha256:9589ced67302785a021c6d04dd4de5867f20a917c2d121f5ee9b657c39ecade7",
       "rationale": "#4511 adds the optional client-local privateFile field: the download creates a new 0600 file exclusively, never through a symbolic link, and stops once it crosses maxBytes. It is never sent, and every existing call site omits it, so the GET /artifacts/:id framing is unchanged."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
+      "digest": "sha256:7239b9113f2175d899c382d1b7a45de22ebb0890707ab2907e15d76afe1dabb1",
+      "rationale": "#4518 client-side only: after a remote daemon error the client settles the recording grants that this request bound before dispatch, keyed by a client-generated ID that never crosses the wire. The error fields read and the error the caller receives are unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
+      "digest": "sha256:5853b0f36ecba9ba34ac0ed9aaa363d5fca2e1f244ad678e2d13628a15425202",
+      "rationale": "#4518 client-side only: the function takes the client's own recording grant binding, settles it from the confirmed answer, and adds the client-owned recordingDestinationWarnings and warnings fields when a recording lands in cwd. Every field a released daemon sends is read as before; nothing new is sent or required."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
+      "digest": "sha256:b0855ac586d3a2f4fec6e020c21a2ca769d69c20cadc3f8511382bf91fc49007",
+      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, so a reply's artifactType no longer selects directory extraction for recordings. A released daemon sends recordings as untyped or file artifacts, which land where they did before."
     }
   ]
 }
