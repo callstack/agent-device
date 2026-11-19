@@ -350,6 +350,7 @@ skipOnWindows(
         destination: world.destination,
         force: false,
         revision: 2,
+        committedDigest: digestOf(world.destination),
         staging: [],
       },
     ]);
@@ -411,6 +412,7 @@ skipOnWindows(
           destination: world.destination,
           force: false,
           revision: 1,
+          committedDigest: digestOf(world.destination),
           staging: [],
         },
       ]);
@@ -528,3 +530,8 @@ skipOnWindows(
     expect(nothingEscaped(world, ['../../../../tmp/etc/passwd'])).toEqual([]);
   },
 );
+
+/** The SHA-256 a record keeps for the bytes its newest version was committed with. */
+function digestOf(file: string): string {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}

@@ -2,6 +2,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import {
+  hostPathRules,
+  requireWindowsScriptVolume,
+  scriptEntryNameOrRefuse,
+} from './atomic-file.ts';
 
 type PathResolutionOptions = {
   cwd?: string;
@@ -15,7 +20,7 @@ function resolveHomeDirectory(env?: EnvMap): string {
 export function expandUserHomePath(inputPath: string, options: PathResolutionOptions = {}): string {
   if (inputPath === '~') return resolveHomeDirectory(options.env);
   if (inputPath.startsWith('~/')) {
-    return path.join(resolveHomeDirectory(options.env), inputPath.slice(2));
+    return hostPathRules().join(resolveHomeDirectory(options.env), inputPath.slice(2));
   }
   return inputPath;
 }
@@ -25,8 +30,47 @@ export function resolveUserPath(
   options: PathResolutionOptions & { cwd: string },
 ): string {
   const expandedPath = expandUserHomePath(inputPath, options);
-  if (path.isAbsolute(expandedPath)) return expandedPath;
-  return path.resolve(options.cwd, expandedPath);
+  const rules = hostPathRules();
+  if (rules.isAbsolute(expandedPath)) return expandedPath;
+  return rules.resolve(options.cwd, expandedPath);
+}
+
+/**
+ * Expands a script destination a caller spelled into the absolute path host-kit judges, refusing a spelling
+ * whose last segment names no entry BEFORE the expansion normalizes it away: `./missing/.` would otherwise
+ * become `<cwd>/missing`, and the publish would create a file under the directory's name.
+ */
+export function resolveScriptDestination(
+  spelled: string,
+  options: Readonly<{ cwd: string; env?: EnvMap }>,
+): string {
+  const rules = hostPathRules();
+  scriptEntryNameOrRefuse(spelled);
+  if (rules !== path.win32) {
+    const resolved = resolveUserPath(spelled, options);
+    scriptEntryNameOrRefuse(resolved);
+    return stripTrailingScriptSeparators(resolved, rules.sep);
+  }
+
+  let expanded = spelled;
+  if (spelled.startsWith('~/')) {
+    const home = resolveHomeDirectory(options.env);
+    if (rules.isAbsolute(home) || /^[a-z]:/i.test(home)) requireWindowsScriptVolume(spelled, home);
+    expanded = rules.join(home, spelled.slice(2));
+    scriptEntryNameOrRefuse(expanded);
+  }
+  if (rules.isAbsolute(expanded)) return stripTrailingScriptSeparators(expanded, rules.sep);
+
+  requireWindowsScriptVolume(spelled, options.cwd);
+  const resolved = rules.resolve(options.cwd, expanded);
+  scriptEntryNameOrRefuse(resolved);
+  return resolved;
+}
+
+function stripTrailingScriptSeparators(destination: string, separator: string): string {
+  let end = destination.length;
+  while (destination[end - 1] === '/' || destination[end - 1] === separator) end -= 1;
+  return destination.slice(0, end);
 }
 
 /**

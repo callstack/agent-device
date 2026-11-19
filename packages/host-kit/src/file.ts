@@ -1,6 +1,8 @@
 export {
   confirmScriptDestination,
   isAtomicPublishTemporaryPath,
+  isWindowsShareUnavailable,
+  judgeScriptDestination,
   prepareScriptDestination,
   publishDurableFileSync,
   publishFileSync,
@@ -11,6 +13,7 @@ export {
   type ScriptDestinationOptions,
 } from './internal/atomic-file.ts';
 export {
+  assertScriptTargetVacant,
   lstatIfPresent,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,
@@ -22,6 +25,7 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
+  resolveScriptDestination,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

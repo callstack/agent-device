@@ -10,9 +10,12 @@ export const NOT_REGULAR_FILE_HINT =
 const CONCURRENT_REPLACEMENT_HINT =
   'Another process replaced the file at this path while it was being opened. Stop the concurrent writer, then retry.';
 
-/** Opens a regular final-path file for verified reads, or returns absent. */
+/**
+ * Opens a regular final-path file for verified reads, or returns absent. A FIFO swapped in after the `lstat`
+ * opens at once with O_NONBLOCK and is refused by the identity check, instead of waiting for a writer.
+ */
 export function openVerifiedFileForRead(pathname: string): number | undefined {
-  return openVerifiedFile(pathname, fs.constants.O_RDONLY, false);
+  return openVerifiedFile(pathname, fs.constants.O_RDONLY | optionalNonBlockFlag(), false);
 }
 
 /** Opens or creates a verified regular final-path file with atomic append semantics. */
@@ -142,8 +145,28 @@ export function lstatIfPresent(pathname: string): fs.Stats | undefined {
   }
 }
 
+/** Refuses an occupied script destination before dispatch, including dangling final links. */
+export function assertScriptTargetVacant(destination: string): void {
+  try {
+    if (!lstatIfPresent(destination)) return;
+  } catch {
+    // Delivery judges the ancestry and commits exclusively when this probe cannot establish occupancy.
+    return;
+  }
+  throw new AppError('COMMAND_FAILED', `A file already exists at ${destination}.`, {
+    reason: 'script_target_exists',
+    path: destination,
+    hint: 'Choose another output path or pass --force/--overwrite.',
+  });
+}
+
 function sameFile(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
+}
+
+function optionalNonBlockFlag(): number {
+  const nonBlock = fs.constants.O_NONBLOCK;
+  return Number.isInteger(nonBlock) && nonBlock > 0 ? nonBlock : 0;
 }
 
 function optionalNoFollowFlag(): number {

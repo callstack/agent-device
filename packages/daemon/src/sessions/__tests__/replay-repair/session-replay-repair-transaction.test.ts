@@ -208,7 +208,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
 
   const healedPath = path.join(root, 'flow.healed.ad');
   // BLOCKER 2a: the close response positively reports the committed healed path.
-  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(healedPath);
+  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(fs.realpathSync(healedPath));
   expect(fs.existsSync(healedPath)).toBe(true);
   const healedScript = fs.readFileSync(healedPath, 'utf8');
   // Fix 4: complete + atomic — the sentinel is present, and the only file in
@@ -485,7 +485,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
     leaseRegistry,
   });
   expect(retry.ok).toBe(true);
-  if (retry.ok) expect(retry.data?.savedScript).toBe(retryPath);
+  if (retry.ok) expect(retry.data?.savedScript).toBe(fs.realpathSync(retryPath));
   const promoted = parseReplayScriptDetailed(fs.readFileSync(retryPath, 'utf8'));
   expect(promoted.actions.filter((a) => a.command === 'close')).toHaveLength(1);
 });

@@ -41,6 +41,7 @@ export type ScriptAncestryExposure =
   | 'not_a_directory'
   | 'entry_appeared'
   | 'relative_destination'
+  | 'unnamed_entry'
   | 'unresolvable_parent'
   | 'unreachable_parent'
   | 'parent_replaced';
@@ -143,29 +144,49 @@ export function publishScriptFileSync(options: {
   destination: string;
   contents: string;
   publish?: AtomicPublishMode;
-}): void {
-  // The entry is spelled FROM the directory the rule judged, never from the caller's spelling: a `..` or a
-  // link sends the entry elsewhere, and a temporary sibling beside that spelling is one another local user
-  // can reach (ADR 0016). Spelling it here puts the sibling where the entry lands, on its own.
-  const judged = prepareScriptDestination(options.destination).directory;
+}): string {
+  // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
+  // elsewhere, and a temporary sibling beside that spelling is one another local user can reach (ADR 0016).
+  const { entry } = prepareScriptDestination(options.destination);
   publishFileSync({
-    destination: path.join(judged, path.basename(options.destination)),
+    destination: entry,
     contents: options.contents,
     mode: SCRIPT_FILE_MODE,
     publish: options.publish,
     exactMode: true,
   });
+  return entry;
 }
 
 /**
  * The canonical temp path for a destination: a sibling of the name, inside the directory the publish will
- * create the entry in — the walk's answer for a script destination, `path.dirname` for every other one.
+ * create the entry in — the walk's answer for a script destination, `path.dirname` for every other one. Its
+ * name stays bounded whatever the destination's length, so any name that fits the filesystem has a temp
+ * sibling that fits too.
  */
 function createAtomicPublishTempPath(directory: string, destination: string): string {
   return path.join(
     directory,
-    `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
+    `${temporaryNamePrefix(destination)}${process.pid}-${crypto.randomBytes(8).toString('hex')}.tmp`,
   );
+}
+
+/** How many bytes of the destination's name a temp sibling repeats, so a reader can still tell whose it is. */
+const TEMP_NAME_STEM_BYTES = 32;
+
+/**
+ * The start every temp sibling of `destination` shares, and no other destination's: at most 32 bytes of its
+ * name for a reader, then a hash of the WHOLE name, so two names that share their first bytes never share it.
+ */
+function temporaryNamePrefix(destination: string): string {
+  const name = path.basename(destination);
+  let stem = '';
+  for (const character of name) {
+    if (Buffer.byteLength(stem + character) > TEMP_NAME_STEM_BYTES) break;
+    stem += character;
+  }
+  const digest = crypto.createHash('sha256').update(name).digest('hex').slice(0, 16);
+  return `.${stem}.${digest}.`;
 }
 
 function removeTempBestEffort(destination: string, temporaryPath: string | undefined): void {
@@ -214,12 +235,12 @@ function scriptDestination(
   create: boolean,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
-  const spelled = spelledParent(destination);
   if (process.platform === 'win32') {
-    // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
-    if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
-    return { directory: spelled, identity: 'windows' };
+    return windowsScriptDestination(destination, create);
   }
+  // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
+  const spelled = spelledParent(destination);
+  const name = scriptEntryNameOrRefuse(destination);
   const trust = scriptTrust(options);
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
@@ -228,16 +249,224 @@ function scriptDestination(
   if (othersCreateEntriesIn(arrived.authority, trust)) {
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  return { directory: arrived.deepest, identity: arrived.identity };
+  return authorizedEntry(arrived.deepest, arrived.identity, name);
+}
+
+function windowsScriptDestination(destination: string, create: boolean): ScriptDestination {
+  const rules = path.win32;
+  const root = requireWindowsScriptVolume(destination, destination);
+  const name = entryNameOrRefuse(destination, rules);
+  const directory = rules.dirname(rules.normalize(destination));
+  requireWindowsScriptDirectory(destination, root);
+  if (directory === root) return authorizedEntry(directory, 'windows', name);
+  if (create) createWindowsScriptParents(destination, root, directory);
+  else requireWindowsScriptDirectory(destination, directory);
+  return authorizedEntry(directory, 'windows', name);
+}
+
+function createWindowsScriptParents(destination: string, root: string, directory: string): void {
+  const missing: string[] = [];
+  let parent = directory;
+  // Start at the requested parent so a traverse-only ancestor needs no attribute read.
+  while (parent !== root && !makeWindowsScriptDirectory(destination, parent)) {
+    missing.push(parent);
+    parent = path.win32.dirname(parent);
+  }
+  if (parent === root) throw scriptAncestryFailure(destination, root, 'unreachable_parent');
+  for (const child of missing.reverse()) {
+    if (!makeWindowsScriptDirectory(destination, child)) {
+      throw scriptAncestryFailure(destination, child, 'unreachable_parent');
+    }
+  }
+}
+
+function makeWindowsScriptDirectory(destination: string, directory: string): boolean {
+  try {
+    fs.mkdirSync(directory, { mode: SCRIPT_DIR_MODE });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+    if (code !== 'EEXIST') throw error;
+    requireWindowsScriptDirectory(destination, directory);
+  }
+  return true;
+}
+
+function requireWindowsScriptDirectory(destination: string, directory: string): void {
+  let stats: fs.Stats | undefined;
+  try {
+    stats = fs.statSync(directory, { throwIfNoEntry: false });
+  } catch (error) {
+    if (!isWindowsShareUnavailable(directory, error)) throw error;
+  }
+  if (!stats) throw scriptAncestryFailure(destination, directory, 'unreachable_parent');
+  if (!stats.isDirectory()) throw scriptAncestryFailure(destination, directory, 'not_a_directory');
+}
+
+/** Windows reports a deleted share as a connection reset through libuv. */
+export function isWindowsShareUnavailable(file: string, error: unknown): boolean {
+  return (
+    process.platform === 'win32' &&
+    /^[\\/]{2}/.test(file) &&
+    (error as NodeJS.ErrnoException | undefined)?.code === 'ECONNRESET'
+  );
+}
+
+function authorizedEntry(
+  directory: string,
+  identity: string | undefined,
+  name: string,
+): ScriptDestination {
+  return { directory, identity, name, entry: hostPathRules().join(directory, name) };
 }
 
 /**
- * Where a script entry is created: the PHYSICAL directory the rule judged, and that directory's identity as
- * the walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename.
+ * The name a spelled script destination's entry is created under, or a refusal when its last segment names
+ * none. Both the preflight that expands a caller's spelling and the publication itself ask this one helper,
+ * before anything touches the filesystem (ADR 0016).
+ */
+export function scriptEntryNameOrRefuse(spelled: string): string {
+  const rules = hostPathRules();
+  if (rules === path.win32 && /^[\\/]|^[a-z]:/i.test(spelled)) {
+    requireWindowsScriptVolume(spelled, spelled);
+  }
+  return entryNameOrRefuse(spelled, rules);
+}
+
+function entryNameOrRefuse(spelled: string, rules: path.PlatformPath): string {
+  const name = scriptEntryName(spelled, rules);
+  if (name === undefined) throw unnamedEntryFailure(spelled, rules);
+  return name;
+}
+
+/** Returns the drive or complete ordinary UNC root of a Windows script path. */
+export function requireWindowsScriptVolume(spelled: string, candidate: string): string {
+  const drive = /^[a-z]:[\\/]/i.test(candidate);
+  const unc = /^[\\/]{2}([^\\/]+)[\\/]+([^\\/]+)/.exec(candidate);
+  if (
+    drive ||
+    (unc &&
+      unc.slice(1).every((part) => !/[:?*<>"|]|[. ]$/.test(part) && !hasControlCharacter(part)))
+  ) {
+    return path.win32.parse(path.win32.normalize(candidate)).root;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    `Refusing to save the script at ${spelled}: ${candidate} lacks a supported Windows volume.`,
+    {
+      reason: 'script_ancestor_untrusted',
+      exposure: 'windows_path_form',
+      path: spelled,
+      ancestor: candidate,
+      hint: 'Use an absolute drive-letter path or an ordinary Windows network share path.',
+    },
+  );
+}
+
+/** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */
+export function hostPathRules(): path.PlatformPath {
+  return process.platform === 'win32' ? path.win32 : path.posix;
+}
+
+/**
+ * The refusal for a spelling {@link scriptEntryName} names no entry for. A Windows directory holding a `:` is
+ * the PATH's fault, not its last name's, so that refusal names the directory and says what to change there.
+ */
+export function unnamedEntryFailure(spelled: string, rules: path.PlatformPath): AppError {
+  const parent = rules.dirname(spelled);
+  if (rules.sep === '\\' && holdsColonAfterRoot(rules.normalize(parent), rules)) {
+    return new AppError(
+      'INVALID_ARGS',
+      `Refusing to save the script under ${parent}: a Windows path cannot hold \`:\` after its drive, and a directory in it does.`,
+      {
+        reason: SCRIPT_ANCESTRY_REASONS[0],
+        exposure: 'unnamed_entry',
+        path: spelled,
+        ancestor: parent,
+        hint: 'Remove the `:` from the directory names in the script path.',
+      },
+    );
+  }
+  return scriptAncestryFailure(spelled, parent, 'unnamed_entry');
+}
+
+/** Whether a name holds a character below U+0020, which Windows refuses in a file name. */
+function hasControlCharacter(name: string): boolean {
+  return [...name].some((character) => character.charCodeAt(0) < 0x20);
+}
+
+/** Whether a Windows path holds a `:` past its root, where only a stream separator would put one. */
+function holdsColonAfterRoot(normalized: string, rules: path.PlatformPath): boolean {
+  return normalized.slice(rules.parse(normalized).root.length).includes(':');
+}
+
+/**
+ * The one entry a script destination's spelling names under `rules`, or `undefined` when its last segment
+ * names none: empty, a root, `.`, `..`, a spelling holding a NUL, or the bare `~` a home expansion turns
+ * into a directory. A trailing separator names the same entry it always has. The split is root-aware: a
+ * basename would turn the share of a bare UNC root into a file name.
+ */
+export function scriptEntryName(spelled: string, rules: path.PlatformPath): string | undefined {
+  // A lone surrogate is written as U+FFFD, so the file created would be another name than the one judged.
+  const bareHome = rules.sep === '\\' ? /^~[\\/]*$/ : /^~\/*$/;
+  if (spelled.includes('\0') || /\p{Surrogate}/u.test(spelled) || bareHome.test(spelled)) {
+    return undefined;
+  }
+  // The raw last segment first: a normalization folds a final `.` or `..` away.
+  const { base } = rules.parse(spelled);
+  if (base === '' || base === '.' || base === '..' || exceedsNameMax(base, rules)) return undefined;
+  return rules.sep === '\\' ? windowsEntryName(rules.normalize(spelled), rules) : base;
+}
+
+/**
+ * Whether a name is longer than one directory entry can hold: 255 UTF-8 bytes on the common POSIX filesystems,
+ * 255 UTF-16 units on NTFS. Refused before anything is created, instead of failing after its parent was made.
+ */
+function exceedsNameMax(name: string, rules: path.PlatformPath): boolean {
+  return (rules.sep === '\\' ? name.length : Buffer.byteLength(name)) > NAME_MAX;
+}
+
+const NAME_MAX = 255;
+
+/**
+ * The Windows answer, read from the spelling as the publisher's own joins normalize it, so a doubled separator
+ * cannot hide a root. A device-namespace path, an extended UNC root that `parse` reads as names, a reserved
+ * device name, and a stream after a `:` all name something other than one file.
+ */
+function windowsEntryName(normalized: string, rules: path.PlatformPath): string | undefined {
+  // The device namespace, and an extended prefix that names anything but a drive or a UNC share.
+  if (/^\\\\\.\\/.test(normalized)) return undefined;
+  if (/^\\\\\?\\/.test(normalized) && !/^\\\\\?\\(?:[A-Z]:\\|UNC\\)/i.test(normalized))
+    return undefined;
+  if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
+  // An IPC share, ordinary or extended, opens a named pipe or a mailslot, not a file: `pipe`, `IPC$` (the SMB
+  // named-pipe share) and `mailslot`. The same names below an ordinary share are ordinary directories.
+  if (/^\\\\(?:\?\\UNC\\)?[^\\]+\\(?:pipe|IPC\$|mailslot)(?:\\|$)/i.test(normalized)) {
+    return undefined;
+  }
+  const { base } = rules.parse(normalized);
+  if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
+  // Microsoft's naming rules: no reserved character or control character, no trailing dot or space, and no
+  // reserved device name, with or without an extension.
+  if (/[<>:"/\\|?*]/.test(base) || hasControlCharacter(base) || /[. ]$/.test(base))
+    return undefined;
+  // Only ASCII spaces fall away before the comparison; a no-break space is part of the name.
+  const stem = base.split('.')[0]?.replace(/ +$/, '') ?? '';
+  return /^(?:CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$)$/i.test(stem)
+    ? undefined
+    : base;
+}
+
+/**
+ * The entry a script is created as: the PHYSICAL directory the rule judged, that directory's identity as the
+ * walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename — and the
+ * validated name. `entry` is the one path a publisher creates.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
   identity: string | undefined;
+  name: string;
+  entry: string;
 }>;
 
 export type DurableFilePublishMode = 'replace' | 'link-exclusive';
@@ -324,19 +553,32 @@ export function isAtomicPublishTemporaryPath(value: unknown, destination: string
   if (typeof value !== 'string') return false;
   if (path.dirname(value) !== path.dirname(destination)) return false;
   const name = path.basename(value);
-  return name.startsWith(`.${path.basename(destination)}.`) && name.endsWith('.tmp');
+  return name.startsWith(temporaryNamePrefix(destination)) && name.endsWith('.tmp');
 }
 
 /**
- * Confirms a destination host-kit ANSWERED earlier, and reports the directory to create the entry in. The one
- * check a caller that stages bytes owes, for the reason ADR 0016 states.
+ * Judges a destination that is already in place, creating nothing, and reports its entry: what a caller
+ * answers about a version it published before (ADR 0016).
  */
-export function confirmScriptDestination(destination: string, prepared: ScriptDestination): string {
+export function judgeScriptDestination(destination: string): ScriptDestination {
+  return scriptDestination(destination, false);
+}
+
+/**
+ * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
+ * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
+ * the same directory.
+ */
+export function confirmScriptDestination(
+  destination: string,
+  prepared: ScriptDestination,
+): ScriptDestination {
   const current = scriptDestination(destination, false);
-  if (current.identity !== prepared.identity) {
+  // The directory is compared too: Windows answers one constant identity for every directory.
+  if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
     throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
   }
-  return current.directory;
+  return current;
 }
 
 /**
@@ -575,6 +817,8 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   not_a_directory: 'a directory was expected there, and something else stands in the way.',
   entry_appeared:
     'a directory the script path needs was missing when the path was checked and appeared before this save could create it.',
+  unnamed_entry:
+    'the script path has to end in one file name of at most 255 bytes, not `.`, `..`, `~`, a root, or nothing at all, and it cannot hold a NUL.',
   relative_destination:
     'the script path has to be absolute, so the directories it names are the ones that get checked.',
   unresolvable_parent:
@@ -606,8 +850,9 @@ function scriptAncestryFailure(
   ancestor: string,
   exposure: ScriptAncestryExposure,
 ): AppError {
+  // A path that names no file is the caller's input to correct; every other refusal is about the ground.
   return new AppError(
-    'COMMAND_FAILED',
+    exposure === 'unnamed_entry' ? 'INVALID_ARGS' : 'COMMAND_FAILED',
     `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
     {
       reason:
@@ -624,6 +869,9 @@ function scriptAncestryFailure(
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
+  }
+  if (exposure === 'unnamed_entry') {
+    return 'End the script path in a valid file name, such as `--save-script=./workflows/journey.ad`.';
   }
   if (exposure === 'shared_group_writable') {
     return `Close the directory to its group with \`chmod g-w ${ancestor}\`, or save the script under a directory only you can write.`;
