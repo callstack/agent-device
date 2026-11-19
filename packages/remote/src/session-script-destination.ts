@@ -517,17 +517,18 @@ function stageOrAnswer(
   file: string,
   revision: number,
 ): PublishOutcome | Readonly<{ staging: string; prepared: ScriptDestination }> {
-  const repeated = lockedRepeat(file, revision);
-  const destination = readRecord(file)?.destination;
-  if (repeated || destination === undefined) return repeated ?? { published: undefined };
-  // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
-  const prepared = prepareScriptDestination(destination);
-  const answered = settledRepeat(file, revision, prepared);
   const record = readRecord(file);
-  if (answered || !record) return answered ?? { published: undefined };
+  if (!record) return { published: undefined };
+  const repeated = committedRepeat(record, revision);
+  if (repeated) return repeated;
+  // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
+  const prepared = prepareScriptDestination(record.destination);
+  const current = settleNamedInterruption(file, record, revision, prepared);
+  const promoted = committedRepeat(current, revision);
+  if (promoted) return promoted;
   const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
   try {
-    writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
+    writeRecord(file, { ...current, staging: [...(current.staging ?? []), staging] });
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
@@ -667,12 +668,6 @@ function committedRepeat(record: ScriptRecord, revision: number): PublishOutcome
   };
 }
 
-/** Runs under the record lock: answers a version the record committed, reading nothing but the record. */
-function lockedRepeat(file: string, revision: number): PublishOutcome | undefined {
-  const record = readRecord(file);
-  return record ? committedRepeat(record, revision) : { published: undefined };
-}
-
 /**
  * Runs under the record lock: answers a version the record committed, or settles an interrupted commit that
  * names it against the entry host-kit confirms and answers it when that commit installed it. Nothing when the
@@ -685,10 +680,25 @@ function settledRepeat(
 ): PublishOutcome | undefined {
   const record = readRecord(file);
   if (!record) return { published: undefined };
-  const repeated = committedRepeat(record, revision);
-  if (repeated || revision > (record.publishing?.revision ?? 0)) return repeated;
+  return (
+    committedRepeat(record, revision) ??
+    committedRepeat(settleNamedInterruption(file, record, revision, prepared), revision)
+  );
+}
+
+/**
+ * Runs under the record lock: settles an interrupted commit that names `revision` against the entry host-kit
+ * confirms, and returns the record as settled, or the record unchanged when no such commit is pending.
+ */
+function settleNamedInterruption(
+  file: string,
+  record: ScriptRecord,
+  revision: number,
+  prepared: ScriptDestination,
+): ScriptRecord {
+  if (revision > (record.publishing?.revision ?? 0)) return record;
   const { entry } = confirmScriptDestination(record.destination, prepared);
-  return committedRepeat(settleInterrupted(file, record, entry), revision);
+  return settleInterrupted(file, record, entry);
 }
 
 /**

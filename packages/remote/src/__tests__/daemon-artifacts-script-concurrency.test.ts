@@ -2,7 +2,7 @@
 // answered from the record under the lock, never against a stale read (ADR 0016).
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import * as file from '@agent-device/host-kit/file';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
@@ -59,21 +59,31 @@ function countedServer(onFetch: () => { body: string } | undefined = () => ({ bo
   return { served, fetches };
 }
 
-test('a commit that lands between the first read and staging is answered without a fetch', async () => {
+test('a commit that lands after the unlocked first read is answered under the lock without a fetch', async () => {
+  // The snapshot read outside the lock still says revision 1; the decision under the lock sees revision 2.
   const { stateDir, directory } = caller();
   const destination = path.join(directory, 'journey.ad');
   const { served, fetches } = countedServer();
   const baseUrl = await artifactServer(served);
   const { id } = await open(baseUrl, stateDir, destination);
-  vi.mocked(file.prepareScriptDestination).mockImplementationOnce((spelled) => {
-    otherDeliveryCommits(stateDir, destination);
-    return actual.prepareScriptDestination(spelled);
-  });
+  const { file: recordFile } = soleRecord(stateDir);
+  const read = fs.readFileSync.bind(fs) as (...args: unknown[]) => string | Buffer;
+  let landed = false;
+  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((...args: unknown[]) => {
+    const contents = read(...args);
+    if (!landed && args[0] === recordFile) {
+      landed = true;
+      otherDeliveryCommits(stateDir, destination);
+    }
+    return contents;
+  }) as typeof fs.readFileSync);
+  onTestFinished(() => spy.mockRestore());
 
   const late = await answer(baseUrl, stateDir, request('click'), {
     artifacts: [script('v2', 2, id)],
   });
 
+  expect(landed).toBe(true);
   expect(fetches.count).toBe(0);
   expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
@@ -265,28 +275,24 @@ test('a failed fetch after a concurrent close retired the record reports the fet
 });
 
 test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-  'a commit that lands before the locked decision is answered before an unusable parent is judged',
+  'a commit that lands after the first record lock never lets an unusable parent refuse a committed version',
   async () => {
-    // Another delivery commits version 2 right after this client's first look at the record, and the parent
-    // then becomes shared. The locked decision answers the repeat without preparing the destination.
+    // Another delivery commits version 2 as soon as this client's first record lock releases, and the parent then
+    // becomes shared. The repeat decision, preparation and staging share that one lock, so the commit is answered
+    // from the record and the shared parent is never judged for a version it already holds.
     const { stateDir, directory } = caller();
     const destination = path.join(directory, 'journey.ad');
-    const { served, fetches } = countedServer();
+    const { served } = countedServer();
     const baseUrl = await artifactServer(served);
     const { id } = await open(baseUrl, stateDir, destination);
-    const { file: recordFile } = soleRecord(stateDir);
-    const read = fs.readFileSync.bind(fs) as (...args: unknown[]) => string | Buffer;
     let landed = false;
-    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((...args: unknown[]) => {
-      const contents = read(...args);
-      if (!landed && args[0] === recordFile) {
-        landed = true;
-        otherDeliveryCommits(stateDir, destination);
-        fs.chmodSync(directory, 0o777);
-      }
-      return contents;
-    }) as typeof fs.readFileSync);
-    vi.mocked(file.prepareScriptDestination).mockClear();
+    vi.mocked(file.withProcessLock).mockImplementationOnce(async (options) => {
+      const result = await actual.withProcessLock(options);
+      otherDeliveryCommits(stateDir, destination);
+      fs.chmodSync(directory, 0o777);
+      landed = true;
+      return result;
+    });
 
     try {
       const late = await answer(baseUrl, stateDir, request('click'), {
@@ -294,12 +300,9 @@ test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
       });
 
       expect(landed).toBe(true);
-      expect(file.prepareScriptDestination).not.toHaveBeenCalled();
-      expect(fetches.count).toBe(0);
-      expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
+      expect(late.ok && late.data?.savedScript).toBe(destination);
       expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
     } finally {
-      spy.mockRestore();
       fs.chmodSync(directory, 0o700);
     }
   },
