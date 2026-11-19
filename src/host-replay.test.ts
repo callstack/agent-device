@@ -225,6 +225,8 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
       name: '@agent-device/maestro',
       version: '0.0.0',
       type: 'module',
+      engines: { node: '>=22.12' },
+      'agent-device': { apiVersion: 3, replayBackend: 'maestro' },
       exports: { './agent-device': './plugin.mjs' },
     }),
   );

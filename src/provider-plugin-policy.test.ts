@@ -75,8 +75,8 @@ test('a WebDriver descriptor missing what the engine needs is listed as an inval
     home,
     'example',
     `export default () => ({
-      apiVersion: 2, provider: 'example', credentials: { variables: [] },
-      setup: async () => ({ webDriver: { provider: 'example' } }),
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "example", credentials: { variables: [] },
+      setup: async () => ({ webDriver: { provider: 'example' } }) }],
     });`,
   );
   const registry = await startStoreRegistry(env);

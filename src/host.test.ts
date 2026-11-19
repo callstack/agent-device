@@ -242,7 +242,7 @@ test('a host registers the plugins its embedder imported and reports the invento
 
 test.each([
   { plugin: 'not-a-plugin', reason: 'invalid_plugin' },
-  { plugin: { apiVersion: 1, provider: 'wrong-version' }, reason: 'incompatible_plugin' },
+  { plugin: { apiVersion: 2, provider: 'wrong-version' }, reason: 'incompatible-plugin-api' },
 ])(
   'plugin validation reports $reason through the registry inventory',
   async ({ plugin, reason }) => {

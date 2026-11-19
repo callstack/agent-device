@@ -68,7 +68,9 @@ test('connection resolve and verify use each call host independently', async () 
     {
       source: 'embedder',
       load: () => ({
-        apiVersion: 2,
+        apiVersion: 3,
+        contributes: [{
+        kind: 'provider',
         provider: 'example',
         credentials: { variables: [] },
         setup: () => ({}),
@@ -91,6 +93,7 @@ test('connection resolve and verify use each call host independently', async () 
             return { provider: 'example', service: 'example', verificationMessage: 'ok' };
           },
         },
+        }],
       }),
     },
   ]);
@@ -119,7 +122,9 @@ test('provider registry setup receives its supplied command host', async () => {
     {
       source: 'embedder',
       load: () => ({
-        apiVersion: 2,
+        apiVersion: 3,
+        contributes: [{
+        kind: 'provider',
         provider: 'example',
         credentials: { variables: [] },
         setup: async (host: import('./host.ts').ProviderPluginHost) => {
@@ -130,6 +135,7 @@ test('provider registry setup receives its supplied command host', async () => {
           observed = JSON.parse(result.stdout);
           return { webDriver: { provider: 'example' } };
         },
+        }],
       }),
     },
   ]);

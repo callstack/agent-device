@@ -52,6 +52,8 @@ function installFixture(name = packageName, provider = 'example') {
         name,
         version: '1.2.3',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider },
         exports: { './agent-device': { import: './plugin.mjs' } },
       }),
     );
@@ -115,7 +117,7 @@ test('failed npm install and incompatible replacement preserve the active select
   assert.equal(fs.readdirSync(path.join(home, 'plugins')).length, 1);
 });
 
-test('a factory shaped for the removed v1 contract still installs', async () => {
+test('a factory shaped for the removed v1 contract still installs but never loads', async () => {
   const { env } = pluginHome();
   vi.mocked(runCmd).mockImplementation(async (_command, _argv, options) => {
     const directory = path.join(options!.cwd!, 'node_modules', packageName);
@@ -126,6 +128,8 @@ test('a factory shaped for the removed v1 contract still installs', async () => 
         name: packageName,
         version: '1.2.3',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider: 'example' },
         exports: { './agent-device': { import: './plugin.mjs' } },
       }),
     );
@@ -136,8 +140,8 @@ test('a factory shaped for the removed v1 contract still installs', async () => 
   await changePlugin('add', packageName, env);
   const [listed] = await listPlugins(env, []);
   assert.deepEqual(
-    { name: listed?.name, compatible: listed?.compatible },
-    { name: packageName, compatible: false },
+    { name: listed?.name, compatible: listed?.compatible, reason: listed?.error?.reason },
+    { name: packageName, compatible: false, reason: 'incompatible-plugin-api' },
   );
 });
 
@@ -150,19 +154,19 @@ test('concurrent additions serialize without dropping the other package', async 
     const name: string = Object.keys(dependencies)[0]!;
     const directory = path.join(options!.cwd!, 'node_modules', name);
     fs.mkdirSync(directory, { recursive: true });
+    const provider = name.toLowerCase().replaceAll(/[^a-z0-9-]/g, '-');
     fs.writeFileSync(
       path.join(directory, 'package.json'),
       JSON.stringify({
         name,
         version: '1.2.3',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider },
         exports: { './agent-device': { import: './plugin.mjs' } },
       }),
     );
-    fs.writeFileSync(
-      path.join(directory, 'plugin.mjs'),
-      pluginSource(name.toLowerCase().replaceAll(/[^a-z0-9-]/g, '-')),
-    );
+    fs.writeFileSync(path.join(directory, 'plugin.mjs'), pluginSource(provider));
     return { stdout: '', stderr: '', exitCode: 0 };
   });
   await Promise.all([changePlugin('add', 'constructor', env), changePlugin('add', 'two', env)]);

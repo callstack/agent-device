@@ -34,8 +34,9 @@ test('plugins list and remove route through the CLI and emits JSON without daemo
     'example',
     `import fs from 'node:fs';
      export default () => ({
-       apiVersion: 2, provider: 'example', credentials: { variables: [] },
+       apiVersion: 3, contributes: [{ kind: 'provider', provider: "example", credentials: { variables: [] },
        setup: async () => { fs.writeFileSync(${JSON.stringify(marker)}, 'yes'); throw new Error('must not set up'); },
+       }],
      });`,
   );
   const sendToDaemon = vi.fn(async () => {
@@ -51,7 +52,7 @@ test('plugins list and remove route through the CLI and emits JSON without daemo
     const result = JSON.parse(stdout);
     assert.equal(result.success, true);
     assert.deepEqual(result.data.plugins, [
-      { name: 'example', version: '2.0.0', provider: 'example', compatible: true },
+      { name: 'example', version: '2.0.0', provider: "example", compatible: true },
     ]);
     assert.equal(sendToDaemon.mock.calls.length, 0);
     await runCli(['plugins', 'remove', 'example', '--json'], { sendToDaemon });
@@ -84,7 +85,7 @@ test('plugins list reports the running daemon inventory next to the store select
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
   const owner = readCurrentOwnerIdentity();
   const failed = {
-    provider: 'example',
+    provider: "example",
     source: 'store',
     package: 'example',
     version: '1.2.3',
@@ -167,7 +168,7 @@ test('plugins list names a plugin the running daemon did not register', async ()
       processStartTime: owner.startTime,
       plugins: [
         {
-          provider: 'example',
+          provider: "example",
           source: 'store',
           package: 'example',
           state: 'failed',
@@ -209,6 +210,8 @@ test.each(['relative', 'absolute'])(
         name: 'cli-artifact',
         version: '1.0.0',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider: 'cli-artifact' },
         exports: { './agent-device': './plugin.mjs' },
         scripts: { preinstall: 'node sentinel.cjs' },
       }),
@@ -387,6 +390,8 @@ test('plugins add installs a scoped pinned registry selector through the store',
         name: '@example/provider',
         version: '1.2.3',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider: "example" },
         exports: { './agent-device': './plugin.mjs' },
       }),
     );

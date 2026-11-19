@@ -118,22 +118,23 @@ test('a broken plugin is listed as failed while its working neighbor registers',
   selectPlugin(
     home,
     'd-invalid',
-    `export default () => ({ apiVersion: 2, provider: 'Not Valid', credentials: { variables: [] }, setup() {} });`,
+    `export default () => ({ apiVersion: 3, contributes: [{ kind: 'provider', provider: 'Not Valid', credentials: { variables: [] }, setup() {} }] });`,
   );
   selectPlugin(
     home,
     'e-setup-fails',
-    `export default () => ({ apiVersion: 2, provider: 'setup-fails', credentials: { variables: [] }, setup: async () => { throw new Error('setup failed'); } });`,
+    `export default () => ({ apiVersion: 3, contributes: [{ kind: 'provider', provider: "setup-fails", credentials: { variables: [] }, setup: async () => { throw new Error('setup failed'); } }] });`,
   );
   selectPlugin(
     home,
     'f-bad-owner',
     `export default () => ({
-      apiVersion: 2, provider: 'declared-id', credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "declared-id", credentials: { variables: [] },
       setup: async () => ({
         runtime: { provider: 'other-id', ownsDevice: () => false, getInteractor: () => undefined,
           deviceInventoryProvider: async () => [], leaseLifecycle: {}, shutdown: async () => {} },
         platformModule: { owner: { kind: 'provider-runtime', provider: 'other-id', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } } })
+      }]
     });`,
   );
   const registry = await startStore(env);
@@ -163,7 +164,7 @@ test('the first plugin to name a provider claims it even when it fails, and late
   selectPlugin(
     home,
     'a-claims-then-fails',
-    `export default () => ({ apiVersion: 2, provider: 'shared', credentials: { variables: [] }, setup: async () => { throw new Error('setup failed'); } });`,
+    `export default () => ({ apiVersion: 3, contributes: [{ kind: 'provider', provider: "shared", credentials: { variables: [] }, setup: async () => { throw new Error('setup failed'); } }] });`,
   );
   selectPlugin(home, 'b-duplicate', pluginSource('shared'));
   selectPlugin(home, 'c-builtin-id', pluginSource('limrun'));
@@ -184,15 +185,14 @@ test('the first plugin to name a provider claims it even when it fails, and late
   await registry.close();
 });
 
-test('a package whose factory returns the v1 shape is listed as incompatible', async () => {
+test('a package whose factory returns the version 2 shape gets the typed incompatibility', async () => {
   const { home, env } = pluginHome();
   selectPlugin(
     home,
-    'v1-factory',
+    'v2-factory',
     `export default () => ({
-       runtime: { provider: 'v1-factory', ownsDevice: () => false, getInteractor: () => undefined,
-         deviceInventoryProvider: async () => [], leaseLifecycle: {}, shutdown: async () => {} },
-       platformModule: { owner: { kind: 'provider-runtime', provider: 'v1-factory', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } } });`,
+       apiVersion: 2, provider: "v2-factory", credentials: { variables: [] },
+       setup: async () => ({}) });`,
   );
   const { resolveProviderPlugins, claimProviderIds } = await import('./registry.ts');
   const { storePluginCandidates } = await import('./store.ts');
@@ -201,12 +201,47 @@ test('a package whose factory returns the v1 shape is listed as incompatible', a
     ...(await storePluginCandidates(env)),
   ]);
 
-  // A v1 package used to be dispatched from its manifest and registered; the contract version is
-  // now the only way in, so it is listed and skipped like any other incompatible plugin.
+  // There is no compatibility shim: the contract version is the only way in, so a version 2
+  // result is listed and skipped with the typed incompatibility.
   assert.deepEqual(
     resolved.inventory().map(({ package: name, state, error }) => [name, state, error?.reason]),
-    [['v1-factory', 'failed', 'incompatible_plugin']],
+    [['v2-factory', 'failed', 'incompatible-plugin-api']],
   );
+});
+
+test('a package whose metadata declares apiVersion 2 fails before import with the typed incompatibility', async () => {
+  const { home, env } = pluginHome();
+  selectPlugin(
+    home,
+    'v2-metadata',
+    'throw new Error("metadata checks must not import this package");',
+    { claims: { apiVersion: 2, provider: 'v2-metadata' } },
+  );
+  const { resolveProviderPlugins, claimProviderIds } = await import('./registry.ts');
+  const { storePluginCandidates } = await import('./store.ts');
+  const resolved = await resolveProviderPlugins([
+    ...claimProviderIds(['limrun']),
+    ...(await storePluginCandidates(env)),
+  ]);
+  assert.deepEqual(
+    resolved.inventory().map(({ package: name, state, error }) => [name, state, error?.reason]),
+    [['v2-metadata', 'failed', 'incompatible-plugin-api']],
+  );
+});
+
+test('a factory whose claims do not match the package metadata is invalid', async () => {
+  const { home, env } = pluginHome();
+  // Metadata declares provider: metadata-id, but the factory returns provider: factory-id.
+  selectPlugin(home, 'mismatch', pluginSource('factory-id'), {
+    claims: { apiVersion: 3, provider: 'metadata-id' },
+  });
+  const registry = await startStore(env, []);
+  assert.deepEqual(registry.registrations, []);
+  assert.deepEqual(
+    registry.inventory.map(({ package: name, state, error }) => [name, state, error?.reason]),
+    [['mismatch', 'failed', 'invalid_plugin']],
+  );
+  await registry.close();
 });
 
 test('entry discovery prefers ./agent-device and falls back to the root export only when it is absent', async () => {
@@ -277,14 +312,15 @@ test('a plugin dispose runs after its runtime shuts down', async () => {
     'disposing',
     `import fs from 'node:fs';
     export default (options) => ({
-      apiVersion: 2, provider: 'disposing', credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "disposing", credentials: { variables: [] },
       setup: async () => ({
-        runtime: { provider: 'disposing', ownsDevice: () => false, getInteractor: () => undefined,
+        runtime: { provider: "disposing", ownsDevice: () => false, getInteractor: () => undefined,
           deviceInventoryProvider: async () => [], leaseLifecycle: {},
           shutdown: async () => { fs.appendFileSync(options.log, 'runtime;'); } },
-        platformModule: { owner: { kind: 'provider-runtime', provider: 'disposing', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
+        platformModule: { owner: { kind: 'provider-runtime', provider: "disposing", instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
         dispose: async () => { fs.appendFileSync(options.log, 'dispose;'); },
       }),
+      }],
     });`,
     { selectionOptions: { log } },
   );
@@ -302,14 +338,15 @@ test('a frozen runtime registers untouched, serves its facets, and is shut down 
     'frozen',
     `import fs from 'node:fs';
     export default (options) => ({
-      apiVersion: 2, provider: 'frozen', credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "frozen", credentials: { variables: [] },
       setup: async () => ({
-        runtime: Object.freeze({ provider: 'frozen', ownsDevice: () => false, getInteractor: () => undefined,
+        runtime: Object.freeze({ provider: "frozen", ownsDevice: () => false, getInteractor: () => undefined,
           deviceInventoryProvider: async () => [], leaseLifecycle: Object.freeze({}),
           shutdown: async () => { fs.appendFileSync(options.log, 'runtime;'); } }),
-        platformModule: Object.freeze({ owner: Object.freeze({ kind: 'provider-runtime', provider: 'frozen', instance: 'test' }), loadRuntime: async () => { throw new Error('lazy'); } }),
+        platformModule: Object.freeze({ owner: Object.freeze({ kind: 'provider-runtime', provider: "frozen", instance: 'test' }), loadRuntime: async () => { throw new Error('lazy'); } }),
         dispose: async () => { fs.appendFileSync(options.log, 'dispose;'); },
       }),
+      }],
     });`,
     { selectionOptions: { log } },
   );
@@ -475,12 +512,13 @@ test('a rejected setup shuts its runtime down before it disposes', async () => {
     'rejected',
     `import fs from 'node:fs';
     export default (options) => ({
-      apiVersion: 2, provider: 'rejected', credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "rejected", credentials: { variables: [] },
       setup: async () => ({
         runtime: { provider: 'other-id', shutdown: async () => { fs.appendFileSync(options.log, 'runtime;'); } },
         platformModule: {},
         dispose: async () => { fs.appendFileSync(options.log, 'dispose;'); },
       }),
+      }],
     });`,
     { selectionOptions: { log } },
   );
@@ -558,7 +596,7 @@ test('one plugin failing to shut down does not stop the others from shutting dow
   const log = path.join(home, 'close-log');
   const source = (name: string, shutdownBody: string) => `import fs from 'node:fs';
     export default (options) => ({
-      apiVersion: 2, provider: ${JSON.stringify(name)}, credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: ${JSON.stringify(name)}, credentials: { variables: [] },
       setup: async () => ({
         runtime: { provider: ${JSON.stringify(name)}, ownsDevice: () => false, getInteractor: () => undefined,
           deviceInventoryProvider: async () => [], leaseLifecycle: {},
@@ -566,6 +604,7 @@ test('one plugin failing to shut down does not stop the others from shutting dow
         platformModule: { owner: { kind: 'provider-runtime', provider: ${JSON.stringify(name)}, instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
         dispose: async () => { fs.appendFileSync(options.log, ${JSON.stringify(`${name}-dispose;`)}); },
       }),
+      }],
     });`;
   selectPlugin(
     home,
@@ -589,6 +628,7 @@ test('one plugin failing to shut down does not stop the others from shutting dow
 
   const events = fs.readFileSync(log, 'utf8').split(';').filter(Boolean).sort();
   assert.deepEqual(events, ['fine-dispose', 'fine-shutdown', 'throws-dispose', 'throws-shutdown']);
+  // Close runs in reverse activation order: the second-activated plugin closes first.
   assert.deepEqual(
     outcomes.map(({ provider, source, shutdown, dispose }) => [
       provider,
@@ -597,8 +637,8 @@ test('one plugin failing to shut down does not stop the others from shutting dow
       dispose.status,
     ]),
     [
-      ['throws', 'store', 'boom', 'ok'],
       ['fine', 'store', 'ok', 'ok'],
+      ['throws', 'store', 'boom', 'ok'],
     ],
   );
   assert.equal(await registry.close(), outcomes);

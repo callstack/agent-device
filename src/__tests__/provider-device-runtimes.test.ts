@@ -214,14 +214,15 @@ test('composition shutdown is the only route the daemon uses: it shuts every run
     'cleaning',
     `import fs from 'node:fs';
     export default (options) => ({
-      apiVersion: 2, provider: 'cleaning', credentials: { variables: [] },
+      apiVersion: 3, contributes: [{ kind: 'provider', provider: "cleaning", credentials: { variables: [] },
       setup: async () => ({
-        runtime: { provider: 'cleaning', ownsDevice: () => false, getInteractor: () => undefined,
+        runtime: { provider: "cleaning", ownsDevice: () => false, getInteractor: () => undefined,
           deviceInventoryProvider: async () => [], leaseLifecycle: {},
           shutdown: async () => { fs.appendFileSync(options.log, 'runtime;'); } },
-        platformModule: { owner: { kind: 'provider-runtime', provider: 'cleaning', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
+        platformModule: { owner: { kind: 'provider-runtime', provider: "cleaning", instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
         dispose: async () => { fs.appendFileSync(options.log, 'dispose;'); },
       }),
+      }],
     });`,
     { selectionOptions: { log } },
   );

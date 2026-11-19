@@ -461,7 +461,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         home,
         '@agent-device/browserstack',
         `import browserstack from ${JSON.stringify(import.meta.resolve('@agent-device/browserstack'))}; export default browserstack;`,
-        { selectionOptions: {} },
+        { selectionOptions: {}, claims: { apiVersion: 3, provider: 'browserstack' } },
       );
       const previousHome = process.env.AGENT_DEVICE_HOME;
       process.env.AGENT_DEVICE_HOME = home;

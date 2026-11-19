@@ -31,6 +31,8 @@ function packFixture(
       name,
       version: '1.2.3',
       type: 'module',
+      engines: { node: '>=22.12' },
+      'agent-device': { apiVersion: 3, provider: name },
       exports: exportsField,
       scripts: {
         preinstall: `node sentinel.cjs`,

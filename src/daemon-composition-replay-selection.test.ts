@@ -16,19 +16,24 @@ import {
 import { composeDaemonRuntimeDeps } from './daemon-composition.ts';
 
 function pluginSource(backend: 'ad' | 'maestro') {
-  const capability =
+  const contribution =
     backend === 'ad'
-      ? `execution: { create: () => ({
+      ? `kind: 'replay-execution', id: 'ad', setup: () => ({ execution: { create: () => ({
           inspectAdReplay() {}, runAdReplay() {}, runReplayTestSuite() {}
-        }) }`
-      : `replayBackend: { create: () => ({
+        }) } })`
+      : `kind: 'replay-backend', backend: 'maestro', setup: () => ({ replayBackend: { create: () => ({
           id: 'maestro', collectSourceFiles() {}, inspectSource() {},
           runReplay() {}, exportReplayScript() {}
-        }) }`;
+        }) } })`;
   return `export default () => ({
-    apiVersion: 2, kind: 'replay-backend', backend: '${backend}',
-    setup: () => ({ ${capability} })
+    apiVersion: 3, contributes: [{ ${contribution} }]
   });`;
+}
+
+function claimsOf(backend: 'ad' | 'maestro') {
+  return backend === 'ad'
+    ? { apiVersion: 3, replayExecution: true }
+    : { apiVersion: 3, replayBackend: 'maestro' };
 }
 
 async function composedRuntime(env: NodeJS.ProcessEnv, embedded = false) {
@@ -77,14 +82,14 @@ test.each([
     const { home, env } = pluginHome();
     const name = `@example/${backend}`;
     const source = pluginSource(backend);
-    selectPlugin(home, name, source);
+    selectPlugin(home, name, source, { claims: claimsOf(backend) });
     const runtime = await composedRuntime(env);
     try {
       const first = await runtime.resolve(backend);
-      selectPlugin(home, '@example/unrelated', pluginSource(backend));
+      selectPlugin(home, '@example/unrelated', pluginSource(backend), { claims: claimsOf(backend) });
       expect(await runtime.resolve(backend)).toBe(first);
       if (change === 'replace') {
-        selectPlugin(home, name, source);
+        selectPlugin(home, name, source, { claims: claimsOf(backend) });
       } else {
         const configPath = path.join(home, 'config.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -104,7 +109,7 @@ test.each(['ad', 'maestro'] as const)(
   'embedded %s implementations remain independent of store changes',
   async (backend) => {
     const { home, env } = pluginHome();
-    selectPlugin(home, `@example/${backend}`, pluginSource(backend));
+    selectPlugin(home, `@example/${backend}`, pluginSource(backend), { claims: claimsOf(backend) });
     const runtime = await composedRuntime(env, true);
     try {
       const first = await runtime.resolve(backend);
@@ -128,7 +133,7 @@ test.each([
       await expect(runtime.resolve(backend)).rejects.toMatchObject({
         details: { reason: 'plugin-not-installed', package: name },
       });
-      selectPlugin(home, name, pluginSource(backend));
+      selectPlugin(home, name, pluginSource(backend), { claims: claimsOf(backend) });
       await expect(runtime.resolve(backend)).rejects.toMatchObject({
         details: { reason: 'daemon-plugin-set-stale', package: name },
       });

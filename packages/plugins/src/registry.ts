@@ -309,6 +309,10 @@ async function loadSlot(
     slot.failure = asPluginFailure(error, 'plugin_load_failed');
     slot.provider = readProviderId(raw) ?? slot.candidate.provider;
     slot.backend = readBackendId(raw);
+    // The first registration keeps its claim even when it fails: a pre-read identity still
+    // reserves the claim, so a later candidate with the same id is the failed duplicate.
+    if (slot.provider !== undefined) claimed.provider.add(slot.provider);
+    if (slot.backend !== undefined) claimed.backend.add(slot.backend);
   }
 }
 
@@ -433,13 +437,26 @@ function requireReplayClaim(
   packageName: string | undefined,
   assertSelectionCurrent?: (packageName: string) => void,
 ): Claim {
-  const claim = resolved.slots
-    .flatMap((slot) => slot.claims)
-    .find((claim) => claim.space === space && claim.key === id);
-  if (claim) {
-    if (claim.slot.candidate.source === 'store' && claim.slot.candidate.package)
-      assertSelectionCurrent?.(claim.slot.candidate.package);
-    return claim;
+  // In candidate order: a slot's own claim first, then a failed load whose pre-read id matches,
+  // so the first registration's failure is what a resolution surfaces.
+  for (const slot of resolved.slots) {
+    const claim = slot.claims.find((claim) => claim.space === space && claim.key === id);
+    if (claim) {
+      if (slot.candidate.source === 'store' && slot.candidate.package)
+        assertSelectionCurrent?.(slot.candidate.package);
+      return claim;
+    }
+    if (slot.claims.length === 0 && slot.failure !== undefined && slot.backend === id) {
+      if (slot.candidate.source === 'store' && slot.candidate.package)
+        assertSelectionCurrent?.(slot.candidate.package);
+      return {
+        slot,
+        space,
+        key: id,
+        contribution: undefined as unknown as Contribution,
+        failure: slot.failure,
+      } satisfies Claim;
+    }
   }
   // A selected package that failed before it could claim still answers for its own name.
   const failed = resolved.slots.find(
@@ -452,14 +469,13 @@ function requireReplayClaim(
   if (failed) {
     if (failed.candidate.source === 'store' && failed.candidate.package)
       assertSelectionCurrent?.(failed.candidate.package);
-    const claim: Claim = {
+    return {
       slot: failed,
       space,
       key: id,
       contribution: undefined as unknown as Contribution,
       failure: failed.failure,
-    };
-    return claim;
+    } satisfies Claim;
   }
   if (packageName) assertSelectionCurrent?.(packageName);
   throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${id}`, {
@@ -697,6 +713,7 @@ function readBackendId(raw: unknown): string | undefined {
     for (const entry of raw.contributes) {
       if (isRecord(entry) && entry.kind === 'replay-backend' && isProviderId(entry.backend))
         return entry.backend;
+      if (isRecord(entry) && entry.kind === 'replay-execution') return NATIVE_REPLAY_BACKEND;
     }
   }
   return undefined;
