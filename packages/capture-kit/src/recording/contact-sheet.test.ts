@@ -23,8 +23,8 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   runCmd: vi.fn(),
 }));
 
-vi.mock(import('./swift-cache.ts'), async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./swift-cache.ts')>()),
+vi.mock(import('@agent-device/host-swift/swift-cache'), async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-swift/swift-cache')>()),
   compileSwiftSources: vi.fn(async () => '/cached/bin/recording-frames'),
 }));
 

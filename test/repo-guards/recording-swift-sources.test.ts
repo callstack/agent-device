@@ -5,19 +5,14 @@ import { expect, test } from 'vitest';
 import { stripSwiftComments } from '../../scripts/strip-swift-comments.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const RECORDING_SCRIPTS = path.resolve(
-  HERE,
-  '../../apple/runner/AgentDeviceRunner/RecordingScripts',
-);
+const RECORDING_SCRIPTS = path.resolve(HERE, '../../packages/host-swift/swift');
 type EmbeddedSources = Record<
   'RECORDING_OVERLAY_SOURCES' | 'RECORDING_FRAMES_SOURCES',
   readonly { fileName: string; text: string }[]
 >;
 // Read by file, as the generated artifact it is, the way the .swift files are read.
 const { RECORDING_FRAMES_SOURCES, RECORDING_OVERLAY_SOURCES } = (await import(
-  pathToFileURL(
-    path.resolve(HERE, '../../packages/capture-kit/src/recording/recording-swift-sources.ts'),
-  ).href
+  pathToFileURL(path.resolve(HERE, '../../packages/host-swift/src/recording-swift-sources.ts')).href
 )) as EmbeddedSources;
 const EMBEDDED = [...RECORDING_OVERLAY_SOURCES, ...RECORDING_FRAMES_SOURCES];
 const REGENERATE =

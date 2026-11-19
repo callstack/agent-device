@@ -8,7 +8,7 @@ import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtu
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { compileSwiftSources, runSwiftHelper } from './swift-cache.ts';
+import { compileSwiftSources, runSwiftHelper } from '@agent-device/host-swift/swift-cache';
 import {
   hasVideoContainer,
   isPlayableVideo,
@@ -20,7 +20,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
-vi.mock('./swift-cache.ts', async () => ({
+vi.mock('@agent-device/host-swift/swift-cache', async () => ({
   // The launcher every helper goes through; it reaches the mocked runCmd, so a launch that skips it is visible.
   runSwiftHelper: vi.fn(
     async (_host: unknown, executablePath: string, args: readonly string[], options: object) =>
@@ -29,7 +29,9 @@ vi.mock('./swift-cache.ts', async () => ({
   getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR ?? '',
   compileSwiftSources: vi.fn(async () => '/bin/true'),
   isUntrustedSwiftCacheError: (
-    await vi.importActual<typeof import('./swift-cache.ts')>('./swift-cache.ts')
+    await vi.importActual<typeof import('@agent-device/host-swift/swift-cache')>(
+      '@agent-device/host-swift/swift-cache',
+    )
   ).isUntrustedSwiftCacheError,
 }));
 

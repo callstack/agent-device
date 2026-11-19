@@ -34,10 +34,6 @@ const LEGACY_OUTPUT_DIRS = [
   path.join('dist', 'apple', 'apple-runner'),
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
-// The recording helpers are compiled from copies embedded in the JavaScript build
-// (packages/capture-kit/src/recording/recording-swift-sources.ts), never from a file in the package, so their
-// .swift sources are not shipped.
-const SKIPPED_RUNNER_DIR_NAMES = new Set([...SKIPPED_DIR_NAMES, 'RecordingScripts']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
 // The isolation scan's positive control compiles only in scripts/build-xcuitest-apple.sh builds:
 // the repo gates and the prebuilt release runner. Runners built from this package omit it.
@@ -79,7 +75,7 @@ function packageAppleRunnerSource(options = {}) {
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
-    skipDirectoryNames: SKIPPED_RUNNER_DIR_NAMES,
+    skipDirectoryNames: SKIPPED_DIR_NAMES,
     skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
   });
   packageSnapshotPresentationSource(root, options, summary);

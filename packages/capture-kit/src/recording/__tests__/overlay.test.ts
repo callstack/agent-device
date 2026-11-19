@@ -376,10 +376,7 @@ test('the overlay compiles its shipped source, never one planted at the checkout
   // An installed agent-device package whose top-level checkout path another user could write, used as the
   // host's working directory: neither location is a source the overlay may compile.
   const installed = path.join(tmpDir, 'node_modules', 'agent-device');
-  const planted = path.join(
-    installed,
-    'apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
-  );
+  const planted = path.join(installed, 'packages/host-swift/swift/recording-overlay.swift');
   fs.mkdirSync(path.dirname(planted), { recursive: true });
   fs.writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: 'agent-device' }));
   fs.writeFileSync(planted, 'print("planted")\n');
@@ -409,7 +406,8 @@ test('the overlay compiles its shipped source, never one planted at the checkout
     deadline: startRecordingOverlayBudget(),
   });
 
-  const { RECORDING_OVERLAY_SOURCES } = await import('../recording-swift-sources.ts');
+  const { RECORDING_OVERLAY_SOURCES } =
+    await import('@agent-device/host-swift/recording-swift-sources');
   expect(outsideStaging).toEqual([]);
   expect(compiled).toEqual(
     Object.fromEntries(RECORDING_OVERLAY_SOURCES.map(({ fileName, text }) => [fileName, text])),

@@ -66,6 +66,9 @@ importers:
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:packages/host-kit
+      '@agent-device/host-swift':
+        specifier: workspace:*
+        version: link:packages/host-swift
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
@@ -301,6 +304,9 @@ importers:
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
+      '@agent-device/host-swift':
+        specifier: workspace:*
+        version: link:../host-swift
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -658,6 +664,22 @@ importers:
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
+
+  packages/host-swift:
+    dependencies:
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
 
   packages/kernel: {}
 

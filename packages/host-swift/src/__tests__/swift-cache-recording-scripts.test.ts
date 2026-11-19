@@ -5,14 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { runCmd } from '@agent-device/host-kit/command';
-import { mkdtempForTest } from '../../tmp-dir.fixtures.ts';
+import { mkdtempForTest } from '../tmp-dir.fixtures.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const recordingScriptsDir = path.resolve(
-  __dirname,
-  '../../../../../apple/runner/AgentDeviceRunner/RecordingScripts',
-);
-const recordingTestSupportDir = path.resolve(__dirname, '../../../../../test/integration/support');
+const recordingScriptsDir = path.resolve(__dirname, '../../swift');
+const recordingTestSupportDir = path.resolve(__dirname, '../../../../test/integration/support');
 const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;
 
 type TypecheckOutcome = { exitCode: number; stderr: string; source: string };
