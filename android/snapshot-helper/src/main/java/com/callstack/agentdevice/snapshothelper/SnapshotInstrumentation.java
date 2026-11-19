@@ -29,6 +29,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final int SESSION_RESPONSE_WRITE_TIMEOUT_MS = 8_000;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
@@ -180,7 +181,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       int maxDepth,
       int maxNodes)
       throws IOException {
-    // The session socket lives in the abstract namespace, reached from the host through
+    // Android's LocalServerSocket(String) binds in the abstract namespace. The host reaches it through
     // `adb forward tcp:<port> localabstract:<name>`; the forwarded peer is adbd, and its uid is
     // checked before any command byte is read. The name is derived from the port and carries no
     // secret — admission is the peer uid, not name secrecy.
@@ -211,10 +212,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
           }
           long deadlineAtMs =
               SessionPeerPolicy.commandReadDeadlineAtMs(SystemClock.elapsedRealtime(), readBudgetMs);
-          String requestId = "";
           try {
-            String command =
-                readSessionCommandLine(socket, deadlineAtMs, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+            String command;
+            try {
+              command = readSessionCommandLine(socket, deadlineAtMs, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+            } catch (IOException error) {
+              socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
+              SessionResponseWriter.writeSessionError(socket.getOutputStream(), "", error);
+              continue;
+            }
+            // LocalSocket applies setSoTimeout to both directions.
+            socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
             SessionPeerPolicy.LineDecision lineDecision =
                 SessionPeerPolicy.commandLineDecision(command, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
@@ -230,7 +238,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
             }
             String[] parts = command.trim().split("\\s+", 3);
             String action = parts.length > 0 ? parts[0] : "";
-            requestId = parts.length > 1 ? parts[1] : "";
+            String requestId = parts.length > 1 ? parts[1] : "";
             if ("quit".equals(action)) {
               writeSessionOkQuietly(socket, requestId);
               return;
@@ -282,17 +290,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
                 timeoutMs,
                 maxDepth,
                 maxNodes);
-          } catch (IOException error) {
-            // One connection's expected I/O failure — a silent peer past the absolute read
-            // deadline, a command line over the byte cap, a response the peer never read — is
-            // answered with an error and contained here, so the session keeps serving the next
-            // connection. Command handlers contain their own throwables and answer with session
-            // errors themselves.
-            try {
-              SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
-            } catch (IOException ignored) {
-              // The peer is already gone; nothing is left to tell it.
-            }
+          } catch (IOException ignored) {
+            // Close the failed connection without appending another frame to a partial response.
           }
         }
       }
@@ -371,6 +370,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
     Bundle result = new Bundle();
     putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
     result.putString("requestId", requestId);
+    String xml;
     try {
       long startedAtMs = System.currentTimeMillis();
       DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
@@ -380,11 +380,13 @@ public final class SnapshotInstrumentation extends Instrumentation {
           DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
       result.putString("ok", "true");
       putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
-      result.putString("byteLength", Integer.toString(capture.xml.getBytes(StandardCharsets.UTF_8).length));
-      SessionResponseWriter.writeSessionResponse(output, result, capture.xml);
+      xml = capture.xml;
+      result.putString("byteLength", Integer.toString(xml.getBytes(StandardCharsets.UTF_8).length));
     } catch (Throwable error) {
       SessionResponseWriter.writeSessionError(output, requestId, error);
+      return;
     }
+    SessionResponseWriter.writeSessionResponse(output, result, xml);
   }
 
   private static String readStringArgument(Bundle arguments, String key) {
