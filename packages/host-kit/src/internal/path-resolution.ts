@@ -49,7 +49,7 @@ export function resolveScriptDestination(
   if (rules !== path.win32) {
     const resolved = resolveUserPath(spelled, options);
     scriptEntryNameOrRefuse(resolved);
-    return resolved;
+    return resolved.replace(/\/+$/, '');
   }
 
   let expanded = spelled;
@@ -59,7 +59,7 @@ export function resolveScriptDestination(
     expanded = rules.join(home, spelled.slice(2));
     scriptEntryNameOrRefuse(expanded);
   }
-  if (rules.isAbsolute(expanded)) return expanded;
+  if (rules.isAbsolute(expanded)) return expanded.replace(/[\\/]+$/, '');
 
   requireWindowsScriptVolume(spelled, options.cwd);
   const resolved = rules.resolve(options.cwd, expanded);

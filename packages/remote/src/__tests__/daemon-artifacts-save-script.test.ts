@@ -46,28 +46,34 @@ test.each(
   },
 );
 
-test('existing client target refuses before dispatch unless force was granted', async () => {
-  const root = mkdtempForTestSync('script-existing-');
-  const destination = path.join(root, 'output.ad');
-  fs.writeFileSync(destination, 'original');
-  const req = {
-    session: 'owned',
-    command: 'open',
-    positionals: ['Demo'],
-    flags: { saveScript: destination },
-  };
-  await expect(
-    prepareRemoteRequestArtifacts(req, REMOTE, signal, createTestHostEnvironment()),
-  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason: 'script_target_exists' } });
-  const forced = await prepareRemoteRequestArtifacts(
-    { ...req, flags: { ...req.flags, force: true } },
-    REMOTE,
-    signal,
-    createTestHostEnvironment(),
-  );
-  expect(forced.clientArtifactPaths?.savedScript).toBe(destination);
-  expect(fs.readFileSync(destination, 'utf8')).toBe('original');
-});
+test.each(['', '/'])(
+  'existing client target with suffix %j needs force before dispatch',
+  async (suffix) => {
+    const root = mkdtempForTestSync('script-existing-');
+    const destination = path.join(root, 'output.ad');
+    fs.writeFileSync(destination, 'original');
+    const req = {
+      session: 'owned',
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { saveScript: destination + suffix },
+    };
+    await expect(
+      prepareRemoteRequestArtifacts(req, REMOTE, signal, createTestHostEnvironment()),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'script_target_exists' },
+    });
+    const forced = await prepareRemoteRequestArtifacts(
+      { ...req, flags: { ...req.flags, force: true } },
+      REMOTE,
+      signal,
+      createTestHostEnvironment(),
+    );
+    expect(forced.clientArtifactPaths?.savedScript).toBe(destination);
+    expect(fs.readFileSync(destination, 'utf8')).toBe('original');
+  },
+);
 
 test('local publication retains its path and flags', async () => {
   const req = {
