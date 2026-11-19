@@ -161,6 +161,9 @@ test('Windows script preparation creates nested parents one level at a time', ()
   const mkdir = vi
     .spyOn(fs, 'mkdirSync')
     .mockImplementationOnce(() => {
+      throw Object.assign(new Error('A parent is missing'), { code: 'ENOENT' });
+    })
+    .mockImplementationOnce(() => {
       throw Object.assign(new Error('A directory appeared'), { code: 'EEXIST' });
     })
     .mockReturnValue(undefined);
@@ -169,6 +172,7 @@ test('Windows script preparation creates nested parents one level at a time', ()
     expect(prepareScriptDestination(destination).entry).toBe(destination);
   });
   expect(mkdir.mock.calls).toEqual([
+    [String.raw`Z:\recordings\today`, { mode: 0o700 }],
     [String.raw`Z:\recordings`, { mode: 0o700 }],
     [String.raw`Z:\recordings\today`, { mode: 0o700 }],
   ]);
@@ -186,21 +190,31 @@ test('Windows script preparation stops when the volume disappears after validati
     throw missing;
   });
   onWindows(() => {
-    expect(() => prepareScriptDestination(String.raw`Z:\recordings\today\journey.ad`)).toThrow(
-      missing,
+    expectUntrusted(
+      () => prepareScriptDestination(String.raw`Z:\recordings\today\journey.ad`),
+      'unreachable_parent',
+      'Z:\\',
     );
   });
   expect(stat).toHaveBeenCalledExactlyOnceWith('Z:\\', { throwIfNoEntry: false });
-  expect(mkdir).toHaveBeenCalledExactlyOnceWith(String.raw`Z:\recordings`, { mode: 0o700 });
+  expect(mkdir.mock.calls).toEqual([
+    [String.raw`Z:\recordings\today`, { mode: 0o700 }],
+    [String.raw`Z:\recordings`, { mode: 0o700 }],
+  ]);
 });
 
 test('Windows script preparation refuses a file that appeared in place of a parent', () => {
   const directory = fs.statSync(root());
   const file = fs.statSync(new URL(import.meta.url));
   vi.spyOn(fs, 'statSync').mockReturnValueOnce(directory).mockReturnValueOnce(file);
-  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
-    throw Object.assign(new Error('A file appeared'), { code: 'EEXIST' });
-  });
+  const mkdir = vi
+    .spyOn(fs, 'mkdirSync')
+    .mockImplementationOnce(() => {
+      throw Object.assign(new Error('A parent is missing'), { code: 'ENOENT' });
+    })
+    .mockImplementation(() => {
+      throw Object.assign(new Error('A file appeared'), { code: 'EEXIST' });
+    });
   onWindows(() => {
     expectUntrusted(
       () => prepareScriptDestination(String.raw`Z:\recordings\today\journey.ad`),
@@ -208,8 +222,41 @@ test('Windows script preparation refuses a file that appeared in place of a pare
       String.raw`Z:\recordings`,
     );
   });
-  expect(mkdir).toHaveBeenCalledExactlyOnceWith(String.raw`Z:\recordings`, { mode: 0o700 });
+  expect(mkdir.mock.calls).toEqual([
+    [String.raw`Z:\recordings\today`, { mode: 0o700 }],
+    [String.raw`Z:\recordings`, { mode: 0o700 }],
+  ]);
 });
+
+test.each(['create', 'reuse'])(
+  'Windows publication can %s a parent below a traverse-only directory',
+  (operation) => {
+    const directory = fs.statSync(root());
+    const restricted = String.raw`Z:\traverse-only`;
+    const denied = Object.assign(new Error('The ancestor only permits traversal'), {
+      code: 'EACCES',
+    });
+    const stat = vi.spyOn(fs, 'statSync').mockImplementation((name) => {
+      if (name === restricted) throw denied;
+      return directory;
+    });
+    const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation((name) => {
+      if (name === restricted) throw denied;
+      if (operation === 'reuse')
+        throw Object.assign(new Error('The parent exists'), { code: 'EEXIST' });
+      return undefined;
+    });
+    const parent = path.win32.join(restricted, 'recordings');
+    const destination = path.win32.join(parent, 'journey.ad');
+    onWindows(() => {
+      const prepared = prepareScriptDestination(destination);
+      expect(prepared.entry).toBe(destination);
+      expect(confirmScriptDestination(destination, prepared).entry).toBe(destination);
+    });
+    expect(mkdir).toHaveBeenCalledExactlyOnceWith(parent, { mode: 0o700 });
+    expect(stat).not.toHaveBeenCalledWith(restricted, expect.anything());
+  },
+);
 
 test.each(['///journey.ad', '//server', 'C:journey.ad', String.raw`\\?\C:\journey.ad`])(
   'all Windows publication boundaries refuse the unqualified path %s',

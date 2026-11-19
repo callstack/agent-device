@@ -255,31 +255,59 @@ function windowsScriptDestination(destination: string, create: boolean): ScriptD
   const root = requireWindowsScriptVolume(destination, destination);
   const name = entryNameOrRefuse(destination, rules);
   const directory = rules.dirname(rules.normalize(destination));
-  const tail = rules.relative(root, directory);
   requireWindowsScriptDirectory(destination, root);
-  if (tail === '') return authorizedEntry(directory, 'windows', name);
-  if (create) createWindowsScriptParents(destination, root, tail);
+  if (directory === root) return authorizedEntry(directory, 'windows', name);
+  if (create) createWindowsScriptParents(destination, root, directory);
   else requireWindowsScriptDirectory(destination, directory);
   return authorizedEntry(directory, 'windows', name);
 }
 
-function createWindowsScriptParents(destination: string, root: string, tail: string): void {
-  let level = root;
-  for (const part of tail.split(path.win32.sep)) {
-    level = path.win32.join(level, part);
-    try {
-      fs.mkdirSync(level, { mode: SCRIPT_DIR_MODE });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      requireWindowsScriptDirectory(destination, level);
+function createWindowsScriptParents(destination: string, root: string, directory: string): void {
+  const missing: string[] = [];
+  let parent = directory;
+  // Start at the requested parent so a traverse-only ancestor needs no attribute read.
+  while (parent !== root && !makeWindowsScriptDirectory(destination, parent)) {
+    missing.push(parent);
+    parent = path.win32.dirname(parent);
+  }
+  if (parent === root) throw scriptAncestryFailure(destination, root, 'unreachable_parent');
+  for (const child of missing.reverse()) {
+    if (!makeWindowsScriptDirectory(destination, child)) {
+      throw scriptAncestryFailure(destination, child, 'unreachable_parent');
     }
   }
 }
 
+function makeWindowsScriptDirectory(destination: string, directory: string): boolean {
+  try {
+    fs.mkdirSync(directory, { mode: SCRIPT_DIR_MODE });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+    if (code !== 'EEXIST') throw error;
+    requireWindowsScriptDirectory(destination, directory);
+  }
+  return true;
+}
+
 function requireWindowsScriptDirectory(destination: string, directory: string): void {
-  const stats = fs.statSync(directory, { throwIfNoEntry: false });
+  let stats: fs.Stats | undefined;
+  try {
+    stats = fs.statSync(directory, { throwIfNoEntry: false });
+  } catch (error) {
+    if (!isWindowsShareUnavailable(directory, error)) throw error;
+  }
   if (!stats) throw scriptAncestryFailure(destination, directory, 'unreachable_parent');
   if (!stats.isDirectory()) throw scriptAncestryFailure(destination, directory, 'not_a_directory');
+}
+
+/** Windows reports a deleted share as a connection reset through libuv. */
+export function isWindowsShareUnavailable(file: string, error: unknown): boolean {
+  return (
+    process.platform === 'win32' &&
+    /^[\\/]{2}/.test(file) &&
+    (error as NodeJS.ErrnoException | undefined)?.code === 'ECONNRESET'
+  );
 }
 
 function authorizedEntry(

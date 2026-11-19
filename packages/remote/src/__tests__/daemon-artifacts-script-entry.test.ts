@@ -300,35 +300,51 @@ test('a retained record cannot use an unqualified Windows destination', async ()
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
 
-test('a committed Windows script reports a vanished volume as a changed entry', async () => {
-  const { stateDir, directory } = caller();
-  const destination = path.join(directory, 'journey.ad');
-  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
-  const { id } = await open(baseUrl, stateDir, destination);
-  const { file: recordFile, record } = soleRecord(stateDir);
-  fs.writeFileSync(
-    recordFile,
-    JSON.stringify({ ...record, destination: String.raw`Z:\journey.ad` }),
-  );
-  const realStat = fs.statSync.bind(fs);
-  const stat = vi
-    .spyOn(fs, 'statSync')
-    .mockImplementation(((name: never, ...args: never[]) =>
-      String(name) === 'Z:\\' ? undefined : realStat(name, ...args)) as typeof fs.statSync);
-  try {
-    const again = await onWindowsRules(() =>
-      answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
-    );
-    expect(again).toMatchObject({
-      ok: true,
-      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
-    });
-    expect(again.ok && again.data).not.toHaveProperty('savedScript');
-    expect(stat).toHaveBeenCalledWith('Z:\\', { throwIfNoEntry: false });
-  } finally {
-    stat.mockRestore();
-  }
-});
+test.each([
+  { root: 'Z:\\', unavailable: 'drive' },
+  { root: '\\\\server\\share\\', unavailable: 'share root' },
+  { root: '\\\\server\\share\\', unavailable: 'share entry' },
+] as const)(
+  'a committed Windows script reports an unavailable $unavailable as changed',
+  async ({ root, unavailable }) => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    const { file: recordFile, record } = soleRecord(stateDir);
+    const retained = path.win32.join(root, 'journey.ad');
+    fs.writeFileSync(recordFile, JSON.stringify({ ...record, destination: retained }));
+    const reset = Object.assign(new Error('The network name was deleted'), { code: 'ECONNRESET' });
+    const realStat = fs.statSync.bind(fs);
+    const availableDirectory = fs.statSync(directory);
+    const stat = vi.spyOn(fs, 'statSync').mockImplementation(((name: never, ...args: never[]) => {
+      if (String(name) !== root) return realStat(name, ...args);
+      if (unavailable === 'share root') throw reset;
+      return unavailable === 'share entry' ? availableDirectory : undefined;
+    }) as typeof fs.statSync);
+    if (unavailable === 'share entry') {
+      vi.mocked(file.openVerifiedFileForRead).mockImplementationOnce(() => {
+        throw reset;
+      });
+    }
+    try {
+      const again = await onWindowsRules(() =>
+        answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
+      );
+      expect(again).toMatchObject({
+        ok: true,
+        data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+      });
+      expect(again.ok && again.data).not.toHaveProperty('savedScript');
+      expect(stat).toHaveBeenCalledWith(root, { throwIfNoEntry: false });
+      if (unavailable === 'share entry') {
+        expect(file.openVerifiedFileForRead).toHaveBeenCalledWith(retained);
+      }
+    } finally {
+      stat.mockRestore();
+    }
+  },
+);
 
 test.skipIf(process.platform === 'win32')(
   'a version delivered again through a retargeted link never reports the unrelated file there',

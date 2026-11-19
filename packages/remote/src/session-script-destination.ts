@@ -18,6 +18,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
   confirmScriptDestination,
+  isWindowsShareUnavailable,
   judgeScriptDestination,
   openVerifiedFileForRead,
   scriptAncestryReason,
@@ -685,9 +686,12 @@ function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
  */
 function committedVersionEntry(record: ScriptRecord, entry: string): string {
   if (record.committedDigest === undefined) throw new CommittedVersionUnverified('unverifiable');
-  if (contentDigest(entry) !== record.committedDigest)
-    throw new CommittedVersionUnverified('changed');
-  return entry;
+  try {
+    if (contentDigest(entry) === record.committedDigest) return entry;
+  } catch (error) {
+    if (!isWindowsShareUnavailable(entry, error)) throw error;
+  }
+  throw new CommittedVersionUnverified('changed');
 }
 
 /**
