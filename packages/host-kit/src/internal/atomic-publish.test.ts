@@ -8,7 +8,7 @@ import {
   withAtomicPublishTempPathSync,
 } from './atomic-publish.ts';
 
-const directory = mkdtempForTestSync('host-kit-atomic-file-');
+const directory = mkdtempForTestSync('host-kit-atomic-publish-');
 
 function destination(name: string): string {
   return path.join(directory, name);

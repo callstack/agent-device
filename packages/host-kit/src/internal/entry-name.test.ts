@@ -1,17 +1,14 @@
 // The one entry name a script destination's spelling names, under POSIX and Windows rules, and the expansion
 // that refuses a spelling whose last segment names none before it normalizes it away (ADR 0016).
 import { expect, test } from 'vitest';
-import fs from 'node:fs';
 import path from 'node:path';
 import { resolveScriptDestination, scriptEntryName, unnamedEntryFailure } from './entry-name.ts';
-import { ancestryRoot as root, expectUntrusted } from './script-destination-host.fixtures.ts';
-
-const skipOnWindows = process.platform === 'win32' ? test.skip : test;
-
-/** Every entry under `directory`, so a refusal can show it created nothing anywhere below it. */
-function tree(directory: string): string[] {
-  return fs.readdirSync(directory, { recursive: true }).map(String).sort();
-}
+import {
+  ancestryRoot as root,
+  expectUntrusted,
+  skipOnWindows,
+  tree,
+} from './script-destination-host.fixtures.ts';
 
 test.each([
   { spelled: '\\\\server\\share\\', name: undefined },
@@ -61,6 +58,8 @@ test.each([
   { spelled: '\\\\?\\PIPE\\recorder', name: undefined },
   { spelled: '\\journey.ad', name: undefined },
   { spelled: '/journey.ad', name: undefined },
+  { spelled: '\\\\server\\share.\\journey.ad', name: undefined },
+  { spelled: '\\\\server\\pipe.\\recorder', name: undefined },
   { spelled: '\\\\?\\Volume{0}\\journey.ad', name: undefined },
   { spelled: '\\\\?\\C:\\dir\\journey.ad', name: undefined },
   { spelled: 'C:\\new\\COM⁴.ad', name: 'COM⁴.ad' },
