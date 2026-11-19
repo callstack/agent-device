@@ -23,6 +23,7 @@ import {
 } from './device.ts';
 import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
 import {
+  keepRevylSessionAlive,
   REVYL_ALLOCATION_TIMEOUT_MS,
   revylCallerGaveUp,
   revylCleanupPending,
@@ -230,6 +231,8 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
 function createRevylLeaseDriver(
   client: RevylClient,
 ): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylLeaseRequest> {
+  /** The idle-clock refresh of each ready session, by session id, ended before its `/stop`. */
+  const keepAlives = new Map<string, () => void>();
   return {
     startTimeoutMs: REVYL_ALLOCATION_TIMEOUT_MS,
     // A session is created when `start_device` answers, not when it is sent, so the issued id is never
@@ -247,9 +250,12 @@ function createRevylLeaseDriver(
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;
+      keepAlives.set(sessionId, keepRevylSessionAlive(client, runId));
       return { status: 'ready', session: started.session, handle: { runId, sessionId } };
     },
     stop: async (handle) => {
+      keepAlives.get(handle.sessionId)?.();
+      keepAlives.delete(handle.sessionId);
       try {
         await stopRevylSession(client, handle.sessionId);
       } catch (error) {

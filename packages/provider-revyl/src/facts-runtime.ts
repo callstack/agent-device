@@ -15,6 +15,7 @@ import {
   liveSessionUnavailable,
   revylInteractionOperationFacts,
   revylNavigationOperationFacts,
+  revylSettingsOperationFacts,
   revylUnsupportedOperationFacts,
   REVYL_FOLD_UNAVAILABLE,
   REVYL_PUSH_UNAVAILABLE,
@@ -176,6 +177,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...revylNavigationOperationFacts(device),
       ...revylUnsupportedOperationFacts(),
+      ...revylSettingsOperationFacts(device),
       ...audioProbeRuntimeOperationFacts({
         capture: audioProbeUnavailable,
         query: audioProbeUnavailable,

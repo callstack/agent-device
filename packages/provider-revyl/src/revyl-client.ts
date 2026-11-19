@@ -30,7 +30,13 @@ export const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
-const DEVICE_PROXY_GET_ACTIONS = new Set(['screenshot', 'health', 'device_info', 'hierarchy']);
+const DEVICE_PROXY_GET_ACTIONS = new Set([
+  'screenshot',
+  'health',
+  'device_info',
+  'hierarchy',
+  'appearance',
+]);
 
 export type RevylClientOptions = Readonly<{
   apiKey: string;
@@ -290,6 +296,9 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       return json<RevylInstallStatus>({
         ...workerRequest(workflowRunId, `install_status/${encodeURIComponent(installId)}`, signal),
         method: 'GET',
+        // A status read changes nothing, and one 500 from Revyl mid-install would otherwise end an
+        // install the worker is still carrying out.
+        retryServerError: true,
       });
     },
     async verifyCredentials(signal) {

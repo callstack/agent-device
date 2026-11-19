@@ -302,12 +302,12 @@ What a **Yes** does not claim:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Back](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes |
 | [Home](/docs/commands#navigation) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Set screen orientation](/docs/commands#navigation) | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Yes | No | No |
+| [Set screen orientation](/docs/commands#navigation) | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Set only; unlock unsupported | Yes | Portrait and landscape-left only; unlock unsupported | Set only; unlock unsupported |
 | [Phone hardware buttons](/docs/commands#navigation) | Yes | Yes | Yes | Yes | No | Yes | No | No |
 | [iPhone Action Button](/docs/commands#navigation) | No | No | No | No | Models with an Action Button only | No | No | No |
 | [Foldable pose](/docs/commands#navigation) | No | No | No | No | No | No | No | No |
 | [TV remote keys](/docs/commands#tv-targets) | No | No | No | No | No | No | No | No |
-| [System and app settings helpers](/docs/commands#settings-helpers) | No | No | No | No | Yes | Yes | No | No |
+| [System and app settings helpers](/docs/commands#settings-helpers) | No | No | No | No | Yes | Yes | Appearance, location coordinates, permission, clear app state, and reset keychain; no reads | Appearance, location coordinates, permission, and clear app state; no reads |
 | [Clipboard read and write](/docs/commands#clipboard) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Push notification simulation](/docs/commands#push-notification-simulation) | No | No | No | No | Yes | No | No | No |
 | [App event triggers through the app hook](/docs/commands#app-event-triggers-app-hook) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |

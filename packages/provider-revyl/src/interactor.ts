@@ -16,6 +16,16 @@ import type {
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import {
+  parseAppearanceAction,
+  parsePermissionAction,
+  parsePermissionTarget,
+  type SettingOptions,
+} from '@agent-device/contracts/settings';
+import type {
+  MobilePermissionTarget,
+  PermissionAction,
+} from '@agent-device/contracts/settings-catalog';
+import {
   AppError,
   discloseDispatch,
   discloseDispatchAfterSteps,
@@ -26,6 +36,48 @@ import { captureRevylSnapshot, createRevylSnapshotReader } from './snapshot.ts';
 
 /** Revyl's worker holds the touch this long when the caller names no hold. */
 const DEFAULT_LONG_PRESS_DURATION_MS = 1_500;
+
+/** The orientation names `/set_orientation` takes for each rotation on a worker that rotates precisely. */
+const REVYL_ORIENTATIONS = {
+  portrait: 'portrait',
+  'landscape-left': 'landscape_left',
+  'landscape-right': 'landscape_right',
+  'portrait-upside-down': 'upside_down',
+} as const satisfies Record<DeviceRotation, string>;
+
+/**
+ * A worker without precise orientation (an iOS simulator) takes `portrait` and `landscape`, and its
+ * `landscape` turns the device's top to the left: landscape-left.
+ */
+const REVYL_IMPRECISE_ORIENTATIONS: Partial<Record<DeviceRotation, string>> = {
+  portrait: 'portrait',
+  'landscape-left': 'landscape',
+};
+
+/**
+ * The Maestro permission names `/set_permissions` takes. `contacts-limited` and `location-always`
+ * have no Maestro name of their own, so they are absent and refused.
+ */
+const REVYL_PERMISSIONS = {
+  all: 'all',
+  camera: 'camera',
+  microphone: 'microphone',
+  photos: 'photos',
+  contacts: 'contacts',
+  notifications: 'notifications',
+  calendar: 'calendar',
+  location: 'location',
+  'media-library': 'medialibrary',
+  motion: 'motion',
+  reminders: 'reminders',
+  siri: 'siri',
+} as const satisfies Partial<Record<MobilePermissionTarget, string>>;
+
+const REVYL_PERMISSION_VALUES = {
+  grant: 'allow',
+  deny: 'deny',
+  reset: 'unset',
+} as const satisfies Record<PermissionAction, string>;
 
 /**
  * One Revyl session's device actions.
@@ -337,13 +389,130 @@ class RevylInteractor implements Interactor {
     await this.workerAction('go_home');
   }
 
-  /** Revyl keeps the device in the orientation its session started in; no action rotates it. */
-  setOrientation(_orientation: DeviceRotation): never {
-    throw unsupported('orientation', 'Revyl does not expose orientation control.');
+  /**
+   * A worker that reports `supports_precise_orientation` rotates to each side by name. Any other
+   * worker rotates only to portrait and landscape-left, so the other two are refused rather than
+   * reported for a side the device is not on.
+   */
+  async setOrientation(orientation: DeviceRotation): Promise<{ orientation: DeviceRotation }> {
+    const name = this.session.preciseOrientation
+      ? REVYL_ORIENTATIONS[orientation]
+      : REVYL_IMPRECISE_ORIENTATIONS[orientation];
+    if (name === undefined) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        `This Revyl worker cannot rotate to ${orientation}; it rotates to portrait and landscape-left only.`,
+        {
+          reason: 'unsupported-provider-mode',
+          command: 'orientation',
+          runId: this.session.runId,
+          hint: 'Rotate to portrait or landscape-left.',
+        },
+      );
+    }
+    await this.workerAction('set_orientation', { orientation: name });
+    return { orientation };
   }
 
-  setSetting(): never {
-    throw unsupported('settings', 'Revyl does not expose settings control.');
+  /**
+   * The settings the worker has an action for. The facts admit only these, so any other name is a
+   * routing bug and is refused rather than sent.
+   */
+  async setSetting(
+    setting: string,
+    state: string,
+    appId?: string,
+    options?: SettingOptions,
+  ): Promise<Record<string, unknown> | void> {
+    switch (setting) {
+      case 'appearance':
+        return await this.setAppearance(parseAppearanceAction(state));
+      case 'location':
+        return await this.setLocation(state, options);
+      case 'permission':
+        return await this.setPermission(state, this.settingsApp(setting, appId), options);
+      case 'clear-app-state':
+        await this.workerAction('clear_app_state', {
+          bundle_id: this.settingsApp(setting, appId),
+        });
+        return;
+      case 'reset-keychain':
+        await this.workerAction('clear_keychain', {});
+        return;
+    }
+    throw unsupported('settings', `Revyl does not expose the ${setting} setting.`);
+  }
+
+  private async setAppearance(
+    action: 'light' | 'dark' | 'toggle',
+  ): Promise<{ appearance: 'light' | 'dark' }> {
+    let appearance: 'light' | 'dark';
+    if (action === 'toggle') {
+      const current = await this.workerAction('appearance');
+      if (current.appearance !== 'light' && current.appearance !== 'dark') {
+        throw new AppError('COMMAND_FAILED', 'Revyl did not report the current appearance.', {
+          reason: 'provider-invalid-response',
+          runId: this.session.runId,
+        });
+      }
+      appearance = current.appearance === 'dark' ? 'light' : 'dark';
+    } else {
+      appearance = action;
+    }
+    await this.workerAction('set_appearance', { appearance });
+    return { appearance };
+  }
+
+  /**
+   * `/set_location` moves the device's own coordinates. The worker has no action that switches
+   * location services, so `on` and `off` are refused rather than reported as applied.
+   */
+  private async setLocation(
+    state: string,
+    options: SettingOptions | undefined,
+  ): Promise<{ latitude: number; longitude: number }> {
+    const latitude = options?.latitude;
+    const longitude = options?.longitude;
+    if (latitude === undefined || longitude === undefined) {
+      throw unsupported(
+        'settings',
+        `Revyl sets a location fix with set <lat> <lon>; it cannot switch location services ${state}.`,
+      );
+    }
+    await this.workerAction('set_location', { latitude, longitude });
+    return { latitude, longitude };
+  }
+
+  private async setPermission(
+    state: string,
+    bundleId: string,
+    options: SettingOptions | undefined,
+  ): Promise<Record<string, unknown>> {
+    const action = parsePermissionAction(state);
+    const target = parsePermissionTarget(options?.permissionTarget);
+    if (options?.permissionMode !== undefined) {
+      throw unsupported('settings', 'Revyl does not take a permission mode such as limited.');
+    }
+    if (!Object.hasOwn(REVYL_PERMISSIONS, target)) {
+      throw unsupported('settings', `Revyl has no permission named ${target}.`);
+    }
+    const permission = REVYL_PERMISSIONS[target as keyof typeof REVYL_PERMISSIONS];
+    await this.workerAction('set_permissions', {
+      bundle_id: bundleId,
+      permissions: { [permission]: REVYL_PERMISSION_VALUES[action] },
+    });
+    return { app: bundleId, permission: target, action };
+  }
+
+  /** The app a setting names, else the one this session launched; the worker needs a bundle id. */
+  private settingsApp(setting: string, appId: string | undefined): string {
+    const app = appId?.trim() || this.session.launchedApp.bundleId;
+    if (app) return app;
+    throw new AppError('INVALID_ARGS', `The ${setting} setting needs an app.`, {
+      reason: 'provider-app-not-launched',
+      command: 'settings',
+      hint: 'Pass --app, or open the app first.',
+    });
   }
 
   /**
