@@ -12,7 +12,7 @@ import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
  * Progress never renews the aggregate, and client disconnect shares this owner
  * through the existing response-disconnect signal.
  */
-const UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS = 600_000;
+export const UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS = 600_000;
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 const TRANSFER_INGRESS_AGGREGATE_REASON = 'transfer_ingress_deadline_exceeded';
 
@@ -166,16 +166,18 @@ function lingerUntilBodyEnds(req: IncomingMessage): () => void {
 }
 
 /**
- * Resolves which failure a joined upload pipeline reports. When the ingress signal owns
- * the abort, Node's pipeline rejects with a generic AbortError, so the owner's typed
- * reason is restored here. An earlier classified failure (any non-abort error, including
- * a different typed reason) is returned unchanged.
+ * Resolves which failure a joined upload pipeline reports, by the owned signal state and
+ * never by error text. When the ingress signal is aborted, it owns every unclassified
+ * failure, so its typed reason is reported. A failure that is already a typed AppError
+ * (an earlier classification such as a byte limit or ticket expiry) is kept unchanged.
  */
 export function resolveIngressFailure(signal: AbortSignal | undefined, error: unknown): unknown {
-  if (!signal?.aborted) return error;
-  const reason = signal.reason;
-  if (error === reason) return error;
-  if (isGenericAbortError(error) && reason instanceof Error) return reason;
+  if (!signal?.aborted || error instanceof AppError) return error;
+  try {
+    throwIfIngressAborted(signal);
+  } catch (reason) {
+    return reason;
+  }
   return error;
 }
 
@@ -184,10 +186,4 @@ export function throwIfIngressAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return;
   if (signal.reason instanceof Error) throw signal.reason;
   throw new AppError('COMMAND_FAILED', 'Upload canceled', { reason: 'upload_canceled' });
-}
-
-function isGenericAbortError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const { name, code } = error as { name?: unknown; code?: unknown };
-  return name === 'AbortError' || code === 'ABORT_ERR';
 }

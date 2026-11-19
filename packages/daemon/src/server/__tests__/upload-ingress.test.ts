@@ -154,7 +154,7 @@ test('a client disconnect on an unfinished response aborts the transfer signal',
   ingress.dispose();
 });
 
-test('resolveIngressFailure maps an abort-owned generic failure to the typed reason only', () => {
+test('resolveIngressFailure lets the aborted signal own every unclassified failure, whatever its name', () => {
   const typed = new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
     reason: 'transfer_ingress_deadline_exceeded',
     transferPhase: 'request-body',
@@ -164,14 +164,15 @@ test('resolveIngressFailure maps an abort-owned generic failure to the typed rea
   controller.abort(typed);
   const aborted = controller.signal;
 
-  // Node's pipeline rejects an aborted signal with a generic AbortError; the owner's
-  // typed reason is restored.
+  // The signal state decides, not the error's name or code: a Node AbortError, a
+  // premature close, and an error with no abort marker all report the owner's reason.
   const genericAbort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
   assert.equal(resolveIngressFailure(aborted, genericAbort), typed);
-  const codedAbort = Object.assign(new Error('Different diagnostic'), { code: 'ABORT_ERR' });
-  assert.equal(resolveIngressFailure(aborted, codedAbort), typed);
-  const unrelated = new Error(genericAbort.message);
-  assert.equal(resolveIngressFailure(aborted, unrelated), unrelated);
+  const prematureClose = Object.assign(new Error('Premature close'), {
+    code: 'ERR_STREAM_PREMATURE_CLOSE',
+  });
+  assert.equal(resolveIngressFailure(aborted, prematureClose), typed);
+  assert.equal(resolveIngressFailure(aborted, new Error('no abort marker')), typed);
   assert.equal(resolveIngressFailure(aborted, typed), typed);
 
   // An earlier classified failure is preserved even when the signal aborted afterwards.
@@ -180,8 +181,8 @@ test('resolveIngressFailure maps an abort-owned generic failure to the typed rea
   });
   assert.equal(resolveIngressFailure(aborted, classified), classified);
 
-  // Without an abort, the pipeline error passes through unchanged.
+  // Without an abort, the pipeline error passes through unchanged, even an AbortError.
   const plain = new AbortController().signal;
-  assert.equal(resolveIngressFailure(plain, classified), classified);
+  assert.equal(resolveIngressFailure(plain, genericAbort), genericAbort);
   assert.equal(resolveIngressFailure(undefined, genericAbort), genericAbort);
 });

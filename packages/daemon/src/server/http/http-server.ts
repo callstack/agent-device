@@ -40,6 +40,7 @@ import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { shouldStreamRequestProgress } from '@agent-device/daemon-contracts/request-progress-protocol';
 import { statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
+import { UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS } from '../upload-ingress.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
@@ -78,14 +79,17 @@ import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
 /**
- * Explicit ingress ceilings (#4441): 30 seconds to receive a request's headers and
- * 600 seconds to receive its body, instead of the Node defaults. They bound socket
- * ingress only. Uploads have a separate aggregate from request admission through
- * finalization (upload-ingress.ts). A socket timeout can close an incomplete request
- * before the upload owner can answer. RPC execution keeps its own deadlines.
+ * Explicit ingress ceilings (#4441): 30 seconds to receive a request's headers, and a
+ * request ceiling instead of the Node defaults. They bound socket ingress only. Uploads
+ * have their own aggregate from request admission through finalization
+ * (upload-ingress.ts). The request ceiling stays one margin behind that aggregate, so
+ * the upload owner answers an expired body with its typed reason before the socket
+ * timeout closes it. RPC execution keeps its own deadlines.
  */
 const DAEMON_HTTP_HEADERS_TIMEOUT_MS = 30_000;
-const DAEMON_HTTP_REQUEST_TIMEOUT_MS = 600_000;
+const UPLOAD_AGGREGATE_SOCKET_MARGIN_MS = 30_000;
+const DAEMON_HTTP_REQUEST_TIMEOUT_MS =
+  UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS + UPLOAD_AGGREGATE_SOCKET_MARGIN_MS;
 
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
