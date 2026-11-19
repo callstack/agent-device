@@ -330,6 +330,58 @@ test('request lifecycle events omit internal diagnostic paths', () => {
   assert.equal(JSON.stringify([started, failed]).includes('private failure message'), false);
 });
 
+function buildReasonEvents(reason: unknown) {
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'public-session',
+    command: 'snapshot',
+    positionals: [],
+    meta: { requestId: 'req-1', reason: reason as string },
+  };
+  return {
+    started: buildRequestStartedEvent({ req }),
+    finished: buildRequestFinishedEvent({ req, response: { ok: true, data: {} }, durationMs: 5 }),
+    failed: buildRequestFinishedEvent({
+      req,
+      response: { ok: false, error: { code: 'COMMAND_FAILED', message: 'private failure' } },
+      durationMs: 7,
+    }),
+  };
+}
+
+test('request lifecycle events record the client-stated reason', () => {
+  const { started, finished, failed } = buildReasonEvents('  Check the login form  ');
+
+  assert.deepEqual(started.details, { reason: 'Check the login form' });
+  assert.deepEqual(finished.details, { durationMs: 5, reason: 'Check the login form' });
+  assert.deepEqual(failed.details, {
+    durationMs: 7,
+    code: 'COMMAND_FAILED',
+    diagnosticId: undefined,
+    reason: 'Check the login form',
+  });
+});
+
+test('request lifecycle events omit an absent, blank, or non-string reason', () => {
+  for (const reason of [undefined, '', '   \n', 42, { text: 'not a string' }]) {
+    const { started, finished, failed } = buildReasonEvents(reason);
+
+    assert.equal(started.details, undefined);
+    assert.deepEqual(finished.details, { durationMs: 5 });
+    assert.equal(Object.hasOwn(failed.details ?? {}, 'reason'), false);
+  }
+});
+
+test('request event reasons are bounded without splitting a code point', () => {
+  const { started, finished, failed } = buildReasonEvents(`${'a'.repeat(118)}😀 and more text`);
+  const bounded = `${'a'.repeat(118)}😀…`;
+
+  assert.equal(Array.from(bounded).length, 120);
+  assert.equal(started.details?.reason, bounded);
+  assert.equal(finished.details?.reason, bounded);
+  assert.equal(failed.details?.reason, bounded);
+});
+
 test('unknown commands keep the existing generic completion event', () => {
   const event = buildSuccessEvent('future-command', { arbitrary: 'not projected' });
 

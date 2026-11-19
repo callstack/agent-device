@@ -272,6 +272,46 @@ test('request timeline records thrown request failures after scope creation', as
   ]);
 });
 
+test('request timeline records the client-stated reason on start and finish', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-reason-');
+  sessionStore.publish('events-session', makeIosSession('events-session'));
+
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'click',
+    positionals: ['10', '20'],
+    flags: { platform: 'android' },
+    meta: { requestId: 'req-reason', reason: 'Open the cart to check the total' },
+  });
+
+  await sessionStore.flushEvents('events-session');
+  const page = sessionStore.readEvents('events-session');
+  expect(page.events).toEqual([
+    expect.objectContaining({
+      kind: 'request.started',
+      requestId: 'req-reason',
+      details: { reason: 'Open the cart to check the total' },
+    }),
+    expect.objectContaining({
+      kind: 'request.finished',
+      requestId: 'req-reason',
+      details: expect.objectContaining({ reason: 'Open the cart to check the total' }),
+    }),
+  ]);
+});
+
 test('request timeline records setup failures after start is appended', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
 

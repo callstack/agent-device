@@ -166,6 +166,8 @@ export type DaemonRequestMeta = {
   lockPolicy?: DaemonLockPolicy;
   lockPlatform?: PlatformSelector;
   requestProgress?: 'replay-test' | 'command';
+  /** A short client-stated reason for the command, recorded on request events only when sent. */
+  reason?: string;
 };
 
 export type DaemonRequest = {

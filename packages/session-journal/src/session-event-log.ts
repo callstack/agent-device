@@ -8,7 +8,10 @@ import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagn
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
-import { buildRequestSuccessEventPresentation } from './session-event-request.ts';
+import {
+  buildRequestSuccessEventPresentation,
+  readBoundedSessionEventString,
+} from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';
 import {
   assertSessionEventLogCursorRetained,
@@ -196,11 +199,13 @@ export function appendActionEvent(
 
 export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {
   const { req } = params;
+  const reason = readBoundedSessionEventString(req.meta?.reason);
   return {
     kind: 'request.started',
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
+    ...(reason ? { details: { reason } } : {}),
   };
 }
 
@@ -210,6 +215,7 @@ export function buildRequestFinishedEvent(params: {
   durationMs: number;
 }): SessionEventLogInput {
   const { req, response, durationMs } = params;
+  const reason = readBoundedSessionEventString(req.meta?.reason);
   if (response.ok) {
     const presentation = buildRequestSuccessEventPresentation(req, response.data);
     return {
@@ -218,7 +224,7 @@ export function buildRequestFinishedEvent(params: {
       command: req.command,
       status: 'ok',
       summary: presentation.summary ?? `Finished ${req.command}`,
-      details: { durationMs, ...presentation.details },
+      details: { durationMs, ...presentation.details, ...(reason ? { reason } : {}) },
     };
   }
   return {
@@ -231,6 +237,7 @@ export function buildRequestFinishedEvent(params: {
       durationMs,
       code: response.error.code,
       diagnosticId: response.error.diagnosticId,
+      ...(reason ? { reason } : {}),
     },
   };
 }
