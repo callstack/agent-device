@@ -374,6 +374,18 @@ skipOnWindows('a staging sibling whose write failed is still tidied from ground 
   expect(fs.readdirSync(state)).toEqual([]);
 });
 
+skipOnWindows('a read leaves a record mode alone, because it writes nothing', () => {
+  // A reader has no business changing what it reads. The writer's proof ends with `fchmod`, and only because
+  // every later line goes through that handle: a record read at a loose mode is still the daemon's own bytes,
+  // and silently tightening a caller's file while asking it a question would be an unasked-for write.
+  const state = stateDir();
+  const report = path.join(state, 'daemon-shutdown.json');
+  fs.writeFileSync(report, '{"a":1}\n', { mode: 0o644 });
+
+  expect(readOf(readPrivateStateFileTailSync(report, 4096))).toBe('{"a":1}\n');
+  expect(Number(fs.statSync(report).mode) & 0o777).toBe(0o644);
+});
+
 skipOnWindows('a read fault at the ancestry is answered as a refusal, not thrown', () => {
   // Every reader of a state record treats it as OPTIONAL: a stop that already happened, a client polling a
   // startup, a marker tail. The walk converts the lookup faults a state path can meet going in, but a host can
