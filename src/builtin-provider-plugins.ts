@@ -32,7 +32,9 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
         // The host adapters are the root's own: the provider names what a runtime needs, and this
         // composition answers with its platform owners and this host's env/cwd.
         createDependencies: async () =>
-          (await import('./sdk/limrun-runtime-dependencies.ts')).createLimrunRuntimeDependencies(host),
+          (await import('./sdk/limrun-runtime-dependencies.ts')).createLimrunRuntimeDependencies(
+            host,
+          ),
         // HAR captures land beside the session files, under the daemon's own state dir. The state
         // dir is resolved with the load, so an unconfigured process never probes for one.
         stateDir: resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, {
