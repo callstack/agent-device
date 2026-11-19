@@ -1,5 +1,9 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
-import { observeAndroidEmulatorGeneration } from '@agent-device/platform-android/device-boot';
+import {
+  ANDROID_EMULATOR_GENERATION_BUDGET_MS,
+  observeAndroidEmulatorGeneration,
+} from '@agent-device/platform-android/device-boot';
+import { Deadline } from '@agent-device/host-kit/retry';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -92,9 +96,10 @@ export function createAndroidEmulatorHost(
       try {
         const startTime = await record.startTime;
         if (!startTime) return undefined;
-        const first = await observeAndroidEmulatorGeneration(device);
+        const deadline = Deadline.fromTimeoutMs(ANDROID_EMULATOR_GENERATION_BUDGET_MS);
+        const first = await observeAndroidEmulatorGeneration(device, { deadline });
         if (first?.pid !== pid || first.startTime !== startTime) return undefined;
-        const second = await observeAndroidEmulatorGeneration(device);
+        const second = await observeAndroidEmulatorGeneration(device, { deadline });
         if (second?.pid !== pid || second.startTime !== startTime) return undefined;
         return { pid, startTime };
       } catch {

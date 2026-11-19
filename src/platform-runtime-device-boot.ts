@@ -15,11 +15,13 @@ export const deviceBootObservation: DeviceBootObservationService & DeviceShutdow
     async assessShutdownGeneration(device, expected) {
       if (device.platform !== 'android' || device.kind !== 'emulator') return 'not-applicable';
       if (!expected) return 'unobserved';
-      const { observeAndroidEmulatorGeneration } =
+      const { ANDROID_EMULATOR_GENERATION_BUDGET_MS, observeAndroidEmulatorGeneration } =
         await import('@agent-device/platform-android/device-boot');
-      const first = await observeAndroidEmulatorGeneration(device);
+      const { Deadline } = await import('@agent-device/host-kit/retry');
+      const deadline = Deadline.fromTimeoutMs(ANDROID_EMULATOR_GENERATION_BUDGET_MS);
+      const first = await observeAndroidEmulatorGeneration(device, { deadline });
       if (!first) return 'unobserved';
-      const second = await observeAndroidEmulatorGeneration(device);
+      const second = await observeAndroidEmulatorGeneration(device, { deadline });
       if (!second || second.pid !== first.pid || second.startTime !== first.startTime)
         return 'unobserved';
       return first.pid === expected.pid && first.startTime === expected.startTime

@@ -1,17 +1,27 @@
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
 
-/** Observe the process listening on the ADB emulator console port without contacting it. */
+/**
+ * Observe the process listening on the ADB emulator console port without contacting it. A caller
+ * that observes more than once passes one deadline, so all reads share one bounded budget.
+ */
 export async function observeAndroidEmulatorGeneration(
   device: DeviceInfo,
+  options: { deadline?: DeadlineClock } = {},
 ): Promise<AndroidEmulatorLaunchIdentity | undefined> {
   if (device.platform !== 'android' || device.kind !== 'emulator') return undefined;
   const match = /^emulator-(\d+)$/.exec(device.id);
   const port = Number(match?.[1]);
   if (!match || !Number.isInteger(port) || port < 1 || port > 65535) return undefined;
   for (let attempt = 1; attempt <= LISTENER_PROBE_ATTEMPTS; attempt += 1) {
-    const reading = await readConsoleListener(port);
+    const budgetMs = Math.min(
+      LISTENER_PROBE_TIMEOUT_MS,
+      options.deadline?.remainingMs() ?? LISTENER_PROBE_TIMEOUT_MS,
+    );
+    if (budgetMs <= 0) return undefined;
+    const reading = await readConsoleListener(port, budgetMs);
     if (reading.kind === 'identity') return reading.identity;
     if (reading.kind === 'absent') return undefined;
   }
@@ -26,25 +36,30 @@ type ConsoleListenerReading =
   | { kind: 'unread' };
 
 /**
- * `lsof -b -w -t` prints only process ids, one per line, skips kernel calls that can block under
- * load (`-b`) and suppresses the warnings that `-b` causes (`-w`). It exits 1 with no output when
- * nothing listens. An emulator listens on IPv4 and IPv6 from one process, so its id prints once.
+ * `lsof -t` prints only process ids, one per line, and exits 1 with no output when nothing listens.
+ * An emulator listens on IPv4 and IPv6 from one process, so its id prints once. On macOS, `-b`
+ * skips kernel calls that can block under load, and `-w` suppresses the warnings it causes. Linux
+ * lsof finds sockets through /proc, and `-b` can stop the port filter from matching there.
  */
-async function readConsoleListener(port: number): Promise<ConsoleListenerReading> {
+async function readConsoleListener(
+  port: number,
+  budgetMs: number,
+): Promise<ConsoleListenerReading> {
   try {
     const { hostPlatform, readProcessIdentityFacts } =
       await import('@agent-device/host-kit/process');
     if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') return { kind: 'absent' };
     const { runCmd } = await import('@agent-device/host-kit/command');
+    const nonBlocking = hostPlatform() === 'darwin' ? ['-b', '-w'] : [];
     const result = await runCmd(
       'lsof',
-      ['-b', '-w', '-t', '-nP', `-iTCP:${port}`, '-sTCP:LISTEN'],
-      { allowFailure: true, timeoutMs: LISTENER_PROBE_TIMEOUT_MS },
+      [...nonBlocking, '-t', '-nP', `-iTCP:${port}`, '-sTCP:LISTEN'],
+      { allowFailure: true, timeoutMs: budgetMs },
     );
     if (result.exitCode !== 0) return { kind: 'absent' };
     const pid = soleListenerPid(result.stdout);
     if (pid === undefined) return { kind: 'absent' };
-    const facts = await readProcessIdentityFacts(pid, LISTENER_PROBE_TIMEOUT_MS);
+    const facts = await readProcessIdentityFacts(pid, budgetMs);
     if (facts.zombie === true) return { kind: 'absent' };
     if (!facts.startTime || facts.zombie !== false) return { kind: 'unread' };
     return { kind: 'identity', identity: { pid, startTime: facts.startTime } };
@@ -73,6 +88,12 @@ function soleListenerPid(stdout: string): number | undefined {
  */
 const LISTENER_PROBE_TIMEOUT_MS = 5_000;
 const LISTENER_PROBE_ATTEMPTS = 2;
+
+/**
+ * One budget for the two agreeing observations that bind or verify a launch identity. Open and
+ * close each spend at most this long on the probe.
+ */
+export const ANDROID_EMULATOR_GENERATION_BUDGET_MS = 10_000;
 
 /** The probe answers in tens of milliseconds and must not become the reason an `open` waits. */
 const BOOT_PROBE_TIMEOUT_MS = 3_000;

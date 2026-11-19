@@ -4,11 +4,12 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 const mocks = vi.hoisted(() => ({
   runCmd: vi.fn(),
   readProcessIdentityFacts: vi.fn(),
+  hostPlatform: vi.fn(),
 }));
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd: mocks.runCmd }));
 vi.mock('@agent-device/host-kit/process', () => ({
   readProcessIdentityFacts: mocks.readProcessIdentityFacts,
-  hostPlatform: () => 'darwin',
+  hostPlatform: mocks.hostPlatform,
 }));
 
 import { observeAndroidEmulatorGeneration } from './device-boot.ts';
@@ -25,6 +26,7 @@ beforeEach(() => {
   // `lsof -b -w -t` prints the listening process id once, even for IPv4 and IPv6 sockets.
   mocks.runCmd.mockResolvedValue({ exitCode: 0, stdout: '42\n', stderr: '' });
   mocks.readProcessIdentityFacts.mockResolvedValue({ startTime: 'start', zombie: false });
+  mocks.hostPlatform.mockReturnValue('darwin');
 });
 
 const slowRead = () => Promise.reject(new Error('lsof timed out after 5000ms'));
@@ -80,4 +82,31 @@ test('physical and malformed targets do not inspect host processes', async () =>
     await observeAndroidEmulatorGeneration({ ...device, id: 'emulator-5558:other' }),
   ).toBeUndefined();
   expect(mocks.runCmd).not.toHaveBeenCalled();
+});
+
+test('Linux reads the listener without -b, which can stop the port filter matching through /proc', async () => {
+  mocks.hostPlatform.mockReturnValue('linux');
+  expect(await observeAndroidEmulatorGeneration(device)).toEqual({ pid: 42, startTime: 'start' });
+  expect(mocks.runCmd).toHaveBeenCalledWith(
+    'lsof',
+    ['-t', '-nP', '-iTCP:5558', '-sTCP:LISTEN'],
+    expect.objectContaining({ timeoutMs: 5_000 }),
+  );
+});
+
+test('a shared deadline caps each read and stops reads once it is spent', async () => {
+  const remaining = [3_000, 0];
+  const deadline = {
+    remainingMs: () => remaining.shift() ?? 0,
+    elapsedMs: () => 0,
+    isExpired: () => false,
+  };
+  mocks.runCmd.mockImplementationOnce(slowRead);
+  expect(await observeAndroidEmulatorGeneration(device, { deadline })).toBeUndefined();
+  expect(mocks.runCmd).toHaveBeenCalledTimes(1);
+  expect(mocks.runCmd).toHaveBeenCalledWith(
+    'lsof',
+    expect.any(Array),
+    expect.objectContaining({ timeoutMs: 3_000 }),
+  );
 });

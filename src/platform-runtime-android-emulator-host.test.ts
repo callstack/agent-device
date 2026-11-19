@@ -4,7 +4,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 const { observeAndroidEmulatorGeneration } = vi.hoisted(() => ({
   observeAndroidEmulatorGeneration: vi.fn(),
 }));
-vi.mock('@agent-device/platform-android/device-boot', () => ({ observeAndroidEmulatorGeneration }));
+vi.mock('@agent-device/platform-android/device-boot', () => ({
+  ANDROID_EMULATOR_GENERATION_BUDGET_MS: 10_000,
+  observeAndroidEmulatorGeneration,
+}));
 
 const { runCmd, runCmdDetached, runCmdDetachedMonitored, emitDiagnostic } = vi.hoisted(() => ({
   runCmd: vi.fn(async (_cmd: string, args: readonly string[]) => ({
@@ -66,7 +69,14 @@ test('binds the launched process only when both serial observations match its re
   observeAndroidEmulatorGeneration.mockResolvedValue(launchIdentity);
   await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toEqual(launchIdentity);
   expect(observeAndroidEmulatorGeneration).toHaveBeenCalledTimes(2);
-  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledWith(emulator);
+  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledWith(emulator, {
+    deadline: expect.any(Object),
+  });
+  // Both observations share one deadline, so the pair is bounded together.
+  const calls = observeAndroidEmulatorGeneration.mock.calls as unknown as Array<
+    [unknown, { deadline: unknown }]
+  >;
+  expect(calls[1]?.[1].deadline).toBe(calls[0]?.[1].deadline);
 });
 
 test('does not bind an unrelated listener, reused pid, or unavailable observation', async () => {
