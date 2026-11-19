@@ -360,13 +360,13 @@ agent-device close --session watch --shutdown
 - `scroll up|down` turns the Digital Crown. The amount is a fraction of the screen height, so `scroll down 1` moves about one screen. The crown also moves pickers and steppers that have crown focus. `scroll left|right` is refused; swipe instead.
 - `swipe` and `gesture swipe|pan|fling` send one-finger touches to the session app: horizontal and vertical pages, row swipe actions, and pan in custom views. `gesture swipe right-edge` (from the left edge toward the right) goes back.
 - Commands act on the session app and bring it back to the foreground first. The watch face and its overlays, such as Notification Center and the Smart Stack, are not reachable.
-- `back` presses the navigation bar back button, or swipes in from the left edge when there is none.
+- `back` presses the navigation bar back button, or swipes in from the left edge when there is none. The edge swipe is not verified: on a root screen it changes nothing and `back` still succeeds.
 - `home` presses the Digital Crown. From an app it shows the watch face; from the watch face it opens the app grid.
-- `fill` and `type` type into the system input sheet that a text field opens, then press its Done button. The sheet is found by its English Done label.
+- `fill` and `type` wait for the system input sheet that a text field opens (its keyboard), type into it, then press the sheet's Done button. Done is found by its English label. On another system language the text stays in the open sheet and the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED`; press the sheet's commit button by ref.
 - `action-button` presses the Action Button on Apple Watch Ultra; other models refuse with `hardware_control_unavailable`.
 - `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, and `screenshot` work as on iOS.
 - Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `record`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
-- Open apps by bundle ID. Without `apps`, there is no name lookup.
+- Open apps by their watch bundle ID, such as `com.apple.NanoSettings`. Without `apps` there is no name lookup, and app aliases such as `settings` resolve to iPhone bundle IDs.
 
 ## Desktop targets
 

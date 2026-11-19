@@ -56,9 +56,14 @@ extension RunnerTests {
     let buttons = app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex
     if buttons.count == 1, let button = buttons.first, button.isHittable {
       let frame = button.frame
-      _ = try tapAt(app: app, x: frame.midX, y: frame.midY)
-      return .performed
+      switch try tapAt(app: app, x: frame.midX, y: frame.midY) {
+      case .performed:
+        return .performed
+      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
+        return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
+      }
     }
+    // The edge swipe is not verified: on a root screen it changes nothing and still reports success.
     let surface = try resolvedTouchReferenceFrame(app: app)
     _ = try dragAt(
       app: app,
