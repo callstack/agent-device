@@ -8,7 +8,7 @@ import type {
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/retry';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
@@ -409,10 +409,10 @@ export function createExpiredProviderLeaseReleaser(options: {
       // Shutdown gets one final, bounded attempt at every pending release. A
       // provider call that hangs must not keep the daemon alive indefinitely.
       const deadline = new AbortController();
-      await Promise.race([
-        retryPending().finally(() => deadline.abort()),
-        sleep(Math.max(0, timeoutMs), deadline.signal),
-      ]);
+      await settleWithin(
+        () => retryPending().finally(() => deadline.abort()),
+        Math.max(0, timeoutMs),
+      );
       const result = {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
         unknown: [

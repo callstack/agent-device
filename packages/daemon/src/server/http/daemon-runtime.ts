@@ -43,7 +43,6 @@ import {
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
-  settleWithinBudget,
   type ShutdownReport,
   type StartupRollback,
 } from './server-shutdown.ts';
@@ -76,7 +75,7 @@ import {
   reapOwnedProcessRecordsAtStartup,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { isEnvTruthy } from '@agent-device/host-kit/retry';
+import { isEnvTruthy, settleWithin } from '@agent-device/host-kit/retry';
 import {
   parseIntegerEnv,
   readVersion,
@@ -712,15 +711,11 @@ async function startDaemonRuntimeOnHost(
     const total = inFlightRequests.size;
     if (total === 0) return { drained: 0, abandoned: 0 };
     cancelAllRequests();
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const outcome = await Promise.race([
-      Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
-      new Promise<'deadline'>((resolve) => {
-        deadlineTimer = setTimeout(() => resolve('deadline'), requestDrainTimeoutMs);
-      }),
-    ]);
-    clearTimeout(deadlineTimer);
-    abandonedRequests = outcome === 'drained' ? 0 : inFlightRequests.size;
+    const outcome = await settleWithin(
+      () => Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
+      requestDrainTimeoutMs,
+    );
+    abandonedRequests = outcome.kind === 'settled' ? 0 : inFlightRequests.size;
     if (abandonedRequests > 0) {
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_requests_abandoned', {
         abandoned: abandonedRequests,
@@ -799,19 +794,22 @@ async function startDaemonRuntimeOnHost(
       },
     );
     expiredProviderLeaseReleaser.shutdown();
-    const ownerClose = await settleWithinBudget(
-      () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
-      options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
-    );
-    platformOwners =
-      ownerClose.kind === 'rejected'
-        ? 'failed'
-        : ownerClose.kind === 'deadline'
-          ? 'pending'
-          : 'closed';
-    if (ownerClose.kind === 'rejected') {
+    let ownerFailed = false;
+    let ownerFailure: unknown;
+    try {
+      const ownerClose = await settleWithin(
+        () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
+        options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
+      );
+      platformOwners = ownerClose.kind === 'deadline' ? 'pending' : 'closed';
+    } catch (error) {
+      platformOwners = 'failed';
+      ownerFailed = true;
+      ownerFailure = error;
+    }
+    if (ownerFailed) {
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-        error: normalizeError(ownerClose.error),
+        error: normalizeError(ownerFailure),
       });
     }
     const plugins = await pluginClose.close();
@@ -852,10 +850,7 @@ async function startDaemonRuntimeOnHost(
       return report;
     } finally {
       await Promise.allSettled([
-        settleWithinBudget(
-          async () => await releasePngWorker(),
-          DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS,
-        ),
+        settleWithin(async () => await releasePngWorker(), DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
         Promise.resolve().then(() => pluginClose.close()),
       ]);
       await Promise.allSettled([
