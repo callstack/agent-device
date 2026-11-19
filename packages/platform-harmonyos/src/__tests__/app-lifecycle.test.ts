@@ -625,6 +625,35 @@ test('a far deadline keeps the 5s window and the connection hint when every read
   );
 });
 
+test('a partly clamped deadline keeps the computed window when every read fails', async () => {
+  vi.useFakeTimers();
+  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  const pending = verifyHarmonyOpenForeground(
+    openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
+    { timing: {} },
+    DEVICE,
+    new AbortController().signal,
+  );
+
+  // A deadline with 2s left bounds the poll below the 5s default: the probe
+  // failure names the 2s the poll actually had, so a literal "5s" revert
+  // fails here. The clamp is not a squeeze to zero, so the hint stays the
+  // connection one.
+  await vi.advanceTimersByTimeAsync(3_000);
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.details?.reason, 'open-foreground-probe-unreadable');
+      assert.match(String(error.message), /within 2s/);
+      assert.doesNotMatch(String(error.message), /within 5s/);
+      assert.match(error.details?.hint ?? '', /check the device connection/i);
+      assert.doesNotMatch(error.details?.hint ?? '', /deadline/i);
+      return true;
+    },
+  );
+});
+
 test('a partly clamped deadline names the deadline window on open-not-foreground', async () => {
   vi.useFakeTimers();
   mockRunCmd.mockResolvedValue({
