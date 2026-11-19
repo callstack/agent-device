@@ -514,44 +514,6 @@ export async function settleScriptDeliveryReceiptOfFailure(
 }
 
 /**
- * #4518: marks the open capture grants of a finishing request whose answer was an error as
- * pending-recovery, so the bounded sweep never removes evidence of a capture whose outcome this
- * client cannot know. The unbound error names no grant, so EVERY known-open grant of the
- * request's scope is preserved — never one guessed grant, and nothing is authorized from the
- * response text. Never throws.
- */
-export async function noteUncertainFinishingCapture(
-  info: DaemonArtifactEndpoint,
-  req: DaemonWireRequest,
-  stateDir: string,
-): Promise<void> {
-  try {
-    if (!info.baseUrl || req.command !== 'record') return;
-    const grants = await import('./capture-grant.ts');
-    const slot = grants.captureSlotOfCommand(req.command);
-    if (slot === undefined || !grants.finishesCaptureRequest(req)) return;
-    const open = grants.listOpenCaptureGrantsInScope({
-      stateDir,
-      baseUrl: info.baseUrl,
-      req,
-      slot,
-    });
-    for (const grant of open) {
-      await grants.settleCaptureGrant({
-        stateDir,
-        baseUrl: info.baseUrl,
-        req,
-        slot,
-        grantId: grant.grantId,
-        outcome: 'pending-recovery',
-      });
-    }
-  } catch {
-    // A settle that cannot run leaves the records open; they are retained evidence regardless.
-  }
-}
-
-/**
  * Releases the grant for a start known to have failed before execution. The request's own
  * grant ID and scope identify the only record eligible for removal. Never throws.
  */
@@ -565,16 +527,35 @@ export async function noteFailedCaptureStart(
     const grants = await import('./capture-grant.ts');
     const slot = grants.captureSlotOfCommand(req.command);
     if (slot === undefined || !grants.isCaptureStartRequest(req)) return;
-    await grants.settleCaptureGrant({
+    await grants.releaseCaptureGrant({
       stateDir,
       baseUrl: info.baseUrl,
       req,
       slot,
       grantId: req.meta?.captureGrantId,
-      outcome: 'discard',
     });
   } catch {
-    // A settle that cannot run leaves the record open; admission caps still bound the store.
+    // A release that cannot run leaves the record; the store's sweep still bounds it.
+  }
+}
+
+/**
+ * Retires the capture grants of a close's own authenticated scope: a close the daemon confirmed
+ * ends the session's captures (including a recording its teardown retained), so their grants
+ * must not outlive the session. Only the close's scope is matched; another scope's grants are
+ * never touched. Never throws, so it never replaces the close's own outcome.
+ */
+export async function retireClosedScopeCaptureGrants(
+  info: DaemonArtifactEndpoint,
+  req: DaemonWireRequest,
+  stateDir: string,
+): Promise<void> {
+  try {
+    if (!info.baseUrl || req.command !== 'close') return;
+    const grants = await import('./capture-grant.ts');
+    await grants.retireCaptureGrantsInScope({ stateDir, baseUrl: info.baseUrl, req });
+  } catch {
+    // A retire that cannot run leaves the records; the store's sweep still bounds them.
   }
 }
 
@@ -591,22 +572,35 @@ export async function materializeRemoteArtifacts(
   stateDir: string,
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
-  const endpoint = { baseUrl: info.baseUrl, token: info.token };
-  const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  const download = (scripts?: SessionScriptDelivery) =>
-    downloadResponseArtifacts(endpoint, req, response, host, scripts, stateDir);
-  // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
-  // publication and no script artifact of its own (#4595).
-  if (
-    response.data?.scriptPublicationId === undefined &&
-    response.data?.scriptDeliveryReceipt === undefined &&
-    !artifacts.some(isSessionScriptArtifact)
-  ) {
-    return await download();
+  try {
+    const endpoint = { baseUrl: info.baseUrl, token: info.token };
+    const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
+    const download = (scripts?: SessionScriptDelivery) =>
+      downloadResponseArtifacts(endpoint, req, response, host, scripts, stateDir);
+    // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
+    // publication and no script artifact of its own (#4595).
+    if (
+      response.data?.scriptPublicationId === undefined &&
+      response.data?.scriptDeliveryReceipt === undefined &&
+      !artifacts.some(isSessionScriptArtifact)
+    ) {
+      return await download();
+    }
+    const { sessionScriptDelivery } = await import('./session-script-destination.ts');
+    const scripts = sessionScriptDelivery(
+      endpoint,
+      req,
+      response,
+      stateDir,
+      downloadRemoteArtifact,
+    );
+    return await scripts.settleAfter(download);
+  } finally {
+    // A close the daemon confirmed ends its scope's captures without a stop echo (a recording its
+    // teardown retained, a daemon restart, a lost start answer), so the close retires the grants
+    // of its own authenticated scope even when bringing the response's artifacts here failed.
+    await retireClosedScopeCaptureGrants(info, req, stateDir);
   }
-  const { sessionScriptDelivery } = await import('./session-script-destination.ts');
-  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
-  return await scripts.settleAfter(download);
 }
 
 async function downloadResponseArtifacts(
@@ -620,6 +614,42 @@ async function downloadResponseArtifacts(
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutScriptFieldOwner(response.data);
   const grantContext = await resolveCaptureGrantContext(endpoint, req, response, stateDir);
+  // A matched echo whose delivery then fails keeps its grant: the daemon answered, so a retried
+  // stop can still deliver to the granted destination. Only a successful delivery releases the
+  // grant — including a matching echo that carried no artifacts at all.
+  const delivered = await downloadAllArtifacts(
+    endpoint,
+    req,
+    response,
+    host,
+    scripts,
+    grantContext,
+    data,
+    artifacts,
+  );
+  if (grantContext?.grant !== undefined) {
+    const grants = await import('./capture-grant.ts');
+    await grants.releaseCaptureGrant({
+      stateDir,
+      baseUrl: endpoint.baseUrl,
+      req,
+      slot: grantContext.slot,
+      grantId: grantContext.echoedGrantId,
+    });
+  }
+  return delivered;
+}
+
+async function downloadAllArtifacts(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  host: HostEnvironment,
+  scripts: SessionScriptDelivery | undefined,
+  grantContext: CaptureGrantContext | undefined,
+  data: DaemonResponseData | undefined,
+  artifacts: DaemonArtifact[],
+): Promise<DaemonResponse> {
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
@@ -755,17 +785,8 @@ async function resolveCaptureGrantContext(
     slot,
     grantId: echoedGrantId,
   });
-  if (grant !== undefined) {
-    // The producer echoed this exact grant ID: the capture reached a known outcome.
-    await grants.settleCaptureGrant({
-      stateDir,
-      baseUrl: endpoint.baseUrl,
-      req,
-      slot,
-      grantId: echoedGrantId,
-      outcome: 'finished',
-    });
-  }
+  // A matched echo alone settles nothing yet: the caller releases the grant only after this
+  // response's delivery succeeded, so a failed materialization leaves the grant for a retry.
   return {
     slot,
     grant,

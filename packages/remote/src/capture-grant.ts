@@ -14,7 +14,11 @@ import {
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { publishFileSync } from '@agent-device/host-kit/file';
-import { withoutTrailingSlashes, withRemoteStateLock } from './remote-state-record-lock.ts';
+import {
+  STALE_RECORD_MS,
+  withoutTrailingSlashes,
+  withRemoteStateLock,
+} from './remote-state-record-lock.ts';
 
 /**
  * #4518: the one client-owned record of where a remote capture's output belongs. A remote
@@ -26,13 +30,15 @@ import { withoutTrailingSlashes, withRemoteStateLock } from './remote-state-reco
  * this client itself chose. A daemon echo is not authority; it is matched against this record by
  * the echoed ID and the full scope, never believed, and with no echo or no match only the
  * contained cwd-local name remains (disclosed) — the pre-grant behavior.
+ *
+ * A grant record never outlives the capture it covers: a matching stop whose delivery succeeded
+ * deletes it, a successful close retires its whole scope, and the admission sweep removes anything
+ * untouched for the shared `STALE_RECORD_MS` horizon. The admission caps therefore bound only
+ * unresolved records.
  */
 
 /** The capture kinds a finishing action can close: the command names the slot. */
 export type CaptureSlot = 'record';
-
-/** The lifecycle of one grant record. `pending-recovery` records are never swept. */
-export type CaptureGrantState = 'open' | 'finished' | 'pending-recovery';
 
 export type CaptureGrant = Readonly<{
   version: 1;
@@ -46,23 +52,13 @@ export type CaptureGrant = Readonly<{
     leaseId: string;
     session: string;
   }>;
-  state: CaptureGrantState;
   createdAtMs: number;
-  updatedAtMs: number;
 }>;
 
 /** Finite admission: at most this many grant records per state directory (prior design choice). */
 const MAX_CAPTURE_GRANTS = 64;
 /** Aggregate serialized metadata limit per state directory. */
 const MAX_CAPTURE_GRANT_STORE_METADATA_BYTES = 8 * 1024 * 1024;
-// A transition can lengthen the state and update the timestamp. Reserve their maximum growth.
-const CAPTURE_GRANT_TRANSITION_BYTES =
-  'pending-recovery'.length - 'open'.length + String(Number.MIN_SAFE_INTEGER).length;
-/**
- * A KNOWN-FINISHED record untouched for this long is expired by the sweep. Open and
- * pending-recovery records are retained evidence and are never swept, however old.
- */
-const STALE_CAPTURE_GRANT_MS = 7 * 24 * 60 * 60 * 1000;
 /** One sweep scans at most this many entries, so admission stays bounded. */
 const SWEEP_SCAN_LIMIT = 256;
 const GRANT_LOCK_TIMEOUT_MS = 30_000;
@@ -126,12 +122,11 @@ function scopeMatches(
  * bounded sweep and the aggregate census run under one state admission lock, and the record is
  * written by its immutable grant ID — never as a latest-slot overwrite. The aggregate admission
  * is finite: at most `MAX_CAPTURE_GRANTS` records and `MAX_CAPTURE_GRANT_STORE_METADATA_BYTES` of
- * TOTAL serialized metadata, reserving room for the incoming record within that budget. An
- * UNCERTAIN census (the store directory exists but cannot be read or sized) refuses admission
- * rather than counting as zero — fail-closed. Refuses (throws) when the record cannot be
- * admitted or written, so a destination the client cannot remember must not become writable
- * later from a response echo. Returns the minted grant ID the request should carry in
- * `meta.captureGrantId`.
+ * TOTAL serialized metadata, so the caps bound only unresolved records. An UNCERTAIN census (the
+ * store directory exists but cannot be read or sized) refuses admission rather than counting as
+ * zero — fail-closed. Refuses (throws) when the record cannot be admitted or written, so a
+ * destination the client cannot remember must not become writable later from a response echo.
+ * Returns the minted grant ID the request should carry in `meta.captureGrantId`.
  */
 export async function admitCaptureGrant(params: {
   stateDir: string;
@@ -143,16 +138,13 @@ export async function admitCaptureGrant(params: {
   const grantId = mintCaptureGrantId();
   const dir = grantsDir(params.stateDir);
   const file = path.join(dir, `${grantId}.json`);
-  const now = Date.now();
   const record: CaptureGrant = {
     version: 1,
     grantId,
     slot: params.slot,
     destination: params.destination,
     scope: grantScope(params.baseUrl, params.req),
-    state: 'open',
-    createdAtMs: now,
-    updatedAtMs: now,
+    createdAtMs: Date.now(),
   };
   const serialized = `${JSON.stringify(record)}\n`;
   const incomingBytes = Buffer.byteLength(serialized, 'utf8');
@@ -165,18 +157,17 @@ export async function admitCaptureGrant(params: {
       throw new AppError('COMMAND_FAILED', 'Too many retained remote capture grants.', {
         reason: 'capture_grant_admission_refused',
         limit: MAX_CAPTURE_GRANTS,
-        hint: 'Finish or close the open captures, or clear stale records under remote-connections/capture-grants in the agent-device state directory.',
+        hint: 'Finish or close the open captures; records nobody touches are removed automatically after a week.',
       });
     }
-    const reservedBytes = (census.count + 1) * CAPTURE_GRANT_TRANSITION_BYTES;
-    if (census.bytes + incomingBytes + reservedBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
+    if (census.bytes + incomingBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
       throw new AppError(
         'COMMAND_FAILED',
         'The retained remote capture grant metadata exceeds the aggregate size limit.',
         {
           reason: 'capture_grant_admission_refused',
           limit: MAX_CAPTURE_GRANT_STORE_METADATA_BYTES,
-          hint: 'Finish or close the open captures, or clear stale records under remote-connections/capture-grants in the agent-device state directory.',
+          hint: 'Finish or close the open captures; records nobody touches are removed automatically after a week.',
         },
       );
     }
@@ -214,55 +205,18 @@ export function readCaptureGrantById(params: {
 }
 
 /**
- * Every KNOWN-OPEN grant record of this scope and slot, newest first. Used when a finishing
- * answer leaves the capture's outcome uncertain: ALL of the scope's open grants become
- * pending-recovery — never one guessed grant, because an unbound response cannot say which
- * start it covered. A response string never chooses a grant on its own; only the client's own
- * persisted records are listed here.
+ * Deletes the one grant a response's PRODUCER-ECHOED `captureGrantId` matched, after the capture
+ * it covers was delivered successfully — including a matching echo that carried no artifacts. Also
+ * releases the grant of a start known to have failed before execution. Only a record matching the
+ * ID AND this request's full scope (endpoint/tenant/run/lease/session/slot) is ever removed.
+ * Never throws; an unmatched ID releases nothing.
  */
-export function listOpenCaptureGrantsInScope(params: {
-  stateDir: string;
-  baseUrl: string;
-  req: Omit<DaemonWireRequest, 'token'>;
-  slot: CaptureSlot;
-}): CaptureGrant[] {
-  const dir = grantsDir(params.stateDir);
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return [];
-  }
-  const open: CaptureGrant[] = [];
-  for (const name of entries.slice(0, SWEEP_SCAN_LIMIT)) {
-    if (!name.endsWith('.json')) continue;
-    const record = parseGrantFile(path.join(dir, name));
-    if (
-      record === undefined ||
-      record.slot !== params.slot ||
-      record.state !== 'open' ||
-      !scopeMatches(record.scope, params.baseUrl, params.req)
-    ) {
-      continue;
-    }
-    open.push(record);
-  }
-  return open.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
-}
-
-/**
- * Settles a grant after the capture it covers reached a known outcome: `finished` when a matching
- * stop/report answered, `pending-recovery` when the finishing answer was uncertain. A
- * `pending-recovery` record is never swept. `discard` releases a definitively rejected or unsent
- * start. Never throws; an unmatched ID settles nothing.
- */
-export async function settleCaptureGrant(params: {
+export async function releaseCaptureGrant(params: {
   stateDir: string;
   baseUrl: string;
   req: Omit<DaemonWireRequest, 'token'>;
   slot: CaptureSlot;
   grantId: string | undefined;
-  outcome: 'finished' | 'pending-recovery' | 'discard';
 }): Promise<void> {
   const grantId = readCaptureGrantId(params.grantId);
   if (grantId === undefined) return;
@@ -279,26 +233,52 @@ export async function settleCaptureGrant(params: {
       ) {
         return;
       }
-      if (params.outcome === 'discard') {
-        fs.rmSync(file, { force: true });
-        return;
-      }
-      const settled: CaptureGrant = {
-        ...record,
-        state: params.outcome,
-        updatedAtMs: Date.now(),
-      };
-      publishFileSync({
-        destination: file,
-        contents: `${JSON.stringify(settled)}\n`,
-        mode: 0o600,
-      });
+      fs.rmSync(file, { force: true });
     });
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
-      phase: 'capture_grant_settle_failed',
-      data: { grantId, outcome: params.outcome, error: String(error) },
+      phase: 'capture_grant_release_failed',
+      data: { grantId, error: String(error) },
+    });
+  }
+}
+
+/**
+ * Retires every grant record of this request's authenticated scope — the records a successful
+ * `close` ends, because the close finishes or disposes the session's captures without a stop
+ * echo. Only records whose full scope (endpoint/tenant/run/lease/session) matches the close are
+ * removed; another scope's grants are never touched. Never throws.
+ */
+export async function retireCaptureGrantsInScope(params: {
+  stateDir: string;
+  baseUrl: string;
+  req: Omit<DaemonWireRequest, 'token'>;
+}): Promise<void> {
+  const dir = grantsDir(params.stateDir);
+  try {
+    await withStoreLock(dir, async () => {
+      let names: string[];
+      try {
+        names = fs.readdirSync(dir);
+      } catch (error) {
+        if (isNotFoundError(error)) return;
+        throw error;
+      }
+      for (const name of names.slice(0, SWEEP_SCAN_LIMIT)) {
+        if (!name.endsWith('.json')) continue;
+        const record = parseGrantFile(path.join(dir, name));
+        if (record === undefined || !scopeMatches(record.scope, params.baseUrl, params.req)) {
+          continue;
+        }
+        fs.rmSync(path.join(dir, name), { force: true });
+      }
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'capture_grant_retire_failed',
+      data: { session: params.req.session, error: String(error) },
     });
   }
 }
@@ -383,19 +363,22 @@ function isDerivedChunkPath(primary: string, candidate: string): boolean {
 }
 
 /**
- * Bounded sweep: removes ONLY expired records whose state is KNOWN-FINISHED. Retained known-open
- * and pending-recovery evidence is preserved even when old; a record nobody can parse is
- * uncertain evidence and stays (it still counts toward the admission caps, fail-closed). Runs
- * under the admission lock, so it never interleaves with another process's census or write.
+ * Bounded sweep on the session-script store's horizon: removes every grant record untouched for
+ * `STALE_RECORD_MS`, unresolved captures included, so a record never outlives the capture it
+ * covers and the admission caps bound only records inside the horizon. The staleness clock is the
+ * file's own mtime — the same clock the session-script store sweeps by — so even a record nobody
+ * can parse is reclaimed once it is old. Runs under the admission lock, so it never interleaves
+ * with another process's census or write, and touches only stale `.json` entries of this store
+ * directory: unrelated records are left alone.
  */
 function sweepGrants(dir: string, entries: readonly GrantCensusEntry[]): void {
-  const staleBefore = Date.now() - STALE_CAPTURE_GRANT_MS;
+  const staleBefore = Date.now() - STALE_RECORD_MS;
   for (const entry of entries.slice(0, SWEEP_SCAN_LIMIT)) {
-    const record = parseGrantFile(path.join(dir, entry.name));
-    if (record === undefined) continue;
-    if (record.state !== 'finished') continue;
-    if (record.updatedAtMs >= staleBefore) continue;
-    fs.rmSync(path.join(dir, entry.name), { force: true });
+    const file = path.join(dir, entry.name);
+    if ((fs.lstatSync(file, { throwIfNoEntry: false })?.mtimeMs ?? Infinity) >= staleBefore) {
+      continue;
+    }
+    fs.rmSync(file, { force: true });
   }
 }
 
@@ -483,8 +466,7 @@ function asCaptureGrant(value: unknown): CaptureGrant | undefined {
   if (record.slot !== 'record') return undefined;
   if (typeof record.destination !== 'string' || record.destination.length === 0) return undefined;
   if (!isGrantScope(record.scope)) return undefined;
-  if (!isGrantState(record.state)) return undefined;
-  if (!isFiniteMs(record.createdAtMs) || !isFiniteMs(record.updatedAtMs)) return undefined;
+  if (!isFiniteMs(record.createdAtMs)) return undefined;
   return record as CaptureGrant;
 }
 
@@ -494,10 +476,6 @@ function isGrantScope(scope: unknown): scope is CaptureGrant['scope'] {
   return ['baseUrl', 'tenantId', 'runId', 'leaseId', 'session'].every(
     (field) => typeof value[field] === 'string',
   );
-}
-
-function isGrantState(state: unknown): state is CaptureGrantState {
-  return state === 'open' || state === 'finished' || state === 'pending-recovery';
 }
 
 function isFiniteMs(value: unknown): value is number {

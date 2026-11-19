@@ -17,16 +17,16 @@ import { runSourceCliJson } from './cli-json.ts';
 // whose answer is withheld still authorizes a later `record stop` run as a SEPARATE CLI process
 // from a DIFFERENT working directory — but only because the daemon echoes the grant ID back and
 // the persisted record matches it with the full scope. An echoed ID that matches nothing (or no
-// echo at all) leaves only the contained cwd-local name, and an error answer to the stop leaves
-// the grant pending-recovery. Loopback fixture daemon only: no devices, no real user paths, no
-// hostile payloads — this proves the benign cross-process flow, not a security exposure.
+// echo at all) leaves only the contained cwd-local name, a successful matching stop deletes the
+// grant, a failed or errored answer retains it, and a confirmed close retires the session's
+// grants. Loopback fixture daemon only: no devices, no real user paths, no hostile payloads —
+// this proves the benign cross-process flow, not a security exposure.
 
 const VIDEO_BYTES = 'video-bytes';
 const UNMATCHED_GRANT_ID = '00000000-0000-4000-8000-000000000000';
 
 type GrantRecord = {
   grantId: string;
-  state: string;
   destination: string;
 };
 
@@ -35,11 +35,13 @@ type FakeDaemon = {
   port: number;
   starts: Array<{ grantId?: string; outPath?: string }>;
   setStopMode(mode: 'echo' | 'unmatched' | 'error'): void;
+  setCloseMode(mode: 'ok' | 'error'): void;
 };
 
 function createFakeDaemon(): FakeDaemon {
   const starts: Array<{ grantId?: string; outPath?: string }> = [];
   let stopMode: 'echo' | 'unmatched' | 'error' = 'echo';
+  let closeMode: 'ok' | 'error' = 'ok';
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://loopback');
     const writeJson = (statusCode: number, payload: unknown) => {
@@ -143,6 +145,14 @@ function createFakeDaemon(): FakeDaemon {
         });
         return;
       }
+      if (params.command === 'close' && closeMode === 'error') {
+        writeJson(200, {
+          jsonrpc: '2.0',
+          id: payload.id,
+          error: { code: -32000, message: 'fixture close failure', data: {} },
+        });
+        return;
+      }
       writeJson(200, { jsonrpc: '2.0', id: payload.id, result: { ok: true, data: {} } });
     });
   });
@@ -152,6 +162,9 @@ function createFakeDaemon(): FakeDaemon {
     starts,
     setStopMode: (mode) => {
       stopMode = mode;
+    },
+    setCloseMode: (mode) => {
+      closeMode = mode;
     },
   };
 }
@@ -227,7 +240,6 @@ test('a withheld accepted record start still authorizes an exact stop from a sep
     assert.equal(open.length, 1);
     const openRecord = open.at(0);
     assert.ok(openRecord);
-    assert.equal(openRecord.state, 'open');
     assert.equal(openRecord.destination, granted);
     assert.equal(openRecord.grantId, daemon.starts[0]?.grantId);
 
@@ -241,8 +253,8 @@ test('a withheld accepted record start still authorizes an exact stop from a sep
     assert.equal(fs.readFileSync(`${granted}.mp4`, 'utf8'), VIDEO_BYTES);
     // Nothing landed in the stop process's own cwd.
     assert.deepEqual(fs.readdirSync(world.cwdB), []);
-    // The matched stop settled the grant.
-    assert.equal(readGrantRecords(world.stateDir)[0]?.state, 'finished');
+    // The successful matching stop deleted the grant: it never outlives its capture.
+    assert.equal(readGrantRecords(world.stateDir).length, 0);
   } finally {
     await closeLoopbackServer(daemon.server);
   }
@@ -272,7 +284,7 @@ test('a stop echoing an unmatched grant ID is refused to the contained cwd-local
     });
     assert.notEqual(start.status, 0);
     const granted = path.join(world.cwdA, 'clips', 'demo');
-    assert.equal(readGrantRecords(world.stateDir)[0]?.state, 'open');
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
 
     // The stop's echo names a grant this client never persisted: no persisted destination is
     // authorized, so the artifact keeps the contained name in the STOP process's cwd.
@@ -282,14 +294,14 @@ test('a stop echoing an unmatched grant ID is refused to the contained cwd-local
     assert.equal(stop.json?.data?.outPath, path.join(world.cwdB, 'demo.mp4'));
     assert.equal(fs.readFileSync(path.join(world.cwdB, 'demo.mp4'), 'utf8'), VIDEO_BYTES);
     assert.equal(fs.existsSync(`${granted}.mp4`), false);
-    // An unmatched echo settles nothing.
-    assert.equal(readGrantRecords(world.stateDir)[0]?.state, 'open');
+    // An unmatched echo releases nothing: the grant is retained.
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
   } finally {
     await closeLoopbackServer(daemon.server);
   }
 });
 
-test('an error answer to the stop leaves the grant pending-recovery instead of guessing an outcome', async (t) => {
+test('an error answer to the stop retains the grant instead of guessing an outcome', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant recovery proof')) return;
   const world = writeWorld('agent-device-capture-grant-recovery-');
   const daemon = createFakeDaemon();
@@ -312,12 +324,55 @@ test('an error answer to the stop leaves the grant pending-recovery instead of g
       env,
     });
     assert.notEqual(start.status, 0);
-    assert.equal(readGrantRecords(world.stateDir)[0]?.state, 'open');
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
 
     daemon.setStopMode('error');
     const stop = await runSourceCliJson(['record', 'stop', ...base], { cwd: world.cwdB, env });
     assert.notEqual(stop.status, 0, 'the fixture stop failure must surface');
-    assert.equal(readGrantRecords(world.stateDir)[0]?.state, 'pending-recovery');
+    // The unbound error names no grant and settles nothing: the record is retained (and the
+    // store's stale sweep still bounds it).
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+test('a confirmed close retires the session scope’s grants; a failed close retires nothing', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'capture grant close proof')) return;
+  const world = writeWorld('agent-device-capture-grant-close-');
+  const daemon = createFakeDaemon();
+  try {
+    daemon.port = await listenOnLoopback(daemon.server);
+    const configPath = writeRemoteConfig({ root: world.root, port: daemon.port });
+    const base = [
+      '--remote-config',
+      configPath,
+      '--state-dir',
+      world.stateDir,
+      '--session',
+      'default',
+      '--json',
+    ];
+    const env = { HOME: world.home, USERPROFILE: world.home, CI: '1' };
+
+    const start = await runSourceCliJson(['record', 'start', 'clips/demo', ...base], {
+      cwd: world.cwdA,
+      env,
+    });
+    assert.notEqual(start.status, 0);
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
+
+    // A close the daemon rejects retires nothing.
+    daemon.setCloseMode('error');
+    const failedClose = await runSourceCliJson(['close', ...base], { cwd: world.cwdA, env });
+    assert.notEqual(failedClose.status, 0, 'the fixture close failure must surface');
+    assert.equal(readGrantRecords(world.stateDir).length, 1);
+
+    // A close the daemon confirms retires the session's grant records.
+    daemon.setCloseMode('ok');
+    const close = await runSourceCliJson(['close', ...base], { cwd: world.cwdA, env });
+    assert.equal(close.status, 0, close.stderr || close.stdout);
+    assert.equal(readGrantRecords(world.stateDir).length, 0);
   } finally {
     await closeLoopbackServer(daemon.server);
   }

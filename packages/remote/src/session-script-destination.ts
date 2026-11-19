@@ -23,12 +23,14 @@ import {
   type ScriptDestination,
 } from '@agent-device/host-kit/file';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
-import { withoutTrailingSlashes, withRemoteStateLock } from './remote-state-record-lock.ts';
+import {
+  STALE_RECORD_MS,
+  withoutTrailingSlashes,
+  withRemoteStateLock,
+} from './remote-state-record-lock.ts';
 
 /** The download stops at this size, so a daemon cannot fill the caller's disk. */
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
-/** A record untouched for this long is removed the next time a record is created. */
-const STALE_RECORD_MS = 7 * 24 * 60 * 60 * 1000;
 const RECORD_LOCK_TIMEOUT_MS = 30_000;
 
 /**

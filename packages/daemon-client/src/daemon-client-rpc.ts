@@ -15,7 +15,6 @@ import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
   noteFailedCaptureStart,
-  noteUncertainFinishingCapture,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
@@ -120,10 +119,9 @@ async function rejectDaemonHttpRpcError(
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  // #4518: an error answer to a finishing capture leaves its outcome uncertain; the scope's open
-  // grants become pending-recovery and are never swept. An error answer to a capture START is a
-  // known rejection: only the grant the request itself named is released.
-  await noteUncertainFinishingCapture(info, req, stateDir);
+  // #4518: an error answer to a capture START is a known rejection: only the grant the request
+  // itself named is released. An error answer to a finishing capture settles nothing — the grant
+  // stays until a matching stop delivers it, the session closes, or the store's sweep reclaims it.
   await noteFailedCaptureStart(info, req, stateDir);
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {

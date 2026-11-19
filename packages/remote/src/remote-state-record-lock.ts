@@ -7,6 +7,12 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
  * must not become an eager edge of `remote-connection-state.ts`, which the CLI evaluates at startup.
  */
 
+/**
+ * The one staleness horizon of the remote-connections record stores: a record untouched for this
+ * long is removed the next time its store sweeps, so no record outlives its capture.
+ */
+export const STALE_RECORD_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Base-URL comparison form: a trailing slash is the same endpoint. */
 export function withoutTrailingSlashes(value: string): string {
   let end = value.length;

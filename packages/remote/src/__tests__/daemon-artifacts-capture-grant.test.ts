@@ -22,15 +22,19 @@ import {
 import {
   admitCaptureStartGrant,
   materializeRemoteArtifacts,
+  noteFailedCaptureStart,
   prepareRemoteRequestArtifacts,
+  retireClosedScopeCaptureGrants,
 } from '../daemon-artifacts.ts';
 import {
   admitCaptureGrant,
-  listOpenCaptureGrantsInScope,
+  authorizedCaptureLocalPath,
   readCaptureGrantById,
-  settleCaptureGrant,
+  releaseCaptureGrant,
+  retireCaptureGrantsInScope,
   type CaptureGrant,
 } from '../capture-grant.ts';
+import { STALE_RECORD_MS } from '../remote-state-record-lock.ts';
 
 const signal = new AbortController().signal;
 
@@ -185,7 +189,6 @@ test('a record start persists its grant before dispatch, and an accepted start w
     const startReq = stopRequest(world, { positionals: ['start', 'clips/demo'] });
     const grant = readGrant(world, port, startReq, grantId);
     expect(grant?.destination).toBe(granted);
-    expect(grant?.state).toBe('open');
 
     // The stop runs in a separate CLI process with a different cwd; the daemon echoes the grant ID
     // from the accepted capture and the extension-appended destination as localPath.
@@ -231,7 +234,8 @@ test('a record start persists its grant before dispatch, and an accepted start w
     expect(fs.readFileSync(telemetryPath, 'utf8')).toBe('video-bytes');
     expect(fs.existsSync(path.join(otherCwd, 'demo.mp4'))).toBe(false);
 
-    expect(readGrant(world, port, stopRequest(world), grantId)?.state).toBe('finished');
+    // The successful matching stop deleted the grant: a record never outlives its capture.
+    expect(readGrant(world, port, stopRequest(world), grantId)).toBeUndefined();
   } finally {
     await closeLoopbackServer(server);
   }
@@ -281,6 +285,16 @@ test('a reordered acknowledgement cannot overwrite or extend a newer grant', asy
     const first = await runStart(world, port, 'clips/first', 'ok');
     const second = await runStart(world, port, 'clips/second', 'ok');
 
+    const matchingGrant = readGrant(world, port, stopRequest(world), first.grantId);
+    expect(matchingGrant?.destination).toBe(first.granted);
+    expect(
+      authorizedCaptureLocalPath({
+        grant: matchingGrant,
+        field: 'outPath',
+        localPath: `${second.granted}.mp4`,
+      }),
+    ).toBeUndefined();
+
     // A late stop echoing the FIRST grant writes only to the first destination...
     const late = await materialize(
       world,
@@ -320,7 +334,16 @@ test('a reordered acknowledgement cannot overwrite or extend a newer grant', asy
     expect(overreach.ok && overreach.data?.outPath).toBe(path.join(world.cwd, 'second.mp4'));
     expect(fs.existsSync(`${second.granted}.mp4`)).toBe(false);
 
-    // The newer grant is still open and intact.
+    // The late matched stop deleted the first grant; the newer grant is still intact.
+    expect(
+      readCaptureGrantById({
+        stateDir: world.stateDir,
+        baseUrl: world.endpoint(port).baseUrl,
+        req: stopRequest(world),
+        slot: 'record',
+        grantId: first.grantId,
+      }),
+    ).toBeUndefined();
     expect(
       readCaptureGrantById({
         stateDir: world.stateDir,
@@ -328,8 +351,8 @@ test('a reordered acknowledgement cannot overwrite or extend a newer grant', asy
         req: stopRequest(world),
         slot: 'record',
         grantId: second.grantId,
-      })?.state,
-    ).toBe('open');
+      }),
+    ).toBeDefined();
   } finally {
     await closeLoopbackServer(server);
   }
@@ -374,7 +397,7 @@ test('an older daemon without a grant echo authorizes no persisted destination: 
     expect(fs.existsSync(granted)).toBe(false);
     expect(fs.existsSync(path.join(world.root, 'clips', 'demo.mp4'))).toBe(false);
 
-    // The grant the client persisted is untouched: no echo, so nothing settled it.
+    // The grant the client persisted is untouched: no echo, so nothing released it.
     expect(
       readCaptureGrantById({
         stateDir: world.stateDir,
@@ -382,8 +405,8 @@ test('an older daemon without a grant echo authorizes no persisted destination: 
         req: stopRequest(world),
         slot: 'record',
         grantId,
-      })?.state,
-    ).toBe('open');
+      }),
+    ).toBeDefined();
   } finally {
     await closeLoopbackServer(server);
   }
@@ -434,7 +457,7 @@ test('a stop with an unmatched grant ID or without any grant never trusts localP
   }
 });
 
-test('aggregate admission refuses beyond 64 records and the bounded sweep reclaims only expired non-recovery records', async (t) => {
+test('admission refuses beyond 64 unresolved records, but matched stops and the stale sweep free the room — no lockout', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant admission')) return;
   const world = makeWorld('agent-device-capture-grant-cap-');
   const server = http.createServer((_req, res) => res.end('bytes'));
@@ -448,7 +471,9 @@ test('aggregate admission refuses beyond 64 records and the bounded sweep reclai
       positionals: ['start', `clips/${session}`],
       meta: { cwd: world.root },
     });
-    // 64 records admitted.
+    const grantsDir = path.join(world.stateDir, 'remote-connections', 'capture-grants');
+    const grantFile = (grantId: string) => path.join(grantsDir, `${grantId}.json`);
+    // 64 unresolved records admitted.
     const admittedIds = new Map<string, string>();
     for (let i = 0; i < 64; i += 1) {
       const grantId = await admitCaptureGrant({
@@ -460,7 +485,7 @@ test('aggregate admission refuses beyond 64 records and the bounded sweep reclai
       });
       admittedIds.set(`s${i}`, grantId);
     }
-    // The 65th is refused before dispatch with a typed error.
+    // The 65th is refused before dispatch with a typed error while all 64 stay unresolved.
     await expect(
       admitCaptureGrant({
         stateDir: world.stateDir,
@@ -473,77 +498,18 @@ test('aggregate admission refuses beyond 64 records and the bounded sweep reclai
       details: expect.objectContaining({ reason: 'capture_grant_admission_refused', limit: 64 }),
     });
 
-    // A pending-recovery record is never swept, even when ancient.
-    const protectedId = '11111111-1111-4111-8111-111111111111';
-    fs.mkdirSync(path.join(world.stateDir, 'remote-connections', 'capture-grants'), {
-      recursive: true,
-    });
-    fs.writeFileSync(
-      path.join(world.stateDir, 'remote-connections', 'capture-grants', `${protectedId}.json`),
-      JSON.stringify({
-        version: 1,
-        grantId: protectedId,
-        slot: 'record',
-        destination: path.join(world.root, 'clips', 'protected'),
-        scope: { baseUrl, tenantId: '', runId: '', leaseId: '', session: 's0' },
-        state: 'pending-recovery',
-        createdAtMs: 0,
-        updatedAtMs: 0,
-      }),
-    );
-    // Still refused: the sweep may not remove the protected record.
-    await expect(
-      admitCaptureGrant({
+    // 64 successful matching stops delete their grants, so the cap bounds only unresolved
+    // records and 64 successful recordings never lock out the next start.
+    for (const [session, grantId] of admittedIds) {
+      await releaseCaptureGrant({
         stateDir: world.stateDir,
         baseUrl,
-        req: makeReq('overflow'),
+        req: makeReq(session),
         slot: 'record',
-        destination: path.join(world.root, 'clips', 'overflow'),
-      }),
-    ).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'capture_grant_admission_refused' }),
-    });
-
-    // An expired KNOWN-OPEN record is retained evidence too: the sweep removes finished
-    // records only, even when an open one is ancient.
-    const staleOpenFile = path.join(
-      world.stateDir,
-      'remote-connections',
-      'capture-grants',
-      `${admittedIds.get('s63')}.json`,
-    );
-    {
-      const record = JSON.parse(fs.readFileSync(staleOpenFile, 'utf8')) as Record<string, unknown>;
-      fs.writeFileSync(staleOpenFile, JSON.stringify({ ...record, updatedAtMs: 0 }));
-    }
-
-    // Expired FINISHED records are reclaimed by the sweep, freeing room (the protected
-    // pending-recovery record and the stale open record still count against the cap).
-    const agedFiles: string[] = [];
-    for (const session of ['s0', 's1']) {
-      const reqN = makeReq(session);
-      const grantIdN = admittedIds.get(session);
-      expect(grantIdN).toBeDefined();
-      await settleCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: reqN,
-        slot: 'record',
-        grantId: grantIdN,
-        outcome: 'finished',
+        grantId,
       });
-      // Age it past the staleness horizon.
-      const file = path.join(
-        world.stateDir,
-        'remote-connections',
-        'capture-grants',
-        `${grantIdN}.json`,
-      );
-      const record = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
-      fs.writeFileSync(file, JSON.stringify({ ...record, updatedAtMs: 0 }));
-      agedFiles.push(file);
     }
-    const admitted = await admitCaptureGrant({
+    const afterStops = await admitCaptureGrant({
       stateDir: world.stateDir,
       baseUrl,
       req: makeReq('overflow'),
@@ -556,24 +522,71 @@ test('aggregate admission refuses beyond 64 records and the bounded sweep reclai
         baseUrl,
         req: makeReq('overflow'),
         slot: 'record',
-        grantId: admitted,
+        grantId: afterStops,
       })?.destination,
     ).toBe(path.join(world.root, 'clips', 'overflow'));
-    for (const file of agedFiles) expect(fs.existsSync(file)).toBe(false);
-    // The pending-recovery record survived the sweep.
-    expect(
-      fs.existsSync(
-        path.join(world.stateDir, 'remote-connections', 'capture-grants', `${protectedId}.json`),
-      ),
-    ).toBe(true);
-    // ...and so did the stale KNOWN-OPEN record: the sweep never touches retained open evidence.
-    expect(fs.existsSync(staleOpenFile)).toBe(true);
+    await releaseCaptureGrant({
+      stateDir: world.stateDir,
+      baseUrl,
+      req: makeReq('overflow'),
+      slot: 'record',
+      grantId: afterStops,
+    });
+
+    // Refill to the cap with unresolved records, then age all but one past the shared
+    // STALE_RECORD_MS horizon: the next admission sweeps exactly the stale ones.
+    const refillIds: string[] = [];
+    for (let i = 0; i < 64; i += 1) {
+      refillIds.push(
+        await admitCaptureGrant({
+          stateDir: world.stateDir,
+          baseUrl,
+          req: makeReq(`r${i}`),
+          slot: 'record',
+          destination: path.join(world.root, 'clips', `r${i}`),
+        }),
+      );
+    }
+    await expect(
+      admitCaptureGrant({
+        stateDir: world.stateDir,
+        baseUrl,
+        req: makeReq('overflow'),
+        slot: 'record',
+        destination: path.join(world.root, 'clips', 'overflow'),
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'capture_grant_admission_refused' }),
+    });
+    const ancient = new Date(Date.now() - STALE_RECORD_MS - 60_000);
+    const freshId = refillIds[63];
+    expect(freshId).toBeDefined();
+    const freshFile = grantFile(freshId as string);
+    for (const grantId of refillIds.slice(0, 63))
+      fs.utimesSync(grantFile(grantId), ancient, ancient);
+    // An unrelated non-record entry in the same directory is never swept.
+    fs.writeFileSync(path.join(grantsDir, 'notes.txt'), 'not a grant record');
+    fs.utimesSync(path.join(grantsDir, 'notes.txt'), ancient, ancient);
+
+    const admitted = await admitCaptureGrant({
+      stateDir: world.stateDir,
+      baseUrl,
+      req: makeReq('overflow'),
+      slot: 'record',
+      destination: path.join(world.root, 'clips', 'overflow'),
+    });
+    expect(admitted).toBeDefined();
+    // The 63 stale unresolved records were swept; the fresh one and the unrelated file remain.
+    for (const grantId of refillIds.slice(0, 63))
+      expect(fs.existsSync(grantFile(grantId))).toBe(false);
+    expect(fs.existsSync(freshFile)).toBe(true);
+    expect(fs.existsSync(path.join(grantsDir, 'notes.txt'))).toBe(true);
   } finally {
     await closeLoopbackServer(server);
   }
 });
 
-test('aggregate admission reserves bytes for later grant state changes', async (t) => {
+test('aggregate admission refuses when serialized metadata reaches the byte limit', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant byte cap')) return;
   const world = makeWorld('agent-device-capture-grant-bytes-');
   const server = http.createServer((_req, res) => res.end('bytes'));
@@ -604,11 +617,12 @@ test('aggregate admission reserves bytes for later grant state changes', async (
     );
     const original = fs.readFileSync(file);
     const record = JSON.parse(original.toString('utf8')) as CaptureGrant;
-    const destination = record.destination + 'x'.repeat(limit - 2 * original.byteLength);
+    // Pad the one record until the store's total serialized metadata reaches the limit.
+    const destination = record.destination + 'x'.repeat(limit - original.byteLength);
     fs.writeFileSync(file, `${JSON.stringify({ ...record, destination })}\n`);
-    expect(fs.statSync(file).size + original.byteLength).toBe(limit);
+    expect(fs.statSync(file).size).toBe(limit);
 
-    // The incoming record fits exactly as written, but would leave no room to settle either grant.
+    // No room remains for the incoming record, so admission is refused with the byte limit.
     await expect(admitCaptureGrant(options)).rejects.toMatchObject({
       details: expect.objectContaining({
         reason: 'capture_grant_admission_refused',
@@ -663,7 +677,6 @@ test('a rejected start releases only the grant its own request named; uncertain 
     const second = await runStart(world, port, 'clips/second', 'withheld');
     // The second start's request carried its own grant ID and the daemon answered an error:
     // exactly that record is released.
-    const { noteFailedCaptureStart } = await import('../daemon-artifacts.ts');
     await noteFailedCaptureStart(
       world.endpoint(port),
       {
@@ -692,46 +705,126 @@ test('a rejected start releases only the grant its own request named; uncertain 
         req: stopRequest(world),
         slot: 'record',
         grantId: first.grantId,
-      })?.state,
-    ).toBe('open');
+      }),
+    ).toBeDefined();
   } finally {
     await closeLoopbackServer(server);
   }
 });
 
-test('an uncertain finish marks every open grant of the scope pending-recovery without guessing one', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'capture grant pending recovery')) return;
-  const world = makeWorld('agent-device-capture-grant-recovery-');
+test('a matching stop echo with no artifacts still deletes the grant', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'capture grant echo-only stop')) return;
+  const world = makeWorld('agent-device-capture-grant-echo-only-');
   const server = http.createServer((_req, res) => res.end('bytes'));
   try {
     const port = await listenOnLoopback(server);
-    const first = await runStart(world, port, 'clips/first', 'withheld');
-    const second = await runStart(world, port, 'clips/second', 'withheld');
-    // Both starts are accepted-but-answerless: two open grants in one scope.
-    expect(
-      listOpenCaptureGrantsInScope({
-        stateDir: world.stateDir,
-        baseUrl: world.endpoint(port).baseUrl,
-        req: stopRequest(world),
-        slot: 'record',
-      })
-        .map((grant) => grant.grantId)
-        .sort(),
-    ).toEqual([first.grantId, second.grantId].sort());
-    // An error answer to the stop leaves the outcome uncertain: BOTH become pending-recovery.
-    const { noteUncertainFinishingCapture } = await import('../daemon-artifacts.ts');
-    await noteUncertainFinishingCapture(world.endpoint(port), stopRequest(world), world.stateDir);
-    for (const grantId of [first.grantId, second.grantId]) {
-      expect(
-        readCaptureGrantById({
-          stateDir: world.stateDir,
-          baseUrl: world.endpoint(port).baseUrl,
-          req: stopRequest(world),
-          slot: 'record',
-          grantId,
-        })?.state,
-      ).toBe('pending-recovery');
+    const { grantId } = await runStart(world, port, 'clips/demo', 'withheld');
+    // The daemon confirms the capture (echoes its grant ID) but the response carries no artifacts.
+    const response = await materialize(
+      world,
+      port,
+      stopRequest(world),
+      okResponse([], { captureGrantId: grantId }),
+    );
+    expect(response.ok).toBe(true);
+    expect(readGrant(world, port, stopRequest(world), grantId)).toBeUndefined();
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a matching stop whose artifact download fails keeps the grant so a retried stop can deliver', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'capture grant failed delivery')) return;
+  const world = makeWorld('agent-device-capture-grant-failed-delivery-');
+  // The artifact endpoint fails while `failArtifacts` is set, then serves the bytes.
+  let failArtifacts = true;
+  const server = http.createServer((req, res) => {
+    if (failArtifacts && req.url?.includes('/artifacts/')) {
+      res.writeHead(500);
+      res.end('down');
+      return;
     }
+    res.end('video-bytes');
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    const { grantId, granted } = await runStart(world, port, 'clips/demo', 'withheld');
+    const stopResponse = () =>
+      okResponse(
+        [
+          artifact({
+            field: 'outPath',
+            localPath: `${granted}.mp4`,
+            fileName: 'demo.mp4',
+            captureGrantId: grantId,
+          }),
+        ],
+        { captureGrantId: grantId },
+      );
+    await expect(materialize(world, port, stopRequest(world), stopResponse())).rejects.toThrow();
+    // Materialization failed on an answered response, so the grant is retained for the retry.
+    expect(readGrant(world, port, stopRequest(world), grantId)).toBeDefined();
+    expect(fs.existsSync(`${granted}.mp4`)).toBe(false);
+
+    // The retried stop delivers to the granted destination and releases the grant.
+    failArtifacts = false;
+    const response = await materialize(world, port, stopRequest(world), stopResponse());
+    expect(response.ok && response.data?.outPath).toBe(`${granted}.mp4`);
+    expect(fs.readFileSync(`${granted}.mp4`, 'utf8')).toBe('video-bytes');
+    expect(readGrant(world, port, stopRequest(world), grantId)).toBeUndefined();
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a successful close retires its own scope’s grants and never another scope’s; a failed close retires nothing', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'capture grant close')) return;
+  const world = makeWorld('agent-device-capture-grant-close-');
+  const server = http.createServer((_req, res) => res.end('bytes'));
+  try {
+    const port = await listenOnLoopback(server);
+    const baseUrl = world.endpoint(port).baseUrl;
+    // Two grants in the closing session's scope, one in a different session's scope.
+    const own = await runStart(world, port, 'clips/own-a', 'withheld', 'closing');
+    const ownToo = await runStart(world, port, 'clips/own-b', 'withheld', 'closing');
+    const other = await runStart(world, port, 'clips/other', 'withheld', 'elsewhere');
+    const closeReq: DaemonWireRequest = {
+      token: 'secret',
+      command: 'close',
+      session: 'closing',
+      positionals: [],
+      meta: { cwd: world.cwd },
+    };
+    const otherReq = stopRequest(world, { session: 'elsewhere' });
+    const readOwn = (grantId: string) => readGrant(world, port, closeReq, grantId);
+    const readOther = (grantId: string) => readGrant(world, port, otherReq, grantId);
+
+    // A failed close (an error answer) runs no grant action: everything stays.
+    await noteFailedCaptureStart(world.endpoint(port), closeReq, world.stateDir);
+    expect(readOwn(own.grantId)).toBeDefined();
+    expect(readOther(other.grantId)).toBeDefined();
+
+    // The daemon confirmed the close: materializing its ok response retires the close's scope.
+    const closed = await materialize(world, port, closeReq, okResponse([]));
+    expect(closed.ok).toBe(true);
+    expect(readOwn(own.grantId)).toBeUndefined();
+    expect(readOwn(ownToo.grantId)).toBeUndefined();
+    // The other scope's grant is untouched (cross-scope isolation).
+    expect(readOther(other.grantId)).toBeDefined();
+
+    // The store-level retire agrees: only the named scope is removed, whatever the command.
+    await retireCaptureGrantsInScope({
+      stateDir: world.stateDir,
+      baseUrl,
+      req: otherReq,
+    });
+    expect(readOther(other.grantId)).toBeUndefined();
+    // A non-close request never triggers the retire on its own.
+    const third = await runStart(world, port, 'clips/third', 'withheld', 'third');
+    await retireClosedScopeCaptureGrants(world.endpoint(port), stopRequest(world), world.stateDir);
+    expect(
+      readGrant(world, port, stopRequest(world, { session: 'third' }), third.grantId),
+    ).toBeDefined();
   } finally {
     await closeLoopbackServer(server);
   }
