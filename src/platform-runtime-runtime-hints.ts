@@ -1,4 +1,4 @@
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
@@ -40,11 +40,7 @@ export async function applyRuntimeHintValues(params: {
 }): Promise<void> {
   const { device, appId, values } = params;
   if (!appId) return;
-  const transport = resolveRuntimeTransportHints({
-    metroHost: values.metroHost,
-    metroPort: values.metroPort ? Number(values.metroPort) : undefined,
-    bundleUrl: values.bundleUrl,
-  });
+  const transport = resolveTransport(values);
   if (!transport) return;
 
   if (device.platform === 'android') {
@@ -72,6 +68,57 @@ export async function clearRuntimeHintValues(params: {
   if (isIosFamily(device) && device.kind === 'simulator') {
     await clearIosSimulatorRuntimeHints(device, appId);
   }
+}
+
+/**
+ * The Apple hint path, for the Apple owner's own calls. It reads only Apple targets: an Android
+ * device is refused rather than dispatched to ADB, so an Apple-scoped grant cannot write Android
+ * app preferences. The dispatching entry point above never reaches a non-Apple device here.
+ */
+export async function applyAppleRuntimeHintValues(params: {
+  device: DeviceInfo;
+  appId?: string;
+  values: RuntimeHintValues;
+}): Promise<void> {
+  const { device, appId, values } = params;
+  if (!appId) return;
+  requireAppleRuntimeHintTarget(device);
+  const transport = resolveTransport(values);
+  if (!transport) return;
+  if (isIosFamily(device) && device.kind === 'simulator') {
+    await applyIosSimulatorRuntimeHints(device, appId, transport);
+  }
+}
+
+/** Removes what {@link applyAppleRuntimeHintValues} wrote; refuses a non-Apple target the same way. */
+export async function clearAppleRuntimeHintValues(params: {
+  device: DeviceInfo;
+  appId?: string;
+}): Promise<void> {
+  const { device, appId } = params;
+  if (!appId) return;
+  requireAppleRuntimeHintTarget(device);
+  if (isIosFamily(device) && device.kind === 'simulator') {
+    await clearIosSimulatorRuntimeHints(device, appId);
+  }
+}
+
+/** Hints are an Apple-owned operation only where the caller holds an Apple device. */
+function requireAppleRuntimeHintTarget(device: DeviceInfo): void {
+  if (isApplePlatform(device.platform)) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Apple runtime hints require an Apple device; '${device.id}' is a ${device.platform} device.`,
+    { reason: 'apple_runtime_hint_target_required', deviceId: device.id },
+  );
+}
+
+function resolveTransport(values: RuntimeHintValues): ResolvedRuntimeTransport | undefined {
+  return resolveRuntimeTransportHints({
+    metroHost: values.metroHost,
+    metroPort: values.metroPort ? Number(values.metroPort) : undefined,
+    bundleUrl: values.bundleUrl,
+  });
 }
 
 function androidDevPrefsPaths(packageName: string): string[] {

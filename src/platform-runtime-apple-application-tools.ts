@@ -104,13 +104,15 @@ export function createAppleApplicationTools(env: Readonly<EnvMap>): AppleApplica
         startupTimeoutMs: input.timeoutMs,
       });
     },
+    // The Apple owner's own hint calls take the Apple-only path, so a non-Apple target reaching here
+    // is refused at the owner instead of being dispatched to ADB by the neutral dispatcher.
     applyRuntimeHints: async (device, input) => {
-      const { applyRuntimeHintValues } = await loadRuntimeHints();
-      await applyRuntimeHintValues({ device, ...input });
+      const { applyAppleRuntimeHintValues } = await loadRuntimeHints();
+      await applyAppleRuntimeHintValues({ device, ...input });
     },
     clearRuntimeHints: async (device, input) => {
-      const { clearRuntimeHintValues } = await loadRuntimeHints();
-      await clearRuntimeHintValues({ device, ...input });
+      const { clearAppleRuntimeHintValues } = await loadRuntimeHints();
+      await clearAppleRuntimeHintValues({ device, ...input });
     },
     dismissCloseAlerts: async (device, input) => await dismissMacOsCloseAlerts(device, input, env),
     detachRunnerSessionsForShutdown: async () => {

@@ -97,6 +97,38 @@ test('preparing the runner spends the requested budget on stale-bundle cleanup, 
   );
 });
 
+test('the Apple tools refuse an Android hint target instead of dispatching it to ADB', async () => {
+  // The Apple owner's hint members take the Apple-only path. At the base these members forwarded
+  // to the neutral dispatcher, which sent an Android device to ADB, so an Apple-scoped grant could
+  // write Android app preferences. Refusal here happens before any executor is reached.
+  const androidDevice: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+  const tools = createAppleApplicationTools({});
+  await expect(
+    tools.applyRuntimeHints(androidDevice, {
+      appId: 'com.example.app',
+      values: { metroHost: '10.0.0.10', metroPort: '8081' },
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: { reason: 'apple_runtime_hint_target_required', deviceId: 'emulator-5554' },
+  });
+  await expect(
+    tools.clearRuntimeHints(androidDevice, {
+      appId: 'com.example.app',
+      values: { metroHost: '10.0.0.10', metroPort: '8081' },
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: { reason: 'apple_runtime_hint_target_required' },
+  });
+});
+
 test('a macOS frontmost-app open resolves the identity of the frontmost application', async () => {
   mockResolveFrontmostMacOsApp.mockResolvedValueOnce({
     bundleId: 'com.apple.TextEdit',

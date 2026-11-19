@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  applyAppleRuntimeHintValues,
   applyRuntimeHintValues,
+  clearAppleRuntimeHintValues,
   clearRuntimeHintValues,
 } from '../platform-runtime-runtime-hints.ts';
 import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
@@ -397,6 +399,50 @@ test('applyRuntimeHintValues writes iOS simulator React Native defaults', async 
     assert.match(
       loggedArgs,
       /simctl spawn sim-1 defaults write com\.example\.demo RCT_packager_scheme -string http/,
+    );
+  });
+});
+
+test('the Apple hint path refuses an Android device instead of writing Android preferences', async () => {
+  await withMockedAdb(async ({ device, argsLogPath }) => {
+    await assert.rejects(
+      applyAppleRuntimeHintValues({
+        device,
+        appId: 'com.example.demo',
+        values: { metroHost: '10.0.0.10', metroPort: '8081' },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.reason, 'apple_runtime_hint_target_required');
+        return true;
+      },
+    );
+    // Refusal means no ADB call: an Apple-scoped grant cannot reach the device shell at all.
+    await assert.rejects(
+      fs.readFile(argsLogPath, 'utf8'),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
+    );
+  });
+});
+
+test('the Apple hint path writes the same simulator defaults as the dispatcher', async () => {
+  await withMockedXcrun(async ({ device, argsLogPath }) => {
+    await applyAppleRuntimeHintValues({
+      device,
+      appId: 'com.example.demo',
+      values: { metroHost: '127.0.0.1', metroPort: '8081' },
+    });
+    await clearAppleRuntimeHintValues({ device, appId: 'com.example.demo' });
+
+    const loggedArgs = await fs.readFile(argsLogPath, 'utf8');
+    assert.match(
+      loggedArgs,
+      /simctl spawn sim-1 defaults write com\.example\.demo RCT_jsLocation -string 127\.0\.0\.1:8081/,
+    );
+    assert.match(
+      loggedArgs,
+      /simctl spawn sim-1 defaults delete com\.example\.demo RCT_jsLocation/,
     );
   });
 });

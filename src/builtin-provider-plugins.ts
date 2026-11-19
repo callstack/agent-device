@@ -35,7 +35,7 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
       apiVersion: 2,
       provider: LIMRUN_ID,
       credentials: limrunCredentialDeclaration(),
-      setup: async (pluginHost) => {
+      setup: async () => {
         const [runtime, dependencies] = await Promise.all([
           import('@agent-device/provider-limrun'),
           import('./sdk/limrun-runtime-dependencies.ts'),
@@ -50,9 +50,7 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
               'network-har',
             ),
           },
-          // The registry's host capabilities are the boundary for shared platform mechanics; the
-          // adapter keeps its own lazy edges for the provider-specific ones.
-          dependencies.createLimrunRuntimeDependencies(host, pluginHost),
+          dependencies.createLimrunRuntimeDependencies(host),
           {
             includePlatformModule: true,
           },

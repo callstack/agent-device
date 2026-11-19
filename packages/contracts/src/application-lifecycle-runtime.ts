@@ -439,36 +439,41 @@ export type AppleApplicationTools = Readonly<{
 }>;
 
 /**
- * The daemon-wide Apple shutdown members. They hand off or stop every runner session this process
- * holds, so the daemon's own durable-resource lifecycle is their only caller: a provider's
- * authority ends at the sessions its own leases own.
+ * The Apple mechanics one provider lease consumes: resolving what an open addresses, and applying
+ * or clearing this platform's runtime hints. Runner mechanics are absent by declaration because a
+ * lease owns its own runner — {@link AppleApplicationTools} names what a lease's own tools expose
+ * once the lease binds it — and a holder of this projection has no session id to hand to them even
+ * at runtime.
  */
-const appleDaemonShutdownMembers = [
-  'detachRunnerSessionsForShutdown',
-  'finalizeRunnerSessionsForShutdown',
+export type AppleApplicationToolsForProvider = Readonly<{
+  resolveOpenTarget(
+    device: DeviceInfo,
+    input: OpenTargetResolutionInput,
+  ): Promise<OpenTargetResolution>;
+  applyRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
+  clearRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
+}>;
+
+/** The operations the provider projection publishes: exactly the three a provider consumes. */
+const appleProviderToolMembers = [
+  'resolveOpenTarget',
+  'applyRuntimeHints',
+  'clearRuntimeHints',
 ] as const;
 
 /**
- * The Apple mechanics a host may place in a provider plugin's hands: open-target resolution,
- * runner-session mechanics, and runtime hints. The daemon shutdown members are absent by
- * declaration, and a host omits them from the value it hands over.
- */
-export type AppleApplicationToolsForProvider = Omit<
-  AppleApplicationTools,
-  (typeof appleDaemonShutdownMembers)[number]
->;
-
-/**
- * Projects Apple tools to {@link AppleApplicationToolsForProvider}. The omitted members are removed
- * from the runtime value, not only from its type, so a holder of the projection cannot reach them
- * through an unchecked reference.
+ * Projects Apple tools to {@link AppleApplicationToolsForProvider}. Every member beyond the allow-
+ * listed three — the runner-session mechanics a lease owns, and the daemon-wide shutdown members
+ * that hand off or stop every runner session this process holds — is removed from the runtime
+ * value, not only from its type, so a holder of the projection cannot reach any of them through an
+ * unchecked reference. The daemon's own durable-resource lifecycle keeps the full port.
  */
 export function availableAppleApplicationToolsForProvider(
-  tools: AppleApplicationToolsForProvider,
+  tools: AppleApplicationTools,
 ): AppleApplicationToolsForProvider {
-  const omitted: readonly string[] = appleDaemonShutdownMembers;
+  const published: readonly string[] = appleProviderToolMembers;
   return Object.freeze(
-    Object.fromEntries(Object.entries(tools).filter(([key]) => !omitted.includes(key))),
+    Object.fromEntries(Object.entries(tools).filter(([key]) => published.includes(key))),
   ) as AppleApplicationToolsForProvider;
 }
 

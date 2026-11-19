@@ -22,7 +22,7 @@ import type {
   WebDriverDescriptor,
 } from './contract.ts';
 import type { RegisteredConnection } from './connection.ts';
-import { createPluginHost, type ProviderHostCapabilities } from './host.ts';
+import { createPluginHost } from './host.ts';
 import {
   NO_PLUGIN_CREDENTIALS,
   type PluginCleanupOutcome,
@@ -74,9 +74,7 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
 
 /**
  * What the composing root decides for every registry, so this package names no provider: how a
- * plugin's `{ webDriver }` descriptor becomes a runtime, and which host capabilities a setup
- * receives. The drivers come from the root rather than an import: ADR-0019 and ADR-0034 keep
- * platform and provider implementation out of this package, so the registry only asks the policy.
+ * plugin's `{ webDriver }` descriptor becomes a runtime.
  */
 export type PluginRegistryPolicy = Readonly<{
   assertReplaySelectionCurrent?(packageName: string): void;
@@ -84,14 +82,6 @@ export type PluginRegistryPolicy = Readonly<{
     descriptor: WebDriverDescriptor,
     context: Readonly<{ clientVersion: string }>,
   ): Promise<Pick<ProviderRegistration, 'runtime' | 'platformModule'>>;
-  /**
-   * Builds the capability facets `startProviderRegistry` adds to every `setup` host it creates for
-   * this policy. The registry never interprets the facets; it hands the host environment over and
-   * awaits. The replay scope never calls it: no provider runtime is set up there.
-   */
-  hostCapabilities?(
-    host: HostEnvironment,
-  ): ProviderHostCapabilities | Promise<ProviderHostCapabilities>;
 }>;
 
 export type ProviderRegistration = Readonly<{
@@ -194,14 +184,11 @@ export async function startProviderRegistry(
   policy: PluginRegistryPolicy,
   scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
-  // Only a provider setup reads the facets, so the policy builds them at most once, and only now.
-  const resolveCapabilities = createHostCapabilitiesResolver(policy, host);
   for (const slot of resolved.slots) {
     if (slot.failure !== undefined) continue;
     try {
       if (slot.replayPlugin) await setUpReplaySlot(slot, slot.replayPlugin, host);
-      else if (slot.plugin && scope === 'all')
-        await setUpSlot(slot, slot.plugin, host, policy, resolveCapabilities);
+      else if (slot.plugin && scope === 'all') await setUpSlot(slot, slot.plugin, host, policy);
     } catch (error) {
       slot.failure = asPluginFailure(error, 'plugin_setup_failed');
       slot.registration = undefined;
@@ -266,34 +253,6 @@ export async function startProviderRegistry(
       return [...providers, ...backends.flat()];
     }),
   });
-}
-
-/**
- * The `setup` host capabilities, built at most once per registry. Host capabilities are optional:
- * a policy that fails to build them must not be diagnosed as each plugin's own setup failure, so a
- * rejection is kept as the facet's typed failure, the build is attempted once, and every setup
- * proceeds without the facets.
- */
-function createHostCapabilitiesResolver(
-  policy: PluginRegistryPolicy,
-  host: HostEnvironment,
-): () => Promise<ProviderHostCapabilities> {
-  if (!policy.hostCapabilities) return async () => ({});
-  let building: Promise<ProviderHostCapabilities> | undefined;
-  return () =>
-    (building ??= Promise.resolve()
-      .then(() => policy.hostCapabilities!(host))
-      .catch(async (error: unknown) => {
-        // The diagnostics module stays implementation-lazy so loading the registry evaluates no
-        // more modules than it did before (the eager-closure budget).
-        const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'plugin.host_capabilities_unavailable',
-          data: { error: error instanceof Error ? error.message : String(error) },
-        });
-        return {};
-      }));
 }
 
 async function loadSlot(slot: Slot): Promise<void> {
@@ -465,9 +424,8 @@ async function setUpSlot(
   plugin: AgentDevicePlugin,
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
-  capabilities: () => Promise<ProviderHostCapabilities>,
 ): Promise<void> {
-  const pluginHost = createPluginHost(host, slot.candidate.hostOptions, await capabilities());
+  const pluginHost = createPluginHost(host, slot.candidate.hostOptions);
   const result = await plugin.setup(pluginHost);
   try {
     const { runtime, platformModule } = await buildRegistration(
