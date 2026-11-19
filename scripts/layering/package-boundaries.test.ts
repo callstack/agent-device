@@ -778,7 +778,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/absence-observation-resolution',
     '@agent-device/selectors/ast',
     '@agent-device/selectors/engine',
-    '@agent-device/selectors/find-candidates',
     '@agent-device/selectors/interaction-action',
     '@agent-device/selectors/interaction-error',
     '@agent-device/selectors/interaction-positionals',

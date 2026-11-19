@@ -12,9 +12,9 @@ import {
   listSelectorPipelineMatches,
   resolveSelectorPipeline,
   type SelectorPipelineHooks,
+  findOneNodeCandidates,
 } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import { findOneNodeCandidates } from '@agent-device/selectors/find-candidates';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
@@ -279,6 +279,7 @@ async function findValueReadMatch(
 ): Promise<{ capture: CapturedSnapshot; match: SnapshotNode }> {
   const capture = await captureFindCandidates(runtime, options);
   const matched = findOneNodeCandidates({
+    pipeline: SELECTOR_PIPELINE_POLICIES.findAct,
     nodes: capture.snapshot.nodes,
     locator,
     query: options.query,

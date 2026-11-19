@@ -4,6 +4,7 @@ import {
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
 import type {
+  FindLocator,
   SelectorChainMatchList,
   SelectorMatchOptions,
   SelectorResolution,
@@ -16,11 +17,14 @@ import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snap
 import {
   classifyActionableTouchCandidates,
   isRootInteractionContainer,
+  preferOnscreenMatches,
   resolveActionableTouchResolution,
   resolveElementReportedTwice,
 } from './interaction-targeting.ts';
+import { findBestMatchesByLocator } from './internal/find.ts';
 import type {
   ActingPipelinePolicy,
+  SELECTOR_PIPELINE_POLICIES,
   CandidateSetPipelinePolicy,
   SelectorListPolicy,
   SelectorPipelinePolicy,
@@ -378,4 +382,30 @@ export function selectorPollBudget(policy: SelectorPipelinePolicy): WaitPollBudg
     );
   }
   return policy.poll;
+}
+
+/**
+ * The candidate set of every `find` action that binds one node: mutating actions and the value
+ * reads (`get text`, `get attrs`). The root interaction container is never a candidate, and
+ * on-screen matches rank first. Callers count this list and narrow it with `narrowFindMatches`,
+ * so a read and a tap on the same query bind the same node. The caller passes the `findAct` row,
+ * which the type pins, so this module stays clear of the policy table's eager import closure.
+ */
+export function findOneNodeCandidates(params: {
+  pipeline: (typeof SELECTOR_PIPELINE_POLICIES)['findAct'];
+  nodes: SnapshotNode[];
+  locator: FindLocator;
+  query: string;
+  selectorExpression: string | null;
+  platform: SelectorMatchOptions['platform'];
+}): SnapshotNode[] {
+  const { pipeline, nodes, locator, query, selectorExpression, platform } = params;
+  const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
+  const matches = selectorExpression
+    ? (listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform }).list
+        ?.matchedNodes ?? [])
+    : findBestMatchesByLocator(rooted, locator, query, {
+        requireRect: pipeline.resolution.requireRect,
+      }).matches;
+  return preferOnscreenMatches(matches, nodes);
 }

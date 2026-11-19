@@ -52,10 +52,6 @@
       "types": "./src/interaction-positionals.ts",
       "default": "./src/interaction-positionals.ts"
     },
-    "./find-candidates": {
-      "types": "./src/find-candidates.ts",
-      "default": "./src/find-candidates.ts"
-    },
     "./interaction-targeting": {
       "types": "./src/interaction-targeting.ts",
       "default": "./src/interaction-targeting.ts"

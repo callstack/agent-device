@@ -4,7 +4,7 @@ import {
   type FindLocator,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import { findOneNodeCandidates } from '@agent-device/selectors/find-candidates';
+import { findOneNodeCandidates } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -35,8 +35,16 @@ export function resolveFindMatch(params: {
   // contract — multiple matches reject with candidates unless --first/--last
   // explicitly opts into positional narrowing. `find <q> get text|attrs`
   // counts the same candidate set (#4685).
-  const policy = SELECTOR_PIPELINE_POLICIES.findAct.resolution;
-  let matches = findOneNodeCandidates({ nodes, locator, query, selectorExpression, platform });
+  const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
+  const policy = pipeline.resolution;
+  let matches = findOneNodeCandidates({
+    pipeline,
+    nodes,
+    locator,
+    query,
+    selectorExpression,
+    platform,
+  });
 
   if (matches.length > 1) {
     // The row says candidates reject unless the caller narrowed explicitly;
