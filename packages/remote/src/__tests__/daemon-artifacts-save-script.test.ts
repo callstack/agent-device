@@ -92,6 +92,35 @@ test('local publication retains its path and flags', async () => {
   expect(result.clientArtifactPaths).toBeUndefined();
 });
 
+test.skipIf(process.platform === 'win32')(
+  'remote open treats a dangling final link as occupied',
+  async () => {
+    const root = mkdtempForTestSync('script-dangling-');
+    const destination = path.join(root, 'journey.ad');
+    const missing = path.join(root, 'missing.ad');
+    fs.symlinkSync(missing, destination);
+    const req = {
+      session: 'owned',
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { saveScript: destination },
+    };
+    const host = createTestHostEnvironment();
+    await expect(prepareRemoteRequestArtifacts(req, REMOTE, signal, host)).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'script_target_exists', path: destination },
+    });
+    const forced = await prepareRemoteRequestArtifacts(
+      { ...req, flags: { ...req.flags, force: true } },
+      REMOTE,
+      signal,
+      host,
+    );
+    expect(forced.clientArtifactPaths?.savedScript).toBe(destination);
+    expect(fs.readlinkSync(destination)).toBe(missing);
+  },
+);
+
 test('remote open expands home on the caller', async () => {
   const root = mkdtempForTestSync('script-home-');
   const home = path.join(root, 'caller-home');
@@ -116,7 +145,7 @@ test.each([
   { name: 'an empty path', spelled: () => '' },
 ])('remote open refuses $name as an unnamed entry before anything else', async ({ spelled }) => {
   const root = mkdtempForTestSync('script-unnamed-');
-  const probe = vi.spyOn(fs, 'existsSync');
+  const probe = vi.spyOn(fs, 'lstatSync');
   await expect(
     prepareRemoteRequestArtifacts(
       {
@@ -159,7 +188,7 @@ async function expectRefusedBeforeAnything(
     exposure?: string;
   }> = {},
 ): Promise<void> {
-  const probe = vi.spyOn(fs, 'existsSync');
+  const probe = vi.spyOn(fs, 'lstatSync');
   try {
     await onWindowsRules(() =>
       expect(
@@ -329,7 +358,7 @@ test.each(
   async (entry) => {
     const { spelled, expected, force } = entry;
     const cwd = 'cwd' in entry ? entry.cwd : String.raw`C:\work`;
-    const probe = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    const probe = vi.spyOn(fs, 'lstatSync').mockReturnValue(undefined);
     try {
       const result = await onWindowsRules(() =>
         prepareRemoteRequestArtifacts(

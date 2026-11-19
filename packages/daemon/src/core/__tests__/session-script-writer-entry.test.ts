@@ -2,7 +2,7 @@
 // directory or a hard link already standing there, under each overwrite mode (ADR 0016). The overlong name is
 // what this rule refuses; the directory and hard-link rows are behavior pins that held before it and must keep
 // holding through the single owner.
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -28,6 +28,49 @@ function root(): string {
   fs.chmodSync(directory, 0o700);
   return directory;
 }
+
+skipOnWindows('a local write reports the committed entry through a POSIX parent alias', () => {
+  const directory = root();
+  const parent = path.join(directory, 'recordings');
+  const alias = path.join(directory, 'alias');
+  fs.mkdirSync(parent, { mode: 0o700 });
+  fs.symlinkSync(parent, alias);
+  const writer = new SessionScriptWriter(path.join(directory, 'sessions'), directory);
+  const entry = path.join(parent, 'journey.ad');
+
+  const result = writer.write(recordingTo(`${alias}/journey.ad/`, false));
+
+  expect(result).toMatchObject({ written: true, path: entry });
+  expect(fs.readFileSync(entry, 'utf8')).toContain('open');
+});
+
+test('a local write reports the normalized Windows entry it commits', () => {
+  const directory = root();
+  const volume = fs.statSync(directory);
+  const writer = new SessionScriptWriter(path.join(directory, 'sessions'), directory);
+  const rename = vi.spyOn(fs, 'renameSync').mockReturnValue(undefined);
+  const mocks = [
+    rename,
+    vi.spyOn(fs, 'statSync').mockReturnValue(volume),
+    vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined),
+    vi.spyOn(fs, 'writeFileSync').mockReturnValue(undefined),
+    vi.spyOn(fs, 'chmodSync').mockReturnValue(undefined),
+    vi.spyOn(fs, 'rmSync').mockReturnValue(undefined),
+  ];
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    const spelling = 'C:/recordings/./journey.ad/';
+    const entry = String.raw`C:\recordings\journey.ad`;
+    const result = writer.write(recordingTo(spelling, true), { force: true });
+
+    expect(result).toMatchObject({ written: true, path: entry });
+    expect(rename).toHaveBeenCalledExactlyOnceWith(expect.any(String), entry);
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    for (const mock of mocks) mock.mockRestore();
+  }
+});
 
 type Outcome = Readonly<
   { written: true } | { written: false; reason?: string; exposure?: string; notReason?: string }

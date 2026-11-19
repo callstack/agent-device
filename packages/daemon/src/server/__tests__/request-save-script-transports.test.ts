@@ -335,6 +335,6 @@ test('an owner-armed session still records its target and publishes its script',
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
   const result = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
-  expect(result).toEqual({ written: true, path: target, actionCount: 1 });
+  expect(result).toEqual({ written: true, path: fs.realpathSync(target), actionCount: 1 });
   expect(fs.readFileSync(target, 'utf8')).toMatch(/^open /m);
 });

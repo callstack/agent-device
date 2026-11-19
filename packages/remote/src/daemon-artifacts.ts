@@ -12,7 +12,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveScriptDestination } from '@agent-device/host-kit/file';
+import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
@@ -142,13 +142,7 @@ function prepareRemoteScriptOutput(
     typeof requested === 'string' ? requested : `recording-${Date.now()}.ad`,
     { cwd: req.meta?.cwd ?? host.cwd, env: host.env },
   );
-  if (requested !== true && !req.flags?.force && fs.existsSync(localPath)) {
-    throw new AppError('COMMAND_FAILED', `A file already exists at ${localPath}.`, {
-      reason: 'script_target_exists',
-      path: localPath,
-      hint: 'Choose another output path or pass --force/--overwrite.',
-    });
-  }
+  if (requested !== true && !req.flags?.force) assertScriptTargetVacant(localPath);
   clientPaths.savedScript = localPath;
   return { ...flags, saveScript: true };
 }

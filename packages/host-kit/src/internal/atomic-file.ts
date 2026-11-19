@@ -144,16 +144,18 @@ export function publishScriptFileSync(options: {
   destination: string;
   contents: string;
   publish?: AtomicPublishMode;
-}): void {
+}): string {
   // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
   // elsewhere, and a temporary sibling beside that spelling is one another local user can reach (ADR 0016).
+  const { entry } = prepareScriptDestination(options.destination);
   publishFileSync({
-    destination: prepareScriptDestination(options.destination).entry,
+    destination: entry,
     contents: options.contents,
     mode: SCRIPT_FILE_MODE,
     publish: options.publish,
     exactMode: true,
   });
+  return entry;
 }
 
 /**

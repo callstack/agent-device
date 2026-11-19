@@ -151,7 +151,7 @@ export class SessionScriptWriter {
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
       // formatting+publish step.
-      publishHealedScriptAtomically({
+      const committedPath = publishHealedScriptAtomically({
         scriptPath,
         script: prepared.script,
         force: options?.force,
@@ -164,7 +164,7 @@ export class SessionScriptWriter {
           session.scriptPublication ?? NO_SCRIPT_PUBLICATION,
         );
       }
-      return { written: true, path: scriptPath, actionCount: prepared.actionCount };
+      return { written: true, path: committedPath, actionCount: prepared.actionCount };
     } catch (error) {
       return handleSessionScriptWriteFailure({
         session,
@@ -315,19 +315,18 @@ function publishHealedScriptAtomically(params: {
   force?: boolean;
   mode?: number;
   callerOwnsDestination: boolean;
-}): void {
+}): string {
   const { scriptPath, script, force, mode, callerOwnsDestination } = params;
   try {
     if (callerOwnsDestination) {
       // host-kit owns this route's whole sequence (#4565): it walks the destination's chain, refuses a
       // destination another local user can steer BEFORE creating anything, creates what is missing one level
       // at a time at 0700 inside the directory it judged, and writes the script itself at 0600.
-      publishScriptFileSync({
+      return publishScriptFileSync({
         destination: scriptPath,
         contents: script,
         publish: force ? 'replace' : 'link-exclusive',
       });
-      return;
     }
     publishFileSync({
       destination: scriptPath,
@@ -335,6 +334,7 @@ function publishHealedScriptAtomically(params: {
       publish: force ? 'replace' : 'link-exclusive',
       ...(mode === undefined ? {} : { mode }),
     });
+    return scriptPath;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     throw new AppError(

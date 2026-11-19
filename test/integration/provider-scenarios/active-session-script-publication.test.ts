@@ -23,7 +23,7 @@ test('provider route publishes and replays an open-to-destination script with a 
       await client.command.wait({ selector: 'label="Search"', ...world.selection });
 
       const published = await client.sessions.saveScript({ path: scriptPath });
-      assert.equal(published.savedScript, scriptPath);
+      assert.equal(published.savedScript, fs.realpathSync(scriptPath));
       assert.equal(published.session, 'default');
       assert.equal(published.actionCount, 2);
 
@@ -119,7 +119,7 @@ test('replaying a published script against a reshuffled screen fails closed inst
           ...world.selection,
         });
         const published = await client.sessions.saveScript({ path: scriptPath });
-        assert.equal(published.savedScript, scriptPath);
+        assert.equal(published.savedScript, fs.realpathSync(scriptPath));
         // The published guard carries recorded landmark identity.
         assert.match(fs.readFileSync(scriptPath, 'utf8'), /agent-device:target-v1/);
         await client.sessions.close();
@@ -466,7 +466,7 @@ test('#1398: a read-only wait recorded after a parameterized fill never re-seria
         // valid guard.
         await client.command.wait({ selector: 'label="Apps"', ...world.selection });
         const published = await client.sessions.saveScript({ path: scriptPath });
-        assert.equal(published.savedScript, scriptPath);
+        assert.equal(published.savedScript, fs.realpathSync(scriptPath));
 
         const script = fs.readFileSync(scriptPath, 'utf8');
         assert.equal(script.includes(secret), false, script);

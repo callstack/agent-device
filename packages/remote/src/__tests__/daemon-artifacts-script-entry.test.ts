@@ -346,6 +346,61 @@ test.each([
   },
 );
 
+test('a dropped UNC share keeps the interrupted commit journal and staging', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file: recordFile, record } = soleRecord(stateDir);
+  const share = '\\\\server\\share\\';
+  const entry = path.win32.join(share, 'journey.ad');
+  const staging = fs.mkdtempSync(path.join(directory, '.agent-device-script-'));
+  const anchor = path.join(staging, 'script.ad.anchor');
+  fs.writeFileSync(anchor, 'v2\n');
+  const identity = fs.statSync(anchor, { bigint: true });
+  const journal = JSON.stringify({
+    ...record,
+    destination: entry,
+    staging: [staging],
+    publishing: {
+      revision: 2,
+      file: `${identity.dev}:${identity.ino}`,
+      staging,
+      digest: sha256('v2\n'),
+    },
+  });
+  fs.writeFileSync(recordFile, journal);
+  const directoryStats = fs.statSync(directory);
+  const realStat = fs.statSync.bind(fs);
+  const realLstat = fs.lstatSync.bind(fs);
+  const stat = vi
+    .spyOn(fs, 'statSync')
+    .mockImplementation(((name: never, ...args: never[]) =>
+      String(name) === share ? directoryStats : realStat(name, ...args)) as typeof fs.statSync);
+  const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation(((name: never, ...args: never[]) => {
+    if (String(name) === entry) {
+      throw Object.assign(new Error('The share connection dropped'), { code: 'ECONNRESET' });
+    }
+    return realLstat(name, ...args);
+  }) as typeof fs.lstatSync);
+  try {
+    const result = await onWindowsRules(() =>
+      answer(baseUrl, stateDir, request('click'), { artifacts: [script('v1', 1, id)] }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      data: { scriptDeliveryFailure: { cause: 'script_entry_changed' } },
+    });
+    expect(result.ok && result.data).not.toHaveProperty('savedScript');
+    expect(lstat).toHaveBeenCalledWith(entry, { bigint: true, throwIfNoEntry: false });
+  } finally {
+    lstat.mockRestore();
+    stat.mockRestore();
+  }
+  expect(fs.readFileSync(recordFile, 'utf8')).toBe(journal);
+  expect(fs.readFileSync(anchor, 'utf8')).toBe('v2\n');
+});
+
 test.skipIf(process.platform === 'win32')(
   'a version delivered again through a retargeted link never reports the unrelated file there',
   async () => {

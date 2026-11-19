@@ -145,6 +145,16 @@ export function lstatIfPresent(pathname: string): fs.Stats | undefined {
   }
 }
 
+/** Refuses an occupied script destination before dispatch, including dangling final links. */
+export function assertScriptTargetVacant(destination: string): void {
+  if (!lstatIfPresent(destination)) return;
+  throw new AppError('COMMAND_FAILED', `A file already exists at ${destination}.`, {
+    reason: 'script_target_exists',
+    path: destination,
+    hint: 'Choose another output path or pass --force/--overwrite.',
+  });
+}
+
 function sameFile(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }

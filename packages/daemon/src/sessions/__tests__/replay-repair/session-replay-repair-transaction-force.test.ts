@@ -136,7 +136,7 @@ test('#1258: close --save-script --force overwrites an existing COMPLETE healed 
   expect(closeResponse.ok).toBe(true);
   expect(sessionStore.get(sessionName)).toBeUndefined();
   const healedPath = path.join(root, 'flow.healed.ad');
-  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(healedPath);
+  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(fs.realpathSync(healedPath));
   const script = fs.readFileSync(healedPath, 'utf8');
   expect(script).toContain(HEAL_COMPLETE_SENTINEL);
   const parsed = parseReplayScriptDetailed(script);
@@ -381,7 +381,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
     leaseRegistry,
   });
   expect(closeResponse.ok).toBe(true);
-  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(targetA);
+  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(fs.realpathSync(targetA));
   expect(fs.existsSync(targetA)).toBe(true);
   const committed = parseReplayScriptDetailed(fs.readFileSync(targetA, 'utf8'));
   expect(committed.actions.map((a) => a.command)).toEqual(['open', 'press', 'close']);

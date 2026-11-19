@@ -667,9 +667,17 @@ function settleUnderLock(
 
 /** An interrupted version counts as published only when the entry host-kit authorized is that very file. */
 function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
-  const settled = withoutPublishing(record);
   const { publishing } = record;
-  if (!publishing || fileIdentity(entry) !== publishing.file) return settled;
+  if (!publishing) return record;
+  let identity: string | undefined;
+  try {
+    identity = fileIdentity(entry);
+  } catch (error) {
+    if (isWindowsShareUnavailable(entry, error)) throw new CommittedVersionUnverified('changed');
+    throw error;
+  }
+  const settled = withoutPublishing(record);
+  if (identity !== publishing.file) return settled;
   // The promoted version's digest replaces the previous one, and a version that carries none clears it, so a
   // repeat never verifies the new file against an older version's bytes.
   const { committedDigest: _previous, ...promoted } = settled;

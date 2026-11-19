@@ -13,6 +13,7 @@ export {
   type ScriptDestinationOptions,
 } from './internal/atomic-file.ts';
 export {
+  assertScriptTargetVacant,
   lstatIfPresent,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,

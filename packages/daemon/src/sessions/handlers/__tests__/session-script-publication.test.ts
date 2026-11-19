@@ -46,7 +46,7 @@ let root: string;
 let store: SessionStore;
 
 beforeEach(() => {
-  root = mkdtempForTestSync('agent-device-active-publication-');
+  root = fs.realpathSync(mkdtempForTestSync('agent-device-active-publication-'));
   store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 });
 
