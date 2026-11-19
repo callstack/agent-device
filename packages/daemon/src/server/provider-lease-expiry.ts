@@ -408,7 +408,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
       // provider call that hangs must not keep the daemon alive indefinitely.
-      await settleWithin(() => retryPending(), Math.max(0, timeoutMs));
+      // A release that fails inside the budget is still a pending release: the
+      // drain reports it, it never throws past the bounded window.
+      await settleWithin(() => retryPending(), Math.max(0, timeoutMs)).catch(() => undefined);
       const result = {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
         unknown: [

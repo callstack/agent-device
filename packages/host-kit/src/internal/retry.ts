@@ -226,9 +226,12 @@ export type SettleWithinOutcome<T> = { kind: 'settled'; value: T } | { kind: 'de
  * Settles `work` within `timeoutMs` and reports which happened: `{ kind: 'settled', value }` when
  * the work finished first, `{ kind: 'deadline' }` when the budget elapsed first. The deadline
  * timer is cleared on every path, so it never outlives this call. This does not cancel the work:
- * when the deadline wins, `work` keeps running to its own end (its rejection stays observed here,
- * so a late failure never reaches the unhandled-rejection path), while a rejection that beats the
- * deadline propagates to the caller.
+ * when the deadline wins, `work` keeps running to its own end and a rejection arriving after the
+ * deadline is swallowed here — the outcome is already `{ kind: 'deadline' }`, and the rejection
+ * stays observed, so it never reaches the unhandled-rejection path. A rejection that beats the
+ * deadline propagates to the caller. With a spent (zero) budget the deadline is already eligible
+ * to win before the work's first continuation runs, so a caller that must see the work's own
+ * failure, even at budget zero, has to await the work, not this wrapper.
  *
  * With `options.keepAlive: false` the deadline timer is also unref'd, so a deadline awaited by a
  * background sweep does not hold the event loop open while it waits (a hung sweep must not keep a

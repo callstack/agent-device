@@ -262,6 +262,31 @@ test('a shutdown drain that settles inside its budget leaves no deadline timer b
   }
 });
 
+test('a shutdown drain reports its result when a pending release fails inside the budget', async () => {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release: vi.fn().mockRejectedValue(new Error('provider down')) },
+    providerRuntimeIds: ['browserstack'],
+  });
+
+  try {
+    releaser.beginShutdown();
+    await expect(releaser.release(lease)).resolves.toEqual({ status: 'retrying' });
+    // The drain's retry hits the failing provider inside the budget. A failed release is a
+    // pending release: drain resolves its report, it never throws past the bounded window.
+    await expect(releaser.drain(2_000)).resolves.toMatchObject({
+      pending: [lease],
+      released: [],
+    });
+  } finally {
+    releaser.shutdown();
+  }
+});
+
 test('a daemon killed while holding a provider lease recovers it on restart', async () => {
   const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
   const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
