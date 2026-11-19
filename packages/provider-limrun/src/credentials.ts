@@ -23,7 +23,7 @@ const INSTANCE_VARS = {
 } as const;
 
 /** Every variable that selects which Limrun account or instance the credentials reach. */
-export const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
+const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
   ...Object.values(ACCOUNT_VARS),
   ...INSTANCE_VARS.ios,
   ...INSTANCE_VARS.android,
