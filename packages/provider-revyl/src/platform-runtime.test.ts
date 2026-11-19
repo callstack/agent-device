@@ -200,15 +200,16 @@ test('a live session installs a build through its deployment operations', async 
 });
 
 /**
- * #4441: the daemon derives the URL materialization cutoff (earliest registered request deadline
- * less the deploy-ledger reserve) and passes it through the input. A provider binding that drops
- * it lets a download run to the full request deadline and starve the deploy ledger.
+ * #4726: the daemon derives the URL materialization cutoff (earliest registered request deadline
+ * less the deploy-ledger reserve) and passes it as data on the input, which the binding forwards
+ * untouched to the executor that arms its own timer. A binding that drops the input or its
+ * deadline data lets a download run to the full request deadline and starve the deploy ledger.
  */
 test.each([
   ['ios', 'appleDeployment'],
   ['android', 'androidDeployment'],
 ] as const)(
-  'a live %s session forwards the daemon-derived cutoff to the executor, and the binding scope signal without one',
+  'a live %s session forwards the daemon-derived materialization deadline to the executor',
   async (platform, executorKey) => {
     const device: DeviceInfo =
       platform === 'ios'
@@ -243,21 +244,18 @@ test.each([
       scope.signal,
     );
 
-    const cutoff = new AbortController().signal;
+    const materializationDeadlineMs = Date.now() + 120_000;
     const input: MaterializeAppSourceInput = {
       source: { kind: 'url', url: 'https://apps.test/build.zip' },
-      signal: cutoff,
+      materializationDeadlineMs,
     };
     await binding.operations.materializeAppSource!(input);
-    // Signals are compared by identity: two distinct AbortSignals deep-equal each other.
     assert.equal(prepareArtifact.mock.lastCall?.[0], input);
-    assert.equal(prepareArtifact.mock.lastCall?.[1]?.signal, cutoff);
-
-    const withoutCutoff: MaterializeAppSourceInput = {
-      source: { kind: 'url', url: 'https://apps.test/build.zip' },
-    };
-    await binding.operations.materializeAppSource!(withoutCutoff);
-    assert.equal(prepareArtifact.mock.lastCall?.[0], withoutCutoff);
+    assert.equal(
+      prepareArtifact.mock.lastCall?.[0]?.materializationDeadlineMs,
+      materializationDeadlineMs,
+    );
+    // Cancellation stays on the binding's request scope signal.
     assert.equal(prepareArtifact.mock.lastCall?.[1]?.signal, scope.signal);
   },
 );

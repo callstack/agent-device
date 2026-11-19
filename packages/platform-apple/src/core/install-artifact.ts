@@ -24,6 +24,8 @@ import {
 type InstallIosArtifactOptions = {
   appIdentifierHint?: string;
   signal?: AbortSignal;
+  /** The epoch-ms cutoff the daemon derived for this transfer; see `materializeInstallablePath`. */
+  materializationDeadlineMs?: number;
   /** The host environment whose proxy settings apply to a network download. */
   environment: NodeJS.ProcessEnv;
 };
@@ -64,6 +66,9 @@ async function prepareIosInstallArtifactInScope(
       (stat.isFile() && candidatePath.toLowerCase().endsWith('.ipa')),
     installableLabel: 'iOS installable (.app or .ipa)',
     signal: options.signal,
+    ...(options.materializationDeadlineMs !== undefined
+      ? { materializationDeadlineMs: options.materializationDeadlineMs }
+      : {}),
     environment: options.environment,
   });
 

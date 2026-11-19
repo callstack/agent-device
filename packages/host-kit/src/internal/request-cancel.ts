@@ -233,27 +233,6 @@ export function getRequestReadOnlyDeadlineMs(requestId: string | undefined): num
   return getRequestDeadlineMs(requestId);
 }
 
-/**
- * The signal a request-scoped child phase (source materialization) must observe: the request's
- * shared cancellation composed with the earliest registered execution/result deadline less the
- * reserve the rest of the route still needs (#4441, decisions 6827686874/6856998913). The phases
- * share one runtime cancellation, so an operator's cancel or an earlier cutoff aborts this too;
- * the timeout part is the remaining deadline budget, never an independent maximum. With no
- * deadline armed, the request's own signal is returned unchanged and the caller's standalone
- * aggregate stays the only cap.
- */
-export function getRequestBudgetSignal(
-  requestId: string | undefined,
-  reserveMs: number,
-): AbortSignal | undefined {
-  const requestSignal = getRequestSignal(requestId);
-  const deadlineMs = getRequestDeadlineMs(requestId);
-  if (deadlineMs === undefined) return requestSignal;
-  const remainingMs = Math.max(0, deadlineMs - Date.now() - reserveMs);
-  const budgetSignal = AbortSignal.timeout(remainingMs);
-  return requestSignal ? AbortSignal.any([requestSignal, budgetSignal]) : budgetSignal;
-}
-
 export function throwIfRequestCanceled(requestId: string | undefined): void {
   getRequestSignal(requestId)?.throwIfAborted();
   if (isRequestCanceled(requestId)) {

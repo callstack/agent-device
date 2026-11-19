@@ -269,10 +269,11 @@ test.each([
   },
 );
 
-test('materialization forwards the daemon-derived cutoff to the executor, and the binding scope signal without one', async () => {
-  // #4441: the daemon derives the URL materialization cutoff (earliest registered request
-  // deadline less the deploy-ledger reserve) and passes it through the input. Dropping it here
-  // would let a hosted download run to the full request deadline and starve the deploy ledger.
+test('materialization passes the input with its daemon-derived deadline to the executor', async () => {
+  // #4726: the cutoff travels as data (materializationDeadlineMs) on the input, which the binding
+  // forwards untouched to the host executor that arms its own timer. The binding keeps only the
+  // request scope signal for cancellation; a dropped input or deadline data starves the deploy
+  // ledger exactly as the old per-binding signal merge did.
   const prepareArtifact = vi.fn(
     async (
       _input: MaterializeAppSourceInput,
@@ -309,21 +310,16 @@ test('materialization forwards the daemon-derived cutoff to the executor, and th
     },
   });
 
-  const cutoff = new AbortController().signal;
+  const materializationDeadlineMs = Date.now() + 120_000;
   const input: MaterializeAppSourceInput = {
     source: { kind: 'url', url: 'https://apps.test/app.apk' },
-    signal: cutoff,
+    materializationDeadlineMs,
   };
   await binding.operations.materializeAppSource?.(input);
   expect(prepareArtifact.mock.lastCall?.[0]).toBe(input);
-  // Signals compared by identity: two distinct AbortSignals deep-equal each other.
-  expect(prepareArtifact.mock.lastCall?.[1]?.signal).toBe(cutoff);
-
-  const withoutCutoff: MaterializeAppSourceInput = {
-    source: { kind: 'path', path: '/tmp/app.apk' },
-  };
-  await binding.operations.materializeAppSource?.(withoutCutoff);
-  expect(prepareArtifact.mock.lastCall?.[0]).toBe(withoutCutoff);
+  expect(prepareArtifact.mock.lastCall?.[0]?.materializationDeadlineMs).toBe(
+    materializationDeadlineMs,
+  );
   expect(prepareArtifact.mock.lastCall?.[1]?.signal).toBe(controller.signal);
 });
 

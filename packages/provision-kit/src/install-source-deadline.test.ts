@@ -236,6 +236,120 @@ test('a connect phase timeout survives caller cancellation during failure propag
   }
 });
 
+test('a daemon-derived materializationDeadlineMs arms its own shorter timer and reports it', async () => {
+  // #4726: the cutoff travels as data. The materializer must arm one timer for the remaining
+  // budget (never longer than the standalone aggregate) and report its expiry as
+  // source_materialization_deadline_exceeded with the armed timeout, not a request cancellation.
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
+    (args) =>
+      new Promise<never>((_resolve, reject) => {
+        args.signal.addEventListener('abort', () => reject(args.signal.reason), { once: true });
+      }),
+  );
+  // AbortSignal.timeout runs on an internal timer the fake clock does not drive; rearm it on the
+  // faked setTimeout so the deadline armed from the data expires under the test clock and its
+  // armed value stays observable.
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(
+      () => controller.abort(new DOMException('This operation timed out', 'TimeoutError')),
+      ms,
+    );
+    return controller.signal;
+  });
+  try {
+    const outcome = materializeInstallablePath({
+      source: urlSource(),
+      ...APK_MATCHER,
+      materializationDeadlineMs: Date.now() + 10_000,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    await flushRealIOMacrotasks();
+    const armed = timeoutSpy.mock.calls.map(([ms]) => ms).filter((ms) => ms <= 10_000);
+    assert.ok(
+      armed.some((ms) => ms > 0 && ms <= 10_000),
+      `the data cutoff must arm its own remaining-budget timer, got ${JSON.stringify(
+        timeoutSpy.mock.calls,
+      )}`,
+    );
+    // Below the 30s connect phase ceiling, so the deadline is the timer that ends the download.
+    await vi.advanceTimersByTimeAsync(10_001);
+    const error = await outcome;
+    assert.ok(error instanceof AppError, 'the cutoff expiry must be a typed AppError');
+    assert.deepEqual(error.details, {
+      reason: 'source_materialization_deadline_exceeded',
+      transferPhase: 'materialization',
+      timeoutMs: armed[0],
+    });
+    assert.ok(
+      (error.details as { timeoutMs: number }).timeoutMs <= 10_000,
+      'the reported timeout is the armed value, never the hard-coded 600s aggregate',
+    );
+    assert.equal(
+      isRequestCanceledError(error),
+      false,
+      'a timer-driven cutoff is never a request cancellation',
+    );
+  } finally {
+    timeoutSpy.mockRestore();
+    requestMock.mockRestore();
+    restoreLookup();
+  }
+});
+
+test('a spent materializationDeadlineMs fails at once as the typed deadline, not a cancellation', async () => {
+  // The cold-boot shape: readiness consumed the whole budget before materialization, so the
+  // daemon-derived cutoff already passed. The failure is still the typed deadline error with the
+  // armed 0ms timeout — a request_canceled with a no-retry hint would tell agents not to retry.
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl');
+  try {
+    const error = await materializeInstallablePath({
+      source: urlSource(),
+      ...APK_MATCHER,
+      materializationDeadlineMs: Date.now() - 1,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'source_materialization_deadline_exceeded');
+    assert.equal(error.details?.timeoutMs, 0);
+    assert.equal(isRequestCanceledError(error), false);
+    assert.equal(requestMock.mock.calls.length, 0, 'no network work may start past the cutoff');
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+  }
+});
+
+test('request cancellation still reports request_canceled with a deadline armed', async () => {
+  // The closest negative: with a deadline timer armed, a real cancellation keeps its own reason,
+  // so the deadline relabeling cannot swallow it.
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
+    (args) =>
+      new Promise<never>((_resolve, reject) => {
+        args.signal.addEventListener('abort', () => reject(args.signal.reason), { once: true });
+      }),
+  );
+  const caller = new AbortController();
+  caller.abort(createRequestCanceledError());
+  try {
+    const error = await materializeInstallablePath({
+      source: urlSource(),
+      ...APK_MATCHER,
+      signal: caller.signal,
+      materializationDeadlineMs: Date.now() + 90_000,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    assert.ok(isRequestCanceledError(error), 'a real cancellation stays a cancellation');
+    assert.equal(requestMock.mock.calls.length, 0);
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+  }
+});
+
 test.for(['during extraction', 'after resolution', 'after cutoff before timer delivery'] as const)(
   'materialization refuses and cleans up an archive when the aggregate expires %s',
   async (expiry) => {

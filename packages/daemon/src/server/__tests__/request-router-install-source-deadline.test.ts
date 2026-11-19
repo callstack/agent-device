@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, test, vi, type Mock } from 'vitest';
 import { INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS } from '@agent-device/command-registry/timeout-policy';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   AppDeploymentResult,
@@ -209,8 +210,6 @@ type ProviderSpies = {
   deployMaterializedApp: Mock<PlatformRuntimeOperations['deployMaterializedApp']>;
   /** The request scope's signal, captured when the router binds the device. */
   scopeSignal: AbortSignal | undefined;
-  /** The cutoff signal the handler passed into materialization, captured per call. */
-  inputSignal: AbortSignal | undefined;
 };
 
 /**
@@ -232,17 +231,13 @@ function makeProviderGateway(
     inspectFacts: vi.fn(),
     bind: vi.fn(),
     ensureReady: vi.fn(async () => ({ ...ANDROID_DEVICE, booted: true })),
-    materializeAppSource: vi.fn((input) => {
-      spies.inputSignal = input.signal;
-      return materializeFactory(() => spies.scopeSignal)(input);
-    }),
+    materializeAppSource: vi.fn((input) => materializeFactory(() => spies.scopeSignal)(input)),
     deployMaterializedApp: vi.fn(async (): Promise<AppDeploymentResult> => ({
       packageName: 'com.example.app',
       appName: 'Example App',
       launchTarget: 'com.example.app',
     })),
     scopeSignal: undefined,
-    inputSignal: undefined,
   };
   const admittedFacts = (device: DeviceInfo) => {
     const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));
@@ -596,21 +591,45 @@ test('ordinary install_source over loopback RPC succeeds end to end (benign cont
 });
 
 // #4726 review f1: on BOTH daemon entry transports (HTTP /rpc and the newline socket), the armed
-// request cutoff must reach the materialization binding as the request's earliest registered
-// deadline less the deploy-ledger reserve (570s - 450s = 120s from admission), composed with the
-// request's shared cancellation — while the binding's scope signal keeps the full 570s deadline.
+// request cutoff must reach the materialization binding as `materializationDeadlineMs` data: the
+// request's earliest registered deadline less the deploy-ledger reserve. The binding's scope
+// signal keeps the full request deadline for cancellation only. A materialization that arms its
+// own timer for the data and fails at it must answer with the typed
+// `source_materialization_deadline_exceeded` error carrying the armed timeout, not a cancellation.
 const MATERIALIZATION_CUTOFF_MS = SOURCE_DEADLINE_MS - INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS;
 
-/** A materialization that observes the cutoff signal the handler passed in, as provision-kit does. */
-function inputSignalMaterialize(): PlatformRuntimeOperations['materializeAppSource'] {
-  const op: PlatformRuntimeOperations['materializeAppSource'] = (input) =>
-    new Promise<MaterializedAppSource>((_resolve, reject) => {
-      const signal = input.signal;
-      assert.ok(signal, 'materialization must receive the daemon-derived cutoff signal');
-      if (signal.aborted) reject(signal.reason);
-      else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+/**
+ * A materialization that arms its own timer for the input's deadline data and answers its expiry
+ * with the typed deadline error, as the provision-kit materializer does. The armed timeout is the
+ * remaining budget read from the data under the test clock.
+ */
+function deadlineDataMaterialize(): {
+  op: PlatformRuntimeOperations['materializeAppSource'];
+  /** The timeout the fake armed from the input data, once materialization starts. */
+  armed: () => number | undefined;
+} {
+  let armedMs: number | undefined;
+  const op: PlatformRuntimeOperations['materializeAppSource'] = (input) => {
+    const { materializationDeadlineMs: deadlineMs } = input;
+    if (deadlineMs === undefined) {
+      throw new Error(
+        'materialization must receive the daemon-derived materializationDeadlineMs data',
+      );
+    }
+    armedMs = Math.max(0, deadlineMs - Date.now());
+    return new Promise<MaterializedAppSource>((_resolve, reject) => {
+      setTimeout(() => {
+        reject(
+          new AppError('COMMAND_FAILED', 'App source materialization timed out', {
+            reason: 'source_materialization_deadline_exceeded',
+            transferPhase: 'materialization',
+            timeoutMs: armedMs,
+          }),
+        );
+      }, armedMs);
     });
-  return op;
+  };
+  return { op, armed: () => armedMs };
 }
 
 async function sendSocketRequest(port: number, request: DaemonRequest): Promise<DaemonResponse> {
@@ -633,9 +652,10 @@ async function sendSocketRequest(port: number, request: DaemonRequest): Promise<
 }
 
 for (const transport of ['http-rpc', 'socket'] as const) {
-  test(`${transport}: the armed request cutoff reaches materialization as deadline less deploy-ledger reserve`, async (t) => {
+  test(`${transport}: the armed request cutoff reaches materialization as deadline less deploy-ledger reserve, and its expiry answers with the typed deadline error`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
-    const { gateway, spies } = makeProviderGateway(() => inputSignalMaterialize());
+    const deadline = deadlineDataMaterialize();
+    const { gateway, spies } = makeProviderGateway(() => deadline.op);
     const { handler } = makeRouterHarness(gateway);
     const requestId = `req-install-source-cutoff-${transport}`;
     let answer: Promise<unknown>;
@@ -653,16 +673,6 @@ for (const transport of ['http-rpc', 'socket'] as const) {
     try {
       vi.useFakeTimers();
       vi.setSystemTime(START_MS);
-      // AbortSignal.timeout runs on an internal timer the fake clock does not drive; rearm it on
-      // the faked setTimeout so the derived cutoff fires at its armed value under the fake clock.
-      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
-        const controller = new AbortController();
-        setTimeout(
-          () => controller.abort(new DOMException('This operation timed out', 'TimeoutError')),
-          ms,
-        );
-        return controller.signal;
-      });
       answer =
         transport === 'http-rpc'
           ? postRpc(port, installSourceRpcBody(requestId))
@@ -671,26 +681,17 @@ for (const transport of ['http-rpc', 'socket'] as const) {
         () => spies.materializeAppSource.mock.calls.length > 0,
         'the provider materialization to start',
       );
-      const inputSignal = spies.inputSignal;
-      assert.ok(inputSignal, 'the handler must pass the derived cutoff into materialization');
-      assert.equal(inputSignal!.aborted, false);
-      assert.ok(
-        timeoutSpy.mock.calls.some(([ms]) => ms === MATERIALIZATION_CUTOFF_MS),
-        `the cutoff must be armed at deadline less reserve (${MATERIALIZATION_CUTOFF_MS}ms), got ${JSON.stringify(
-          timeoutSpy.mock.calls,
-        )}`,
+      const armedMs = deadline.armed();
+      assert.equal(
+        armedMs,
+        MATERIALIZATION_CUTOFF_MS,
+        `the deadline data must arm at deadline less reserve (${MATERIALIZATION_CUTOFF_MS}ms), got ${armedMs}ms`,
       );
 
       await vi.advanceTimersByTimeAsync(MATERIALIZATION_CUTOFF_MS - 1);
-      assert.equal(inputSignal!.aborted, false, 'no cutoff before deadline minus reserve');
       assert.equal(spies.scopeSignal?.aborted, false, 'the shared deadline is still running');
 
       await vi.advanceTimersByTimeAsync(1);
-      assert.equal(
-        inputSignal!.aborted,
-        true,
-        'materialization cutoff at the request deadline less the deploy-ledger reserve',
-      );
       assert.equal(
         spies.scopeSignal?.aborted,
         false,
@@ -698,10 +699,11 @@ for (const transport of ['http-rpc', 'socket'] as const) {
       );
 
       const raw = await withRealGuard(answer);
+      let errorDetails: Record<string, unknown> | undefined;
       if (transport === 'http-rpc') {
         const rpc = raw as RpcAnswer;
         assert.equal(rpc.body.result, undefined, 'no success result on the wire');
-        assert.ok(rpc.body.error, 'the cutoff must answer as an error');
+        errorDetails = rpc.body.error?.data?.details as Record<string, unknown> | undefined;
       } else {
         const response = raw as DaemonResponse;
         assert.equal(
@@ -709,8 +711,16 @@ for (const transport of ['http-rpc', 'socket'] as const) {
           false,
           'a request whose materialization cutoff passed must not succeed',
         );
-        assert.ok(response.ok === false && response.error, 'the cutoff must answer as an error');
+        errorDetails = response.ok === false ? response.error.details : undefined;
       }
+      // The cutoff expiry is the typed materialization deadline with the armed timeout — never a
+      // request cancellation, whose no-retry hint agents would act on (#4726).
+      assert.equal(
+        errorDetails?.reason,
+        'source_materialization_deadline_exceeded',
+        `a cutoff expiry must answer as the typed deadline error, got ${JSON.stringify(errorDetails)}`,
+      );
+      assert.equal(errorDetails?.timeoutMs, MATERIALIZATION_CUTOFF_MS);
       assert.equal(
         spies.deployMaterializedApp.mock.calls.length,
         0,
@@ -722,7 +732,6 @@ for (const transport of ['http-rpc', 'socket'] as const) {
         'the request registration is released after the answer',
       );
     } finally {
-      vi.mocked(AbortSignal.timeout).mockRestore();
       await closeLoopbackServer(server);
       vi.useRealTimers();
     }

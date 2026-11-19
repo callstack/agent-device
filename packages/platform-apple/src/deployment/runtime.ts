@@ -77,7 +77,7 @@ export function createAppleAppDeploymentOperations(params: {
           deployApp: async (input: AppDeploymentInput) =>
             await deployAppleApp(host, device, input, signal, install),
           materializeAppSource: async (input: MaterializeAppSourceInput) =>
-            await host.appleDeployment.prepareArtifact(input, { signal: input.signal ?? signal }),
+            await host.appleDeployment.prepareArtifact(input, { signal }),
           deployMaterializedApp: async (input: DeployMaterializedAppInput) =>
             await deployPreparedAppleApp(host, device, input, signal, install),
           uninstallApp: async (input: AppUninstallInput) =>

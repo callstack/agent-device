@@ -56,7 +56,7 @@ export function createAndroidAppDeploymentOperations(params: {
     deployApp: async (input: AppDeploymentInput) =>
       await deployAndroidApp(host, device, input, signal, install),
     materializeAppSource: async (input: MaterializeAppSourceInput) =>
-      await host.androidDeployment.prepareArtifact(input, { signal: input.signal ?? signal }),
+      await host.androidDeployment.prepareArtifact(input, { signal }),
     deployMaterializedApp: async (input: DeployMaterializedAppInput) =>
       await deployPreparedAndroidApp(host, device, input, signal, install),
     sendPushNotification: async (input: PushNotificationInput) =>

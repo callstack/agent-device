@@ -22,6 +22,9 @@ export function createAppleAppDeploymentExecutor(
         await import('@agent-device/platform-apple/install-artifact');
       return await prepareIosInstallArtifact(input.source, {
         ...options,
+        ...(input.materializationDeadlineMs !== undefined
+          ? { materializationDeadlineMs: input.materializationDeadlineMs }
+          : {}),
         environment: env,
       });
     },

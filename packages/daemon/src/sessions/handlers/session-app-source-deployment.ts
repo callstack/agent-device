@@ -1,6 +1,6 @@
 import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import { INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS } from '@agent-device/command-registry/timeout-policy';
-import { getRequestBudgetSignal } from '@agent-device/host-kit/request';
+import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -95,16 +95,21 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
     const runtime = await bindDevice(device, readyMaterializeAndDeployAppUse);
     // #4441: a URL materialization must leave the deploy-ledger reserve inside the daemon's
     // source-install work budget, so its cutoff is the request's earliest registered deadline
-    // (armed at admission on both daemon entry transports) less that reserve. The shared request
-    // cancellation stays composed in, so a client cancel or earlier cutoff still wins. A local
-    // path source has no transfer, so it keeps the request scope's own armed deadline.
-    const materializationSignal =
-      resolvedSource.source.kind === 'url'
-        ? getRequestBudgetSignal(req.meta?.requestId, INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS)
-        : undefined;
+    // (armed at admission on both daemon entry transports) less that reserve. It travels as data
+    // on the input, and the materializer arms its own timer and labels its expiry with the armed
+    // value; request cancellation stays on the binding's scope signal. The reserve covers only the
+    // phases after materialization: readiness ran here already, and charging it again would arm a
+    // zero-second cutoff on a cold-boot route. A local path source has no transfer, so the
+    // materializer's standalone aggregate stays its only cap.
+    const requestDeadlineMs =
+      resolvedSource.source.kind === 'url' ? getRequestDeadlineMs(req.meta?.requestId) : undefined;
     materialized = await runtime.operations.materializeAppSource({
       source: resolvedSource.source,
-      ...(materializationSignal ? { signal: materializationSignal } : {}),
+      ...(requestDeadlineMs === undefined
+        ? {}
+        : {
+            materializationDeadlineMs: requestDeadlineMs - INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS,
+          }),
     });
     retained = await retainIfRequested({
       artifact: materialized,
