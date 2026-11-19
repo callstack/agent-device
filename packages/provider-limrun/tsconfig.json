@@ -27,6 +27,9 @@
       "path": "../platform-apple"
     },
     {
+      "path": "../plugins"
+    },
+    {
       "path": "../test-kit"
     }
   ]
