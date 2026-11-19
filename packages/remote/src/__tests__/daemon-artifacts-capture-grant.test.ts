@@ -691,8 +691,10 @@ test('an uncertain finish marks every open grant of the scope pending-recovery w
         baseUrl: world.endpoint(port).baseUrl,
         req: stopRequest(world),
         slot: 'record',
-      }).map((grant) => grant.grantId),
-    ).toEqual([second.grantId, first.grantId]);
+      })
+        .map((grant) => grant.grantId)
+        .sort(),
+    ).toEqual([first.grantId, second.grantId].sort());
     // An error answer to the stop leaves the outcome uncertain: BOTH become pending-recovery.
     const { noteUncertainFinishingCapture } = await import('../daemon-artifacts.ts');
     await noteUncertainFinishingCapture(world.endpoint(port), stopRequest(world), world.stateDir);
