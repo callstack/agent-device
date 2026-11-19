@@ -22,39 +22,56 @@ const device: DeviceInfo = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  // The real macOS shape for an emulator listening on IPv4 and IPv6: one process, two sockets.
-  mocks.runCmd.mockResolvedValue({ exitCode: 0, stdout: 'p42\nf31\nf32\n', stderr: '' });
+  // `lsof -b -w -t` prints the listening process id once, even for IPv4 and IPv6 sockets.
+  mocks.runCmd.mockResolvedValue({ exitCode: 0, stdout: '42\n', stderr: '' });
   mocks.readProcessIdentityFacts.mockResolvedValue({ startTime: 'start', zombie: false });
 });
 
-test('observes only the listener on the admitted console port', async () => {
+const slowRead = () => Promise.reject(new Error('lsof timed out after 5000ms'));
+
+test('observes only the listener on the admitted console port without blocking kernel calls', async () => {
   expect(await observeAndroidEmulatorGeneration(device)).toEqual({ pid: 42, startTime: 'start' });
   expect(mocks.runCmd).toHaveBeenCalledWith(
     'lsof',
-    ['-nP', '-iTCP:5558', '-sTCP:LISTEN', '-Fp'],
-    expect.anything(),
+    ['-b', '-w', '-t', '-nP', '-iTCP:5558', '-sTCP:LISTEN'],
+    expect.objectContaining({ allowFailure: true, timeoutMs: 5_000 }),
   );
 });
 
-test('ambiguous listeners and missing process identity remain unknown', async () => {
-  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'p42\nf31\np43\nf32\n', stderr: '' });
-  expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
-  expect(mocks.readProcessIdentityFacts).not.toHaveBeenCalled();
-  mocks.readProcessIdentityFacts.mockResolvedValueOnce({ startTime: null, zombie: false });
-  expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
-});
-
-test('one process with a single listening socket is observed', async () => {
-  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'p42\nf31\n', stderr: '' });
+test('a slow listener read is retried once and still observes the identity', async () => {
+  mocks.runCmd.mockImplementationOnce(slowRead);
   expect(await observeAndroidEmulatorGeneration(device)).toEqual({ pid: 42, startTime: 'start' });
+  expect(mocks.runCmd).toHaveBeenCalledTimes(2);
 });
 
-test('no listener or a malformed pid remains unknown', async () => {
-  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+test('a slow process identity read is retried once', async () => {
+  mocks.readProcessIdentityFacts.mockResolvedValueOnce({ startTime: null, zombie: null });
+  expect(await observeAndroidEmulatorGeneration(device)).toEqual({ pid: 42, startTime: 'start' });
+  expect(mocks.runCmd).toHaveBeenCalledTimes(2);
+});
+
+test('two slow reads remain unknown', async () => {
+  mocks.runCmd.mockImplementation(slowRead);
   expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
-  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'p0\nf31\n', stderr: '' });
+  expect(mocks.runCmd).toHaveBeenCalledTimes(2);
+});
+
+test('no listener answers at once without a retry', async () => {
+  mocks.runCmd.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' });
+  expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
+  expect(mocks.runCmd).toHaveBeenCalledTimes(1);
+  expect(mocks.readProcessIdentityFacts).not.toHaveBeenCalled();
+});
+
+test('ambiguous listeners, a malformed pid and a zombie remain unknown without a retry', async () => {
+  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: '42\n43\n', stderr: '' });
+  expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
+  mocks.runCmd.mockResolvedValueOnce({ exitCode: 0, stdout: '0\n', stderr: '' });
   expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
   expect(mocks.readProcessIdentityFacts).not.toHaveBeenCalled();
+  mocks.readProcessIdentityFacts.mockResolvedValueOnce({ startTime: 'start', zombie: true });
+  expect(await observeAndroidEmulatorGeneration(device)).toBeUndefined();
+  expect(mocks.runCmd).toHaveBeenCalledTimes(3);
 });
 
 test('physical and malformed targets do not inspect host processes', async () => {
