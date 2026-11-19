@@ -229,10 +229,16 @@ export type SettleWithinOutcome<T> = { kind: 'settled'; value: T } | { kind: 'de
  * when the deadline wins, `work` keeps running to its own end (its rejection stays observed here,
  * so a late failure never reaches the unhandled-rejection path), while a rejection that beats the
  * deadline propagates to the caller.
+ *
+ * With `options.keepAlive: false` the deadline timer is also unref'd, so a deadline awaited by a
+ * background sweep does not hold the event loop open while it waits (a hung sweep must not keep a
+ * process with no other ref'd handles alive until the budget elapses). The default keeps the
+ * timer ref'd, for shutdown callers where an unref'd timer could let the process exit mid-report.
  */
 export function settleWithin<T>(
   work: () => Promise<T>,
   timeoutMs: number,
+  options?: Readonly<{ keepAlive?: boolean }>,
 ): Promise<SettleWithinOutcome<T>> {
   return new Promise<SettleWithinOutcome<T>>((resolve, reject) => {
     let settled = false;
@@ -244,6 +250,7 @@ export function settleWithin<T>(
       },
       Math.max(0, timeoutMs),
     );
+    if (options?.keepAlive === false) timer.unref?.();
     Promise.resolve()
       .then(work)
       .then(

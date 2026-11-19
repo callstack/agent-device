@@ -240,6 +240,37 @@ test('settleWithin treats a spent budget as an immediate deadline', async () => 
   assert.deepEqual(outcome, { kind: 'deadline' });
 });
 
+test('settleWithin unrefs the deadline timer only when keepAlive is false', async () => {
+  vi.useFakeTimers();
+  try {
+    const unrefCalls: unknown[] = [];
+    const original = globalThis.setTimeout;
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: Parameters<typeof setTimeout>[0],
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      const timer = original(handler, timeout, ...args) as unknown as NodeJS.Timeout;
+      const unref = timer.unref.bind(timer);
+      timer.unref = () => {
+        unrefCalls.push(timer);
+        return unref();
+      };
+      return timer as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    await settleWithin(async () => 'done', 10_000, { keepAlive: false });
+    assert.equal(unrefCalls.length, 1, 'keepAlive: false unrefs the deadline timer');
+
+    await settleWithin(async () => 'done', 10_000);
+    assert.equal(unrefCalls.length, 1, 'the default keeps the deadline timer ref’d');
+
+    spy.mockRestore();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('pollUntilSettled stops sampling once the request is canceled', async () => {
   const controller = new AbortController();
   let samples = 0;

@@ -283,7 +283,9 @@ async function expireIdleSession(
   const expiry = settleIdleSessionUnderLock({ ...params, lockKeys });
   const budgetMs = params.settleBudgetMs?.(params.ref.session);
   if (budgetMs === undefined) return void (await expiry);
-  const budget = await settleWithin(() => expiry, budgetMs);
+  // A background sweep's settle budget must not hold the daemon's event loop if the expiry
+  // hangs, so the deadline timer is unref'd (the removed budgetElapsedAfter unref'd too).
+  const budget = await settleWithin(() => expiry, budgetMs, { keepAlive: false });
   if (budget.kind === 'settled') return;
   emitDiagnostic({
     level: 'warn',
