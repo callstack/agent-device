@@ -401,7 +401,12 @@ async function cleanUpReplaySlot(slot: Slot): Promise<PluginCleanupOutcome[]> {
   ];
 }
 
-function withConnectionHost(
+/**
+ * A plugin's connection with the host it declares added to each context. Exported for the composing
+ * root: a built-in provider wires its plugin's callbacks to a CLI call through the same helper the
+ * registry uses, so both answer `connect` identically.
+ */
+export function withConnectionHost(
   connection: PluginConnection,
   hostOptions: Record<string, unknown> | undefined,
 ): RegisteredConnection {
