@@ -81,14 +81,14 @@ test('Apple smoke gives each platform an independent runner and cleanup', () => 
   }
 });
 
-test('the tvOS/visionOS runner build job compiles only on runner-owning PRs', () => {
-  const job = appleWorkflow().jobs['build-runner-tvos-visionos']!;
+test('the tvOS/visionOS/watchOS runner build job compiles only on runner-owning PRs', () => {
+  const job = appleWorkflow().jobs['build-runner-tvos-visionos-watchos']!;
   expect(job.if).toBe('${{ !github.event.pull_request.draft }}');
   expect(job['runs-on']).toBe('blacksmith-6vcpu-macos-26');
   const steps = job.steps.flatMap((step) => [step, ...(step.parallel ?? [])]);
   const select = steps.find((step) => step.id === 'runner-impact')!;
   expect(select.run).toContain(
-    'scripts/device-lane-impact.ts swift-runner-tvos swift-runner-visionos',
+    'scripts/device-lane-impact.ts swift-runner-tvos swift-runner-visionos swift-runner-watchos',
   );
   const builds = steps.filter((step) => step.uses === './.github/actions/setup-apple-runner-build');
   expect(
@@ -100,23 +100,26 @@ test('the tvOS/visionOS runner build job compiles only on runner-owning PRs', ()
   ).toEqual([
     ['swift-runner-tvos', 'tvos', 'generic/platform=tvOS Simulator'],
     ['swift-runner-visionos', 'visionos', 'generic/platform=visionOS Simulator'],
+    ['swift-runner-watchos', 'watchos', 'generic/platform=watchOS Simulator'],
   ]);
   for (const build of builds) {
     expect(build.if).toContain("steps.runner-impact.outputs.run != 'false'");
     expect(build.with?.['derived-path']).toMatch(/^\$\{\{ env\.\w+_DERIVED_PATH \}\}$/);
     expect(build.env?.AGENT_DEVICE_XCUITEST_ARCHS).toBe('arm64');
   }
-  for (const variable of ['TVOS_DERIVED_PATH', 'VISIONOS_DERIVED_PATH']) {
+  for (const variable of ['TVOS_DERIVED_PATH', 'VISIONOS_DERIVED_PATH', 'WATCHOS_DERIVED_PATH']) {
     expect(job.env?.[variable]).toContain('runner-derived');
   }
-  // The selector behind the job's path filter: runner sources select both new checks, unrelated
-  // production TypeScript selects neither, so the macOS minutes are spent only on runner PRs.
+  // The selector behind the job's path filter: runner sources select the new checks, unrelated
+  // production TypeScript selects none of them, so the macOS minutes are spent only on runner PRs.
   const runnerPlan = selectChecks({ changedFiles: ['apple/runner/Sources/Runner/Main.swift'] });
   expect(runnerPlan.checks).toContain('swift-runner-tvos');
   expect(runnerPlan.checks).toContain('swift-runner-visionos');
+  expect(runnerPlan.checks).toContain('swift-runner-watchos');
   const tsPlan = selectChecks({ changedFiles: ['src/platform-runtime.ts'] });
   expect(tsPlan.checks).not.toContain('swift-runner-tvos');
   expect(tsPlan.checks).not.toContain('swift-runner-visionos');
+  expect(tsPlan.checks).not.toContain('swift-runner-watchos');
 });
 
 test.each(['ios', 'macos'] as const)('the %s job selects only its own platform', (platform) => {

@@ -117,7 +117,7 @@ test('android-adb stub test delegates project ownership to Vitest', () => {
 });
 
 test('Swift runner change selects every XCUITest platform build', () => {
-  // Each platform build is its own gate in its own lane, so a Swift change owns all four.
+  // Each platform build is its own gate in its own lane, so a Swift change owns all five.
   // (The Apple device lanes ride along: the runner is what those lanes boot — device-lanes.ts.)
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
     'native-dupes',
@@ -125,6 +125,7 @@ test('Swift runner change selects every XCUITest platform build', () => {
     'swift-runner-macos',
     'swift-runner-tvos',
     'swift-runner-visionos',
+    'swift-runner-watchos',
     'packaged-runner-swift',
     'replay-ios',
     'replay-ios-device',
@@ -145,6 +146,7 @@ test('a runner XCTest source also selects the test-list and package-source check
       'swift-runner-macos',
       'swift-runner-tvos',
       'swift-runner-visionos',
+      'swift-runner-watchos',
       'xctest-selection',
       'packaged-runner-swift',
       'replay-ios',
@@ -183,6 +185,7 @@ test('the shared foreground geometry header selects the Apple runner builds', ()
     'swift-runner-macos',
     'swift-runner-tvos',
     'swift-runner-visionos',
+    'swift-runner-watchos',
     'packaged-runner-swift',
   ] as const) {
     assert.ok(
