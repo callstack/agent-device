@@ -584,3 +584,98 @@ test('an early answer to an unfinished body closes the connection and keeps the 
     await closeLoopbackServer(server);
   }
 });
+
+test('an early 308 reaches a client that is still streaming its body', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const auth = { authorization: 'Bearer daemon-secret' };
+  const sizeBytes = 64 * 1024 * 1024;
+  const chunk = Buffer.alloc(1024 * 1024, 0x61);
+  /** Streams the body until the answer arrives, as the remote upload client does. */
+  const streamUntilAnswered = (uploadId: string) =>
+    new Promise<RouteResponse>((resolve, reject) => {
+      let answered = false;
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          agent: false,
+          method: 'PUT',
+          path: `/upload/direct/${uploadId}`,
+          headers: auth,
+        },
+        (res) => {
+          answered = true;
+          const chunks: Buffer[] = [];
+          res.on('data', (data: Buffer) => chunks.push(data));
+          res.on('end', () => {
+            req.destroy();
+            resolve({
+              status: res.statusCode ?? 0,
+              headers: res.headers,
+              body: Buffer.concat(chunks).toString(),
+            });
+          });
+        },
+      );
+      req.on('error', (error) => {
+        if (!answered) reject(error);
+      });
+      let sent = 0;
+      const pump = () => {
+        while (!answered && sent < sizeBytes) {
+          sent += chunk.length;
+          if (!req.write(chunk)) {
+            req.once('drain', pump);
+            return;
+          }
+        }
+      };
+      pump();
+    });
+  try {
+    const preflight = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'POST',
+          path: '/upload/preflight',
+          headers: { ...auth, 'content-type': 'application/json' },
+        },
+        (req) =>
+          req.end(
+            JSON.stringify({
+              sha256: 'a'.repeat(64),
+              uploadAttemptId: crypto.randomUUID(),
+              fileName: 'artifact.bin',
+              sizeBytes,
+              artifactType: 'file',
+            }),
+          ),
+      ),
+    );
+    assert.equal(preflight.status, 200);
+    const { uploadId } = JSON.parse(preflight.body) as { uploadId: string };
+    const seeded = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'PUT',
+          path: `/upload/direct/${uploadId}`,
+          headers: { ...auth, 'content-range': `bytes 0-0/${sizeBytes}`, 'content-length': '1' },
+        },
+        (req) => req.end('a'),
+      ),
+    );
+    assert.equal(seeded.headers['x-upload-offset'], '1');
+    // A reset on close with unread body bytes is timing dependent, so the case repeats.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const answer = await withIO(streamUntilAnswered(uploadId), 'the early 308 answer');
+      assert.equal(answer.status, 308);
+      assert.equal(answer.headers['x-upload-offset'], '1');
+      assert.equal(answer.headers.connection, 'close');
+    }
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

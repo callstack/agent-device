@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { TRANSFER_BODY_INACTIVITY_TIMEOUT_MS } from '@agent-device/host-kit/transport';
 import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
@@ -42,7 +43,10 @@ export type UploadTransferIngress = {
  * The ingress also owns the early-answer rule: every answer sent before the body is
  * fully read carries `Connection: close`, and that connection ends after the answer
  * flushes, under these timers. A keep-alive connection never drains an unread body
- * outside the ingress budget.
+ * outside the ingress budget. The close lingers (RFC 9112 §9.6): the server half-closes
+ * after the answer and discards the rest of the body until the body ends, the client
+ * closes, or a timer fires. A full close with unread bytes resets the connection, and
+ * a client that is still sending then loses the answer.
  */
 export function beginUploadTransferIngress(params: {
   req: IncomingMessage;
@@ -51,6 +55,7 @@ export function beginUploadTransferIngress(params: {
   const { req, res } = params;
   // Until the body is complete, any answer is an early answer.
   res.setHeader('connection', 'close');
+  const restoreClose = lingerUntilBodyEnds(req);
   const expiry = new AbortController();
   const signal = AbortSignal.any([expiry.signal, responseDisconnectSignal(req, res)]);
   const aggregateTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
@@ -85,6 +90,7 @@ export function beginUploadTransferIngress(params: {
     // A finished exchange may already have detached its socket.
     const socket = req.socket as IncomingMessage['socket'] | null;
     if (req.complete || !socket || socket.destroyed) {
+      restoreClose();
       stopTimers();
       return;
     }
@@ -125,10 +131,37 @@ export function beginUploadTransferIngress(params: {
       if (!disposed && bytes > 0) armInactivity();
     },
     bodyComplete() {
+      restoreClose();
       if (!res.headersSent) res.removeHeader('connection');
       if (!disposed) stopInactivity();
     },
     dispose,
+  };
+}
+
+/**
+ * Makes the connection's close linger while this request's body is unread: the socket
+ * half-closes after the answer, and the full close waits until the body ends. Node calls
+ * `destroySoon` after a `Connection: close` answer; this request owns that call only
+ * until it returns the original. Returns the function that restores it.
+ */
+function lingerUntilBodyEnds(req: IncomingMessage): () => void {
+  const socket = req.socket as IncomingMessage['socket'] | null;
+  if (!socket) return () => {};
+  const closeNow = socket.destroySoon;
+  let lingering = false;
+  socket.destroySoon = function lingeringClose(this: Socket): void {
+    if (req.complete) {
+      closeNow.call(this);
+      return;
+    }
+    if (this.writable) this.end();
+    if (lingering) return;
+    lingering = true;
+    req.once('end', () => closeNow.call(this));
+  };
+  return () => {
+    if (!lingering) socket.destroySoon = closeNow;
   };
 }
 
