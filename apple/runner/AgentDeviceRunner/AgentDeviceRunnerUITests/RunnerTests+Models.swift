@@ -199,18 +199,6 @@ fileprivate extension CommandTraits {
     isReadOnly: false
   )
 
-#if os(watchOS)
-  /// The Digital Crown press acts on whatever is on screen: from an app it shows the watch face, and
-  /// from the face it opens the app grid. Bringing the session app forward first would turn every
-  /// press into the first one.
-  static let watchCrownPress = CommandTraits(
-    launchPolicy: .noApp,
-    convertsRecordedFailure: true,
-    retainsJournalResponseJson: true,
-    isReadOnly: false
-  )
-#endif
-
   /// `alert get` changes nothing, so it is the one alert action that may be replayed.
   static let presentedSurfaceQuery = CommandTraits(
     retryOnSessionLoss: true,
@@ -350,9 +338,12 @@ extension Command {
     case .querySelector:
       return .selectorResolution
 
+    // The watchOS Digital Crown press acts on whatever is on screen: from an app it shows the watch
+    // face, and from the face it opens the app grid. Like the other hardware presses, it must not
+    // bring the session app forward first.
     case .home:
 #if os(watchOS)
-      return .watchCrownPress
+      return .presentedSurfaceMutation
 #else
       return .appMutation
 #endif
