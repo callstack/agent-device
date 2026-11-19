@@ -61,7 +61,7 @@ import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
 import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
-import { applyWatchOsOperationFacts } from './os/watchos/facts.ts';
+import { applyWatchOsOperationFacts, bindWatchOsOperations } from './os/watchos/facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
@@ -411,7 +411,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: logs.device,
         owner,
         facts,
-        operations: Object.freeze(operations),
+        operations: Object.freeze(
+          bindWatchOsOperations(request.device, facts.operations, operations),
+        ),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },

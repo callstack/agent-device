@@ -86,6 +86,23 @@ test('a watchOS simulator names why it refuses multi-touch, the App Switcher, an
   });
 });
 
+test('a watchOS simulator binds exactly the operations its facts admit', async () => {
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device: watch(),
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  for (const [operation, fact] of Object.entries(binding.facts.operations)) {
+    expect(typeof (binding.operations as Record<string, unknown>)[operation], operation).toBe(
+      fact.available ? 'function' : 'undefined',
+    );
+  }
+});
+
 test('a physical Apple Watch is refused on every operation', async () => {
   expect(await availableOperations(watch('device'))).toEqual([]);
 });

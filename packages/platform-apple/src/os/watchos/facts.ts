@@ -92,3 +92,18 @@ export function applyWatchOsOperationFacts<T extends Record<string, RuntimeOpera
     }),
   ) as T;
 }
+
+/**
+ * Drops the bound operations a watch refuses. The modules bind from their own facts, so the watch
+ * admission must also narrow the binding for facts and operations to agree.
+ */
+export function bindWatchOsOperations<T extends object>(
+  device: DeviceInfo,
+  facts: Readonly<Record<string, RuntimeOperationFact>>,
+  operations: T,
+): T {
+  if (device.appleOs !== 'watchos') return operations;
+  return Object.fromEntries(
+    Object.entries(operations).filter(([operation]) => facts[operation]?.available !== false),
+  ) as T;
+}

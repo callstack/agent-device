@@ -754,7 +754,7 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
     summary: 'Press the iPhone, iPad, or Apple Watch Ultra Action Button',
     searchHint: 'side switch',
     cliDetail:
-      'iPhone, iPad, and Apple Watch simulators. The runner asks the device for the button and reports unsupported when that model has none.',
+      'iPhone, iPad, and Apple Watch Ultra simulators. The runner asks the device for the button and reports unsupported when that model has none.',
   },
   run: (client, input) => client.command.actionButton(input),
 });
