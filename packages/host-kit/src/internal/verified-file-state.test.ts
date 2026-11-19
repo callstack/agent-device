@@ -12,7 +12,7 @@ import {
   directoryWith,
   modeOf,
   serveOwnership,
-} from './atomic-file-host.fixtures.ts';
+} from './script-destination-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
   ensurePrivateDirectoryChain,

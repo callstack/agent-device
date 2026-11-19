@@ -468,7 +468,7 @@ Every state entry is opened through the one state opener in `packages/host-kit/s
 **Where the guarantee does not reach.** This amendment covers the daemon's state records.
 It is not a promise that no local user can read a record whose directory is sticky and shared.
 It says nothing about caller-named artifacts outside the state directory, which remain scoped to #4669.
-Stale-record cleanup (`clearStaleDaemonRecords`, and the sweep of dead pids' phase markers) removes names inside the state directory without taking the judged-entry path.
+Every unlink of a state record removes a name inside the state directory without taking the judged-entry path.
 That is the intended boundary: an unlink costs one name, follows nothing, and writes no bytes, so a planted entry cannot steer it.
 
 ## Consequences

@@ -135,7 +135,6 @@ test('a script publishes at a Windows drive root without creating the volume', (
   const destination = String.raw`C:\journey.ad`;
   vi.spyOn(fs, 'writeFileSync').mockReturnValue(undefined);
   vi.spyOn(fs, 'chmodSync').mockReturnValue(undefined);
-  vi.spyOn(fs, 'rmSync').mockReturnValue(undefined);
   const rename = vi.spyOn(fs, 'renameSync').mockReturnValue(undefined);
   onWindows(() => {
     publishScriptFileSync({ destination, contents: 'journey\n' });

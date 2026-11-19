@@ -15,7 +15,7 @@ import {
   modeOf,
   serveOwnership,
   withSharedUmask,
-} from './atomic-file-host.fixtures.ts';
+} from './script-destination-host.fixtures.ts';
 import {
   ensurePrivateDirectoryChain,
   judgePrivateDirectoryChain,

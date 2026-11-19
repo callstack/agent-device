@@ -17,7 +17,7 @@ export type ScriptAncestryExposure =
   | 'parent_replaced';
 
 /** Why each exposure makes that ground unsafe, in the caller's terms. */
-const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
+export const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   foreign_owned: 'another local user owns that part of the path.',
   world_writable: 'any local user can write that part of the path.',
   shared_group_writable:

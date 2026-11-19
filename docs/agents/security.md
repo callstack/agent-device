@@ -11,7 +11,7 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers stage and commit inside the judged directory.
 Remote script delivery caps bytes as they arrive.
-ADR 0016 names what that judgment leaves out.
+ADR 0016 names what the state-directory judgment leaves out.
 
 ## Proposed in #4669
 
