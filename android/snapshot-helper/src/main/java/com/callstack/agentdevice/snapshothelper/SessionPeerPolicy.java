@@ -7,9 +7,8 @@ import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Pure admission and bound decisions for persistent-session connections. Every decision is a
- * function of its inputs only, so the test suite drives it with synthetic peers: no socket, no
- * clock, no Android runtime.
+ * Admission and command framing for persistent-session connections. The reader takes an injected
+ * stream, clock and timeout setter so tests can drive the same policy outside Android.
  *
  * <p>The session transport is an abstract {@code localabstract:} socket reached through
  * {@code adb forward tcp:<host port> localabstract:<name>}. The forwarded peer of such a

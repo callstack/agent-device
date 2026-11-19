@@ -14,6 +14,7 @@ public final class SessionPeerPolicyTest {
     admitsTheAdbdUids();
     rejectsNonAdbdUids();
     commandCompletedAtDeadlineIsAccepted();
+    incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
@@ -50,6 +51,26 @@ public final class SessionPeerPolicyTest {
         input, ignored -> {}, () -> nowMs[0], 110, 8);
     if (!"ab".equals(command)) {
       throw new AssertionError("Expected a complete command returned at the deadline");
+    }
+  }
+
+  private static void incompleteCommandAtDeadlineCannotStartAnotherRead() throws Exception {
+    long[] nowMs = {100};
+    List<Integer> timeouts = new ArrayList<>();
+    ByteArrayInputStream input = new ByteArrayInputStream("a\n".getBytes(StandardCharsets.UTF_8)) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        nowMs[0] = 110;
+        return super.read(data, offset, Math.min(1, length));
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(input, timeouts::add, () -> nowMs[0], 110, 8);
+      throw new AssertionError("Expected the deadline to stop an unfinished command");
+    } catch (SocketTimeoutException expected) {
+      if (!timeouts.equals(Arrays.asList(10))) {
+        throw new AssertionError("Expected one bounded read and no zero timeout: " + timeouts);
+      }
     }
   }
 

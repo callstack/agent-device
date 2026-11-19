@@ -70,6 +70,7 @@ export type AndroidSnapshotHelperCaptureOptions = {
   helperVersion?: string;
   helperVersionCode?: number;
   helperSha256?: string;
+  helperSha256Verified?: boolean;
   packageName?: string;
   instrumentationRunner?: string;
   waitForIdleTimeoutMs?: number;

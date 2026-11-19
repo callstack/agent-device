@@ -470,6 +470,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
+  install: AndroidSnapshotHelperInstallResult;
   helperDeviceKey: string;
 }): Promise<AndroidSnapshotHelperOutput> {
   const { signal, adb, adbProvider, artifact, helperDeviceKey } = params;
@@ -477,6 +478,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     adb,
     adbProvider,
     artifact,
+    install: params.install,
     deviceKey: helperDeviceKey,
     signal,
   });
@@ -601,6 +603,7 @@ async function captureAndroidHelperContentAttempt(params: {
       adb,
       adbProvider,
       artifact,
+      install,
       helperDeviceKey,
     });
     helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);

@@ -134,6 +134,7 @@ export async function readAndroidTouchHelperViewportReading(
         adb: prepared.adb,
         adbProvider: prepared.adbProvider,
         artifact: prepared.artifact,
+        install: prepared.install,
         deviceKey: prepared.deviceKey,
       }),
     );

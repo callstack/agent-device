@@ -12,6 +12,7 @@ import type {
 } from './snapshot-helper-types.ts';
 import { resolveAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
   isAndroidSnapshotHelperSessionRequestTimeout,
   parseAndroidSnapshotHelperSessionTouchResponse,
   requestAndroidSnapshotHelperSessionSnapshot,
@@ -114,9 +115,6 @@ export function discloseHelperTouchDispatch(
   if ((action !== 'gesture' && action !== 'input') || !(error instanceof AppError)) return error;
   return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
 }
-
-// Keep in sync with SessionPeerPolicy.MAX_COMMAND_LINE_BYTES in the snapshot APK.
-const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 256 * 1024;
 
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;

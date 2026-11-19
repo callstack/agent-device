@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
   androidSnapshotHelperSessionForwardTarget,
   androidSnapshotHelperSessionSocketName,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
@@ -21,6 +23,22 @@ test('the session forward targets the helper abstract socket derived from the ho
     androidSnapshotHelperSessionForwardTarget(1),
     androidSnapshotHelperSessionForwardTarget(2),
   );
+});
+
+test('the host forward target and byte cap agree with the Android helper', () => {
+  const java = readFileSync(
+    new URL(
+      '../../../../android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/SessionPeerPolicy.java',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const prefix = /SESSION_SOCKET_PREFIX = "([^"]+)";/.exec(java);
+  const cap = /MAX_COMMAND_LINE_BYTES = (\d+) \* (\d+);/.exec(java);
+  assert.ok(prefix, 'expected a socket prefix in SessionPeerPolicy');
+  assert.ok(cap, 'expected the command byte cap in SessionPeerPolicy');
+  assert.equal(androidSnapshotHelperSessionForwardTarget(18093), `localabstract:${prefix[1]}18093`);
+  assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES, Number(cap[1]) * Number(cap[2]));
 });
 
 test('parses the session envelope and snapshot metadata', () => {

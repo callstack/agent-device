@@ -69,17 +69,31 @@ test('an older ready helper stays one-shot across time and capture options until
     adbProvider: provider,
     deviceKey: 'android:emulator-5554',
     helperSha256: 'old-build',
+    helperSha256Verified: true,
   };
 
-  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
-  now.mockReturnValue(Date.now() + 61_000);
-  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
-  assert.equal(
-    await captureAndroidSnapshotWithHelperSession({ ...options, waitForIdleTimeoutMs: 40 }),
-    undefined,
+  const logPath = path.join(
+    await mkdtempForTest('snapshot-helper-unsupported-'),
+    'diagnostics.jsonl',
   );
-  assert.equal(spawnArgs.length, 1);
-  assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
+  await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+    now.mockReturnValue(Date.now() + 61_000);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+    assert.equal(
+      await captureAndroidSnapshotWithHelperSession({ ...options, waitForIdleTimeoutMs: 40 }),
+      undefined,
+    );
+    assert.equal(spawnArgs.length, 1);
+    assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
+  });
+  const log = await fs.readFile(logPath, 'utf8');
+  assert.equal(
+    log.match(/"phase":"android_snapshot_helper_session_transport_unsupported"/g)?.length,
+    1,
+  );
+  assert.match(log, /"helperSha256":"old-build"/);
+  assert.doesNotMatch(log, /"phase":"android_snapshot_helper_session_start_failed"/);
 
   const replacement = createSessionProvider({ calls, spawnArgs });
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -89,6 +103,24 @@ test('an older ready helper stays one-shot across time and capture options until
     helperSha256: 'new-build',
   });
   assert.equal(output?.metadata.transport, 'persistent-session');
+  assert.equal(spawnArgs.length, 2);
+});
+
+test('a marker-less binary without a verified installed digest earns only timed backoff', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
+  const options = {
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    helperSha256: 'selected-artifact-not-verified-on-device',
+  };
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(spawnArgs.length, 1);
+  skewClockPastSessionBackoff();
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
   assert.equal(spawnArgs.length, 2);
 });
 

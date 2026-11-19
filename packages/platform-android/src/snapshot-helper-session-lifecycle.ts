@@ -189,7 +189,9 @@ async function resolveAndroidSnapshotHelperSession(params: {
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
-  if (unsupportedSessionBuilds().has(params.buildIdentity)) return undefined;
+  if (params.options.helperSha256Verified && unsupportedSessionBuilds().has(params.buildIdentity)) {
+    return undefined;
+  }
   return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
 
@@ -226,14 +228,32 @@ async function tryStartAndroidSnapshotHelperSession(params: {
   } catch (error) {
     params.options.signal?.throwIfAborted();
     const reason = error instanceof AppError ? error.details?.reason : undefined;
-    if (reason === SESSION_TRANSPORT_UNSUPPORTED_REASON) {
-      unsupportedSessionBuilds().add(params.buildIdentity);
-    } else {
-      failedSessions().set(
-        params.identity,
-        Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
-      );
+    if (
+      reason === SESSION_TRANSPORT_UNSUPPORTED_REASON &&
+      params.options.helperSha256Verified &&
+      params.options.helperSha256
+    ) {
+      if (!unsupportedSessionBuilds().has(params.buildIdentity)) {
+        unsupportedSessionBuilds().add(params.buildIdentity);
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'android_snapshot_helper_session_transport_unsupported',
+          data: {
+            deviceKey: params.deviceKey,
+            packageName: params.resolved.packageName,
+            runner: params.resolved.runner,
+            helperVersion: params.options.helperVersion,
+            helperVersionCode: params.options.helperVersionCode,
+            helperSha256: params.options.helperSha256,
+          },
+        });
+      }
+      return undefined;
     }
+    failedSessions().set(
+      params.identity,
+      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
+    );
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_session_start_failed',
