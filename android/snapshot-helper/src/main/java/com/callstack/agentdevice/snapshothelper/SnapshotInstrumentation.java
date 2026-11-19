@@ -82,18 +82,13 @@ public final class SnapshotInstrumentation extends Instrumentation {
         finishSafely(0, result);
         return;
       }
-      long startedAtMs = System.currentTimeMillis();
-      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
-      AccessibilityTreeCapture.Result capture =
-          captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
-      DisplayExtent.Extent display =
-          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
-      writeOutputFile(outputPath, capture.xml);
+      String xml =
+          captureInto(
+              result, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+      writeOutputFile(outputPath, xml);
       if (emitChunks) {
-        emitChunks(capture.xml);
+        emitChunks(xml);
       }
-      result.putString("ok", "true");
-      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
       finishSafely(0, result);
     } catch (Throwable error) {
       result.putString("ok", "false");
@@ -335,15 +330,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
           putBaseMetadata(
               result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
           result.putString("requestId", requestId);
-          long startedAtMs = System.currentTimeMillis();
-          DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
-          AccessibilityTreeCapture.Result capture =
-              captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
-          DisplayExtent.Extent display =
-              DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
-          result.putString("ok", "true");
-          putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
-          byte[] body = capture.xml.getBytes(StandardCharsets.UTF_8);
+          String xml =
+              captureInto(
+                  result, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+          byte[] body = xml.getBytes(StandardCharsets.UTF_8);
           result.putString("byteLength", Integer.toString(body.length));
           return SessionResponseWriter.encodeSessionResponse(result, body);
         },
@@ -428,6 +418,28 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   @SuppressWarnings("deprecation")
+  /** Captures the tree, records its metadata in result, and returns the XML. */
+  private String captureInto(
+      Bundle result,
+      long waitForIdleQuietMs,
+      long waitForIdleTimeoutMs,
+      long timeoutMs,
+      int maxDepth,
+      int maxNodes)
+      throws TimeoutException,
+          InterruptedException,
+          AccessibilityCaptureStabilizer.IncompleteCaptureException {
+    long startedAtMs = System.currentTimeMillis();
+    DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
+    AccessibilityTreeCapture.Result capture =
+        captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+    DisplayExtent.Extent display =
+        DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
+    result.putString("ok", "true");
+    putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
+    return capture.xml;
+  }
+
   private AccessibilityTreeCapture.Result captureXml(
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
