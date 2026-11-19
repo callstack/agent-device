@@ -97,7 +97,7 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   // records end up in a base nothing judged. Every directory a fold steps OUT OF stands above the state root,
   // where ADR 0016 allows links, which is why this is asked here — at the one point where the route is still a
   // spelling — and cannot be reconstructed from folded text afterwards.
-  if (stepsBackOut(route)) return foldParentRelativeStateRoute(value, route);
+  if (spelledRouteStepsBackOut(route)) return foldParentRelativeStateRoute(value, route);
   return route;
 }
 
@@ -247,11 +247,6 @@ function joinTextually(cwd: string, spelled: string): string {
   const relative = spelled.replace(/^\.\//, '');
   if (!cwd) return relative;
   return cwd.endsWith(path.sep) ? `${cwd}${relative}` : `${cwd}${path.sep}${relative}`;
-}
-
-/** Whether a spelled path asks for a step back out of the directory it is in, on the host's own separator. */
-function stepsBackOut(spelled: string): boolean {
-  return spelledRouteStepsBackOut(spelled);
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

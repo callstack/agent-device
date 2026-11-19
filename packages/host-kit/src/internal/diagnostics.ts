@@ -8,18 +8,18 @@ import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
 /**
- * Says {@link value} on this process's stderr and answers whether the stream took it.
+ * Says {@link value} on this process's stderr, and costs nothing when the stream will not take it.
  *
  * This is the sink for a report whose own route is the thing that failed — a refused state path, a log handle
  * that broke mid-write, a pipe nobody reads. Such a line cannot go where its subject could not go, so stderr
- * is the route, and the write is contained: a report is never worth the flow that was making it.
+ * is the route, and the write is contained: a report is never worth the flow that was making it. Whether the
+ * stream took the line changes no caller's answer, so it is not reported.
  */
-export function writeHostStderrBestEffort(value: string): boolean {
+export function writeHostStderrBestEffort(value: string): void {
   try {
     process.stderr.write(value);
-    return true;
   } catch {
-    return false;
+    // A closed pipe makes the whole thing cost nothing.
   }
 }
 
@@ -443,7 +443,7 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
   // Sending it there would ask the same I/O that is failing, once per warning, until the stack gives out, so
   // while one is being reported every line leaves by stderr and nothing touches the path.
   if (scope.reportingUndeliverableLine) {
-    sayDiagnosticLineOnStderr(line);
+    writeHostStderrBestEffort(line);
     return false;
   }
   // A judged sink is owed only to the path its owner named, and only while that is still the path in
@@ -456,7 +456,7 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
       return true;
     } catch (error) {
       reportUndeliverableDiagnosticLine(scope, error);
-      sayDiagnosticLineOnStderr(line);
+      writeHostStderrBestEffort(line);
       return false;
     }
   }
@@ -468,12 +468,12 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
   // about that path. Such a line goes to stderr: writing it at the name would reach ground whose
   // judgment is what is being made, and asking the factory again would open the path once per warning.
   if (scope.establishingLogSink) {
-    sayDiagnosticLineOnStderr(line);
+    writeHostStderrBestEffort(line);
     return false;
   }
   const sink = scope.logSink ?? establishDiagnosticLineSink(scope, factory, logPath);
   if (!sink) {
-    sayDiagnosticLineOnStderr(line);
+    writeHostStderrBestEffort(line);
     return false;
   }
   try {
@@ -484,7 +484,7 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     // again, and this one is said where a broken handle cannot swallow it.
     closeDiagnosticLineSink(scope);
     reportUndeliverableDiagnosticLine(scope, error);
-    sayDiagnosticLineOnStderr(line);
+    writeHostStderrBestEffort(line);
   }
   return false;
 }
@@ -521,11 +521,6 @@ function establishDiagnosticLineSink(
   } finally {
     scope.establishingLogSink = false;
   }
-}
-
-/** One event's text, handed to the route that needs no path at all. */
-function sayDiagnosticLineOnStderr(line: string): void {
-  writeHostStderrBestEffort(line);
 }
 
 /**
