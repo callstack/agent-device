@@ -1,6 +1,7 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
+import type { LaunchedDeviceProcessService } from '@agent-device/contracts/device-boot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
@@ -357,6 +358,7 @@ export async function handleSessionCloseCommands(
       clearRuntimeHints: admission.clearRuntimeHints,
       repairArmed: repair.repairArmed,
       platformResourceCleanup,
+      launchedProcess: params.platformServices.launchedDeviceProcess,
       deviceShutdownDenied: params.deviceShutdownDenied,
     }),
   );
@@ -427,6 +429,8 @@ async function runCloseTeardownAndRelease(params: {
   repairArmed: boolean;
   platformResourceCleanup: PlatformResourceCleanup;
   deviceShutdownDenied?: boolean;
+  /** The host process this session's `open` launched, as the root-composed owner answers for it. */
+  launchedProcess: LaunchedDeviceProcessService;
 }): Promise<SessionCloseFinalization> {
   const {
     req,
@@ -465,6 +469,7 @@ async function runCloseTeardownAndRelease(params: {
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
     deviceShutdownDenied: params.deviceShutdownDenied,
+    launchedProcess: params.launchedProcess,
   });
   let session = sessionStore.requireCurrent(ref);
   // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
