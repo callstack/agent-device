@@ -80,9 +80,7 @@ export async function createProviderHostCapabilities(
 ): Promise<ProviderHostCapabilitiesWithInteractor> {
   // The host adb port refuses an unbound host; this wiring binds it once and loads no device state.
   await import('./platform-runtime-android-adb-host.ts');
-  // `getInteractor` is synchronous, so the family's interactor factory is read here, once, while
-  // this host is wired. The Android family's mechanics are already in this process by then; nothing
-  // is probed and no device state is read.
+  // Load the factory during host setup so `getInteractor` can stay synchronous.
   const { createAndroidInteractor } = await import('./core/interactors/android.ts');
   const runOnHost = <T>(task: () => Promise<T>) =>
     withCommandHost({ host, requestEnv: undefined }, task);
