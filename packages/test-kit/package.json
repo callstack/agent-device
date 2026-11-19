@@ -8,7 +8,8 @@
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/kernel": "workspace:*",
+    "oxc-parser": "^0.146.0"
   },
   "exports": {
     ".": {
@@ -17,7 +18,6 @@
     }
   },
   "devDependencies": {
-    "fast-check": "^4.9.0",
-    "oxc-parser": "^0.146.0"
+    "fast-check": "^4.9.0"
   }
 }

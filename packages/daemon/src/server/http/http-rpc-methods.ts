@@ -194,22 +194,7 @@ function parseInstallSource(params: Record<string, unknown>): HttpInstallSource 
     if (!url) {
       throw new AppError('INVALID_ARGS', 'Invalid params: source.url is required for url sources');
     }
-    const rawHeaders = record.headers;
-    const headers: Record<string, string> = {};
-    if (rawHeaders !== undefined) {
-      if (!rawHeaders || typeof rawHeaders !== 'object' || Array.isArray(rawHeaders)) {
-        throw new AppError('INVALID_ARGS', 'Invalid params: source.headers must be a string map');
-      }
-      for (const [key, value] of Object.entries(rawHeaders as Record<string, unknown>)) {
-        if (typeof value !== 'string') {
-          throw new AppError(
-            'INVALID_ARGS',
-            'Invalid params: source.headers values must be strings',
-          );
-        }
-        headers[key] = value;
-      }
-    }
+    const headers = parseInstallHeaders(record.headers);
     return Object.keys(headers).length > 0 ? { kind: 'url', url, headers } : { kind: 'url', url };
   }
   if (record.kind === 'path') {
@@ -226,6 +211,22 @@ function parseInstallSource(params: Record<string, unknown>): HttpInstallSource 
     'INVALID_ARGS',
     'Invalid params: source.kind must be "url" or "github-actions-artifact"',
   );
+}
+
+function parseInstallHeaders(rawHeaders: unknown): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (rawHeaders !== undefined) {
+    if (!rawHeaders || typeof rawHeaders !== 'object' || Array.isArray(rawHeaders)) {
+      throw new AppError('INVALID_ARGS', 'Invalid params: source.headers must be a string map');
+    }
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value !== 'string') {
+        throw new AppError('INVALID_ARGS', 'Invalid params: source.headers values must be strings');
+      }
+      headers[key] = value;
+    }
+  }
+  return headers;
 }
 
 function toInstallFromSourceDaemonRequest(
