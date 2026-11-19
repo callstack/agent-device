@@ -36,7 +36,7 @@ export async function inspectAndroidEmulatorGeneration(
       options.deadline?.remainingMs() ?? LISTENER_PROBE_TIMEOUT_MS,
     );
     if (budgetMs <= 0) return { miss: last };
-    const reading = await readConsoleListener(port, budgetMs);
+    const reading = await readConsoleListener(port, budgetMs, options.deadline);
     if (reading.kind === 'identity') return { identity: reading.identity };
     if (reading.kind === 'absent') return { miss: reading.miss };
     last = reading.miss;
@@ -78,6 +78,7 @@ type ConsoleListenerReading =
 async function readConsoleListener(
   port: number,
   budgetMs: number,
+  deadline: DeadlineClock | undefined,
 ): Promise<ConsoleListenerReading> {
   const { hostPlatform, readProcessIdentityFacts } = await import('@agent-device/host-kit/process');
   if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') {
@@ -99,8 +100,11 @@ async function readConsoleListener(
   }
   const pid = soleListenerPid(stdout);
   if (pid === undefined) return { kind: 'absent', miss: 'ambiguous-listener' };
+  // The ps read gets only what the shared deadline still has, so lsof and ps together stay inside it.
+  const processBudgetMs = Math.min(budgetMs, deadline?.remainingMs() ?? budgetMs);
+  if (processBudgetMs <= 0) return { kind: 'unread', miss: 'process-read-timeout' };
   try {
-    const facts = await readProcessIdentityFacts(pid, budgetMs);
+    const facts = await readProcessIdentityFacts(pid, processBudgetMs);
     if (facts.zombie === true) return { kind: 'absent', miss: 'zombie-listener' };
     if (!facts.startTime || facts.zombie !== false) {
       return { kind: 'unread', miss: 'process-read-timeout' };
