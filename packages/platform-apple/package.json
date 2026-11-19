@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Apple-family platform runtime metadata and implementations for agent-device.",
   "scripts": {
+    "test:tvos-snapshot-presentation": "node --experimental-strip-types test/tvos-snapshot-presentation.fixtures.ts",
     "verify-installed-snapshot-bridge": "node --experimental-strip-types scripts/verify-installed-snapshot-bridge.ts"
   },
   "dependencies": {

@@ -422,11 +422,8 @@ test('regular tvOS tree captures publish focus on the surviving tile as focus mo
     const raw = testCase.projection === 'raw';
     const { presented, state } = JSON.parse(
       execFileSync(
-        process.execPath,
-        [
-          '--experimental-strip-types',
-          'packages/platform-apple/test/tvos-snapshot-presentation.ts',
-        ],
+        'pnpm',
+        ['--silent', '--filter', '@agent-device/platform-apple', 'test:tvos-snapshot-presentation'],
         {
           encoding: 'utf8',
           input: JSON.stringify({
