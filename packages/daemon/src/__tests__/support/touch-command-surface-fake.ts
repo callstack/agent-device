@@ -33,7 +33,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
-import { buildSelectorChainForNode } from '@agent-device/selectors';
+import { buildSelectorChainForNode, recordedSelectorExpression } from '@agent-device/selectors';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
 import {
   captureAndStoreSnapshot,
@@ -326,8 +326,8 @@ async function dragOrInert(
       destination: { selectorChain: destinationTarget.selectorChain, resolution: exact },
     },
     recording: {
-      sourceSelector: sourceTarget.selectorChain.join(' || '),
-      destinationSelector: destinationTarget.selectorChain.join(' || '),
+      sourceSelector: recordedSelectorExpression(sourceTarget.selectorChain),
+      destinationSelector: recordedSelectorExpression(destinationTarget.selectorChain),
       sourceTarget,
       destinationTarget,
     },

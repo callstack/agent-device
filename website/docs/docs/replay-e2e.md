@@ -64,6 +64,8 @@ By default, the script goes to:
 ~/.agent-device/sessions/<session>-<timestamp>.ad
 ```
 
+Each recorded element step writes its target as a selector. When the element's id is unique on the recorded screen, the step writes only that id, for example `press 'id="submit"'`. Otherwise, it writes alternatives such as role and label, joined with `||`, for example `press 'role="button" label="Submit" || label="Submit"'`.
+
 To choose the output file, pass a path to `--save-script`:
 
 ```bash

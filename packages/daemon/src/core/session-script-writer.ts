@@ -6,6 +6,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import { recordedSelectorExpression } from '@agent-device/selectors';
 import {
   inferFillText,
   appendScriptSeriesFlags,
@@ -431,7 +432,7 @@ function readSelectorChainExpression(action: SessionAction): string | undefined 
     action.result.selectorChain.every((entry) => typeof entry === 'string')
       ? (action.result.selectorChain as string[])
       : [];
-  return selectorChain.length > 0 ? selectorChain.join(' || ') : undefined;
+  return recordedSelectorExpression(selectorChain);
 }
 
 function isSelectorTargetingCommand(command: string): boolean {
