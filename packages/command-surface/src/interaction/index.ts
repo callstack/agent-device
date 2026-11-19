@@ -559,9 +559,9 @@ const swipeCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Fling between coordinates',
-    searchHint: 'drag gesture',
+    searchHint: 'flick slide carousel page',
     cliDetail:
-      'The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
+      'A swipe never pauses on the start point, so it does not engage a hold-to-reorder handle -- use gesture drag @src @dst for a held move. The first read after a swipe waits for two captures to agree. --no-post-gesture-stabilization skips that wait for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('swipe'),
   run: (client, input) => client.interactions.swipe(input as SwipeOptions),
@@ -661,9 +661,9 @@ const gestureCommandFacet = defineCommandFacet({
   effect: 'destructive',
   text: {
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
-    searchHint: 'multi-touch zoom',
+    searchHint: 'reorder zoom multi-touch',
     cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]; drag holds the source down first (800 ms by default) before moving, which is what engages a reorder handle. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values. gesture swipe accepts --no-post-gesture-stabilization to skip the stabilization wait before the next read, for a caller whose own polling verifies the screen.',
   },
   metadata: metadata('gesture'),
   run: (client, input) =>
