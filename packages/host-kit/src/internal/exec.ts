@@ -63,9 +63,19 @@ export type ExecDetachedExit = {
   error?: string;
 };
 
+/**
+ * The child's side of the Node IPC channel, present only when `stdio` includes `'ipc'`. It is
+ * unref'd at spawn, so neither the child handle nor the channel keeps this process alive.
+ */
+export type ExecDetachedChannel = Readonly<{
+  /** Subscribes to the messages the child sends over its IPC channel. */
+  onMessage(listener: (message: unknown) => void): void;
+}>;
+
 export type ExecDetachedProcess = {
   pid: number;
   exited: Promise<ExecDetachedExit>;
+  channel?: ExecDetachedChannel;
 };
 
 /**
@@ -498,7 +508,17 @@ export function runCmdDetachedMonitored(
     });
   });
   child.unref();
-  return { pid, exited };
+  // A detached monitored child is joined through `exited`, never through its IPC channel, so the
+  // channel must not hold this process's event loop either.
+  child.channel?.unref();
+  const channel: ExecDetachedChannel | undefined = child.channel
+    ? Object.freeze({
+        onMessage(listener: (message: unknown) => void): void {
+          child.on('message', listener);
+        },
+      })
+    : undefined;
+  return { pid, exited, ...(channel ? { channel } : {}) };
 }
 
 export function runCmdBackground(

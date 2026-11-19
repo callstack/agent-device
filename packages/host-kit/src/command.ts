@@ -5,6 +5,7 @@ export {
   type CommandExecutorOverride,
   type ExecBackgroundOptions,
   type ExecBackgroundResult,
+  type ExecDetachedChannel,
   type ExecDetachedExit,
   execFailureDetails,
   type ExecOptions,

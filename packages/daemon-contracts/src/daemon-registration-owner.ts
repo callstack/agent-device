@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
+import {
+  runCmdDetachedMonitored,
+  type ExecDetachedChannel,
+  type ExecDetachedExit,
+} from '@agent-device/host-kit/command';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
@@ -46,7 +50,7 @@ import {
   resolveDaemonShutdownReportPath,
   type DaemonShutdownOutcome,
 } from './daemon-shutdown-report.ts';
-import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
+import { DAEMON_PROGRESS_CHANNEL_ENV } from './daemon-startup-phases.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
 export type DaemonRegistrationFields = Readonly<{
@@ -93,7 +97,6 @@ export async function tryAcquireDaemonRegistration(
   try {
     acquisition.assertHeld();
     fs.rmSync(resolveDaemonShutdownReportPath(boundPaths.baseDir), { force: true });
-    sweepDeadDaemonStartupPhasesFiles(boundPaths.baseDir);
   } catch (error) {
     await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
   }
@@ -255,6 +258,11 @@ export type DaemonStartupLaunch = Readonly<{
   pid: number;
   startTime?: string;
   exited: Promise<ExecDetachedExit>;
+  /**
+   * This launch's own progress channel to the detached child, opened at spawn. The child reports
+   * each startup phase over it; the channel is unref'd, so it never holds this process alive.
+   */
+  channel?: ExecDetachedChannel;
   readIdentity(): OwnerIdentity;
 }>;
 type OwnedStartup = { launch: DaemonStartupLaunch; joined: boolean; startTime?: string };
@@ -325,8 +333,10 @@ export function launchDaemonProcess(
         ...input.env,
         AGENT_DEVICE_STATE_DIR: input.paths.baseDir,
         AGENT_DEVICE_DAEMON_SERVER_MODE: input.serverMode,
+        // Marks this launch as the one whose startup progress the IPC channel below carries.
+        [DAEMON_PROGRESS_CHANNEL_ENV]: '1',
       },
-      stdio: ['ignore', logFd, logFd],
+      stdio: ['ignore', logFd, logFd, 'ipc'],
     });
     const boundPaths = { ...input.paths };
     const startup: OwnedStartup = {

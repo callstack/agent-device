@@ -415,7 +415,7 @@ for (const exit of [
   });
 }
 
-test('a busy contender that exits sweeps its own pre-lock marker before the retried attempt', async (t) => {
+test('a busy contender that exits reports its pre-lock phase over its own channel before the retried attempt', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-busy-retry-marker-'));
   const http = await startHttpDaemonFixture({ devices: [] });
@@ -432,7 +432,7 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
         kind: 'registered',
         paths,
         fields: fields(http.port),
-        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        fixtureOptions: { emitStartupPhaseBeforeAcquisition: true },
         observe(child) {
           void child.exited.then((exit) => {
             assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
@@ -462,12 +462,12 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
     assert.equal(
       fs.readdirSync(path.join(paths.baseDir, 'fixture-entries')).length,
       1,
-      'the refused retry must not launch another marker writer',
+      'the refused retry must not launch another child',
     );
     assert.deepEqual(
       fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
       [],
-      "the retry result must not leave the joined busy contender's record behind",
+      'the retry result must not leave any marker-named file behind',
     );
     assert.equal(released, true, 'the contender must have exited busy against the held claim');
   } finally {
@@ -477,7 +477,7 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
 });
 
 test('a joined busy contender waits for a published winner to become ready without signaling it', async (t) => {
-  // The contender records its pre-lock phase through the real protocol; the handoff must sweep it.
+  // The contender reports its pre-lock phase over its own launch channel; the handoff must leave no file behind.
   if (await skipWhenLoopbackUnavailable(t)) return;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-delayed-ready-'));
   let probes = 0;
@@ -493,7 +493,7 @@ test('a joined busy contender waits for a published winner to become ready witho
         kind: 'registered',
         paths,
         fields: fields(http.port),
-        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        fixtureOptions: { emitStartupPhaseBeforeAcquisition: true },
         observe(child) {
           void child.exited.then((exit) => {
             contenderExit = exit;
@@ -521,7 +521,7 @@ test('a joined busy contender waits for a published winner to become ready witho
     assert.deepEqual(
       fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
       [],
-      "the winner handoff must not leave the exited contender's record behind",
+      'the winner handoff must not leave any marker-named file behind',
     );
   } finally {
     signal.mockRestore();
