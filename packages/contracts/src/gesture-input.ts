@@ -122,31 +122,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
     assertNoHoldMs(kind, record);
   }
   if (kind === 'pan') {
-    const pointerCount = readOptionalInteger(record, 'pointerCount', { min: 1, max: 2 }) as
-      | GesturePointerCount
-      | undefined;
-    const holdMs = readOptionalInteger(record, 'holdMs', {
-      min: 0,
-      max: GESTURE_DURATION_MAX_MS,
-    });
-    if (holdMs !== undefined && pointerCount === 2) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'holdMs is supported only for single-pointer gesture pan',
-        {
-          hint: 'Drop --pointer-count 2 or --hold-ms.',
-        },
-      );
-    }
-    const durationMs = readOptionalGestureDuration(record);
-    return {
-      kind,
-      origin: readPoint(record, 'origin'),
-      delta: readPoint(record, 'delta'),
-      ...(pointerCount === undefined ? {} : { pointerCount }),
-      ...(durationMs === undefined ? {} : { durationMs }),
-      ...(holdMs === undefined ? {} : { holdMs }),
-    };
+    return readPanGesturePayload(record);
   }
   if (kind === 'drag') {
     return readDragGesturePayload(record);
@@ -293,6 +269,30 @@ function assertNoHoldMs(kind: string, record: Record<string, unknown>): void {
   throw new AppError('INVALID_ARGS', 'holdMs is supported only for gesture tap and gesture pan', {
     hint: `gesture ${kind} does not read holdMs.`,
   });
+}
+
+function readPanGesturePayload(record: Record<string, unknown>): PanGesturePayload {
+  const pointerCount = readOptionalInteger(record, 'pointerCount', { min: 1, max: 2 }) as
+    | GesturePointerCount
+    | undefined;
+  const holdMs = readOptionalInteger(record, 'holdMs', {
+    min: 0,
+    max: GESTURE_DURATION_MAX_MS,
+  });
+  if (holdMs !== undefined && pointerCount === 2) {
+    throw new AppError('INVALID_ARGS', 'holdMs is supported only for single-pointer gesture pan', {
+      hint: 'Drop --pointer-count 2 or --hold-ms.',
+    });
+  }
+  const durationMs = readOptionalGestureDuration(record);
+  return {
+    kind: 'pan',
+    origin: readPoint(record, 'origin'),
+    delta: readPoint(record, 'delta'),
+    ...(pointerCount === undefined ? {} : { pointerCount }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(holdMs === undefined ? {} : { holdMs }),
+  };
 }
 
 function readDragGesturePayload(record: Record<string, unknown>): DragGesturePayload {
