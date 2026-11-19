@@ -762,3 +762,82 @@ test.each([false, true])(
     }
   },
 );
+
+// #4441 (decision 6856998913): withRequestDeadline honors any earlier registered
+// execution/result deadline at admission — a source-install request whose result deadline
+// (registered by the admitting transport) already passed is refused before task entry.
+test('withRequestDeadline refuses task entry when an earlier registered result deadline already expired', async () => {
+  vi.useFakeTimers();
+  const requestId = 'expired-result-deadline-at-entry';
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: Date.now() - 1,
+  });
+  try {
+    let entered = false;
+    await assert.rejects(
+      withRequestDeadline(requestId, 570_000, async () => {
+        entered = true;
+        return { ok: true };
+      }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_request_timeout' &&
+        error.details.timeoutMs === 570_000 &&
+        error.details.requestId === requestId,
+    );
+    assert.equal(entered, false, 'the expired request entered its task');
+    assert.equal(getRequestSignal(requestId)?.aborted, true);
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('withRequestDeadline admits task entry while an earlier result deadline is still live', async () => {
+  vi.useFakeTimers();
+  const requestId = 'live-result-deadline-at-entry';
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: Date.now() + 60_000,
+  });
+  try {
+    let entered = false;
+    const result = await withRequestDeadline(requestId, 570_000, async () => {
+      entered = true;
+      return { ok: true };
+    });
+    assert.equal(entered, true);
+    assert.equal(result.ok, true);
+    assert.equal(getRequestSignal(requestId)?.aborted, false);
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('an already-expired result deadline does not relabel an earlier explicit cancellation', async () => {
+  vi.useFakeTimers();
+  const requestId = 'canceled-before-result-deadline-entry';
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: Date.now() - 1,
+  });
+  try {
+    markRequestCanceled(requestId);
+    let entered = false;
+    await assert.rejects(
+      withRequestDeadline(requestId, 570_000, async () => {
+        entered = true;
+        return { ok: true };
+      }),
+      (error: unknown) =>
+        isRequestCanceledError(error) &&
+        (error as AppError).details?.reason === 'request_canceled' &&
+        (error as AppError).details?.timeoutMs === undefined,
+    );
+    assert.equal(entered, false);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});

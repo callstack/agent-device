@@ -16,6 +16,8 @@ import {
   shouldPreferExplicitDeviceOverExistingSession,
   shouldValidateSessionSelector,
   resolveProviderDeviceResolutionIntent,
+  resolveDaemonRequestResultDeadlineMs,
+  resolveDaemonRequestTimeoutMs,
   usesSessionlessDefaultProviderDevice,
 } from '../daemon-command-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
@@ -330,6 +332,32 @@ function makeRequest(command: string, positionals: string[] = []): DaemonRequest
 
 // The fact the transports stamp on each admitted request: only a request with no action in any of
 // its steps may let a resend loop spend its deadline.
+// #4441 (decision 6856998913): the router's daemon request timeout for both source-install
+// commands is the one 570 s source work budget; the admitting transport registers the same
+// result deadline (admittedAt + 570 s), and unrelated commands keep no daemon deadline.
+test('source-install requests resolve the 570 s daemon deadline and result deadline', () => {
+  const request = (command: string) =>
+    ({
+      token: 't',
+      session: 'default',
+      command,
+      positionals: [],
+      flags: {},
+    }) as DaemonRequest;
+  for (const command of [PUBLIC_COMMANDS.installFromSource, INTERNAL_COMMANDS.installSource]) {
+    assert.equal(resolveDaemonRequestTimeoutMs(request(command)), 570_000, command);
+    const admittedAt = 1_000_000;
+    assert.equal(
+      resolveDaemonRequestResultDeadlineMs(request(command), admittedAt),
+      admittedAt + 570_000,
+      command,
+    );
+  }
+  for (const command of [PUBLIC_COMMANDS.install, PUBLIC_COMMANDS.snapshot]) {
+    assert.equal(resolveDaemonRequestTimeoutMs(request(command)), undefined, command);
+  }
+});
+
 test('isReadOnlyRequest marks reads, and never a request that dispatches an action', () => {
   const request = (command: string, positionals: string[] = []) => ({
     token: 't',
