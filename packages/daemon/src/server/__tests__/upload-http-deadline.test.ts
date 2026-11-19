@@ -676,7 +676,10 @@ test('an expired queued request with an unread body never resets the earlier ans
   }
 });
 
-test('a single-shot upload expiring behind a long finalize never closes the socket under it', async (t) => {
+// A guard, not a regression proof: it also passes before the forwarder change, because Node
+// attaches no socket to a queued request. It pins the response order for a pipelined
+// single-shot expiry.
+test('guard: a single-shot upload expiring behind a long finalize keeps the earlier answer first', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();
   const reads = holdPayloadReads((path) => String(path).endsWith('/payload'));
@@ -922,3 +925,67 @@ test('a chunk refused by its byte cap lingers only for the grace, not the inacti
     await closeLoopbackServer(server);
   }
 });
+
+for (const route of ['/upload/preflight', '/upload/finalize']) {
+  test(`an oversized JSON body on ${route} gets its 400 and a clean close while the client keeps sending`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { server, port } = await startServer();
+    try {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
+      let received = '';
+      const socketErrors: unknown[] = [];
+      socket.on('error', (error) => socketErrors.push(error));
+      socket.on('data', (data: Buffer) => {
+        received += data.toString('latin1');
+      });
+      // A chunked body declares no length, so the reader refuses it as it passes 64 KiB.
+      socket.write(
+        `POST ${route} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+          `Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n`,
+      );
+      const chunk = Buffer.alloc(16 * 1024, 0x20);
+      const framed = Buffer.concat([
+        Buffer.from(`${chunk.length.toString(16)}\r\n`),
+        chunk,
+        Buffer.from('\r\n'),
+      ]);
+      // The client keeps sending 2 MiB, well past the refusal, as a client that has not
+      // read its answer yet would.
+      const sent = new Promise<void>((resolve, reject) => {
+        socket.once('error', reject);
+        let total = 0;
+        const pump = () => {
+          while (total < 2 * 1024 * 1024) {
+            total += chunk.length;
+            const last = total >= 2 * 1024 * 1024;
+            const flushed = socket.write(framed, last ? () => resolve() : undefined);
+            if (!flushed && !last) {
+              socket.once('drain', pump);
+              return;
+            }
+          }
+        };
+        pump();
+      });
+      await withIO(sent, 'the oversized body sent past the refusal');
+      await flushIO();
+      assert.match(received, /^HTTP\/1\.1 400 /, 'the client reads its typed refusal');
+      assert.equal(socket.readableEnded, true, 'the server half-closed with a FIN');
+      assert.deepEqual(socketErrors, [], 'no reset reached the client');
+      // After its lingering grace the server closes the connection.
+      const openConnections = () =>
+        new Promise<number>((resolve, reject) =>
+          server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
+        );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flushIO();
+      assert.equal(await openConnections(), 0);
+      assert.deepEqual(socketErrors, []);
+      socket.destroy();
+    } finally {
+      vi.useRealTimers();
+      await closeLoopbackServer(server);
+    }
+  });
+}

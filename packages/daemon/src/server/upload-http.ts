@@ -291,12 +291,10 @@ function answerUploadFailure(
 ): void {
   if (res.headersSent) return;
   try {
-    commit(() => undefined);
+    commit(() => sendRestJsonError(res, normalizeError(error)));
   } catch {
     // The ingress answered with its expiry, or the client is gone.
-    return;
   }
-  sendRestJsonError(res, normalizeError(error));
 }
 
 async function readRestJsonBody(

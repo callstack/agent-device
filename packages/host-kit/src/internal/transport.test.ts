@@ -54,11 +54,7 @@ test('readNodeHttpResponseBody decodes the complete response stream', async () =
 });
 
 test('readNodeHttpRequestBody returns bytes and preserves the caller error message at the limit', async () => {
-  const request = Readable.from([
-    Buffer.from('hello '),
-    Buffer.alloc(0),
-    Buffer.from('world'),
-  ]) as unknown as IncomingMessage;
+  const request = bodyRequest([Buffer.from('hello '), Buffer.alloc(0), Buffer.from('world')]);
   const accepted: number[] = [];
   const onAcceptedBytes = (bytes: number) => accepted.push(bytes);
   assert.deepEqual(
@@ -67,10 +63,7 @@ test('readNodeHttpRequestBody returns bytes and preserves the caller error messa
   );
   assert.deepEqual(accepted, [6, 5]);
 
-  const oversized = Readable.from([
-    Buffer.from('hello '),
-    Buffer.from('world!'),
-  ]) as unknown as IncomingMessage;
+  const oversized = bodyRequest([Buffer.from('hello '), Buffer.from('world!')]);
   accepted.length = 0;
   await assert.rejects(
     readNodeHttpRequestBody(oversized, 11, 'body exceeded', onAcceptedBytes),
@@ -82,7 +75,22 @@ test('readNodeHttpRequestBody returns bytes and preserves the caller error messa
     },
   );
   assert.deepEqual(accepted, [6]);
+  // The refusal leaves the request intact for its response owner to end.
+  assert.equal((oversized as unknown as Readable).destroyed, false);
 });
+
+test('readNodeHttpRequestBody refuses a declared length over the bound before reading', async () => {
+  const declared = bodyRequest([Buffer.from('ok')], { 'content-length': '12' });
+  await assert.rejects(
+    readNodeHttpRequestBody(declared, 11, 'body exceeded'),
+    (error: unknown) => error instanceof AppError && error.message === 'body exceeded',
+  );
+  assert.equal(declared.readableEnded, false, 'no byte was read');
+});
+
+function bodyRequest(chunks: Buffer[], headers: Record<string, string> = {}): IncomingMessage {
+  return Object.assign(Readable.from(chunks), { headers }) as unknown as IncomingMessage;
+}
 
 test('timingSafeStringEqual handles equal, unequal, and unequal-length secrets', () => {
   assert.equal(timingSafeStringEqual('secret', 'secret'), true);

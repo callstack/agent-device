@@ -60,15 +60,25 @@ export function readNodeHttpResponseBody(
   });
 }
 
+/**
+ * Reads a bounded request body. A declared length over the bound is refused before any
+ * byte is read. A refusal leaves the request intact (`destroyOnReturn: false`): destroying
+ * it would detach its socket and reset a client that is still sending, so the caller's
+ * response owner answers and decides how the connection ends.
+ */
 export async function readNodeHttpRequestBody(
   req: IncomingMessage,
   maxBodyBytes: number,
   tooLargeMessage: string,
   onAcceptedBytes?: (bytes: number) => void,
 ): Promise<Buffer> {
+  const declaredLength = Number(req.headers['content-length']);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) {
+    throw new AppError('INVALID_ARGS', tooLargeMessage);
+  }
   const chunks: Buffer[] = [];
   let bodyBytes = 0;
-  for await (const chunk of req) {
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bodyBytes += buffer.length;
     if (bodyBytes > maxBodyBytes) {
