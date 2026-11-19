@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { Agent, ProxyAgent, request, type Dispatcher } from 'undici';
+import { Agent, Pool, ProxyAgent, request, type Dispatcher } from 'undici';
 
 export type InstallSourceNetworkResponse = {
   statusCode: number;
@@ -16,14 +16,20 @@ export async function requestApprovedUrl(params: {
   signal: AbortSignal;
   /** The host environment whose proxy variables apply to the request. */
   environment: NodeJS.ProcessEnv;
+  /** Called once the dispatcher's connection to the upstream is established. */
+  onConnected?: () => void;
 }): Promise<InstallSourceNetworkResponse> {
   const proxy = resolveProxyForUrl(params.url, params.environment);
   const dispatcher = proxy
-    ? proxyDispatcher(proxy, params.url)
+    ? proxyDispatcher(proxy, params.url, params.onConnected)
     : directDispatcher(params.approvedAddress, params.family);
   const dispatchUrl = proxy
     ? approvedAddressUrl(params.url, params.approvedAddress, params.family)
     : params.url;
+  // Only undici's Agent emits 'connect' (pinned undici 7.30.1: agent.js/client.js do, the
+  // ProxyAgent dispatcher does not), so the proxy path reports establishment from inside its own
+  // tunnel connector wrap instead of this event.
+  if (!proxy && params.onConnected) dispatcher.once('connect', params.onConnected);
   try {
     const requestOptions = {
       dispatcher,
@@ -42,6 +48,8 @@ export async function requestApprovedUrl(params: {
   } catch (error) {
     await closeDispatcher(dispatcher);
     throw error;
+  } finally {
+    if (!proxy && params.onConnected) dispatcher.off('connect', params.onConnected);
   }
 }
 
@@ -84,7 +92,7 @@ function directDispatcher(address: string, family: 4 | 6): Agent {
   });
 }
 
-function proxyDispatcher(proxyUrl: string, destination: URL): ProxyAgent {
+function proxyDispatcher(proxyUrl: string, destination: URL, onConnected?: () => void): ProxyAgent {
   const literalDestination = net.isIP(stripBrackets(destination.hostname)) !== 0;
   return new ProxyAgent({
     uri: proxyUrl,
@@ -93,7 +101,36 @@ function proxyDispatcher(proxyUrl: string, destination: URL): ProxyAgent {
       destination.protocol === 'https:' && !literalDestination
         ? { servername: stripBrackets(destination.hostname) }
         : undefined,
+    // ProxyAgent builds its own inner Agent and never emits 'connect' (pinned undici 7.30.1,
+    // lib/dispatcher/proxy-agent.js), so establishment is reported by wrapping the tunnel
+    // connector the inner factory receives: its callback fires exactly when the upstream
+    // connection through the CONNECT tunnel is established.
+    factory: (origin: string | URL, options: Pool.Options) =>
+      new Pool(origin, withUpstreamConnectedCallback(options, onConnected)),
   });
+}
+
+type TunnelConnectCallback = (
+  ...args: [error: null, socket: net.Socket] | [error: Error, socket: null]
+) => void;
+type TunnelConnect = (options: unknown, callback: TunnelConnectCallback) => void;
+
+/** Fires `onConnected` once the wrapped connector has established the upstream connection. */
+function withUpstreamConnectedCallback(
+  options: Pool.Options,
+  onConnected?: () => void,
+): Pool.Options {
+  const connect = options.connect;
+  if (!onConnected || typeof connect !== 'function') return options;
+  const tunnelConnect = connect as TunnelConnect;
+  return {
+    ...options,
+    connect: (connectOptions: unknown, callback: TunnelConnectCallback) =>
+      tunnelConnect(connectOptions, (...args) => {
+        if (args[0] === null) onConnected();
+        callback(...args);
+      }),
+  };
 }
 
 function approvedAddressUrl(original: URL, address: string, family: 4 | 6): URL {

@@ -15,6 +15,8 @@ export async function prepareAndroidInstallArtifact(
   options: {
     signal?: AbortSignal;
     resolveIdentity?: boolean;
+    /** The epoch-ms cutoff the daemon derived for this transfer; see `materializeInstallablePath`. */
+    materializationDeadlineMs?: number;
     /** The host environment whose proxy settings apply to a network download. */
     environment: NodeJS.ProcessEnv;
   },
@@ -25,6 +27,9 @@ export async function prepareAndroidInstallArtifact(
       stat.isFile() && isAndroidInstallablePath(candidatePath),
     installableLabel: 'Android installable (.apk or .aab)',
     signal: options.signal,
+    ...(options.materializationDeadlineMs !== undefined
+      ? { materializationDeadlineMs: options.materializationDeadlineMs }
+      : {}),
     environment: options.environment,
   });
   try {
