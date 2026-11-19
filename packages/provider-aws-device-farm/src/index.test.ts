@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import awsDeviceFarm from './index.ts';
-import type { AgentDevicePlugin } from 'agent-device/plugins';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;

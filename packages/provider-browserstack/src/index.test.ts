@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import browserstack from './index.ts';
-import type { AgentDevicePlugin } from 'agent-device/plugins';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;

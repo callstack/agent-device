@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
-import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import revyl from './index.ts';
-import type { AgentDevicePlugin } from 'agent-device/plugins';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;
