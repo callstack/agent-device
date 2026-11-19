@@ -158,3 +158,29 @@ test('with a progress sink, the reporter hands each event to it instead of writi
     },
   ]);
 });
+
+test('an upload completes when its progress observer throws mid-upload', async () => {
+  const { createUploadProgressTransform } = await import('../upload-progress.ts');
+  const { Readable } = await import('node:stream');
+  const { pipeline } = await import('node:stream/promises');
+  const chunk = Buffer.alloc(8 * 1024 * 1024);
+  let calls = 0;
+  const transform = createUploadProgressTransform({
+    stage: 'direct',
+    fileName: 'app.apk',
+    startOffset: 0,
+    totalBytes: chunk.byteLength * 3,
+    onProgress: () => {
+      calls += 1;
+      throw new Error('observer failed');
+    },
+  });
+  let received = 0;
+
+  await pipeline(Readable.from([chunk, chunk, chunk]), transform, async (source) => {
+    for await (const part of source) received += (part as Buffer).byteLength;
+  });
+
+  assert.equal(received, chunk.byteLength * 3);
+  assert.equal(calls, 3);
+});

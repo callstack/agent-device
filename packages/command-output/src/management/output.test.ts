@@ -165,6 +165,24 @@ describe('openCliOutput', () => {
     expect(openJsonSnapshot).toEqual(snapshotOutput.jsonData ?? snapshotOutput.data);
   });
 
+  test('open --foreground prints the top-level and the nested snapshot warnings once each', async () => {
+    const { attachRefs } = await import('@agent-device/kernel/snapshot');
+    const nodes = attachRefs([{ index: 0, type: 'Button', label: 'Sign In', depth: 0 }]);
+    const output = await withNoColorAsync(() =>
+      printOpen({
+        session: 'default',
+        warnings: ['Open warning.'],
+        snapshot: { nodes, truncated: false, warnings: ['Snapshot warning.'] },
+        identifiers: { session: 'default' },
+      }),
+    );
+
+    const lines = String(output.text).split('\n');
+    expect(lines.filter((line) => line === 'Warning: Open warning.')).toHaveLength(1);
+    expect(lines.filter((line) => line === 'Warning: Snapshot warning.')).toHaveLength(1);
+    expect(lines.filter((line) => line.includes('warning.'))).toHaveLength(2);
+  });
+
   test('renders the initialSnapshotError warning without a tree when the composed capture failed', async () => {
     const warning =
       'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';

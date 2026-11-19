@@ -22,6 +22,7 @@ import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { snapshotCliOutput } from '../capture/output.ts';
 import {
+  appendWarningLinesText,
   type CliOutputFormatter,
   type CliOutputFormatterParams,
   messageCliOutput,
@@ -106,7 +107,12 @@ export async function openCliOutput(
   const snapshotOutput = await buildOpenInitialSnapshotOutput(result.snapshot);
   if (snapshotOutput) {
     data.snapshot = snapshotOutput.jsonData ?? snapshotOutput.data;
-    if (snapshotOutput.text) lines.push(snapshotOutput.text);
+    // The nested snapshot is not the response, so the dispatcher never sees its warnings: they print here, once.
+    const snapshotText = appendWarningLinesText(
+      snapshotOutput.text,
+      result.snapshot as unknown as Record<string, unknown>,
+    );
+    if (snapshotText) lines.push(snapshotText);
   }
   return {
     data,

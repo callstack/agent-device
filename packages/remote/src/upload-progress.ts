@@ -47,13 +47,11 @@ export function createUploadProgressTransform(options: {
     transform(chunk: Buffer, _encoding, callback) {
       transferredBytes = Math.min(totalBytes, transferredBytes + chunk.byteLength);
       if (transferredBytes >= nextReportAt) {
-        onProgress?.({
-          type: 'progress',
-          stage,
-          fileName,
-          transferredBytes,
-          totalBytes,
-        });
+        try {
+          onProgress?.({ type: 'progress', stage, fileName, transferredBytes, totalBytes });
+        } catch {
+          // Progress is an observer: a failing one must not fail the upload it observes.
+        }
         nextReportAt = Math.min(totalBytes, transferredBytes + stepBytes);
       }
       callback(null, chunk);
