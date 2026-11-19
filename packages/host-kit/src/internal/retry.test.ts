@@ -2,7 +2,7 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { Deadline, pollUntilSettled, retryWithPolicy } from './retry.ts';
+import { Deadline, pollUntilSettled, retryWithPolicy, settleWithin } from './retry.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from './diagnostics.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
@@ -185,6 +185,59 @@ test('pollUntilSettled samples once under a spent deadline', async () => {
     intervalMs: 100,
   });
   assert.deepEqual(outcome, { settled: false, value: 'pending' });
+});
+
+test('settleWithin settles with the work value and clears its deadline timer', async () => {
+  vi.useFakeTimers();
+  try {
+    const outcome = settleWithin(async () => 'done', 10_000);
+    assert.deepEqual(await outcome, { kind: 'settled', value: 'done' });
+    assert.equal(vi.getTimerCount(), 0, 'the deadline timer is cleared once the work settles');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('settleWithin reports the deadline without canceling the work and without leaking its timer', async () => {
+  vi.useFakeTimers();
+  try {
+    let workFinished = false;
+    const outcome = settleWithin(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60_000));
+      workFinished = true;
+      return 'late';
+    }, 1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    assert.deepEqual(await outcome, { kind: 'deadline' });
+    assert.equal(
+      vi.getTimerCount(),
+      1,
+      'only the work’s own timer remains; the deadline timer was cleared',
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(workFinished, true, 'the work runs to its own end');
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('settleWithin propagates a rejection that beats the deadline and clears its timer', async () => {
+  vi.useFakeTimers();
+  try {
+    const outcome = settleWithin(async () => {
+      throw new Error('boom');
+    }, 10_000);
+    await assert.rejects(outcome, /boom/);
+    assert.equal(vi.getTimerCount(), 0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('settleWithin treats a spent budget as an immediate deadline', async () => {
+  const outcome = await settleWithin(() => new Promise<string>(() => {}), 0);
+  assert.deepEqual(outcome, { kind: 'deadline' });
 });
 
 test('pollUntilSettled stops sampling once the request is canceled', async () => {

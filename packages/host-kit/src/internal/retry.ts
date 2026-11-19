@@ -219,6 +219,50 @@ export async function pollUntilSettled<T>(params: {
   }
 }
 
+/** What {@link settleWithin} reports: the work settled first, or the deadline won. */
+export type SettleWithinOutcome<T> = { kind: 'settled'; value: T } | { kind: 'deadline' };
+
+/**
+ * Settles `work` within `timeoutMs` and reports which happened: `{ kind: 'settled', value }` when
+ * the work finished first, `{ kind: 'deadline' }` when the budget elapsed first. The deadline
+ * timer is cleared on every path, so it never outlives this call. This does not cancel the work:
+ * when the deadline wins, `work` keeps running to its own end (its rejection stays observed here,
+ * so a late failure never reaches the unhandled-rejection path), while a rejection that beats the
+ * deadline propagates to the caller.
+ */
+export function settleWithin<T>(
+  work: () => Promise<T>,
+  timeoutMs: number,
+): Promise<SettleWithinOutcome<T>> {
+  return new Promise<SettleWithinOutcome<T>>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(
+      () => {
+        if (settled) return;
+        settled = true;
+        resolve({ kind: 'deadline' });
+      },
+      Math.max(0, timeoutMs),
+    );
+    Promise.resolve()
+      .then(work)
+      .then(
+        (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve({ kind: 'settled', value });
+        },
+        (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+  });
+}
+
 function waitForRetryDelay(
   ms: number,
   signal: AbortSignal | undefined,

@@ -4,6 +4,8 @@ export {
   isEnvTruthy,
   pollUntilSettled,
   retryWithPolicy,
+  settleWithin,
+  type SettleWithinOutcome,
   sleep,
   RETRY_PHASE,
 } from './internal/retry.ts';
