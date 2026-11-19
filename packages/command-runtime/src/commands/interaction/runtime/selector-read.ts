@@ -14,6 +14,7 @@ import {
   type SelectorPipelineHooks,
 } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { findOneNodeCandidates } from '@agent-device/selectors/find-candidates';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
@@ -248,7 +249,16 @@ async function listFindMatches(
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<Extract<FindReadCommandResult, { kind: 'list' }>> {
-  const { matched } = await captureFindMatches(runtime, options, locator);
+  const selectorExpression = parseFindSelectorExpression(locator, options.query);
+  const capture = await captureFindCandidates(runtime, options);
+  const matched = selectorExpression
+    ? (listSelectorPipelineMatches(
+        SELECTOR_PIPELINE_POLICIES.readList,
+        capture.snapshot.nodes,
+        selectorExpression,
+        { platform: runtime.backend.platform },
+      ).list?.matchedNodes ?? [])
+    : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
   return {
     kind: 'list',
     matches: matched.map((node) => ({ ...refAddress(node), node })),
@@ -258,14 +268,23 @@ async function listFindMatches(
 /**
  * `find <q> get text|attrs` (#4685): a value read binds ONE node, so it shares the mutating find's
  * ambiguity contract (#1625) — several matches refuse with the candidate list unless `--first` or
- * `--last` picks one. Presence (`exists`, `wait`) stays first-match.
+ * `--last` picks one. It counts and narrows `findOneNodeCandidates`, the set mutating find binds, so
+ * a read and a tap on the same query bind the same node. Presence (`exists`, `wait`) stays
+ * first-match.
  */
 async function findValueReadMatch(
   runtime: AgentDeviceRuntime,
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<{ capture: CapturedSnapshot; match: SnapshotNode }> {
-  const { capture, matched } = await captureFindMatches(runtime, options, locator);
+  const capture = await captureFindCandidates(runtime, options);
+  const matched = findOneNodeCandidates({
+    nodes: capture.snapshot.nodes,
+    locator,
+    query: options.query,
+    selectorExpression: parseFindSelectorExpression(locator, options.query),
+    platform: runtime.backend.platform,
+  });
   if (matched.length === 0) throw new AppError('COMMAND_FAILED', 'find did not match any element');
   if (matched.length === 1) return { capture, match: matched[0]! };
   const narrowed = narrowFindMatches(matched, options);
@@ -279,13 +298,11 @@ async function findValueReadMatch(
   return { capture, match: narrowed };
 }
 
-/** Every match on one stored capture: the candidate set `list` returns and a value read narrows. */
-async function captureFindMatches(
+/** One stored, unscoped capture: `list` and the value reads both need every match in it. */
+async function captureFindCandidates(
   runtime: AgentDeviceRuntime,
   options: FindReadCommandOptions,
-  locator: FindLocator,
-): Promise<{ capture: CapturedSnapshot; matched: SnapshotNode[] }> {
-  const selectorExpression = parseFindSelectorExpression(locator, options.query);
+): Promise<CapturedSnapshot> {
   // CONSERVATIVE: Deliberately UNSCOPED. findSnapshotScope narrows the capture to the first label
   // match's subtree, which hides every other match, so neither a list nor an ambiguity check could
   // see them. Revisit only if scoped capture can keep every matching subtree.
@@ -296,15 +313,7 @@ async function captureFindMatches(
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
   }
-  const matched = selectorExpression
-    ? (listSelectorPipelineMatches(
-        SELECTOR_PIPELINE_POLICIES.readList,
-        capture.snapshot.nodes,
-        selectorExpression,
-        { platform: runtime.backend.platform },
-      ).list?.matchedNodes ?? [])
-    : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
-  return { capture, matched };
+  return capture;
 }
 
 /**

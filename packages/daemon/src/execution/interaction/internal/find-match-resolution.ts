@@ -1,15 +1,12 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
-  findBestMatchesByLocator,
   narrowFindMatches,
   type FindLocator,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import { listSelectorPipelineMatches } from '@agent-device/selectors/selector-pipeline';
+import { findOneNodeCandidates } from '@agent-device/selectors/find-candidates';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { isRootInteractionContainer } from '@agent-device/selectors/interaction-targeting';
-import { preferOnscreenMatches } from './find-match-ranking.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
@@ -34,31 +31,12 @@ export function resolveFindMatch(params: {
   platform: SessionState['device']['platform'];
 }): FindMatchResult {
   const { nodes, locator, query, selectorExpression, flags, platform } = params;
-  const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
-  const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
   // #1625: selector-shaped and text-shaped queries share ONE ambiguity
   // contract — multiple matches reject with candidates unless --first/--last
-  // explicitly opts into positional narrowing. Selectors used to take the
-  // first match silently, which was exactly the mis-binding path the error's
-  // own recovery advice ("use a selector") pointed agents at.
-  const policy = pipeline.resolution;
-  let matches: SnapshotState['nodes'];
-  if (selectorExpression) {
-    // The `reject-candidates` door: the row's candidacy stage runs inside, and
-    // the whole candidate set comes back for find to rank and narrow.
-    matches =
-      listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform }).list
-        ?.matchedNodes ?? [];
-  } else {
-    // Fuzzy text scoring, not a selector chain: this branch brings its own
-    // matcher and reads the row's rect requirement. The row still governs the
-    // target it produces — occlusion and promotion run on it below, in the
-    // same node stages the selector branch reaches.
-    matches = findBestMatchesByLocator(rooted, locator, query, {
-      requireRect: policy.requireRect,
-    }).matches;
-  }
-  matches = preferOnscreenMatches(matches, nodes);
+  // explicitly opts into positional narrowing. `find <q> get text|attrs`
+  // counts the same candidate set (#4685).
+  const policy = SELECTOR_PIPELINE_POLICIES.findAct.resolution;
+  let matches = findOneNodeCandidates({ nodes, locator, query, selectorExpression, platform });
 
   if (matches.length > 1) {
     // The row says candidates reject unless the caller narrowed explicitly;

@@ -1,22 +1,51 @@
-import { centerOfRect } from '@agent-device/kernel/snapshot';
-import { type SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { centerOfRect, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  findBestMatchesByLocator,
+  type FindLocator,
+  type SelectorMatchOptions,
+} from '@agent-device/selectors';
 import {
   createActionableTouchResolver,
   isRootInteractionContainer,
   resolveActionableTouchResolution,
-} from '@agent-device/selectors/interaction-targeting';
+} from './interaction-targeting.ts';
+import { listSelectorPipelineMatches } from './selector-pipeline.ts';
+import { SELECTOR_PIPELINE_POLICIES } from './selector-pipeline-policy.ts';
 
 /**
- * How `find` orders the candidates its locator matched, before the ambiguity
- * contract in `find-match-resolution.ts` either refuses them or narrows with
- * `--first`/`--last`. Ordering is a separate question from matching: it asks
- * which candidate an agent most plausibly meant to touch, using the same
+ * The candidate set of every `find` action that binds one node: mutating actions and the value
+ * reads (`get text`, `get attrs`). The root interaction container is never a candidate, and
+ * on-screen matches rank first. Callers count this list and narrow it with `narrowFindMatches`,
+ * so a read and a tap on the same query bind the same node.
+ */
+export function findOneNodeCandidates(params: {
+  nodes: SnapshotNode[];
+  locator: FindLocator;
+  query: string;
+  selectorExpression: string | null;
+  platform: SelectorMatchOptions['platform'];
+}): SnapshotNode[] {
+  const { nodes, locator, query, selectorExpression, platform } = params;
+  const pipeline = SELECTOR_PIPELINE_POLICIES.findAct;
+  const rooted = nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]));
+  const matches = selectorExpression
+    ? (listSelectorPipelineMatches(pipeline, rooted, selectorExpression, { platform }).list
+        ?.matchedNodes ?? [])
+    : findBestMatchesByLocator(rooted, locator, query, {
+        requireRect: pipeline.resolution.requireRect,
+      }).matches;
+  return preferOnscreenMatches(matches, nodes);
+}
+
+/**
+ * How `find` orders the candidates its locator matched. Ordering is a separate question from
+ * matching: it asks which candidate an agent most plausibly meant to touch, using the same
  * actionability policy the interaction itself will run.
  */
 export function preferOnscreenMatches(
-  matches: SnapshotState['nodes'],
-  nodes: SnapshotState['nodes'],
-): SnapshotState['nodes'] {
+  matches: SnapshotNode[],
+  nodes: SnapshotNode[],
+): SnapshotNode[] {
   const viewport = nodes[0]?.rect;
   if (!viewport) return matches;
   const onscreen = matches.filter((node) => {
@@ -35,10 +64,10 @@ export function preferOnscreenMatches(
 }
 
 function rankInteractiveMatches(
-  matches: SnapshotState['nodes'],
-  nodes: SnapshotState['nodes'],
+  matches: SnapshotNode[],
+  nodes: SnapshotNode[],
   resolveTouch: ReturnType<typeof createActionableTouchResolver>,
-): SnapshotState['nodes'] {
+): SnapshotNode[] {
   return matches
     .map((node, index) => ({
       node,
@@ -53,8 +82,8 @@ function rankInteractiveMatches(
 }
 
 function interactiveMatchScore(
-  node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
+  node: SnapshotNode,
+  nodes: SnapshotNode[],
   resolveTouch: ReturnType<typeof createActionableTouchResolver>,
 ): number {
   const resolution = resolveTouch(node);
@@ -67,7 +96,7 @@ function interactiveMatchScore(
 
 function resolvedTouchScore(
   resolution: ReturnType<typeof resolveActionableTouchResolution>,
-  root: SnapshotState['nodes'][number] | undefined,
+  root: SnapshotNode | undefined,
 ): number {
   if (!resolution.node.rect) return 0;
   if (resolution.reason === 'semantic-target' || resolution.reason === 'same-rect-descendant') {
@@ -82,6 +111,6 @@ function resolvedTouchScore(
   return 0;
 }
 
-function rectArea(node: SnapshotState['nodes'][number]): number {
+function rectArea(node: SnapshotNode): number {
   return node.rect ? node.rect.width * node.rect.height : Number.POSITIVE_INFINITY;
 }

@@ -313,21 +313,22 @@ test('find get attrs refuses the ambiguity exists tolerates on the same tree (#4
   assert.equal(error.code, 'AMBIGUOUS_MATCH');
   assert.equal((error.details as { matches?: number } | undefined)?.matches, 2);
 
-  // `--first`/`--last` are the explicit opt-in: each picks its end of the candidate set.
+  // `--first`/`--last` are the explicit opt-in. They pick an end of mutating find's ranked
+  // candidate set, not of document order, so the smaller tiebreak winner ranks first.
   const first = await device.selectors.find({
     session: 'default',
     query: AMBIGUOUS_SELECTOR,
     action: 'get_attrs',
     findFirst: true,
   });
-  assert.equal(first.kind === 'attrs' ? first.ref : undefined, FIRST_MATCH_REF);
+  assert.equal(first.kind === 'attrs' ? first.ref : undefined, DISAMBIGUATED_REF);
   const last = await device.selectors.find({
     session: 'default',
     query: AMBIGUOUS_SELECTOR,
     action: 'get_attrs',
     findLast: true,
   });
-  assert.equal(last.kind === 'attrs' ? last.ref : undefined, DISAMBIGUATED_REF);
+  assert.equal(last.kind === 'attrs' ? last.ref : undefined, FIRST_MATCH_REF);
 
   // Presence keeps the readAny row: an ambiguous screen still answers `found: true`.
   const exists = await device.selectors.find({

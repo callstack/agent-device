@@ -152,7 +152,7 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: 'none',
   },
-  /** `is exists`/`absent` and `find <q> exists`. */
+  /** `is exists`/`absent` and `find <q> exists|wait`. */
   readAny: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readAny,
     occlusion: 'ignore',
@@ -176,16 +176,13 @@ export const SELECTOR_PIPELINE_POLICIES = {
     promotion: 'none',
     poll: WAIT_POLL_BUDGET,
   },
-  /**
-   * `find <q> list`: enumerate matches; never narrows, never acts. `find <q> get text|attrs` reads
-   * the same set and refuses several matches unless `--first`/`--last` picks one (#4685).
-   */
+  /** `find <q> list`: enumerate matches; never narrows, never acts. */
   readList: {
     resolution: SELECTOR_RESOLUTION_POLICIES.readList,
     occlusion: 'ignore',
   },
   /**
-   * Mutating `find` (#1625). `offscreen: 'ignore'` is deliberate for the ranking (`preferOnscreen
+   * Mutating `find` (#1625) and its value reads (#4685, through `findOneNodeCandidates`). `offscreen: 'ignore'` is deliberate for the ranking (`preferOnscreen
    * Matches` prefers an on-screen twin rather than refusing an off-screen one), and each action then
    * decides what to do with the winner: click/fill hand it to the acting leaf, while focus/type
    * dispatch a point themselves, which is why ADR 0011 classifies this row's stages per action on

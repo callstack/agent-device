@@ -69,7 +69,7 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'fail-closed',
     requireRect: false,
   },
-  /** `exists`/`absent` and `find <q> exists` — presence is the question. */
+  /** `exists`/`absent` and `find <q> exists|wait` — presence is the question. */
   readAny: {
     ambiguity: 'first-match',
     requireRect: false,
@@ -79,16 +79,17 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'first-match',
     requireRect: false,
   },
-  /** Mutating `find` (#1625): candidates reject unless explicitly narrowed. */
+  /**
+   * Mutating `find` (#1625) and its value reads (`get text`/`get attrs`, #4685):
+   * candidates reject unless explicitly narrowed.
+   */
   findAct: {
     ambiguity: 'reject-candidates',
     requireRect: true,
   },
   /**
    * `find <q> list` — the inspection surface: every match is the ANSWER, so the
-   * candidate set stays whole and nothing needs a tap point. Find's value reads
-   * (`get text`/`get attrs`, #4685) take the same set and, like mutating find,
-   * reject several matches unless `--first`/`--last` narrows them.
+   * candidate set stays whole and nothing needs a tap point.
    */
   readList: {
     ambiguity: 'reject-candidates',
