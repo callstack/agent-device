@@ -65,7 +65,8 @@ be granted it, so it cannot deliver broadcasts to the receiver — the text-inje
 closed to other apps while the IME is active. (An earlier design used a manifest receiver with
 `android:exported="false"` + explicit-component targeting, but on API 36 adb shell cannot deliver
 to a non-exported component, which broke the CLI path; the permission gate is what actually works.)
-The receiver bounds text length, validates base64, and reports runtime failures as rejected broadcasts.
+The receiver bounds text length and validates base64. It catches every `Throwable` from the handler and
+reports it as a rejected broadcast, so a malformed broadcast cannot crash the IME process.
 
 - `ACTION_INPUT_TEXT_B64` (`--es text <base64 utf-8>`) -- commit decoded text at the cursor.
 - `ACTION_INPUT_TEXT` (`--es text <string>`) -- commit text directly (subject to `adb shell`'s own

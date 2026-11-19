@@ -71,7 +71,8 @@ public class TestInputMethodService extends InputMethodService {
             final BroadcastReceiver.PendingResult pending = goAsync();
             try {
               handleAction(intent, pending);
-            } catch (RuntimeException error) {
+            } catch (Throwable error) {
+              // A malformed broadcast must never crash the IME process and strand the field.
               Log.w(TAG, "handleAction failed: " + error.getClass().getSimpleName());
               pending.setResult(RESULT_REJECTED_PAYLOAD, "error", null);
             } finally {
