@@ -109,7 +109,7 @@ test.each([String.raw`\\localhost\pipe\recorder`])(
         ok: false,
         error: {
           code: 'INVALID_ARGS',
-          details: { reason: 'script_ancestor_untrusted', exposure: 'unnamed_entry' },
+          details: { reason: 'script_ancestor_untrusted', exposure: 'windows_path_form' },
         },
       });
     } finally {
