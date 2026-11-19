@@ -465,7 +465,11 @@ Links ABOVE the state root stay allowed, as they are for a script destination: `
 A `..` carried by a link's target moves that position back, and a route component's own step-back does not clear it: a link below the root that resolves above where it stands makes every name below it unprovable. The walk carries the position across a link's own step-backs and refuses a state route that a link can carry above the state base, with `..` resolved in lexical form so an absent leaf is judged too.
 Every state entry is opened through the one state opener in `packages/host-kit/src/internal/verified-file.ts` — the registration record, the startup marker, the shutdown report, and `daemon.log`, including the launcher and the diagnostics sink. Its POSIX walk re-asks `O_NOFOLLOW` at each component, compares the `lstat` it judged with the `fstat` of the descriptor it holds, and re-asks the open once after it repairs a directory it narrowed. Mode is said and read back on a descriptor only, never at a name; a POSIX mode that will not carry `0600` is a refusal of the open, not a warning beside it. `readStateEntrySync` is the optional read of the same chain: an absent entry is the textual `absent` verdict, and every other host fault is a refusal verdict, never a throw through a caller that already succeeded.
 
-**Where the guarantee does not reach.** This amendment covers the daemon's state records. It is not a promise that no local user can read a record whose directory is sticky and shared. It says nothing about caller-named artifacts outside the state directory, which remain scoped to #4669.
+**Where the guarantee does not reach.** This amendment covers the daemon's state records.
+It is not a promise that no local user can read a record whose directory is sticky and shared.
+It says nothing about caller-named artifacts outside the state directory, which remain scoped to #4669.
+Stale-record cleanup (`clearStaleDaemonRecords`, and the sweep of dead pids' phase markers) removes names inside the state directory without taking the judged-entry path.
+That is the intended boundary: an unlink costs one name, follows nothing, and writes no bytes, so a planted entry cannot steer it.
 
 ## Consequences
 
