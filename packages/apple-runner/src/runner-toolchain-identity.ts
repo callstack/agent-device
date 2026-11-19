@@ -18,7 +18,9 @@ export type AppleSdkName =
   | 'appletvos'
   | 'macosx'
   | 'xrsimulator'
-  | 'xros';
+  | 'xros'
+  | 'watchsimulator'
+  | 'watchos';
 
 /** Toolchain half of the runner cache key. Every field is read from the selected Xcode. */
 export type RunnerToolchainFingerprint = {
@@ -38,6 +40,8 @@ const SDK_DIRECTORY_NAMES: Record<AppleSdkName, string> = {
   macosx: 'MacOSX',
   xrsimulator: 'XRSimulator',
   xros: 'XROS',
+  watchsimulator: 'WatchSimulator',
+  watchos: 'WatchOS',
 };
 
 /** The symlink `xcode-select -s` writes and `xcode-select -p` reads back. */

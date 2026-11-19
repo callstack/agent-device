@@ -418,6 +418,27 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: error.localizedDescription))
       }
     case .remotePress:
+#if os(watchOS)
+      // Spike (#4735): probe the watch hardware APIs. Not a wire contract.
+      switch command.remoteButton {
+      case "crown-down":
+        XCUIDevice.shared.rotateDigitalCrown(delta: command.amount ?? 0.25)
+      case "crown-up":
+        XCUIDevice.shared.rotateDigitalCrown(delta: -(command.amount ?? 0.25))
+      case "double-tap":
+        XCUIDevice.shared.perform(handGesture: .doubleTap)
+      case "flick":
+        guard #available(watchOS 26.0, *) else {
+          return Response(ok: false, error: ErrorPayload(message: "flick needs watchOS 26"))
+        }
+        XCUIDevice.shared.perform(handGesture: .flick)
+      case "crown-press":
+        XCUIDevice.shared.press(.home)
+      default:
+        return Response(ok: false, error: ErrorPayload(message: "unknown watch control"))
+      }
+      return Response(ok: true, data: DataPayload(message: "watch control \(command.remoteButton ?? "")"))
+#endif
       guard let button = tvRemoteButton(from: command.remoteButton) else {
         return Response(ok: false, error: ErrorPayload(message: "remotePress requires remoteButton"))
       }

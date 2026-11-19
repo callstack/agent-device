@@ -60,16 +60,6 @@ export function createAppleInteractor(
   host: HostEnvironment,
   runnerProvider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): Interactor {
-  // watchOS unsupported sentinel: XCUITest cannot drive watchOS UI (no
-  // XCUIApplication), so a watchOS device has no runner backend. Reject it
-  // explicitly here rather than letting `appleOs: 'watchos'` silently fall
-  // through to the iOS runner profile (see resolveRunnerPlatformNameForAppleOs).
-  if (device.appleOs === 'watchos') {
-    throw new AppError(
-      'UNSUPPORTED_PLATFORM',
-      'watchOS is not supported: XCUITest cannot drive watchOS UI, so this device has no runner backend.',
-    );
-  }
   const env = host.env;
   const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext, env);
   const appBackend = isMacOs(device) ? hostMacOsAppBackend(env) : 'xctest';

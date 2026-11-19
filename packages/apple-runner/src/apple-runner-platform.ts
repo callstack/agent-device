@@ -32,7 +32,7 @@ export const SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES = [
   SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
 ] as const;
 
-export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
+export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS';
 
 type RunnerPlatformDeviceKind = 'simulator' | 'device';
 
@@ -128,6 +128,34 @@ const RUNNER_PLATFORM_PROFILES: Record<RunnerApplePlatformName, RunnerPlatformPr
         preferred: ['xros'],
         disallowed: [
           'xrsimulator',
+          'iphoneos',
+          'iphonesimulator',
+          'appletvos',
+          'appletvsimulator',
+          'macos',
+        ],
+      },
+    },
+  },
+  // Spike (#4735): simulators only. The device row exists because the profile type needs one.
+  watchOS: {
+    sdkName: {
+      simulator: 'watchsimulator',
+      device: 'watchos',
+    },
+    derivedBaseName: {
+      simulator: 'watchos-simulator',
+      device: 'watchos-device',
+    },
+    xctestrunHints: {
+      simulator: {
+        preferred: ['watchsimulator'],
+        disallowed: ['iphoneos', 'iphonesimulator', 'appletvos', 'appletvsimulator', 'macos'],
+      },
+      device: {
+        preferred: ['watchos'],
+        disallowed: [
+          'watchsimulator',
           'iphoneos',
           'iphonesimulator',
           'appletvos',

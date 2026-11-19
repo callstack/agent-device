@@ -1,0 +1,62 @@
+# Spike (#4735): an isolated watchOS runner project. It reuses the iOS runner's UITests sources
+# and does not touch AgentDeviceRunner.xcodeproj. Regenerate with `xcodegen generate`.
+name: AgentDeviceRunnerWatch
+options:
+  deploymentTarget:
+    watchOS: '10.0'
+packages:
+  AgentDeviceSnapshotPresentation:
+    path: ../../snapshot-presentation
+settings:
+  base:
+    DEVELOPMENT_TEAM: 2S799L9W4M
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: '5.0'
+    AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID: com.callstack.agentdevice.runner
+    AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID: com.callstack.agentdevice.runner.uitests
+targets:
+  AgentDeviceRunner:
+    type: application
+    platform: watchOS
+    sources:
+      - AgentDeviceRunnerWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID)
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: AgentDeviceRunner
+        INFOPLIST_KEY_WKWatchOnly: YES
+        INFOPLIST_KEY_WKApplication: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: '1.0'
+  AgentDeviceRunnerUITests:
+    type: bundle.ui-testing
+    platform: watchOS
+    sources:
+      - path: ../AgentDeviceRunner/AgentDeviceRunnerUITests
+        excludes:
+          - 'UnitTests/**'
+          - '*.entitlements'
+    dependencies:
+      - target: AgentDeviceRunner
+      - package: AgentDeviceSnapshotPresentation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID)
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: AgentDeviceRunner
+        SWIFT_OBJC_BRIDGING_HEADER: ../AgentDeviceRunner/AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../../snapshot-bridge
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: '1.0'
+schemes:
+  AgentDeviceRunnerWatch:
+    build:
+      targets:
+        AgentDeviceRunner: all
+        AgentDeviceRunnerUITests: [test]
+    test:
+      targets:
+        - AgentDeviceRunnerUITests

@@ -97,10 +97,10 @@ final class RunnerTests: XCTestCase {
   }
 
   static let springboardBundleId = "com.apple.springboard"
-  // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
+  // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard), watchOS (Carousel)
   // and macOS have no such host, so there is nothing to probe there.
   static let hasSpringBoardSystemModalHost: Bool = {
-    #if os(tvOS) || os(macOS)
+    #if os(tvOS) || os(macOS) || os(watchOS)
       return false
     #else
       return true

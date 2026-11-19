@@ -1,0 +1,778 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		03E69F54C501FD4F8529DF1F /* RunnerKeyboardStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417C4FE6EF697E6BE1771039 /* RunnerKeyboardStatus.swift */; };
+		062EBC97AFC001208BF8145C /* RunnerTests+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD4EF2B6C21AE0EA51FB80BB /* RunnerTests+Lifecycle.swift */; };
+		094AE9D6004AD9BE749A5B94 /* RunnerTests+SnapshotBackendCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDFCA8E0FEFE34E1B3FBB31 /* RunnerTests+SnapshotBackendCapabilities.swift */; };
+		100E318BD39A13EAF86ACDD3 /* RunnerKeyboardReturnKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A739DF443A64BFF7DCF32147 /* RunnerKeyboardReturnKey.swift */; };
+		139014C384BBF20D77D9CE8D /* RunnerTests+SynthesizedGesturePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82DBBC3F1FC2139810E17A74 /* RunnerTests+SynthesizedGesturePolicy.swift */; };
+		143F842DC62A23D6183C53CF /* RunnerTests+ScrollDragExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFA714E0708A2E0A7687EE92 /* RunnerTests+ScrollDragExecution.swift */; };
+		1695EB96EAE954647BF4B474 /* RunnerSurfacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FC757A37F0DE232A7C5754D /* RunnerSurfacePolicy.swift */; };
+		17791407E48AFF522E2BE520 /* RunnerXCTestEventBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 115B8F9A0CB361616D48697C /* RunnerXCTestEventBridge.m */; };
+		184EF60E9E49073037AFC6A9 /* RunnerTests+Snapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A48645E6A2544BD0E852659F /* RunnerTests+Snapshot.swift */; };
+		1948FB6FC34AE0000CB339CD /* RunnerAlertLabelVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DDDFDEB2E3207343B435498 /* RunnerAlertLabelVocabulary.swift */; };
+		1A0EEDF974C745251FE2A0F8 /* RunnerTests+TypeExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58EF81F2569502E10DABB02D /* RunnerTests+TypeExecution.swift */; };
+		1AA8BC2ACFFC4CE29D8F5C35 /* RunnerTests+SnapshotExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BCD503AE14632D743286FB /* RunnerTests+SnapshotExecution.swift */; };
+		2078DD2C29B2D18B9F0AACD9 /* RunnerStringNormalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A9007C4C543B42EA335DEE /* RunnerStringNormalization.swift */; };
+		2340C731E56369687E69CDD8 /* RunnerAlertButtonChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF4ACE3A1735543E068B106E /* RunnerAlertButtonChoice.swift */; };
+		23C1B27E13B52F53D8D00187 /* RunnerSnapshotBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 6CEF910A2E3BAD7A1F027AD5 /* RunnerSnapshotBridge.m */; };
+		24B792108F156F5F9953DB79 /* RunnerTests+SequenceExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157473A993B46B052F86A664 /* RunnerTests+SequenceExecution.swift */; };
+		2554E1EBC357B1FC1BDF4A98 /* RunnerRequestPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D7830C8C87CB6140588673B /* RunnerRequestPanel.swift */; };
+		28F398AF30361B4A367B8E31 /* RunnerSynthesizedGesture.m in Sources */ = {isa = PBXBuildFile; fileRef = F610461327B760A048CDC1EA /* RunnerSynthesizedGesture.m */; };
+		2E87E12AD935116117FB4A3F /* RunnerTests+GestureExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25EDA48CAB055ECC9FA6A37C /* RunnerTests+GestureExecution.swift */; };
+		33F2892E66FE23CE9FB058D0 /* AgentDeviceRunnerWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532C2FABB338A23FD9D439E4 /* AgentDeviceRunnerWatchApp.swift */; };
+		3439E532D614D50F778EA6C1 /* RunnerTests+TextTyping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409C9BFFAD4115C7A91D823A /* RunnerTests+TextTyping.swift */; };
+		37BB4F140F5E8F8ACEF2DA01 /* RunnerLaunchConfirmationPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF140F828CCCEE87310242C /* RunnerLaunchConfirmationPrompt.swift */; };
+		38AF0570D2437C288F8E9862 /* RunnerTests+Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2446697A6D623F253D072E5B /* RunnerTests+Navigation.swift */; };
+		3B7D4BB0D0446BE71993BC9F /* RunnerTests+TvRemote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E59E249E5258217D6A342B1 /* RunnerTests+TvRemote.swift */; };
+		3C03AD5D6FE5977D29975AB8 /* RunnerTests+ScrollGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AACBCDEBCF3F7102BF7E5BC /* RunnerTests+ScrollGesture.swift */; };
+		3F21BE9639CB91BF5A778AC3 /* RunnerTests+SnapshotCapturePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E4A35B2620E230FECBC7E7 /* RunnerTests+SnapshotCapturePlan.swift */; };
+		40F7594702A1A2128BC2D27E /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF7C19314F5EDC71F19D37F /* RunnerTests.swift */; };
+		4714DA39F0334CE7D5046318 /* RunnerTests+Orientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4522C14A25C8937D27CC10 /* RunnerTests+Orientation.swift */; };
+		4AB878CDEFE35A1D193F7740 /* RunnerTests+ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048E870750F02FAAEF555190 /* RunnerTests+ScreenRecorder.swift */; };
+		54144A41F0744F601D2527D9 /* RunnerMainOwnedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E455EBDDBD7992D7F2DA0D14 /* RunnerMainOwnedState.swift */; };
+		5678F8CC459E65C28DEC94BA /* RunnerTests+SnapshotAcquisition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2566056BB56F7D8379B19CF0 /* RunnerTests+SnapshotAcquisition.swift */; };
+		5D24547D7AF0BD00116E93B2 /* RunnerIsolationCanary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFC92D912779CCCD75442CE /* RunnerIsolationCanary.swift */; };
+		675C3783564F93C56EA5B0EC /* RunnerTests+SnapshotChannelPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9610F64A03C49FCD8FC912 /* RunnerTests+SnapshotChannelPolicy.swift */; };
+		6FD6B9F874D524D8420E0C01 /* RunnerTests+CommandExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89B0D2F20642389776415C62 /* RunnerTests+CommandExecution.swift */; };
+		70027F0CEC154EFA5035442E /* RunnerTests+Transport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3437989B2D8B2DCC911DC1 /* RunnerTests+Transport.swift */; };
+		728C7CF0C2AB96B9202DC6A0 /* RunnerTests+Exceptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B82B648D3F1D7FBA150F781 /* RunnerTests+Exceptions.swift */; };
+		76600A484E615235B7010F5C /* RunnerTests+SnapshotPresentationInvariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A2712FCC6578DF96F56101 /* RunnerTests+SnapshotPresentationInvariant.swift */; };
+		79B650D87232FDCC19799444 /* RunnerSynthesizedTextEntry.m in Sources */ = {isa = PBXBuildFile; fileRef = F04657D30A7215CB4780A436 /* RunnerSynthesizedTextEntry.m */; };
+		7EA149C7FBD93D7FD9C5684C /* RunnerTests+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750F9CEC90FA18587982B268 /* RunnerTests+Keyboard.swift */; };
+		7EEF726C70B7B31311476975 /* RunnerTests+MainThreadWork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D969692C6E92295ED054045 /* RunnerTests+MainThreadWork.swift */; };
+		86A52795429D6C61949CC9C7 /* RunnerScrollViewportPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C26784B2DBE9B299C794A979 /* RunnerScrollViewportPolicy.swift */; };
+		89C9A576D78BE3FA90CFAF7B /* RunnerObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = B04D9D900C67A4EC542DF11A /* RunnerObjCExceptionCatcher.m */; };
+		8AE9A0A2CDB864A0FFDD97DD /* RunnerTests+TextInputProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B08578AD56C3DBF2CF64DD /* RunnerTests+TextInputProbe.swift */; };
+		8F5D3178E1DFA6498EEB66FF /* RunnerTapPointPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35B85725E2B8DA978376BB0 /* RunnerTapPointPolicy.swift */; };
+		8F7F8DC1AF22FDB65B42D8AB /* RunnerTests+ScreenEdgeGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D07C30026935DC6772BD2E9 /* RunnerTests+ScreenEdgeGesture.swift */; };
+		9A7E6914697800A6F5CC4674 /* RunnerTests+SystemModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F3C38D7E8F4A48A5A1C13B /* RunnerTests+SystemModal.swift */; };
+		9AB4DEFE63BDA16B587CEE75 /* RunnerTests+Interaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA1788B7AFD18DA5F8C18D9B /* RunnerTests+Interaction.swift */; };
+		A3BAFD48ED950577643A14B4 /* RunnerTests+SynthesizedInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE3453147BCB2C17F9145D9 /* RunnerTests+SynthesizedInteraction.swift */; };
+		A7B31DDDDAA36B33182D82E0 /* RunnerTests+AXSnapshotFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4848591FE450CC9C36277DDD /* RunnerTests+AXSnapshotFallback.swift */; };
+		AED255088B5E2062E14457E2 /* RunnerTests+PrivateAXElementTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 088C863D8D36BA8A0B4CD50B /* RunnerTests+PrivateAXElementTypes.swift */; };
+		B3ED4CAFE6301B7715BC91AE /* RunnerTests+AlertObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A86852758C5E9B0DA47D98 /* RunnerTests+AlertObservation.swift */; };
+		B6610B09179D610F96A783F9 /* RunnerTests+BlockingSystemModalResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76E9C09C4EA9CC59FA19B143 /* RunnerTests+BlockingSystemModalResolution.swift */; };
+		BCC6BAC21114BCFE2458210E /* RunnerTests+TextInputCandidatePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9863C47A801C40588AEA6D12 /* RunnerTests+TextInputCandidatePolicy.swift */; };
+		BE9A8BBFD0C80B17D0640D19 /* RunnerSelectorMatchPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA15562EF0EBBA1D15A65710 /* RunnerSelectorMatchPolicy.swift */; };
+		C0D4876490A10E9F010B7731 /* RunnerTests+SnapshotCaptureTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F99CE595BA90398FECE0C15 /* RunnerTests+SnapshotCaptureTarget.swift */; };
+		C235729DD1D3D7E53531BBAA /* AgentDeviceSnapshotPresentation in Frameworks */ = {isa = PBXBuildFile; productRef = 59DD46D8CD55D5CC57C48F19 /* AgentDeviceSnapshotPresentation */; };
+		C6B2EBD692071E9A2298508A /* RunnerTests+SynthesizedTextEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10EF45BAA6EF8A0B0804BF2 /* RunnerTests+SynthesizedTextEntry.swift */; };
+		CA299F17D5CA878027198CBA /* RunnerSimulatorEdgeTouch.m in Sources */ = {isa = PBXBuildFile; fileRef = 2937FD9B59E6D11946AFD5BC /* RunnerSimulatorEdgeTouch.m */; };
+		CFD3F3793E82A65D8A04A68A /* RunnerTests+Environment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC85CF908BFAD26F967A3F58 /* RunnerTests+Environment.swift */; };
+		D425725762DCB938BAB156C4 /* RunnerSystemPromptStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A215B747DC98E5A25995B7 /* RunnerSystemPromptStrings.swift */; };
+		D9A663539C04FBE7F8B31792 /* RunnerListenerPeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C90261B389987EBB4537BB7 /* RunnerListenerPeer.swift */; };
+		DA1C5226CA4A37227EACB2B0 /* RunnerTests+CommandJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0749CE18D7645427DEF166 /* RunnerTests+CommandJournal.swift */; };
+		DC43BD4AFAA765BDE1E573BF /* RunnerTests+TextEntryConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64C88A6B2DF09CBB271ABD6 /* RunnerTests+TextEntryConfirmation.swift */; };
+		DF562B609F264A1E48AFAF0D /* RunnerTests+Alert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A434474FF7FFC74C6D25FE5 /* RunnerTests+Alert.swift */; };
+		E28B45EC0DCD05C141F6E47B /* RunnerTests+SnapshotBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335435890C7F7DAC4EF7225C /* RunnerTests+SnapshotBridge.swift */; };
+		E3B9F89A9019A4CDFC8BCA6C /* RunnerTests+SynthesizedCommitDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3608E9A8CB536C63DD17DFC /* RunnerTests+SynthesizedCommitDeadline.swift */; };
+		E4E952953610ADE12C3C01A1 /* RunnerAXSnapshotBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = CD576FFF3F5DEEB84410B070 /* RunnerAXSnapshotBridge.m */; };
+		E6D4B8C2D1211FC6E2FF3AFF /* RunnerHttpRequestFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B29054253F77515E32A724C /* RunnerHttpRequestFraming.swift */; };
+		E73E72E0552E23B4D78C7224 /* RunnerAlertVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39CC86F8AB35B1C55FB3341F /* RunnerAlertVerification.swift */; };
+		EC5DC7AE9D658C4AE389768F /* RunnerAppScreenCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871A21496198B8092266431B /* RunnerAppScreenCapture.swift */; };
+		EF43FFB6D5EC0939F8FF9DC0 /* RunnerSystemSurfaceHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC1E0F88B23B97039D939F5D /* RunnerSystemSurfaceHostPolicy.swift */; };
+		F02D5B4624DC93BB52BE5F56 /* RunnerTests+TextEntryReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95ED37A8CEBE7B6C5817C29 /* RunnerTests+TextEntryReadiness.swift */; };
+		F12E1E8D0EB68D1C35EC77DA /* RunnerTests+Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93450B1D0DB97BCF50D95A17 /* RunnerTests+Models.swift */; };
+		F35F830C123716FC5712E33E /* RunnerTests+PrivateAXPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C1524DC98F04B4CEB204FF /* RunnerTests+PrivateAXPresentation.swift */; };
+		F3AA02F4B2B3A3DFD297A25E /* RunnerTests+CommandDispatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851BF388865AEA4CE34B50A3 /* RunnerTests+CommandDispatch.swift */; };
+		F4675C23F8009B2E51336F7A /* RunnerTests+TextEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3260BD55FBD55C1CC129AB56 /* RunnerTests+TextEntry.swift */; };
+		F613A3F2E2DC2A10B1EBD9C8 /* RunnerTests+TextEntryFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2DE923B5F615E306ED3476D /* RunnerTests+TextEntryFocus.swift */; };
+		FAFD43F94871F50ACA2E6421 /* RunnerTests+SnapshotTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = C271F1E9F09C63566C416025 /* RunnerTests+SnapshotTiming.swift */; };
+		FDFA982FF874C32F7BDECA4D /* RunnerListenerToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7FE73E85304EFD6A9219A1 /* RunnerListenerToken.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8E474B66502BD2DFDF15BC4D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 733FBD5DCBE4088C86527438 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8B2BA145A8A99679B7B39050;
+			remoteInfo = AgentDeviceRunner;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		048E870750F02FAAEF555190 /* RunnerTests+ScreenRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+ScreenRecorder.swift"; sourceTree = "<group>"; };
+		088C863D8D36BA8A0B4CD50B /* RunnerTests+PrivateAXElementTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+PrivateAXElementTypes.swift"; sourceTree = "<group>"; };
+		0A434474FF7FFC74C6D25FE5 /* RunnerTests+Alert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Alert.swift"; sourceTree = "<group>"; };
+		0D7830C8C87CB6140588673B /* RunnerRequestPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerRequestPanel.swift; sourceTree = "<group>"; };
+		0E882DA40330741D7616532E /* RunnerSimulatorEdgeTouch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerSimulatorEdgeTouch.h; sourceTree = "<group>"; };
+		0F99CE595BA90398FECE0C15 /* RunnerTests+SnapshotCaptureTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotCaptureTarget.swift"; sourceTree = "<group>"; };
+		115B8F9A0CB361616D48697C /* RunnerXCTestEventBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerXCTestEventBridge.m; sourceTree = "<group>"; };
+		157473A993B46B052F86A664 /* RunnerTests+SequenceExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SequenceExecution.swift"; sourceTree = "<group>"; };
+		1C90261B389987EBB4537BB7 /* RunnerListenerPeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerListenerPeer.swift; sourceTree = "<group>"; };
+		21B79049736DE117C780E8A2 /* snapshot-presentation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "snapshot-presentation"; path = "../../snapshot-presentation"; sourceTree = SOURCE_ROOT; };
+		2446697A6D623F253D072E5B /* RunnerTests+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Navigation.swift"; sourceTree = "<group>"; };
+		2566056BB56F7D8379B19CF0 /* RunnerTests+SnapshotAcquisition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotAcquisition.swift"; sourceTree = "<group>"; };
+		25EDA48CAB055ECC9FA6A37C /* RunnerTests+GestureExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+GestureExecution.swift"; sourceTree = "<group>"; };
+		26CD68EB164310625322E621 /* RunnerSimulatorEdgeContact.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerSimulatorEdgeContact.h; sourceTree = "<group>"; };
+		2937FD9B59E6D11946AFD5BC /* RunnerSimulatorEdgeTouch.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerSimulatorEdgeTouch.m; sourceTree = "<group>"; };
+		2CA96014A36BCD4797CCF7BE /* RunnerAXSnapshotBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerAXSnapshotBridge.h; sourceTree = "<group>"; };
+		31A86852758C5E9B0DA47D98 /* RunnerTests+AlertObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+AlertObservation.swift"; sourceTree = "<group>"; };
+		3260BD55FBD55C1CC129AB56 /* RunnerTests+TextEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextEntry.swift"; sourceTree = "<group>"; };
+		335435890C7F7DAC4EF7225C /* RunnerTests+SnapshotBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotBridge.swift"; sourceTree = "<group>"; };
+		39CC86F8AB35B1C55FB3341F /* RunnerAlertVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAlertVerification.swift; sourceTree = "<group>"; };
+		3DDDFDEB2E3207343B435498 /* RunnerAlertLabelVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAlertLabelVocabulary.swift; sourceTree = "<group>"; };
+		409C9BFFAD4115C7A91D823A /* RunnerTests+TextTyping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextTyping.swift"; sourceTree = "<group>"; };
+		40B08578AD56C3DBF2CF64DD /* RunnerTests+TextInputProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextInputProbe.swift"; sourceTree = "<group>"; };
+		417C4FE6EF697E6BE1771039 /* RunnerKeyboardStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerKeyboardStatus.swift; sourceTree = "<group>"; };
+		45C1524DC98F04B4CEB204FF /* RunnerTests+PrivateAXPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+PrivateAXPresentation.swift"; sourceTree = "<group>"; };
+		4848591FE450CC9C36277DDD /* RunnerTests+AXSnapshotFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+AXSnapshotFallback.swift"; sourceTree = "<group>"; };
+		532C2FABB338A23FD9D439E4 /* AgentDeviceRunnerWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDeviceRunnerWatchApp.swift; sourceTree = "<group>"; };
+		58EF81F2569502E10DABB02D /* RunnerTests+TypeExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TypeExecution.swift"; sourceTree = "<group>"; };
+		5B4522C14A25C8937D27CC10 /* RunnerTests+Orientation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Orientation.swift"; sourceTree = "<group>"; };
+		62A2712FCC6578DF96F56101 /* RunnerTests+SnapshotPresentationInvariant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotPresentationInvariant.swift"; sourceTree = "<group>"; };
+		6B777737AF21962D90754CDF /* RunnerSynthesizedTextEntry.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerSynthesizedTextEntry.h; sourceTree = "<group>"; };
+		6B82B648D3F1D7FBA150F781 /* RunnerTests+Exceptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Exceptions.swift"; sourceTree = "<group>"; };
+		6C0749CE18D7645427DEF166 /* RunnerTests+CommandJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+CommandJournal.swift"; sourceTree = "<group>"; };
+		6CEF910A2E3BAD7A1F027AD5 /* RunnerSnapshotBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerSnapshotBridge.m; sourceTree = "<group>"; };
+		6D07C30026935DC6772BD2E9 /* RunnerTests+ScreenEdgeGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+ScreenEdgeGesture.swift"; sourceTree = "<group>"; };
+		6FC757A37F0DE232A7C5754D /* RunnerSurfacePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerSurfacePolicy.swift; sourceTree = "<group>"; };
+		71B600438FFBF916F3564A7E /* RunnerSnapshotBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerSnapshotBridge.h; sourceTree = "<group>"; };
+		750F9CEC90FA18587982B268 /* RunnerTests+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Keyboard.swift"; sourceTree = "<group>"; };
+		76E9C09C4EA9CC59FA19B143 /* RunnerTests+BlockingSystemModalResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+BlockingSystemModalResolution.swift"; sourceTree = "<group>"; };
+		7AACBCDEBCF3F7102BF7E5BC /* RunnerTests+ScrollGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+ScrollGesture.swift"; sourceTree = "<group>"; };
+		7BF140F828CCCEE87310242C /* RunnerLaunchConfirmationPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerLaunchConfirmationPrompt.swift; sourceTree = "<group>"; };
+		7D969692C6E92295ED054045 /* RunnerTests+MainThreadWork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+MainThreadWork.swift"; sourceTree = "<group>"; };
+		7E59E249E5258217D6A342B1 /* RunnerTests+TvRemote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TvRemote.swift"; sourceTree = "<group>"; };
+		82DBBC3F1FC2139810E17A74 /* RunnerTests+SynthesizedGesturePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SynthesizedGesturePolicy.swift"; sourceTree = "<group>"; };
+		851BF388865AEA4CE34B50A3 /* RunnerTests+CommandDispatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+CommandDispatch.swift"; sourceTree = "<group>"; };
+		871A21496198B8092266431B /* RunnerAppScreenCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAppScreenCapture.swift; sourceTree = "<group>"; };
+		89B0D2F20642389776415C62 /* RunnerTests+CommandExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+CommandExecution.swift"; sourceTree = "<group>"; };
+		8EDFCA8E0FEFE34E1B3FBB31 /* RunnerTests+SnapshotBackendCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotBackendCapabilities.swift"; sourceTree = "<group>"; };
+		8F9610F64A03C49FCD8FC912 /* RunnerTests+SnapshotChannelPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotChannelPolicy.swift"; sourceTree = "<group>"; };
+		93450B1D0DB97BCF50D95A17 /* RunnerTests+Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Models.swift"; sourceTree = "<group>"; };
+		9863C47A801C40588AEA6D12 /* RunnerTests+TextInputCandidatePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextInputCandidatePolicy.swift"; sourceTree = "<group>"; };
+		9B29054253F77515E32A724C /* RunnerHttpRequestFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerHttpRequestFraming.swift; sourceTree = "<group>"; };
+		9F6FC1AD18B1CDEAE13D851F /* RunnerXCTestEventBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerXCTestEventBridge.h; sourceTree = "<group>"; };
+		A48645E6A2544BD0E852659F /* RunnerTests+Snapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Snapshot.swift"; sourceTree = "<group>"; };
+		A739DF443A64BFF7DCF32147 /* RunnerKeyboardReturnKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerKeyboardReturnKey.swift; sourceTree = "<group>"; };
+		A95ED37A8CEBE7B6C5817C29 /* RunnerTests+TextEntryReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextEntryReadiness.swift"; sourceTree = "<group>"; };
+		A9A215B747DC98E5A25995B7 /* RunnerSystemPromptStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerSystemPromptStrings.swift; sourceTree = "<group>"; };
+		AA15562EF0EBBA1D15A65710 /* RunnerSelectorMatchPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerSelectorMatchPolicy.swift; sourceTree = "<group>"; };
+		B04D9D900C67A4EC542DF11A /* RunnerObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerObjCExceptionCatcher.m; sourceTree = "<group>"; };
+		B2DE923B5F615E306ED3476D /* RunnerTests+TextEntryFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextEntryFocus.swift"; sourceTree = "<group>"; };
+		B3608E9A8CB536C63DD17DFC /* RunnerTests+SynthesizedCommitDeadline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SynthesizedCommitDeadline.swift"; sourceTree = "<group>"; };
+		B64C88A6B2DF09CBB271ABD6 /* RunnerTests+TextEntryConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+TextEntryConfirmation.swift"; sourceTree = "<group>"; };
+		B9BCD503AE14632D743286FB /* RunnerTests+SnapshotExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotExecution.swift"; sourceTree = "<group>"; };
+		BA14ACF13BBB0D481B6EF3A4 /* AgentDeviceRunner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentDeviceRunner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBFC92D912779CCCD75442CE /* RunnerIsolationCanary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerIsolationCanary.swift; sourceTree = "<group>"; };
+		BF4ACE3A1735543E068B106E /* RunnerAlertButtonChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAlertButtonChoice.swift; sourceTree = "<group>"; };
+		C26784B2DBE9B299C794A979 /* RunnerScrollViewportPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerScrollViewportPolicy.swift; sourceTree = "<group>"; };
+		C271F1E9F09C63566C416025 /* RunnerTests+SnapshotTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotTiming.swift"; sourceTree = "<group>"; };
+		CA4D8AE6AF365C88504C9CF3 /* AgentDeviceRunnerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentDeviceRunnerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC3437989B2D8B2DCC911DC1 /* RunnerTests+Transport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Transport.swift"; sourceTree = "<group>"; };
+		CD576FFF3F5DEEB84410B070 /* RunnerAXSnapshotBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerAXSnapshotBridge.m; sourceTree = "<group>"; };
+		CFF7C19314F5EDC71F19D37F /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
+		D10EF45BAA6EF8A0B0804BF2 /* RunnerTests+SynthesizedTextEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SynthesizedTextEntry.swift"; sourceTree = "<group>"; };
+		D35B85725E2B8DA978376BB0 /* RunnerTapPointPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTapPointPolicy.swift; sourceTree = "<group>"; };
+		D5A9007C4C543B42EA335DEE /* RunnerStringNormalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerStringNormalization.swift; sourceTree = "<group>"; };
+		DA1788B7AFD18DA5F8C18D9B /* RunnerTests+Interaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Interaction.swift"; sourceTree = "<group>"; };
+		DD4CAD40CDE7479CB77A9462 /* AgentDeviceRunnerUITests-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AgentDeviceRunnerUITests-Bridging-Header.h"; sourceTree = "<group>"; };
+		E1554B8F6F43DC169EC0D2A9 /* RunnerSynthesizedGesture.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerSynthesizedGesture.h; sourceTree = "<group>"; };
+		E2E4A35B2620E230FECBC7E7 /* RunnerTests+SnapshotCapturePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SnapshotCapturePlan.swift"; sourceTree = "<group>"; };
+		E455EBDDBD7992D7F2DA0D14 /* RunnerMainOwnedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerMainOwnedState.swift; sourceTree = "<group>"; };
+		EBD820D85A28CC9A98A11B1F /* RunnerObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RunnerObjCExceptionCatcher.h; sourceTree = "<group>"; };
+		ECE3453147BCB2C17F9145D9 /* RunnerTests+SynthesizedInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SynthesizedInteraction.swift"; sourceTree = "<group>"; };
+		F04657D30A7215CB4780A436 /* RunnerSynthesizedTextEntry.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerSynthesizedTextEntry.m; sourceTree = "<group>"; };
+		F3F3C38D7E8F4A48A5A1C13B /* RunnerTests+SystemModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+SystemModal.swift"; sourceTree = "<group>"; };
+		F610461327B760A048CDC1EA /* RunnerSynthesizedGesture.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RunnerSynthesizedGesture.m; sourceTree = "<group>"; };
+		FC1E0F88B23B97039D939F5D /* RunnerSystemSurfaceHostPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerSystemSurfaceHostPolicy.swift; sourceTree = "<group>"; };
+		FC85CF908BFAD26F967A3F58 /* RunnerTests+Environment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Environment.swift"; sourceTree = "<group>"; };
+		FD4EF2B6C21AE0EA51FB80BB /* RunnerTests+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+Lifecycle.swift"; sourceTree = "<group>"; };
+		FD7FE73E85304EFD6A9219A1 /* RunnerListenerToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerListenerToken.swift; sourceTree = "<group>"; };
+		FFA714E0708A2E0A7687EE92 /* RunnerTests+ScrollDragExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RunnerTests+ScrollDragExecution.swift"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BE3815B4CFC9F3ABD84E3E5B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C235729DD1D3D7E53531BBAA /* AgentDeviceSnapshotPresentation in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		250B35E4DFBD45CD58353F79 /* AgentDeviceRunnerUITests */ = {
+			isa = PBXGroup;
+			children = (
+				DD4CAD40CDE7479CB77A9462 /* AgentDeviceRunnerUITests-Bridging-Header.h */,
+				BF4ACE3A1735543E068B106E /* RunnerAlertButtonChoice.swift */,
+				3DDDFDEB2E3207343B435498 /* RunnerAlertLabelVocabulary.swift */,
+				39CC86F8AB35B1C55FB3341F /* RunnerAlertVerification.swift */,
+				871A21496198B8092266431B /* RunnerAppScreenCapture.swift */,
+				2CA96014A36BCD4797CCF7BE /* RunnerAXSnapshotBridge.h */,
+				CD576FFF3F5DEEB84410B070 /* RunnerAXSnapshotBridge.m */,
+				9B29054253F77515E32A724C /* RunnerHttpRequestFraming.swift */,
+				BBFC92D912779CCCD75442CE /* RunnerIsolationCanary.swift */,
+				A739DF443A64BFF7DCF32147 /* RunnerKeyboardReturnKey.swift */,
+				417C4FE6EF697E6BE1771039 /* RunnerKeyboardStatus.swift */,
+				7BF140F828CCCEE87310242C /* RunnerLaunchConfirmationPrompt.swift */,
+				1C90261B389987EBB4537BB7 /* RunnerListenerPeer.swift */,
+				FD7FE73E85304EFD6A9219A1 /* RunnerListenerToken.swift */,
+				E455EBDDBD7992D7F2DA0D14 /* RunnerMainOwnedState.swift */,
+				EBD820D85A28CC9A98A11B1F /* RunnerObjCExceptionCatcher.h */,
+				B04D9D900C67A4EC542DF11A /* RunnerObjCExceptionCatcher.m */,
+				0D7830C8C87CB6140588673B /* RunnerRequestPanel.swift */,
+				C26784B2DBE9B299C794A979 /* RunnerScrollViewportPolicy.swift */,
+				AA15562EF0EBBA1D15A65710 /* RunnerSelectorMatchPolicy.swift */,
+				26CD68EB164310625322E621 /* RunnerSimulatorEdgeContact.h */,
+				0E882DA40330741D7616532E /* RunnerSimulatorEdgeTouch.h */,
+				2937FD9B59E6D11946AFD5BC /* RunnerSimulatorEdgeTouch.m */,
+				71B600438FFBF916F3564A7E /* RunnerSnapshotBridge.h */,
+				6CEF910A2E3BAD7A1F027AD5 /* RunnerSnapshotBridge.m */,
+				D5A9007C4C543B42EA335DEE /* RunnerStringNormalization.swift */,
+				6FC757A37F0DE232A7C5754D /* RunnerSurfacePolicy.swift */,
+				E1554B8F6F43DC169EC0D2A9 /* RunnerSynthesizedGesture.h */,
+				F610461327B760A048CDC1EA /* RunnerSynthesizedGesture.m */,
+				6B777737AF21962D90754CDF /* RunnerSynthesizedTextEntry.h */,
+				F04657D30A7215CB4780A436 /* RunnerSynthesizedTextEntry.m */,
+				A9A215B747DC98E5A25995B7 /* RunnerSystemPromptStrings.swift */,
+				FC1E0F88B23B97039D939F5D /* RunnerSystemSurfaceHostPolicy.swift */,
+				D35B85725E2B8DA978376BB0 /* RunnerTapPointPolicy.swift */,
+				CFF7C19314F5EDC71F19D37F /* RunnerTests.swift */,
+				0A434474FF7FFC74C6D25FE5 /* RunnerTests+Alert.swift */,
+				31A86852758C5E9B0DA47D98 /* RunnerTests+AlertObservation.swift */,
+				4848591FE450CC9C36277DDD /* RunnerTests+AXSnapshotFallback.swift */,
+				76E9C09C4EA9CC59FA19B143 /* RunnerTests+BlockingSystemModalResolution.swift */,
+				851BF388865AEA4CE34B50A3 /* RunnerTests+CommandDispatch.swift */,
+				89B0D2F20642389776415C62 /* RunnerTests+CommandExecution.swift */,
+				6C0749CE18D7645427DEF166 /* RunnerTests+CommandJournal.swift */,
+				FC85CF908BFAD26F967A3F58 /* RunnerTests+Environment.swift */,
+				6B82B648D3F1D7FBA150F781 /* RunnerTests+Exceptions.swift */,
+				25EDA48CAB055ECC9FA6A37C /* RunnerTests+GestureExecution.swift */,
+				DA1788B7AFD18DA5F8C18D9B /* RunnerTests+Interaction.swift */,
+				750F9CEC90FA18587982B268 /* RunnerTests+Keyboard.swift */,
+				FD4EF2B6C21AE0EA51FB80BB /* RunnerTests+Lifecycle.swift */,
+				7D969692C6E92295ED054045 /* RunnerTests+MainThreadWork.swift */,
+				93450B1D0DB97BCF50D95A17 /* RunnerTests+Models.swift */,
+				2446697A6D623F253D072E5B /* RunnerTests+Navigation.swift */,
+				5B4522C14A25C8937D27CC10 /* RunnerTests+Orientation.swift */,
+				088C863D8D36BA8A0B4CD50B /* RunnerTests+PrivateAXElementTypes.swift */,
+				45C1524DC98F04B4CEB204FF /* RunnerTests+PrivateAXPresentation.swift */,
+				6D07C30026935DC6772BD2E9 /* RunnerTests+ScreenEdgeGesture.swift */,
+				048E870750F02FAAEF555190 /* RunnerTests+ScreenRecorder.swift */,
+				FFA714E0708A2E0A7687EE92 /* RunnerTests+ScrollDragExecution.swift */,
+				7AACBCDEBCF3F7102BF7E5BC /* RunnerTests+ScrollGesture.swift */,
+				157473A993B46B052F86A664 /* RunnerTests+SequenceExecution.swift */,
+				A48645E6A2544BD0E852659F /* RunnerTests+Snapshot.swift */,
+				2566056BB56F7D8379B19CF0 /* RunnerTests+SnapshotAcquisition.swift */,
+				8EDFCA8E0FEFE34E1B3FBB31 /* RunnerTests+SnapshotBackendCapabilities.swift */,
+				335435890C7F7DAC4EF7225C /* RunnerTests+SnapshotBridge.swift */,
+				E2E4A35B2620E230FECBC7E7 /* RunnerTests+SnapshotCapturePlan.swift */,
+				0F99CE595BA90398FECE0C15 /* RunnerTests+SnapshotCaptureTarget.swift */,
+				8F9610F64A03C49FCD8FC912 /* RunnerTests+SnapshotChannelPolicy.swift */,
+				B9BCD503AE14632D743286FB /* RunnerTests+SnapshotExecution.swift */,
+				62A2712FCC6578DF96F56101 /* RunnerTests+SnapshotPresentationInvariant.swift */,
+				C271F1E9F09C63566C416025 /* RunnerTests+SnapshotTiming.swift */,
+				B3608E9A8CB536C63DD17DFC /* RunnerTests+SynthesizedCommitDeadline.swift */,
+				82DBBC3F1FC2139810E17A74 /* RunnerTests+SynthesizedGesturePolicy.swift */,
+				ECE3453147BCB2C17F9145D9 /* RunnerTests+SynthesizedInteraction.swift */,
+				D10EF45BAA6EF8A0B0804BF2 /* RunnerTests+SynthesizedTextEntry.swift */,
+				F3F3C38D7E8F4A48A5A1C13B /* RunnerTests+SystemModal.swift */,
+				3260BD55FBD55C1CC129AB56 /* RunnerTests+TextEntry.swift */,
+				B64C88A6B2DF09CBB271ABD6 /* RunnerTests+TextEntryConfirmation.swift */,
+				B2DE923B5F615E306ED3476D /* RunnerTests+TextEntryFocus.swift */,
+				A95ED37A8CEBE7B6C5817C29 /* RunnerTests+TextEntryReadiness.swift */,
+				9863C47A801C40588AEA6D12 /* RunnerTests+TextInputCandidatePolicy.swift */,
+				40B08578AD56C3DBF2CF64DD /* RunnerTests+TextInputProbe.swift */,
+				409C9BFFAD4115C7A91D823A /* RunnerTests+TextTyping.swift */,
+				CC3437989B2D8B2DCC911DC1 /* RunnerTests+Transport.swift */,
+				7E59E249E5258217D6A342B1 /* RunnerTests+TvRemote.swift */,
+				58EF81F2569502E10DABB02D /* RunnerTests+TypeExecution.swift */,
+				9F6FC1AD18B1CDEAE13D851F /* RunnerXCTestEventBridge.h */,
+				115B8F9A0CB361616D48697C /* RunnerXCTestEventBridge.m */,
+			);
+			name = AgentDeviceRunnerUITests;
+			path = ../AgentDeviceRunner/AgentDeviceRunnerUITests;
+			sourceTree = "<group>";
+		};
+		6378772A6E7A96024B49AB6C /* AgentDeviceRunnerWatch */ = {
+			isa = PBXGroup;
+			children = (
+				532C2FABB338A23FD9D439E4 /* AgentDeviceRunnerWatchApp.swift */,
+			);
+			path = AgentDeviceRunnerWatch;
+			sourceTree = "<group>";
+		};
+		70DA3A26312291F5755E0D6E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BA14ACF13BBB0D481B6EF3A4 /* AgentDeviceRunner.app */,
+				CA4D8AE6AF365C88504C9CF3 /* AgentDeviceRunnerUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7C714E31CC57FE1EFAC3604D /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				21B79049736DE117C780E8A2 /* snapshot-presentation */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		956ADF25B34437FD1D92FCCD = {
+			isa = PBXGroup;
+			children = (
+				250B35E4DFBD45CD58353F79 /* AgentDeviceRunnerUITests */,
+				6378772A6E7A96024B49AB6C /* AgentDeviceRunnerWatch */,
+				7C714E31CC57FE1EFAC3604D /* Packages */,
+				70DA3A26312291F5755E0D6E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2776B82206B6F55598535480 /* AgentDeviceRunnerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 85F02B79F0935317653DC668 /* Build configuration list for PBXNativeTarget "AgentDeviceRunnerUITests" */;
+			buildPhases = (
+				63D5198A710CF37D1BE6417D /* Sources */,
+				BE3815B4CFC9F3ABD84E3E5B /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				93FFA301F974BEEF703A3BB0 /* PBXTargetDependency */,
+			);
+			name = AgentDeviceRunnerUITests;
+			packageProductDependencies = (
+				59DD46D8CD55D5CC57C48F19 /* AgentDeviceSnapshotPresentation */,
+			);
+			productName = AgentDeviceRunnerUITests;
+			productReference = CA4D8AE6AF365C88504C9CF3 /* AgentDeviceRunnerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		8B2BA145A8A99679B7B39050 /* AgentDeviceRunner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 03C7E967FE65EED6BC63B7EA /* Build configuration list for PBXNativeTarget "AgentDeviceRunner" */;
+			buildPhases = (
+				A27560DE5D446D45B6275AA5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AgentDeviceRunner;
+			packageProductDependencies = (
+			);
+			productName = AgentDeviceRunner;
+			productReference = BA14ACF13BBB0D481B6EF3A4 /* AgentDeviceRunner.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		733FBD5DCBE4088C86527438 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2776B82206B6F55598535480 = {
+						DevelopmentTeam = 2S799L9W4M;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 8B2BA145A8A99679B7B39050;
+					};
+					8B2BA145A8A99679B7B39050 = {
+						DevelopmentTeam = 2S799L9W4M;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = BF45DDAE7A5544F4F19DA536 /* Build configuration list for PBXProject "AgentDeviceRunnerWatch" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 956ADF25B34437FD1D92FCCD;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B33646A094711793655AC057 /* XCLocalSwiftPackageReference "../../snapshot-presentation" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 70DA3A26312291F5755E0D6E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8B2BA145A8A99679B7B39050 /* AgentDeviceRunner */,
+				2776B82206B6F55598535480 /* AgentDeviceRunnerUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		63D5198A710CF37D1BE6417D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E4E952953610ADE12C3C01A1 /* RunnerAXSnapshotBridge.m in Sources */,
+				2340C731E56369687E69CDD8 /* RunnerAlertButtonChoice.swift in Sources */,
+				1948FB6FC34AE0000CB339CD /* RunnerAlertLabelVocabulary.swift in Sources */,
+				E73E72E0552E23B4D78C7224 /* RunnerAlertVerification.swift in Sources */,
+				EC5DC7AE9D658C4AE389768F /* RunnerAppScreenCapture.swift in Sources */,
+				E6D4B8C2D1211FC6E2FF3AFF /* RunnerHttpRequestFraming.swift in Sources */,
+				5D24547D7AF0BD00116E93B2 /* RunnerIsolationCanary.swift in Sources */,
+				100E318BD39A13EAF86ACDD3 /* RunnerKeyboardReturnKey.swift in Sources */,
+				03E69F54C501FD4F8529DF1F /* RunnerKeyboardStatus.swift in Sources */,
+				37BB4F140F5E8F8ACEF2DA01 /* RunnerLaunchConfirmationPrompt.swift in Sources */,
+				D9A663539C04FBE7F8B31792 /* RunnerListenerPeer.swift in Sources */,
+				FDFA982FF874C32F7BDECA4D /* RunnerListenerToken.swift in Sources */,
+				54144A41F0744F601D2527D9 /* RunnerMainOwnedState.swift in Sources */,
+				89C9A576D78BE3FA90CFAF7B /* RunnerObjCExceptionCatcher.m in Sources */,
+				2554E1EBC357B1FC1BDF4A98 /* RunnerRequestPanel.swift in Sources */,
+				86A52795429D6C61949CC9C7 /* RunnerScrollViewportPolicy.swift in Sources */,
+				BE9A8BBFD0C80B17D0640D19 /* RunnerSelectorMatchPolicy.swift in Sources */,
+				CA299F17D5CA878027198CBA /* RunnerSimulatorEdgeTouch.m in Sources */,
+				23C1B27E13B52F53D8D00187 /* RunnerSnapshotBridge.m in Sources */,
+				2078DD2C29B2D18B9F0AACD9 /* RunnerStringNormalization.swift in Sources */,
+				1695EB96EAE954647BF4B474 /* RunnerSurfacePolicy.swift in Sources */,
+				28F398AF30361B4A367B8E31 /* RunnerSynthesizedGesture.m in Sources */,
+				79B650D87232FDCC19799444 /* RunnerSynthesizedTextEntry.m in Sources */,
+				D425725762DCB938BAB156C4 /* RunnerSystemPromptStrings.swift in Sources */,
+				EF43FFB6D5EC0939F8FF9DC0 /* RunnerSystemSurfaceHostPolicy.swift in Sources */,
+				8F5D3178E1DFA6498EEB66FF /* RunnerTapPointPolicy.swift in Sources */,
+				A7B31DDDDAA36B33182D82E0 /* RunnerTests+AXSnapshotFallback.swift in Sources */,
+				DF562B609F264A1E48AFAF0D /* RunnerTests+Alert.swift in Sources */,
+				B3ED4CAFE6301B7715BC91AE /* RunnerTests+AlertObservation.swift in Sources */,
+				B6610B09179D610F96A783F9 /* RunnerTests+BlockingSystemModalResolution.swift in Sources */,
+				F3AA02F4B2B3A3DFD297A25E /* RunnerTests+CommandDispatch.swift in Sources */,
+				6FD6B9F874D524D8420E0C01 /* RunnerTests+CommandExecution.swift in Sources */,
+				DA1C5226CA4A37227EACB2B0 /* RunnerTests+CommandJournal.swift in Sources */,
+				CFD3F3793E82A65D8A04A68A /* RunnerTests+Environment.swift in Sources */,
+				728C7CF0C2AB96B9202DC6A0 /* RunnerTests+Exceptions.swift in Sources */,
+				2E87E12AD935116117FB4A3F /* RunnerTests+GestureExecution.swift in Sources */,
+				9AB4DEFE63BDA16B587CEE75 /* RunnerTests+Interaction.swift in Sources */,
+				7EA149C7FBD93D7FD9C5684C /* RunnerTests+Keyboard.swift in Sources */,
+				062EBC97AFC001208BF8145C /* RunnerTests+Lifecycle.swift in Sources */,
+				7EEF726C70B7B31311476975 /* RunnerTests+MainThreadWork.swift in Sources */,
+				F12E1E8D0EB68D1C35EC77DA /* RunnerTests+Models.swift in Sources */,
+				38AF0570D2437C288F8E9862 /* RunnerTests+Navigation.swift in Sources */,
+				4714DA39F0334CE7D5046318 /* RunnerTests+Orientation.swift in Sources */,
+				AED255088B5E2062E14457E2 /* RunnerTests+PrivateAXElementTypes.swift in Sources */,
+				F35F830C123716FC5712E33E /* RunnerTests+PrivateAXPresentation.swift in Sources */,
+				8F7F8DC1AF22FDB65B42D8AB /* RunnerTests+ScreenEdgeGesture.swift in Sources */,
+				4AB878CDEFE35A1D193F7740 /* RunnerTests+ScreenRecorder.swift in Sources */,
+				143F842DC62A23D6183C53CF /* RunnerTests+ScrollDragExecution.swift in Sources */,
+				3C03AD5D6FE5977D29975AB8 /* RunnerTests+ScrollGesture.swift in Sources */,
+				24B792108F156F5F9953DB79 /* RunnerTests+SequenceExecution.swift in Sources */,
+				184EF60E9E49073037AFC6A9 /* RunnerTests+Snapshot.swift in Sources */,
+				5678F8CC459E65C28DEC94BA /* RunnerTests+SnapshotAcquisition.swift in Sources */,
+				094AE9D6004AD9BE749A5B94 /* RunnerTests+SnapshotBackendCapabilities.swift in Sources */,
+				E28B45EC0DCD05C141F6E47B /* RunnerTests+SnapshotBridge.swift in Sources */,
+				3F21BE9639CB91BF5A778AC3 /* RunnerTests+SnapshotCapturePlan.swift in Sources */,
+				C0D4876490A10E9F010B7731 /* RunnerTests+SnapshotCaptureTarget.swift in Sources */,
+				675C3783564F93C56EA5B0EC /* RunnerTests+SnapshotChannelPolicy.swift in Sources */,
+				1AA8BC2ACFFC4CE29D8F5C35 /* RunnerTests+SnapshotExecution.swift in Sources */,
+				76600A484E615235B7010F5C /* RunnerTests+SnapshotPresentationInvariant.swift in Sources */,
+				FAFD43F94871F50ACA2E6421 /* RunnerTests+SnapshotTiming.swift in Sources */,
+				E3B9F89A9019A4CDFC8BCA6C /* RunnerTests+SynthesizedCommitDeadline.swift in Sources */,
+				139014C384BBF20D77D9CE8D /* RunnerTests+SynthesizedGesturePolicy.swift in Sources */,
+				A3BAFD48ED950577643A14B4 /* RunnerTests+SynthesizedInteraction.swift in Sources */,
+				C6B2EBD692071E9A2298508A /* RunnerTests+SynthesizedTextEntry.swift in Sources */,
+				9A7E6914697800A6F5CC4674 /* RunnerTests+SystemModal.swift in Sources */,
+				F4675C23F8009B2E51336F7A /* RunnerTests+TextEntry.swift in Sources */,
+				DC43BD4AFAA765BDE1E573BF /* RunnerTests+TextEntryConfirmation.swift in Sources */,
+				F613A3F2E2DC2A10B1EBD9C8 /* RunnerTests+TextEntryFocus.swift in Sources */,
+				F02D5B4624DC93BB52BE5F56 /* RunnerTests+TextEntryReadiness.swift in Sources */,
+				BCC6BAC21114BCFE2458210E /* RunnerTests+TextInputCandidatePolicy.swift in Sources */,
+				8AE9A0A2CDB864A0FFDD97DD /* RunnerTests+TextInputProbe.swift in Sources */,
+				3439E532D614D50F778EA6C1 /* RunnerTests+TextTyping.swift in Sources */,
+				70027F0CEC154EFA5035442E /* RunnerTests+Transport.swift in Sources */,
+				3B7D4BB0D0446BE71993BC9F /* RunnerTests+TvRemote.swift in Sources */,
+				1A0EEDF974C745251FE2A0F8 /* RunnerTests+TypeExecution.swift in Sources */,
+				40F7594702A1A2128BC2D27E /* RunnerTests.swift in Sources */,
+				17791407E48AFF522E2BE520 /* RunnerXCTestEventBridge.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A27560DE5D446D45B6275AA5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				33F2892E66FE23CE9FB058D0 /* AgentDeviceRunnerWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		93FFA301F974BEEF703A3BB0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8B2BA145A8A99679B7B39050 /* AgentDeviceRunner */;
+			targetProxy = 8E474B66502BD2DFDF15BC4D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		18368E7C22FF5F90E2EF5CEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = AgentDeviceRunner;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+		1907CF78887A3CBECF2B8C5B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID = com.callstack.agentdevice.runner;
+				AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID = com.callstack.agentdevice.runner.uitests;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2S799L9W4M;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		2D41DE55C7647BBE1CF0FD46 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID = com.callstack.agentdevice.runner;
+				AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID = com.callstack.agentdevice.runner.uitests;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2S799L9W4M;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		47014671FD18369CF8CE4DB3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../snapshot-bridge";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "../AgentDeviceRunner/AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = AgentDeviceRunner;
+			};
+			name = Release;
+		};
+		6006FED96FE4B5D984BA1209 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = AgentDeviceRunner;
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		94A4DC251A1A26775B13E545 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../snapshot-bridge";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "../AgentDeviceRunner/AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = AgentDeviceRunner;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		03C7E967FE65EED6BC63B7EA /* Build configuration list for PBXNativeTarget "AgentDeviceRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6006FED96FE4B5D984BA1209 /* Debug */,
+				18368E7C22FF5F90E2EF5CEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		85F02B79F0935317653DC668 /* Build configuration list for PBXNativeTarget "AgentDeviceRunnerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				94A4DC251A1A26775B13E545 /* Debug */,
+				47014671FD18369CF8CE4DB3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BF45DDAE7A5544F4F19DA536 /* Build configuration list for PBXProject "AgentDeviceRunnerWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2D41DE55C7647BBE1CF0FD46 /* Debug */,
+				1907CF78887A3CBECF2B8C5B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B33646A094711793655AC057 /* XCLocalSwiftPackageReference "../../snapshot-presentation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../snapshot-presentation";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		59DD46D8CD55D5CC57C48F19 /* AgentDeviceSnapshotPresentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AgentDeviceSnapshotPresentation;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 733FBD5DCBE4088C86527438 /* Project object */;
+}

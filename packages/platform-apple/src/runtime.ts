@@ -138,7 +138,7 @@ function unsupportedAppleDeviceKind(hint: string) {
 }
 
 function shutdownFact(device: DeviceInfo) {
-  if (!isIosFamily(device) || device.appleOs === 'watchos') return unavailable;
+  if (!isIosFamily(device)) return unavailable;
   return device.kind === 'simulator' ? available : shutdownKindUnavailable;
 }
 
@@ -161,14 +161,12 @@ function appleApplicationLifecycleFacts(device: DeviceInfo) {
 }
 
 function appleOpenTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchOpenTargetUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleOpenTargetKindUnavailable;
 }
 
 function appleCloseTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchCloseTargetUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleCloseTargetKindUnavailable;
@@ -216,8 +214,8 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       leafRecordingFacts.available && hostAvailability?.available === false
         ? unavailableFact('unsupported-provider-mode', hostAvailability.hint)
         : leafRecordingFacts;
-    const readiness = device.appleOs === 'watchos' ? unavailable : available;
-    const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;
+    const readiness = available;
+    const boot = isMacOs(device) ? unavailable : available;
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
@@ -473,7 +471,6 @@ function applePerfFacts(device: DeviceInfo): Readonly<{
  * snapshot, whose desktop surfaces come from a separate host port.
  */
 function appleScreenshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return screenshotWatchOsUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : screenshotKindUnavailable;

@@ -171,6 +171,11 @@ extension RunnerTests {
     }
 
     func typeIntoCurrentTarget(_ value: String) throws -> TextEntryFailure? {
+#if os(watchOS)
+      // Spike (#4735): watchOS edits text in a system input sheet, not in the tapped field, so the
+      // field never takes keyboard focus. The sheet's text view does.
+      return typeApplicationWide(value, reason: "watchos-input-sheet")
+#endif
 #if os(iOS)
       if shouldUseSynthesizedFirstResponderType {
         guard try reader.input() != nil else {

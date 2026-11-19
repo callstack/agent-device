@@ -526,7 +526,7 @@ export function platformSelectorsConflict(
 export function resolveApplePlatformName(
   platformOrTarget: ApplePlatform | DeviceTarget | undefined,
   appleOs?: AppleOS,
-): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS' {
   // Prefer the explicit, stored Apple OS when present; legacy records without
   // it keep resolving through the existing target-based inference below.
   if (appleOs) return resolveRunnerPlatformNameForAppleOs(appleOs);
@@ -537,10 +537,12 @@ export function resolveApplePlatformName(
 
 function resolveRunnerPlatformNameForAppleOs(
   appleOs: AppleOS,
-): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS' {
   switch (appleOs) {
     case 'tvos':
       return 'tvOS';
+    case 'watchos':
+      return 'watchOS';
     case 'macos':
       return 'macOS';
     case 'visionos':

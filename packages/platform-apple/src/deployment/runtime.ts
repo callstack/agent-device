@@ -308,5 +308,5 @@ function applePushFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 function isSupportedAppleDeploymentLeaf(device: DeviceInfo): boolean {
-  return isIosFamily(device) && device.appleOs !== 'watchos';
+  return isIosFamily(device);
 }

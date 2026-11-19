@@ -61,7 +61,7 @@ const snapshotActiveAppRequired = unavailableFact(
  * app took the screen stays nobody's to tell.
  */
 function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
+  if (!isIosFamily(device)) return appStateUnavailable;
   return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
 }
 
@@ -82,7 +82,6 @@ function appleElementTextFact(device: DeviceInfo) {
 }
 
 function appleSnapshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return snapshotKindUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
@@ -135,7 +134,6 @@ const applePrepareKindUnavailable = unsupportedAppleDeviceKind(
 );
 
 export function applePrepareAppleRunnerFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchPrepareUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : applePrepareKindUnavailable;
