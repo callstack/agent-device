@@ -306,7 +306,7 @@ function noteRepeatedVersion(
   const { repeat } = outcome;
   if (repeat === undefined) return;
   const recovery = closing
-    ? `record again with ${recordAgainCommand(outcome.published)}.`
+    ? `reuse your original open command with ${recordAgainArguments(outcome.published)}.`
     : 'while the session is still recording, the next recorded action writes the recording to the destination again.';
   data.warnings = [
     ...readResponseWarnings(data),
@@ -315,14 +315,15 @@ function noteRepeatedVersion(
 }
 
 /**
- * The command that records again to the same file; a bare `--save-script` would pick a new file name. A path with a
- * control character cannot survive a rendered text line, so the command names a placeholder for it instead.
+ * The arguments that record again to the same file; a bare `--save-script` would pick a new file name. A path with a
+ * C0 or C1 control character cannot survive a rendered text line, so they name a placeholder for it instead.
  */
-function recordAgainCommand(destination: string): string {
-  if ([...destination].some((char) => char < ' ' || char === '\u007f')) {
-    return 'open --save-script=<path> --force, with the path quoted for your shell';
+function recordAgainArguments(destination: string): string {
+  const control = (char: string) => char < ' ' || (char >= '\u007f' && char <= '\u009f');
+  if ([...destination].some(control)) {
+    return '--save-script=<path> --force, with the path quoted for your shell';
   }
-  return `open --save-script=${shellQuoteIfNeeded(destination)} --force`;
+  return `--save-script=${shellQuoteIfNeeded(destination)} --force`;
 }
 
 function repeatedVersionText(
@@ -667,7 +668,7 @@ function publishStaged(
 }
 
 /**
- * Answers a version the record already committed with the destination as the caller spelled it, without touching
+ * Answers a version the record already committed with the stored absolute destination, without touching
  * the filesystem, or nothing when the version is newer. An interrupted save the record names is disclosed, since
  * it may already have replaced the file.
  */
@@ -814,7 +815,7 @@ function scriptDeliveryFailure(
         cause: 'script_target_exists',
         publicationId,
         message: `A file already exists at ${destination}.`,
-        hint: `Remove the existing file, or start a new recording with ${recordAgainCommand(destination)}.`,
+        hint: `Remove the existing file, or start a new recording by reusing your original open command with ${recordAgainArguments(destination)}.`,
       }
     : {
         reason: 'script_delivery_failed',

@@ -555,30 +555,38 @@ test('a closing repeat names the file to record again to, quoted for a shell', a
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, record again with open --save-script=${quoted} --force.`,
+        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=${quoted} --force.`,
       ],
     },
   });
 });
 
-test('a closing repeat whose path holds a newline names no command that a text line would change', async () => {
-  const { stateDir, directory } = caller();
-  const destination = path.join(directory, 'line\nbreak.ad');
-  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
-  const { id } = await open(baseUrl, stateDir, destination);
+// Windows refuses a control character in the final name, so the first version never commits there.
+test.skipIf(process.platform === 'win32').each([
+  { name: 'a newline', file: 'line\nbreak.ad' },
+  { name: 'a C1 next-line character', file: 'line\u0085break.ad' },
+  { name: 'a C1 control sequence introducer', file: 'line\u009bbreak.ad' },
+])(
+  'a closing repeat whose path holds $name names no command that a text line would change',
+  async ({ file }) => {
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, file);
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
 
-  const closed = await answer(baseUrl, stateDir, request('close'), {
-    scriptPublicationId: id,
-    artifacts: [script('v1', 1, id)],
-  });
+    const closed = await answer(baseUrl, stateDir, request('close'), {
+      scriptPublicationId: id,
+      artifacts: [script('v1', 1, id)],
+    });
 
-  expect(closed).toMatchObject({
-    ok: true,
-    data: {
-      savedScript: destination,
-      warnings: [
-        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, record again with open --save-script=<path> --force, with the path quoted for your shell.`,
-      ],
-    },
-  });
-});
+    expect(closed).toMatchObject({
+      ok: true,
+      data: {
+        savedScript: destination,
+        warnings: [
+          `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=<path> --force, with the path quoted for your shell.`,
+        ],
+      },
+    });
+  },
+);

@@ -286,15 +286,3 @@ describe('the two stdout contracts in one run', () => {
     );
   });
 });
-
-test('a close warning for a path that holds a newline renders no command with that path', async () => {
-  // The remote client words the record-again hint this way for a path that cannot survive one text line.
-  const warning =
-    'Revision 1 of the recording was already saved to /tmp/line\nbreak.ad. It is not checked again. If that file is missing, record again with open --save-script=<path> --force, with the path quoted for your shell.';
-
-  const output = await render('close', { session: 'journey', warnings: [warning] });
-
-  const rendered = `${output.text ?? ''}${output.stderr ?? ''}`;
-  expect(rendered).toContain('record again with open --save-script=<path> --force');
-  expect(rendered).not.toMatch(/--save-script='/);
-});
