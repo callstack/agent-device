@@ -397,16 +397,19 @@ test('an older daemon without a grant echo authorizes no persisted destination: 
     expect(fs.existsSync(granted)).toBe(false);
     expect(fs.existsSync(path.join(world.root, 'clips', 'demo.mp4'))).toBe(false);
 
-    // The grant the client persisted is untouched: no echo, so nothing released it.
-    expect(
-      readCaptureGrantById({
-        stateDir: world.stateDir,
-        baseUrl: world.endpoint(port).baseUrl,
-        req: stopRequest(world),
-        slot: 'record',
-        grantId,
-      }),
-    ).toBeDefined();
+    const req = stopRequest(world);
+    expect(readGrant(world, port, req, grantId)).toBeDefined();
+    const dir = path.join(world.stateDir, 'remote-connections', 'capture-grants');
+    const oldest = new Date(Date.now() - 10_000);
+    fs.utimesSync(path.join(dir, `${grantId}.json`), oldest, oldest);
+    const later = [];
+    for (let i = 1; i <= 64; i += 1) {
+      later.push((await runStart(world, port, `clips/next-${i}`, 'withheld')).grantId);
+    }
+    expect(readGrant(world, port, req, grantId)).toBeUndefined();
+    expect(readGrant(world, port, req, later[0])).toBeDefined();
+    expect(readGrant(world, port, req, later[63])).toBeDefined();
+    expect(fs.readdirSync(dir).filter((name) => name.endsWith('.json'))).toHaveLength(64);
   } finally {
     await closeLoopbackServer(server);
   }
@@ -457,136 +460,38 @@ test('a stop with an unmatched grant ID or without any grant never trusts localP
   }
 });
 
-test('admission refuses beyond 64 unresolved records, but matched stops and the stale sweep free the room — no lockout', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'capture grant admission')) return;
+test('matching releases and the stale sweep free room while fresh grants survive', async () => {
   const world = makeWorld('agent-device-capture-grant-cap-');
-  const server = http.createServer((_req, res) => res.end('bytes'));
-  try {
-    const port = await listenOnLoopback(server);
-    const baseUrl = world.endpoint(port).baseUrl;
-    const makeReq = (session: string): DaemonWireRequest => ({
-      token: 'secret',
-      command: 'record',
-      session,
-      positionals: ['start', `clips/${session}`],
-      meta: { cwd: world.root },
-    });
-    const grantsDir = path.join(world.stateDir, 'remote-connections', 'capture-grants');
-    const grantFile = (grantId: string) => path.join(grantsDir, `${grantId}.json`);
-    // 64 unresolved records admitted.
-    const admittedIds = new Map<string, string>();
-    for (let i = 0; i < 64; i += 1) {
-      const grantId = await admitCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq(`s${i}`),
-        slot: 'record',
-        destination: path.join(world.root, 'clips', `s${i}`),
-      });
-      admittedIds.set(`s${i}`, grantId);
-    }
-    // The 65th is refused before dispatch with a typed error while all 64 stay unresolved.
-    await expect(
-      admitCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq('overflow'),
-        slot: 'record',
-        destination: path.join(world.root, 'clips', 'overflow'),
-      }),
-    ).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'capture_grant_admission_refused', limit: 64 }),
-    });
+  const baseUrl = world.endpoint(1).baseUrl;
+  const req = stopRequest(world, { positionals: ['start', 'clips/demo'] });
+  const options = {
+    stateDir: world.stateDir,
+    baseUrl,
+    req,
+    slot: 'record' as const,
+    destination: path.join(world.root, 'clips', 'demo'),
+  };
+  const grantsDir = path.join(world.stateDir, 'remote-connections', 'capture-grants');
+  const grantFile = (grantId: string) => path.join(grantsDir, `${grantId}.json`);
+  const released = await admitCaptureGrant(options);
+  await releaseCaptureGrant({ ...options, grantId: released });
+  expect(fs.existsSync(grantFile(released))).toBe(false);
 
-    // 64 successful matching stops delete their grants, so the cap bounds only unresolved
-    // records and 64 successful recordings never lock out the next start.
-    for (const [session, grantId] of admittedIds) {
-      await releaseCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq(session),
-        slot: 'record',
-        grantId,
-      });
-    }
-    const afterStops = await admitCaptureGrant({
-      stateDir: world.stateDir,
-      baseUrl,
-      req: makeReq('overflow'),
-      slot: 'record',
-      destination: path.join(world.root, 'clips', 'overflow'),
-    });
-    expect(
-      readCaptureGrantById({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq('overflow'),
-        slot: 'record',
-        grantId: afterStops,
-      })?.destination,
-    ).toBe(path.join(world.root, 'clips', 'overflow'));
-    await releaseCaptureGrant({
-      stateDir: world.stateDir,
-      baseUrl,
-      req: makeReq('overflow'),
-      slot: 'record',
-      grantId: afterStops,
-    });
+  const staleGrant = await admitCaptureGrant(options);
+  const fresh = await admitCaptureGrant(options);
+  const ancient = new Date(Date.now() - STALE_RECORD_MS - 60_000);
+  fs.utimesSync(grantFile(staleGrant), ancient, ancient);
+  fs.writeFileSync(path.join(grantsDir, 'notes.txt'), 'not a grant record');
+  fs.utimesSync(path.join(grantsDir, 'notes.txt'), ancient, ancient);
+  const admitted = await admitCaptureGrant(options);
 
-    // Refill to the cap with unresolved records, then age all but one past the shared
-    // STALE_RECORD_MS horizon: the next admission sweeps exactly the stale ones.
-    const refillIds: string[] = [];
-    for (let i = 0; i < 64; i += 1) {
-      refillIds.push(
-        await admitCaptureGrant({
-          stateDir: world.stateDir,
-          baseUrl,
-          req: makeReq(`r${i}`),
-          slot: 'record',
-          destination: path.join(world.root, 'clips', `r${i}`),
-        }),
-      );
-    }
-    await expect(
-      admitCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq('overflow'),
-        slot: 'record',
-        destination: path.join(world.root, 'clips', 'overflow'),
-      }),
-    ).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'capture_grant_admission_refused' }),
-    });
-    const ancient = new Date(Date.now() - STALE_RECORD_MS - 60_000);
-    const freshId = refillIds[63];
-    expect(freshId).toBeDefined();
-    const freshFile = grantFile(freshId as string);
-    for (const grantId of refillIds.slice(0, 63))
-      fs.utimesSync(grantFile(grantId), ancient, ancient);
-    // An unrelated non-record entry in the same directory is never swept.
-    fs.writeFileSync(path.join(grantsDir, 'notes.txt'), 'not a grant record');
-    fs.utimesSync(path.join(grantsDir, 'notes.txt'), ancient, ancient);
-
-    const admitted = await admitCaptureGrant({
-      stateDir: world.stateDir,
-      baseUrl,
-      req: makeReq('overflow'),
-      slot: 'record',
-      destination: path.join(world.root, 'clips', 'overflow'),
-    });
-    expect(admitted).toBeDefined();
-    // The 63 stale unresolved records were swept; the fresh one and the unrelated file remain.
-    for (const grantId of refillIds.slice(0, 63))
-      expect(fs.existsSync(grantFile(grantId))).toBe(false);
-    expect(fs.existsSync(freshFile)).toBe(true);
-    expect(fs.existsSync(path.join(grantsDir, 'notes.txt'))).toBe(true);
-  } finally {
-    await closeLoopbackServer(server);
-  }
+  expect(fs.existsSync(grantFile(staleGrant))).toBe(false);
+  expect(fs.existsSync(grantFile(fresh))).toBe(true);
+  expect(fs.existsSync(grantFile(admitted))).toBe(true);
+  expect(fs.existsSync(path.join(grantsDir, 'notes.txt'))).toBe(true);
 });
 
-test('aggregate admission refuses when serialized metadata reaches the byte limit', async (t) => {
+test('admission evicts old metadata to fit the byte cap and refuses an individually oversized grant', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant byte cap')) return;
   const world = makeWorld('agent-device-capture-grant-bytes-');
   const server = http.createServer((_req, res) => res.end('bytes'));
@@ -622,13 +527,19 @@ test('aggregate admission refuses when serialized metadata reaches the byte limi
     fs.writeFileSync(file, `${JSON.stringify({ ...record, destination })}\n`);
     expect(fs.statSync(file).size).toBe(limit);
 
-    // No room remains for the incoming record, so admission is refused with the byte limit.
-    await expect(admitCaptureGrant(options)).rejects.toMatchObject({
+    const latest = await admitCaptureGrant(options);
+    expect(fs.existsSync(file)).toBe(false);
+    expect(readGrant(world, port, req, latest)?.destination).toBe(options.destination);
+
+    await expect(
+      admitCaptureGrant({ ...options, destination: destination + 'x' }),
+    ).rejects.toMatchObject({
       details: expect.objectContaining({
         reason: 'capture_grant_admission_refused',
         limit,
       }),
     });
+    expect(readGrant(world, port, req, latest)).toBeDefined();
   } finally {
     await closeLoopbackServer(server);
   }

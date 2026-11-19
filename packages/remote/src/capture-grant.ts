@@ -118,15 +118,8 @@ function scopeMatches(
 }
 
 /**
- * Admits one capture-start grant and durably stores it BEFORE the request is dispatched: the
- * bounded sweep and the aggregate census run under one state admission lock, and the record is
- * written by its immutable grant ID — never as a latest-slot overwrite. The aggregate admission
- * is finite: at most `MAX_CAPTURE_GRANTS` records and `MAX_CAPTURE_GRANT_STORE_METADATA_BYTES` of
- * TOTAL serialized metadata, so the caps bound only unresolved records. An UNCERTAIN census (the
- * store directory exists but cannot be read or sized) refuses admission rather than counting as
- * zero — fail-closed. Refuses (throws) when the record cannot be admitted or written, so a
- * destination the client cannot remember must not become writable later from a response echo.
- * Returns the minted grant ID the request should carry in `meta.captureGrantId`.
+ * Persists a grant before dispatch. The store lock covers the census, eviction, and publish.
+ * Missing or evicted grants never authorize a producer's later echo.
  */
 export async function admitCaptureGrant(params: {
   stateDir: string;
@@ -148,29 +141,20 @@ export async function admitCaptureGrant(params: {
   };
   const serialized = `${JSON.stringify(record)}\n`;
   const incomingBytes = Buffer.byteLength(serialized, 'utf8');
-  await withStoreLock(dir, async () => {
-    const before = censusGrants(dir);
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    sweepGrants(dir, before.entries);
-    const census = censusGrants(dir);
-    if (census.count >= MAX_CAPTURE_GRANTS) {
-      throw new AppError('COMMAND_FAILED', 'Too many retained remote capture grants.', {
+  if (incomingBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'The remote capture grant exceeds the store metadata size limit.',
+      {
         reason: 'capture_grant_admission_refused',
-        limit: MAX_CAPTURE_GRANTS,
-        hint: 'Finish or close the open captures; records nobody touches are removed automatically after a week.',
-      });
-    }
-    if (census.bytes + incomingBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'The retained remote capture grant metadata exceeds the aggregate size limit.',
-        {
-          reason: 'capture_grant_admission_refused',
-          limit: MAX_CAPTURE_GRANT_STORE_METADATA_BYTES,
-          hint: 'Finish or close the open captures; records nobody touches are removed automatically after a week.',
-        },
-      );
-    }
+        limit: MAX_CAPTURE_GRANT_STORE_METADATA_BYTES,
+      },
+    );
+  }
+  await withStoreLock(dir, async () => {
+    const entries = censusGrants(dir);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    pruneGrantsForAdmission(dir, entries, incomingBytes);
     publishFileSync({ destination: file, contents: serialized, mode: 0o600 });
   });
   return grantId;
@@ -362,64 +346,51 @@ function isDerivedChunkPath(primary: string, candidate: string): boolean {
   return /^\d{3,}$/.test(other.name.slice(prefix.length));
 }
 
-/**
- * Bounded sweep on the session-script store's horizon: removes every grant record untouched for
- * `STALE_RECORD_MS`, unresolved captures included, so a record never outlives the capture it
- * covers and the admission caps bound only records inside the horizon. The staleness clock is the
- * file's own mtime — the same clock the session-script store sweeps by — so even a record nobody
- * can parse is reclaimed once it is old. Runs under the admission lock, so it never interleaves
- * with another process's census or write, and touches only stale `.json` entries of this store
- * directory: unrelated records are left alone.
- */
-function sweepGrants(dir: string, entries: readonly GrantCensusEntry[]): void {
+type GrantCensusEntry = Readonly<{ name: string; sizeBytes: number; mtimeMs: number }>;
+
+function pruneGrantsForAdmission(
+  dir: string,
+  entries: GrantCensusEntry[],
+  incomingBytes: number,
+): void {
   const staleBefore = Date.now() - STALE_RECORD_MS;
-  for (const entry of entries.slice(0, SWEEP_SCAN_LIMIT)) {
-    const file = path.join(dir, entry.name);
-    if ((fs.lstatSync(file, { throwIfNoEntry: false })?.mtimeMs ?? Infinity) >= staleBefore) {
-      continue;
+  let count = entries.length;
+  let bytes = entries.reduce((total, entry) => total + entry.sizeBytes, 0);
+  entries.sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
+  for (const entry of entries) {
+    if (
+      entry.mtimeMs >= staleBefore &&
+      count < MAX_CAPTURE_GRANTS &&
+      bytes + incomingBytes <= MAX_CAPTURE_GRANT_STORE_METADATA_BYTES
+    ) {
+      break;
     }
-    fs.rmSync(file, { force: true });
+    fs.rmSync(path.join(dir, entry.name), { force: true });
+    count -= 1;
+    bytes -= entry.sizeBytes;
   }
 }
 
-type GrantCensusEntry = Readonly<{ name: string; sizeBytes: number }>;
-
-type GrantCensus = Readonly<{
-  count: number;
-  bytes: number;
-  entries: GrantCensusEntry[];
-}>;
-
-/**
- * The admission census: how many grant records the store holds and how many bytes of serialized
- * metadata they total. A missing store directory is an EMPTY census (certain), never an error.
- * Anything else unreadable — a path that is not a directory, a record that cannot be sized — is
- * an UNCERTAIN census and throws, so admission is denied instead of counting the unknown as zero.
- */
-function censusGrants(dir: string): GrantCensus {
+/** Admission must know every record's size and age before it can make room. */
+function censusGrants(dir: string): GrantCensusEntry[] {
   let names: string[];
   try {
     names = fs.readdirSync(dir);
   } catch (error) {
-    if (isNotFoundError(error)) return { count: 0, bytes: 0, entries: [] };
+    if (isNotFoundError(error)) return [];
     throw uncertainCensusError(dir, error);
   }
-  let count = 0;
-  let bytes = 0;
   const entries: GrantCensusEntry[] = [];
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
-    let sizeBytes: number;
     try {
-      sizeBytes = fs.statSync(path.join(dir, name)).size;
+      const { size, mtimeMs } = fs.statSync(path.join(dir, name));
+      entries.push({ name, sizeBytes: size, mtimeMs });
     } catch (error) {
       throw uncertainCensusError(dir, error);
     }
-    count += 1;
-    bytes += sizeBytes;
-    entries.push({ name, sizeBytes });
   }
-  return { count, bytes, entries };
+  return entries;
 }
 
 function isNotFoundError(error: unknown): boolean {
