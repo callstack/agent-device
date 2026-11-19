@@ -102,12 +102,12 @@ async function rejectDaemonHttpRpcError(
   const { info, req, stateDir, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
-  // #4518: a daemon refusal settles the recording grants this request bound before dispatch.
-  await options.capture?.settle({ ok: false, error: payload });
   if (!info.baseUrl) {
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
+  // #4518: a daemon refusal settles the recording grants this request bound before dispatch.
+  await options.capture?.settle({ ok: false, error: payload });
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,

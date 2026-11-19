@@ -62,7 +62,7 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
     "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:1bc41daa9831b4e1cd71147c84b263ac586b639d500913a730509c985ca88406",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:41de701a4ba9237d92b5d20268319bd7aa5fda287c60a1965445bfc9127f37f4",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:7239b9113f2175d899c382d1b7a45de22ebb0890707ab2907e15d76afe1dabb1",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:1d2a1d567f47dd547ed5e3ab962ce3e585fad40b177f2fcfd07b622b46a19d6f",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
