@@ -6,6 +6,7 @@ import {
   type LocalInteractorOperationResolver,
   type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
+import { createRuntimeContractInvalidError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ResolvedScrollExecutionOptions } from './scroll-command.ts';
@@ -36,10 +37,11 @@ export type ScrollRuntimeOperations = Readonly<{
    * The touch-scroll surface fact `scroll refresh` admits on. Declared available exactly where a
    * finger pull can drive the scroll surface — iOS and iPadOS, Android phone and tablet — and
    * unavailable on a TV target, a desktop leaf, and every wheel-driven surface, so the refresh
-   * plan's `use` refuses there at admission with no inline platform check in the daemon. The
-   * daemon never invokes this operation; it exists so the fact hangs on a declared operation.
+   * plan's `use` refuses there at admission with no inline platform check in the daemon. The fact
+   * is admission-only: it carries no device work, so a binding refuses a call by name instead of
+   * reporting success for work nobody did.
    */
-  touchScrollSurface(): Promise<void>;
+  touchScrollSurface(): Promise<never>;
 }>;
 
 /** Validated movement evidence beside the owner's unchanged public response fields. */
@@ -97,8 +99,13 @@ function bindScrollDirection(
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): ScrollRuntimeOperations {
   return Object.freeze({
-    // Admission-fact only: never invoked, so the bound value carries no behavior.
-    touchScrollSurface: async () => {},
+    // The fact is admission-only: the plan's `use` reads it, and no route is allowed to invoke it.
+    // A call would report success for device work nobody did, so the binding refuses by name.
+    touchScrollSurface: async (): Promise<never> => {
+      throw createRuntimeContractInvalidError(
+        'touchScrollSurface carries the touch-scroll admission fact and performs no device work',
+      );
+    },
     scrollDirection: async (input: ScrollDirectionInput) => {
       signal.throwIfAborted();
       const interactor = await resolveInteractor({

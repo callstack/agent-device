@@ -194,6 +194,31 @@ test('bound scroll refresh refuses where the owner runs no gesture plan, naming 
   );
 });
 
+test('bound scroll refresh refuses a surface it cannot read with a typed reason too', async () => {
+  // The third admission branch: the leaf declares the touch surface and a gesture plan but no
+  // capture. It must answer the same typed reason as its neighbours, not one an agent has to
+  // text-match.
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        {
+          scroll: async () => ({}),
+          gesture: async () => ({}),
+        },
+        { session: sessionWithStoredScreen(topScreen(false)) },
+      ),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      if (error.code !== 'UNSUPPORTED_OPERATION') return false;
+      assert.match(error.message, /snapshot support/);
+      assert.equal(error.details?.reason, 'scroll_refresh_unsupported_platform');
+      return true;
+    },
+  );
+});
+
 test('bound scroll refresh refuses --until with a typed reason before any device work', async () => {
   await assert.rejects(
     () =>

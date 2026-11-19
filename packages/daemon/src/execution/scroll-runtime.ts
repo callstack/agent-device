@@ -327,7 +327,7 @@ function scrollCaptureUnsupported(subject: string, hint: string | undefined) {
  * The refusal one refresh requirement answers, named for the cell that failed. The refresh use
  * mixes a capability fact with two execution operations, so a leaf that runs gestures but cannot
  * read the screen, or reads the screen but plans no gesture, must not be told it lacks snapshot
- * support. The touch-scroll branch keeps the reason the review round named: `scroll_refresh_unsupported_platform`.
+ * support. Every branch carries the typed reason an agent branches on.
  */
 function refreshAdmissionRefusal(
   device: DeviceInfo,
@@ -351,9 +351,11 @@ function refreshAdmissionRefusal(
       withHint,
     );
   }
-  return scrollCaptureUnsupported(
-    'scroll refresh, which reads the top edge of the scrollable area before pulling,',
-    hint,
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    `scroll refresh is not supported on ${publicPlatformString(device)}: it reads the top edge of the scrollable area before pulling, which requires snapshot support`,
+    { reason: 'scroll_refresh_unsupported_platform' },
+    withHint,
   );
 }
 

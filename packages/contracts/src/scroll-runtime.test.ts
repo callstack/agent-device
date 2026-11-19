@@ -88,6 +88,19 @@ test('a provider binding fails closed when its exact owner exposes no interactor
   });
 });
 
+test('the admission-only touch fact refuses a call instead of reporting work nobody did', async () => {
+  const operations = bindLocalScrollInteractor({
+    device,
+    signal: new AbortController().signal,
+    resolveInteractor: async () => ({ scroll: vi.fn() }) as unknown as Interactor,
+  });
+
+  await expect(operations.touchScrollSurface()).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'runtime-contract-invalid' },
+  });
+});
+
 test('an already-cancelled request never resolves an interactor', async () => {
   const controller = new AbortController();
   controller.abort();
