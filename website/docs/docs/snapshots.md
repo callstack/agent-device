@@ -163,14 +163,14 @@ when it has one, and its `rect`:
 A persistent bar publishes `persistentBar: true`. Its `coveredBy.kind` is `tab-bar`, `toolbar`,
 `navigation-bar`, or `bottom-navigation`. The cover can be identified by its type,
 role, or subrole. Other covers use their presented role. For example, an alert's container may
-publish as `group` with the alert's accessible name. When the covered node sits in a scroll
-container the bar does not wholly contain, the bar also publishes `scrollCanReveal: true`: a scroll
-can reveal the node clear of the bar.
+publish as `group` with the alert's accessible name. When a scroll container of the covered node
+reports hidden content toward the bar and its frame reaches beyond the bar on the bar-free side,
+the bar also publishes `scrollCanReveal: true`: a scroll can reveal the node clear of the bar.
 
 A `click`/`press`/`fill`/`find ... focus` refused on that node repeats the same description in
 `error.details.coveredBy` and names it in `error.hint`. For a persistent bar, use a different visible target or inspect with a snapshot or screenshot
-before retrying. Audit reports covered controls inside scroll containers, except a row under a
-persistent bar marked `scrollCanReveal`.
+before retrying. Audit reports covered controls inside scroll containers, except a control or row
+under a persistent bar marked `scrollCanReveal`.
 `coveredBy` is diagnostic and has no
 ref, so the cover is not an actionable target. It is absent when nothing nameable covers — an
 anonymous container with no accessible name that is not a persistent bar, or a backend policy that reports only the boolean, such

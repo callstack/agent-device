@@ -275,11 +275,13 @@ export type SnapshotCoveringNode = {
    */
   persistentBar?: true;
   /**
-   * Set when the cover is a persistent bar and the covered node sits in scrollable content whose
-   * frame is not wholly inside the bar, so scrolling can reveal the node clear of the bar. The
-   * touch refusal still stands at the current scroll position; the audit reads this fact to stay
-   * silent about rows a scroll can reveal. Absent for any other cover and when no scroll can
-   * reveal the node, such as a scroller wholly behind the bar or a fixed control.
+   * Set when the cover is a persistent bar and scrolling can reveal the covered node clear of the
+   * bar: a scrollable ancestor of the node reports hidden content toward the bar
+   * (`hiddenContentBelow` with its frame reaching above the bar, or `hiddenContentAbove` with its
+   * frame reaching below the bar), so a scroll in that ancestor moves the node off the bar.
+   * The touch refusal still stands at the current scroll position; the audit reads this fact to
+   * stay silent about controls a scroll can reveal. Absent for any other cover and when no scroll
+   * can reveal the node, such as a list already scrolled to its end or a fixed control.
    */
   scrollCanReveal?: true;
 };
@@ -366,7 +368,12 @@ export type RawSnapshotNode = {
   /** Keyboard tap-surface membership, including hosted app controls; independent of settle ownership.
    * Omission means unevaluated. Survives ancestor removal. */
   keyboardOwned?: boolean;
+  /**
+   * Content above the visible area that scrolling can reveal. Vertical axis by construction: no
+   * producer publishes it for a horizontal-only scroller.
+   */
   hiddenContentAbove?: boolean;
+  /** Content below the visible area that scrolling can reveal. Vertical axis by construction. */
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
   /**

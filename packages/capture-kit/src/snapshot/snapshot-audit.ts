@@ -442,14 +442,13 @@ function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | und
 }
 
 /**
- * A persistent bar over scrollable content does not block the row for good: when the scan
+ * A persistent bar over scrollable content does not block the node for good: when the scan
  * published `scrollCanReveal` on the cover, a scroll can reveal the node clear of the bar, so the
- * audit stays silent. The touch refusal still stands at the current scroll position and keeps its
- * own scroll hint; only this advisory finding drops.
+ * audit stays silent. Only this advisory finding drops; the touch refusal still stands at the
+ * current scroll position. `scrollCanReveal` is only ever set on a persistent-bar cover.
  */
 function isScrollRevealedByCover(node: SnapshotNode): boolean {
-  const cover = node.coveredBy;
-  return cover?.persistentBar === true && cover.scrollCanReveal === true;
+  return node.coveredBy?.scrollCanReveal === true;
 }
 
 function coveredRole(node: SnapshotNode, scan: AuditScan): string | undefined {

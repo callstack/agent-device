@@ -7,7 +7,6 @@ import {
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
-  findNearestScrollableAncestor,
   isScrollableNodeLike,
   type SnapshotProducer,
   snapshotBarKind,
@@ -197,14 +196,16 @@ function describeCoveringNode(
 }
 
 /**
- * Whether scrolling can reveal a target a persistent bar covers. The target's nearest scrollable
- * ancestor is the container a scroll moves it in; when the bar does not contain that container's
- * whole frame, part of its viewport is clear of the bar and a scroll can move the target there.
- * A bar that contains the scroller's whole frame leaves no clear area — for example a horizontal
- * scroller wholly behind a bottom bar — and no scroll can reveal the target. A target with no
- * scrollable ancestor is fixed, so no scroll reveals it either. Purely geometric: the scan cannot
- * see the scroller's current offset, so a scroller already at the far edge still counts as
- * revealable.
+ * Whether scrolling can reveal a target a persistent bar covers. This predicate is the single owner
+ * of the rule, and it uses only facts every producer emits: for each scrollable ancestor of the
+ * target, the ancestor reports hidden content toward the bar (`hiddenContentBelow` with its frame
+ * reaching above the bar, or `hiddenContentAbove` with its frame reaching below the bar), so a
+ * scroll in that ancestor moves the node off the bar and the node has somewhere clear to go. A bar
+ * that contains the scroller's whole frame leaves no clear area. A target with no scrollable ancestor
+ * is fixed, so no scroll reveals it either. Without that, no scroll the scroller can perform moves
+ * the node clear of the bar, so no `scrollCanReveal` is published — a list already scrolled to its
+ * end keeps its last row reported under the bar. Producers own the scroll axis when they publish
+ * hidden content, so a horizontal-only scroller reports neither flag and cannot qualify here.
  */
 function scrollCanRevealTarget(
   scan: OcclusionScan,
@@ -213,11 +214,34 @@ function scrollCanRevealTarget(
 ): boolean {
   const coverRect = positiveRect(cover.rect);
   if (!coverRect) return false;
-  const scroller = findNearestScrollableAncestor(target, scan.byIndex);
-  if (!scroller) return false;
-  const scrollerRect = positiveRect(scroller.rect);
-  if (!scrollerRect) return false;
-  return !rectContains(coverRect, scrollerRect);
+  for (const scroller of scrollableAncestorsOf(target, scan.byIndex)) {
+    const scrollerRect = positiveRect(scroller.rect);
+    if (!scrollerRect) continue;
+    const revealsFromAbove = scroller.hiddenContentBelow === true && scrollerRect.y < coverRect.y;
+    const revealsFromBelow =
+      scroller.hiddenContentAbove === true &&
+      scrollerRect.y + scrollerRect.height > coverRect.y + coverRect.height;
+    if (revealsFromAbove || revealsFromBelow) return true;
+  }
+  return false;
+}
+
+/** Every scrollable ancestor of the target, nearest first; a scroll in any of them moves the target. */
+function scrollableAncestorsOf(
+  target: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+): RawSnapshotNode[] {
+  const scrollers: RawSnapshotNode[] = [];
+  let current =
+    typeof target.parentIndex === 'number' ? byIndex.get(target.parentIndex) : undefined;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    visited.add(current.index);
+    if (isScrollableNodeLike(current)) scrollers.push(current);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+  }
+  return scrollers;
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */
