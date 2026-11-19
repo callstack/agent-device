@@ -6,7 +6,7 @@ Accepted.
 This ADR is implemented on `main`, including the #1349 identity-level destination-guard amendment.
 
 Implementation owners are `packages/daemon/src/sessions/handlers/session-script-publication.ts` and `packages/daemon/src/core/session-script-active-publication.ts`.
-Remote delivery (#4511 amendment) is owned by `packages/daemon/src/core/session-script-publication-capability.ts` and, on the client, `packages/remote/src/session-script-destination.ts`.
+Remote delivery (#4511 amendment) is owned by `packages/daemon/src/core/session-script-publication-capability.ts` and, on the client, `session-script-destination.ts`, `script-publication-record.ts` and `script-version-publisher.ts` in `packages/remote/src/`.
 
 ## Rules at a glance
 
