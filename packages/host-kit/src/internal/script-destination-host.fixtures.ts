@@ -2,11 +2,19 @@
 // directories it builds them on. The ancestry rule reads the real host for its own identity, so a test that
 // leaves that alone is asserting against whatever account the machine it runs on happens to have.
 
-import { expect } from 'vitest';
+import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { publishScriptFileSync } from './script-destination.ts';
+
+/** A test that needs POSIX ownership or POSIX path rules, skipped on Windows. */
+export const skipOnWindows: typeof test.skip = process.platform === 'win32' ? test.skip : test;
+
+/** Every entry under `directory`, so a refusal can show it created nothing anywhere below it. */
+export function tree(directory: string): string[] {
+  return fs.readdirSync(directory, { recursive: true }).map(String).sort();
+}
 
 /** This process's uid. Windows has none, and every test that uses it is skipped there. */
 export const currentUid = process.getuid?.() ?? -1;

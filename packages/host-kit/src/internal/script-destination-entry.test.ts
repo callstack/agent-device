@@ -9,6 +9,8 @@ import {
   expectUntrusted,
   expectUntrustedReplaced,
   publish,
+  skipOnWindows,
+  tree,
 } from './script-destination-host.fixtures.ts';
 import {
   confirmScriptDestination,
@@ -17,16 +19,9 @@ import {
   publishScriptFileSync,
 } from './script-destination.ts';
 
-const skipOnWindows = process.platform === 'win32' ? test.skip : test;
-
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-/** Every entry under `directory`, so a refusal can show it created nothing anywhere below it. */
-function tree(directory: string): string[] {
-  return fs.readdirSync(directory, { recursive: true }).map(String).sort();
-}
 
 skipOnWindows.each([
   { name: 'a `.` final segment', suffix: '/.' },
