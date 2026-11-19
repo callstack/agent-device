@@ -353,13 +353,12 @@ export async function verifyHarmonyOpenForeground(
           HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
           Math.max(0, requestDeadlineAtMs - Date.now()),
         );
-  const clampedByDeadline = pollBudgetMs < HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
   const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
   }
-  throw openForegroundHardFailure(bundleId, verification, clampedByDeadline, pollBudgetMs);
+  throw openForegroundHardFailure(bundleId, verification, pollBudgetMs);
 }
 
 /**
@@ -372,11 +371,10 @@ export async function verifyHarmonyOpenForeground(
 function openForegroundHardFailure(
   bundleId: string,
   verification: OpenForegroundVerification,
-  clampedByDeadline: boolean,
   pollBudgetMs: number,
 ): AppError {
   if (verification.state === 'probe-failed') {
-    if (clampedByDeadline && pollBudgetMs <= 0) {
+    if (pollBudgetMs <= 0) {
       return new AppError(
         'COMMAND_FAILED',
         `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`,
@@ -386,15 +384,17 @@ function openForegroundHardFailure(
         },
       );
     }
+    const window = Math.max(1, Math.round(pollBudgetMs / 100) / 10);
     return new AppError(
       'COMMAND_FAILED',
-      `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within 5s`,
+      `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within ${window}s`,
       {
         reason: 'open-foreground-probe-unreadable',
         hint: 'Check the device connection, then run the open again.',
       },
     );
   }
+  const clampedByDeadline = pollBudgetMs < HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS;
   return new AppError(
     'COMMAND_FAILED',
     clampedByDeadline
