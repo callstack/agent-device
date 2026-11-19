@@ -4,6 +4,26 @@ import CoreVideo
 extension RunnerTests {
   // MARK: - Screen Recorder
 
+  #if os(watchOS)
+  /// watchOS has no `AVAssetWriter`. The daemon refuses recording on a watch, so this answers only a
+  /// direct runner request.
+  final class ScreenRecorder {
+    init(outputPath: String, fps: Int32?) {}
+
+    func start(
+      bootstrap: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+      frame: @escaping @Sendable () -> RunnerImage?
+    ) throws {
+      throw NSError(
+        domain: "AgentDeviceRunner.Record",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "runner recording is unavailable on watchOS"]
+      )
+    }
+
+    func stop() throws {}
+  }
+  #else
   final class ScreenRecorder {
     private let outputPath: String
     private let fps: Int32?
@@ -291,6 +311,7 @@ extension RunnerTests {
     }
 
   }
+  #endif
 }
 
 extension RunnerTests {

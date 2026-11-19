@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const PLATFORMS = ['ios', 'macos', 'tvos', 'visionos'];
+const PLATFORMS = ['ios', 'macos', 'tvos', 'visionos', 'watchos'];
 
 /**
  * Compiles the Apple runner for every platform the package supports, into a scratch directory

@@ -251,8 +251,8 @@ extension RunnerTests {
   /// lower, so an older system refuses rather than pressing a control that cannot exist there.
   @discardableResult
   func pressActionButton() -> Bool {
-#if os(iOS)
-    guard #available(iOS 16.0, *) else { return false }
+#if os(iOS) || os(watchOS)
+    guard #available(iOS 16.0, watchOS 9.0, *) else { return false }
     guard XCUIDevice.shared.hasHardwareButton(.action) else { return false }
     XCUIDevice.shared.press(.action)
     return true

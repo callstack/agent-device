@@ -149,6 +149,8 @@ extension RunnerTests {
       logSwipe(trace.logLine(name: "error", code: String(describing: type(of: error))))
       throw error
     }
+#elseif os(watchOS)
+    return try performWatchBack(app: app)
 #else
     // visionOS has no back command. The daemon refuses it at the back capability fact, so this
     // answers only a direct runner request, with nothing sent.

@@ -8,7 +8,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
  * record; this module owns the script-side platform vocabulary, so the runner entry carries none of it.
  */
 
-const RUNNER_XCUITEST_SCRIPT_PLATFORMS = ['ios', 'macos', 'tvos', 'visionos'] as const;
+const RUNNER_XCUITEST_SCRIPT_PLATFORMS = ['ios', 'macos', 'tvos', 'visionos', 'watchos'] as const;
 export type RunnerXcuitestScriptPlatform = (typeof RUNNER_XCUITEST_SCRIPT_PLATFORMS)[number];
 
 export function isRunnerXcuitestScriptPlatform(
@@ -25,6 +25,7 @@ const RUNNER_SCRIPT_TARGET: Record<
   macos: 'desktop',
   tvos: 'tv',
   visionos: 'mobile',
+  watchos: 'mobile',
 };
 
 const RUNNER_SCRIPT_APPLE_OS: Record<
@@ -35,6 +36,7 @@ const RUNNER_SCRIPT_APPLE_OS: Record<
   macos: 'macos',
   tvos: 'tvos',
   visionos: 'visionos',
+  watchos: 'watchos',
 };
 
 /**

@@ -303,6 +303,9 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
+#if os(watchOS)
+      return try watchCrownScroll(app: activeApp, command: command, direction: direction)
+#endif
       guard let scrollContext = try synthesizedCoordinateContext(app: activeApp) else {
         return Response(
           ok: false,

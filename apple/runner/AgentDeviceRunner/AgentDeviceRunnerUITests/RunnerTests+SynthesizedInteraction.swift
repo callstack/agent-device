@@ -871,6 +871,8 @@ extension RunnerTests {
       message: "multi-touch gestures are not supported on tvOS",
       hint: "tvOS has no touch input; use remote-driven navigation."
     )
+#elseif os(watchOS)
+    return try watchSampledPlannedGesture(app: app, plan: plan)
 #elseif os(visionOS)
     return .unsupported(
       message: "multi-touch gestures are not supported on visionOS",

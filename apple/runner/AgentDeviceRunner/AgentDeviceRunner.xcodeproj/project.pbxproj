@@ -367,6 +367,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AgentDeviceRunner/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "";
+				"INFOPLIST_FILE[sdk=watchsimulator*]" = "";
+				"INFOPLIST_KEY_WKApplication[sdk=watchsimulator*]" = YES;
+				"INFOPLIST_KEY_WKWatchOnly[sdk=watchsimulator*]" = YES;
+				// The SwiftUI watch host replaces the Objective-C UIKit host on watchOS only.
+				EXCLUDED_SOURCE_FILE_NAMES = AgentDeviceRunnerWatchApp.swift;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=watchsimulator*]" = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -387,9 +393,10 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3,7";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator watchsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,4,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
+					WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
@@ -403,6 +410,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AgentDeviceRunner/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "";
+				"INFOPLIST_FILE[sdk=watchsimulator*]" = "";
+				"INFOPLIST_KEY_WKApplication[sdk=watchsimulator*]" = YES;
+				"INFOPLIST_KEY_WKWatchOnly[sdk=watchsimulator*]" = YES;
+				// The SwiftUI watch host replaces the Objective-C UIKit host on watchOS only.
+				EXCLUDED_SOURCE_FILE_NAMES = AgentDeviceRunnerWatchApp.swift;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=watchsimulator*]" = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -423,9 +436,10 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3,7";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator watchsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,4,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
+					WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -456,9 +470,10 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3,7";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator watchsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,4,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
+					WATCHOS_DEPLOYMENT_TARGET = 10.0;
 				TEST_TARGET_NAME = AgentDeviceRunner;
 			};
 			name = Debug;
@@ -487,9 +502,10 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3,7";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator watchsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,4,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
+					WATCHOS_DEPLOYMENT_TARGET = 10.0;
 				TEST_TARGET_NAME = AgentDeviceRunner;
 			};
 			name = Release;
