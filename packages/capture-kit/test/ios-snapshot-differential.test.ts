@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -9,28 +10,20 @@ import {
   compareDifferentialCases,
   runSwiftCases,
   SWIFT_RUN_TIMEOUT_MS,
-} from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.ts';
+} from '../src/ios-snapshot-engine/conformance-harness.ts';
 import {
   swiftToolchainAvailable,
   writeDifferentialFailureArtifact,
-} from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.fixtures.ts';
-import { differentialBatchArbitrary } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-generator.ts';
-import { readIosSnapshotEngineFixture } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-fixture.ts';
+} from '../src/ios-snapshot-engine/conformance-harness.fixtures.ts';
+import { differentialBatchArbitrary } from '../src/ios-snapshot-engine/conformance-generator.ts';
+import { readIosSnapshotEngineFixture } from '../src/ios-snapshot-engine/conformance-fixture.ts';
 import {
   hostRowNodes,
   runnerNodes,
   safariWebViewNodes,
   threadNodes,
   viewport as capturedViewport,
-} from '../packages/capture-kit/src/ios-snapshot-engine/runner-presentation-fixtures.ts';
-
-import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
-import {
-  presentAppleRunnerSnapshot,
-  readAppleSnapshotResult,
-} from '../packages/platform-apple/src/snapshot-presentation.ts';
-import { TVOS_SIMULATOR } from '../packages/platform-apple/src/__tests__/device-fixtures.ts';
+} from '../src/ios-snapshot-engine/runner-presentation-fixtures.ts';
 
 type DifferentialCase = Parameters<typeof compareDifferentialCases>[0][number];
 
@@ -427,26 +420,28 @@ test('regular tvOS tree captures publish focus on the surviving tile as focus mo
     const swift = swiftCases[index]!;
     assert.equal(swift.outcome, 'success', testCase.name);
     const raw = testCase.projection === 'raw';
-    const read = readAppleSnapshotResult(
-      {
-        nodes: swift.rawNodes,
-        snapshotViewport: { kind: 'reported', rect: testCase.viewport },
-      },
-      TVOS_SIMULATOR,
-    );
-    const presented = presentAppleRunnerSnapshot(
-      TVOS_SIMULATOR,
-      { raw, interactiveOnly: testCase.interactiveOnly },
-      read,
-    );
-    const capture = stampSnapshotIdentity(presented, {
-      backend: 'xctest',
-      producer: 'apple-runner',
-    });
-    const state = buildSnapshotState(capture, {
-      snapshotRaw: raw,
-      snapshotInteractiveOnly: testCase.interactiveOnly,
-    });
+    const { presented, state } = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          '--experimental-strip-types',
+          'packages/platform-apple/test/tvos-snapshot-presentation.ts',
+        ],
+        {
+          encoding: 'utf8',
+          input: JSON.stringify({
+            nodes: swift.rawNodes,
+            viewport: testCase.viewport,
+            raw,
+            interactiveOnly: testCase.interactiveOnly,
+          }),
+        },
+      ),
+    ) as {
+      presented: { nodes: NonNullable<typeof swift.rawNodes> };
+      state: { nodes: NonNullable<typeof swift.rawNodes> };
+    };
+
     for (const nodes of [swift.rawNodes!, presented.nodes, state.nodes]) {
       const focused = nodes.filter((node) => node.focused === true);
       assert.deepEqual(
