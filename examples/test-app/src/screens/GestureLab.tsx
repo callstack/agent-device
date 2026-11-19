@@ -444,38 +444,6 @@ export function GestureLab() {
       <Text style={styles.metric} testID="drag-gesture-status">
         drag completed {dragCompleted ? 'yes' : 'no'}
       </Text>
-      <View testID="reorder-list">
-        {reorderOrder.map((label) => (
-          <ReorderRow
-            key={label}
-            label={label}
-            onHoldActivated={() => setReorderHoldActivated(true)}
-            onMoveDy={(dy) => setReorderLastDy(dy)}
-            onSwap={(direction) =>
-              setReorderOrder((current) => {
-                const index = current.indexOf(label);
-                const target = index + direction;
-                if (direction === 0 || index < 0 || target < 0 || target >= current.length) {
-                  return current;
-                }
-                const next = [...current];
-                next[index] = current[target]!;
-                next[target] = label;
-                return next;
-              })
-            }
-          />
-        ))}
-      </View>
-      <Text style={styles.metric} testID="reorder-status">
-        reorder order {reorderOrder.join(',')}
-      </Text>
-      <Text style={styles.metric} testID="reorder-hold">
-        reorder hold activated {reorderHoldActivated ? 'yes' : 'no'}
-      </Text>
-      <Text style={styles.metric} testID="reorder-last-dy">
-        reorder last dy {Math.round(reorderLastDy)}
-      </Text>
 
       {Platform.OS === 'ios' ? (
         <GestureDetector gesture={panDurationGesture}>{targetView}</GestureDetector>
@@ -515,6 +483,39 @@ export function GestureLab() {
           testID="multi-tap-target"
         />
       </GestureDetector>
+
+      <View testID="reorder-list">
+        {reorderOrder.map((label) => (
+          <ReorderRow
+            key={label}
+            label={label}
+            onHoldActivated={() => setReorderHoldActivated(true)}
+            onMoveDy={(dy) => setReorderLastDy(dy)}
+            onSwap={(direction) =>
+              setReorderOrder((current) => {
+                const index = current.indexOf(label);
+                const target = index + direction;
+                if (direction === 0 || index < 0 || target < 0 || target >= current.length) {
+                  return current;
+                }
+                const next = [...current];
+                next[index] = current[target]!;
+                next[target] = label;
+                return next;
+              })
+            }
+          />
+        ))}
+      </View>
+      <Text style={styles.metric} testID="reorder-status">
+        reorder order {reorderOrder.join(',')}
+      </Text>
+      <Text style={styles.metric} testID="reorder-hold">
+        reorder hold activated {reorderHoldActivated ? 'yes' : 'no'}
+      </Text>
+      <Text style={styles.metric} testID="reorder-last-dy">
+        reorder last dy {Math.round(reorderLastDy)}
+      </Text>
     </SectionCard>
   );
 }
