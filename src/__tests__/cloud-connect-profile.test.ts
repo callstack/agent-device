@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { buildConnectClientId } from '../cli/connection/client-id.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
@@ -243,12 +244,14 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
   }
 });
 
-test('connect limrun repeated for the same session reuses its connection and profile', async () => {
+test('connect limrun reconnects to the saved named session and profile', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-repeat-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
   vi.useFakeTimers({ toFake: ['Date'] });
-  const connect = async () =>
+  const session = 'limrun-repeat';
+  const savedRunId = `limrun-${buildConnectClientId('limrun', stateDir, session)}`;
+  const connect = async (runId?: string) =>
     await captureConnectStdout(async () => {
       await connectCommand({
         host: createTestHostEnvironment(),
@@ -259,7 +262,8 @@ test('connect limrun repeated for the same session reuses its connection and pro
           version: false,
           stateDir,
           platform: 'android',
-          session: 'limrun-repeat',
+          session,
+          ...(runId === undefined ? {} : { runId }),
         },
         client: {} as AgentDeviceClient,
       });
@@ -267,7 +271,7 @@ test('connect limrun repeated for the same session reuses its connection and pro
 
   try {
     vi.setSystemTime(1_000);
-    await connect();
+    await connect(savedRunId);
     const first = readRequiredActiveState(stateDir);
     // Time passes between the two connects; the connection identity must not depend on it.
     vi.setSystemTime(90_000);

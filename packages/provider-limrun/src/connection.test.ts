@@ -70,6 +70,7 @@ test('resolve names the platform, its lease backend, and the capture opt-in it c
     leaseProvider: 'limrun',
     platform: 'ios',
     clientId: undefined,
+    runId: 'limrun-803cad858538d077',
     providerNetworkLogs: true,
     providerNetworkHosts: 'api.example',
   });
@@ -139,14 +140,11 @@ test('resolve reads the refused profile fields before the credentials or the pla
   );
 });
 
-test('resolve gives an unscoped connect a run of its own and leaves identity to the host', async () => {
+test('resolve gives each unscoped connect a run and preserves an explicit run', async () => {
   const first = await resolve({ platform: 'android' });
   const second = await resolve({ platform: 'android' });
   assert.match(String(first.profile.runId), /^limrun-[a-f0-9]{16}$/);
   assert.notEqual(first.profile.runId, second.profile.runId);
 
-  // A named session reconnects under the run the host derives from that session, and a run the
-  // caller passed is theirs to share; neither is the provider's to name.
-  assert.equal((await resolve({ platform: 'android', session: 'ci' })).profile.runId, undefined);
-  assert.equal((await resolve({ platform: 'android', runId: 'run-a' })).profile.runId, undefined);
+  assert.equal((await resolve({ platform: 'android', runId: 'run-a' })).profile.runId, 'run-a');
 });

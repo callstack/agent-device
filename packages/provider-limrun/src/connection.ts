@@ -24,7 +24,7 @@ import {
 import type { LimrunConnectionVerificationOptions } from './connection-verification.ts';
 
 /** The flags and environment one `connect` call gives the provider. */
-type ConnectContext = Pick<PluginConnectionContext, 'flags' | 'env'>;
+type ConnectContext = Pick<PluginConnectionContext, 'flags' | 'env' | 'stateDir'>;
 
 /**
  * The read-only account or instance check `verify` performs. The provider's own verification fills
@@ -65,16 +65,9 @@ export function createLimrunConnection(
   };
 }
 
-/**
- * The profile Limrun contributes to a connection; the host owns the identity written around it.
- * Limrun serves a local daemon through its own tunnel, and both the instance and its app are chosen
- * after connect, so the profile fixes those axes instead of carrying over selections that cannot
- * apply to them. A named session keeps the run the host derives from that session, which is what
- * lets a reconnect reuse its connection; an unscoped connect resolves its own session after this
- * call, so it gets a run of its own rather than one shared by every unscoped connect.
- */
+/** The transport, lease and capture settings that Limrun adds to the saved profile. */
 function limrunConnectProfile(context: ConnectContext): RemoteConfigProfile {
-  const { flags, env } = context;
+  const { flags, env, stateDir } = context;
   rejectRefusedProviderProfileFields(flags, LIMRUN_PROFILE_FIELDS);
   const leaseBackend = requireLimrunLeaseBackend(flags);
   const platform = leaseBackend === 'ios-instance' ? 'ios' : 'android';
@@ -89,13 +82,18 @@ function limrunConnectProfile(context: ConnectContext): RemoteConfigProfile {
     // A Limrun lease is scoped by its run and its provider, and no device is picked before
     // allocation, so the provider names no client of its own and the host's identity stands.
     clientId: undefined,
-    ...(flags.runId === undefined && flags.session === undefined
-      ? { runId: `limrun-${crypto.randomBytes(8).toString('hex')}` }
-      : {}),
+    runId: flags.runId ?? limrunRunId(stateDir, flags.session ?? crypto.randomUUID()),
     // The capture opt-in is read at lease allocation, so it must survive into later commands.
     providerNetworkLogs: flags.providerNetworkLogs,
     providerNetworkHosts: flags.providerNetworkHosts,
   };
+}
+
+/** Keep the run identity of saved Limrun sessions so reconnect can reuse them. */
+function limrunRunId(stateDir: string, session: string): string {
+  const identity = [LIMRUN_PROVIDER, stateDir, session].join('\0');
+  const digest = crypto.createHash('sha256').update(identity).digest('hex');
+  return `${LIMRUN_PROVIDER}-${digest.slice(0, 16)}`;
 }
 
 /**
