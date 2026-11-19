@@ -69,11 +69,14 @@
 //     a `new AppError(...)` construction, its subclass's construction, or a subclass's own
 //     `super(...)`) may not name a value the file did not publish at the merge-base; typed internal
 //     `reason` properties are not wire vocabulary and are not measured (R89).
+//   - Over PRODUCTION SOURCES: `Promise.race(` occurrences per package (workspace package or root
+//     `src`) may only shrink against the merge-base (R87) — deadline races go through host-kit's
+//     `settleWithin`, which clears its own timer on every settle path.
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
-// R6, R9, and the R10 R7 counts are ratchets with no written-down reference: each is the same
-// measurement taken over the merge-base with origin/main (`ratchet-reference.ts`), so growth
-// fails, a shrink needs no edit, and no change can bank headroom.
+// R6, R9, the R10 R7 counts, and the R87 race counts are ratchets with no written-down reference:
+// each is the same measurement taken over the merge-base with origin/main (`ratchet-reference.ts`),
+// so growth fails, a shrink needs no edit, and no change can bank headroom.
 // `(root)` holds the executables and ranks above the spine. The retired `src/utils` zone is
 // deliberately outside the spine and is rejected separately by R14; extracted workspace package
 // zones are classified separately and held behind R11 instead of the src folder spine.
@@ -101,6 +104,7 @@ import {
   type ResolvedImportEdge,
 } from './model.ts';
 import { checkTypeInversions } from './type-inversion-ratchet.ts';
+import { checkPromiseRaceCounts } from './promise-race-ratchet.ts';
 import { checkZoneValueDag } from './zone-value-dag.ts';
 import {
   measureRatchets,
@@ -451,6 +455,10 @@ function report(
     const measuredOverlay = handlerOwnedOverlay(ratchets.sessionAuthority);
     const handlerOwnedShapeFiles = measuredOverlay.shapeFiles.length;
     const handlerOwnedAuthorityFiles = measuredOverlay.authorityFiles.length;
+    const remainingRaces = Object.values(ratchets.promiseRaces).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
@@ -471,7 +479,9 @@ function report(
         `static or dynamic edges (R82); process globals stay at declared entries and ` +
         `command-host reads stay at command-execution/spawn boundaries (R86); ` +
         `${packageExportSurfaceSummary(ratchets.testOnlyExports, reference.testOnlyExports)}; ` +
-        `${testColocationSummary(ratchets.unmatchedTests, reference.unmatchedTests)}; and ` +
+        `${testColocationSummary(ratchets.unmatchedTests, reference.unmatchedTests)}; ` +
+        `\`Promise.race(\` counts per package hold at or under the merge-base ` +
+        `${reference.ref.slice(0, 10)} (R87, ${remainingRaces} remaining); and ` +
         `the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
@@ -569,6 +579,7 @@ export const LAYERING_RULE_IDS = [
   'test-colocation',
   'unique-exported-type-names',
   'untyped-reason-literals',
+  'promise-race-ratchet',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -671,6 +682,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.ratchets.untypedReasonLiterals,
       context.reference.untypedReasonLiterals,
     ),
+  'promise-race-ratchet': (context) =>
+    checkPromiseRaceCounts(context.sources, context.reference.promiseRaces),
 };
 
 export function main(): number {

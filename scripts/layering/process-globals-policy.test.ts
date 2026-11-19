@@ -19,6 +19,7 @@ test('the registered gate rejects process configuration and command-host scope i
     testOnlyExports: [],
     unmatchedTests: [],
     untypedReasonLiterals: {},
+    promiseRaces: {},
   };
   const context: LayeringContext = {
     sourceFiles: [...allTypeScriptSources.keys()],
