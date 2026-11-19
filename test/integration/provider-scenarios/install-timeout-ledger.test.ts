@@ -79,6 +79,7 @@ type InstallLedgerScenario = ClosableProviderScenarioResource &
   }>;
 
 const REQUIRED_DAEMON_RESULT_MARGIN_MS = 30_000;
+const EXPECTED_STANDALONE_SOURCE_BUDGET_MS = 600_000;
 let nextAppleScenarioId = 0;
 
 for (const route of [
@@ -203,7 +204,7 @@ function stubSourceDownload(scenario: InstallLedgerScenario): void {
   );
   vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
     async (request): Promise<networkTransport.InstallSourceNetworkResponse> => {
-      scenario.ledger.record('download', [request.url.toString()], timeouts.get(request.signal));
+      scenario.ledger.record('download', [request.url.toString()], timeouts.get(request.signal), 0);
       return {
         statusCode: 200,
         headers: {},
@@ -439,18 +440,18 @@ function assertLedgerFitsEnvelope(
     flags: {},
   });
   assert.ok(envelopeMs !== undefined, `${command} must declare a bounded envelope`);
-  // The source download no longer carries the retired fixed 120s transfer ceiling: it consumes
-  // the shared source-work budget (envelope minus the daemon result margin) together with the
-  // other phases, so it counts only what remains after the phases that do not share that budget.
-  const sourceWorkBudgetMs = envelopeMs - REQUIRED_DAEMON_RESULT_MARGIN_MS;
-  const otherPhasesMs = ledger
+  // The observed download timer bounds standalone materialization. The daemon's shared
+  // source-work deadline applies to the whole route; its enforcement requires a route test.
+  for (const call of ledger.filter(({ tool }) => tool === 'download')) {
+    assert.equal(
+      call.timeoutMs,
+      EXPECTED_STANDALONE_SOURCE_BUDGET_MS,
+      `${route} ${command} must arm the finite standalone source budget`,
+    );
+  }
+  const virtualElapsedMs = ledger
     .filter((call) => call.tool !== 'download')
     .reduce((total, call) => total + Math.max(0, call.timeoutMs - 1), 0);
-  const downloadCall = ledger.find((call) => call.tool === 'download');
-  const downloadShareMs = downloadCall
-    ? Math.max(0, Math.min(downloadCall.timeoutMs, sourceWorkBudgetMs - otherPhasesMs) - 1)
-    : 0;
-  const virtualElapsedMs = otherPhasesMs + downloadShareMs;
   assert.ok(
     virtualElapsedMs + REQUIRED_DAEMON_RESULT_MARGIN_MS <= envelopeMs,
     `${route} ${command} ledger worst case (${virtualElapsedMs}ms) + ` +

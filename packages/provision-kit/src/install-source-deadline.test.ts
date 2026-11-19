@@ -196,6 +196,7 @@ test('a DNS approval stall reports the connect phase timeout', async () => {
       transferPhase: 'connect',
       timeoutMs: 30_000,
     });
+    assert.ok(isRequestCanceledError(error.cause));
   } finally {
     releaseLookup(new Error('lookup fixture released'));
     lookup.mockRestore();

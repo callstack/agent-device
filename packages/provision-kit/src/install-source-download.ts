@@ -116,7 +116,11 @@ async function requestHop(
       onConnected: () => watchdog.arm('response-headers', phases.responseHeaderTimeoutMs),
     });
   } catch (error) {
-    if (phases.isPhaseTimeout(watchdog.signal.reason)) throw watchdog.signal.reason;
+    if (phases.isPhaseTimeout(error)) throw error;
+    const reason: unknown = watchdog.signal.reason;
+    if (reason instanceof AppError && phases.isPhaseTimeout(reason)) {
+      throw new AppError(reason.code, reason.message, reason.details, error);
+    }
     if (error instanceof AppError) throw error;
     const networkErrorCode = readNetworkErrorCode(error);
     throw new AppError(
