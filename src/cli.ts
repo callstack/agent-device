@@ -281,23 +281,7 @@ async function parseCliInputOrExit(
   const isHelpAlias = parsed.command === 'help';
   const isHelpFlag = parsed.flags.help;
   if (isHelpAlias || isHelpFlag) {
-    if (isHelpAlias && parsed.positionals.length > 1) {
-      await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
-      return exitAfterFlush(1);
-    }
-    const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
-    if (!helpTarget) {
-      process.stdout.write(`${await usage()}\n`);
-      return exitAfterFlush(0);
-    }
-    const commandHelp = await usageForCommand(helpTarget);
-    if (commandHelp) {
-      process.stdout.write(commandHelp);
-      return exitAfterFlush(0);
-    }
-    await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
-    process.stdout.write(`${await usage()}\n`);
-    return exitAfterFlush(1);
+    return await exitAfterHelp(parsed, isHelpAlias);
   }
 
   if (!parsed.command) {
@@ -322,6 +306,29 @@ async function parseCliInputOrExit(
   }
 
   return { parsed, command: parsed.command, positionals: parsed.positionals };
+}
+
+async function exitAfterHelp(
+  parsed: ParsedCliInput['parsed'],
+  isHelpAlias: boolean,
+): Promise<never> {
+  if (isHelpAlias && parsed.positionals.length > 1) {
+    await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
+    return exitAfterFlush(1);
+  }
+  const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
+  if (!helpTarget) {
+    process.stdout.write(`${await usage()}\n`);
+    return exitAfterFlush(0);
+  }
+  const commandHelp = await usageForCommand(helpTarget);
+  if (commandHelp) {
+    process.stdout.write(commandHelp);
+    return exitAfterFlush(0);
+  }
+  await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
+  process.stdout.write(`${await usage()}\n`);
+  return exitAfterFlush(1);
 }
 
 async function exitOnParseFailure(
