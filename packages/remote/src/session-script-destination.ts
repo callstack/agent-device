@@ -648,6 +648,7 @@ function publishStaged(
  */
 function committedRepeat(record: ScriptRecord, revision: number): PublishOutcome | undefined {
   if (revision > record.revision) return undefined;
+  // Without an entry for the committed revision, the destination is answered as the caller spelled it.
   const published =
     record.entry?.revision === record.revision ? record.entry.path : record.destination;
   return { published, repeat: { requested: revision, committed: record.revision } };
@@ -694,11 +695,9 @@ function settleInterrupted(file: string, record: ScriptRecord, entry: string): S
   const settled = settlePublishing(record, entry);
   // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
   writeRecord(file, settled);
-  const { staging } = record.publishing;
-  fs.rmSync(staging, { recursive: true, force: true });
-  const current = withoutStaging(settled, staging);
-  writeRecord(file, current);
-  return current;
+  // Best effort once the commit is recorded: a directory that stays listed is removed by retirement or the sweep.
+  releaseStagingQuietly(file, record.publishing.staging);
+  return readRecord(file) ?? settled;
 }
 
 /** An interrupted version counts as published only when the entry host-kit authorized is that very file. */

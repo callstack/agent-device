@@ -518,3 +518,35 @@ test('a recorded entry is only reported: a newer version is written to the autho
   expect(fs.readFileSync(decoy, 'utf8')).toBe('decoy\n');
   expect(soleRecord(stateDir).record.entry).toEqual({ revision: 2, path: destination });
 });
+
+test('a staging removal that fails after settlement recorded the commit keeps the committed answer', async () => {
+  // A dropped Windows share answers ECONNRESET to the removal; the revision is already recorded by then.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  interruptNextCommit();
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+  delete served.v2;
+  const { staging } = soleRecord(stateDir).record.publishing;
+  const remove = fs.rmSync.bind(fs) as (...args: unknown[]) => void;
+  const reset = Object.assign(new Error('The share connection dropped'), { code: 'ECONNRESET' });
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((...args: unknown[]) => {
+    if (args[0] === staging) throw reset;
+    remove(...args);
+  }) as typeof fs.rmSync);
+  onTestFinished(() => spy.mockRestore());
+
+  const reoffered = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(spy).toHaveBeenCalledWith(staging, { recursive: true, force: true });
+  expect(reoffered).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(reoffered.ok && reoffered.data).not.toHaveProperty('scriptDeliveryFailure');
+  // The directory stays listed, so retirement or the sweep removes it later.
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, staging: [staging] });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
+});
