@@ -439,6 +439,8 @@ async function publishScriptVersion(
   try {
     // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
     const prepared = prepareScriptDestination(record.destination);
+    const settled = await settleInterruptedFirst(file, record, revision as number, prepared);
+    if (settled) return settled;
     const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
     staging = allocated;
     if (!allocated) return { published: undefined };
@@ -629,6 +631,38 @@ function publishStaged(
 function committedRepeat(record: ScriptRecord, revision: number): PublishOutcome | undefined {
   if (revision > record.revision) return undefined;
   return { published: record.entry ?? record.destination, repeatedRevision: revision };
+}
+
+/**
+ * An interrupted commit may already have renamed this version into place: settling it before staging answers a
+ * re-offer from the record, even after its artifact expired. Any other version goes straight to its download.
+ */
+async function settleInterruptedFirst(
+  file: string,
+  record: ScriptRecord,
+  revision: number,
+  prepared: ScriptDestination,
+): Promise<PublishOutcome | undefined> {
+  if (revision > (record.publishing?.revision ?? 0)) return undefined;
+  return await withRecordLock(file, async () => settledInterruptedRepeat(file, revision, prepared));
+}
+
+/**
+ * Runs under the record lock, before staging: settles an interrupted commit against the entry host-kit confirms,
+ * and answers the version from the record when that commit (or another) put it in place, or nothing when it still
+ * needs a download.
+ */
+function settledInterruptedRepeat(
+  file: string,
+  revision: number,
+  prepared: ScriptDestination,
+): PublishOutcome | undefined {
+  const record = readRecord(file);
+  if (!record) return { published: undefined };
+  const repeated = committedRepeat(record, revision);
+  if (repeated || !record.publishing) return repeated;
+  const { entry } = confirmScriptDestination(record.destination, prepared);
+  return committedRepeat(settleInterrupted(file, record, entry), revision);
 }
 
 /**

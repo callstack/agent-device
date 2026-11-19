@@ -393,3 +393,46 @@ test('a version an interrupted commit never put in place is downloaded even afte
   expect(delivered).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
+
+/** Fails the record write that records a committed revision, leaving the version interrupted mid-commit. */
+function interruptNextCommit(): void {
+  let writes = 0;
+  vi.mocked(file.publishFileSync).mockImplementation((options) => {
+    // Record writes of one version: listing the staging directory, naming the version, its revision.
+    if (options.destination.endsWith('.json') && writes++ === 2) throw new Error('crashed');
+    actual.publishFileSync(options);
+  });
+}
+
+test('re-offering a version an interrupted commit already put in place needs no download', async () => {
+  // Version 2 renamed into place, and its revision was never recorded. The daemon offers it again after its
+  // artifact expired: settling the interrupted commit answers it from the record, and nothing is fetched.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  interruptNextCommit();
+  await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+  vi.mocked(file.publishFileSync).mockImplementation(actual.publishFileSync);
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 1, publishing: { revision: 2 } });
+  let fetches = 0;
+  Object.defineProperty(served, 'v2', {
+    enumerable: true,
+    get: () => {
+      fetches += 1;
+      return undefined;
+    },
+  });
+
+  const reoffered = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(fetches).toBe(0);
+  expect(reoffered).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(reoffered.ok && reoffered.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, entry: destination });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
+});
