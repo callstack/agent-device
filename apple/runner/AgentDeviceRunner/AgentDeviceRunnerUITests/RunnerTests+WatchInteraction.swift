@@ -73,13 +73,11 @@ extension RunnerTests {
       return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
     }
     // A pop changes the navigation bar: its title, or the back button leaves at the root.
-    let deadline = Date().addingTimeInterval(Self.watchBackConfirmationTimeout)
-    repeat {
-      if let before, let after = watchNavigationBarIdentity(app: app), after != before {
-        return .performed
-      }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-    } while Date() < deadline
+    let popped = watchPoll(timeout: Self.watchBackConfirmationTimeout) {
+      guard let before, let after = watchNavigationBarIdentity(app: app) else { return false }
+      return after != before
+    }
+    if popped { return .performed }
     return .unconfirmed(ErrorPayload(
       code: RunnerWireErrorCode.backSwipeUnverified,
       message: "back pressed the navigation bar back button, but the navigation bar did not change within 1 s. This is an unknown outcome.",
@@ -153,19 +151,8 @@ extension RunnerTests {
         ]
       }
     }
-    let window = resolved.window
-    var dispatched: ObjCBool = false
-    let failure = RunnerSynthesizedGesture.synthesizeGesture(
-      withApplication: app,
-      resolvedWindow: window,
-      interfaceOrientation: 1,
-      pointerSamples: pointerSamples,
-      dispatched: &dispatched
-    )
-    return try Self.synthesizedGestureOutcome(
-      failure: failure,
-      dispatched: dispatched.boolValue,
-      refusalHint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
+    return try dispatchSynthesizedPointerSamples(
+      app: app, window: resolved.window, orientation: 1, pointerSamples: pointerSamples
     )
   }
 
@@ -183,7 +170,7 @@ extension RunnerTests {
       }
       point = CGPoint(x: x, y: y)
     }
-    guard waitForWatchInputSheet(app: activeApp) else {
+    guard watchPoll(timeout: Self.watchInputSheetTimeout, until: { activeApp.keyboards.firstMatch.exists }) else {
       let failure = TextEntryFailure.notFocused
       return Response(ok: false, error: ErrorPayload(
         code: failure.rawValue,
@@ -212,7 +199,7 @@ extension RunnerTests {
     withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
       done.tap()
     }
-    guard waitForWatchInputSheetToClose(app: activeApp) else {
+    guard watchPoll(timeout: Self.watchInputSheetTimeout, until: { !activeApp.keyboards.firstMatch.exists }) else {
       return Response(ok: false, error: ErrorPayload(
         code: TextEntryFailure.commitNotObserved.rawValue,
         message: "the watchOS input sheet stayed open after Done",
@@ -227,20 +214,12 @@ extension RunnerTests {
     ))
   }
 
-  private func waitForWatchInputSheetToClose(app: XCUIApplication) -> Bool {
-    let deadline = Date().addingTimeInterval(Self.watchInputSheetTimeout)
+  /// Polls `condition` on the main run loop until it holds or `timeout` passes.
+  private func watchPoll(timeout: TimeInterval, until condition: () -> Bool) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
     repeat {
-      if !app.keyboards.firstMatch.exists { return true }
-      RunLoop.current.run(until: Date().addingTimeInterval(TextEntryTiming.pollInterval * 5))
-    } while Date() < deadline
-    return false
-  }
-
-  private func waitForWatchInputSheet(app: XCUIApplication) -> Bool {
-    let deadline = Date().addingTimeInterval(Self.watchInputSheetTimeout)
-    repeat {
-      if app.keyboards.firstMatch.exists { return true }
-      RunLoop.current.run(until: Date().addingTimeInterval(TextEntryTiming.pollInterval * 5))
+      if condition() { return true }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     } while Date() < deadline
     return false
   }
