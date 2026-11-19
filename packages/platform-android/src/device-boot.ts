@@ -17,18 +17,10 @@ export type AndroidEmulatorGenerationReading =
   | Readonly<{ miss: AndroidEmulatorGenerationMiss }>;
 
 /**
- * Observe the process listening on the ADB emulator console port without contacting it. A caller
- * that observes more than once passes one deadline, so all reads share one bounded budget.
+ * Observe the process listening on the ADB emulator console port without contacting it, with the
+ * reason a read produced no identity. A caller that observes more than once passes one deadline,
+ * so all reads share one bounded budget.
  */
-export async function observeAndroidEmulatorGeneration(
-  device: DeviceInfo,
-  options: { deadline?: DeadlineClock } = {},
-): Promise<AndroidEmulatorLaunchIdentity | undefined> {
-  const reading = await inspectAndroidEmulatorGeneration(device, options);
-  return 'identity' in reading ? reading.identity : undefined;
-}
-
-/** {@link observeAndroidEmulatorGeneration} with the reason a read produced no identity. */
 export async function inspectAndroidEmulatorGeneration(
   device: DeviceInfo,
   options: { deadline?: DeadlineClock } = {},

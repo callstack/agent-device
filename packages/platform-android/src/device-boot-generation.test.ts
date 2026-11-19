@@ -12,7 +12,14 @@ vi.mock('@agent-device/host-kit/process', () => ({
   hostPlatform: mocks.hostPlatform,
 }));
 
-import { observeAndroidEmulatorGeneration } from './device-boot.ts';
+import { inspectAndroidEmulatorGeneration } from './device-boot.ts';
+
+const observeAndroidEmulatorGeneration = async (
+  ...args: Parameters<typeof inspectAndroidEmulatorGeneration>
+) => {
+  const reading = await inspectAndroidEmulatorGeneration(...args);
+  return 'identity' in reading ? reading.identity : undefined;
+};
 
 const device: DeviceInfo = {
   platform: 'android',
