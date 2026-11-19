@@ -330,7 +330,7 @@ extension RunnerTests {
             amount: defaults.scrollAmount,
             pixels: command.pixels,
             frame: planFrame,
-            container: pullContainer.rect
+            container: runnerContainerInPlanFrame(pullContainer.rect, frame: planFrame)
           ) else {
             return Response(
               ok: false,

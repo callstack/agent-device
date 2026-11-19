@@ -178,6 +178,38 @@ test('bound scroll refresh honors an explicit amount as the pull fraction of the
   assert.equal(options.pixels, 520);
 });
 
+test('bound scroll refresh clamps an explicit --pixels into the measured-safe pull band', async () => {
+  const calls: ScrollCall[] = [];
+  await runScroll(
+    ['refresh'],
+    { pixels: 100 },
+    {
+      ...frozenCaptures([topScreen(false)]),
+      scroll: async (direction, options) => {
+        calls.push({ direction, options });
+        return { pixels: 320 };
+      },
+    },
+    { session: sessionWithStoredScreen(topScreen(false)) },
+  );
+  const options = calls[0]!.options as Record<string, unknown>;
+  assert.equal(options.pixels, 320, 'a 100px pull only rubber-bands; the floor is 320px');
+});
+
+test('bound scroll refresh refuses an unreadable capture with its own typed reason, not no_container', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        { ...frozenCaptures([[]]), scroll: async () => ({}) },
+        { session: sessionWithStoredScreen(topScreen(false)) },
+      ),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_refresh_capture_unreadable',
+  );
+});
+
 test('bound scroll refresh anchors the pull inside the innermost nested scroller, not the screen-level one', async () => {
   // A list nested in a screen-level ScrollView: the broad top-edge read names the outer scroller,
   // but a pull anchored there starts on the header and moves nothing.

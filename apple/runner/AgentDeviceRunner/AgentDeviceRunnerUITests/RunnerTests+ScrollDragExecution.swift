@@ -113,8 +113,8 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       holdDuration: synthesized == nil
-        ? coordinateDragHoldDuration() + max(0, holdMs ?? 0)
-        : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs) + max(0, holdMs ?? 0),
+        ? coordinateDragHoldDuration() + max(0, holdMs ?? 0) / 1000.0
+        : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs) + max(0, holdMs ?? 0) / 1000.0,
       message: message
     )
   }

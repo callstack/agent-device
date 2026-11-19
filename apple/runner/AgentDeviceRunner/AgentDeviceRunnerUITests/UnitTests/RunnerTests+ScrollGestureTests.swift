@@ -111,6 +111,21 @@ extension RunnerTests {
     }
   }
 
+  func testRunnerContainerInPlanFrameSubtractsANonZeroWindowOrigin() {
+    // iPad split view: the window's on-screen rect starts at (400, 120), and the daemon's
+    // scrollPullContainer arrives in screen coordinates.
+    let frame = CGRect(x: 400, y: 120, width: 600, height: 900)
+    let container = CGRect(x: 420, y: 240, width: 560, height: 700)
+    let converted = runnerContainerInPlanFrame(container, frame: frame)
+    XCTAssertEqual(converted, CGRect(x: 20, y: 120, width: 560, height: 700))
+    // A full-screen window keeps the container unchanged.
+    let fullScreen = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+    XCTAssertEqual(
+      runnerContainerInPlanFrame(container, frame: fullScreen),
+      container
+    )
+  }
+
   // The planner constants are private on both sides; the table pins them behaviourally on a
   // 1000px axis where every rounding step is exact.
   func testRunnerScrollGesturePlanUsesParityTableConstants() throws {

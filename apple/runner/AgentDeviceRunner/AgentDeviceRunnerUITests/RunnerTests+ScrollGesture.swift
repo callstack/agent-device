@@ -89,6 +89,18 @@ func runnerScrollGesturePlan(
 private let runnerDefaultRefreshPullAmount = 0.4
 private let runnerScrollContainerEdgeInset = 8.0
 
+/// The daemon sends the pull container in screen (accessibility) coordinates; the planner works in
+/// the plan frame's own space. On a full-screen window the two origins coincide; on iPad split view
+/// the window's on-screen origin is non-zero and must be subtracted.
+func runnerContainerInPlanFrame(_ container: CGRect, frame: CGRect) -> CGRect {
+  CGRect(
+    x: container.minX - frame.minX,
+    y: container.minY - frame.minY,
+    width: container.width,
+    height: container.height
+  )
+}
+
 /// The one pull a `scroll refresh` dispatches: a downward lane anchored just inside the TOP of the
 /// scroll container (in the plan frame's own space), not the centred lane a directional scroll
 /// runs. A pull that begins above the list lands on the header and moves nothing, and a

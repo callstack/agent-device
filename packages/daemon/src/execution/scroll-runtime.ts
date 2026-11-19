@@ -323,12 +323,12 @@ function resolveRefreshExecutionOptions(
   containerRect: Rect,
 ): ResolvedScrollExecutionOptions {
   const pullAmount = options.amount ?? DEFAULT_REFRESH_PULL_AMOUNT;
-  const pullPixels =
-    options.pixels ??
-    Math.min(
-      REFRESH_PULL_MAX_PX,
-      Math.max(REFRESH_PULL_MIN_PX, Math.round(pullAmount * containerRect.height)),
-    );
+  // The pull distance always lands in the measured-safe band, whether it came from an explicit
+  // --pixels or from the container fraction: small pulls only rubber-band, large ones stay reliable.
+  const pullPixels = Math.min(
+    REFRESH_PULL_MAX_PX,
+    Math.max(REFRESH_PULL_MIN_PX, options.pixels ?? Math.round(pullAmount * containerRect.height)),
+  );
   return {
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
     pixels: pullPixels,
@@ -353,8 +353,19 @@ async function readCapturedTopEdgeState(
   context.signal?.throwIfAborted();
   const snapshot = await runtime.operations.captureSnapshot(scrollCaptureInput(context));
   const nodes = snapshot.nodes ?? [];
-  if (nodes.length === 0) return undefined;
-  const broad = await readScrollEdgeState(nodes, 'top');
+  const broad = nodes.length === 0 ? undefined : await readScrollEdgeState(nodes, 'top');
+  // An unreadable capture is a capture failure, not "no scroller": refusing it as no_container would
+  // tell the agent the app has no list when the read simply failed.
+  if (broad === undefined || broad.emptySnapshot) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'scroll refresh could not read the screen to find the scroll container',
+      {
+        reason: 'scroll_refresh_capture_unreadable',
+        hint: 'Run snapshot -i for the current screen and retry.',
+      },
+    );
+  }
   const broadRect = broad.containerRect;
   if (!broadRect) return broad;
   // A screen can nest scrollers (a list inside a screen-level ScrollView), and the broad read picks

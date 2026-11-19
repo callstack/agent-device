@@ -368,7 +368,7 @@ export async function scrollAndroid(
     swipeSurface.viewport,
     'android',
   );
-  const gesturePlan = withHoldBeforeRelease(panPlan, scrollPlan, durationMs, holdMs);
+  const gesturePlan = withHoldBeforeRelease(panPlan, durationMs, holdMs);
   const backend = await executeAndroidTouchPlan(device, {
     ...gesturePlan,
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
@@ -429,21 +429,25 @@ function androidScrollLane(
  */
 function withHoldBeforeRelease(
   panPlan: GesturePlan,
-  scrollPlan: Readonly<{ x1: number; y1: number; x2: number; y2: number }>,
   durationMs: number,
   holdMs: number,
 ): GesturePlan {
   if (holdMs <= 0 || panPlan.topology !== 'single') return panPlan;
+  // Keep the pan's interpolated samples and park the contact at the pulled end point for the
+  // hold: the injector lifts at the last sample's offset, so the appended stationary sample is the
+  // hold before release.
+  const trajectory = panPlan.pointers[0];
+  const lastSample = trajectory.samples.at(-1);
+  if (lastSample === undefined) return panPlan;
   return {
     ...panPlan,
     durationMs: durationMs + holdMs,
     pointers: [
       {
-        pointerId: 0,
+        ...trajectory,
         samples: [
-          { offsetMs: 0, point: { x: scrollPlan.x1, y: scrollPlan.y1 } },
-          { offsetMs: durationMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
-          { offsetMs: durationMs + holdMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
+          ...trajectory.samples,
+          { offsetMs: durationMs + holdMs, point: lastSample.point },
         ],
       },
     ],

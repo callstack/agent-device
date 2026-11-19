@@ -785,6 +785,7 @@ test('scrollAndroid anchors a refresh pull at the top of the container and holds
       const samples = payload.pointers[0]!.samples;
       const last = samples.at(-1)!;
       assert.equal(last.offsetMs, 1600, 'the contact lifts only after the hold');
+      assert.ok(samples.length > 3, 'the pan samples stay interpolated; the hold only appends');
       assert.deepEqual(
         { x: last.x, y: last.y },
         { x: samples.at(-2)!.x, y: samples.at(-2)!.y },
