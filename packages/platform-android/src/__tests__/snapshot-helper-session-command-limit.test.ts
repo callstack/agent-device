@@ -11,7 +11,9 @@ vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
   stopAndroidSnapshotHelperSession: vi.fn(),
 }));
 
-vi.mock('../snapshot-helper-session-protocol.ts', () => ({
+// The real max-command-bytes constant owns this scenario; only dispatch is doubled.
+vi.mock('../snapshot-helper-session-protocol.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../snapshot-helper-session-protocol.ts')>()),
   sendAndroidSnapshotHelperSessionCommand: vi.fn(),
 }));
 
