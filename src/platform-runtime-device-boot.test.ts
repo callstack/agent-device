@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     observed: false,
     reason: 'unobserved',
   })),
+  ANDROID_EMULATOR_GENERATION_BUDGET_MS: 10_000,
   observeAndroidEmulatorGeneration: vi.fn(
     async (): Promise<{ pid: number; startTime: string } | undefined> => undefined,
   ),
@@ -39,6 +40,11 @@ test('generation is reported only when two serial observations agree', async () 
   expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
     'same',
   );
+  // The two agreeing reads share one deadline, so a slow host cannot double the budget.
+  const calls = mocks.observeAndroidEmulatorGeneration.mock.calls as unknown as Array<
+    [unknown, { deadline: unknown }]
+  >;
+  expect(calls[1]?.[1].deadline).toBe(calls[0]?.[1].deadline);
   mocks.observeAndroidEmulatorGeneration
     .mockResolvedValueOnce(identity)
     .mockResolvedValueOnce({ ...identity, startTime: 'replacement' });
