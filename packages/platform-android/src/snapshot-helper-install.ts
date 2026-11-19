@@ -140,6 +140,7 @@ export async function ensureAndroidSnapshotHelper(options: {
       versionCode,
       installedVersionCode,
       installedSha256,
+      ...(installedSha256 === sha256 ? { verifiedSha256: sha256 } : {}),
       installed: false,
       reason,
     };
@@ -184,6 +185,7 @@ export async function ensureAndroidSnapshotHelper(options: {
     versionCode,
     installedVersionCode,
     installedSha256,
+    verifiedSha256: sha256,
     installed: true,
     reason,
   };

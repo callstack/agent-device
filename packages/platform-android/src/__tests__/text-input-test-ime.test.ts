@@ -276,8 +276,15 @@ test.each([
   );
 
   if (refused) {
-    assert.equal((outcome as AppError | undefined)?.details?.reason, 'android-test-ime-text-too-large');
-    assert.deepEqual(broadcasts, [], 'the field must keep its value when the IME cannot carry text');
+    assert.equal(
+      (outcome as AppError | undefined)?.details?.reason,
+      'android-test-ime-text-too-large',
+    );
+    assert.deepEqual(
+      broadcasts,
+      [],
+      'the field must keep its value when the IME cannot carry text',
+    );
     assert.equal(currentText, 'stale value');
   } else {
     assert.equal(outcome, undefined);

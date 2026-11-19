@@ -176,10 +176,7 @@ export function buildAndroidSnapshotHelperCaptureOptions(params: {
     helperVersion: params.artifact.manifest.version,
     helperVersionCode: params.artifact.manifest.versionCode,
     helperSha256: params.artifact.manifest.sha256,
-    helperSha256Verified:
-      params.install.installed ||
-      (params.install.installedVersionCode === params.artifact.manifest.versionCode &&
-        params.install.installedSha256 === params.artifact.manifest.sha256),
+    helperSha256Verified: params.install.verifiedSha256 === params.artifact.manifest.sha256,
     packageName: params.artifact.manifest.packageName,
     instrumentationRunner: params.artifact.manifest.instrumentationRunner,
     waitForIdleTimeoutMs: ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,

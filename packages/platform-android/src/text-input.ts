@@ -29,6 +29,7 @@ import {
   type AndroidFillVerification,
 } from './fill-verification.ts';
 import {
+  canAndroidImeHelperCommitText,
   clearAndroidImeHelperText,
   isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
@@ -302,6 +303,15 @@ async function fillAndroidImeHelper(
   beforeTarget: AndroidFillVerification['targetInput'],
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
+  // The helper commits a replacement in one broadcast, so a text it would drop or cut is refused
+  // before the clear: the field keeps its value instead of losing it to a partial replacement.
+  if (!canAndroidImeHelperCommitText(text)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android fill text is too long for the test IME to commit in one broadcast; the field was not cleared',
+      { reason: 'android-test-ime-text-too-large', textLength: text.length },
+    );
+  }
   const adb = resolveAndroidAdbExecutor(device);
   let dispatchedSteps = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
