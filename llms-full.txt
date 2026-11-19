@@ -1840,7 +1840,7 @@ agent-device daemon status --json
 Boot and shut down:
 
 * `boot` gets the selected target ready without launching an app. It needs an active session or a device selector. You mainly need it when `open` fails because no simulator or emulator is booted.
-* `boot --pick newest` boots one device when the request names none and several equally preferred devices match, all shut down. Without it, `boot` fails with `AMBIGUOUS_MATCH` and its hint names the option. Device ranking applies to ordinary selection and the `AMBIGUOUS_MATCH` count as well as this option: among Apple devices of the same kind, an iPhone ranks above an iPad, then tvOS, then visionOS. Among the tied devices, it prefers a mobile target over a TV, then the newest OS version, then the first name in name order. Name order compares numbers by value, so iPhone 9 comes before iPhone 17, but it is not device age: with equal OS versions, iPhone 16e comes before iPhone 17. Stopped Android AVDs report no OS version, so the name decides between them. It never picks between booted devices or provider devices. The response names the device and reports `selection.reason: newest-bootable-local`.
+* `boot --pick newest` boots one device when the request names none and several equally preferred devices match, all shut down. Without it, `boot` fails with `AMBIGUOUS_MATCH` and its hint names the option. Device ranking applies to ordinary selection and the `AMBIGUOUS_MATCH` count as well as this option: among Apple devices of the same kind, an iPhone ranks above an iPad, then tvOS, then visionOS, then watchOS. Among the tied devices, it prefers a mobile target over a TV, then the newest OS version, then the first name in name order. Name order compares numbers by value, so iPhone 9 comes before iPhone 17, but it is not device age: with equal OS versions, iPhone 16e comes before iPhone 17. Stopped Android AVDs report no OS version, so the name decides between them. It never picks between booted devices or provider devices. The response names the device and reports `selection.reason: newest-bootable-local`.
 * Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one. On macOS the window opens behind the focused app, which keeps focus (also when `open` boots a stopped AVD). This is best-effort: the emulator can still take focus if the focused app cannot be read, or if its window appears after the startup budget runs out.
 * `shutdown` turns off the selected local Apple simulator or Android emulator. On [Limrun](/docs/limrun#create-and-delete-an-instance), it deletes an instance that agent-device created or releases an attachment to an existing instance. It refuses a device used by an active session; use `close --shutdown` to end that session first.
 * `--timeout <ms>` on `boot`, `open <app>`, and `prepare ios-runner` is the startup budget for booting an iOS Simulator or Android emulator (for `prepare ios-runner`, shared with runner preparation). A never-booted iOS Simulator can take several minutes. When the budget runs out, the command fails with `error.details.reason: boot_timeout` and the device keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
@@ -2104,6 +2104,32 @@ vega virtual-device stop
 * LG webOS TVs run through the optional `@agent-device/webos` plugin, which drives web apps over the Chrome DevTools Protocol. See [LG webOS](/docs/webos).
 * Samsung Tizen TVs run through the optional `@agent-device/tizen` plugin, which drives web apps over the Chrome DevTools Protocol. See [Samsung Tizen](/docs/tizen).
 * On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
+
+## watchOS simulators
+
+Apple Watch simulators use the same XCUITest runner as iOS. Select one with `--platform ios` and its `--udid` or `--device` name; a watch is never picked when another Apple simulator matches.
+
+```bash
+agent-device open com.apple.NanoSettings --platform ios --device "Apple Watch Series 11 (46mm)" --session watch
+agent-device snapshot -i --session watch
+agent-device press 'label="Smart Stack"' --session watch --settle
+agent-device scroll down --session watch
+agent-device swipe 180 124 20 124 --session watch
+agent-device back --session watch
+agent-device close --session watch --shutdown
+```
+
+* Simulators only. Device discovery does not list a physical Apple Watch. The host needs the watchOS simulator runtime: `xcodebuild -downloadPlatform watchOS`.
+* `scroll up|down` turns the Digital Crown. The amount is a fraction of the screen height, so `scroll down 1` moves about one screen. The crown also moves pickers and steppers that have crown focus. `scroll left|right` is refused; swipe instead.
+* `swipe` and `gesture swipe|pan|fling` send one-finger touches to the session app: horizontal and vertical pages, row swipe actions, and pan in custom views. `gesture swipe right-edge` (from the left edge toward the right) goes back.
+* Commands act on the session app and bring it back to the foreground first, except the hardware presses `home` and `action-button`, which act on whatever is on screen. The watch face and its overlays, such as Notification Center and the Smart Stack, are not reachable.
+* `back` presses the navigation bar back button and waits up to 1 s for the navigation bar to change; if it does not, `back` fails with `back_swipe_unverified` (`dispatched: unknown`). A screen without a back button, such as a root screen, refuses with `back_swipe_not_dispatched` (`dispatched: no`): watchOS pops by edge swipe only while that button is shown. Press the screen’s close control by ref instead.
+* `home` presses the Digital Crown. From an app it shows the watch face; from the watch face it opens the app grid.
+* `fill` and `type` wait for the system input sheet that a text field opens (its keyboard), type into it, press the sheet’s Done button, and wait for the sheet to close. Done is found by its English label. On another system language, or when the sheet stays open, the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED` and the text stays in the sheet; press its commit button by ref.
+* `action-button` presses the Action Button on Apple Watch Ultra; other models refuse with `hardware_control_unavailable`.
+* `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, and `screenshot` work as on iOS.
+* Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `record`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
+* Open apps by their watch bundle ID, such as `com.apple.NanoSettings`. Without `apps` there is no name lookup, and app aliases such as `settings` resolve to iPhone bundle IDs.
 
 ## Desktop targets
 
@@ -3838,7 +3864,7 @@ In a source checkout, `pnpm clean:daemon --prune-dev` first stops the current ch
 
 > Learn what agent-device is, where it fits in agentic mobile, TV, desktop, and web development, and how agents use it for app verification, debugging, profiling, QA, and replay.
 
-`agent-device` is an open source device layer for coding agents: a CLI, MCP server, and Node.js API that let agents verify and QA apps, locally or in device clouds, on iOS, Android, HarmonyOS, tvOS, Android TV, Fire TV devices running Fire OS, Amazon Vega OS TV apps in the Vega Virtual Device, macOS (including Electron apps), Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
+`agent-device` is an open source device layer for coding agents: a CLI, MCP server, and Node.js API that let agents verify and QA apps, locally or in device clouds, on iOS, Android, HarmonyOS, tvOS, watchOS simulators, Android TV, Fire TV devices running Fire OS, Amazon Vega OS TV apps in the Vega Virtual Device, macOS (including Electron apps), Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
 
 Use it when an agent needs to inspect and operate a running app, not only reason about source code or screenshots.
 
