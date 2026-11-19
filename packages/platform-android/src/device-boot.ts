@@ -1,4 +1,9 @@
-import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
+import type {
+  DeviceBootObservation,
+  LaunchedProcessCheck,
+  LaunchedProcessStopConfirmation,
+} from '@agent-device/contracts/device-boot';
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**
@@ -61,3 +66,60 @@ async function readUptimeSeconds(device: DeviceInfo): Promise<number | undefined
     return undefined;
   }
 }
+
+/**
+ * Whether `pid` still is the emulator process this host launched, from one `ps` of that pid.
+ * Liveness is read separately from the start time because a reaped process leaves no `ps` row, and
+ * only `kill(pid, 0)` tells that apart from a `ps` read that failed. The process is `changed` once it
+ * is gone, zombie, or carries a different start time — every one of those means the emulator that
+ * answers the serial now is somebody else's launch.
+ */
+export async function checkAndroidEmulatorLaunchProcess(
+  identity: AndroidEmulatorLaunchIdentity,
+): Promise<LaunchedProcessCheck> {
+  const { isProcessAlive, processStartTimesDiffer, readProcessIdentityFacts } =
+    await import('@agent-device/host-kit/process');
+  let facts: Awaited<ReturnType<typeof readProcessIdentityFacts>>;
+  try {
+    facts = await readProcessIdentityFacts(identity.pid, PROCESS_IDENTITY_TIMEOUT_MS);
+  } catch {
+    return 'unverified';
+  }
+  if (!isProcessAlive(identity.pid) || facts.zombie === true) return 'changed';
+  if (processStartTimesDiffer(identity.startTime, facts.startTime)) return 'changed';
+  return facts.startTime === identity.startTime ? 'same' : 'unverified';
+}
+
+/**
+ * Whether the launched emulator process took the shutdown asked of the device through
+ * `adb emu kill`. It waits only for the process that command addressed to leave, so an emulator that
+ * exits promptly costs one liveness read. A process that ignores the kill is stopped by pid, and
+ * host-kit signals that pid only while the recorded start time still names it.
+ */
+export async function confirmAndroidEmulatorLaunchProcessStopped(
+  identity: AndroidEmulatorLaunchIdentity,
+): Promise<LaunchedProcessStopConfirmation> {
+  const { stopProcessAndConfirmExit, waitForProcessExit } =
+    await import('@agent-device/host-kit/process');
+  if (await waitForProcessExit(identity.pid, GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS)) return 'stopped';
+  const stop = await stopProcessAndConfirmExit(
+    { pid: identity.pid, identity: { startTime: identity.startTime } },
+    LAUNCHED_PROCESS_STOP_BUDGET,
+  );
+  return stop.status === 'stopped' ? 'stopped' : 'unconfirmed';
+}
+
+/**
+ * Under heavy host load one process-table read took up to 4.2 s. The launch-naming read gets 5 s and
+ * a retry because losing it loses the launch; this read is on a close's decision path and answers in
+ * tens of milliseconds, so it gets one ordinary process budget instead.
+ */
+const PROCESS_IDENTITY_TIMEOUT_MS = 1_000;
+
+/**
+ * The graceful `adb emu kill` already had its own 15 s to work. Waiting the same again on a process
+ * that is demonstrably ignoring it would double what one close may spend, so this confirms the exit
+ * briefly and then escalates.
+ */
+const GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS = 3_000;
+const LAUNCHED_PROCESS_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;

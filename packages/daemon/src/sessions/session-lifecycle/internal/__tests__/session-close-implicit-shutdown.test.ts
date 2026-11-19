@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -18,19 +18,9 @@ import {
   inspectDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
 import {
-  launchedEmulatorProcess,
-  resetLaunchedEmulatorProcess,
-} from '../../../../__tests__/support/launched-emulator-process-fixture.ts';
-
-// The host's answers about the emulator process an `open` launched are modelled, so an Android case
-// can settle its close without touching the real process table.
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const { launchedEmulatorProcessHost } =
-    await import('../../../../__tests__/support/launched-emulator-process-fixture.ts');
-  return launchedEmulatorProcessHost(
-    await importOriginal<typeof import('@agent-device/host-kit/process')>(),
-  );
-});
+  launchedProcessOwnerAnswers,
+  resetLaunchedProcessOwnerAnswers,
+} from '../../../../__tests__/support/launched-process-owner-fixture.ts';
 
 bindTestCommandHost();
 
@@ -47,7 +37,7 @@ const {
 
 beforeEach(() => {
   resetSessionCloseShutdownMocks();
-  resetLaunchedEmulatorProcess();
+  resetLaunchedProcessOwnerAnswers();
 });
 
 const iosSimulator: SessionState['device'] = {
@@ -68,6 +58,9 @@ const androidEmulator: SessionState['device'] = {
   booted: false,
 };
 
+/** The process identity a session records for the emulator its own `open` launched. */
+const LAUNCH_IDENTITY = { pid: 4112, startTime: 'launch-start-time' } as const;
+
 async function closeSession(params: {
   sessionName: string;
   device: SessionState['device'];
@@ -87,11 +80,7 @@ async function closeSession(params: {
   const sessionStore = makeSessionStore();
   const session = makeSession(sessionName, device);
   if (bootedByOpen) session.bootedByOpen = bootedByOpen;
-  if (device.platform === 'android')
-    session.androidLaunchIdentity = {
-      pid: launchedEmulatorProcess.pid,
-      startTime: launchedEmulatorProcess.startTime,
-    };
+  if (device.platform === 'android') session.androidLaunchIdentity = LAUNCH_IDENTITY;
   if (bootedByOpen) {
     const claimInput = {
       env: host.env,
@@ -210,6 +199,11 @@ test.each([
         stderr: '',
       });
     }
+    // The stop is owed to the launch either way, but only the emulator family has a host process to
+    // confirm, so the Android close confirms the recorded process and the iOS close does not.
+    if (device.platform === 'android')
+      expect(launchedProcessOwnerAnswers.confirmations).toEqual([LAUNCH_IDENTITY]);
+    else expect(launchedProcessOwnerAnswers.confirmations).toEqual([]);
   },
 );
 

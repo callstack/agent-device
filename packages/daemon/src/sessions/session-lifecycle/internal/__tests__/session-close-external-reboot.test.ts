@@ -1,7 +1,9 @@
-// #4585: plain `close` owes a stop to the emulator PROCESS its own `open` launched, not to whichever
-// process answers the serial now. Routed through the session command handler, so claim acquisition,
-// renewal, launch-identity recording and close teardown all run against real claim files, and the
-// only host fact close reads about the launched process is the `ps` of the recorded pid.
+// #4585: plain `close` owes a stop to the PROCESS its own `open` launched, not to whichever process
+// answers the serial now. Routed through the session command handler, so claim acquisition, renewal,
+// launch-identity recording and close teardown all run against real claim files. What the host says
+// about the launched process is answered by the launched-process owner fixture, exactly as the
+// composed owner answers it — the process reads themselves are pinned in the Android and
+// composition lanes.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import * as hostProcess from '@agent-device/host-kit/process';
@@ -25,23 +27,13 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-// The host's answers about the emulator process `open` launched are modelled so no case signals or
-// waits on a real process. `launchedEmulatorProcess()` is that model.
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const { launchedEmulatorProcessHost } =
-    await import('../../../../__tests__/support/launched-emulator-process-fixture.ts');
-  return launchedEmulatorProcessHost(
-    await importOriginal<typeof import('@agent-device/host-kit/process')>(),
-  );
-});
-
 import {
-  launchedEmulatorProcess as launched,
-  resetLaunchedEmulatorProcess,
-} from '../../../../__tests__/support/launched-emulator-process-fixture.ts';
+  launchedProcessOwnerAnswers as owner,
+  resetLaunchedProcessOwnerAnswers,
+} from '../../../../__tests__/support/launched-process-owner-fixture.ts';
 
-/** The identity `open` records for the emulator process it launched, as the model answers for it. */
-const launchedEmulatorIdentity = () => ({ pid: launched.pid, startTime: launched.startTime });
+/** The identity `open` records for the emulator process it launched. */
+const LAUNCH_IDENTITY = { pid: 4112, startTime: 'launch-start-time' } as const;
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import type { CloseApplicationFinalizationInput } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -108,8 +100,7 @@ function createRoutedSession() {
     if (command.selectsDevice) {
       vi.mocked(resolveTargetDevice).mockResolvedValue(STOPPED_AVD);
       mockEnsureReadyRuntime.mockImplementation(async (input) => {
-        if (!command.omitLaunchIdentity)
-          input.onAndroidEmulatorLaunchIdentity?.(launchedEmulatorIdentity());
+        if (!command.omitLaunchIdentity) input.onAndroidEmulatorLaunchIdentity?.(LAUNCH_IDENTITY);
         return BOOTED_EMULATOR;
       });
     }
@@ -169,7 +160,7 @@ function createRoutedSession() {
 
 /**
  * Opens a stopped AVD through the cold route and leaves the emulator running on the boot this
- * session caused, with the launched process recorded as the host answers for it.
+ * session caused, with the launched process recorded as the host answered for it.
  */
 async function openBootedByThisSession(runs: ReturnType<typeof createRoutedSession>) {
   const opened = await runs.run({
@@ -182,7 +173,7 @@ async function openBootedByThisSession(runs: ReturnType<typeof createRoutedSessi
   // The boot fact and the identity of the process that caused it are written together, and that
   // pair is the only thing close may act on.
   expect(session?.bootedByOpen).toBe(true);
-  expect(session?.androidLaunchIdentity).toEqual(launchedEmulatorIdentity());
+  expect(session?.androidLaunchIdentity).toEqual(LAUNCH_IDENTITY);
 }
 
 function closeWarningMessages(response: { ok?: unknown; data?: unknown }): unknown {
@@ -200,7 +191,7 @@ const NO_LAUNCH_IDENTITY_WARNING =
 beforeEach(() => {
   mockEnsureReadyRuntime.mockReset();
   mockEnsureReadyRuntime.mockResolvedValue(undefined);
-  resetLaunchedEmulatorProcess();
+  resetLaunchedProcessOwnerAnswers();
 });
 
 afterEach(() => {
@@ -221,26 +212,30 @@ test('plain close stops the emulator this session booted while it still runs tha
   expect(closeWarningMessages(closed.response!)).toBeUndefined();
   if (closed.response?.ok)
     expect(closed.response.data).toMatchObject({ shutdown: { success: true } });
-  // The launched process took the shutdown it was asked for, so nothing was ever signalled by pid,
-  // and the session is retired with its claim like any successful close.
-  expect(launched.signalAttempts).toEqual([]);
+  // The launched process was asked about once, with the recorded identity, and confirmed as stopped,
+  // so nothing was escalated; the session is retired with its claim like any successful close.
+  expect(owner.checks).toEqual([{ device: BOOTED_EMULATOR, identity: LAUNCH_IDENTITY }]);
+  expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
   expect(runs.sessionStore.get(SESSION)).toBeUndefined();
   expect(runs.sessionClaimCount()).toBe(0);
 }, 30_000);
 
-test('plain close stops the launched process itself when it ignores the emulator console kill', async () => {
+test('plain close succeeds without saying more when the stop could not be confirmed', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
-  launched.exitsOnKill = false;
+  owner.confirmation = 'unconfirmed';
 
   const closed = await runs.run({ name: 'close' });
 
   expect(closed.response?.ok).toBe(true);
+  expect(closed.finalizeAsks).toEqual([
+    expect.objectContaining({ shutdownTarget: true, retainRunner: false }),
+  ]);
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
+  // The stop was asked of the device and the launched process was escalated by the owner; an
+  // unconfirmed exit is the owner's diagnostic, not a close the caller has to act on.
   expect(closeWarningMessages(closed.response!)).toBeUndefined();
-  // The escalation aims only at the process this session launched, with the identity open recorded,
-  // which is what host-kit requires before it signals anything.
-  expect(launched.signalAttempts).toEqual([{ pid: launched.pid, startTime: launched.startTime }]);
+  expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
 });
 
 test('plain close leaves an emulator rebooted outside the session running and says why', async () => {
@@ -249,7 +244,7 @@ test('plain close leaves an emulator rebooted outside the session running and sa
 
   // Somebody else's actor kills this emulator and boots the same AVD; the recorded process is gone,
   // and the serial is answered by a process this session never launched.
-  launched.alive = false;
+  owner.check = 'changed';
   const closed = await runs.run({ name: 'close' });
 
   expect(closed.response?.ok).toBe(true);
@@ -259,8 +254,9 @@ test('plain close leaves an emulator rebooted outside the session running and sa
   expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
   expect(closeWarningMessages(closed.response!)).toEqual([PROCESS_CHANGED_WARNING]);
   if (closed.response?.ok) expect(closed.response.data).not.toHaveProperty('shutdown');
-  // Close reads the launched process once, and only as its own decision.
-  expect(launched.factReads).toBe(1);
+  // Close asks about the launched process once, and only as its own decision.
+  expect(owner.checks).toHaveLength(1);
+  expect(owner.confirmations).toEqual([]);
 }, 30_000);
 
 test('Quick Boot retains the replacement with the same serial and restored guest uptime', async () => {
@@ -268,8 +264,9 @@ test('Quick Boot retains the replacement with the same serial and restored guest
   await openBootedByThisSession(runs);
 
   // The default quick-boot restore keeps the guest clock and the serial, and the new emulator
-  // process happens to reuse the pid. Only the start time separates the two lifetimes.
-  launched.liveStartTime = 'replacement-start-time';
+  // process happens to reuse the pid. Only the process identity separates the two lifetimes, and
+  // the owner is the one that reads it.
+  owner.check = 'changed';
   const closed = await runs.run({ name: 'close' });
 
   expect(closed.finalizeAsks).toEqual([
@@ -279,24 +276,10 @@ test('Quick Boot retains the replacement with the same serial and restored guest
   expect(closeWarningMessages(closed.response!)).toEqual([PROCESS_CHANGED_WARNING]);
 });
 
-test('plain close leaves the emulator running when a zombie answers the recorded pid', async () => {
+test('plain close retains the emulator when the host will not answer for the recorded process', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
-  launched.zombie = true;
-
-  const closed = await runs.run({ name: 'close' });
-
-  expect(closed.finalizeAsks).toEqual([
-    expect.objectContaining({ shutdownTarget: false, retainRunner: false }),
-  ]);
-  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
-  expect(closeWarningMessages(closed.response!)).toEqual([PROCESS_CHANGED_WARNING]);
-});
-
-test('plain close retains the emulator when the host will not answer for the recorded pid', async () => {
-  const runs = createRoutedSession();
-  await openBootedByThisSession(runs);
-  launched.unreadable = true;
+  owner.check = 'unverified';
 
   const closed = await runs.run({ name: 'close' });
 
@@ -306,7 +289,7 @@ test('plain close retains the emulator when the host will not answer for the rec
   ]);
   expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
   expect(closeWarningMessages(closed.response!)).toEqual([PROCESS_UNVERIFIED_WARNING]);
-  expect(launched.signalAttempts).toEqual([]);
+  expect(owner.confirmations).toEqual([]);
 }, 30_000);
 
 test('missing launch identity does not acquire ownership from a later process read', async () => {
@@ -325,16 +308,18 @@ test('missing launch identity does not acquire ownership from a later process re
     expect.objectContaining({ shutdownTarget: false, retainRunner: false }),
   ]);
   expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
-  // Nothing was recorded, so close has no pid to read and asks the host nothing.
-  expect(launched.factReads).toBe(0);
+  // Nothing was recorded, so close asks about a process it cannot name, and a stop is never
+  // confirmed against an identity that does not exist.
+  expect(owner.checks).toEqual([{ device: BOOTED_EMULATOR, identity: undefined }]);
+  expect(owner.confirmations).toEqual([]);
   expect(closeWarningMessages(closed.response!)).toEqual([NO_LAUNCH_IDENTITY_WARNING]);
 });
 
-test('close --shutdown stops the device and never signals the launched process', async () => {
+test('close --shutdown stops the device and never asks about the launched process', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
-  launched.alive = false;
-  launched.exitsOnKill = false;
+  owner.check = 'changed';
+  owner.confirmation = 'unconfirmed';
 
   const closed = await runs.run({ name: 'close', flags: { shutdown: true } });
 
@@ -344,10 +329,13 @@ test('close --shutdown stops the device and never signals the launched process',
   ]);
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
   expect(closeWarningMessages(closed.response!)).toBeUndefined();
-  expect(launched.signalAttempts).toEqual([]);
+  // An explicit --shutdown is the user's own command for the device; the launched process neither
+  // gates it nor gets confirmed afterwards.
+  expect(owner.checks).toEqual([]);
+  expect(owner.confirmations).toEqual([]);
 }, 30_000);
 
-test('a policy refusal stays the reported reason and reads no process', async () => {
+test('a policy refusal stays the reported reason and asks nothing of the process owner', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
 
@@ -361,10 +349,10 @@ test('a policy refusal stays the reported reason and reads no process', async ()
   expect(closeWarningMessages(closed.response!)).toEqual([
     "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
   ]);
-  expect(launched.factReads).toBe(0);
+  expect(owner.checks).toEqual([]);
 }, 30_000);
 
-test('a lost claim stays the reported reason and reads no process', async () => {
+test('a lost claim stays the reported reason and asks nothing of the process owner', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
   await runs.dropSessionClaim();
@@ -379,7 +367,7 @@ test('a lost claim stays the reported reason and reads no process', async () => 
   expect(closeWarningMessages(closed.response!)).toEqual([
     "This session's open booted this device, but close could not verify its device claim and did not request a stop.",
   ]);
-  expect(launched.factReads).toBe(0);
+  expect(owner.checks).toEqual([]);
 }, 30_000);
 
 test('changing the device serial clears launch ownership', async () => {
