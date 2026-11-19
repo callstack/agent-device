@@ -63,7 +63,8 @@ function multiTouchRefusalSubject(device: DeviceInfo): string | undefined {
     appleOs === 'ipados' ||
     appleOs === 'macos' ||
     appleOs === 'tvos' ||
-    appleOs === 'visionos'
+    appleOs === 'visionos' ||
+    appleOs === 'watchos'
   ) {
     return APPLE_OS_DISPLAY_NAMES[appleOs];
   }

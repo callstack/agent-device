@@ -95,7 +95,6 @@ function bindAppleAppLogs(
 }
 
 function appleAppLogFacts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperations> {
-  if (device.appleOs === 'watchos') return unavailableAppleFacts(device);
   const admitted =
     isIosFamily(device) && device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest'
       ? ({
@@ -121,30 +120,6 @@ function appleAppLogFacts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperati
       appLogStart: admitted,
       appLogReattach: available,
       appLogCleanup: available,
-    },
-  });
-}
-
-function unavailableAppleFacts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperations> {
-  const unavailable = Object.freeze({
-    available: false,
-    reason: 'unsupported-platform-leaf',
-    hint: 'watchOS app logs are not supported.',
-  } as const);
-  return Object.freeze({
-    device: {
-      family: 'apple',
-      appleOs: 'watchos',
-      kind: device.kind,
-      ...(device.target === undefined ? {} : { target: device.target }),
-      providerMode: 'local',
-    },
-    operations: {
-      appLogInspect: unavailable,
-      appLogDoctor: unavailable,
-      appLogStart: unavailable,
-      appLogReattach: unavailable,
-      appLogCleanup: unavailable,
     },
   });
 }

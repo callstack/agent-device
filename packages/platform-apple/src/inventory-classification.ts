@@ -4,6 +4,7 @@ import { isCoreDeviceReachable } from './core/physical-device-constants.ts';
 const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|realitydevice)/i;
 const APPLE_IPAD_PATTERN = /ipad/i;
 const APPLE_VISION_PATTERN = /\b(apple vision|vision pro|xros|visionos|realitydevice)\b/i;
+const APPLE_WATCH_PATTERN = /\b(apple watch|apple-watch|watchos)\b/i;
 const APPLE_MOBILE_LABEL_PATTERN = /\b(iphone|ipad|ipod)\b/i;
 const APPLE_TV_PRODUCT_TYPE_PATTERN = /^appletv/i;
 const APPLE_TV_LABEL_HINTS = ['apple tv', 'appletv', 'tvos'] as const;
@@ -48,7 +49,8 @@ export function isSupportedAppleRuntime(runtime: string): boolean {
     normalized.includes('ios') ||
     normalized.includes('tvos') ||
     normalized.includes('xros') ||
-    normalized.includes('visionos')
+    normalized.includes('visionos') ||
+    normalized.includes('watchos')
   );
 }
 
@@ -70,6 +72,7 @@ export function resolveAppleTargetFromLabel(value: string): DeviceTarget | null 
 export function resolveAppleOs(target: DeviceTarget, descriptors: string[]): AppleOS {
   if (target === 'tv') return 'tvos';
   if (descriptors.some((descriptor) => APPLE_VISION_PATTERN.test(descriptor))) return 'visionos';
+  if (descriptors.some((descriptor) => APPLE_WATCH_PATTERN.test(descriptor))) return 'watchos';
   if (descriptors.some((descriptor) => APPLE_IPAD_PATTERN.test(descriptor))) return 'ipados';
   return 'ios';
 }

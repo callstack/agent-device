@@ -39,8 +39,6 @@ const SIMULATOR_TARGET_LABEL = 'iOS recording';
 const SIMULATOR_BACKEND_LABEL = 'simctl recordVideo';
 
 export function appleScreenRecordingFacts(device: DeviceInfo) {
-  if (device.appleOs === 'watchos')
-    return unavailableFact('unsupported-platform-leaf', 'watchOS recording is not supported.');
   if (
     isIosFamily(device) &&
     device.kind === 'device' &&

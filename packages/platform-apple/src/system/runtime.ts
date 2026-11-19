@@ -60,16 +60,6 @@ const clipboardLeafUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'clipboard is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const);
-/**
- * watchOS has no XCUITest-driveable UI (ADR-0009), so no Apple interactor can be constructed for
- * it and every interactor-backed operation stays unavailable there — the same reading
- * `appleBackFact` takes, and for the same reason: facts are the support authority, not a mirror
- * of a capability table that never modeled interactor constructibility.
- */
-const appleWatchOsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-} as const);
 
 /**
  * The one host-or-simulator reading `clipboard` and `settings` share, and sharing it is parity
@@ -84,7 +74,6 @@ function appleHostOrSimulatorFact(
 ): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return appleWatchOsUnavailable;
   if (device.kind === 'simulator') return available;
   return os === 'macos' ? available : leafUnavailable;
 }
@@ -135,7 +124,6 @@ const alertLeafUnavailable = Object.freeze({
 function appleAlertFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return alertKindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return appleWatchOsUnavailable;
   if (device.kind === 'simulator' || os === 'ios' || os === 'macos') return available;
   return alertLeafUnavailable;
 }
@@ -143,11 +131,11 @@ function appleAlertFact(device: DeviceInfo): RuntimeOperationFact {
 /**
  * No apple-family closure ever gated `trigger-app-event` beyond its capability bucket
  * (`{ simulator, device }`): the deep link opens through the same interactor `open` every Apple
- * leaf drives. watchOS is the one narrowing, for want of a constructible interactor at all.
+ * leaf drives.
  */
 function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return appEventKindUnavailable;
-  return resolveDeviceAppleOs(device) === 'watchos' ? appleWatchOsUnavailable : available;
+  return available;
 }
 
 /**

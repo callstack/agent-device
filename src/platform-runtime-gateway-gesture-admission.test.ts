@@ -105,7 +105,8 @@ test('TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit'
   });
   expect(tvOs.operations.performMultiTouchGesturePlan.available).toBe(false);
   expect(visionOs.operations.performMultiTouchGesturePlan.available).toBe(false);
-  expect(watchOs.operations.performGesturePlan.available).toBe(false);
+  expect(watchOs.operations.performGesturePlan.available).toBe(true);
+  expect(watchOs.operations.performMultiTouchGesturePlan.available).toBe(false);
   expect(macOs.operations.performGesturePlan.available).toBe(true);
   expect(macOs.operations.performMultiTouchGesturePlan.available).toBe(false);
   expect(linux.operations.performGesturePlan.available).toBe(true);

@@ -48,7 +48,7 @@ test.each([
   ['tvOS simulator', leaves.tvos, true, true, false, false, true, true],
   ['macOS host', leaves.macos, true, true, false, false, true, true],
   ['visionOS simulator', leaves.visionos, false, false, false, false, true, true],
-  ['watchOS sentinel', leaves.watchos, false, false, false, false, false, true],
+  ['watchOS simulator', leaves.watchos, true, true, false, false, true, true],
 ])(
   'declares the %s gesture and scroll cells',
   async (_name, device, plan, directionalFling, multiTouch, drag, viewport, scroll) => {
@@ -75,12 +75,10 @@ test('carries the retired multi-touch hints on every Apple leaf that refused', a
     available: false,
     hint: expect.stringContaining('source hold, timed movement, and destination hold'),
   });
-  // watchOS was caught by the retired admission's FIRST branch, before the policy that carries
-  // the per-OS hints ever ran, so it refuses without one.
   const watchos = await runtime.inspectFacts(leaves.watchos);
-  expect(watchos.operations.performGesturePlan).toEqual({
+  expect(watchos.operations.performMultiTouchGesturePlan).toMatchObject({
     available: false,
-    reason: 'unsupported-platform-leaf',
+    hint: expect.stringContaining('watchOS apps have no multi-touch gestures'),
   });
 });
 

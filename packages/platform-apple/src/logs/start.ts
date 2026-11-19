@@ -103,9 +103,6 @@ export async function startAppleAppLogs(
 }
 
 function assertAppleLogStartSupported(device: DeviceInfo): void {
-  if (device.appleOs === 'watchos') {
-    throw new AppError('UNSUPPORTED_PLATFORM', 'watchOS app logs are not supported');
-  }
   if (
     isIosFamily(device) &&
     device.kind === 'device' &&
