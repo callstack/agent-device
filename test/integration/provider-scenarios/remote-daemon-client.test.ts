@@ -26,6 +26,7 @@ type RemoteRpcRequest = {
     positionals?: unknown[];
     flags?: Record<string, unknown>;
     meta?: {
+      captureGrantId?: string;
       clientArtifactPaths?: Record<string, string>;
       installSource?: unknown;
       uploadedArtifactId?: string;
@@ -56,6 +57,7 @@ type RemoteDaemonState = {
   rpcMode: 'success' | 'error';
   rpcRequests: RemoteRpcRequest[];
   uploadRequests: UploadRequest[];
+  recordingCaptureGrantId?: string;
   recordingClientOutPath?: string;
   screenshotPath: string;
 };
@@ -399,6 +401,7 @@ function writeRecordSuccess(
 ): void {
   const action = String(payload.params?.positionals?.[0] ?? '').toLowerCase();
   if (action === 'start') {
+    state.recordingCaptureGrantId = payload.params?.meta?.captureGrantId;
     state.recordingClientOutPath = payload.params?.meta?.clientArtifactPaths?.outPath;
     writeJson(res, 200, {
       jsonrpc: '2.0',
@@ -421,12 +424,14 @@ function writeRecordSuccess(
       data: {
         recording: 'stopped',
         outPath: state.recordingClientOutPath,
+        captureGrantId: state.recordingCaptureGrantId,
         artifacts: [
           {
             artifactId: 'recording-1',
             field: 'outPath',
             localPath: state.recordingClientOutPath,
             fileName: 'remote-recording.mp4',
+            captureGrantId: state.recordingCaptureGrantId,
           },
         ],
       },
@@ -560,11 +565,13 @@ async function assertRecordingArtifactRoundTrip(
     /^\/tmp\/agent-device-recording-/,
   );
   assert.equal(recordStartRpc?.params?.meta?.clientArtifactPaths?.outPath, paths.recordingPath);
+  assert.ok(recordStartRpc?.params?.meta?.captureGrantId);
 
   const recordStopRpc = rpcRequests.at(-1);
   assert.equal(recordStopRpc?.params?.command, 'record');
   assert.equal(recordStopRpc?.params?.positionals?.[0], 'stop');
   assert.equal(recordStopRpc?.params?.meta?.clientArtifactPaths, undefined);
+  assert.equal(recordStopRpc?.params?.meta?.captureGrantId, undefined);
 }
 
 async function assertEventsRpc(
