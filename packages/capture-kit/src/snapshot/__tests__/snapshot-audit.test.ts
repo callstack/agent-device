@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { AuditContext, AuditFinding } from '@agent-device/contracts/capture';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { annotateCoveredSnapshotNodes } from '../../snapshot-occlusion.ts';
 import { auditSnapshot } from '../snapshot-audit.ts';
 
-const IOS: AuditContext = { platform: 'ios', truncated: false };
+const IOS: AuditContext = { platform: 'ios', producer: 'apple-runner', truncated: false };
 const ANDROID: AuditContext = { platform: 'android', pixelDensity: 2, truncated: false };
 
 function node(index: number, fields: Partial<SnapshotNode> = {}): SnapshotNode {
@@ -321,3 +322,274 @@ describe('scope', () => {
     expect(result.limitations).toEqual([expect.stringContaining('web rects')]);
   });
 });
+
+test('publishes the captured label and identifier but omits a missing-name label', () => {
+  const findings = audit([
+    node(1, { label: 'Save Lemon Herb Rice', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+    node(2, { identifier: 'save', label: 'com.example:id/save' }),
+    node(3, { label: 'Pay', interactionBlocked: 'covered', hittable: false }),
+  ]).findings;
+  expect(findings[0]).toMatchObject({ label: 'Save Lemon Herb Rice' });
+  expect(findings[1]).toMatchObject({ kind: 'missing-name', identifier: 'save' });
+  expect(findings[1]).not.toHaveProperty('label');
+  expect(findings[2]).toMatchObject({ label: 'Pay' });
+});
+
+type CoverPublication = {
+  name: string;
+  type: string;
+  role?: string;
+  subrole?: string;
+  label?: string;
+};
+
+/**
+ * Window > screen holding a scroll view (one row inside) and a fixed control, with the cover listed
+ * last so it draws on top. The row and the fixed control both sit under the cover. The occlusion scan
+ * produces each `coveredBy`, so the audit reads exactly what a capture publishes.
+ */
+function scannedCoverTree(cover: CoverPublication): SnapshotNode[] {
+  const raw: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'Other',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      depth: 2,
+      type: 'ScrollView',
+      hiddenContentBelow: true,
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 3,
+      parentIndex: 2,
+      depth: 3,
+      type: 'Button',
+      label: 'Scrolled row',
+      hittable: true,
+      rect: { x: 0, y: 800, width: 402, height: 60 },
+    },
+    {
+      index: 4,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      label: 'Fixed control',
+      hittable: true,
+      rect: { x: 300, y: 800, width: 60, height: 60 },
+    },
+    {
+      index: 5,
+      parentIndex: 1,
+      depth: 2,
+      type: cover.type,
+      ...(cover.role ? { role: cover.role } : {}),
+      ...(cover.subrole ? { subrole: cover.subrole } : {}),
+      ...(cover.label ? { label: cover.label } : {}),
+      hittable: true,
+      rect: { x: 0, y: 791, width: 402, height: 83 },
+    },
+  ];
+  return annotateCoveredSnapshotNodes(raw, {
+    producer: cover.type.startsWith('com.google.android.') ? 'android-uiautomator' : 'apple-runner',
+  }).map((scanned) => ({
+    ...scanned,
+    ref: `e${scanned.index}`,
+  }));
+}
+
+test.for<CoverPublication>([
+  { name: 'type only', type: 'TabBar' },
+  { name: 'navigation bar type', type: 'NavigationBar', label: 'Inbox' },
+  { name: 'toolbar type', type: 'Toolbar' },
+  { name: 'UIKit class in role beside a generic type', type: 'Other', role: 'UITabBar' },
+  { name: 'subrole only', type: 'Other', subrole: 'AXToolbar' },
+  {
+    name: 'Android bottom navigation',
+    type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+  },
+])('reports both covered controls under a scanned bar from the $name publication', (cover) => {
+  const nodes = scannedCoverTree(cover);
+  expect(nodes[3]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { persistentBar: true },
+  });
+  expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
+  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
+});
+
+test('keeps the covered-control finding for a button in a horizontal scroller wholly behind a bottom bar', () => {
+  // The bar contains the scroller's whole usable viewport (400x65 inside the 400x75 bar), so no
+  // scroll can reveal the button: the audit keeps the finding instead of excluding it as scroll
+  // chrome. The occlusion scan produces the `coveredBy`, as in a real capture.
+  const raw: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'android.widget.HorizontalScrollView',
+      rect: { x: 0, y: 725, width: 400, height: 65 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      label: 'Buy now',
+      hittable: true,
+      rect: { x: 20, y: 735, width: 120, height: 50 },
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      depth: 1,
+      type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+      hittable: true,
+      rect: { x: 0, y: 725, width: 400, height: 75 },
+    },
+  ];
+  const nodes = annotateCoveredSnapshotNodes(raw, { producer: 'android-uiautomator' }).map(
+    (scanned) => ({
+      ...scanned,
+      ref: `e${scanned.index}`,
+    }),
+  );
+  expect(nodes[2]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { persistentBar: true },
+  });
+  expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e2']);
+});
+
+test.for<CoverPublication>([
+  { name: 'sheet', type: 'Sheet' },
+  { name: 'dialog', type: 'Dialog', label: 'Tab Bar' },
+  { name: 'labelled alert group', type: 'Alert', label: 'Confirm' },
+])('retains a scanned $name over a control inside a scroll container', (cover) => {
+  const nodes = scannedCoverTree(cover);
+  expect(nodes[3]).toMatchObject({ interactionBlocked: 'covered' });
+  expect(nodes[3]?.coveredBy?.persistentBar).toBeUndefined();
+  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
+});
+
+test.each([
+  [IOS, 'Apple HIG recommends 44×44pt.'],
+  [ANDROID, 'Material recommends 48×48dp.'],
+] as const)('returns guidance only for present kinds on %j', (context, size) => {
+  const result = audit(
+    [
+      node(1, { label: 'Save', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      node(2, { label: 'Save again', rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      node(3),
+      node(4, { interactionBlocked: 'covered', hittable: false }),
+    ],
+    context,
+  );
+  expect(result.guidance).toEqual({
+    'small-target': `${size} Enlarge the touch area with padding, a minimum size, or hitSlop.`,
+    'missing-name':
+      'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+    'covered-control':
+      'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
+  });
+  expect(
+    audit([node(1, { label: 'Large', rect: { x: 0, y: 0, width: 100, height: 100 } })], context)
+      .guidance,
+  ).toEqual({});
+  expect(
+    Object.keys(
+      audit([node(1, { rect: { x: 0, y: 0, width: 100, height: 100 } })], context).guidance,
+    ),
+  ).toEqual(['missing-name']);
+});
+
+test('skips UIKit sheet grabbers by captured class without matching their label', () => {
+  const small = { x: 0, y: 0, width: 73, height: 24 };
+  const findings = audit([
+    node(1, { role: '_UIGrabber', label: 'Sheet Grabber', value: 'Expanded', rect: small }),
+    node(2, { role: '_UIGrabber', label: 'Poignée', rect: small }),
+    node(3, { subrole: '_UIGrabber', rect: small }),
+    node(4, { label: 'Sheet Grabber', rect: small }),
+  ]).findings;
+  expect(summarize(findings)).toEqual(['small-target @e4']);
+});
+
+test.each(['NavigationBar', 'Toolbar', 'TabBar'])(
+  'skips iOS %s target size but keeps missing names and app content',
+  (type) => {
+    const small = { x: 0, y: 0, width: 42.2, height: 42.2 };
+    const nodes = [
+      node(0, { type, hittable: false }),
+      node(2, { parentIndex: 0, label: 'Cancel', rect: { ...small, width: 50.6 } }),
+      node(3, { parentIndex: 0, label: 'Add', rect: small }),
+      node(4, { parentIndex: 0, identifier: 'unnamed-bar-item', rect: small }),
+      node(5, { label: 'App action', rect: small }),
+    ];
+    expect(summarize(audit(nodes).findings)).toEqual(['missing-name @e4', 'small-target @e5']);
+    expect(summarize(audit(nodes, ANDROID).findings)).toEqual([
+      'small-target @e2',
+      'small-target @e3',
+      'small-target @e4',
+      'missing-name @e4',
+      'small-target @e5',
+    ]);
+  },
+);
+
+test.each(['NavigationBar', 'Toolbar', 'TabBar', 'BottomNavigationView'])(
+  'checks app content inside a %s-shaped container',
+  (type) => {
+    for (const container of ['ScrollView', 'Other', 'Button']) {
+      const result = audit([
+        node(0, { type, hittable: false }),
+        node(1, { type: container, label: 'Content', parentIndex: 0 }),
+        node(2, { label: 'Save', parentIndex: 1, rect: { x: 0, y: 0, width: 22, height: 22 } }),
+      ]);
+      expect(summarize(result.findings), container).toEqual(['small-target @e2']);
+    }
+  },
+);
+
+test.each([{ type: 'HomeToolbarView' }, { type: 'Other', role: 'BottomTabBar' }])(
+  'checks the size of controls in the custom iOS bar %j',
+  (container) => {
+    const result = audit([
+      node(0, { ...container, hittable: false }),
+      node(1, {
+        parentIndex: 0,
+        label: 'Save',
+        rect: { x: 0, y: 0, width: 24, height: 24 },
+      }),
+    ]);
+    expect(summarize(result.findings)).toEqual(['small-target @e1']);
+  },
+);
+
+test.each([{ role: 'UITabBar' }, { subrole: 'UIToolbar' }, { subrole: 'AXToolbar' }])(
+  'recognizes a direct bar item through its parent class %j',
+  (barClass) => {
+    const item = node(1, {
+      parentIndex: 0,
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 36, height: 36 },
+    });
+    const parent = node(0, { type: 'Other', hittable: false, ...barClass });
+    expect(audit([parent, item]).findings).toEqual([]);
+    expect(
+      summarize(audit([parent, item], { ...IOS, producer: 'appium-source' }).findings),
+    ).toEqual(['small-target @e1']);
+    expect(summarize(audit([parent, { ...item, label: undefined }]).findings)).toEqual([
+      'missing-name @e1',
+    ]);
+    expect(
+      summarize(audit([{ ...parent, role: 'UIView', subrole: undefined }, item]).findings),
+    ).toEqual(['small-target @e1']);
+  },
+);

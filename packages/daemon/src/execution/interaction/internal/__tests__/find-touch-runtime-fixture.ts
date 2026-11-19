@@ -1,3 +1,4 @@
+import type { SnapshotCaptureProvenance } from '@agent-device/contracts/snapshot';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expect } from 'vitest';
 import { legacyDispatchCapture } from '../../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
@@ -60,6 +61,7 @@ export function resetFindTouchRuntimeFixture(): void {
 export async function runFindClickScenario(options: {
   positionals: string[];
   nodes?: Array<Record<string, unknown>>;
+  snapshotProvenance?: SnapshotCaptureProvenance;
   flags?: DaemonRequest['flags'];
   session?: SessionState;
   createCommandSurface?: CreateDaemonCommandSurface;
@@ -77,7 +79,7 @@ export async function runFindClickScenario(options: {
   if (options.nodes !== undefined) {
     mockDispatch.mockImplementation(async (_device, command) => {
       if (command === 'snapshot') {
-        return { nodes: options.nodes };
+        return { nodes: options.nodes, ...options.snapshotProvenance };
       }
       return {};
     });

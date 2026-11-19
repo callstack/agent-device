@@ -45,4 +45,7 @@ export {
   isMeaningfulLabel,
   isMeaningfulSignal,
   normalizeType,
+  isNativeIosSnapshotBarNode,
+  snapshotBarKind,
+  snapshotNodeKindIncludesAny,
 } from '../snapshot-text.ts';

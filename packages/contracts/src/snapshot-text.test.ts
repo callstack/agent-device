@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { androidFieldValue, isFillableType } from './snapshot-text.ts';
+import {
+  androidFieldValue,
+  isFillableType,
+  isNativeIosSnapshotBarNode,
+  snapshotBarKind,
+} from './snapshot-text.ts';
 
 const fieldValues = JSON.parse(
   readFileSync(
@@ -24,4 +29,39 @@ test('a web text input is fillable by its ARIA role, a button is not', () => {
   expect(isFillableType('textbox', 'web')).toBe(true);
   expect(isFillableType('searchbox', 'web')).toBe(true);
   expect(isFillableType('button', 'web')).toBe(false);
+});
+
+// The full bar identity lives here, bottom navigation included, so consumers that publish a
+// persistent-bar fact read one vocabulary instead of matching platform role strings themselves.
+test.each([
+  { name: 'an iOS tab bar type', node: { type: 'TabBar' }, kind: 'tab-bar' },
+  {
+    name: 'a UIKit class in role beside a generic type',
+    node: { type: 'Other', role: 'UINavigationBar' },
+    kind: 'navigation-bar',
+  },
+  {
+    name: 'a toolbar in subrole only',
+    node: { type: 'Other', subrole: 'AXToolbar' },
+    kind: 'toolbar',
+  },
+  {
+    name: 'an Android bottom navigation view',
+    node: { type: 'com.google.android.material.bottomnavigation.BottomNavigationView' },
+    kind: 'bottom-navigation',
+  },
+])('snapshotBarKind reads $name', ({ node, kind }) => {
+  const producer = kind === 'bottom-navigation' ? 'android-uiautomator' : 'apple-runner';
+  expect(snapshotBarKind(node, producer)).toBe(kind);
+  expect(isNativeIosSnapshotBarNode(node, producer)).toBe(kind !== 'bottom-navigation');
+  expect(snapshotBarKind(node, 'cdp-dom')).toBeUndefined();
+});
+
+test.each([
+  { type: 'Button', role: 'UIButton' },
+  { type: 'HomeToolbarView' },
+  { type: 'Other', role: 'BottomTabBar' },
+])('a non-bar node reads no bar kind for %j', (node) => {
+  expect(snapshotBarKind(node, 'apple-runner')).toBeUndefined();
+  expect(isNativeIosSnapshotBarNode(node, 'apple-runner')).toBe(false);
 });

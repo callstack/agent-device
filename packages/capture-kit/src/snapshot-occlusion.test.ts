@@ -6,6 +6,7 @@ import {
   annotateCoveredSnapshotNodes,
   annotateSnapshotNodesCoveredByPolicy,
 } from './snapshot-occlusion.ts';
+import { buildSnapshotState } from './snapshot-state.ts';
 
 // #1478 P5 codec-extraction regression: `annotateCoveredSnapshotNodes` marks
 // a touch candidate `interactionBlocked: 'covered'` when a later, floating
@@ -256,6 +257,21 @@ test('annotateSnapshotNodesCoveredByPolicy publishes the cover a backend hit tes
   assert.equal(result?.interactionBlocked, 'covered');
   assert.equal(result?.hittable, false);
   assert.deepEqual(result?.coveredBy, { kind: 'button', label: 'Top story', rect: card.rect });
+});
+
+test('a labelled ARIA toolbar keeps its hit-test cover without claiming persistence', () => {
+  const rect = { x: 0, y: 100, width: 300, height: 60 };
+  const target: RawSnapshotNode = { index: 0, type: 'button', rect, hittable: true };
+
+  const [result] = annotateSnapshotNodesCoveredByPolicy([target], () => ({
+    type: 'toolbar',
+    role: 'toolbar',
+    label: 'Editing actions',
+    rect,
+  }));
+
+  assert.equal(result?.interactionBlocked, 'covered');
+  assert.deepEqual(result?.coveredBy, { kind: 'toolbar', label: 'Editing actions', rect });
 });
 
 test('annotateSnapshotNodesCoveredByPolicy names no cover when the hit element is an anonymous box', () => {
@@ -705,6 +721,41 @@ test('a full-viewport toolbar container does not cover its application siblings'
   const annotated = annotateCoveredSnapshotNodes([application, target, toolbarContainer]);
 
   assert.equal(annotated[1]?.interactionBlocked, undefined);
+});
+
+test.each([
+  {
+    type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+    cover: { kind: 'bottom-navigation', persistentBar: true },
+  },
+  {
+    type: 'com.example.BottomNavigationView',
+    cover: { kind: 'bottomnavigationview' },
+  },
+])('Android snapshot assembly preserves qualified cover identity for $type', ({ type, cover }) => {
+  const rect = { x: 0, y: 0, width: 400, height: 800 };
+  const state = buildSnapshotState(
+    {
+      backend: 'android',
+      producer: 'android-uiautomator',
+      nodes: [
+        { index: 0, type: 'application', rect },
+        {
+          index: 1,
+          type: 'button',
+          role: 'button',
+          parentIndex: 0,
+          label: 'Room',
+          rect: { x: 20, y: 100, width: 120, height: 50 },
+        },
+        { index: 2, type, parentIndex: 0, label: 'Actions', rect },
+      ],
+    },
+    undefined,
+  );
+
+  assert.equal(state.nodes[1]?.interactionBlocked, 'covered');
+  assert.deepEqual(state.nodes[1]?.coveredBy, { ...cover, label: 'Actions', rect });
 });
 
 test.for([

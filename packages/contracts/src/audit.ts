@@ -1,5 +1,6 @@
 import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer } from './snapshot-producers.ts';
 
 export type AuditFindingKind = 'small-target' | 'missing-name' | 'covered-control';
 
@@ -23,6 +24,10 @@ type AuditFindingBase = {
   rect?: Rect;
   /** Control role as the snapshot presents it, such as `button`. */
   role: string;
+  /** Accessible label from the captured node. */
+  label?: string;
+  /** Accessibility identifier or resource id from the captured node. */
+  identifier?: string;
 };
 
 export type AuditFinding =
@@ -32,6 +37,7 @@ export type AuditFinding =
 
 export type AuditContext = {
   platform: PublicPlatform;
+  producer?: SnapshotProducer;
   /** Absent means a mobile target. */
   target?: DeviceTarget;
   /** Physical pixels per dp, from the Android capture. */
@@ -50,6 +56,7 @@ export type AuditChecks = {
 
 export type AuditResult = {
   findings: AuditFinding[];
+  guidance: Partial<Record<AuditFindingKind, string>>;
   checks: AuditChecks;
   /** Checks the audit could not run or could only partly run, with the reason. */
   limitations: string[];

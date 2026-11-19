@@ -5,6 +5,7 @@ import { throwIfOffscreenInteractionTarget } from './target-visibility-stages.ts
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
+  coveredByAnonymousTabBarScanSnapshot,
   coveredByScanSnapshot,
   coveredByTabBarSnapshot,
   createInteractionDevice,
@@ -175,6 +176,7 @@ test('runtime covered refusal names the covering element the occlusion scan foun
         kind: 'tab-bar',
         label: 'Media',
         rect: { x: 0, y: 760, width: 390, height: 84 },
+        persistentBar: true,
       });
       assert.doesNotMatch(String(details?.hint), /@e\d/);
       assert.match(String(details?.hint), /Covered by the tab-bar "Media" at \(0, 760 390x84\)/);
@@ -182,6 +184,111 @@ test('runtime covered refusal names the covering element the occlusion scan foun
     },
   );
   assert.deepEqual(calls, []);
+});
+
+test('runtime covered refusal keeps dismissal recovery for a custom toolbar overlay', async () => {
+  const device = createInteractionDevice(coveredByScanSnapshot('HomeToolbarView'), {
+    tap: async () => {},
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'hometoolbarview',
+        label: 'Media',
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+      });
+      assert.match(String(details?.hint), /Dismiss or close that element/);
+      return true;
+    },
+  );
+});
+
+test('runtime covered refusal names an unnamed generic-typed bar and never says dismiss', async () => {
+  const device = createInteractionDevice(coveredByAnonymousTabBarScanSnapshot(), {
+    tap: async () => {},
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+      });
+      assert.match(
+        String(details?.hint),
+        /^Covered by the tab-bar at \(0, 791 402x83\)\. Use a different visible target/,
+      );
+      // The fixed button has no scrollable ancestor, so no scroll can move it clear of the bar.
+      assert.doesNotMatch(String(details?.hint), /dismiss|close|scroll|the other/i);
+      return true;
+    },
+  );
+});
+
+test('runtime covered refusal suggests inspection for a covered target in a scroll view', async () => {
+  const device = createInteractionDevice(
+    coveredByAnonymousTabBarScanSnapshot({ scrollable: true }),
+    {
+      tap: async () => {},
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e3'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+      });
+      assert.match(
+        String(details?.hint),
+        /^Covered by the tab-bar at \(0, 791 402x83\)\. Use a different visible target/,
+      );
+      assert.doesNotMatch(String(details?.hint), /dismiss|close|scroll/i);
+      return true;
+    },
+  );
+});
+
+test('runtime covered refusal keeps the fixed-target recovery for a horizontal scroller wholly behind a scanned bar', async () => {
+  // The bar contains the horizontal scroller's whole 402x65 viewport, so no scroll can reveal the
+  // button: the hint must not suggest scrolling, which could never clear the bar.
+  const device = createInteractionDevice(
+    coveredByAnonymousTabBarScanSnapshot({ horizontal: true }),
+    {
+      tap: async () => {},
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e3'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        rect: { x: 0, y: 791, width: 402, height: 83 },
+        persistentBar: true,
+      });
+      assert.equal(
+        String(details?.hint),
+        'Covered by the tab-bar at (0, 791 402x83). Use a different visible target, or inspect with snapshot/screenshot before retrying.',
+      );
+      assert.doesNotMatch(String(details?.hint), /scroll/i);
+      return true;
+    },
+  );
 });
 
 test('runtime covered refusal keeps the generic hint when the cover is a policy boolean', async () => {

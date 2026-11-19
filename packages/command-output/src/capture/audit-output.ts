@@ -15,6 +15,9 @@ function formatAuditText(result: AuditSnapshotCommandResult): string {
     summaryLine(result.findings),
     ...findingLines(result.findings, result.refsGeneration),
   ];
+  const guidance = Object.entries(result.guidance);
+  if (guidance.length > 0)
+    lines.push('', ...guidance.map(([kind, sentence]) => `${kind}: ${sentence}`));
   if (result.limitations.length > 0) {
     lines.push('', ...result.limitations.map((limitation) => `Limitation: ${limitation}`));
   }
@@ -44,25 +47,31 @@ function findingLines(
   const kindWidth = Math.max(0, ...findings.map((finding) => finding.kind.length));
   return findings.map(
     (finding, index) =>
-      `${refs[index]!.padEnd(refWidth)}  ${finding.kind.padEnd(kindWidth)}  ${findingText(finding)}`,
+      `${refs[index]!.padEnd(refWidth)}  ${finding.kind.padEnd(kindWidth)}  ${elementText(finding)}  ${findingText(finding)}`,
   );
 }
 
 function findingText(finding: AuditFinding): string {
   switch (finding.kind) {
     case 'small-target':
-      return `${sizeText(finding.detail)}; review touch area`;
+      return sizeText(finding.detail);
     case 'missing-name':
-      return `${capitalize(finding.role.replaceAll('-', ' '))} has no accessible name`;
+      return 'No accessible name';
     case 'covered-control':
       return 'Accessible action is unavailable to touch';
   }
 }
 
-function sizeText({ width, height, unit }: AuditSizeDetail): string {
-  return `${width}×${height}${unit}`;
+function sizeText({ width, height, unit, recommendedSize }: AuditSizeDetail): string {
+  return `${width}×${height}${unit}, below ${recommendedSize}×${recommendedSize}${unit}`;
 }
 
-function capitalize(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+function elementText(finding: AuditFinding): string {
+  const name = finding.kind === 'missing-name' ? undefined : finding.label;
+  const identity = name
+    ? JSON.stringify(name)
+    : finding.identifier
+      ? `id=${JSON.stringify(finding.identifier)}`
+      : undefined;
+  return identity ? `${finding.role} ${identity}` : finding.role;
 }

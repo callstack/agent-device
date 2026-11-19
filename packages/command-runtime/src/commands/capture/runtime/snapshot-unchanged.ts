@@ -169,6 +169,7 @@ function areCoveringNodesEquivalent(
   return (
     previous.kind === current.kind &&
     previous.label === current.label &&
+    previous.persistentBar === current.persistentBar &&
     areRectsEquivalent(previous.rect, current.rect)
   );
 }

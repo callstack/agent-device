@@ -2,10 +2,11 @@ import type {
   AuditChecks,
   AuditContext,
   AuditFinding,
+  AuditFindingKind,
   AuditResult,
   AuditSizeUnit,
 } from '@agent-device/contracts/capture';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
@@ -48,6 +49,8 @@ type SizeRule =
   | { kind: 'unchecked'; limitation: string };
 
 type AuditScan = {
+  platform: AuditContext['platform'];
+  producer: AuditContext['producer'];
   byIndex: ReadonlyMap<number, SnapshotNode>;
   children: ChildrenByParent;
 };
@@ -58,6 +61,8 @@ type AuditScan = {
  */
 export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditContext): AuditResult {
   const scan: AuditScan = {
+    platform: context.platform,
+    producer: context.producer,
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
   };
@@ -65,6 +70,7 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
   const findings = nodes.flatMap((node) => auditNode(node, scan, rule));
   return {
     findings,
+    guidance: auditGuidance(findings, context),
     checks: { snapshot: snapshotCompleteness(context) },
     limitations: collectLimitations(context, rule),
   };
@@ -93,8 +99,12 @@ function controlFindings(
   scan: AuditScan,
   rule: SizeRule,
 ): AuditFinding[] {
-  if (node.ref === undefined || !isActionable(node)) return [];
-  const small = isInlineLink(node, role, scan) ? undefined : smallTargetFinding(node, role, rule);
+  const ownership = controlOwnership(node, scan);
+  if (node.ref === undefined || !isActionable(node, ownership)) return [];
+  const small =
+    ownership === 'platform-sized' || isInlineLink(node, role, scan)
+      ? undefined
+      : smallTargetFinding(node, role, rule);
   const unnamed = hasAccessibleName(node, role, scan) ? undefined : missingNameFinding(node, role);
   return [small, unnamed].filter((finding) => finding !== undefined);
 }
@@ -122,15 +132,20 @@ function controlRole(node: SnapshotNode): string | undefined {
   return CONTROL_ROLES.find(([suffix]) => type.endsWith(suffix))?.[1];
 }
 
-/**
- * Visible, enabled, not already proven unreachable by position, and owned by the app: system bars
- * and keyboard keys are the platform's controls.
- */
-function isActionable(node: SnapshotNode): boolean {
+type ControlOwnership = 'app' | 'platform-sized' | 'system';
+
+function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership {
+  if (node.systemBar !== undefined || node.keyboardOwned === true) return 'system';
+  if (scan.platform !== 'ios') return 'app';
+  if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
+  const parent = parentOf(node, scan);
+  return parent && isNativeIosSnapshotBarNode(parent, scan.producer) ? 'platform-sized' : 'app';
+}
+
+function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean {
   return (
     isPositiveFiniteRect(node.rect) &&
-    node.systemBar === undefined &&
-    node.keyboardOwned !== true &&
+    ownership !== 'system' &&
     node.enabled !== false &&
     node.visibleToUser !== false &&
     node.hittable !== false &&
@@ -217,7 +232,8 @@ function smallTargetFinding(
 }
 
 function missingNameFinding(node: SnapshotNode, role: string): AuditFinding {
-  return { ...findingBase(node, role), kind: 'missing-name', severity: 'warning' };
+  const { label: _label, ...base } = findingBase(node, role);
+  return { ...base, kind: 'missing-name', severity: 'warning' };
 }
 
 /**
@@ -251,6 +267,8 @@ function findingBase(node: SnapshotNode, role: string) {
     ref: `@${node.ref}`,
     ...(node.rect ? { rect: node.rect } : {}),
     role,
+    ...(node.label?.trim() ? { label: node.label.trim() } : {}),
+    ...(node.identifier?.trim() ? { identifier: node.identifier.trim() } : {}),
   };
 }
 
@@ -286,4 +304,20 @@ function typedContent(node: SnapshotNode): string | undefined {
 
 function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function auditGuidance(
+  findings: readonly AuditFinding[],
+  context: AuditContext,
+): AuditResult['guidance'] {
+  const size =
+    context.platform === 'ios' ? 'Apple HIG recommends 44×44pt.' : 'Material recommends 48×48dp.';
+  const sentences: Record<AuditFindingKind, string> = {
+    'small-target': `${size} Enlarge the touch area with padding, a minimum size, or hitSlop.`,
+    'missing-name':
+      'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+    'covered-control':
+      'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
+  };
+  return Object.fromEntries(findings.map(({ kind }) => [kind, sentences[kind]]));
 }
