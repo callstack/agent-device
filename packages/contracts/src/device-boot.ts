@@ -1,5 +1,4 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidEmulatorLaunchIdentity } from './device-readiness-runtime.ts';
 
 /**
  * Why a device owner could not name the start of its current boot. `unobserved` covers every
@@ -23,11 +22,4 @@ export type DeviceBootObservation =
  */
 export type DeviceBootObservationService = Readonly<{
   observeBootTimeMs(device: DeviceInfo): Promise<DeviceBootObservation>;
-}>;
-
-export type DeviceShutdownGenerationService = Readonly<{
-  assessShutdownGeneration(
-    device: DeviceInfo,
-    expected: AndroidEmulatorLaunchIdentity | undefined,
-  ): Promise<'same' | 'changed' | 'unobserved' | 'not-applicable'>;
 }>;

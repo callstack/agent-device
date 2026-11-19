@@ -126,11 +126,10 @@ agent-device open --platform ios --device iPhone_17_Pro
 agent-device close            # the simulator this open booted ends shut down
 ```
 
-If a local Android emulator process changed or cannot be verified,
-plain `close` leaves it running and reports why in `warnings`.
-The check reads the emulator's host process with `lsof`, so it needs a macOS or Linux host with
-`lsof` installed. On other hosts, plain `close` leaves a booted Android emulator running and warns;
-use `close --shutdown` to stop it.
+For an Android emulator, that stop is owed to the emulator process this session's `open`
+launched, so `close` checks that process before it asks for the stop. When it is gone, or when the
+host cannot answer for it, plain `close` leaves the emulator running and reports why in `warnings`.
+Use `close --shutdown` to stop the emulator anyway.
 
 Add `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership.
 Physical devices are not stopped. Provider sessions follow the provider's shutdown action.

@@ -143,7 +143,6 @@ function route(
       ? {}
       : {
           deviceBootObservation: {
-            assessShutdownGeneration: async () => 'not-applicable' as const,
             observeBootTimeMs: async () => ({
               observed: true as const,
               bootedAtMs: options.bootedAtMs!,

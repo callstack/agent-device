@@ -42,6 +42,12 @@ export type DeviceReadinessRuntimeHost = Readonly<{
   androidEmulator: Readonly<{
     discover(request: DeviceInventoryRequest, signal: AbortSignal): Promise<readonly DeviceInfo[]>;
     launch(avdName: string, headless: boolean, bootBudgetMs: number): Promise<number>;
+    /**
+     * What this host's `launch` of `pid` recorded about the emulator process it started, or nothing
+     * when that launch is unknown here or its start time could not be read. The caller records it
+     * beside the serial the launch came up on, so a later stop can prove the running emulator is
+     * still that process.
+     */
     bindLaunchedEmulator?(
       pid: number,
       device: DeviceInfo,

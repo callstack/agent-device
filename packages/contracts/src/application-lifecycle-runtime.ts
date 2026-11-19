@@ -1,7 +1,3 @@
-import type {
-  AndroidShutdownVerification,
-  AndroidShutdownRetained,
-} from './device-shutdown-runtime.ts';
 import type { RuntimeOperationName } from './runtime-operation-names.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -275,12 +271,10 @@ export type CloseApplicationFinalizationInput = Readonly<{
   daemonShutdown?: boolean;
   /** `close --shutdown` is an admitted close finalization effect, never a daemon fallback. */
   shutdownTarget?: boolean;
-  verifyAndroidShutdown?: AndroidShutdownVerification;
 }>;
 
 export type CloseApplicationFinalizationResult = Readonly<{
   shutdown?: TargetShutdownResult;
-  androidShutdownRetained?: AndroidShutdownRetained['retained'];
 }>;
 
 export type PrepareAppleRunnerInput = Readonly<{

@@ -2,13 +2,18 @@ import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { inspectSessionLeaseRetainedOnClose } from '../../lease-lifecycle.ts';
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DeviceShutdownGenerationService } from '@agent-device/contracts/device-boot';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { renewDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { OrdinaryCloseScript } from './session-close-script.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
+import {
+  checkAndroidEmulatorProcess,
+  confirmAndroidEmulatorProcessStopped,
+  type AndroidEmulatorProcessCheck,
+} from './session-close-emulator-process.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {
   reportSessionCleanupFailures,
@@ -40,12 +45,17 @@ type CloseDeviceStopDecision = Readonly<{
   implicitShutdownDeniedByPolicy: boolean;
   implicitShutdownClaimLost: boolean;
   /**
-   * #4585: the close owned stopping the device its own `open` booted, but the device has been
-   * through a boot this session never described since that open, so the running device is not the
-   * one this session started and the implicit stop is withheld. The close itself succeeded.
+   * #4585: the emulator process this session's `open` launched is not running any more, so whoever
+   * answers that serial now is somebody else's device and the implicit stop is withheld. The close
+   * itself succeeded.
    */
-  implicitShutdownDeviceRebooted: boolean;
-  implicitShutdownGenerationUnobserved: boolean;
+  implicitShutdownLaunchedProcessGone: boolean;
+  /**
+   * #4585: close could not establish whether its own launched emulator process still runs, so it
+   * stops nothing. This covers the open that recorded no process identity and a host that would not
+   * answer for the recorded pid.
+   */
+  implicitShutdownLaunchedProcessUnverified: boolean;
 }>;
 
 export type SessionCloseTeardownResult = Readonly<{
@@ -64,11 +74,12 @@ export type SessionCloseTeardownResult = Readonly<{
  * close's own stop from ever being asked: the refusal is decided before the call, so the runner
  * retention a kept-running device earns is not spent on a stop that can never happen.
  *
- * #4585: a stop this session owes its own open is a stop owed to the boot that open caused, so the
- * the Android host generation is checked only once the stop is otherwise owed. An
- * explicit `--shutdown` commands the stop whatever the device says, and a lost claim or a policy
- * refusal has already decided it without reaching the device. Each reason is reported as itself and
- * in this order: what settled the stop first is the only reason close can honestly give.
+ * #4585: on Android, the stop this session owes is owed to the emulator PROCESS its own open
+ * launched, not to whatever answers that serial now, so the recorded process is checked once, right
+ * before the stop is asked for. An explicit `--shutdown` commands the stop whatever the process
+ * says, and a lost claim or a policy refusal has already decided it without reaching the host. Each
+ * reason is reported as itself and in this order: what settled the stop first is the only reason
+ * close can honestly give.
  */
 async function decideDeviceStopOnClose(params: {
   env: EnvMap;
@@ -76,7 +87,6 @@ async function decideDeviceStopOnClose(params: {
   session: SessionState;
   localFamily: boolean;
   deviceShutdownDenied: boolean;
-  observeDeviceBoot: DeviceShutdownGenerationService;
 }): Promise<CloseDeviceStopDecision> {
   const { session } = params;
   const implicitShutdown =
@@ -87,27 +97,72 @@ async function decideDeviceStopOnClose(params: {
   const implicitShutdownClaimLost = claimRenewal?.status === 'lost';
   const implicitShutdownDeniedByPolicy =
     implicitShutdown && !implicitShutdownClaimLost && params.deviceShutdownDenied;
-  const generation =
+  const launchedProcess =
     implicitShutdown && !implicitShutdownDeniedByPolicy && claimRenewal?.status === 'renewed'
-      ? await params.observeDeviceBoot
-          .assessShutdownGeneration(session.device, session.androidLaunchIdentity)
-          .catch(() => 'unobserved' as const)
+      ? await checkLaunchedAndroidEmulatorProcess(session)
       : 'not-applicable';
-  const implicitShutdownDeviceRebooted = generation === 'changed';
-  const implicitShutdownGenerationUnobserved = generation === 'unobserved';
+  const implicitShutdownLaunchedProcessGone = launchedProcess === 'changed';
+  const implicitShutdownLaunchedProcessUnverified = launchedProcess === 'unverified';
   return {
     shutdownRequested:
       params.explicitShutdown ||
       (implicitShutdown &&
         !implicitShutdownDeniedByPolicy &&
-        !implicitShutdownDeviceRebooted &&
-        !implicitShutdownGenerationUnobserved &&
+        !implicitShutdownLaunchedProcessGone &&
+        !implicitShutdownLaunchedProcessUnverified &&
         claimRenewal?.status === 'renewed'),
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
-    implicitShutdownDeviceRebooted,
-    implicitShutdownGenerationUnobserved,
+    implicitShutdownLaunchedProcessGone,
+    implicitShutdownLaunchedProcessUnverified,
   };
+}
+
+/**
+ * Whether the emulator process this session's open launched still runs the device it booted. Only
+ * the Android emulator has a host process this daemon launched to check; every other device is
+ * stopped by the platform answer alone, so this reports `not-applicable` rather than a miss.
+ */
+async function checkLaunchedAndroidEmulatorProcess(
+  session: SessionState,
+): Promise<AndroidEmulatorProcessCheck | 'not-applicable'> {
+  if (session.device.platform !== 'android' || session.device.kind !== 'emulator')
+    return 'not-applicable';
+  const identity = session.androidLaunchIdentity;
+  if (!identity) {
+    emitAndroidLaunchIdentityMiss('open-recorded-no-process');
+    return 'unverified';
+  }
+  const check = await checkAndroidEmulatorProcess(identity);
+  if (check !== 'same')
+    emitAndroidLaunchIdentityMiss(`process-check-${check}`, { pid: identity.pid });
+  return check;
+}
+
+/**
+ * Step 3 of the implicit Android stop: the platform asked the emulator to shut itself down through
+ * `adb emu kill`, so confirm the process this session launched actually left. One that ignores the
+ * kill is stopped by pid, and host-kit refuses a pid that no longer carries the recorded start time.
+ */
+async function confirmLaunchedAndroidEmulatorStopped(session: SessionState): Promise<void> {
+  if (session.device.platform !== 'android' || session.device.kind !== 'emulator') return;
+  const identity = session.androidLaunchIdentity;
+  if (!identity) return;
+  if ((await confirmAndroidEmulatorProcessStopped(identity)) === 'unconfirmed')
+    emitAndroidLaunchIdentityMiss('launched-process-stop-unconfirmed', { pid: identity.pid });
+}
+
+/**
+ * The one diagnostic for a session whose close could not settle the state of the emulator process
+ * its own `open` launched. `step` names the step that decided it, which is the only thing that
+ * separates the cases the caller reports with the same warning.
+ */
+function emitAndroidLaunchIdentityMiss(step: string, data: Record<string, unknown> = {}): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_launch_identity_miss',
+    data: { step, ...data },
+  });
 }
 
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
@@ -131,7 +186,6 @@ export async function runSessionCloseTeardown(params: {
   }): OrdinaryCloseScript;
   platformResourceCleanup: PlatformResourceCleanup;
   deviceShutdownDenied?: boolean;
-  observeDeviceBoot: DeviceShutdownGenerationService;
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
@@ -165,10 +219,8 @@ export async function runSessionCloseTeardown(params: {
     session,
     localFamily: lifecycle.owner.kind === 'local-family',
     deviceShutdownDenied: params.deviceShutdownDenied === true,
-    observeDeviceBoot: params.observeDeviceBoot,
   });
   const { shutdownRequested, ...stopReasons } = deviceStop;
-  const expectedAndroidLaunchIdentity = session.androidLaunchIdentity;
   const retainExecutionHost = params.platformResourceCleanup.retainExecutionHostAfterClose({
     device: session.device,
     shutdownRequested,
@@ -212,20 +264,14 @@ export async function runSessionCloseTeardown(params: {
         retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
         shutdownTarget: shutdownRequested && lifecycle.owner.kind === 'local-family',
-        ...(shutdownRequested && req.flags?.shutdown !== true
-          ? {
-              verifyAndroidShutdown: async () => {
-                const generation = await params.observeDeviceBoot
-                  .assessShutdownGeneration(session.device, expectedAndroidLaunchIdentity)
-                  .catch(() => 'unobserved' as const);
-                return generation === 'same' || generation === 'changed'
-                  ? generation
-                  : ('unobserved' as const);
-              },
-            }
-          : {}),
       })) ?? {},
   );
+  // The platform has asked the emulator it owns to shut down; this is where this session checks the
+  // process it launched actually left, because `adb emu kill` answers for the guest, not for the
+  // host process. An explicit `--shutdown` is the user's own command for the device and is not this
+  // session's launched process to confirm.
+  if (shutdownRequested && req.flags?.shutdown !== true)
+    await confirmLaunchedAndroidEmulatorStopped(session);
   const saveScriptOutcome = repairArmed
     ? {}
     : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
@@ -239,12 +285,6 @@ export async function runSessionCloseTeardown(params: {
     shutdownResult: finalization?.shutdown,
     shutdownPrepared: finalization !== undefined,
     ...stopReasons,
-    implicitShutdownDeviceRebooted:
-      stopReasons.implicitShutdownDeviceRebooted ||
-      finalization?.androidShutdownRetained === 'changed',
-    implicitShutdownGenerationUnobserved:
-      stopReasons.implicitShutdownGenerationUnobserved ||
-      finalization?.androidShutdownRetained === 'unobserved',
   };
 }
 

@@ -57,20 +57,6 @@ test('Android shutdown uses the owning package capability', async () => {
   expect(shutdownLoaders.android).toHaveBeenCalledOnce();
 });
 
-test('Android host forwards the shutdown verifier to the runtime', async () => {
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-  const verify = async () => 'same' as const;
-  const abortSignal = signal();
-  await shutdownHost().android.shutdownTarget(device, abortSignal, verify);
-  expect(androidShutdown).toHaveBeenCalledWith(device, abortSignal, verify);
-});
-
 test('a shutdown guard refuses every shutdown path before the owner runtime loads', async () => {
   const denied = new Error('policy denies device-shutdown');
   const host = shutdownHost(() => {
