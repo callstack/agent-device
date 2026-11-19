@@ -27,7 +27,6 @@ import {
   pollHarmonyOpenForeground,
   verifyHarmonyOpenForeground,
 } from '../app-lifecycle.ts';
-import { parseHarmonyForegroundRead } from '../app-state.ts';
 import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { runCmd } from '@agent-device/host-kit/command';
 
@@ -393,16 +392,6 @@ test('pollHarmonyOpenForeground classifies a mission list with no foreground mis
 });
 
 test('a mission-less keyguard dump reads as no-foreground, not as a dead probe', async () => {
-  // A keyguard that hides the mission list answers with dump content and no
-  // Mission ID block: the read read the device, so the poll carries the
-  // unlock-shaped answer instead of the connection hint.
-  assert.deepEqual(parseHarmonyForegroundRead('User ID #100\n'), {
-    kind: 'no-foreground-mission',
-  });
-  // An empty answer is a dead pipe: it stays unreadable.
-  assert.deepEqual(parseHarmonyForegroundRead(''), { kind: 'unparseable' });
-  assert.deepEqual(parseHarmonyForegroundRead('  \n  '), { kind: 'unparseable' });
-
   vi.useFakeTimers();
   mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'User ID #100\n', stderr: '' });
   const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application');

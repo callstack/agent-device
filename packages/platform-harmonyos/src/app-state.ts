@@ -47,10 +47,11 @@ export function parseHarmonyForegroundRead(rawOutput: string): HarmonyForeground
     if (!packageName || !activity) return { kind: 'unparseable' };
     return { kind: 'foreground', package: packageName, activity };
   }
-  // A dump that answers with content but no mission block is the keyguard
-  // shape on units whose lock screen hides the mission list: the read read
-  // the device, and only an empty answer is a dead pipe.
-  return sawMission || rawOutput.trim().length > 0
+  // A dump that answers with its section headers but no mission block is the
+  // keyguard shape on units whose lock screen hides the mission list: the
+  // headers are the dump's own structure, so the read read the device. Error
+  // text and empty answers carry no structure and stay unreadable.
+  return sawMission || /\bUser ID #/.test(rawOutput)
     ? { kind: 'no-foreground-mission' }
     : { kind: 'unparseable' };
 }

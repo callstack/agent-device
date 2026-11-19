@@ -18,6 +18,14 @@ test('classifies a mission list without a foreground mission as no-foreground-mi
   });
 });
 
+test('classifies a dump with section headers but no mission block as no-foreground-mission', () => {
+  // A keyguard that hides the mission list answers with the dump's headers
+  // and no Mission ID block: the read read the device, not a dead pipe.
+  expect(parseHarmonyForegroundRead('User ID #100\n')).toEqual({
+    kind: 'no-foreground-mission',
+  });
+});
+
 test('classifies output with no mission list as unparseable', () => {
   expect(parseHarmonyForegroundRead('')).toEqual({ kind: 'unparseable' });
   expect(parseHarmonyForegroundRead('aa: error: dump failed')).toEqual({ kind: 'unparseable' });
