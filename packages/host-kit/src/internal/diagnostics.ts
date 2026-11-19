@@ -4,9 +4,24 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
-import { writeHostStderrBestEffort } from './host-stderr.ts';
 import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
+
+/**
+ * Says {@link value} on this process's stderr and answers whether the stream took it.
+ *
+ * This is the sink for a report whose own route is the thing that failed — a refused state path, a log handle
+ * that broke mid-write, a pipe nobody reads. Such a line cannot go where its subject could not go, so stderr
+ * is the route, and the write is contained: a report is never worth the flow that was making it.
+ */
+export function writeHostStderrBestEffort(value: string): boolean {
+  try {
+    process.stderr.write(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The severity an event is recorded with. */
 export type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';

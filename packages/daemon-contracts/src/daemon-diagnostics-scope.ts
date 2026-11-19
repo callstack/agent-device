@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import { writeHostStderrBestEffort } from '@agent-device/host-kit/process';
 import {
   type DiagnosticLineSink,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
+  writeHostStderrBestEffort,
 } from '@agent-device/host-kit/diagnostics';
 
 /** The state owners this scope's sink needs, taken from host-kit's file surface. */

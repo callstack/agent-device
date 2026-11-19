@@ -41,7 +41,6 @@ export {
   waitForProcessExit,
   writeHostStderr,
 } from './internal/host-process.ts';
-export { writeHostStderrBestEffort } from './internal/host-stderr.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {

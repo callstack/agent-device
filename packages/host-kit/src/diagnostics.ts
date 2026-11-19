@@ -6,6 +6,7 @@ export {
   type DiagnosticEventInput,
   type DiagnosticLevel,
   emitDiagnostic,
+  writeHostStderrBestEffort,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
