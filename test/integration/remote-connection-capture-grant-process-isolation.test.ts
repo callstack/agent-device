@@ -39,7 +39,7 @@ type FakeDaemon = {
 
 function createFakeDaemon(): FakeDaemon {
   const starts: Array<{ grantId?: string; outPath?: string }> = [];
-  const state = { withholdStarts: true, stopMode: 'echo' as 'echo' | 'unmatched' | 'error' };
+  let stopMode: 'echo' | 'unmatched' | 'error' = 'echo';
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://loopback');
     const writeJson = (statusCode: number, payload: unknown) => {
@@ -89,11 +89,10 @@ function createFakeDaemon(): FakeDaemon {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      if (payload.method === 'agent_device.lease.allocate') {
-        writeJson(200, { jsonrpc: '2.0', id: payload.id, result: { ok: true, data: { lease } } });
-        return;
-      }
-      if (payload.method === 'agent_device.lease.heartbeat') {
+      if (
+        payload.method === 'agent_device.lease.allocate' ||
+        payload.method === 'agent_device.lease.heartbeat'
+      ) {
         writeJson(200, { jsonrpc: '2.0', id: payload.id, result: { ok: true, data: { lease } } });
         return;
       }
@@ -106,24 +105,12 @@ function createFakeDaemon(): FakeDaemon {
           grantId: params.meta?.captureGrantId,
           outPath: params.meta?.clientArtifactPaths?.outPath,
         });
-        if (state.withholdStarts) {
-          // The start is accepted but its answer is withheld: the socket dies mid-request.
-          req.socket.destroy();
-          return;
-        }
-        writeJson(200, {
-          jsonrpc: '2.0',
-          id: payload.id,
-          result: {
-            ok: true,
-            data: { started: true, captureGrantId: params.meta?.captureGrantId },
-          },
-        });
+        req.socket.destroy();
         return;
       }
       if (params.command === 'record' && params.positionals?.[0] === 'stop') {
         const last = starts.at(-1);
-        if (state.stopMode === 'error') {
+        if (stopMode === 'error') {
           writeJson(200, {
             jsonrpc: '2.0',
             id: payload.id,
@@ -131,7 +118,7 @@ function createFakeDaemon(): FakeDaemon {
           });
           return;
         }
-        const echoId = state.stopMode === 'unmatched' ? UNMATCHED_GRANT_ID : last?.grantId;
+        const echoId = stopMode === 'unmatched' ? UNMATCHED_GRANT_ID : last?.grantId;
         const localPath = last?.outPath ? `${last.outPath}.mp4` : '/daemon/x.mp4';
         writeJson(200, {
           jsonrpc: '2.0',
@@ -164,8 +151,7 @@ function createFakeDaemon(): FakeDaemon {
     port: 0,
     starts,
     setStopMode: (mode) => {
-      state.stopMode = mode;
-      state.withholdStarts = false;
+      stopMode = mode;
     },
   };
 }
