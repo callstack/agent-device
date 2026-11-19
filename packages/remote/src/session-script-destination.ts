@@ -11,6 +11,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -18,8 +19,6 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireProcessLock,
   confirmScriptDestination,
-  isWindowsShareUnavailable,
-  judgeScriptDestination,
   openVerifiedFileForRead,
   scriptAncestryReason,
   prepareScriptDestination,
@@ -47,25 +46,27 @@ const RECORD_LOCK_TIMEOUT_MS = 30_000;
  * ones a crashed download left behind. `retired` marks a record a close has ended: it authorizes no
  * further version and stays on disk only until its staging directories are removed.
  */
-/** A published destination, `undefined` when no record matches, or a typed delivery failure. */
-type PublishOutcome =
-  | Readonly<{ published: string | undefined }>
-  | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
-
 type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
-  /**
-   * The SHA-256 of the bytes the newest version was committed with. It only verifies a repeated delivery
-   * against the entry host-kit judges; it never names where anything is written. Unlike a device and inode,
-   * a digest cannot be inherited by a later file that reuses the inode.
-   */
-  committedDigest?: string;
-  publishing?: Readonly<{ revision: number; file: string; staging: string; digest?: string }>;
+  publishing?: Readonly<{ revision: number; file: string; staging: string }>;
   staging?: readonly string[];
   retired?: true;
 }>;
+
+/**
+ * A published destination, `undefined` when no record matches, or a typed delivery failure. `repeat` marks a
+ * version answered from the record alone, without looking at the file: the revision asked for, the revision the
+ * record last confirmed, which is newer when the version asked for was superseded, and an interrupted save the
+ * record names, which may already have replaced the file.
+ */
+type PublishOutcome =
+  | Readonly<{
+      published: string | undefined;
+      repeat?: Readonly<{ requested: number; committed: number; pending?: number }>;
+    }>
+  | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
 
@@ -126,11 +127,11 @@ async function settleScriptReceipt(
     download: typeof downloadRemoteArtifact;
   }>,
   receipt: ScriptDeliveryReceipt,
-  disclose: (failure: ScriptDeliveryFailure, error: unknown) => void,
+  data: Record<string, unknown>,
 ): Promise<ReceiptSettlement> {
   const { endpoint, req, stateDir } = context;
   const failures = [...(receipt.failures ?? [])];
-  for (const failure of failures) disclose(failure, undefined);
+  for (const failure of failures) discloseDeliveryFailure(data, req, failure, undefined);
   const file = recordPath(stateDir, endpoint.baseUrl, req, receipt.publicationId);
   const record = readRecord(file);
   if (!record) {
@@ -145,8 +146,11 @@ async function settleScriptReceipt(
   const published = receipt.version
     ? await publishScriptVersion(context, receipt.version, closesOwnPlan)
     : undefined;
-  if (published && 'failure' in published) disclose(published.failure, published.error);
+  if (published && 'failure' in published) {
+    discloseDeliveryFailure(data, req, published.failure, published.error);
+  }
   const destination = published && 'published' in published ? published.published : undefined;
+  if (published) noteRepeatedVersion(data, published, closesOwnPlan);
   return {
     ...(closesOwnPlan ? { retire: file } : {}),
     ...(destination !== undefined && receipt.version?.artifactId !== undefined
@@ -239,17 +243,14 @@ export function sessionScriptDelivery(
       }
       const { published } = outcome;
       if (published === undefined) return;
+      noteRepeatedVersion(data, outcome, req.command === 'close');
       data.savedScript = published;
       kept.push({ ...artifact, localPath: published });
     },
     settleAfter: async (run) => {
       const data = response.data ?? {};
       if (rejected) discloseDeliveryFailure(data, req, rejected, undefined);
-      settled = receipt
-        ? await settleScriptReceipt(context, receipt, (failure, error) =>
-            discloseDeliveryFailure(data, req, failure, error),
-          )
-        : undefined;
+      settled = receipt ? await settleScriptReceipt(context, receipt, data) : undefined;
       try {
         return await run(delivery);
       } finally {
@@ -293,6 +294,52 @@ function discloseDeliveryFailure(
 }
 
 /**
+ * Adds a warning for a version answered from the record alone: the saved file is not looked at again, so the
+ * warning names how to recover a file removed since.
+ */
+function noteRepeatedVersion(
+  data: Record<string, unknown>,
+  outcome: PublishOutcome,
+  closing: boolean,
+): void {
+  if (!('published' in outcome) || outcome.published === undefined) return;
+  const { repeat } = outcome;
+  if (repeat === undefined) return;
+  const recovery = closing
+    ? `reuse your original open command with ${recordAgainArguments(outcome.published)}.`
+    : 'while the session is still recording, the next recorded action writes the recording to the destination again.';
+  data.warnings = [
+    ...readResponseWarnings(data),
+    `${repeatedVersionText(repeat, outcome.published)} It is not checked again. If that file is missing, ${recovery}`,
+  ];
+}
+
+/**
+ * The arguments that record again to the same file; a bare `--save-script` would pick a new file name. A path with a
+ * C0 or C1 control character cannot survive a rendered text line, so they name a placeholder for it instead.
+ */
+function recordAgainArguments(destination: string): string {
+  const control = (char: string) => char < ' ' || (char >= '\u007f' && char <= '\u009f');
+  if ([...destination].some(control)) {
+    return '--save-script=<path> --force, with the path quoted for your shell';
+  }
+  return `--save-script=${shellQuoteIfNeeded(destination)} --force`;
+}
+
+function repeatedVersionText(
+  repeat: Readonly<{ requested: number; committed: number; pending?: number }>,
+  published: string,
+): string {
+  const answer =
+    repeat.requested === repeat.committed
+      ? `Revision ${repeat.requested} of the recording was already saved to ${published}.`
+      : `Revision ${repeat.requested} of the recording is superseded: the record last confirmed revision ${repeat.committed} at ${published}.`;
+  return repeat.pending === undefined
+    ? answer
+    : `${answer} Revision ${repeat.pending} may already have replaced that file; its save was interrupted.`;
+}
+
+/**
  * Settles the one delivery receipt a FAILED response names (#4595), where no successful-artifact
  * path runs: a batch that stopped mid-plan still delivers what its completed steps wrote. The
  * disclosure rides the error the caller receives. A close retires the record only when the failure
@@ -329,7 +376,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
   const settled = await settleScriptReceipt(
     { endpoint, req, stateDir, download },
     honored ? receipt : withoutClose(receipt),
-    (failure, failureError) => discloseDeliveryFailure(data, req, failure, failureError),
+    data,
   );
   if (settled.retire) await retireQuietly(req, settled.retire);
   const disclosure: Record<string, unknown> = {
@@ -377,7 +424,8 @@ function validatedFailedBatchStep(req: DaemonWireRequest, error: DaemonError): n
 /**
  * Publishes one version and returns the destination, `undefined` when no record of this client
  * matches the artifact, or a typed delivery failure. A version no newer than the one published is
- * skipped. `closesRecording` says this version is the last one any later command will ask for, so
+ * answered from the record: nothing is downloaded, and the saved file is neither read nor judged again.
+ * `closesRecording` says this version is the last one any later command will ask for, so
  * the failure hint offers the recovery that is actually left.
  *
  * The download streams, capped at `MAX_SCRIPT_BYTES`, into a new private file in a private staging
@@ -418,19 +466,15 @@ async function publishScriptVersion(
   const pending = { named: false };
   let staging: string | undefined;
   try {
-    // The record as read under the lock, never the snapshot read above, decides whether the version is
-    // already committed or may already be in place: a repeat is judged against the state a commit writes,
-    // and a version already on disk needs no fresh download.
-    const repeated = await withRecordLock(file, async () =>
-      settledRepeat(file, revision as number),
+    // Decided from the record as the lock holds it, never from the snapshot above, in the same operation that
+    // judges the destination and allocates staging.
+    const allocated = await withRecordLock(file, async () =>
+      stageOrAnswer(file, revision as number),
     );
-    if (repeated) return { published: repeated.published };
-    // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
-    const prepared = prepareScriptDestination(record.destination);
-    const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
-    staging = allocated;
-    if (!allocated) return { published: undefined };
-    const staged = path.join(allocated, 'script.ad');
+    if (!('staging' in allocated)) return allocated;
+    const { prepared } = allocated;
+    staging = allocated.staging;
+    const staged = path.join(allocated.staging, 'script.ad');
     try {
       await context.download({
         ...endpoint,
@@ -440,27 +484,29 @@ async function publishScriptVersion(
         privateFile: { maxBytes: MAX_SCRIPT_BYTES },
       });
     } catch (error) {
-      // Another delivery may have committed this version since the record was settled; a failed fetch is
-      // only this client's failure while the version is not on disk. The staging cleanup and that decision
-      // take ONE lock, the decision after the cleanup, so no commit can land between them. A settlement
-      // that refuses or cannot verify the committed version is that refusal, not the fetch error.
+      // Another delivery may have committed this version meanwhile, or installed it and been interrupted; a
+      // failed fetch is only this client's failure while neither holds. The staging cleanup and that decision
+      // take ONE lock.
+      const released = allocated.staging;
       const committed = await withRecordLock(file, async () => {
         staging = undefined;
-        releaseStagingQuietly(file, allocated);
-        return settledRepeat(file, revision as number);
+        releaseStagingQuietly(file, released);
+        return settledRepeat(file, revision as number, prepared);
       });
-      if (committed?.published !== undefined) return { published: committed.published };
+      // Only a published path answers the call; a record a concurrent close retired leaves the fetch error.
+      if (committed && 'published' in committed && committed.published !== undefined)
+        return committed;
       throw error;
     }
     const version = {
       revision: revision as number,
-      staging: allocated,
+      staging: allocated.staging,
       staged,
       // What host-kit answered above, carried for the one confirmation before the rename.
       prepared,
       pending,
     };
-    return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
+    return await withRecordLock(file, async () => publishStaged(file, version));
   } catch (error) {
     return {
       failure: scriptDeliveryFailure(record.destination, id as string, error, closesRecording),
@@ -476,20 +522,31 @@ async function publishScriptVersion(
 }
 
 /**
- * Creates a staging directory in the ground host-kit judged, and lists it in the record before any script
- * bytes reach it, or nothing when the record went away (ADR 0016).
+ * Runs under the record lock, as one operation: answers a version the record committed before the destination is
+ * judged, or else prepares the destination, answers a version an interrupted commit installed, or creates a staging
+ * directory in the ground host-kit judged and lists it in the record before any script bytes reach it (ADR 0016).
  */
-function allocateStaging(file: string, prepared: ScriptDestination): string | undefined {
+function stageOrAnswer(
+  file: string,
+  revision: number,
+): PublishOutcome | Readonly<{ staging: string; prepared: ScriptDestination }> {
   const record = readRecord(file);
-  if (!record) return undefined;
+  if (!record) return { published: undefined };
+  const repeated = committedRepeat(record, revision);
+  if (repeated) return repeated;
+  // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
+  const prepared = prepareScriptDestination(record.destination);
+  const current = settleNamedInterruption(file, record, revision, prepared);
+  const promoted = committedRepeat(current, revision);
+  if (promoted) return promoted;
   const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
   try {
-    writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
+    writeRecord(file, { ...current, staging: [...(current.staging ?? []), staging] });
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  return staging;
+  return { staging, prepared };
 }
 
 /** Releases a staging directory; one that cannot be removed stays listed, for retirement or the sweep. */
@@ -577,22 +634,21 @@ function publishStaged(
     prepared: ScriptDestination;
     pending: { named: boolean };
   }>,
-): string | undefined {
+): PublishOutcome {
   const { revision, staging, staged, prepared, pending } = version;
+  const record = readRecord(file);
+  if (!record) return { published: undefined };
+  // A copy that became a repeat while it downloaded is answered exactly as an early repeat is.
+  const repeated = committedRepeat(record, revision);
+  if (repeated) return repeated;
   // Confirmed here, under the record lock, because the download ran since host-kit answered. The entry it
   // returns is the only path this commit creates or probes: the destination's own spelling never reaches the
   // filesystem, and nothing the record stores can point recovery elsewhere (ADR 0016).
-  const settled = settleUnderLock(file, revision, (destination) =>
-    confirmScriptDestination(destination, prepared),
-  );
-  if (!settled) return undefined;
-  const { current, entry } = settled;
-  // A copy that became a repeat while it downloaded is answered exactly as an early repeat is.
-  if (revision <= current.revision) return committedVersionEntry(current, entry);
-  // A version whose staged bytes cannot be digested could never be verified later, so it is not committed.
-  const digest = contentDigest(staged);
-  if (digest === undefined) throw new Error('The staged script could not be digested.');
-  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging, digest };
+  const { entry } = confirmScriptDestination(record.destination, prepared);
+  const current = settleInterrupted(file, record, entry);
+  const promoted = committedRepeat(current, revision);
+  if (promoted) return promoted;
+  const publishing = { revision, file: verifiedStagedIdentity(staged), staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);
   writeRecord(file, { ...current, publishing });
@@ -606,182 +662,88 @@ function publishStaged(
     pending.named = false;
     throw error;
   }
-  writeRecord(file, { ...current, revision, committedDigest: digest });
+  writeRecord(file, { ...current, revision });
   pending.named = false;
-  return entry;
+  return { published: entry };
 }
 
 /**
- * Runs under the record lock, before staging: settles the record and answers the version when it turns out to
- * be a repeat, or nothing when it still needs a download. An interrupted version that never reached the entry,
- * and whose directory is gone since, still needs one: the download recreates the directory it lands in.
+ * Answers a version the record already committed with the stored absolute destination, without touching
+ * the filesystem, or nothing when the version is newer. An interrupted save the record names is disclosed, since
+ * it may already have replaced the file.
  */
-function settledRepeat(
-  file: string,
-  revision: number,
-): Readonly<{ published: string | undefined }> | undefined {
-  const record = readRecord(file);
-  if (!record) return { published: undefined };
-  // Only a version the record says is committed or being published can be on disk already.
-  if (revision > Math.max(record.revision, record.publishing?.revision ?? 0)) return undefined;
-  let settled: ReturnType<typeof settleUnderLock>;
-  try {
-    settled = settleUnderLock(file, revision, (destination) => judgeScriptDestination(destination));
-  } catch (error) {
-    if (error instanceof CommittedVersionUnverified && error.kind === 'unconfirmed')
-      return undefined;
-    throw error;
-  }
-  if (!settled) return { published: undefined };
-  if (revision > settled.current.revision) return undefined;
-  return { published: committedVersionEntry(settled.current, settled.entry) };
-}
-
-/** Judges the destination and settles interrupted publication under the record lock. */
-function settleUnderLock(
-  file: string,
-  revision: number,
-  judge: (destination: string) => ScriptDestination,
-): Readonly<{ current: ScriptRecord; entry: string }> | undefined {
-  const record = readRecord(file);
-  if (!record) return undefined;
-  const judged = () => judge(record.destination);
-  const repeat = revision <= Math.max(record.revision, record.publishing?.revision ?? 0);
-  const { entry } = repeat ? judgeRepeat(judged, revision <= record.revision) : judged();
-  let current = settlePublishing(record, entry);
-  if (record.publishing) {
-    // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
-    writeRecord(file, current);
-    const { staging } = record.publishing;
-    try {
-      fs.rmSync(staging, { recursive: true, force: true });
-    } catch (error) {
-      if (isWindowsShareUnavailable(staging, error))
-        throw new CommittedVersionUnverified('changed');
-      throw error;
-    }
-    current = withoutStaging(current, staging);
-    writeRecord(file, current);
-  }
-  return { current, entry };
-}
-
-/** An interrupted version counts as published only when the entry host-kit authorized is that very file. */
-function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
-  const { publishing } = record;
-  if (!publishing) return record;
-  let identity: string | undefined;
-  try {
-    identity = fileIdentity(entry);
-  } catch (error) {
-    if (isWindowsShareUnavailable(entry, error)) throw new CommittedVersionUnverified('changed');
-    throw error;
-  }
-  const settled = withoutPublishing(record);
-  if (identity !== publishing.file) return settled;
-  // The promoted version's digest replaces the previous one, and a version that carries none clears it, so a
-  // repeat never verifies the new file against an older version's bytes.
-  const { committedDigest: _previous, ...promoted } = settled;
+function committedRepeat(record: ScriptRecord, revision: number): PublishOutcome | undefined {
+  if (revision > record.revision) return undefined;
+  const pending = record.publishing?.revision;
   return {
-    ...promoted,
-    revision: Math.max(settled.revision, publishing.revision),
-    ...(publishing.digest === undefined ? {} : { committedDigest: publishing.digest }),
+    published: record.destination,
+    repeat: { requested: revision, committed: record.revision, ...(pending ? { pending } : {}) },
   };
 }
 
 /**
- * Answers a version this client already published: the entry host-kit judged, and only while its content is
- * the committed version's. A caller is never told a path holds its recording when it does not (ADR 0016).
+ * Runs under the record lock: answers a version the record committed, or settles an interrupted commit that
+ * names it against the entry host-kit confirms and answers it when that commit installed it. Nothing when the
+ * version still needs to be staged.
  */
-function committedVersionEntry(record: ScriptRecord, entry: string): string {
-  if (record.committedDigest === undefined) throw new CommittedVersionUnverified('unverifiable');
-  try {
-    if (contentDigest(entry) === record.committedDigest) return entry;
-  } catch (error) {
-    if (!isWindowsShareUnavailable(entry, error)) throw error;
-  }
-  throw new CommittedVersionUnverified('changed');
+function settledRepeat(
+  file: string,
+  revision: number,
+  prepared: ScriptDestination,
+): PublishOutcome | undefined {
+  const record = readRecord(file);
+  if (!record) return { published: undefined };
+  return (
+    committedRepeat(record, revision) ??
+    committedRepeat(settleNamedInterruption(file, record, revision, prepared), revision)
+  );
 }
 
 /**
- * Judges the destination of a repeated version. A directory removed since means the committed file is gone,
- * which is what the caller is told, on the early path and on the locked one alike.
+ * Runs under the record lock: settles an interrupted commit that names `revision` against the entry host-kit
+ * confirms, and returns the record as settled, or the record unchanged when no such commit is pending.
  */
-function judgeRepeat(judge: () => ScriptDestination, confirmed: boolean): ScriptDestination {
-  try {
-    return judge();
-  } catch (error) {
-    if (error instanceof AppError && error.details?.exposure === 'unreachable_parent') {
-      // An interrupted publication that no commit ever confirmed was never known to be saved.
-      throw new CommittedVersionUnverified(confirmed ? 'changed' : 'unconfirmed');
-    }
-    throw error;
-  }
+function settleNamedInterruption(
+  file: string,
+  record: ScriptRecord,
+  revision: number,
+  prepared: ScriptDestination,
+): ScriptRecord {
+  if (revision > (record.publishing?.revision ?? 0)) return record;
+  const { entry } = confirmScriptDestination(record.destination, prepared);
+  return settleInterrupted(file, record, entry);
 }
 
 /**
- * The SHA-256 of a regular file no larger than a delivery can be, read through ONE verified descriptor, or
- * nothing: a link, a special file, an entry swapped while it was opened, a file past the cap, or one whose size
- * moved while it was read cannot be a version this client committed.
+ * The identity of a staged script that is a readable regular file within the delivery cap and stayed unchanged
+ * while it was read through one verified descriptor; anything else is not committed. No content digest is kept; the
+ * identity returned is the pending file identity the record names until the commit settles.
  */
-function contentDigest(file: string): string | undefined {
-  let descriptor: number | undefined;
-  try {
-    descriptor = openVerifiedFileForRead(file);
-  } catch (error) {
-    // Every refusal of the verified open is the same answer: a symbolic link swapped in after the look is
-    // refused by O_NOFOLLOW as ELOOP, and anything else that is not the file looked at by the helper's check.
-    if (error instanceof AppError || isAbsentOrRefusedEntry(error)) return undefined;
-    throw error;
-  }
-  if (descriptor === undefined) return undefined;
+function verifiedStagedIdentity(staged: string): string {
+  const descriptor = openVerifiedFileForRead(staged);
+  if (descriptor === undefined) throw new Error('The staged script is missing.');
   try {
     const opened = fs.fstatSync(descriptor, { bigint: true });
-    const size = Number(opened.size);
-    if (size > MAX_SCRIPT_BYTES) return undefined;
-    const hash = crypto.createHash('sha256');
-    const chunk = Buffer.allocUnsafe(DIGEST_CHUNK_BYTES);
+    if (opened.size > BigInt(MAX_SCRIPT_BYTES)) {
+      throw new Error('The staged script is not within the delivery cap.');
+    }
+    const chunk = Buffer.allocUnsafe(64 * 1024);
     let total = 0;
-    for (;;) {
-      const read = fs.readSync(descriptor, chunk, 0, chunk.length, null);
-      if (read === 0) break;
-      total += read;
-      if (total > MAX_SCRIPT_BYTES) return undefined;
-      hash.update(chunk.subarray(0, read));
+    for (let read = -1; read !== 0 && total <= MAX_SCRIPT_BYTES; total += read) {
+      read = fs.readSync(descriptor, chunk, 0, chunk.length, null);
     }
-    if (total !== size) return undefined;
-    // The bytes hashed belong to the entry only while the descriptor is still that entry, unchanged since it
-    // was opened: a replacement, or a same-length write after the read, moves one of these.
-    const read = fs.fstatSync(descriptor, { bigint: true });
-    const current = lstatEntryIfPresent(file);
-    if (!current || !sameUnchangedFile(opened, read) || !sameUnchangedFile(read, current)) {
-      return undefined;
+    const after = fs.fstatSync(descriptor, { bigint: true });
+    const standing = fs.lstatSync(staged, { bigint: true });
+    if (total > MAX_SCRIPT_BYTES || BigInt(total) !== opened.size) {
+      throw new Error('The staged script is not within the delivery cap.');
     }
-    return hash.digest('hex');
+    if (!sameUnchangedFile(opened, after) || !sameUnchangedFile(after, standing)) {
+      throw new Error('The staged script changed while it was checked.');
+    }
+    return `${opened.dev}:${opened.ino}`;
   } finally {
     fs.closeSync(descriptor);
   }
-}
-
-const DIGEST_CHUNK_BYTES = 64 * 1024;
-
-/**
- * What the entry stands as now, or nothing: a parent that became a file answers ENOTDIR and a removed one
- * ENOENT, and either way there is no committed file at that path.
- */
-function lstatEntryIfPresent(file: string): fs.BigIntStats | undefined {
-  try {
-    return fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
-  } catch (error) {
-    if (isAbsentOrRefusedEntry(error)) return undefined;
-    throw error;
-  }
-}
-
-/** A path that names no file to verify: gone, behind a parent that is not a directory, or a link refused. */
-function isAbsentOrRefusedEntry(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code;
-  return code === 'ENOENT' || code === 'ENOTDIR' || code === 'ELOOP';
 }
 
 function sameUnchangedFile(left: fs.BigIntStats, right: fs.BigIntStats): boolean {
@@ -795,39 +757,26 @@ function sameUnchangedFile(left: fs.BigIntStats, right: fs.BigIntStats): boolean
 }
 
 /**
- * A repeated version this client cannot vouch for: its committed file changed or is gone, or a record from
- * before digests were kept leaves nothing to verify it against.
+ * Settles a version a crash left between its rename and its revision update, against the entry host-kit just
+ * confirmed, and removes that version's staging once the record no longer names it.
  */
-class CommittedVersionUnverified extends Error {
-  readonly kind: 'changed' | 'unconfirmed' | 'unverifiable';
-
-  constructor(kind: 'changed' | 'unconfirmed' | 'unverifiable') {
-    super(`The committed script is ${kind}.`);
-    this.kind = kind;
-  }
+function settleInterrupted(file: string, record: ScriptRecord, entry: string): ScriptRecord {
+  if (!record.publishing) return record;
+  const settled = settlePublishing(record, entry);
+  // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
+  writeRecord(file, settled);
+  // Best effort once the commit is recorded: a directory that stays listed is removed by retirement or the sweep.
+  releaseStagingQuietly(file, record.publishing.staging);
+  return readRecord(file) ?? settled;
 }
 
-/** The disclosure for a repeated version this client cannot vouch for. */
-function committedVersionFailure(
-  destination: string,
-  publicationId: string,
-  error: CommittedVersionUnverified,
-  closing: boolean,
-): ScriptDeliveryFailure {
-  const messages = {
-    changed: `The script saved earlier is no longer at ${destination}.`,
-    unconfirmed: `A save to ${destination} was interrupted before it was confirmed, and its directory is gone.`,
-    unverifiable: `The script saved earlier at ${destination} could not be verified, because it was saved by an earlier release.`,
-  } as const;
-  return {
-    reason: 'script_delivery_failed',
-    cause: error.kind === 'unverifiable' ? 'script_entry_unverified' : 'script_entry_changed',
-    publicationId,
-    message: messages[error.kind],
-    hint: closing
-      ? 'The session is closed, so no later version follows.'
-      : 'The next recorded action or close writes the full recording there again.',
-  };
+/** An interrupted version counts as published only when the entry host-kit authorized is that very file. */
+function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
+  const { publishing } = record;
+  if (!publishing) return record;
+  const settled = withoutPublishing(record);
+  if (fileIdentity(entry) !== publishing.file) return settled;
+  return { ...settled, revision: Math.max(settled.revision, publishing.revision) };
 }
 
 function withoutPublishing(record: ScriptRecord): ScriptRecord {
@@ -846,9 +795,6 @@ function scriptDeliveryFailure(
   error: unknown,
   closing: boolean,
 ): ScriptDeliveryFailure {
-  if (error instanceof CommittedVersionUnverified) {
-    return committedVersionFailure(destination, publicationId, error, closing);
-  }
   // Only the exclusive link of the first version can find an existing entry.
   const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
   const refusal = scriptAncestryReason(error);
@@ -873,7 +819,7 @@ function scriptDeliveryFailure(
         cause: 'script_target_exists',
         publicationId,
         message: `A file already exists at ${destination}.`,
-        hint: 'Remove the existing file, or start a new recording with open --save-script --force.',
+        hint: `Remove the existing file, or start a new recording by reusing your original open command with ${recordAgainArguments(destination)}.`,
       }
     : {
         reason: 'script_delivery_failed',
@@ -958,13 +904,19 @@ function parseRecord(file: string): ScriptRecord | undefined {
     typeof record.destination === 'string' &&
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
-    (record.committedDigest === undefined || typeof record.committedDigest === 'string') &&
     (record.publishing === undefined || isPublishing(record.publishing)) &&
     (record.retired === undefined || record.retired === true) &&
     (record.staging === undefined ||
       (Array.isArray(record.staging) &&
         record.staging.every((staging) => typeof staging === 'string')));
-  return valid ? (record as ScriptRecord) : undefined;
+  if (!valid) return undefined;
+  // A digest an earlier version of this client kept is dropped, so the next write does not carry it forward.
+  const {
+    committedDigest: _digest,
+    entry: _entry,
+    ...current
+  } = record as ScriptRecord & { committedDigest?: unknown; entry?: unknown };
+  return current;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -976,8 +928,7 @@ function isPublishing(publishing: unknown): boolean {
     isObject(publishing) &&
     Number.isSafeInteger(publishing.revision) &&
     typeof publishing.file === 'string' &&
-    typeof publishing.staging === 'string' &&
-    (publishing.digest === undefined || typeof publishing.digest === 'string')
+    typeof publishing.staging === 'string'
   );
 }
 

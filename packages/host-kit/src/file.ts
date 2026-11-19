@@ -6,8 +6,6 @@ export {
 } from './internal/atomic-publish.ts';
 export {
   confirmScriptDestination,
-  isWindowsShareUnavailable,
-  judgeScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,
   type ScriptDestination,
