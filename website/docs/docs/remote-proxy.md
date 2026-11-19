@@ -92,9 +92,10 @@ The daemon itself cannot pick a device by these keys, so it refuses a named key 
 
 Remote screenshots, recordings, performance captures, and trace logs use generated output paths on
 the daemon. When you specify an output path through the CLI, SDK, or MCP, it selects the download
-destination on your machine. A remote `record stop` writes only to a path that `record start` saved
-in the same state directory for the same session. Otherwise it downloads to the current directory
-and warns with `capture_artifact_local_path_refused`. Direct RPC callers receive artifact IDs and
+destination on your machine. A remote `record stop` writes only to the path that `record start`
+saved in the same state directory, or to the chunk and telemetry files derived from it, for the
+same connection and session. Otherwise it downloads to the current directory and lists the
+fallback in `recordingDestinationWarnings`. Direct RPC callers receive artifact IDs and
 download each result with
 `GET /artifacts/<id>` using the same authentication.
 

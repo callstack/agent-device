@@ -16,8 +16,8 @@ import { runSourceCliJson } from './cli-json.ts';
 // shared state directory before dispatch. An accepted start whose answer is withheld still lets a
 // later `record stop`, run as a separate CLI process from a different cwd, write a daemon
 // `localPath` derived from that destination. A `localPath` outside the saved derivations lands in
-// the stopping process's cwd. A delivered stop retires the record, a failed stop keeps it, and a
-// confirmed close retires the session's records. Loopback fixture daemon only.
+// the stopping process's cwd with a typed warning. A confirmed stop retires the record, a failed
+// stop keeps it, and a confirmed close retires the session's records. Loopback fixture daemon only.
 
 const VIDEO_BYTES = 'video-bytes';
 
@@ -248,7 +248,7 @@ test('a withheld accepted record start still authorizes an exact stop from a sep
     assert.equal(fs.readFileSync(`${granted}.mp4`, 'utf8'), VIDEO_BYTES);
     // Nothing landed in the stop process's own cwd.
     assert.deepEqual(fs.readdirSync(world.cwdB), []);
-    // The delivered stop retired the saved destination.
+    // The confirmed stop retired the saved destination.
     assert.deepEqual(readSavedDestinations(world.stateDir), []);
   } finally {
     await closeLoopbackServer(daemon.server);
@@ -289,8 +289,12 @@ test('a stop localPath outside the saved derivations is refused to the contained
     assert.equal(stop.json?.data?.outPath, path.join(world.cwdB, 'demo.mp4'));
     assert.equal(fs.readFileSync(path.join(world.cwdB, 'demo.mp4'), 'utf8'), VIDEO_BYTES);
     assert.equal(fs.existsSync(path.join(world.cwdA, 'clips', 'outside.mp4')), false);
-    // A refused path uses no saved destination, so it is retained.
-    assert.deepEqual(readSavedDestinations(world.stateDir), [granted]);
+    // The stop is confirmed, so its bound grant is retired even though the path was refused.
+    assert.deepEqual(readSavedDestinations(world.stateDir), []);
+    assert.equal(
+      stop.json?.data?.recordingDestinationWarnings?.[0]?.reason,
+      'capture_destination_not_derived',
+    );
   } finally {
     await closeLoopbackServer(daemon.server);
   }

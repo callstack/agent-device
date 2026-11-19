@@ -30,7 +30,7 @@ import {
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
-import { saveCaptureStartDestination } from '@agent-device/remote/daemon-artifacts';
+import { bindCaptureRequest, type CaptureBinding } from '@agent-device/remote/daemon-artifacts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -53,6 +53,8 @@ type SendRequestOptions = {
    * how an attach client and the quiesce request itself time out.
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
+  /** The recording grant binding of this logical request (#4518). `sendRequest` sets it. */
+  capture?: CaptureBinding;
 };
 
 /**
@@ -394,9 +396,18 @@ export async function sendRequest(
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
+  // #4518: one binding per logical request, made before any attempt. A canceled request binds none.
+  const capture =
+    isRemoteDaemon(info) && !options.signal?.aborted
+      ? await bindCaptureRequest(req, info, statePaths.baseDir)
+      : undefined;
   try {
-    return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, options);
+    return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, {
+      ...options,
+      capture,
+    });
   } catch (error) {
+    await settleUndispatchedCapture(capture, error);
     const failure = await recoverFromTimeout(error, info, req, statePaths, options);
     const transport = classifyTransportFailure(failure);
     if (!transport) throw failure;
@@ -404,6 +415,16 @@ export async function sendRequest(
     const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
     throw discloseRequestFailure(transport.failure, req, transport.sent);
   }
+}
+
+/** A request that provably never left this process settles its binding as not delivered. */
+async function settleUndispatchedCapture(
+  capture: CaptureBinding | undefined,
+  error: unknown,
+): Promise<void> {
+  if (!capture || !(error instanceof AppError)) return;
+  if (error.details?.dispatched !== 'no' && error.details?.daemonRequestSent !== false) return;
+  await capture.settle({ ok: false, error: { code: error.code, message: error.message } });
 }
 
 async function recoverFromTimeout(
@@ -557,9 +578,9 @@ async function sendRequestWithTransport(
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  if (transport !== 'http') return await sendSocketRequest(info, req, timeoutMs, options);
-  await saveCaptureStartDestination(req, info, statePaths.baseDir);
-  return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
+  return transport === 'http'
+    ? await sendHttpRequest(info, req, statePaths, timeoutMs, options)
+    : await sendSocketRequest(info, req, timeoutMs, options);
 }
 
 function chooseTransport(
@@ -842,6 +863,7 @@ async function sendHttpRequest(
         req,
         stateDir: statePaths.baseDir,
         host: options.host,
+        capture: options.capture,
         resolve: resolveOnce,
         reject: rejectOnce,
       });

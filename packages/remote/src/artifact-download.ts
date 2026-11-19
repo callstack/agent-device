@@ -30,6 +30,12 @@ export type RemoteArtifactDownload = {
    * stopped once it crosses `maxBytes`, whatever `Content-Length` announced.
    */
   privateFile?: Readonly<{ maxBytes: number }>;
+  /**
+   * Stages the file in a private directory beside the destination and renames it into place
+   * (#4518). No link at the destination name or a replaced parent directory redirects the bytes,
+   * and a failed transfer leaves the existing destination untouched.
+   */
+  stagedFile?: true;
 };
 
 const PRIVATE_FILE_FLAGS =
@@ -46,6 +52,7 @@ type DownloadDestination = {
 
 function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination {
   const { destinationPath } = params;
+  if (params.stagedFile) return stagedFileDestination(params);
   if (params.isDirectory) {
     return {
       prepare: async () => {
@@ -82,6 +89,57 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
       return destinationPath;
     },
   };
+}
+
+function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestination {
+  const { destinationPath } = params;
+  let directory: { path: string; identity: string } | undefined;
+  let staging: string | undefined;
+  return {
+    prepare: async () => {
+      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      directory = await directoryIdentity(path.dirname(destinationPath));
+      staging = await fs.promises.mkdtemp(path.join(directory.path, '.agent-device-download-'));
+    },
+    cleanupOnError: async () => {
+      if (staging) await fs.promises.rm(staging, { recursive: true, force: true });
+    },
+    materialize: async (res, signal) => {
+      const staged = path.join(staging!, 'artifact');
+      const file = await fs.promises.open(staged, PRIVATE_FILE_FLAGS, 0o600).catch((error) => {
+        res.destroy();
+        throw error;
+      });
+      await pipeline(res, file.createWriteStream(), { signal });
+      const current = await directoryIdentity(path.dirname(destinationPath));
+      if (current.path !== directory!.path || current.identity !== directory!.identity) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'The download directory changed during the transfer.',
+          {
+            reason: 'artifact_destination_replaced',
+            artifactId: params.artifactId,
+          },
+        );
+      }
+      // A rename replaces a link at the destination name instead of writing through it.
+      await fs.promises.rename(staged, path.join(directory!.path, path.basename(destinationPath)));
+      await fs.promises.rm(staging!, { recursive: true, force: true });
+      return destinationPath;
+    },
+  };
+}
+
+/** The physical directory and its identity, so a replaced parent is detected before the rename. */
+async function directoryIdentity(directory: string): Promise<{ path: string; identity: string }> {
+  const physical = await fs.promises.realpath(directory);
+  const stat = await fs.promises.lstat(physical, { bigint: true });
+  if (!stat.isDirectory()) {
+    throw new AppError('COMMAND_FAILED', 'The download destination parent is not a directory.', {
+      reason: 'artifact_destination_replaced',
+    });
+  }
+  return { path: physical, identity: `${stat.dev}:${stat.ino}` };
 }
 
 function limitBytes(maxBytes: number, artifactId: string): Transform {

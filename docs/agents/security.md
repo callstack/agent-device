@@ -8,7 +8,8 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 
 Script publishers use caller paths. On POSIX, apply ADR 0016 checks and stage in the checked directory.
 Cap bytes in remote script delivery.
-For remote record stop, honor explicit caller paths. Accept a daemon path only when it derives from a path that this client saved at start for the same scope. Otherwise use a local basename (#4518).
+For remote record stop, accept a daemon path only when it derives from a grant that this client saved at start and bound to the stop before dispatch. Otherwise use a local basename and add a response warning (#4518).
+Write recordings through a private staging directory and a rename. Do not follow a link at the destination name.
 Trace and perf still accept daemon paths.
 
 ## Proposed in #4669

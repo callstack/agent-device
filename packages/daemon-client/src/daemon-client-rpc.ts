@@ -13,6 +13,7 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
+  type CaptureBinding,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
@@ -27,15 +28,16 @@ export function handleDaemonHttpResponseBody(
     req: DaemonWireRequest;
     stateDir: string;
     host: HostEnvironment;
+    capture?: CaptureBinding;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, resolve, reject } = options;
+  const { info, req, stateDir, host, capture, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, capture, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -47,7 +49,14 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, { host, stateDir }, resolve, reject);
+    void resolveDaemonHttpResult(
+      info,
+      req,
+      parsed.result,
+      { host, stateDir, capture },
+      resolve,
+      reject,
+    );
   } catch (err) {
     reject(
       new AppError(
@@ -86,12 +95,15 @@ async function rejectDaemonHttpRpcError(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
+    capture?: CaptureBinding;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
   const { info, req, stateDir, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
+  // #4518: a daemon refusal settles the recording grants this request bound before dispatch.
+  await options.capture?.settle({ ok: false, error: payload });
   if (!info.baseUrl) {
     reject(appErrorFromDaemonError(payload, requestId));
     return;
@@ -189,14 +201,21 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  client: { host: HostEnvironment; stateDir: string },
+  client: { host: HostEnvironment; stateDir: string; capture?: CaptureBinding },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
     resolve(
       info.baseUrl && result.ok
-        ? await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir)
+        ? await materializeRemoteArtifacts(
+            info,
+            req,
+            result,
+            client.host,
+            client.stateDir,
+            client.capture,
+          )
         : result,
     );
   } catch (error) {

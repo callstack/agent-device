@@ -49,8 +49,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'packages/remote/src/daemon-artifacts.ts#CaptureDestinations':
-    "The CLIENT'S OWN view of the record start destinations it saved in its state directory, with two client-local callbacks. It never crosses the wire; the listed artifact `localPath` is only matched against it.",
+  'packages/remote/src/capture-destination.ts#CaptureBinding':
+    "The CLIENT'S OWN binding of one request to the recording grants in its state directory, with client-local callbacks. It never crosses the wire; the listed artifact `localPath` and the listed daemon answer are only read against it.",
   'packages/remote/src/session-script-destination.ts#PublishOutcome':
     "The CLIENT'S OWN result of one publish attempt: the published path, or a failure plus the local error object behind it. Neither half crosses the wire as this shape: both are transformations into client-local output, the path into the listed `data.savedScript` string and a failure into the listed packages/kernel/src/contracts.ts#ScriptDeliveryFailure. The `error` member is a local unknown thrown value that never reaches the peer.",
   'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':

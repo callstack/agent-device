@@ -5,6 +5,7 @@ import type {
   DaemonResponse,
   DaemonResponseData,
 } from '@agent-device/kernel/contracts';
+import type { CaptureBinding } from './capture-destination.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -294,19 +295,20 @@ async function prepareRemoteInstallSource(
   };
 }
 
+export type { CaptureBinding } from './capture-destination.ts';
+
 /**
- * #4518: saves a remote `record start` destination before dispatch, so a later `record stop` in
- * another CLI process can accept a daemon `localPath` derived from it.
+ * #4518: binds a remote `record start`, `record stop`, `close` or closing batch to the recording
+ * grant store before dispatch. The caller settles the binding from the daemon's answer.
  */
-export async function saveCaptureStartDestination(
+export async function bindCaptureRequest(
   req: DaemonWireRequest,
   info: DaemonArtifactEndpoint,
   stateDir: string,
-): Promise<void> {
-  const destination = req.meta?.clientArtifactPaths?.outPath;
-  if (!info.baseUrl || recordAction(req) !== 'start' || !hasNonEmptyString(destination)) return;
+): Promise<CaptureBinding | undefined> {
+  if (!info.baseUrl || !['record', 'close', 'batch'].includes(req.command)) return undefined;
   const store = await import('./capture-destination.ts');
-  await store.saveCaptureDestination({ stateDir, baseUrl: info.baseUrl, req, destination });
+  return await store.bindCaptureRequest({ stateDir, baseUrl: info.baseUrl, req });
 }
 
 type RemoteArtifactCommand = {
@@ -513,23 +515,27 @@ export async function materializeRemoteArtifacts(
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
   stateDir: string,
+  capture?: CaptureBinding,
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
-  const endpoint = { baseUrl: info.baseUrl, token: info.token };
+  // The confirmed answer settles the grants, whatever happens to the downloads (#4518).
+  await capture?.settle(response);
+  const delivered = await deliverResponseArtifacts(info, req, response, host, stateDir, capture);
+  return capture ? capture.disclose(delivered) : delivered;
+}
+
+async function deliverResponseArtifacts(
+  info: DaemonArtifactEndpoint,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  host: HostEnvironment,
+  stateDir: string,
+  capture: CaptureBinding | undefined,
+): Promise<DaemonResponse> {
+  const endpoint = { baseUrl: info.baseUrl!, token: info.token };
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  const captures = await loadCaptureDestinations(endpoint.baseUrl, req, stateDir);
-  const download = async (scripts?: SessionScriptDelivery) => {
-    const delivered = await downloadResponseArtifacts(
-      endpoint,
-      req,
-      response,
-      host,
-      scripts,
-      captures,
-    );
-    await captures?.retire();
-    return delivered;
-  };
+  const download = (scripts?: SessionScriptDelivery) =>
+    downloadResponseArtifacts(endpoint, req, response, host, scripts, capture);
   // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
   // publication and no script artifact of its own (#4595).
   if (
@@ -550,7 +556,7 @@ async function downloadResponseArtifacts(
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
   scripts: SessionScriptDelivery | undefined,
-  captures: CaptureDestinations | undefined,
+  capture: CaptureBinding | undefined,
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutScriptFieldOwner(response.data);
@@ -567,7 +573,7 @@ async function downloadResponseArtifacts(
       continue;
     }
     if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
-    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host, captures);
+    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host, capture);
     const materializedPath = await downloadRemoteArtifact({
       ...endpoint,
       artifactId: artifact.artifactId,
@@ -576,8 +582,11 @@ async function downloadResponseArtifacts(
       // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
       // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
-      // `downloadRemoteArtifact`).
-      isDirectory: artifact.artifactType === 'test-artifacts',
+      // `downloadRemoteArtifact`). A recording is always one staged file, chosen from the request,
+      // never from the reply's artifact type (#4518).
+      ...(req.command === 'record'
+        ? { stagedFile: true as const }
+        : { isDirectory: artifact.artifactType === 'test-artifacts' }),
     });
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
@@ -648,45 +657,6 @@ function recordAction(req: DaemonWireRequest): string | undefined {
 }
 
 /**
- * #4518: the saved start destinations of a record stop's scope. `authorize` returns a response
- * `localPath` only when it derives from one of them. A delivered stop retires the destinations it
- * used. A confirmed close retires its whole scope.
- */
-type CaptureDestinations = Readonly<{
-  authorize(artifact: DaemonArtifact): string | undefined;
-  retire(): Promise<void>;
-}>;
-
-async function loadCaptureDestinations(
-  baseUrl: string,
-  req: DaemonWireRequest,
-  stateDir: string,
-): Promise<CaptureDestinations | undefined> {
-  const stop = recordAction(req) === 'stop';
-  if (!stop && req.command !== 'close') return undefined;
-  const store = await import('./capture-destination.ts');
-  const scope = { stateDir, baseUrl, req };
-  const saved = stop ? store.readCaptureDestinations(scope) : [];
-  const used = new Set<string>();
-  return {
-    authorize: (artifact) => {
-      const match = store.matchCaptureDestination(saved, artifact.field, artifact.localPath);
-      if (match === undefined) {
-        const detail = saved.length === 0 ? 'no-saved-destination' : 'not-a-derivation';
-        store.discloseUnauthorizedLocalPath(req, artifact.field, detail);
-        return undefined;
-      }
-      used.add(match);
-      return artifact.localPath;
-    },
-    retire: async () => {
-      if (!stop) await store.retireCaptureDestinations(scope);
-      else if (used.size > 0) await store.retireCaptureDestinations({ ...scope, only: used });
-    },
-  };
-}
-
-/**
  * Where this client writes one downloaded artifact. The client chooses: a path it registered in
  * this request wins. A record stop accepts a response `localPath` only when it derives from a
  * destination saved at start for the same scope (#4518). A trace or perf stop or report accepts the
@@ -697,24 +667,26 @@ function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
-  captures: CaptureDestinations | undefined,
+  capture: CaptureBinding | undefined,
 ): string {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return requestedPath;
   if (recordAction(req) === 'stop') {
-    const localPath = hasNonEmptyString(artifact.localPath)
-      ? captures?.authorize(artifact)
-      : undefined;
-    if (localPath !== undefined) return localPath;
+    const authorized = capture?.authorize(artifact.field, artifact.localPath);
+    if (authorized !== undefined) return authorized;
   } else if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return artifact.localPath;
   }
-  const responseName = path.basename(artifact.fileName?.trim() ?? '');
+  const responseName = path.basename(
+    typeof artifact.fileName === 'string' ? artifact.fileName.trim() : '',
+  );
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
       : `${path.basename(artifact.field)}-${Date.now()}`;
-  return path.resolve(req.meta?.cwd ?? host.cwd, fileName);
+  const fallback = path.resolve(req.meta?.cwd ?? host.cwd, fileName);
+  if (req.command === 'record') capture?.warnFallback(artifact.field, artifact.localPath, fallback);
+  return fallback;
 }
 
 type DownloadRemoteArtifactParams = {
@@ -728,6 +700,8 @@ type DownloadRemoteArtifactParams = {
   isDirectory?: boolean;
   /** A capped download into a new private file (`artifact-download.ts`). */
   privateFile?: Readonly<{ maxBytes: number }>;
+  /** A file staged beside its destination and renamed into place (`artifact-download.ts`). */
+  stagedFile?: true;
 };
 
 export async function downloadRemoteArtifact(
