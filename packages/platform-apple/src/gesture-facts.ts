@@ -6,7 +6,11 @@ import type {
   RuntimeOperationUnavailability,
 } from '@agent-device/contracts/platform-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleDevice,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
 const gestureLeafUnavailable = Object.freeze({
@@ -94,14 +98,12 @@ function appleScrollFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 /**
- * Pull-to-refresh is a touch gesture, so it is declared exactly on the touch Apple OSes — iOS and
- * iPadOS, where it is a primary gesture — and refused on watchOS, tvOS, visionOS, and the macOS
- * desktop, whose scroll surfaces are not finger-pulled.
+ * Pull-to-refresh is a touch gesture, so it is declared exactly on the handheld Apple devices —
+ * iOS and iPadOS, where it is a primary gesture — and refused on watchOS, tvOS, visionOS, and the
+ * macOS desktop, whose scroll surfaces are not finger-pulled.
  */
 function appleTouchScrollFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!appleTouchKind(device)) return scrollKindUnavailable;
-  const appleOs = resolveDeviceAppleOs(device);
-  return appleOs === 'ios' || appleOs === 'ipados' ? available : touchScrollLeafUnavailable;
+  return isHandheldAppleDevice(device) ? available : touchScrollLeafUnavailable;
 }
 
 function appleTouchKind(device: DeviceInfo): boolean {

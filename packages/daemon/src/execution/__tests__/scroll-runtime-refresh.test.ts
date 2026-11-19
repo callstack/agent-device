@@ -425,6 +425,59 @@ test('bound scroll refresh anchors the pull inside the innermost nested scroller
   assert.deepEqual(pullSamples(plan)[0]!.point, { x: 540, y: 459 });
 });
 
+test('bound scroll refresh keeps the pull on the container it resolved when an unrelated scroller only overlaps its centre', async () => {
+  // A dev client leaves its launcher list in the accessibility tree over the app's own. It is
+  // smaller than the app's list and so sorts first at the broad container's centre, but it frames
+  // different pixels: a pull planned there drags the launcher while the refresh control never sees
+  // the gesture. The refinement may only narrow the resolved container, never replace it.
+  const listRect = { x: 24, y: 163.3333282470703, width: 354, height: 686.6666666666666 };
+  const overlappingScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      ref: 'e2',
+      index: 2,
+      parentIndex: 1,
+      depth: 1,
+      type: 'ScrollView',
+      identifier: 'refresh-list',
+      rect: listRect,
+      hiddenContentBelow: true,
+    },
+    {
+      ref: 'e3',
+      index: 3,
+      parentIndex: 1,
+      depth: 1,
+      type: 'ScrollView',
+      rect: { x: 8, y: 452.47429519071306, width: 386, height: 413.5257048092868 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await runScroll(
+    ['refresh'],
+    {},
+    {
+      ...frozenCaptures([overlappingScreen]),
+      scroll: async () => ({}),
+      gesture: async (plan) => {
+        plans.push(plan as PullPlanCall);
+        return {};
+      },
+    },
+    { session: sessionWithStoredScreen(overlappingScreen) },
+  );
+  // The lane starts just inside the LIST's top (163.33 + the 8px container inset), not inside the
+  // launcher list the broad container's centre also falls in.
+  assert.deepEqual(pullSamples(plans[0]!)[0]!.point, { x: 201, y: 172 });
+});
+
 test('bound scroll refresh refuses when a nested scroller still hides content above even if the outer one is at the top', async () => {
   const nestedScrolled: SnapshotNode[] = [
     {

@@ -72,6 +72,7 @@ import {
   type ScrollMovementPlan,
 } from './scroll-movement.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
+import { rectContains } from '@agent-device/kernel/rect';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
@@ -520,16 +521,19 @@ async function readCapturedTopEdgeState(
   if (!broadRect) return { state: broad, nodes };
   // A screen can nest scrollers (a list inside a screen-level ScrollView), and the broad read picks
   // the outermost: anchoring the pull there starts it on the header, where it moves nothing. The
-  // pull belongs to the innermost scroller at the broad container's centre. The refusal still asks
-  // whether ANY scroller can scroll up — a nested one with hidden content above eats the pull
-  // before a refresh control ever sees it.
+  // pull belongs to the innermost scroller at the broad container's centre, so this refinement may
+  // only NARROW that container. A screen can also carry a scroller that merely overlaps the centre
+  // without containing it — an iOS dev client leaves its SwiftUI launcher list in the tree over the
+  // app's own — and a pull planned there drags that list while the refresh control never sees it.
   const inner = await readScrollEdgeState(nodes, 'top', {
     point: {
       x: broadRect.x + broadRect.width / 2,
       y: broadRect.y + broadRect.height / 2,
     },
   });
-  if (!inner.containerRect) return { state: broad, nodes };
+  if (!inner.containerRect || !rectContains(broadRect, inner.containerRect)) {
+    return { state: broad, nodes };
+  }
   return { state: { ...inner, canScroll: inner.canScroll || broad.canScroll }, nodes };
 }
 
@@ -559,12 +563,6 @@ async function executeDirectionScroll(
   return scrollResult(target, options, 1, interactionResult, observed);
 }
 
-/**
- * The movement this response may claim, or `undefined` when this command owed no observation of its own
- * effect at all. An absent `movement` field is a claim of its own, so every skip names a typed reason in
- * the daemon log; a runtime bound without a capture answers that way rather than `unobserved`, which
- * keeps its response exactly what it was before this observation existed.
- */
 /** Any bound runtime that may carry the capture the movement claim reads. */
 type CaptureCapableScrollRuntime = Readonly<{
   operations: Readonly<{
@@ -572,6 +570,12 @@ type CaptureCapableScrollRuntime = Readonly<{
   }>;
 }>;
 
+/**
+ * The movement this response may claim, or `undefined` when this command owed no observation of its own
+ * effect at all. An absent `movement` field is a claim of its own, so every skip names a typed reason in
+ * the daemon log; a runtime bound without a capture answers that way rather than `unobserved`, which
+ * keeps its response exactly what it was before this observation existed.
+ */
 async function directionalMovementClaim(
   runtime: CaptureCapableScrollRuntime,
   direction: ScrollDirection,
