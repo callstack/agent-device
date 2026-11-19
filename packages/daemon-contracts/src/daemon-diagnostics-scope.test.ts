@@ -171,12 +171,13 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(process.platform === 'win32')(
-  'a log whose state mode cannot be proven is not used as a sink',
+  'a log whose state mode cannot be proven is not opened as a sink',
   async () => {
-    // The rule narrows the mode of an entry it proved to be this process's own and reports one it could not.
-    // A sink kept across that failure would append this run's events to a file every local user can read
-    // while the run believed its log were private, so the mode is re-asked on the handle before it is
-    // adopted, and a mode that cannot be said refuses the route.
+    // The rule narrows the mode of an entry it proved to be this process's own and refuses one it could not,
+    // AT THE OPEN. A sink kept across that failure would append this run's events to a file every local user
+    // can read while the run believed its log were private, so the mode is said and read back on the
+    // descriptor before any handle is handed out, and a mode that cannot be said is the open's own refusal —
+    // the sink asks the same question nowhere else.
     fs.writeFileSync(logPath, 'earlier\n', { mode: 0o644 });
     fs.chmodSync(logPath, 0o644);
     const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {
@@ -201,7 +202,9 @@ test.skipIf(process.platform === 'win32')(
       'done',
       'a log that cannot be made private still costs the daemon nothing',
     );
-    assert.match(said, /daemon_log_sink_mode_unproven/);
+    // The refusal travels with the reason INSIDE it: one say, at the judgment, naming the mode's cause.
+    assert.match(said, /daemon_log_sink_refused/);
+    assert.match(said, /EPERM/);
     assert.match(said, /unlogged/, 'the event leaves by the one route that needs no private file');
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'earlier\n', 'no event reaches the loose file');
     assert.equal(fs.statSync(logPath).mode & 0o777, 0o644);

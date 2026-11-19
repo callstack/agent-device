@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { foldParentRelativeStateRoute, resolveDaemonPaths } from './daemon-resolution.ts';
+import {
+  anchorDriveRelativeStateRoute,
+  foldParentRelativeStateRoute,
+  resolveDaemonPaths,
+} from './daemon-resolution.ts';
 
 test('a relative state dir resolves against the working directory it is given', () => {
   const paths = resolveDaemonPaths('state/here', { cwd: '/workspace/project' });
@@ -128,6 +132,97 @@ test('a POSIX name containing a backslash is not split into a step back out', ()
   // Splitting on both separators would see a `..` the host never sees and fold a route that asks for none.
   const spelled = String.raw`/work/state\..\elsewhere`;
   expect(foldParentRelativeStateRoute(spelled, spelled, path.posix)).toBe(spelled);
+});
+
+test('a drive-relative route reaches an anchor of its own drive and records land under it', () => {
+  // A cwd absolute on the SAME drive IS where that drive stands for this run, so `C:work` beside a cwd of
+  // `C:\project` names one directory and the records land under it — the benign case, and what the host itself
+  // would open for the same spelling. The drive text does NOT become a directory name.
+  expect(
+    anchorDriveRelativeStateRoute('C:work', 'C:work', String.raw`C:\project`, path.win32),
+  ).toBe(String.raw`C:\project\work`);
+  // A drive letter spelled in another case is still the same drive.
+  expect(
+    anchorDriveRelativeStateRoute('c:work', 'c:work', String.raw`C:\project`, path.win32),
+  ).toBe(String.raw`C:\project\work`);
+  // A cwd at the bare root of that drive anchors to the root itself.
+  expect(anchorDriveRelativeStateRoute('C:work', 'C:work', 'C:\\', path.win32)).toBe(
+    String.raw`C:\work`,
+  );
+  // The closest negative: a spelling that names a directory ON a drive is an ordinary absolute route, and this
+  // owner answers `undefined` — the resolver's ordinary route keeps it exactly as spelled.
+  expect(
+    anchorDriveRelativeStateRoute(
+      String.raw`C:\work\state`,
+      String.raw`C:\work\state`,
+      String.raw`C:\project`,
+      path.win32,
+    ),
+  ).toBeUndefined();
+  // A POSIX spelling that only LOOKS drive-relative carries no root there, anchors nothing, and stays an
+  // ordinary relative name: the owner asks what the HOST's path API answers, never a text pattern.
+  expect(
+    anchorDriveRelativeStateRoute('C:work', 'C:work', '/workspace/project', path.posix),
+  ).toBeUndefined();
+});
+
+test('a drive-relative route finds no anchor off its drive and is refused typed', () => {
+  // No cwd at all, a cwd that is not absolute, a cwd on ANOTHER drive, or a cwd on a UNC scope: each leaves
+  // the host to answer with a per-process current directory no caller named, so the base is refused rather
+  // than guessed.
+  for (const cwd of [
+    undefined,
+    String.raw`work\project`,
+    String.raw`D:\project`,
+    win('', '', 'srv', 'share', 'work'),
+  ]) {
+    expect(() => anchorDriveRelativeStateRoute('C:work', 'C:work', cwd, path.win32)).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({ reason: 'state_dir_drive_relative', drive: 'C:' }),
+      }),
+    );
+  }
+});
+
+test('anchoring a drive-relative route leaves a step back out un-folded for the fold to judge', () => {
+  // `path.resolve` would fold `C:work\..\state` to `C:\project\state` on the spot, which is exactly the
+  // unproven substitution the fold refuses to make anywhere else: `work/..` returns to the parent of whatever
+  // `work` resolves to, so a link at `work` would make the spelling mean something else. The anchor keeps both
+  // names, and the same proven fold every other route goes through answers the step.
+  const anchored = anchorDriveRelativeStateRoute(
+    String.raw`C:work\..\state`,
+    String.raw`C:work\..\state`,
+    String.raw`C:\project`,
+    path.win32,
+  );
+  expect(anchored).toBe(String.raw`C:\project\work\..\state`);
+  expect(foldParentRelativeStateRoute(String.raw`C:work\..\state`, anchored!, path.win32)).toBe(
+    String.raw`C:\project\state`,
+  );
+});
+
+test.runIf(process.platform === 'win32')(
+  'a Windows host anchors a same-drive state dir and refuses an unbound one',
+  () => {
+    // The wiring above, run through `resolveDaemonPaths` on the host whose path API the decision reads.
+    expect(resolveDaemonPaths('C:work', { cwd: String.raw`C:\project` }).baseDir).toBe(
+      String.raw`C:\project\work`,
+    );
+    expect(() => resolveDaemonPaths('C:work', { cwd: 'D:\\work\\project' })).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({ reason: 'state_dir_drive_relative' }),
+      }),
+    );
+  },
+);
+
+test('a POSIX name beginning with a drive-like prefix is an ordinary relative name', () => {
+  // On this host `C:work` carries no root at all, so it joins the working directory like any other name: the
+  // rule is what the HOST's path API answers, not a text pattern applied to every spelling.
+  const paths = resolveDaemonPaths('C:work', { cwd: '/workspace/project' });
+  expect(paths.baseDir).toBe('/workspace/project/C:work');
 });
 
 test('an lstat fault on the stepped-out-of directory is refused, not folded', () => {

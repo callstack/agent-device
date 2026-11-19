@@ -7,7 +7,6 @@ import {
 
 /** The state owners this scope's sink needs, taken from host-kit's file surface. */
 type PrivateStateOpenSurface = Readonly<{
-  assertPrivateStateFileModeSync: typeof import('@agent-device/host-kit/file').assertPrivateStateFileModeSync;
   tryOpenPrivateStateFileSync: typeof import('@agent-device/host-kit/file').tryOpenPrivateStateFileSync;
   writePrivateStateLineSync: typeof import('@agent-device/host-kit/file').writePrivateStateLineSync;
 }>;
@@ -82,10 +81,10 @@ function flushDaemonDiagnostics(): void {
  * rest of the run.
  *
  * Any part of this that touches the host can fail for a reason the rule does not model — an `EIO` from the
- * device, a descriptor the host will not close, a stderr whose pipe is gone. The open and the mode each answer
- * their own failure, and the whole setup is wrapped once more on top: what a sink factory cannot answer is
- * answered as stderr, because the events still have to leave somewhere and raising here would cost the caller
- * the daemon work it was reporting.
+ * device, a descriptor the host will not close, a stderr whose pipe is gone. The open answers its own
+ * failures, including a mode this host would not carry, and the whole setup is wrapped once more on top: what
+ * a sink factory cannot answer is answered as stderr, because the events still have to leave somewhere and
+ * raising here would cost the caller the daemon work it was reporting.
  */
 function daemonLogSink(state: PrivateStateOpenSurface, logPath: string): DiagnosticLineSink {
   try {
@@ -99,11 +98,10 @@ function daemonLogSink(state: PrivateStateOpenSurface, logPath: string): Diagnos
 /**
  * The judged sink, or the reason the log is not this process's to write.
  *
- * A handle is adopted ONLY at the state mode. The state rule narrows the mode of an entry it proved to be
- * this process's own and reports one it could not; a sink kept across that failure would append the run's
- * events to a file every local user can read, and the run would look as though its log were private. The
- * narrowing is re-asked HERE, after the mode was answered, so neither an error nor a silent skip lets the
- * events land at a looser mode — and a mode that cannot be said is a refusal, not a warning.
+ * A handle is adopted ONLY at the state mode, and that is decided ONCE, by the state opener: on POSIX the open
+ * refuses when the mode cannot be said and read back on the descriptor, so a sink is never handed a handle
+ * whose entry every local user can read. The sink therefore asks nothing further of the handle it adopts — the
+ * refusal answers here as `daemon_log_sink_refused`, with the mode's reason inside it.
  */
 function verifiedDaemonLogSink(
   state: PrivateStateOpenSurface,
@@ -117,13 +115,6 @@ function verifiedDaemonLogSink(
     return stderrSink();
   }
   const descriptor = opened.descriptor;
-  try {
-    state.assertPrivateStateFileModeSync(descriptor);
-  } catch (error) {
-    tryClose(descriptor);
-    sayOnStderr(`Daemon daemon_log_sink_mode_unproven: ${logPath}: ${String(error)}`);
-    return stderrSink();
-  }
   let saidFailure = false;
   return {
     write: (line) => {

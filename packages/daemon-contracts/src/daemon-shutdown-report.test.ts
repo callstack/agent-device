@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readDaemonShutdownReport, buildDaemonShutdownReport } from './daemon-shutdown-report.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -172,6 +172,39 @@ test('ignores malformed shutdown reports', async () => {
       JSON.stringify({ providerReleases: { released: [{}], pending: [] } }),
     );
     expect(await readDaemonShutdownReport(stateDir)).toBeNull();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a report that cannot be reached is answered as no report, not as a failure', async () => {
+  // The stop asks for this record AFTER the daemon is already gone, and only to say what the run released. A
+  // host fault on the way to it — one the state rule does not model as an exposure — must therefore cost the
+  // answer and nothing else: a stop that happened is reported as a graceful one with no report, because
+  // throwing here would tell the caller its own stop failed.
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
+  try {
+    fs.writeFileSync(
+      path.join(stateDir, 'daemon-shutdown.json'),
+      JSON.stringify(
+        buildDaemonShutdownReport(
+          {
+            providerReleases: { released: [], pending: [] },
+            claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
+          },
+          AUTHOR,
+        ),
+      ),
+    );
+    const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation(() => {
+      throw Object.assign(new Error('EIO'), { code: 'EIO' });
+    });
+
+    try {
+      await expect(readDaemonShutdownReport(stateDir, AUTHOR)).resolves.toBeNull();
+    } finally {
+      lstat.mockRestore();
+    }
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

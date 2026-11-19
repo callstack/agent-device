@@ -5,7 +5,6 @@ import { emitDiagnostic } from './diagnostics.ts';
 import {
   identityOf,
   lstatEntry,
-  lstatIfPresent,
   othersCreateEntriesIn,
   pathComponents,
   publishFileSync,
@@ -413,9 +412,8 @@ function privateStateDescriptorExposure(
  *
  * An entry this process owns and has one name for is its own whatever mode it stands at, so a wider mode is
  * narrowed rather than refused — on the DESCRIPTOR, the one seam where no link can stand between the ask and
- * the change. A caller that keeps the handle past this call asks {@link assertPrivateStateFileModeSync} and
- * refuses the route when the mode cannot be had; an opener that hands the handle to a caller which treats a
- * loose mode as a warning reports the skip instead.
+ * the change. That narrowing is part of the ANSWER, not a note beside it: every adopter of this handle keeps
+ * writing through it, so on POSIX a mode that cannot be had and read back is the open's own refusal.
  */
 function assertPrivateStateDescriptor(descriptor: number, destination: string): void {
   const held = fs.fstatSync(descriptor, { bigint: true });
@@ -435,23 +433,27 @@ function assertPrivateStateDescriptor(descriptor: number, destination: string): 
         'agent-device will make its own.',
     );
   }
-  try {
-    assertPrivateStateFileModeSync(descriptor);
-  } catch (error) {
-    reportSkippedModeRepair(destination, error instanceof Error ? error.message : String(error));
+  // On POSIX the mode is what makes a record private, so a host that will not carry it is the open's refusal.
+  if (process.platform !== 'win32') {
+    try {
+      assertPrivateStateFileModeSync(descriptor);
+    } catch (error) {
+      const remedy = privateDirectoryWordingOf('record_mode_unproven');
+      throw stateRefusal(destination, 'record_mode_unproven', `${remedy} (${String(error)})`);
+    }
   }
 }
 
 /**
  * Makes the bytes behind a descriptor carry the state file's mode, and PROVES they do.
  *
- * The mode is said on the descriptor and then read back from it, because a caller that keeps this handle is
- * going to write through it for as long as it lives: an `fchmod` the host refused, or a filesystem that will
- * not carry the mode at all, would otherwise leave a record readable by every local user while the process
- * that wrote it believed the state rule had said 0600. The read-back is the whole of the difference — and it
- * is the check a caller cannot make afterwards, since by then the handle is in use.
+ * The mode is said on the descriptor and then read back from it, because every adopter of the handle is going
+ * to write through it for as long as it lives: an `fchmod` the host refused, or a filesystem that will not carry
+ * the mode at all, would otherwise leave a record readable by every local user while the process that wrote it
+ * believed the state rule had said 0600. The read-back is the whole of the difference — and it is the check no
+ * caller can make afterwards, since by then the handle is in use.
  */
-export function assertPrivateStateFileModeSync(descriptor: number): void {
+function assertPrivateStateFileModeSync(descriptor: number): void {
   fs.fchmodSync(descriptor, PRIVATE_STATE_FILE_MODE);
   const mode = Number(fs.fstatSync(descriptor, { bigint: true }).mode) & 0o777;
   if (mode !== PRIVATE_STATE_FILE_MODE) {
@@ -558,12 +560,15 @@ export type PrivateStateRead =
  * read for; the bound only caps the cost. A WHOLE read takes the first bytes and REFUSES an entry longer than
  * the bound, because a JSON record cut from the front is no record, and one cut from the BACK is: an enormous
  * file padded at the front would hand a tail reader a perfectly parsable report that this daemon never wrote.
+ *
+ * The ANCESTRY JUDGMENT is inside the containment: an optional read owes a refusal, not an exception, because a
+ * stop that already succeeded must not be reported as a failure over a record that could not be reached.
  */
 function readStateEntrySync(pathname: string, maxBytes: number, whole: boolean): PrivateStateRead {
-  const asked = stateEntry(pathname);
-  if (asked.destination === undefined) return { status: 'refused' };
   let descriptor: number | undefined;
   try {
+    const asked = stateEntry(pathname);
+    if (asked.destination === undefined) return { status: 'refused' };
     assertStateDirectoryJudged(asked);
     descriptor = openVerifiedFileForRead(asked.destination);
     if (descriptor === undefined) return { status: 'absent' };
@@ -657,13 +662,14 @@ export type PrivateDirectoryChain = Readonly<{
 }>;
 
 /**
- * How a state chain fails: what the walk finds on the route, a spelling with no chain at all, and ground this
- * process cannot read at all.
+ * How a state chain fails: what the walk finds on the route, a spelling with no chain at all, ground this
+ * process cannot read at all, and a record whose private mode this host would not carry.
  */
 export type PrivateDirectoryExposure =
   | ScriptAncestryExposure
   | 'outside_state_dir'
-  | 'state_dir_unreadable';
+  | 'state_dir_unreadable'
+  | 'record_mode_unproven';
 
 /**
  * Establishes the state chain, creating what is missing at {@link SCRIPT_DIR_MODE}, and answers typed.
@@ -885,13 +891,13 @@ function spelledStateTarget(stateDir: string, names: readonly string[]): string 
 }
 
 /**
- * Whether a spelled path names a step back out of the directory it is in, under either separator.
- *
- * `pathComponents` speaks the POSIX separator, because the walk that uses it only runs there; a state path is
- * refused on every host, so this asks the question the way the host's own path does.
+ * Whether a spelled path names a step back out of the directory it is in, under the separator the host itself
+ * honors: both on Windows, where `path` folds `..\` and `../` alike, and only `/` elsewhere, where a backslash
+ * is an ordinary filename byte. Same question, and same answer, as the fold in `daemon-resolution.ts`.
  */
 function hasParentEscape(spelled: string): boolean {
-  return spelled.split(/[\\/]/).some((name) => name === '..');
+  const separator = process.platform === 'win32' ? /[\\/]/ : /\//;
+  return spelled.split(separator).some((name) => name === '..');
 }
 
 /** A chain that is not this process's own, answered with the level that made it so. */
@@ -1002,6 +1008,12 @@ export function privateDirectoryWordingOf(exposure: PrivateDirectoryExposure): s
       'this process cannot read that part of the state path, so it cannot tell who could write there. ' +
       'Make the state directory readable and owned by the user that runs agent-device, or point ' +
       'AGENT_DEVICE_STATE_DIR at such a directory.'
+    );
+  }
+  if (exposure === 'record_mode_unproven') {
+    return (
+      'this host would not carry the private mode a state record is written at. Remove the record at that ' +
+      'name, or keep the state directory on a filesystem that carries file modes.'
     );
   }
   return stateGroundWording[exposure] ?? untrustedGroundWording[exposure];

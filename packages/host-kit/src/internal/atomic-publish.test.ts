@@ -49,18 +49,23 @@ describe('publishFileSync', () => {
     expect(siblings).toEqual([]);
   });
 
-  test('a sibling whose identity the host will not say is still tidied by the claim', () => {
-    // The name embeds this pid and a fresh UUID and was created EXCLUSIVELY, which proves a moment ago that
-    // nobody else's entry stood there. A host that answers no identity for the open descriptor therefore
-    // leaves the CLAIM standing — and the lookup is asked best effort, so it costs this call neither the bytes
-    // it came to write nor the tidying of its own sibling.
-    const target = destination('unidentified.txt');
+  test('a sibling the host gives no identity for is left, not removed on the claim alone', () => {
+    // The name embedding this pid and a fresh UUID proves nobody else's entry stood there WHEN the create ran.
+    // It says nothing about what stands there NOW: an entry swapped into the name since then is somebody else's,
+    // and a `rm` at that path would remove it. With no identity from the open descriptor there is no way to tell
+    // this call's entry from that one, so the cleanup answers a skip. A `link-exclusive` publish leaves the
+    // sibling standing by design, which is where the skip is visible.
+    const target = destination('unidentified.ad');
     const fstat = vi.spyOn(fs, 'fstatSync').mockImplementation((() => {
       throw Object.assign(new Error('ENOSYS'), { code: 'ENOSYS' });
     }) as unknown as typeof fs.fstatSync);
 
     try {
-      publishFileSync({ destination: target, contents: 'bytes' });
+      publishFileSync({
+        destination: target,
+        contents: 'bytes',
+        publish: 'link-exclusive',
+      });
     } finally {
       fstat.mockRestore();
     }
@@ -69,8 +74,66 @@ describe('publishFileSync', () => {
     expect(
       fs
         .readdirSync(directory)
-        .filter((name) => name.startsWith('.unidentified.txt.') && name.endsWith('.tmp')),
+        .filter((name) => name.startsWith('.unidentified.ad.') && name.endsWith('.tmp')),
+    ).toHaveLength(1);
+  });
+
+  test('a sibling this call holds the identity of is tidied after the same publish', () => {
+    // The closest negative, and the ordinary route: the host answers an identity, the name still answers that
+    // one, and the sibling this call made is this call to remove.
+    const target = destination('identified.ad');
+
+    publishFileSync({ destination: target, contents: 'bytes', publish: 'link-exclusive' });
+
+    expect(fs.readFileSync(target, 'utf8')).toBe('bytes');
+    expect(
+      fs
+        .readdirSync(directory)
+        .filter((name) => name.startsWith('.identified.ad.') && name.endsWith('.tmp')),
     ).toEqual([]);
+  });
+
+  test('a sibling replaced by another entry while it was staged is left to its new owner', () => {
+    // The window the identity is asked for: after this call's create, another process puts an entry of its own
+    // at the sibling's name. The `lstat` of the NAME then answers a DIFFERENT inode from the open descriptor,
+    // and that entry is its owner's to keep — removing it would destroy their file to tidy up after this call.
+    // The publish's own failure stays the answer the caller gets.
+    const target = destination('swapped-under-sibling.txt');
+    const realOpenSync = fs.openSync.bind(fs);
+    let planted = false;
+    const openSync = vi.spyOn(fs, 'openSync').mockImplementation(((
+      name: unknown,
+      ...rest: unknown[]
+    ) => {
+      const descriptor = (realOpenSync as (...args: unknown[]) => number)(name, ...rest);
+      if (!planted && typeof name === 'string' && name.endsWith('.tmp')) {
+        planted = true;
+        fs.rmSync(name, { force: true });
+        fs.writeFileSync(name, 'theirs\n');
+      }
+      return descriptor;
+    }) as typeof fs.openSync);
+
+    try {
+      expect(() =>
+        publishFileSync({
+          destination: target,
+          contents: 'bytes',
+          assertDestination: () => {
+            throw new Error('the destination is not this call to replace');
+          },
+        }),
+      ).toThrow(/not this call to replace/);
+    } finally {
+      openSync.mockRestore();
+    }
+
+    const siblings = fs
+      .readdirSync(directory)
+      .filter((name) => name.startsWith('.swapped-under-sibling.txt.') && name.endsWith('.tmp'));
+    expect(siblings).toHaveLength(1);
+    expect(fs.readFileSync(path.join(directory, siblings[0]!), 'utf8')).toBe('theirs\n');
+    expect(fs.existsSync(target)).toBe(false);
   });
 
   test('a staging sibling is not tidied out of ground the caller no longer holds', () => {

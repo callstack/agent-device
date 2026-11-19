@@ -15,7 +15,6 @@ import {
 } from './atomic-file-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
-  assertPrivateStateFileModeSync,
   publishPrivateStateFileSync,
   readPrivateStateFileTailSync,
   tryOpenPrivateStateFileSync,
@@ -329,49 +328,94 @@ skipOnWindows('a staging sibling whose write failed is still tidied from ground 
   expect(fs.readdirSync(state)).toEqual([]);
 });
 
+skipOnWindows('a read fault at the ancestry is answered as a refusal, not thrown', () => {
+  // Every reader of a state record treats it as OPTIONAL: a stop that already happened, a client polling a
+  // startup, a marker tail. The walk converts the lookup faults a state path can meet going in, but a host can
+  // fail one for a reason no exposure models — an `EIO` from the device — and the judgment is part of the read.
+  // An optional read therefore answers a refusal for ANY fault, including one at its own ancestry, because a
+  // caller that cannot be handed bytes still has to be able to finish what it was doing.
+  const state = stateDir();
+  fs.writeFileSync(path.join(state, 'daemon-shutdown.json'), '{"a":1}\n', { mode: 0o600 });
+  const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation(() => {
+    throw Object.assign(new Error('EIO'), { code: 'EIO' });
+  });
+
+  try {
+    expect(
+      readPrivateStateFileTailSync(path.join(state, 'daemon-shutdown.json'), 4096).status,
+    ).toBe('refused');
+    expect(() =>
+      readPrivateStateFileTailSync(path.join(state, 'daemon-shutdown.json'), 4096),
+    ).not.toThrow();
+  } finally {
+    lstat.mockRestore();
+  }
+});
+
 skipOnWindows(
-  'a state mode the host will not carry is answered as a refusal, not a warning',
+  'a state open whose private mode this host will not carry is a refusal, not a warning',
   () => {
-    // A caller that KEEPS the handle — the daemon's log sink is one — writes through it for as long as it
-    // lives. `fchmod` that fails, or a filesystem that will not hold the mode, would otherwise leave the run's
-    // records readable by every local user while the writer believed the state rule had said 0600. The mode is
-    // therefore said and READ BACK on the descriptor, and the caller that keeps the handle is owed the answer.
+    // The mode is certified at the ONE state opener, before any caller adopts the handle: the launcher hands
+    // this descriptor to the daemon child as its stdout and stderr, and a diagnostics sink streams a run
+    // through it. A host that refuses the `fchmod`, or a filesystem that will not hold the mode, would leave
+    // every local user reading those bytes while the writer believed the state rule had said 0600 — so the
+    // open refuses, the bytes already there are untouched, and no adopter has to ask the question again.
     const state = stateDir();
     const log = path.join(state, 'daemon.log');
     fs.writeFileSync(log, 'earlier\n', { mode: 0o644 });
-    fs.chmodSync(log, 0o644);
-
-    const handle = openStateHandle(log, 'append');
     const fchmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {
       throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
     });
+
+    let opened;
     try {
-      expect(() => assertPrivateStateFileModeSync(handle)).toThrow(/EPERM/);
+      opened = tryOpenPrivateStateFileSync(log, 'append');
     } finally {
       fchmod.mockRestore();
     }
 
-    // The host accepts the change and answers a loose mode anyway, which is what a filesystem that does not
-    // carry the bit does: the read-back is what catches it.
-    const fstat = fs.fstatSync.bind(fs);
-    const stat = vi.spyOn(fs, 'fstatSync').mockImplementation(((
-      descriptor: number,
-      options?: fs.StatOptions & { bigint?: true },
-    ) => {
-      const stats = fstat(descriptor, options);
-      if (options?.bigint) (stats as { mode: number | bigint }).mode = BigInt(0o100644);
-      return stats;
-    }) as typeof fs.fstatSync);
-    try {
-      expect(() => assertPrivateStateFileModeSync(handle)).toThrow(/644/);
-    } finally {
-      stat.mockRestore();
-      fs.closeSync(handle);
-    }
-
-    expect(fs.readFileSync(log, 'utf8'), 'the refusal writes nothing').toBe('earlier\n');
+    expect(opened.descriptor).toBeUndefined();
+    expect((opened.failure as AppError).details).toMatchObject({
+      reason: 'state_dir_untrusted',
+      exposure: 'record_mode_unproven',
+    });
+    expect(fs.readFileSync(log, 'utf8')).toBe('earlier\n');
+    expect(fs.lstatSync(log).mode & 0o777).toBe(0o644);
   },
 );
+
+skipOnWindows('a state mode the host accepts at the ask and will not carry is refused too', () => {
+  // The other half of the certification: the read-BACK. A filesystem that takes the `fchmod` and answers a
+  // looser mode afterwards — which is what a mount that does not carry the bit does — would otherwise hand
+  // the caller a handle whose bytes every local user can read while the state rule believed it had said
+  // 0600. The mode is therefore read off the same descriptor it was said on, and a mode that does not come
+  // back is the open's own refusal, with those bytes left as they stand.
+  const state = stateDir();
+  const log = path.join(state, 'daemon.log');
+  fs.writeFileSync(log, 'earlier\n', { mode: 0o644 });
+  const chmod = vi.spyOn(fs, 'fchmodSync').mockImplementation(() => {});
+  const fstat = fs.fstatSync.bind(fs);
+  const stat = vi.spyOn(fs, 'fstatSync').mockImplementation(((
+    descriptor: number,
+    options?: fs.StatOptions & { bigint?: true },
+  ) => {
+    const stats = fstat(descriptor, options);
+    if (options?.bigint) (stats as { mode: number | bigint }).mode = BigInt(0o100644);
+    return stats;
+  }) as typeof fs.fstatSync);
+
+  let opened;
+  try {
+    opened = tryOpenPrivateStateFileSync(log, 'append');
+  } finally {
+    chmod.mockRestore();
+    stat.mockRestore();
+  }
+
+  expect(opened.descriptor).toBeUndefined();
+  expect(String((opened.failure as AppError).message)).toMatch(/644/);
+  expect(fs.readFileSync(log, 'utf8'), 'the refusal writes nothing').toBe('earlier\n');
+});
 
 /** The bytes a state read answered, or `undefined` for absence and refusal alike. */
 function readOf(read: PrivateStateRead): string | undefined {

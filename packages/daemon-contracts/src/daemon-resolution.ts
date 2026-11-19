@@ -67,11 +67,19 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       },
     );
   }
+  // A Windows route can name a DRIVE without naming a directory on it — `C:work` means "work, below wherever
+  // drive C is standing right now". Where that drive stands is established when the caller supplied a working
+  // directory absolute on the SAME drive, and is not established at all otherwise; both answers belong to
+  // {@link anchorDriveRelativeStateRoute}, which owns the decision. A spelling that carries no drive on this
+  // host is an ordinary relative name and takes the ordinary route below.
+  const anchored = anchorDriveRelativeStateRoute(value, expanded, options.cwd);
   // Joined TEXTUALLY rather than with `path.resolve`, and anchored once: this is the ONE base every record name is
   // then built from, so the join must add nothing to what the operator named beyond the working directory a
-  // relative spelling is given against.
+  // relative spelling is given against. A drive-relative route enters the fold below UN-folded like every other
+  // relative route — `path.resolve` would fold its `..` there unproven, and the fold is the only place that
+  // question is answered.
   const anchor = path.isAbsolute(expanded) ? '' : path.resolve(options.cwd ?? '');
-  const route = anchor === '' ? expanded : joinTextually(anchor, expanded);
+  const route = anchored ?? (anchor === '' ? expanded : joinTextually(anchor, expanded));
   // A parent-relative state dir is an ordinary configuration — `--state-dir ../shared-state` beside a checkout —
   // and it stays supported, as it was before this branch. What it cannot be is passed on UN-folded: the record
   // names are derived with `path.join`, which folds a `..` away, so an un-folded base would be JUDGED as one
@@ -87,6 +95,60 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   // spelling — and cannot be reconstructed from folded text afterwards.
   if (stepsBackOut(route)) return foldParentRelativeStateRoute(value, route);
   return route;
+}
+
+/**
+ * Decides a DRIVE-RELATIVE state route — `C:work`, “work below wherever drive C stands” — and answers the
+ * route the resolver builds from it, or `undefined` for a spelling that names no drive and takes the ordinary
+ * relative route. The decision, not just its parts:
+ *
+ * - A working directory ABSOLUTE ON THE SAME DRIVE is where that drive stands for this run: the host would
+ *   itself open `C:\project\work` for `C:work` from `C:\project`, so the route is anchored there and the base
+ *   is one directory. The assembly places the spelling's names under the anchor's with the platform's own root
+ *   and separator, and a `..` among them SURVIVES un-folded — folding one here would be the unproven
+ *   substitution {@link foldParentRelativeStateRoute} refuses to make anywhere else, and the fold below judges
+ *   what this returns.
+ * - No cwd, a cwd that is not absolute, or a cwd anchored anywhere but that drive (another drive letter, a UNC
+ *   scope): the host would answer these with a per-process, per-drive current directory no caller named. No
+ *   anchor is established, and the route is REFUSED typed, because this is the ONE base every record name is
+ *   built from and a guess is never better than an error an operator can act on.
+ *
+ * @param platform the host's path API, asked of the caller rather than assumed, as in the fold above.
+ */
+export function anchorDriveRelativeStateRoute(
+  value: string,
+  spelled: string,
+  cwd: string | undefined,
+  platform: typeof path = path,
+): string | undefined {
+  if (platform.isAbsolute(spelled)) return undefined;
+  const drive = platform.parse(spelled).root;
+  if (drive.length === 0) return undefined;
+  const standing = cwd === undefined ? '' : platform.parse(cwd).root;
+  if (cwd !== undefined && platform.isAbsolute(cwd) && namesSameDrive(drive, standing)) {
+    const anchor = splitSpelledRoute(cwd, platform);
+    const below = splitSpelledRoute(spelled, platform);
+    return joinSpelledRoute(anchor.root, [...anchor.names, ...below.names], platform);
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    `State dir "${value}" names a drive without a directory on it and no working directory on that drive ` +
+      'was given, so which directory its records land in is not established. Name the state directory with ' +
+      'a full path such as ' +
+      String.raw`C:\work\agent-device` +
+      '.',
+    { reason: 'state_dir_drive_relative', drive },
+  );
+}
+
+/**
+ * Whether two roots name the one drive; a Windows drive letter is case-insensitive. A root that is not a
+ * drive's — a POSIX `/`, or a UNC scope — answers no letter pair and matches no spelling's drive this way.
+ */
+function namesSameDrive(spelled: string, standing: string): boolean {
+  return /^[a-zA-Z]:/.test(spelled) && /^[a-zA-Z]:/.test(standing)
+    ? spelled.slice(0, 2).toLowerCase() === standing.slice(0, 2).toLowerCase()
+    : false;
 }
 
 /**

@@ -256,6 +256,56 @@ skipOnWindows('a symbolic link in ground only this user can write is judged thro
   expect(chain.directory).toBe(path.join(real, 'state'));
 });
 
+skipOnWindows(
+  'refuses a planted link below the state directory even when an allowed alias steps back above it',
+  () => {
+    // ADR 0016 allows the ancestor link, and the kernel applies a `..` to the directory PHYSICALLY stood in, so
+    // the walk does too. What that must not cost is the POSITION: the state rule draws its own line AT the
+    // state directory by counting the caller's names, and a `..` carried by somebody else's target is not one of
+    // them. Recounting from zero after one puts every caller name below the alias back above the line, where a
+    // planted link is merely followed and the record lands wherever the link was aimed.
+    const directory = root();
+    const nest = directoryWith(path.join(directory, 'nest'), 0o700);
+    const inner = directoryWith(path.join(nest, 'inner'), 0o700);
+    const alias = path.join(inner, 'alias');
+    fs.symlinkSync('../..', alias, 'dir');
+    const state = directoryWith(path.join(directory, 'state'), 0o700);
+    const elsewhere = directoryWith(path.join(directory, 'elsewhere'), 0o700);
+    fs.symlinkSync(elsewhere, path.join(state, 'sessions'), 'dir');
+
+    const chain = ensurePrivateDirectoryChain(path.join(alias, 'state'), ['sessions']);
+
+    // Refused as a planted link AT the daemon's own ground — not followed into the target the way an allowed
+    // ancestor alias is, and nothing created there.
+    expect(chain.exposure).toBe('planted_link');
+    expect(fs.readdirSync(elsewhere)).toEqual([]);
+    expect(fs.readdirSync(inner)).toEqual(['alias']);
+    expect(modeOf(state)).toBe(0o700);
+  },
+);
+
+skipOnWindows(
+  'a loose state directory reached through an alias that steps back is still repaired',
+  () => {
+    // The same position carries the REPAIR authority: a refusal is narrowed only when the walk says it stood AT
+    // the state directory or below it. A route that rode an allowed alias and its `..` still stands there —
+    // 0775 is the shared-checkout leftover, the mode a mode-less `mkdir` under umask 002 leaves — and is this
+    // daemon's own to narrow. Losing the position here loses the repair, and the daemon would refuse the state
+    // directory it is about to write its registration into.
+    const directory = root();
+    directoryWith(path.join(directory, 'real'), 0o700);
+    const alias = path.join(directory, 'alias');
+    fs.symlinkSync('real/..', alias, 'dir');
+    const state = directoryWith(path.join(directory, 'state'), 0o775);
+
+    const chain = ensurePrivateDirectoryChain(path.join(alias, 'state'));
+
+    expect(chain.exposure).toBeUndefined();
+    expect(chain.directory).toBe(state);
+    expect(modeOf(state)).toBe(0o700);
+  },
+);
+
 skipOnWindows('refuses a sticky shared level in the MIDDLE of the daemon’s own route', () => {
   // ADR 0016 lets a sticky shared directory be passed THROUGH, because passing through one cannot hand
   // anybody the name you are about to create. The state route is not passing through: every level below the
@@ -415,4 +465,32 @@ test('refuses a state name that is not one plain name', () => {
   for (const name of ['', '.', '..', 'a/b', String.raw`a\b`]) {
     expect(judgePrivateDirectoryChain(state, [name]).exposure).toBe('outside_state_dir');
   }
+});
+
+skipOnWindows(
+  'a state directory whose own name carries a backslash and two dots is one name',
+  () => {
+    // The resolution owner folds a parent-relative state route on the host's separator ONLY, so on POSIX it
+    // accepts `/work/state\..\elsewhere` as one directory name — the name the kernel actually opens. The state
+    // rule judges the base that resolution answered, so it has to ask the same question the same way: refusing
+    // a backslash here would deny a daemon its own state directory over a step back the host never performs.
+    const directory = root();
+    const spelled = path.join(directory, String.raw`state\..\elsewhere`);
+    directoryWith(spelled, 0o700);
+
+    const chain = judgePrivateDirectoryChain(spelled);
+
+    expect(chain.exposure).toBeUndefined();
+    expect(chain.directory).toBe(spelled);
+  },
+);
+
+skipOnWindows('a step back spelled with the host separator is still refused', () => {
+  // The closest negative: the separator POSIX does honor refuses the same shape outright.
+  const directory = root();
+  const state = directoryWith(path.join(directory, 'state'), 0o700);
+
+  expect(judgePrivateDirectoryChain(`${state}/../${path.basename(directory)}`).exposure).toBe(
+    'outside_state_dir',
+  );
 });
