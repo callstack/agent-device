@@ -18,6 +18,7 @@ import {
 } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
+  buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
   clipScrollViewportAboveKeyboard,
   scrollKeyboardOccludesSurfaceError,
@@ -321,6 +322,8 @@ export async function scrollAndroid(
     pixels?: number;
     durationMs?: number;
     releaseBehavior?: ScrollReleaseBehavior;
+    holdMs?: number;
+    anchorTop?: boolean;
   } & ScrollContainerTarget &
     AndroidHelperSessionOptions,
 ): Promise<Record<string, unknown>> {
@@ -330,16 +333,28 @@ export async function scrollAndroid(
     helperSessionScope: options?.helperSessionScope,
   });
   const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
-  const relativePlan = buildScrollGesturePlan({
-    direction,
-    amount: options?.amount,
-    pixels: options?.pixels,
-    referenceWidth: swipeSurface.viewport.width,
-    referenceHeight: swipeSurface.viewport.height,
-    ...(options?.containerRect === undefined
-      ? {}
-      : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
-  });
+  // A pull-to-refresh anchors its lane just inside the TOP of the container instead of running the
+  // centred lane: a pull that starts above the list lands on the header and moves nothing.
+  const anchorTop = options?.anchorTop === true && direction === 'up';
+  const relativePlan =
+    anchorTop && options?.containerRect !== undefined
+      ? buildPullRefreshGesturePlan({
+          amount: options?.amount,
+          pixels: options?.pixels,
+          container: relativeToViewport(options.containerRect, swipeSurface.viewport),
+          referenceWidth: swipeSurface.viewport.width,
+          referenceHeight: swipeSurface.viewport.height,
+        })
+      : buildScrollGesturePlan({
+          direction,
+          amount: options?.amount,
+          pixels: options?.pixels,
+          referenceWidth: swipeSurface.viewport.width,
+          referenceHeight: swipeSurface.viewport.height,
+          ...(options?.containerRect === undefined
+            ? {}
+            : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
+        });
   const scrollPlan = {
     ...relativePlan,
     // Injected coordinates are absolute, so their zero-origin reference frame
@@ -355,20 +370,41 @@ export async function scrollAndroid(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
     GESTURE_DURATION_MIN_MS,
   );
-  const backend = await executeAndroidTouchPlan(device, {
-    ...buildGesturePlan(
-      {
-        intent: 'pan',
-        origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
-        delta: {
-          x: scrollPlan.x2 - scrollPlan.x1,
-          y: scrollPlan.y2 - scrollPlan.y1,
-        },
-        durationMs,
+  // The injector lifts the contact at the last sample's offset, so a stationary final sample at
+  // `durationMs + holdMs` is the hold before release a pull-to-refresh needs to commit.
+  const holdMs = options?.holdMs ?? 0;
+  const panPlan = buildGesturePlan(
+    {
+      intent: 'pan',
+      origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
+      delta: {
+        x: scrollPlan.x2 - scrollPlan.x1,
+        y: scrollPlan.y2 - scrollPlan.y1,
       },
-      swipeSurface.viewport,
-      'android',
-    ),
+      durationMs,
+    },
+    swipeSurface.viewport,
+    'android',
+  );
+  const gesturePlan =
+    holdMs > 0
+      ? {
+          ...panPlan,
+          durationMs: durationMs + holdMs,
+          pointers: [
+            {
+              pointerId: 0,
+              samples: [
+                { offsetMs: 0, point: { x: scrollPlan.x1, y: scrollPlan.y1 } },
+                { offsetMs: durationMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
+                { offsetMs: durationMs + holdMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
+              ],
+            },
+          ],
+        }
+      : panPlan;
+  const backend = await executeAndroidTouchPlan(device, {
+    ...gesturePlan,
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
   });
 
@@ -376,6 +412,7 @@ export async function scrollAndroid(
     ...scrollPlan,
     ...swipeSurface.evidence,
     ...(options?.durationMs !== undefined ? { durationMs } : {}),
+    ...(holdMs > 0 ? { holdMs } : {}),
     ...backend,
   };
 }

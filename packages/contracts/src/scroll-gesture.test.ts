@@ -7,8 +7,10 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   assertScrollGestureInput,
   buildInPageSwipeGesturePlan,
+  buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
   clampGestureCoordinate,
+  DEFAULT_REFRESH_PULL_AMOUNT,
   SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE,
   SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
@@ -71,10 +73,20 @@ type ScrollGestureFixture = {
     defaultEdgePaddingFraction: number;
     ordinaryScrollReleaseBehavior: 'controlled';
     edgeScrollReleaseBehavior: 'inertial';
+    defaultRefreshPullAmount: number;
   };
   cases: Array<{
     name: string;
     direction: 'up' | 'down' | 'left' | 'right';
+    amount?: number;
+    pixels?: number;
+    referenceWidth: number;
+    referenceHeight: number;
+    expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
+  }>;
+  pullCases: Array<{
+    name: string;
+    container: Rect;
     amount?: number;
     pixels?: number;
     referenceWidth: number;
@@ -119,6 +131,46 @@ test('buildScrollGesturePlan agrees with every scroll-gesture parity table case'
     assert.equal(plan.referenceWidth, fixture.referenceWidth, fixture.name);
     assert.equal(plan.referenceHeight, fixture.referenceHeight, fixture.name);
   }
+});
+
+// The pull-to-refresh planner shares the same cross-language parity table (`pullCases`), asserted
+// here AND by the Swift port (runnerPullRefreshGesturePlan in RunnerTests+ScrollGesture.swift,
+// gated XCTest in UnitTests/RunnerTests+ScrollGestureTests.swift).
+test('buildPullRefreshGesturePlan agrees with every scroll-gesture pull parity table case', () => {
+  const { pullCases } = readScrollGestureFixture();
+  assert.ok(pullCases.length > 0, 'pull parity table must not be empty');
+  assert.equal(
+    new Set(pullCases.map((c) => c.name)).size,
+    pullCases.length,
+    'case names must be unique',
+  );
+  for (const fixture of pullCases) {
+    const plan = buildPullRefreshGesturePlan({
+      amount: fixture.amount,
+      pixels: fixture.pixels,
+      container: fixture.container,
+      referenceWidth: fixture.referenceWidth,
+      referenceHeight: fixture.referenceHeight,
+    });
+    assert.deepEqual(
+      { x1: plan.x1, y1: plan.y1, x2: plan.x2, y2: plan.y2, pixels: plan.pixels },
+      fixture.expected,
+      fixture.name,
+    );
+    assert.equal(plan.direction, 'up', fixture.name);
+  }
+});
+
+test('buildPullRefreshGesturePlan rejects a non-positive amount or pixels', () => {
+  const frame = { referenceWidth: 400, referenceHeight: 800 };
+  const container = { x: 0, y: 100, width: 400, height: 600 };
+  assert.throws(() => buildPullRefreshGesturePlan({ amount: 0, container, ...frame }), AppError);
+  assert.throws(() => buildPullRefreshGesturePlan({ pixels: -5, container, ...frame }), AppError);
+});
+
+test('the refresh pull default amount agrees with the parity table', () => {
+  const { constants } = readScrollGestureFixture();
+  assert.equal(DEFAULT_REFRESH_PULL_AMOUNT, constants.defaultRefreshPullAmount);
 });
 
 // The two planner constants are private on both sides; the table pins them behaviourally on a

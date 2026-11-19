@@ -729,3 +729,79 @@ test('probeAndroidDisplayRotation reports none when the display read fails', asy
     { returnFailedResults: true },
   );
 });
+
+test('scrollAndroid anchors a refresh pull at the top of the container and holds before release', async () => {
+  // Window below the status bar, list between a header and a footer: the pull must start just
+  // inside the list's top row, not on the header a centred lane would pick.
+  const offsetWindow = { x: 0, y: 136, width: 1080, height: 2264 };
+  const list = { x: 0, y: 436, width: 1080, height: 1500 };
+  const amCalls: string[][] = [];
+  await withFakeAdb(
+    (args: string[]) => {
+      const base = helperRouteAdb(offsetWindow)(args);
+      if (base !== undefined && args[0] === 'shell' && args[1] === 'am') {
+        amCalls.push(args);
+      }
+      return base;
+    },
+    async ({ device }) => {
+      const result = await scrollAndroid(device, 'up', {
+        pixels: 520,
+        durationMs: 1200,
+        holdMs: 400,
+        anchorTop: true,
+        containerRect: list,
+      });
+      // Container-relative band starts at 436-136+8=308, so the absolute pull lane is 444..964.
+      assert.equal(result.y1, 444);
+      assert.equal(result.y2, 964);
+      assert.equal(result.x1, 540);
+      assert.equal(result.x2, 540);
+      assert.equal(result.pixels, 520);
+      assert.equal(result.holdMs, 400);
+      assert.ok(444 > list.y && 964 < list.y + list.height, 'pull stays inside the list rows');
+
+      type InjectedPayload = {
+        durationMs: number;
+        pointers: Array<{ samples: Array<{ offsetMs: number; x: number; y: number }> }>;
+      };
+      const payloads: InjectedPayload[] = [];
+      for (const args of amCalls) {
+        for (let i = 0; i < args.length - 1; i += 1) {
+          if (args[i] === 'payloadBase64' && args[i - 1] === '-e') {
+            try {
+              payloads.push(
+                JSON.parse(Buffer.from(args[i + 1]!, 'base64').toString('utf8')) as InjectedPayload,
+              );
+            } catch {
+              // Not every am call carries the gesture payload; skip the rest.
+            }
+          }
+        }
+      }
+      const payload = payloads.at(-1);
+      assert.ok(payload, 'the injected gesture payload must be captured');
+      assert.equal(payload.durationMs, 1600, 'pull 1200ms + hold 400ms');
+      const samples = payload.pointers[0]!.samples;
+      const last = samples.at(-1)!;
+      assert.equal(last.offsetMs, 1600, 'the contact lifts only after the hold');
+      assert.deepEqual(
+        { x: last.x, y: last.y },
+        { x: samples.at(-2)!.x, y: samples.at(-2)!.y },
+        'the final sample is stationary: a hold, not a move',
+      );
+    },
+  );
+});
+
+test('scrollAndroid without anchorTop keeps the centred lane and no hold', async () => {
+  const offsetWindow = { x: 0, y: 136, width: 1080, height: 2264 };
+  const list = { x: 0, y: 436, width: 1080, height: 1500 };
+  await withFakeAdb(helperRouteAdb(offsetWindow), async ({ device }) => {
+    const result = await scrollAndroid(device, 'up', { pixels: 520, containerRect: list });
+    assert.equal('holdMs' in result, false);
+    // The centred lane stays mid-viewport (relative 872..1392), well below the pull's top anchor.
+    assert.equal(result.y1, 136 + 872);
+    assert.equal(result.y2, 136 + 1392);
+  });
+});

@@ -9,6 +9,13 @@ export const DEFAULT_SCROLL_UNTIL_PASSES = 12;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
 export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
+/**
+ * `scroll refresh` pulls slowly — a fast pull reads as a fling and rubber-bands back without
+ * committing the refresh control (measured on an iOS RN list: 0/5 at the 400ms default, 5/5 at
+ * 1500ms) — and holds briefly at the pulled position before releasing so the control commits.
+ */
+export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
+export const DEFAULT_REFRESH_HOLD_MS = 400;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
@@ -27,6 +34,10 @@ export type ScrollReleaseBehavior = 'controlled' | 'inertial';
  *
  * A directional scroll that measures an unchanged surface WITH hidden content still in that
  * direction does not answer at all: it fails with `scroll_no_progress`.
+ *
+ * `scroll refresh` never answers `at-edge`: its pull runs at the top edge by construction, so an
+ * unchanged surface is reported as `unchanged` and the caller is never told "nothing to scroll"
+ * about a pull it deliberately made.
  */
 export type ScrollMovementObservation = 'moved' | 'at-edge' | 'unchanged' | 'unobserved';
 
@@ -53,15 +64,27 @@ export type ScrollContainerTarget = {
 export type ScrollExecutionOptions = ScrollCommandOptions &
   ScrollContainerTarget & {
     releaseBehavior?: ScrollReleaseBehavior;
+    /**
+     * Pull-to-refresh only: how long the finger holds at the pulled position before releasing, so
+     * the refresh control commits instead of springing back.
+     */
+    holdMs?: number;
+    /**
+     * Pull-to-refresh only: anchor the pull lane just inside the top of `containerRect` instead
+     * of running the centred lane a directional scroll uses.
+     */
+    anchorTop?: boolean;
   };
 
 export type ResolvedScrollExecutionOptions = ScrollCommandOptions &
   ScrollContainerTarget & {
     releaseBehavior: ScrollReleaseBehavior;
+    holdMs?: number;
+    anchorTop?: boolean;
   };
 
 export function resolveScrollExecutionOptions(
-  options: ScrollCommandOptions,
+  options: ScrollExecutionOptions,
   edge?: 'top' | 'bottom',
 ): ResolvedScrollExecutionOptions {
   return {
@@ -117,6 +140,25 @@ export function assertScrollUntilCompatible(
   );
 }
 
+/**
+ * `scroll refresh` performs exactly one pull, so pairing it with a search stop condition names two
+ * and the request has no single meaning. Rejected at the surface, like `top`/`bottom` + `--until`.
+ */
+export function assertScrollRefreshCompatible(
+  input: Readonly<{ refresh?: boolean; until?: string; maxPasses?: number }>,
+): void {
+  if (!input.refresh) return;
+  if (input.until === undefined && input.maxPasses === undefined) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'scroll refresh performs one pull and cannot take --until or --max-passes',
+    {
+      reason: 'scroll_refresh_until_unsupported',
+      hint: 'Use scroll <direction> --until <selector> to search content, or scroll refresh for a single pull.',
+    },
+  );
+}
+
 export function normalizeScrollDurationMs(
   durationMs: number | undefined,
   options: { field?: string; invalidMessage?: string; max?: number } = {},
@@ -146,6 +188,13 @@ export function normalizeScrollDurationMs(
  */
 export type ScrollCommandResult = {
   direction: ScrollDirection;
+  /**
+   * Set for `scroll refresh`: the request was a pull-to-refresh, dispatched as an `up` pull
+   * anchored at the container's top edge. The `movement` field never answers `at-edge` for this
+   * mode — an unchanged surface is reported as `unchanged` instead, because "already at the top"
+   * is the mode's precondition, not news the caller needs to pull again over.
+   */
+  refresh?: true;
   /** Set for `top`/`bottom` requests: the extreme being scrolled to. */
   edge?: 'top' | 'bottom';
   /** Set for `--until` requests: the selector the passes stopped on. */

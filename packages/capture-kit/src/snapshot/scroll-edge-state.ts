@@ -269,13 +269,23 @@ export async function runScrollEdgePasses<TResult>(params: {
 export function formatScrollEdgeMessage(params: {
   direction: ScrollDirection;
   edge?: ScrollEdge | undefined;
+  refresh?: boolean | undefined;
   passes: number;
   amount?: number | undefined;
   pixels?: number | undefined;
   honoredPixels?: number | undefined;
   movement?: ScrollMovementObservation | undefined;
 }): string {
-  const { direction, edge, passes, amount, pixels, honoredPixels, movement } = params;
+  const { direction, edge, refresh, passes, amount, pixels, honoredPixels, movement } = params;
+  if (refresh === true) {
+    // The pull ran at the top edge by construction, so the message names the pull, not a distance:
+    // `at-edge` is never the answer for this mode, and an unchanged surface says so plainly.
+    if (movement === 'moved') return 'Pulled to refresh at the top edge; the surface changed';
+    if (movement === 'unchanged') {
+      return 'Pulled to refresh at the top edge; the visible content did not change';
+    }
+    return 'Pulled to refresh at the top edge';
+  }
   if (edge && passes === 0) {
     return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
   }

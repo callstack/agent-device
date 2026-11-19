@@ -4,10 +4,19 @@ import { isViewportRootNode } from './snapshot-visibility.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
-// `top`/`bottom` are scroll-to-extreme requests with no direction of their own. Declared here
-// rather than in the command runtime that resolves them, so the public `ScrollOptions` can be
-// stated without depending on `commands/`.
-export const SCROLL_INPUT_DIRECTIONS = ['up', 'down', 'left', 'right', 'top', 'bottom'] as const;
+// `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is
+// the pull-to-refresh request, which resolves to a downward pull anchored at the container's top
+// edge. Declared here rather than in the command runtime that resolves them, so the public
+// `ScrollOptions` can be stated without depending on `commands/`.
+export const SCROLL_INPUT_DIRECTIONS = [
+  'up',
+  'down',
+  'left',
+  'right',
+  'top',
+  'bottom',
+  'refresh',
+] as const;
 export type ScrollInputDirection = (typeof SCROLL_INPUT_DIRECTIONS)[number];
 
 export const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
@@ -229,6 +238,97 @@ function insetContainerRange(
   const min = Math.max(padded.min, Math.ceil(start) + SCROLL_CONTAINER_EDGE_INSET);
   const max = Math.min(padded.max, Math.floor(start + size) - 1 - SCROLL_CONTAINER_EDGE_INSET);
   return max > min ? { min, max } : undefined;
+}
+
+/**
+ * The pull fraction of the scroll container one `scroll refresh` drags by default, and the pixel
+ * bounds the daemon clamps it into. The pull has to cross the refresh control's trigger distance,
+ * which differs per platform and per app, so the default sits well above the small pulls that
+ * only rubber-band (measured 0/5 below ~300px on an iOS RN list, 5/5 at 400px).
+ */
+export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
+export const REFRESH_PULL_MIN_PX = 320;
+export const REFRESH_PULL_MAX_PX = 520;
+
+export type PullRefreshGestureOptions = {
+  amount?: number;
+  pixels?: number;
+  /** The vertical scroll container the pull starts inside, in the reference frame's own space. */
+  container: Rect;
+  referenceWidth: number;
+  referenceHeight: number;
+};
+
+export type PullRefreshGesturePlan = {
+  /** A pull always drags the finger downward, which the scroll vocabulary calls `up`. */
+  direction: 'up';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  referenceWidth: number;
+  referenceHeight: number;
+  amount?: number;
+  /** The span dispatched, which is less than `requestedPixels` when the container shortened it. */
+  pixels: number;
+  /** Present only when the container shortened the pull: the span the padding would carry. */
+  requestedPixels?: number;
+};
+
+/**
+ * The one pull `scroll refresh` dispatches: a downward lane anchored just inside the TOP of the
+ * resolved vertical container, not the centred lane a directional scroll runs. Starting at the
+ * container's top edge matters twice over — a pull that begins on a header above the list lands
+ * outside the scroller and moves nothing, and a pull-to-refresh control only arms while its
+ * scroller sits at the top. The lane stays inside the container's intersection with the padded
+ * frame (#2714), so the endpoints never land on the container's boundary row or the status bar.
+ */
+export function buildPullRefreshGesturePlan(
+  options: PullRefreshGestureOptions,
+): PullRefreshGesturePlan {
+  const { container, referenceWidth, referenceHeight } = options;
+  const axisPadding = scrollEdgePadding(referenceHeight);
+  const crossPadding = scrollEdgePadding(referenceWidth);
+  const band = insetContainerRange(container.y, container.height, {
+    min: axisPadding,
+    max: referenceHeight - axisPadding,
+  }) ?? { min: axisPadding, max: referenceHeight - axisPadding };
+  const crossBand = insetContainerRange(container.x, container.width, {
+    min: crossPadding,
+    max: referenceWidth - crossPadding,
+  }) ??
+    insetContainerRange(container.x, container.width, { min: 0, max: referenceWidth }) ?? {
+      min: crossPadding,
+      max: referenceWidth - crossPadding,
+    };
+  const containerCross = Math.round(container.x + container.width / 2);
+  const cross =
+    containerCross >= crossBand.min && containerCross <= crossBand.max
+      ? containerCross
+      : Math.round((crossBand.min + crossBand.max) / 2);
+  const pullAmount = options.amount === undefined ? DEFAULT_REFRESH_PULL_AMOUNT : options.amount;
+  if (!Number.isFinite(pullAmount) || pullAmount <= 0) {
+    throw new AppError('INVALID_ARGS', 'scroll refresh amount must be a positive number');
+  }
+  const requestedPixels =
+    options.pixels !== undefined
+      ? normalizeRequestedPixels(options.pixels)
+      : Math.round(pullAmount * container.height);
+  const travelPixels = Math.max(1, Math.min(requestedPixels, band.max - band.min));
+  const y1 = band.min;
+  const y2 = y1 + travelPixels;
+  return {
+    direction: 'up',
+    x1: cross,
+    y1,
+    x2: cross,
+    y2,
+    referenceWidth,
+    referenceHeight,
+    ...(options.amount !== undefined ? { amount: options.amount } : {}),
+    pixels: travelPixels,
+    ...(travelPixels < requestedPixels ? { requestedPixels } : {}),
+  };
 }
 
 /**

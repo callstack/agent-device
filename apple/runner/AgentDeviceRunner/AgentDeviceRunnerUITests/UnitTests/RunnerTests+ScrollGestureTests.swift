@@ -10,6 +10,7 @@ private struct ScrollGestureFixture: Decodable {
     let defaultEdgePaddingFraction: Double
     let ordinaryScrollReleaseBehavior: String
     let edgeScrollReleaseBehavior: String
+    let defaultRefreshPullAmount: Double
   }
   struct Expected: Decodable {
     let x1: Double
@@ -27,9 +28,19 @@ private struct ScrollGestureFixture: Decodable {
     let referenceHeight: Double
     let expected: Expected
   }
+  struct PullCase: Decodable {
+    let name: String
+    let container: RunnerWireRect
+    let amount: Double?
+    let pixels: Double?
+    let referenceWidth: Double
+    let referenceHeight: Double
+    let expected: Expected
+  }
 
   let constants: Constants
   let cases: [Case]
+  let pullCases: [PullCase]
 }
 
 extension RunnerTests {
@@ -61,6 +72,30 @@ extension RunnerTests {
           pixels: testCase.pixels,
           referenceWidth: testCase.referenceWidth,
           referenceHeight: testCase.referenceHeight
+        ),
+        testCase.name
+      )
+      XCTAssertEqual(plan.x1, testCase.expected.x1, testCase.name)
+      XCTAssertEqual(plan.y1, testCase.expected.y1, testCase.name)
+      XCTAssertEqual(plan.x2, testCase.expected.x2, testCase.name)
+      XCTAssertEqual(plan.y2, testCase.expected.y2, testCase.name)
+      XCTAssertEqual(plan.travelPixels, testCase.expected.pixels, testCase.name)
+    }
+  }
+
+  // The pull planner (runnerPullRefreshGesturePlan) shares the parity table's `pullCases`,
+  // asserted here AND by the TS port (buildPullRefreshGesturePlan in
+  // packages/contracts/src/scroll-gesture.test.ts).
+  func testRunnerPullRefreshGesturePlanMatchesParityTable() throws {
+    let fixture = try loadScrollGestureFixture()
+    XCTAssertFalse(fixture.pullCases.isEmpty, "pull parity table must not be empty")
+    for testCase in fixture.pullCases {
+      let plan = try XCTUnwrap(
+        runnerPullRefreshGesturePlan(
+          amount: testCase.amount,
+          pixels: testCase.pixels,
+          frame: CGRect(x: 0, y: 0, width: testCase.referenceWidth, height: testCase.referenceHeight),
+          container: testCase.container.rect
         ),
         testCase.name
       )

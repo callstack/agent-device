@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { resolveScrollExecutionOptions } from './scroll-command.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { assertScrollRefreshCompatible, resolveScrollExecutionOptions } from './scroll-command.ts';
 import { decodeScrollDirectionResult } from './scroll-runtime.ts';
 
 test('resolveScrollExecutionOptions keeps ordinary scrolls controlled', () => {
@@ -39,4 +40,37 @@ test('decodeScrollDirectionResult declines to guess where the owner reported no 
     decodeScrollDirectionResult({ x1: 201, y1: 665, x2: 201, y2: 'none' }).midpoint,
     undefined,
   );
+});
+
+test('assertScrollRefreshCompatible refuses --until and --max-passes on a refresh with a typed reason', () => {
+  assertScrollRefreshCompatible({ refresh: true });
+  assertScrollRefreshCompatible({ refresh: false, until: 'id=x' });
+  assert.throws(
+    () => assertScrollRefreshCompatible({ refresh: true, until: 'id=x' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'scroll_refresh_until_unsupported',
+  );
+  assert.throws(
+    () => assertScrollRefreshCompatible({ refresh: true, maxPasses: 3 }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_refresh_until_unsupported',
+  );
+});
+
+test('resolveScrollExecutionOptions passes the refresh hold and top anchor through', () => {
+  const resolved = resolveScrollExecutionOptions({ pixels: 320, durationMs: 1200 });
+  assert.equal(resolved.releaseBehavior, 'controlled');
+  assert.equal(resolved.holdMs, undefined);
+  assert.equal(resolved.anchorTop, undefined);
+  const refresh = resolveScrollExecutionOptions({
+    pixels: 320,
+    durationMs: 1200,
+    holdMs: 400,
+    anchorTop: true,
+  });
+  assert.equal(refresh.holdMs, 400);
+  assert.equal(refresh.anchorTop, true);
+  assert.equal(refresh.releaseBehavior, 'controlled');
 });

@@ -7,6 +7,7 @@ import {
 import {
   type ScrollDirection,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS,
+  buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
 } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
@@ -63,14 +64,25 @@ export function normalizeAppleScrollResultWithResolvedFrame(
   }
 
   // Recompute the plan from the runner's resolved frame so reported pixels match the planned
-  // travel (TS keeps buildScrollGesturePlan for Android and recording anyway).
-  const plan = buildScrollGesturePlan({
-    direction,
-    amount: options?.amount,
-    pixels: options?.pixels,
-    referenceWidth,
-    referenceHeight,
-  });
+  // travel (TS keeps the planners for Android and recording anyway). A pull-to-refresh recomputes
+  // with the pull planner; the container rect rides in the same screen space the runner resolves
+  // its frame against on iOS.
+  const plan =
+    options?.anchorTop === true && options?.containerRect !== undefined
+      ? buildPullRefreshGesturePlan({
+          amount: options.amount,
+          pixels: options.pixels,
+          container: options.containerRect,
+          referenceWidth,
+          referenceHeight,
+        })
+      : buildScrollGesturePlan({
+          direction,
+          amount: options?.amount,
+          pixels: options?.pixels,
+          referenceWidth,
+          referenceHeight,
+        });
   return normalizeAppleScrollResult(runnerResult, {
     amount: options?.amount,
     pixels: plan.pixels,
@@ -82,7 +94,10 @@ export function normalizeAppleScrollResultWithResolvedFrame(
 export function scrollRunnerFields(
   options: AppleScrollOptions | undefined,
   config: { includeDuration?: boolean; includeReleaseBehavior?: boolean } = {},
-): Record<string, number | ScrollReleaseBehavior> {
+): Record<
+  string,
+  number | ScrollReleaseBehavior | { x: number; y: number; width: number; height: number }
+> {
   return {
     ...(options?.amount !== undefined ? { amount: options.amount } : {}),
     ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
@@ -91,6 +106,19 @@ export function scrollRunnerFields(
       : {}),
     ...(config.includeReleaseBehavior !== false && options?.releaseBehavior !== undefined
       ? { scrollReleaseBehavior: options.releaseBehavior }
+      : {}),
+    // Pull-to-refresh only: the hold before release, and the container whose top edge the pull
+    // lane anchors to (the runner plans the pull against its resolved frame).
+    ...(options?.holdMs !== undefined ? { scrollHoldMs: options.holdMs } : {}),
+    ...(options?.anchorTop === true && options?.containerRect !== undefined
+      ? {
+          scrollPullContainer: {
+            x: options.containerRect.x,
+            y: options.containerRect.y,
+            width: options.containerRect.width,
+            height: options.containerRect.height,
+          },
+        }
       : {}),
   };
 }
