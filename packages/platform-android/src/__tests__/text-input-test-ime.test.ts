@@ -52,7 +52,6 @@ import {
 } from '../ime-lifecycle.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from '../ime-device.fixtures.ts';
 import { getAndroidTestImeOwnership } from '../ime-state.ts';
-import { resetAndroidImeHelperAckCacheForTests } from '../ime-helper.ts';
 import {
   readAndroidTestImeRecoveryMarkers,
   writeAndroidTestImeRecoveryMarker,
@@ -60,31 +59,19 @@ import {
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();
-  resetAndroidImeHelperAckCacheForTests();
 });
 
-const PROBE_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_PROBE';
 const CLEAR_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
 const INPUT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 
 /**
- * Answers `am broadcast` calls the way the v2 helper does on-device: the capability probe with
- * result=100, text/clear dispatches with result=1 and the attempted UTF-16 length — codes and
- * lengths only, never text. Mutates `state.currentText` like a focused field would.
+ * Acknowledges text and clear with the attempted UTF-16 length and updates the fixture's field.
  */
 function imeBroadcastAck(
   args: readonly string[],
   state: { currentText: string },
 ): { exitCode: number; stdout: string; stderr: string } {
   const action = args[args.indexOf('-a') + 1];
-  if (action === PROBE_ACTION) {
-    return {
-      exitCode: 0,
-      stdout:
-        'Broadcast completed: result=100, data="android-ime-helper-v2", extras: Bundle[mParcelledData.dataSize=116]\n',
-      stderr: '',
-    };
-  }
   if (action === CLEAR_ACTION) {
     state.currentText = '';
     return { exitCode: 0, stdout: 'Broadcast completed: result=1, data="utf16=0"\n', stderr: '' };
@@ -101,12 +88,8 @@ function imeBroadcastAck(
   return { exitCode: 0, stdout: 'Broadcast completed: result=0\n', stderr: '' };
 }
 
-/** Broadcast calls that carried a text/clear action (the probe excluded). */
 function dispatchBroadcasts(calls: readonly (readonly string[])[]): readonly (readonly string[])[] {
-  return calls.filter(
-    (args) =>
-      args[1] === 'am' && args[2] === 'broadcast' && args[args.indexOf('-a') + 1] !== PROBE_ACTION,
-  );
+  return calls.filter((args) => args[1] === 'am' && args[2] === 'broadcast');
 }
 
 // Non-ASCII text now round-trips via the test IME broadcast channel instead of COMMAND_FAILED.
@@ -130,10 +113,6 @@ test('typeAndroid routes non-ASCII text through the test IME broadcast channel w
   );
 
   const broadcastCalls = calls.filter((args) => args[0] === 'shell' && args[1] === 'am');
-  assert.ok(
-    broadcastCalls.some((args) => args.includes(PROBE_ACTION)),
-    'the ack-capability probe must precede any text dispatch',
-  );
   assert.ok(broadcastCalls.every((args) => args[3] === '-p' && args[4] === PACKAGE));
   const dispatches = dispatchBroadcasts(calls);
   assert.equal(dispatches.length, 1);
@@ -426,6 +405,7 @@ test.each([true, false])(
     const adb = createAndroidSnapshotHelperExecutor({
       exec: async (args) => {
         calls.push(args);
+        if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
         if (args[1] === 'am' && args[2] === 'broadcast') {
           if (args.includes(CLEAR_ACTION)) {
             return {
@@ -453,14 +433,19 @@ test.each([true, false])(
         return true;
       });
     }
+    assert.equal(calls.filter((args) => args.includes(CLEAR_ACTION)).length, matches ? 1 : 2);
     assert.equal(state.currentText, 'existing value');
     assert.equal(calls.filter((args) => args.includes(INPUT_ACTION)).length, 0);
   },
 );
 
-test.each([true, false])(
-  'fillAndroid recovers a cleared field with hint=%s',
-  async (hintShowing) => {
+test.for([
+  { hintShowing: true, resultCode: 1 },
+  { hintShowing: false, resultCode: 1 },
+  { hintShowing: false, resultCode: 2 },
+])(
+  'fillAndroid rebinds after a dropped commit ($hintShowing, code $resultCode)',
+  async ({ hintShowing, resultCode }) => {
     setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
     let rebound = false;
     const state = { currentText: 'old name' };
@@ -477,7 +462,7 @@ test.each([true, false])(
             const text = decodeBroadcastText(args);
             return {
               exitCode: 0,
-              stdout: `Broadcast completed: result=1, data="utf16=${text.length}"\n`,
+              stdout: `Broadcast completed: result=${resultCode}, data="utf16=${text.length}"\n`,
               stderr: '',
             };
           }
@@ -501,6 +486,7 @@ test.each([true, false])(
 
     assert.equal(result, undefined, 'a verified fill, not unconfirmed evidence');
     assert.equal(state.currentText, 'Jane');
+    assert.equal(calls.filter((args) => args.includes(INPUT_ACTION)).length, 2);
     assert.deepEqual(
       calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
       ['disable', 'enable', 'set'],
@@ -773,10 +759,10 @@ test('typeAndroid reports a partial dispatch truthfully when a later chunk is re
     async () => {
       await assert.rejects(typeAndroid(ANDROID_EMULATOR, 'q'.repeat(50_000)), (error: AppError) => {
         assert.equal(error.code, 'COMMAND_FAILED');
-        assert.equal(error.details?.failureReason, 'android_ime_helper_dispatch_rejected');
+        assert.equal(error.details?.reason, 'android_ime_helper_dispatch_rejected');
         assert.equal(error.details?.dispatchKind, 'no-input-connection');
         assert.equal(
-          error.details?.dispatchedChunks,
+          error.details?.dispatchedSteps,
           1,
           'partial-dispatch evidence: the first chunk was already dispatched',
         );
@@ -805,15 +791,14 @@ test('typeAndroid refuses to report success when the running helper never acknow
       await assert.rejects(
         typeAndroid(ANDROID_EMULATOR, 'hello'),
         (error: AppError) =>
-          error.code === 'COMMAND_FAILED' &&
-          error.details?.failureReason === 'android_ime_helper_no_ack',
+          error.code === 'COMMAND_FAILED' && error.details?.reason === 'android_ime_helper_no_ack',
       );
     },
   );
   assert.equal(
     calls.filter((args) => args.includes(INPUT_ACTION)).length,
-    0,
-    'no text is dispatched once the ack capability is refused',
+    1,
+    'the unacknowledged broadcast is never retried',
   );
 });
 

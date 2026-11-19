@@ -149,20 +149,14 @@ export {
 export { activateAndroidTestIme } from './ime-activation.ts';
 export {
   ANDROID_IME_HELPER_SERVICE_COMPONENT,
-  chunkAndroidImeHelperText,
   clearAndroidImeHelperText,
-  clearAndroidImeHelperTextCommitted,
   ensureAndroidImeHelper,
   getAndroidImeHelperDeviceKey,
   isAndroidImeHelperPackage,
-  probeAndroidImeHelperAckSupport,
-  resetAndroidImeHelperAckCacheForTests,
   resetAndroidImeHelperInstallCache,
   resolveAndroidImeHelperArtifact,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
-  sendAndroidImeHelperTextCommitted,
-  type AndroidImeHelperDispatchOutcome,
 } from './ime-helper.ts';
 export {
   ANDROID_TEST_IME_SETTINGS_KEYS,

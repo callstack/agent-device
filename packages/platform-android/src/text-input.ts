@@ -35,7 +35,6 @@ import {
   canAndroidImeHelperCommitText,
   chunkAndroidImeHelperText,
   clearAndroidImeHelperTextCommitted,
-  getAndroidImeHelperDeviceKey,
   isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperTextCommitted,
@@ -288,33 +287,12 @@ async function typeAndroidImeHelper(
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
-  const deviceKey = getAndroidImeHelperDeviceKey(device);
-  let dispatchedChunks = 0;
-  await sendAndroidTextSteps(
-    device,
-    planAndroidTextSteps(text, delayMs > 0 ? 1 : Infinity, delayMs),
-    {
-      delayMs,
-      sendChunk: async (chunk) => {
-        // Each line fragment is split into code-point-safe chunks within the helper's declared
-        // per-broadcast byte bound, and every chunk must ack as committed with a matching
-        // attempted UTF-16 length. A dropped, rejected or truncated dispatch fails the type
-        // truthfully instead of reporting success — the ack is attempted dispatch only, never
-        // final field content (fill keeps the single read-back owner).
-        for (const piece of chunkAndroidImeHelperText(chunk)) {
-          try {
-            await sendAndroidImeHelperTextCommitted(adb, packageName, deviceKey, piece);
-            dispatchedChunks += 1;
-          } catch (error) {
-            if (error instanceof AppError) {
-              error.details = { ...error.details, dispatchedChunks };
-            }
-            throw error;
-          }
-        }
-      },
-    },
-  );
+  const chunkLine =
+    delayMs > 0 ? (line: string) => chunkAndroidInputText(line, 1) : chunkAndroidImeHelperText;
+  await sendAndroidTextSteps(device, planAndroidTextSteps(text, chunkLine, delayMs), {
+    delayMs,
+    sendChunk: (chunk) => sendAndroidImeHelperTextCommitted(adb, packageName, chunk),
+  });
   emitAndroidTextDiagnostic('type', 'test-ime', text);
 }
 
@@ -339,9 +317,8 @@ async function fillAndroidImeHelper(
   const adb = resolveAndroidAdbExecutor(device);
   let dispatchedSteps = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
-    const deviceKey = getAndroidImeHelperDeviceKey(device);
     try {
-      await clearAndroidImeHelperTextCommitted(adb, packageName, deviceKey);
+      await clearAndroidImeHelperTextCommitted(adb, packageName);
     } catch (error) {
       if (
         isImeDispatchRejection(error, 'commit-returned-false') &&
@@ -357,9 +334,9 @@ async function fillAndroidImeHelper(
       // Dispatched in code-point-safe chunks within the helper's declared byte bound; every chunk
       // must ack as committed. Field content stays owned by the single read-back below.
       for (const piece of chunkAndroidImeHelperText(text)) {
-        await sendAndroidImeHelperTextCommitted(adb, packageName, deviceKey, piece);
+        await sendAndroidImeHelperTextCommitted(adb, packageName, piece);
+        dispatchedSteps += 1;
       }
-      dispatchedSteps += 1;
     }
     return await verifyAndroidFilledText(device, x, y, text, helper);
   };
@@ -368,7 +345,10 @@ async function fillAndroidImeHelper(
     try {
       first = await attemptFill();
     } catch (error) {
-      if (dispatchedSteps !== 0 || !isImeDispatchRejection(error, 'no-input-connection')) {
+      const canRetry =
+        isImeDispatchRejection(error, 'commit-returned-false') ||
+        (dispatchedSteps === 0 && isImeDispatchRejection(error, 'no-input-connection'));
+      if (!canRetry) {
         throw error;
       }
     }
@@ -403,7 +383,7 @@ function isImeDispatchRejection(
 ): error is AppError {
   return (
     error instanceof AppError &&
-    error.details?.failureReason === ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON &&
+    error.details?.reason === ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON &&
     error.details.dispatchKind === kind
   );
 }
@@ -414,7 +394,11 @@ async function typeAndroidShell(
 ): Promise<void> {
   await sendAndroidTextSteps(
     device,
-    planAndroidTextSteps(options.text, options.chunkSize, options.delayMs),
+    planAndroidTextSteps(
+      options.text,
+      (line) => chunkAndroidInputText(line, options.chunkSize),
+      options.delayMs,
+    ),
     {
       delayMs: options.delayMs,
       sendChunk: async (chunk) => {
@@ -435,10 +419,14 @@ async function typeAndroidShell(
  */
 type AndroidTextStep = { kind: 'chunk'; text: string; pauseAfter: boolean } | { kind: 'enter' };
 
-function planAndroidTextSteps(text: string, chunkSize: number, delayMs: number): AndroidTextStep[] {
+function planAndroidTextSteps(
+  text: string,
+  chunkLine: (line: string) => string[],
+  delayMs: number,
+): AndroidTextStep[] {
   const parts = text.split('\n');
   return parts.flatMap((part, partIndex) => {
-    const chunks = chunkAndroidInputText(part, chunkSize);
+    const chunks = chunkLine(part);
     const lastPart = partIndex + 1 === parts.length;
     const chunkSteps = chunks.map((chunk, chunkIndex): AndroidTextStep => ({
       kind: 'chunk',

@@ -14,7 +14,6 @@ export type AndroidProviderShellState = {
 
 const IME_INPUT_TEXT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const IME_CLEAR_TEXT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
-const IME_PROBE_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_PROBE';
 const IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const IME_PROTOCOL = 'android-ime-helper-v2';
 
@@ -28,14 +27,6 @@ export function androidImeBroadcastAckResult(
   if (!argsStartWith(args, ['shell', 'am', 'broadcast']) || !args.includes('-p')) return undefined;
   if (args[args.indexOf('-p') + 1] !== IME_PACKAGE) return undefined;
   const action = valueAfter(args, '-a');
-  if (action === IME_PROBE_ACTION) {
-    return {
-      stdout:
-        'Broadcast completed: result=100, data="android-ime-helper-v2", extras: Bundle[mParcelledData.dataSize=124]\n',
-      stderr: '',
-      exitCode: 0,
-    };
-  }
   if (action === IME_CLEAR_TEXT_ACTION) {
     return { stdout: 'Broadcast completed: result=1, data="utf16=0"\n', stderr: '', exitCode: 0 };
   }

@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.inputmethodservice.InputMethodService;
 import android.os.Build;
-import android.os.Bundle;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
@@ -31,8 +30,6 @@ public class TestInputMethodService extends InputMethodService {
   private static final String TAG = "AgentDeviceTestIME";
   private static final String PROTOCOL = "android-ime-helper-v2";
 
-  public static final String ACTION_PROBE =
-      "com.callstack.agentdevice.imehelper.ACTION_PROBE";
   public static final String ACTION_INPUT_TEXT =
       "com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT";
   public static final String ACTION_INPUT_TEXT_B64 =
@@ -48,7 +45,6 @@ public class TestInputMethodService extends InputMethodService {
   static final int RESULT_NO_INPUT_CONNECTION = 3;
   static final int RESULT_REJECTED_PAYLOAD = 4; // too large / malformed / unknown action
   static final int RESULT_PROTOCOL_MISMATCH = 5;
-  static final int RESULT_PROBE_OK = 100;
 
   // Senders must hold this to reach the receiver. adb shell (uid 2000) holds it — a co-installed
   // third-party app cannot be granted a signature|privileged permission, so it cannot inject text.
@@ -84,7 +80,6 @@ public class TestInputMethodService extends InputMethodService {
           }
         };
     IntentFilter filter = new IntentFilter();
-    filter.addAction(ACTION_PROBE);
     filter.addAction(ACTION_INPUT_TEXT);
     filter.addAction(ACTION_INPUT_TEXT_B64);
     filter.addAction(ACTION_CLEAR_TEXT);
@@ -115,19 +110,6 @@ public class TestInputMethodService extends InputMethodService {
     String action = intent.getAction();
     if (action == null) {
       pending.setResult(RESULT_REJECTED_PAYLOAD, "no-action", null);
-      return;
-    }
-    if (ACTION_PROBE.equals(action)) {
-      if (!isProtocolAcceptable(intent)) {
-        pending.setResult(RESULT_PROTOCOL_MISMATCH, "protocol", null);
-        Log.w(TAG, "probe: protocol mismatch");
-        return;
-      }
-      Bundle extras = new Bundle();
-      extras.putString("protocol", PROTOCOL);
-      extras.putInt("maxBase64Length", MAX_BASE64_LENGTH);
-      pending.setResult(RESULT_PROBE_OK, PROTOCOL, extras);
-      Log.i(TAG, "probe ok code=" + RESULT_PROBE_OK);
       return;
     }
     if (!isKnownAction(action)) {

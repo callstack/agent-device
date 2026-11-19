@@ -37,7 +37,6 @@ const ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS = 10_000;
 const ANDROID_IME_HELPER_REGISTRATION_TIMEOUT_MS = 5_000;
 const ANDROID_IME_HELPER_REGISTRATION_POLL_MS = 100;
 
-const ACTION_PROBE = 'com.callstack.agentdevice.imehelper.ACTION_PROBE';
 const ACTION_INPUT_TEXT_B64 = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const ACTION_CLEAR_TEXT = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
 
@@ -50,7 +49,6 @@ const IME_RESULT_COMMIT_RETURNED_FALSE = 2;
 const IME_RESULT_NO_INPUT_CONNECTION = 3;
 const IME_RESULT_REJECTED_PAYLOAD = 4;
 const IME_RESULT_PROTOCOL_MISMATCH = 5;
-const IME_RESULT_PROBE_OK = 100;
 
 /**
  * Declared per-dispatch payload bound, mirrored by the helper: a base64 extra of at most 64_000
@@ -70,8 +68,6 @@ export type AndroidImeHelperDispatchOutcome = Readonly<
   | { kind: 'rejected-payload'; detail: string }
   | { kind: 'protocol-mismatch' }
   | { kind: 'no-ack' }
-  /** @internal probe replies only; never produced for text/clear dispatches. */
-  | { kind: 'probe-ok'; protocol: string }
 >;
 
 type AndroidImeBroadcastResult = Readonly<{ resultCode: number; resultData: string }>;
@@ -209,7 +205,6 @@ export async function ensureAndroidImeHelper(options: {
     options,
   );
   if (decision.installed) {
-    imeHelperAckSupport.delete(options.deviceKey);
     await waitForAndroidImeRegistration(options.adb, options.artifact.manifest.serviceComponent);
   }
   return decision;
@@ -319,64 +314,6 @@ export function chunkAndroidImeHelperText(text: string): string[] {
 }
 
 /**
- * Probes whether the running receiver supports the v2 ordered acknowledgement. A probe returning
- * result=0 cannot distinguish a pre-ack helper from no receiver — it establishes neither, so it is
- * a refusal, not a fallback. Share the active probe and retain positive results until reinstall.
- * A receiver can register after a failed probe, so negative results do not survive the call.
- */
-const imeHelperAckSupport = new Map<string, Promise<boolean>>();
-
-export async function probeAndroidImeHelperAckSupport(
-  adb: AndroidAdbExecutor,
-  packageName: string,
-  cacheKey: string,
-): Promise<boolean> {
-  const cached = imeHelperAckSupport.get(cacheKey);
-  if (cached) return await cached;
-  const probe = (async () => {
-    const outcome = await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_PROBE, {});
-    return outcome.kind === 'probe-ok' && outcome.protocol === ANDROID_IME_HELPER_PROTOCOL;
-  })();
-  imeHelperAckSupport.set(cacheKey, probe);
-  let supported = false;
-  try {
-    supported = await probe;
-    return supported;
-  } finally {
-    if (!supported && imeHelperAckSupport.get(cacheKey) === probe) {
-      imeHelperAckSupport.delete(cacheKey);
-    }
-  }
-}
-
-/** @internal Test isolation hook for the cached ack-capability probes. */
-export function resetAndroidImeHelperAckCacheForTests(): void {
-  imeHelperAckSupport.clear();
-}
-
-function assertAndroidImeHelperAckSupported(
-  adb: AndroidAdbExecutor,
-  packageName: string,
-  cacheKey: string,
-): Promise<void> {
-  return probeAndroidImeHelperAckSupport(adb, packageName, cacheKey).then((supported) => {
-    if (supported) return;
-    // Missing acknowledgement evidence can never become optimistic success: refuse with a typed
-    // reason instead of assuming dispatch, and never fall back to an unacknowledged send.
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android test IME helper did not acknowledge the capability probe; refusing to report an unverified type.',
-      {
-        backend: 'test-ime',
-        failureReason: ANDROID_IME_HELPER_NO_ACK_REASON,
-        packageName,
-        hint: 'The active IME helper predates the acknowledgement protocol or its receiver is not registered; reinstall the bundled helper (or pass a current provider artifact) and reactivate the test IME.',
-      },
-    );
-  });
-}
-
-/**
  * Sends one code-point-safe chunk and requires a committed acknowledgement whose attempted UTF-16
  * length matches the request — a shorter ack would mean silent truncation. Throws a typed error
  * otherwise; result details carry codes and lengths only.
@@ -384,10 +321,8 @@ function assertAndroidImeHelperAckSupported(
 export async function sendAndroidImeHelperTextCommitted(
   adb: AndroidAdbExecutor,
   packageName: string,
-  deviceKey: string,
   text: string,
 ): Promise<void> {
-  await assertAndroidImeHelperAckSupported(adb, packageName, deviceKey);
   const outcome = await sendAndroidImeHelperText(adb, packageName, text);
   assertCommittedOutcome(outcome, text.length);
 }
@@ -396,9 +331,7 @@ export async function sendAndroidImeHelperTextCommitted(
 export async function clearAndroidImeHelperTextCommitted(
   adb: AndroidAdbExecutor,
   packageName: string,
-  deviceKey: string,
 ): Promise<void> {
-  await assertAndroidImeHelperAckSupported(adb, packageName, deviceKey);
   const outcome = await clearAndroidImeHelperText(adb, packageName);
   assertCommittedOutcome(outcome, 0);
 }
@@ -413,11 +346,14 @@ function assertCommittedOutcome(
     'Android test IME helper dispatch was not acknowledged as committed.',
     {
       backend: 'test-ime',
-      failureReason:
+      reason:
         outcome.kind === 'no-ack'
           ? ANDROID_IME_HELPER_NO_ACK_REASON
           : ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
       dispatchKind: outcome.kind,
+      ...(outcome.kind === 'no-ack'
+        ? { hint: 'Reinstall a current bundled or provider IME helper and reopen the session.' }
+        : {}),
       ...('attemptedUtf16' in outcome ? { attemptedUtf16: outcome.attemptedUtf16 } : {}),
       ...('detail' in outcome ? { detail: outcome.detail } : {}),
       requestedUtf16,
@@ -447,14 +383,7 @@ async function sendAndroidImeHelperBroadcast(
         packageName,
       });
     }
-    const parsed = parseAndroidImeBroadcastResult(result.stdout);
-    if (action === ACTION_PROBE) {
-      if (parsed && parsed.resultCode === IME_RESULT_PROBE_OK) {
-        return { kind: 'probe-ok', protocol: parsed.resultData };
-      }
-      return { kind: 'no-ack' };
-    }
-    return classifyAndroidImeBroadcastResult(parsed);
+    return classifyAndroidImeBroadcastResult(parseAndroidImeBroadcastResult(result.stdout));
   } catch (error) {
     throw discloseAdbInputDispatch(error);
   }

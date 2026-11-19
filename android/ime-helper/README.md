@@ -65,11 +65,8 @@ be granted it, so it cannot deliver broadcasts to the receiver — the text-inje
 closed to other apps while the IME is active. (An earlier design used a manifest receiver with
 `android:exported="false"` + explicit-component targeting, but on API 36 adb shell cannot deliver
 to a non-exported component, which broke the CLI path; the permission gate is what actually works.)
-Every extra is still treated as untrusted input: bounded length, defensive base64 decoding, and the
-whole handler is wrapped so a malformed broadcast can never crash the IME process and strand a
-field without an active input method.
+The receiver bounds text length, validates base64, and reports runtime failures as rejected broadcasts.
 
-- `ACTION_PROBE` -- capability probe; a v2 receiver answers `result=100, data="android-ime-helper-v2"`.
 - `ACTION_INPUT_TEXT_B64` (`--es text <base64 utf-8>`) -- commit decoded text at the cursor.
 - `ACTION_INPUT_TEXT` (`--es text <string>`) -- commit text directly (subject to `adb shell`'s own
   tokenization; prefer the base64 variant for anything with spaces or non-ASCII).
@@ -87,7 +84,6 @@ the transport prints when no receiver answered, so it is never a valid ack:
 | 3 | no current input connection (no focused editor) |
 | 4 | rejected payload (too large / malformed base64 / empty / unknown action) |
 | 5 | protocol mismatch |
-| 100 | probe ok (data carries the protocol id) |
 
 Result data and log lines carry **codes and lengths only** (`utf16=<n>`), never user text. An ack
 proves receiver acceptance and the attempted length/`commitText` return; editors may transform
