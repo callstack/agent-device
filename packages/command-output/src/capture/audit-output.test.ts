@@ -46,6 +46,57 @@ test('renders warnings and observations as aligned lines with the advisory wordi
   );
 });
 
+test('renders an ambiguous-name line with the shared label and the count', () => {
+  const result: AuditSnapshotCommandResult = {
+    findings: [
+      {
+        kind: 'ambiguous-name',
+        severity: 'warning',
+        ref: '@e4',
+        role: 'button',
+        label: 'Save',
+        detail: { name: 'Save', count: 3 },
+      },
+    ],
+    guidance: {
+      'ambiguous-name':
+        'Give each control a unique label that names its target, for example "Save Lemon Herb Rice".',
+    },
+    checks: CHECKS,
+    limitations: [],
+  };
+  expect(auditCliOutput(result).text).toBe(
+    [
+      'agent-device audit',
+      '1 warning — current screen',
+      '@e4  ambiguous-name  button "Save"  Name shared by 3 controls of this role',
+      '',
+      'ambiguous-name: Give each control a unique label that names its target, for example "Save Lemon Herb Rice".',
+      '',
+    ].join('\n'),
+  );
+});
+
+test('names an ambiguous control that takes its name from a child or content description', () => {
+  const output = auditCliOutput({
+    findings: [
+      {
+        kind: 'ambiguous-name',
+        severity: 'warning',
+        ref: '@e7',
+        role: 'button',
+        detail: { name: 'Add to cart', count: 2 },
+      },
+    ],
+    guidance: {},
+    checks: CHECKS,
+    limitations: [],
+  });
+  expect(output.text).toContain(
+    '@e7  ambiguous-name  button "Add to cart"  Name shared by 2 controls of this role',
+  );
+});
+
 test('prints plain refs when the result carries no generation to pin them to', () => {
   const output = auditCliOutput({
     findings: [{ kind: 'missing-name', severity: 'warning', ref: '@e9', role: 'button' }],

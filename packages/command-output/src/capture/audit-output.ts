@@ -1,5 +1,6 @@
 import type {
   AuditFinding,
+  AuditNameDetail,
   AuditSizeDetail,
   AuditSnapshotCommandResult,
 } from '@agent-device/contracts/capture';
@@ -57,9 +58,15 @@ function findingText(finding: AuditFinding): string {
       return sizeText(finding.detail);
     case 'missing-name':
       return 'No accessible name';
+    case 'ambiguous-name':
+      return sharedNameText(finding.detail);
     case 'covered-control':
       return 'Accessible action is unavailable to touch';
   }
+}
+
+function sharedNameText({ count }: AuditNameDetail): string {
+  return `Name shared by ${count} controls of this role`;
 }
 
 function sizeText({ width, height, unit, recommendedSize }: AuditSizeDetail): string {
@@ -67,7 +74,12 @@ function sizeText({ width, height, unit, recommendedSize }: AuditSizeDetail): st
 }
 
 function elementText(finding: AuditFinding): string {
-  const name = finding.kind === 'missing-name' ? undefined : finding.label;
+  // A control named by its content description, text or a child has no label of its own; the
+  // shared name is still what a reader needs to find it.
+  const name =
+    finding.kind === 'missing-name'
+      ? undefined
+      : (finding.label ?? (finding.kind === 'ambiguous-name' ? finding.detail.name : undefined));
   const identity = name
     ? JSON.stringify(name)
     : finding.identifier

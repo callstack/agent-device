@@ -206,7 +206,7 @@ export const qaReportHelpTopics = {
 Use this when asked for an accessibility review, a11y audit, or a screen-reader or touch-target check of an app.
 
 Scope:
-  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, and covered controls.
+  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, controls of one role that share one accessible name, and covered controls.
   This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance.
 
 Loop for each screen:
@@ -231,7 +231,7 @@ Checks audit cannot do:
     At the end, set the noted mode again. For example, if the noted mode was light, run agent-device settings appearance light.
   If settings refuses on this device, such as a physical iPhone, list large text and dark mode as not done.
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
-    A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
+    Audit reports a name that controls of one role share. Check by hand that each label names its target ("Save Lemon Herb Rice", not "Save"), even when it is unique, and that controls of different roles do not share one name. A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
     On the iOS simulator, agent-device snapshot -i --actions names the custom actions that a merged element hides.
 
