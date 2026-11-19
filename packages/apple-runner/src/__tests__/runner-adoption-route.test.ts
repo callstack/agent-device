@@ -40,7 +40,7 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 const mockUsbmuxPostCommand = vi.mocked(usbmuxRunnerTransport.postCommand);
 const mockIsProcessAlive = vi.fn((_pid: number) => false);
 const mockReadProcessCommand = vi.fn((_pid: number): string | null => null);
-const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'test-process-start');
+const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'posix:1700000000000');
 
 const RUNNER_PID = 424242;
 const RUNNER_PORT = 50700;

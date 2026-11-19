@@ -18,6 +18,7 @@ import {
   ownerIdentityMatches,
   readCurrentOwnerIdentity,
   readCurrentOwnerIdentityAsync,
+  type OwnerIdentity,
   type OwnerLiveness,
 } from './owner-identity.ts';
 import { sleep } from './retry.ts';
@@ -40,6 +41,14 @@ const GUARD_REAP_MARKER_SUFFIX = '.reap';
 export type ProcessLockOwner = {
   pid: number;
   startTime: string | null;
+  /**
+   * The canonical provenanced birth token persisted beside the legacy raw `startTime`, which
+   * released readers still expect in `startTime`. Comparisons prefer this field; absent on
+   * records written before it existed, and then the raw value proves nothing.
+   */
+  birthToken?: string | null;
+  /** The legacy raw rendering, persisted as `startTime` for released readers. Never compared. */
+  rawStartTime?: string | null;
   acquiredAtMs: number;
 };
 
@@ -150,10 +159,10 @@ function inspectProcessLockWith(
       ? { state: 'publishing' }
       : { state: 'unproven', reason: 'owner-unwritten' };
   }
-  const { pid, startTime, acquiredAtMs } = reading.owner;
+  const { pid, startTime, birthToken, acquiredAtMs } = reading.owner;
   return {
     state: 'held',
-    owner: { pid, startTime, acquiredAtMs },
+    owner: { pid, startTime, birthToken, acquiredAtMs },
     liveness: judgeOwner(reading.owner),
   };
 }
@@ -176,7 +185,7 @@ export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAt
       params.lockDirPath,
       (holder) => readHostProcessIdentityObservations([holder.pid]).get(holder.pid) ?? null,
     ),
-    guardHolderStartTime: readCurrentOwnerIdentity().startTime,
+    guardHolderIdentity: readCurrentOwnerIdentity(),
   });
 }
 
@@ -186,8 +195,8 @@ type AttemptEvidence = Readonly<{
   /** Judges an owner record the attempt reports on; it must not probe on an async path. */
   judgeOwner: (owner: ProcessLockOwnerRecord) => OwnerLiveness;
   abandonedGuard: AbandonedGuard | undefined;
-  /** This process's start time, recorded in a guard it takes. */
-  guardHolderStartTime: string | null;
+  /** This process's identity, recorded in a guard it takes. */
+  guardHolderIdentity: Pick<OwnerIdentity, 'startTime' | 'birthToken' | 'rawStartTime'>;
 }>;
 
 function attemptProcessLock(
@@ -197,7 +206,7 @@ function attemptProcessLock(
   const { lockDirPath } = params;
   const judgment = evidence.standing;
   if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
-  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderStartTime)) {
+  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderIdentity)) {
     return { status: 'busy', inspection: inspectProcessLockWith(lockDirPath, evidence.judgeOwner) };
   }
   const outcome = withMutationGuardHeld(
@@ -281,7 +290,16 @@ function publishClaim(
     return { status: 'unproven' };
   }
   const claimToken = crypto.randomUUID();
-  const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
+  const claim: ProcessLockOwnerRecord = {
+    ...owner,
+    // `startTime` keeps the legacy raw rendering released readers expect; the canonical token rides
+    // beside it as `birthToken` and is what this build's reclaim/liveness comparisons use. No
+    // process probe here: the caller's identity was read before the attempt, never under the guard.
+    startTime: owner.rawStartTime ?? owner.startTime,
+    birthToken: owner.birthToken ?? owner.startTime,
+    claimToken,
+    claimIssuerId: CLAIM_ISSUER_ID,
+  };
   try {
     writeProcessLockOwner(ownerFilePath, claim);
   } catch (error) {
@@ -317,10 +335,10 @@ function judgeStandingClaim(
 ): StandingClaimJudgment {
   if (reading.kind !== 'owner' || liveness === undefined) return { kind: 'none' };
   if (isLiveOwnerLiveness(liveness) && !isSpentOwnClaim(reading.owner)) {
-    const { pid, startTime, acquiredAtMs } = reading.owner;
+    const { pid, startTime, birthToken, acquiredAtMs } = reading.owner;
     return {
       kind: 'live',
-      inspection: { state: 'held', owner: { pid, startTime, acquiredAtMs }, liveness },
+      inspection: { state: 'held', owner: { pid, startTime, birthToken, acquiredAtMs }, liveness },
     };
   }
   return { kind: 'reclaimable', owner: reading.owner };
@@ -396,7 +414,7 @@ async function createWaitObservers() {
   return {
     owner: createOwnerObservationReuse(),
     guardHolder: createGuardHolderObservationReuse(),
-    guardHolderStartTime: (await readCurrentOwnerIdentityAsync()).startTime,
+    guardHolderIdentity: await readCurrentOwnerIdentityAsync(),
   };
 }
 
@@ -412,7 +430,7 @@ async function gatherWaitEvidence(
     standing: judgeStandingClaim(reading, liveness),
     judgeOwner: judgeOwnerFromReading(reading, liveness),
     abandonedGuard: await findAbandonedGuardAsync(params.lockDirPath, observe.guardHolder),
-    guardHolderStartTime: observe.guardHolderStartTime,
+    guardHolderIdentity: observe.guardHolderIdentity,
   };
 }
 
@@ -623,7 +641,13 @@ function reclaimMutexPath(lockDirPath: string): string {
  * The guard's holder, written into the guard file itself. A holder that dies inside its guarded
  * filesystem step would otherwise leave a guard nobody can attribute, and so nobody can remove.
  */
-type GuardHolder = Readonly<{ pid: number; startTime: string | null; token: string }>;
+type GuardHolder = Readonly<{
+  pid: number;
+  startTime: string | null;
+  /** Canonical provenanced token beside the legacy raw `startTime` (same dual-write as owner.json). */
+  birthToken?: string | null;
+  token: string;
+}>;
 
 /** A standing guard whose holder is proven dead or its pid reused, named by the holder's token. */
 type AbandonedGuard = Readonly<{ token: string }>;
@@ -638,18 +662,24 @@ const GUARD_TOKEN = /^[0-9a-f-]{36}$/;
 function holdReclaimMutex(
   lockDirPath: string,
   abandoned: AbandonedGuard | undefined,
-  holderStartTime: string | null,
+  holderIdentity: Pick<OwnerIdentity, 'startTime' | 'birthToken' | 'rawStartTime'>,
 ): boolean {
-  if (createReclaimMutex(lockDirPath, holderStartTime)) return true;
+  if (createReclaimMutex(lockDirPath, holderIdentity)) return true;
   if (!abandoned || !reapAbandonedGuard(lockDirPath, abandoned)) return false;
-  return createReclaimMutex(lockDirPath, holderStartTime);
+  return createReclaimMutex(lockDirPath, holderIdentity);
 }
 
-function createReclaimMutex(lockDirPath: string, holderStartTime: string | null): boolean {
+function createReclaimMutex(
+  lockDirPath: string,
+  holderIdentity: Pick<OwnerIdentity, 'startTime' | 'birthToken' | 'rawStartTime'>,
+): boolean {
   const mutexPath = reclaimMutexPath(lockDirPath);
   const holder: GuardHolder = {
     pid: process.pid,
-    startTime: holderStartTime,
+    // Legacy raw rendering for released readers; canonical token for this build's comparisons.
+    // The identity was read before the guard was taken: only filesystem steps run under it.
+    startTime: holderIdentity.rawStartTime ?? holderIdentity.startTime,
+    birthToken: holderIdentity.birthToken ?? holderIdentity.startTime,
     token: crypto.randomUUID(),
   };
   let descriptor: number;
@@ -726,8 +756,19 @@ function readGuardHolder(mutexPath: string): { holder: GuardHolder; ageMs: numbe
   if (!isProcessPid(record.pid) || typeof record.token !== 'string') return undefined;
   if (!GUARD_TOKEN.test(record.token)) return undefined;
   if (record.startTime !== null && typeof record.startTime !== 'string') return undefined;
+  if (
+    record.birthToken !== undefined &&
+    record.birthToken !== null &&
+    typeof record.birthToken !== 'string'
+  )
+    return undefined;
   return {
-    holder: { pid: record.pid, startTime: record.startTime, token: record.token },
+    holder: {
+      pid: record.pid,
+      startTime: record.startTime,
+      birthToken: typeof record.birthToken === 'string' ? record.birthToken : undefined,
+      token: record.token,
+    },
     ageMs,
   };
 }
@@ -802,13 +843,13 @@ function createGuardHolderObservationReuse() {
  */
 async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
   const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
-  const holderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
+  const holderIdentity = await readCurrentOwnerIdentityAsync();
   const observedHolder = createGuardHolderObservationReuse();
   while (
     !holdReclaimMutex(
       lockDirPath,
       await findAbandonedGuardAsync(lockDirPath, observedHolder),
-      holderStartTime,
+      holderIdentity,
     )
   ) {
     if (Date.now() >= deadline) return false;
@@ -870,6 +911,8 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
   return {
     pid: record.pid as number,
     startTime: typeof record.startTime === 'string' ? record.startTime : null,
+    birthToken: typeof record.birthToken === 'string' ? record.birthToken : undefined,
+    rawStartTime: typeof record.startTime === 'string' ? record.startTime : undefined,
     acquiredAtMs: record.acquiredAtMs as number,
     // A record written before claims were tokenized names a process without saying which
     // acquisition it was, which no release can match and no reclaim can be blamed for.
@@ -883,6 +926,8 @@ const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<keyof ProcessLockOwner, (value: un
     pid: isProcessPid,
     acquiredAtMs: (value) => typeof value === 'number' && Number.isFinite(value),
     startTime: (value) => value === undefined || value === null || typeof value === 'string',
+    birthToken: (value) => value === undefined || value === null || typeof value === 'string',
+    rawStartTime: (value) => value === undefined || value === null || typeof value === 'string',
   };
 
 function readProcessLockDiagnostics(

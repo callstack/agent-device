@@ -121,7 +121,12 @@ export async function tryAcquireDaemonRegistration(
               httpPort,
               transport,
               pid: identity.pid,
-              processStartTime: identity.startTime ?? undefined,
+              // `processStartTime` keeps the legacy raw rendering released clients expect;
+              // `processStartTimeToken` carries the canonical provenanced token this build
+              // compares against live reads. A raw value never rides in the token field:
+              // it is unqualified and would prove nothing.
+              processStartTime: identity.rawStartTime ?? identity.startTime ?? undefined,
+              processStartTimeToken: identity.birthToken ?? undefined,
               stateDir: boundPaths.baseDir,
             },
             null,

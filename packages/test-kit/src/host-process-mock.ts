@@ -1,5 +1,6 @@
 import { beforeEach, vi } from 'vitest';
 import type * as HostProcess from '@agent-device/host-kit/process';
+import { LIFETIME_TOKEN } from './process-lifetime.fixtures.ts';
 
 type HostProcessModule = typeof HostProcess;
 type HostProcessIdentityObservation = HostProcess.HostProcessIdentityObservation;
@@ -17,9 +18,9 @@ export function pinOwnProcessStartTime(hostProcess: HostProcessModule): void {
 }
 
 function installPin(hostProcess: HostProcessModule): void {
-  // A canonical POSIX birth token: the provenanced format host-kit reads on macOS, so a
-  // different `posix:` token in a record still proves PID reuse while raw renderings do not.
-  const ownStartTime = 'posix:1763493000000';
+  // The shared canonical POSIX birth token: provenanced, so a different `posix:` token in a
+  // record still proves PID reuse while raw legacy renderings stay unknown.
+  const ownStartTime = LIFETIME_TOKEN;
   vi.spyOn(hostProcess, 'readCurrentOwnerIdentity').mockImplementation(() => ({
     pid: process.pid,
     startTime: ownStartTime,

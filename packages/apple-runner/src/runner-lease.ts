@@ -9,12 +9,14 @@ import {
   withProcessLock,
   hasDeviceClaimAuthority,
   isProcessAlive,
+  compareBirthTokens,
   readProcessCommand,
   readProcessStartTime,
   classifyOwnerLiveness,
   leaseOwnerStateDir,
   shellQuote,
   hostEnvironment,
+  type BirthTokenComparison,
 } from './host.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -710,6 +712,9 @@ async function cleanupLeasedRunnerProcesses(
     },
   });
   if (currentRunnerLeaseOwnerToken(lease.deviceId) !== lease.ownerToken) return;
+  // The pid is signaled only on a provenanced `match` (resolveVerifiedLeaseRunnerPid); reclaim
+  // itself was proven by the owner fence, so an unknown or different birth never blocks the
+  // sweep and never becomes a pid-targeted signal.
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
   await cleanup.cleanupRunnerXcodebuildProcesses({
     deviceId: lease.deviceId,
@@ -746,15 +751,6 @@ async function cleanupLeasedRunnerProcesses(
  * still collects genuinely stray runner processes.
  */
 /**
- * Whether a live pid is provably still the leased runner. The one place this contract is written, so
- * the pid a caller is willing to signal and the pid adoption is willing to take over cannot drift
- * apart (#2681).
- */
-export function isLeaseRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
-  return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
-}
-
-/**
  * XCTest teardown leaves the simulator with app accessibility off, so apps launched afterwards
  * expose an empty tree. Turns it back on once the runner is confirmed gone; a failure only warns.
  */
@@ -785,14 +781,22 @@ export async function repairSimulatorAccessibilityAfterRunnerExit(params: {
 function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
   const pid = lease.runnerPid ?? undefined;
   if (!pid || !isProcessAlive(pid)) return undefined;
-  if (verifyLeaseRunnerPidIdentity(lease, pid)) return pid;
+  const comparison = compareLeaseRunnerPidIdentity(lease, pid);
+  if (comparison === 'match') return pid;
+  // `different` proves reuse; `unknown` (e.g. a legacy raw record beside a canonical read) is
+  // unresolved. Neither authorizes a pid-targeted signal; the rest of the cleanup still runs,
+  // because reclaim was proven by the owner, not by this pid.
   emitDiagnostic({
     level: 'warn',
-    phase: 'ios_runner_lease_recycled_pid_skipped',
+    phase:
+      comparison === 'different'
+        ? 'ios_runner_lease_recycled_pid_skipped'
+        : 'ios_runner_lease_unverified_pid_skipped',
     data: {
       deviceId: lease.deviceId,
       runnerPid: pid,
       runnerStartTime: lease.runnerStartTime,
+      comparison,
       sessionId: lease.sessionId,
     },
   });
@@ -800,17 +804,30 @@ function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
 }
 
 /**
+ * The one live-birth comparison between the leased runner's recorded start time and the live pid.
+ * `match` proves the pid still names the leased runner; `different` proves reuse; `unknown` covers
+ * a legacy raw record against a canonical read — unresolved, never treated as reuse. Shared with
+ * adoption: an unverified pid must never be adopted, because adoption re-stamps the lease with the
+ * live pid's start time and would launder a recycled pid into a strongly-verified lease that
+ * disposal later kills (#1596). When the lease has no recorded start time, the runner-shaped
+ * command line is the independent fallback proof.
+ */
+export function compareLeaseRunnerPidIdentity(
+  lease: RunnerLease,
+  pid: number,
+): BirthTokenComparison {
+  if (!lease.runnerStartTime) {
+    return isRunnerXcodebuildCommand(readProcessCommand(pid)) ? 'match' : 'unknown';
+  }
+  return compareBirthTokens(lease.runnerStartTime, readProcessStartTime(pid));
+}
+
+/**
  * Is the live process holding `pid` provably still the runner this lease
- * recorded? Matching recorded start time, or — when the lease has none — a
- * command line that looks like the runner's xcodebuild. Shared with adoption: an unverified pid must never be adopted,
- * because adoption re-stamps the lease with the live pid's start time and
- * would launder a recycled pid into a strongly-verified lease that disposal
- * later kills (#1596).
+ * recorded? Only a positive `match` answers yes.
  */
 export function verifyLeaseRunnerPidIdentity(lease: RunnerLease, pid: number): boolean {
-  return lease.runnerStartTime
-    ? readProcessStartTime(pid) === lease.runnerStartTime
-    : isRunnerXcodebuildCommand(readProcessCommand(pid));
+  return compareLeaseRunnerPidIdentity(lease, pid) === 'match';
 }
 
 function isRunnerXcodebuildCommand(command: string | null): boolean {

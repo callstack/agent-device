@@ -10,6 +10,7 @@ import {
   readProcessCommand,
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
+import { staleBirthTokenLike } from '@agent-device/test-kit';
 import { isAgentDeviceDaemonProcess, stopDaemonProcess } from './daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
@@ -67,10 +68,7 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
 
 /** A start time in the same provenanced format as `live` but naming a different lifetime. */
 function staleStartTimeLike(live: string): string {
-  if (live.startsWith('linux:')) return 'linux:00000000-0000-4000-8000-000000000000:999999999';
-  if (live.startsWith('posix:')) return 'posix:1';
-  if (/^\d{21}$/.test(live)) return '00000000000000000000';
-  return 'posix:1';
+  return staleBirthTokenLike(live);
 }
 
 // #1545: a reachable daemon with a code-signature mismatch is replaced. If a

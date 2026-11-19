@@ -86,7 +86,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   appleRunnerTestHost.update({
     runCmdStreaming: mockRunCmdStreaming,
-    readProcessStartTime: () => 'test-process-start',
+    readProcessStartTime: () => 'posix:1700000000000',
   });
   mockRunCmdStreaming.mockResolvedValue(undefined);
   mockRepairMacOsRunnerProductsIfNeeded.mockResolvedValue(undefined);

@@ -54,7 +54,7 @@ const {
   // Deterministic value, no shell-out; identity is still enforced by pid in
   // beforeEach below.
   mockReadProcessCommand: vi.fn((_pid: number) => null as string | null),
-  mockReadProcessStartTime: vi.fn((_pid: number) => 'fixed-test-owner-start-time' as string | null),
+  mockReadProcessStartTime: vi.fn((_pid: number) => 'posix:1700000000000' as string | null),
   mockResolveExpectedRunnerCacheMetadata: vi.fn(),
   mockResolveRunnerDerivedPath: vi.fn(),
   mockRunAppleToolCommand: vi.fn(),
@@ -69,12 +69,9 @@ const {
   mockWaitForRunner: vi.fn(),
 }));
 
-// Fixed owner-identity value shared by the readProcessStartTime override
-// below and every fixture/assertion that used to read the module-load-time
-// RUNNER_OWNER_START_TIME constant. runnerOwnerStartTime() (R8) memoizes on
-// its first call, which reads this same override, so the two stay
-// consistent without either one calling back into the other.
-const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
+// Fixed owner-identity value shared by the readProcessStartTime override below and every
+// fixture that used to read the module-load-time RUNNER_OWNER_START_TIME constant.
+const TEST_OWNER_START_TIME = 'posix:1700000000000';
 
 vi.mock('../runner-io.ts', async () => {
   const actual = await vi.importActual<typeof import('../runner-io.ts')>('../runner-io.ts');
@@ -145,11 +142,8 @@ function setRunnerLeaseOwnerStateDir(stateDir: string | undefined): void {
 }
 
 beforeEach(async () => {
-  // Must run before abortAllIosRunnerSessions() below: that call can tear
-  // down sessions left in memory by the PREVIOUS test, and its cleanup path
-  // signals real processes (host.signalPidsBestEffort et al.) unless the
-  // host overrides are already installed. The setup file's own beforeEach
-  // (which runs before this one) just wiped them back to real defaults.
+  // Must run before abortAllIosRunnerSessions() below: that call can tear down sessions left in
+  // memory by the PREVIOUS test, signaling real processes unless the overrides are installed.
   appleRunnerTestHost.update({
     runCmdBackground: mockRunCmdBackground,
     isProcessAlive: mockIsProcessAlive,
@@ -194,9 +188,8 @@ beforeEach(async () => {
   mockIsProcessAlive.mockReturnValue(true);
   mockIsProcessGroupAlive.mockReturnValue(false);
   mockReadProcessCommand.mockReturnValue(null);
-  // Our pid reads back its fixed start time; any other pid reads as
-  // not-found, same as a real `ps` miss. Dead-lease tests use fabricated
-  // pids already rejected by mockIsProcessAlive before this is consulted.
+  // Our pid reads back its fixed start time; any other pid reads as not-found, same as a real
+  // `ps` miss. Dead-lease tests use fabricated pids rejected by mockIsProcessAlive first.
   mockReadProcessStartTime.mockImplementation((pid: number) =>
     pid === process.pid ? TEST_OWNER_START_TIME : null,
   );
@@ -703,10 +696,11 @@ function writeStaleLeaseWithRunner(
 
 test('stale-lease cleanup does not signal a recycled runner pid (start time mismatch)', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lease-recycled-pid-sim' };
-  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
-  mockReadProcessStartTime.mockImplementation((pid: number) =>
-    pid === 55_555 ? 'different-newer-start' : null,
-  );
+  writeStaleLeaseWithRunner(device.id, {
+    runnerPid: 55_555,
+    runnerStartTime: 'posix:2',
+  });
+  mockReadProcessStartTime.mockImplementation((pid: number) => (pid === 55_555 ? 'posix:3' : null));
   const { adapter, treeKills, xcodebuildCleanups } = makeRecordingCleanupAdapter();
 
   await prepareRunnerLeaseForStartup(device, adapter);
@@ -721,10 +715,11 @@ test('stale-lease cleanup does not signal a recycled runner pid (start time mism
 
 test('stale-lease cleanup signals the runner pid when its start time still matches', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lease-verified-pid-sim' };
-  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
-  mockReadProcessStartTime.mockImplementation((pid: number) =>
-    pid === 55_555 ? 'lease-time-start' : null,
-  );
+  writeStaleLeaseWithRunner(device.id, {
+    runnerPid: 55_555,
+    runnerStartTime: 'posix:2',
+  });
+  mockReadProcessStartTime.mockImplementation((pid: number) => (pid === 55_555 ? 'posix:2' : null));
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
   await prepareRunnerLeaseForStartup(device, adapter);
@@ -737,13 +732,16 @@ test('stale-lease cleanup signals the runner pid when its start time still match
 
 test('stale-lease cleanup re-verifies the pid before the SIGKILL escalation', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lease-recycled-between-signals-sim' };
-  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  writeStaleLeaseWithRunner(device.id, {
+    runnerPid: 55_555,
+    runnerStartTime: 'posix:2',
+  });
   // The runner dies on SIGTERM and its pid is recycled while the awaited
   // xcodebuild sweep runs — the SIGKILL escalation must not trust the
   // verification performed for SIGTERM.
   let verifications = 0;
   mockReadProcessStartTime.mockImplementation((pid: number) =>
-    pid === 55_555 ? (++verifications === 1 ? 'lease-time-start' : 'recycled-newer-start') : null,
+    pid === 55_555 ? (++verifications === 1 ? 'posix:2' : 'posix:3') : null,
   );
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
@@ -785,7 +783,10 @@ test('stale-lease cleanup without a recorded start time trusts only runner-shape
 
 test('stale-lease cleanup skips a dead runner pid entirely', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lease-dead-pid-sim' };
-  writeStaleLeaseWithRunner(device.id, { runnerPid: 55_555, runnerStartTime: 'lease-time-start' });
+  writeStaleLeaseWithRunner(device.id, {
+    runnerPid: 55_555,
+    runnerStartTime: 'posix:2',
+  });
   mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999 && pid !== 55_555);
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
@@ -895,7 +896,7 @@ test('runner session startup still rejects a live foreign lease whose owner stat
 
 test('runner lease cleanup reclaims only leases owned by the stopped daemon', async () => {
   const ownerPid = 999_999_991;
-  const ownerStartTime = 'Fri Jun 19 12:00:00 2026';
+  const ownerStartTime = 'posix:1700000001000';
   const owned = makeRunnerLease({
     deviceId: 'runner-session-clean-owned-lease',
     ownerPid,
@@ -905,7 +906,7 @@ test('runner lease cleanup reclaims only leases owned by the stopped daemon', as
   const foreign = makeRunnerLease({
     deviceId: 'runner-session-clean-foreign-lease',
     ownerPid,
-    ownerStartTime: 'Fri Jun 19 12:01:00 2026',
+    ownerStartTime: 'posix:1700000001001',
     ownerToken: 'owner-clean-foreign',
   });
   writeRunnerLease(owned);

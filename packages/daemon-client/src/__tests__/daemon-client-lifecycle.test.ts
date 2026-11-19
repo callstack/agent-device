@@ -13,6 +13,7 @@ import {
   mkdtempForTestSync,
   startHttpDaemonFixture,
   skipWhenLoopbackUnavailable,
+  staleBirthTokenLike,
 } from '@agent-device/test-kit';
 import {
   planRegisteredDaemonLaunches,
@@ -382,16 +383,10 @@ test('daemon acquisition reclaims a proven reused owner before publication', asy
   const paths = resolveDaemonPaths(stateDir);
   const daemon = await startHttpDaemonFixture({ via: 'fresh-daemon' });
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
-  // A proven reuse needs a stale value in the same verified format as the live read of this pid;
-  // a legacy-format token would be unverified, not proof.
+  // A proven reuse needs a stale value in the same provenanced format as the live read of this
+  // pid; a raw legacy rendering would be unknown, not proof.
   const liveStartTime = readProcessStartTime(process.pid);
-  const staleStartTime = liveStartTime?.startsWith('linux:')
-    ? 'linux:00000000-0000-0000-0000-000000000000:0'
-    : liveStartTime?.startsWith('posix:')
-      ? 'posix:1'
-      : liveStartTime !== null && /^\d{21}$/.test(liveStartTime)
-        ? '00000000000000000000'
-        : 'posix:1';
+  const staleStartTime = staleBirthTokenLike(liveStartTime);
   const stale = tryAcquireProcessLock({
     lockDirPath: paths.lockPath,
     owner: { pid: process.pid, startTime: staleStartTime, acquiredAtMs: Date.now() },

@@ -98,7 +98,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
   appleRunnerTestHost.update({
     isProcessAlive: () => true,
     readProcessCommand: () => null,
-    readProcessStartTime: () => 'test-process-start',
+    readProcessStartTime: () => 'posix:1700000000000',
   });
   writeRunnerLease({
     ...buildRunnerLease({

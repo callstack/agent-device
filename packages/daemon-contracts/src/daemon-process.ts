@@ -1,6 +1,7 @@
 import {
+  birthTokenOf,
+  compareBirthTokens,
   isProcessAlive,
-  isProvenancedBirthToken,
   processStartTimesDiffer,
   isProcessPid,
   readHostProcessIdentityObservations,
@@ -34,12 +35,11 @@ export function isAgentDeviceDaemonProcess(
   expectedStartTime: string | undefined,
 ): boolean {
   if (!expectedStartTime) return false;
-  // A raw historical rendering (pre-canonicalization lstart) has no comparable provenance, so it
-  // can neither be confirmed against a canonical read nor authorize a signal on its own.
-  if (!isProvenancedBirthToken(expectedStartTime)) return false;
   if (!isProcessAlive(pid)) return false;
   const actualStartTime = readProcessStartTime(pid);
-  if (!actualStartTime || actualStartTime !== expectedStartTime) return false;
+  // Only a positive provenanced `match` confirms the recorded lifetime and authorizes the daemon
+  // gate; a raw legacy rendering is `unknown` and can neither confirm nor authorize.
+  if (compareBirthTokens(expectedStartTime, actualStartTime) !== 'match') return false;
   const command = readProcessCommand(pid);
   if (!command) return false;
   return isAgentDeviceDaemonCommand(command);
@@ -148,11 +148,13 @@ export async function stopDaemonProcess(
   },
 ): Promise<DaemonTerminationResult> {
   if (!isProcessPid(observed.pid)) return { status: 'retained', reason: 'identity-unverified' };
-  if (!observed.startTime?.trim()) {
+  // The record's canonical token is the comparison evidence; a legacy raw-only value is unknown.
+  const observedToken = birthTokenOf(observed);
+  if (!observedToken?.trim()) {
     if (!isProcessAlive(observed.pid)) return { status: 'not-running' };
     return { status: 'retained', reason: 'missing-start-time' };
   }
-  const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observed.startTime };
+  const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observedToken };
   if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) {
     return { status: 'exited', identity, mode: 'already-exited' };
   }

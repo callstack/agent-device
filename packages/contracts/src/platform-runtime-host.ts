@@ -29,7 +29,12 @@ export type ManagedProcessIdentity = Readonly<{
   command: string;
 }>;
 
-export type ManagedProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
+export type ManagedProcessOwnership =
+  | 'missing'
+  | 'owned-alive'
+  | 'ownership-lost'
+  /** Birth evidence unknown (e.g. a legacy raw record beside a canonical read): unresolved, not a proven fence loss. */
+  | 'unprovable';
 
 /**
  * A daemon-owned process identity that may outlive the request which spawned

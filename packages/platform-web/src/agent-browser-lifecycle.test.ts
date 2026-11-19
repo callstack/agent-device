@@ -2,6 +2,7 @@ import {
   bindTestCommandHost,
   createLiveTestHostEnvironment,
   installFakeManagedAgentBrowser,
+  STALE_LIFETIME_TOKEN,
 } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import * as hostFile from '@agent-device/host-kit/host-file';
@@ -17,7 +18,7 @@ function startToken(pid: number): string {
   return `posix:${1000 + pid}`;
 }
 /** A birth token naming a different lifetime than any `startToken`. */
-const LATER_LIFETIME = 'posix:999999999';
+const LATER_LIFETIME = STALE_LIFETIME_TOKEN;
 
 const { runCmdMock, spawnMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),

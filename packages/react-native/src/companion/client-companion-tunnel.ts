@@ -19,6 +19,7 @@ import { normalizeBaseUrl } from '../metro/base-url.ts';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
+  compareBirthTokens,
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
   isProcessAlive,
@@ -243,7 +244,11 @@ function shouldReuseCompanion(
   if (!isProcessAlive(state.pid)) return false;
   if (state.startTime) {
     const currentStartTime = readProcessStartTime(state.pid);
-    if (!currentStartTime || currentStartTime !== state.startTime) return false;
+    if (!currentStartTime) return false;
+    // Only a proven `different` ends reuse. `unknown` — e.g. a legacy raw record beside a
+    // canonical read after an upgrade — falls through to the command, scope, and bearer-token
+    // fence below, which is the independent ownership proof; reuse signals nothing.
+    if (compareBirthTokens(state.startTime, currentStartTime) === 'different') return false;
   }
   const command = readProcessCommand(state.pid);
   if (!command || !isCompanionTunnelCommand(command, options.definition)) return false;

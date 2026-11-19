@@ -93,10 +93,10 @@ function recorder(
 
 test('rejects PID reuse when start time or full command changes', async () => {
   state.alive.set(41, true);
-  state.starts.set(41, 'new-start');
+  state.starts.set(41, 'posix:2000');
   state.commands.set(41, 'different command');
   await expect(
-    inspectManagedProcess({ pid: 41, startTime: 'old-start', command: 'wrapper' }),
+    inspectManagedProcess({ pid: 41, startTime: 'posix:1000', command: 'wrapper' }),
   ).resolves.toBe('ownership-lost');
 });
 
@@ -104,17 +104,17 @@ test('rejects PID reuse when start time or full command changes', async () => {
 // the next rung's signal.
 test('a marker whose pid changes hands mid-ladder is never signaled again', async () => {
   state.alive.set(41, true);
-  state.starts.set(41, 'root-start');
+  state.starts.set(41, 'posix:1000');
   state.commands.set(41, 'wrapper');
   vi.mocked(listHostProcesses).mockResolvedValue([]);
   const reuse = vi.fn(() => {
     state.alive.set(41, true);
-    state.starts.set(41, 'reused-start');
+    state.starts.set(41, 'posix:3000');
   });
   state.onSignal = reuse;
 
   await expect(
-    terminateManagedProcessSet([{ pid: 41, startTime: 'root-start', command: 'wrapper' }]),
+    terminateManagedProcessSet([{ pid: 41, startTime: 'posix:1000', command: 'wrapper' }]),
   ).resolves.toBe('ownership-lost');
 
   expect(state.signaled.map(({ signal }) => signal)).toEqual(['SIGINT']);
@@ -123,8 +123,8 @@ test('a marker whose pid changes hands mid-ladder is never signaled again', asyn
 
 test('terminates the exact captured process tree without path guessing', async () => {
   for (const [pid, start, command] of [
-    [41, 'root-start', 'wrapper'],
-    [42, 'child-start', 'recorder child'],
+    [41, 'posix:1000', 'wrapper'],
+    [42, 'posix:1001', 'recorder child'],
   ] as const) {
     state.alive.set(pid, true);
     state.starts.set(pid, start);
@@ -132,8 +132,8 @@ test('terminates the exact captured process tree without path guessing', async (
   }
   await expect(
     terminateManagedProcessSet([
-      { pid: 41, startTime: 'root-start', command: 'wrapper' },
-      { pid: 42, startTime: 'child-start', command: 'recorder child' },
+      { pid: 41, startTime: 'posix:1000', command: 'wrapper' },
+      { pid: 42, startTime: 'posix:1001', command: 'recorder child' },
     ]),
   ).resolves.toBe('terminated');
   expect(state.signaled[0]).toEqual({ pids: [41, 42], signal: 'SIGINT' });
@@ -141,10 +141,10 @@ test('terminates the exact captured process tree without path guessing', async (
 
 test('asks for a real probe budget when the answer decides who is signaled', async () => {
   state.alive.set(41, true);
-  state.starts.set(41, 'root-start');
+  state.starts.set(41, 'posix:1000');
   state.commands.set(41, 'wrapper');
   await expect(
-    terminateManagedProcessSet([{ pid: 41, startTime: 'root-start', command: 'wrapper' }]),
+    terminateManagedProcessSet([{ pid: 41, startTime: 'posix:1000', command: 'wrapper' }]),
   ).resolves.toBe('terminated');
   expect(state.budgetedProbeCalls.length).toBeGreaterThan(0);
   expect(Math.min(...state.budgetedProbeCalls)).toBeGreaterThan(PROBE_POLL_TIMEOUT_MS);
@@ -155,7 +155,7 @@ test('ends the recorder it spawned when the host cannot answer the identity prob
   const killed: string[] = [];
   await expect(
     terminateManagedProcessSet(
-      [{ pid: 41, startTime: 'root-start', command: 'wrapper' }],
+      [{ pid: 41, startTime: 'posix:1000', command: 'wrapper' }],
       recorder(41, killed),
     ),
   ).resolves.toBe('terminated');
@@ -166,19 +166,19 @@ test('ends the recorder it spawned when the host cannot answer the identity prob
 test('refuses to signal a live process whose identity nobody can read', async () => {
   state.alive.set(41, true);
   await expect(
-    terminateManagedProcessSet([{ pid: 41, startTime: 'root-start', command: 'wrapper' }]),
+    terminateManagedProcessSet([{ pid: 41, startTime: 'posix:1000', command: 'wrapper' }]),
   ).resolves.toBe('ownership-lost');
   expect(state.signaled).toEqual([]);
 });
 
 test('refuses to end its own spawned pid once another process occupies it', async () => {
   state.alive.set(41, true);
-  state.starts.set(41, 'another-process-start');
+  state.starts.set(41, 'posix:2000');
   state.commands.set(41, 'wrapper');
   const killed: string[] = [];
   await expect(
     terminateManagedProcessSet(
-      [{ pid: 41, startTime: 'root-start', command: 'wrapper' }],
+      [{ pid: 41, startTime: 'posix:1000', command: 'wrapper' }],
       recorder(41, killed),
     ),
   ).resolves.toBe('ownership-lost');
@@ -193,8 +193,8 @@ test('ends its own recorder and still reports a marker it could not account for'
   await expect(
     terminateManagedProcessSet(
       [
-        { pid: 41, startTime: 'root-start', command: 'wrapper' },
-        { pid: 42, startTime: 'child-start', command: 'recorder child' },
+        { pid: 41, startTime: 'posix:1000', command: 'wrapper' },
+        { pid: 42, startTime: 'posix:1001', command: 'recorder child' },
       ],
       recorder(41, killed),
     ),
@@ -210,8 +210,8 @@ test('ends its own recorder when a marker the host cannot read has already exite
   await expect(
     terminateManagedProcessSet(
       [
-        { pid: 41, startTime: 'root-start', command: 'wrapper' },
-        { pid: 42, startTime: 'child-start', command: 'recorder child' },
+        { pid: 41, startTime: 'posix:1000', command: 'wrapper' },
+        { pid: 42, startTime: 'posix:1001', command: 'recorder child' },
       ],
       recorder(41, killed),
     ),
@@ -221,8 +221,8 @@ test('ends its own recorder when a marker the host cannot read has already exite
 
 test('ends the persisted markers when the host process table cannot be read', async () => {
   for (const [pid, start, command] of [
-    [41, 'root-start', 'wrapper'],
-    [42, 'child-start', 'recorder child'],
+    [41, 'posix:1000', 'wrapper'],
+    [42, 'posix:1001', 'recorder child'],
   ] as const) {
     state.alive.set(pid, true);
     state.starts.set(pid, start);
@@ -231,8 +231,8 @@ test('ends the persisted markers when the host process table cannot be read', as
   vi.mocked(listHostProcesses).mockRejectedValueOnce(new Error('/bin/ps timed out after 5000ms'));
   await expect(
     terminateManagedProcessSet([
-      { pid: 41, startTime: 'root-start', command: 'wrapper' },
-      { pid: 42, startTime: 'child-start', command: 'recorder child' },
+      { pid: 41, startTime: 'posix:1000', command: 'wrapper' },
+      { pid: 42, startTime: 'posix:1001', command: 'recorder child' },
     ]),
   ).resolves.toBe('terminated');
   expect(state.signaled[0]).toEqual({ pids: [41, 42], signal: 'SIGINT' });

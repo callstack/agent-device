@@ -491,7 +491,11 @@ async function startDaemonRuntimeOnHost(
   let startingUp = true;
   const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
-    identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
+    identity: {
+      pid: daemonIdentity.pid,
+      processStartTime: daemonIdentity.startTime,
+      rawStartTime: daemonIdentity.rawStartTime,
+    },
     sessionStore,
     leaseRegistry,
     inFlightRequestCount: () => inFlightRequests.size,

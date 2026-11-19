@@ -331,6 +331,12 @@ export type DaemonLifecycleFence = Readonly<{
   pid: number;
   /** Null when the daemon could not prove its start time, as its `daemon.json` records. */
   processStartTime: string | null;
+  /**
+   * Daemon-side only: this instance's own legacy raw rendering, never sent on the wire. A fence
+   * equal to it is the check a released client could perform against this record, so it is
+   * accepted beside the canonical token — never as proof for a signal.
+   */
+  rawStartTime?: string | null;
 }>;
 
 /**

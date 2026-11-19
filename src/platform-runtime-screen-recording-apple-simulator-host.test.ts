@@ -7,12 +7,12 @@ import { createAppleScreenRecordingHost } from './platform-runtime-screen-record
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
 
-/** C-form `lstart` token per pid: the verified format, so a differing token proves a different lifetime. */
+/** Provenanced posix: token per pid, so a differing token proves a different lifetime. */
 function startToken(pid: number): string {
-  return `Tue Nov 17 19:${String(40 + (pid % 20)).padStart(2, '0')}:${String(pid % 60).padStart(2, '0')} 2026`;
+  return `posix:${1_700_000 + pid * 1000}`;
 }
-/** A C-form start time naming a different lifetime than any `startToken`. */
-const LATER_LIFETIME = 'Wed Nov 18 08:00:00 2026';
+/** A provenanced token naming a different lifetime than any `startToken`. */
+const LATER_LIFETIME = 'posix:1999999000';
 
 const processes = vi.hoisted(() => ({
   alive: new Map<number, boolean>(),

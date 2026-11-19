@@ -241,7 +241,12 @@ export function createDaemonLifecycleAdmission(params: {
     // cannot be addressed at all.
     if (!fence || fence.pid !== params.identity.pid) return refuse(instanceMismatch());
     if (params.identity.processStartTime === null) return refuse(instanceMismatch());
-    if (fence.processStartTime !== params.identity.processStartTime) {
+    // The canonical token is the positive match; the daemon's own legacy raw rendering is also
+    // accepted because a released client sends exactly what this record's raw field held.
+    if (
+      fence.processStartTime !== params.identity.processStartTime &&
+      fence.processStartTime !== params.identity.rawStartTime
+    ) {
       return refuse(instanceMismatch());
     }
     if (params.ownership() === 'embedded') return refuse(ownerEmbedded());

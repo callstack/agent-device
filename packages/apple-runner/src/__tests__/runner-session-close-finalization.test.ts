@@ -67,7 +67,7 @@ const {
   mockIsProcessGroupAlive: vi.fn(),
   mockPrepareXctestrunWithEnv: vi.fn(),
   mockReadProcessCommand: vi.fn((_pid: number) => null as string | null),
-  mockReadProcessStartTime: vi.fn((_pid: number) => 'fixed-test-owner-start-time' as string | null),
+  mockReadProcessStartTime: vi.fn((_pid: number) => 'posix:1700000000000' as string | null),
   mockResolveExpectedRunnerCacheMetadata: vi.fn(),
   mockResolveRunnerDerivedPath: vi.fn(),
   mockRunAppleToolCommand: vi.fn(),
@@ -79,7 +79,7 @@ const {
   mockWaitForRunner: vi.fn(),
 }));
 
-const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
+const TEST_OWNER_START_TIME = 'posix:1700000000000';
 
 vi.mock('../runner-io.ts', async () => {
   const actual = await vi.importActual<typeof import('../runner-io.ts')>('../runner-io.ts');

@@ -1,5 +1,6 @@
 import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
+  birthTokenOf,
   isProcessAlive,
   ownerIdentityDiffers,
   isProcessPid,
@@ -42,7 +43,11 @@ export function processLockHoldsDaemonIdentity(
 }
 
 /** The raw record's identity. A pid of `null` is a file that names no owner, not owner zero. */
-type ParsedRegistration = { pid: number | null; startTime: string | null };
+type ParsedRegistration = {
+  pid: number | null;
+  startTime: string | null;
+  startTimeToken: string | null;
+};
 
 type DaemonRecord = Readonly<Record<string, unknown>>;
 
@@ -67,7 +72,17 @@ function readDaemonRegistration(infoPath: string): DaemonRegistrationReading {
   return {
     status: 'present',
     record: read.record,
-    identity: parsed.pid === null ? null : { pid: parsed.pid, startTime: parsed.startTime },
+    identity:
+      parsed.pid === null
+        ? null
+        : {
+            pid: parsed.pid,
+            // In-memory reads compare against live canonical process reads, so the provenanced
+            // token wins; the legacy raw rendering stays beside it for released readers.
+            startTime: parsed.startTimeToken ?? parsed.startTime,
+            birthToken: parsed.startTimeToken,
+            rawStartTime: parsed.startTime,
+          },
     ownership: readDaemonOwnership(read.record.ownership),
   };
 }
@@ -75,12 +90,17 @@ function readDaemonRegistration(infoPath: string): DaemonRegistrationReading {
 function parseRegistration(parsed: {
   pid?: unknown;
   processStartTime?: unknown;
+  processStartTimeToken?: unknown;
 }): ParsedRegistration {
   const pid = parsed.pid;
   if (!isProcessPid(pid)) {
-    return { pid: null, startTime: null };
+    return { pid: null, startTime: null, startTimeToken: null };
   }
-  return { pid, startTime: readableStartTime(parsed.processStartTime) };
+  return {
+    pid,
+    startTime: readableStartTime(parsed.processStartTime),
+    startTimeToken: readableStartTime(parsed.processStartTimeToken),
+  };
 }
 
 /**
@@ -247,8 +267,9 @@ export function observedDaemonIdentityOfRegistration(
 export function readStopCleanupOwner(
   record: DaemonStopIdentity,
 ): { pid: number; processStartTime: string } | null {
-  if (record.ownership !== 'detached' || !record.identity?.startTime) return null;
-  return { pid: record.identity.pid, processStartTime: record.identity.startTime };
+  const token = record.identity ? birthTokenOf(record.identity) : null;
+  if (record.ownership !== 'detached' || !token) return null;
+  return { pid: record.identity!.pid, processStartTime: token };
 }
 
 /**

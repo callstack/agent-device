@@ -9,7 +9,7 @@ const exec = vi.hoisted(() => ({ run: vi.fn() }));
 const processIdentity = vi.hoisted(() => ({
   alive: true,
   command: 'adb -s emulator-5554 logcat --pid 123' as string | null,
-  startTime: 'Sun Aug 9 22:00:00 2026' as string | null,
+  startTime: 'posix:1785844800000' as string | null,
 }));
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -54,7 +54,7 @@ afterEach(() => {
   exec.run.mockReset();
   processIdentity.alive = true;
   processIdentity.command = 'adb -s emulator-5554 logcat --pid 123';
-  processIdentity.startTime = 'Sun Aug 9 22:00:00 2026';
+  processIdentity.startTime = 'posix:1785844800000';
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 

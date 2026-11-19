@@ -138,10 +138,22 @@ test('captureHostEnvironment copies the environment and reads the working direct
   assert.equal(source.cwd.mock.calls.length, 1);
 });
 
-// One row per verdict rule: `ours` needs every recorded claim read and matching.
+// One row per verdict rule: `ours` needs every recorded claim read and matching, and a start-time
+// match must be a provenanced token comparison — an unqualified raw value is never a match.
+const POSIX_TOKEN = 'posix:1794944547000';
 test.each([
-  ['both claims read and matching', { startTime: 'S1', matches: true }, ['S1', 'recorded'], 'ours'],
-  ['only a start time recorded, read and matching', { startTime: 'S1' }, ['S1', null], 'ours'],
+  [
+    'both claims read and matching',
+    { startTime: POSIX_TOKEN, matches: true },
+    [POSIX_TOKEN, 'recorded'],
+    'ours',
+  ],
+  [
+    'only a start time recorded, read and matching',
+    { startTime: POSIX_TOKEN },
+    [POSIX_TOKEN, null],
+    'ours',
+  ],
   ['only a command recorded, read and matching', { matches: true }, [null, 'recorded'], 'ours'],
   [
     'a matching command beside an unread start time',
@@ -180,6 +192,12 @@ test.each([
     { matches: true },
     ['S1', 'other'],
     'reassigned',
+  ],
+  [
+    'an identical raw record and read is unknown, never ours',
+    { startTime: 'Tue Nov 17 19:42:27 2026', matches: true },
+    ['Tue Nov 17 19:42:27 2026', 'recorded'],
+    'unverified',
   ],
 ] as const)('judgeProcessIdentity: %s', (_name, recorded, [startTime, command], verdict) => {
   const expected = {

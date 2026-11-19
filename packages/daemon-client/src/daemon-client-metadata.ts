@@ -25,7 +25,15 @@ export type DaemonInfo = {
   version?: string;
   codeOrigin?: DaemonCodeOrigin;
   codeSignature?: string;
+  /**
+   * The process lifetime as this build compares it: the canonical provenanced
+   * `processStartTimeToken` when the record carries one, else the legacy raw rendering a
+   * released build wrote. Live reads canonicalize the same way, so equal values here are a
+   * provenanced match; a raw-only value stays unqualified and proves nothing on its own.
+   */
   processStartTime?: string;
+  /** The canonical provenanced birth token from the record, absent in pre-token records. */
+  processStartTimeToken?: string;
   /** ADR 0029: digest of the daemon policy the daemon enforces; absent when it has none. */
   policyDigest?: string;
   /** Absent from daemons that predate capabilities, which therefore have none. */
@@ -112,6 +120,7 @@ export async function readRegisteredDaemon(
       !processLockHoldsDaemonIdentity(inspection, {
         pid: info.pid,
         startTime: info.processStartTime ?? null,
+        birthToken: info.processStartTimeToken ?? null,
       })
     )
       info = null;
@@ -147,6 +156,7 @@ export function observedDaemonIdentityOf(info: DaemonInfo): ObservedDaemonIdenti
   return {
     pid: info.pid,
     startTime: info.processStartTime ?? null,
+    birthToken: info.processStartTimeToken ?? null,
     ownership: readDaemonOwnership(info.ownership),
   };
 }
@@ -165,7 +175,10 @@ function readDaemonInfoFromRecord(
     version: readOptionalString(parsed.version),
     codeOrigin: readDaemonInfoCodeOrigin(parsed.codeOrigin),
     codeSignature: readOptionalString(parsed.codeSignature),
-    processStartTime: readOptionalString(parsed.processStartTime),
+    processStartTime:
+      readOptionalString(parsed.processStartTimeToken) ??
+      readOptionalString(parsed.processStartTime),
+    processStartTimeToken: readOptionalString(parsed.processStartTimeToken),
     policyDigest: readOptionalString(parsed.policyDigest),
     capabilities: readDaemonCapabilities(parsed.capabilities),
     ownership: readDaemonOwnership(parsed.ownership),

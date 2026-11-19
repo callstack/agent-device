@@ -23,7 +23,11 @@ import {
   readRegisteredDaemonOwnership,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+  staleBirthTokenLike,
+} from '@agent-device/test-kit';
 import {
   launchDaemonProcess,
   spawnLegacyDaemonFixture,
@@ -187,14 +191,8 @@ test.for(['existing', 'missing'])(
 );
 
 // A start time in the same provenanced format as the live owner's but a different value, so the
-// registration proves replacement; a raw legacy rendering would be unverified, not proof.
-const recycledStartTime = ownIdentity.startTime?.startsWith('linux:')
-  ? 'linux:00000000-0000-0000-0000-000000000000:0'
-  : ownIdentity.startTime?.startsWith('posix:')
-    ? 'posix:1'
-    : ownIdentity.startTime !== null && /^\d{21}$/.test(ownIdentity.startTime)
-      ? '00000000000000000000'
-      : 'posix:1';
+// registration proves replacement; a raw legacy rendering would be unknown, not proof.
+const recycledStartTime = staleBirthTokenLike(ownIdentity.startTime);
 
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
@@ -209,7 +207,9 @@ for (const [pid, startTime, reason] of [
     const before = fs.readFileSync(paths.infoPath, 'utf8');
     assert.deepEqual(await owner.finish(), {
       state: reason,
-      ...(reason === 'replaced' ? { identity: { pid, startTime } } : {}),
+      ...(reason === 'replaced'
+        ? { identity: { pid, startTime, birthToken: null, rawStartTime: startTime } }
+        : {}),
     });
     assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), before);
     assert.equal(fs.existsSync(paths.lockPath), false);

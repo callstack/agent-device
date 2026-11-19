@@ -168,6 +168,11 @@ async function cleanupSimulator(
   if (ownership.includes('ownership-lost')) {
     return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
   }
+  // Unknown birth evidence (e.g. a pre-upgrade raw marker) is unresolved, not a proven fence loss:
+  // markers and artifacts stay, and settlement is left to the owner.
+  if (ownership.includes('unprovable')) {
+    return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+  }
   if (ownership.every((value) => value === 'missing')) {
     if (sessionId !== undefined) {
       host.screenRecording.ownedProcesses.clear(sessionScope(sessionId));

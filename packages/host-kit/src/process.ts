@@ -2,10 +2,12 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 export {
   captureHostEnvironment,
+  type BirthTokenComparison,
   type HostEnvironmentSource,
   type ConfirmedProcessStop,
   confirmedProcessStopDetails,
   type ConfirmedProcessStopDetails,
+  compareBirthTokens,
   describeUnconfirmedProcessStop,
   expandProcessTree,
   type GracefulStopSignal,
@@ -28,6 +30,8 @@ export {
   type ProcessStopIdentity,
   type ProcessStopTarget,
   readConfirmedProcessStopDetails,
+  readProcessStartTimeRaw,
+  readProcessStartTimeRawAsync,
   readHostCpuArch,
   readHostCpuArchSync,
   readHostProcessIdentityObservations,
@@ -50,6 +54,7 @@ export {
   readOwnedProcessRecordFile,
 } from './internal/owned-process-record.ts';
 export {
+  birthTokenOf,
   classifyOwnerLiveness,
   classifyOwnerLivenessAsync,
   classifyOwnerLivenessFromObservation,

@@ -38,7 +38,7 @@ const mockSendRunnerCommandOnce = vi.mocked(sendRunnerCommandOnce);
 const mockResolveExpectedRunnerCacheMetadata = vi.mocked(resolveExpectedRunnerCacheMetadata);
 const mockIsProcessAlive = vi.fn((_pid: number) => false);
 const mockReadProcessCommand = vi.fn((_pid: number): string | null => null);
-const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'test-process-start');
+const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'posix:1700000000000');
 
 // A refusal only exists as a diagnostic, so the refusal matrix reads what adoption emitted rather
 // than what it returned.
@@ -141,7 +141,7 @@ beforeEach(() => {
   mockReadProcessCommand.mockReset();
   mockReadProcessCommand.mockReturnValue(null);
   mockReadProcessStartTime.mockReset();
-  mockReadProcessStartTime.mockReturnValue('test-process-start');
+  mockReadProcessStartTime.mockReturnValue('posix:1700000000000');
   delete process.env.AGENT_DEVICE_IOS_RUNNER_DETACH;
 });
 
@@ -316,7 +316,7 @@ test('adoption is skipped for a recycled runner pid (start time mismatch)', asyn
   // The live process on the leased pid started at a different time than the
   // lease recorded — pid recycled since the owner died (#1596). Adopting it
   // would make later disposal signal an innocent process.
-  writeStaleLease({ runnerStartTime: 'runner-original-start' });
+  writeStaleLease({ runnerStartTime: 'posix:1700000000999' });
   mockIsProcessAlive.mockReturnValue(true);
 
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
@@ -551,7 +551,7 @@ test('physical refusal matrix: the leased runner pid is dead', async () => {
 });
 
 test('physical refusal matrix: the leased runner pid was recycled', async () => {
-  writeStaleLeaseFor(physicalCoreDevice, { runnerStartTime: 'runner-original-start' });
+  writeStaleLeaseFor(physicalCoreDevice, { runnerStartTime: 'posix:1700000000999' });
   mockIsProcessAlive.mockReturnValue(true);
 
   expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();

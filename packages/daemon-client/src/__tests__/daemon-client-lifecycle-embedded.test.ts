@@ -182,6 +182,7 @@ test('takeover refuses an embedded registration without a recorded host start ti
   await registerDaemon(paths, { httpPort: 1, ownership: 'embedded' });
   const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
   delete record.processStartTime;
+  delete record.processStartTimeToken;
   fs.writeFileSync(paths.infoPath, JSON.stringify(record));
   const info = metadata.readDaemonInfo(paths.infoPath);
   assert.ok(info);
