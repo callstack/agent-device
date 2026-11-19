@@ -12,7 +12,7 @@ ADR 0019 owns the cutover and substrate transition rules. Completed migration hi
 Apple support shared an engine while presenting asymmetric iOS, tvOS, and macOS models.
 Inferring the OS from the target lost information, and the structure did not model iPadOS, visionOS, or watchOS.
 Distinguishing or adding an Apple OS therefore cost more than its implementation required.
-The XCTest runner builds iOS, macOS, and tvOS from one project.
+The XCTest runner builds iOS, macOS, tvOS, visionOS, and the watchOS simulator from one project.
 
 ## Decision
 
@@ -25,8 +25,11 @@ This design composes with the daemon facet and descriptor `platformExecution` de
 
 Keep macOS as a distinct AppKit leaf with its helper binary and menubar and desktop surface model.
 Do not flatten the tvOS focus-only interaction contract, which has no coordinate `tap`, across OSes.
-Keep watchOS as an unsupported sentinel: the Apple interactor, gesture admission, and supported-deployment check reject it, and discovery never produces it.
-XCUITest cannot drive watchOS UI.
+Support watchOS simulators through the shared XCUITest runner.
+The runner's host app and UI-test targets build for the watchOS simulator SDK. A SwiftUI host replaces the UIKit host there.
+The watchOS leaf (`os/watchos/facts.ts`) admits only operations with a watch meaning and refuses every other operation.
+The Digital Crown is `scroll` (rotation) and `home` (press). One-finger swipe and pan are admitted. Multi-touch is refused.
+Physical watches are out of scope: a watch reaches the Mac only through its paired iPhone.
 
 The public wire continues to emit `ios` and `macos` leaves through `PUBLIC_PLATFORMS`.
 Internal family ownership must not leak into that compatibility projection.
@@ -36,6 +39,7 @@ Internal family ownership must not leak into that compatibility projection.
 - One `Platform` literal per Apple OS: `DeviceTarget` already spans platforms, and Android TV uses `target: 'tv'`, so a `tvos` literal would conflict with the form-factor axis.
   Every Apple branch site would need to enumerate six literals, and the single-bucket `apple` capability and selector model would break.
 - Keep the existing structure: it retains asymmetric and mislabeled support and lossy OS inference without a path to iPadOS or visionOS.
+- A separate watchOS runner project or a watchOS plugin: both would fork the runner sources and the Apple engine. The watch differences are a few `os(watchOS)` guards and one fact leaf.
 - Exclude macOS: it shares the XCUITest project, and its code already lived in the shared Apple engine, so exclusion would keep the incorrect label.
   A distinct AppKit leaf normalizes macOS without making it the same as the other OSes.
 
@@ -47,6 +51,10 @@ Snapshot fidelity is uneven, and the deep-RN AX-server fallback is iOS-simulator
 visionOS discovery and simulator deployment are supported.
 App deployment is also admitted for CoreDevice-backed physical devices; XCTest-backed physical deployment is unsupported.
 Push remains simulator-only.
-As of 2026-08, no public-command coverage is claimed for visionOS or watchOS.
-This record states the boundary without a command-coverage manifest for either leaf.
+As of 2026-08, no public-command coverage is claimed for visionOS.
+This record states the boundary without a command-coverage manifest for that leaf.
+The watchOS command boundary is the leaf's admission set; its evidence is in #4735 and #4738.
+
+Decision history: until 2026-11 this record kept watchOS as an unsupported sentinel because "XCUITest cannot drive watchOS UI".
+Spike #4735 showed that the watchOS simulator SDK ships XCUIAutomation and that the existing runner builds and runs there.
 Net-new visionOS spatial-input QA remains deferred.
