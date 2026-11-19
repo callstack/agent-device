@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+import type {
+  MaterializeAppSourceInput,
+  MaterializedAppSource,
+} from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -264,6 +268,64 @@ test.each([
     expect(materializeAndroid).toHaveBeenCalledTimes(runtimeDevice.platform === 'android' ? 1 : 0);
   },
 );
+
+test('materialization forwards the daemon-derived cutoff to the executor, and the binding scope signal without one', async () => {
+  // #4441: the daemon derives the URL materialization cutoff (earliest registered request
+  // deadline less the deploy-ledger reserve) and passes it through the input. Dropping it here
+  // would let a hosted download run to the full request deadline and starve the deploy ledger.
+  const prepareArtifact = vi.fn(
+    async (
+      _input: MaterializeAppSourceInput,
+      _options: Readonly<{ signal: AbortSignal }>,
+    ): Promise<MaterializedAppSource> => ({
+      installablePath: '/tmp/app.apk',
+      cleanup: async () => {},
+    }),
+  );
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: {
+      ...host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      androidDeployment: {
+        prepareArtifact,
+      } as unknown as PlatformRuntimeHost['androidDeployment'],
+    },
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities(),
+    deployment: {
+      fact: () => ({ available: true }),
+      deployApp: async () => ({ launchTarget: 'provider-installed' }),
+      deployMaterializedApp: async () => ({ launchTarget: 'provider-materialized' }),
+    },
+  });
+  const controller = new AbortController();
+  const binding = await owner.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: controller.signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  const cutoff = new AbortController().signal;
+  const input: MaterializeAppSourceInput = {
+    source: { kind: 'url', url: 'https://apps.test/app.apk' },
+    signal: cutoff,
+  };
+  await binding.operations.materializeAppSource?.(input);
+  expect(prepareArtifact.mock.lastCall?.[0]).toBe(input);
+  // Signals compared by identity: two distinct AbortSignals deep-equal each other.
+  expect(prepareArtifact.mock.lastCall?.[1]?.signal).toBe(cutoff);
+
+  const withoutCutoff: MaterializeAppSourceInput = {
+    source: { kind: 'path', path: '/tmp/app.apk' },
+  };
+  await binding.operations.materializeAppSource?.(withoutCutoff);
+  expect(prepareArtifact.mock.lastCall?.[0]).toBe(withoutCutoff);
+  expect(prepareArtifact.mock.lastCall?.[1]?.signal).toBe(controller.signal);
+});
 
 test('captures through only the active exact WebDriver interactor', async () => {
   const snapshot = vi.fn(async () => ({ backend: 'android' as const, nodes: [] }));

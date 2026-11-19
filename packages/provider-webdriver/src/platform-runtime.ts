@@ -713,7 +713,10 @@ async function materializeWebDriverSource(
   input: MaterializeAppSourceInput,
   signal: AbortSignal,
 ): Promise<MaterializedAppSource> {
+  // The input's signal is the daemon-derived materialization cutoff (#4441); without one, the
+  // binding's request scope signal applies, as in the platform deployment bindings.
+  const materializationSignal = input.signal ?? signal;
   return device.platform === 'apple'
-    ? await host.appleDeployment.prepareArtifact(input, { signal })
-    : await host.androidDeployment.prepareArtifact(input, { signal });
+    ? await host.appleDeployment.prepareArtifact(input, { signal: materializationSignal })
+    : await host.androidDeployment.prepareArtifact(input, { signal: materializationSignal });
 }

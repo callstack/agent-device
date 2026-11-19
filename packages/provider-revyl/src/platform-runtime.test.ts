@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOwner,
@@ -11,7 +11,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import type { MaterializedAppSource } from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  MaterializeAppSourceInput,
+  MaterializedAppSource,
+} from '@agent-device/contracts/app-deployment-runtime';
 import { createRevylPlatformRuntimeOwner } from './platform-runtime.ts';
 import type { RevylDeploymentSession } from './deployment.ts';
 import type { RevylClient } from './revyl-client.ts';
@@ -49,11 +52,11 @@ function owner(options: {
   });
 }
 
-async function bind(owner: PlatformRuntimeOwner, device = IOS_DEVICE) {
+async function bind(owner: PlatformRuntimeOwner, device = IOS_DEVICE, scopeSignal?: AbortSignal) {
   return await owner.bind({
     device,
     intent: { kind: 'exact-owner', owner: OWNER },
-    scope: { signal: new AbortController().signal },
+    scope: { signal: scopeSignal ?? new AbortController().signal },
   } as never);
 }
 
@@ -195,6 +198,69 @@ test('a live session installs a build through its deployment operations', async 
   );
   assert.deepEqual(installs, ['https://storage.test/get', 'https://storage.test/get']);
 });
+
+/**
+ * #4441: the daemon derives the URL materialization cutoff (earliest registered request deadline
+ * less the deploy-ledger reserve) and passes it through the input. A provider binding that drops
+ * it lets a download run to the full request deadline and starve the deploy ledger.
+ */
+test.each([
+  ['ios', 'appleDeployment'],
+  ['android', 'androidDeployment'],
+] as const)(
+  'a live %s session forwards the daemon-derived cutoff to the executor, and the binding scope signal without one',
+  async (platform, executorKey) => {
+    const device: DeviceInfo =
+      platform === 'ios'
+        ? IOS_DEVICE
+        : {
+            platform: 'android',
+            id: 'revyl:android:lease-1',
+            name: 'Revyl android run-1',
+            kind: 'emulator',
+            target: 'mobile',
+            booted: true,
+          };
+    const prepareArtifact = vi.fn(
+      async (
+        _input: MaterializeAppSourceInput,
+        _options: Readonly<{ signal: AbortSignal }>,
+      ): Promise<MaterializedAppSource> => ({
+        installablePath: '/tmp/build.zip',
+        cleanup: async () => {},
+      }),
+    );
+    const scope = new AbortController();
+    const binding = await bind(
+      owner({
+        hasLiveSession: true,
+        host: {
+          ...HOST,
+          [executorKey]: { prepareArtifact },
+        } as unknown as PlatformRuntimeHost,
+      }),
+      device,
+      scope.signal,
+    );
+
+    const cutoff = new AbortController().signal;
+    const input: MaterializeAppSourceInput = {
+      source: { kind: 'url', url: 'https://apps.test/build.zip' },
+      signal: cutoff,
+    };
+    await binding.operations.materializeAppSource!(input);
+    // Signals are compared by identity: two distinct AbortSignals deep-equal each other.
+    assert.equal(prepareArtifact.mock.lastCall?.[0], input);
+    assert.equal(prepareArtifact.mock.lastCall?.[1]?.signal, cutoff);
+
+    const withoutCutoff: MaterializeAppSourceInput = {
+      source: { kind: 'url', url: 'https://apps.test/build.zip' },
+    };
+    await binding.operations.materializeAppSource!(withoutCutoff);
+    assert.equal(prepareArtifact.mock.lastCall?.[0], withoutCutoff);
+    assert.equal(prepareArtifact.mock.lastCall?.[1]?.signal, scope.signal);
+  },
+);
 
 test('a deployment operation whose session ended refuses rather than installing', async () => {
   const binding = await bind(owner({ hasLiveSession: true }));

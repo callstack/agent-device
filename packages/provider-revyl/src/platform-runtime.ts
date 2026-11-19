@@ -169,10 +169,18 @@ function bindRevylDeployment(
       }
       return await deployRevylApp(session(), input.appPath, env(), signal);
     },
-    materializeAppSource: async (input) =>
-      device.platform === 'apple'
-        ? await options.host.appleDeployment.prepareArtifact(input, { signal })
-        : await options.host.androidDeployment.prepareArtifact(input, { signal }),
+    // The input's signal is the daemon-derived materialization cutoff (#4441); without one, the
+    // binding's request scope signal applies, as in the platform deployment bindings.
+    materializeAppSource: async (input) => {
+      const materializationSignal = input.signal ?? signal;
+      return device.platform === 'apple'
+        ? await options.host.appleDeployment.prepareArtifact(input, {
+            signal: materializationSignal,
+          })
+        : await options.host.androidDeployment.prepareArtifact(input, {
+            signal: materializationSignal,
+          });
+    },
     // What Revyl reports wins; the materializer's reading fills in what it leaves out.
     deployMaterializedApp: async ({ artifact }) => ({
       ...materializedIdentity(artifact),
