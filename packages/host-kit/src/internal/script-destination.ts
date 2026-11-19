@@ -1,7 +1,11 @@
 import fs from 'node:fs';
-import { identityOf, lstatEntry } from './file-identity.ts';
 import path from 'node:path';
-import { publishFileSync, type AtomicPublishMode } from './atomic-publish.ts';
+import {
+  identityOf,
+  lstatEntry,
+  publishFileSync,
+  type AtomicPublishMode,
+} from './atomic-publish.ts';
 import {
   entryNameOrRefuse,
   requireWindowsScriptVolume,
