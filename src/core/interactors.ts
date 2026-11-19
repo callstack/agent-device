@@ -42,7 +42,7 @@ export async function getLocalInteractor(
   // Byte-identical replacement for the former per-platform switch: each plugin's
   // `createInteractor` is the SAME lazy dynamic import + factory call the switch
   // arm performed, and `getPlugin` throws the SAME `UNSUPPORTED_PLATFORM` AppError
-  // the switch default threw. Registry exhaustiveness (BuiltinPluginsCoverAllPlatforms)
-  // guarantees every leaf `Platform` resolves.
+  // the switch default threw. Registry exhaustiveness (BuiltinPluginsCoverRequiredPlatforms)
+  // guarantees every required family resolves; optional families may be absent (ADR 0034).
   return await getPlugin(device.platform).createInteractor(device, runnerContext, host);
 }

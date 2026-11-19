@@ -126,10 +126,14 @@ function createLocalDeviceInventoryGateway(
 
       const perFamily = await Promise.all(
         LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS.map(async (selector) => {
+          const family = familyForSelector(selector);
+          // An absent optional family (ADR 0034) is skipped silently: enumeration never
+          // asks a module that is not registered.
+          if (!registry.has(family)) return [];
           try {
             const devices = await discoverFamily(
               loadSource,
-              familyForSelector(selector),
+              family,
               { ...request, platform: selector },
               scope,
             );

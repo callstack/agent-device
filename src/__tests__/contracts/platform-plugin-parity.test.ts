@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PLATFORMS, type Platform } from '@agent-device/kernel/device';
+import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   getPlugin,
@@ -35,6 +36,17 @@ test('registeredPlatforms() equals the canonical PLATFORMS tuple, in order', () 
   // in the same order. (Left as a parity assertion — PLATFORMS stays the
   // hand-authored source of truth; nothing is derived FROM the registry yet.)
   assert.deepEqual(registeredPlatforms(), [...PLATFORMS]);
+});
+
+test('every required family is covered by a builtin plugin; optional families may be absent', () => {
+  // Completeness (ADR 0034) is enforced for the required families only: apple and android must
+  // always resolve. All six builtins stay registered today, so registeredPlatforms() still
+  // equals PLATFORMS above; once an optional family moves to a `platform` plugin its row
+  // disappears here without breaking this guarantee.
+  for (const family of REQUIRED_PLATFORMS) {
+    assert.ok(registeredPlatforms().includes(family), `required family ${family} is registered`);
+    assert.ok(getPlugin(family).platforms.includes(family));
+  }
 });
 
 test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-list', () => {

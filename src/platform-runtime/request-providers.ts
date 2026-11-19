@@ -13,6 +13,10 @@ import type { WebProvider } from '@agent-device/platform-web';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
 import type { VegaToolProvider } from '@agent-device/platform-vega';
+import {
+  isOptionalPlatform,
+  missingOptionalPlatformModuleError,
+} from '@agent-device/contracts/platform-module';
 import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
@@ -330,7 +334,15 @@ function platformGatedResolverApplies(
   device: DeviceInfo,
 ): boolean {
   // The registry is intentionally loaded by the root composition, not by the daemon request path.
-  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
+  const plugin = tryGetPlugin(device.platform);
+  if (!plugin) {
+    // An explicitly requested optional family with no registered module is a missing plugin
+    // (ADR 0034), reported before any device binding.
+    if (isOptionalPlatform(device.platform))
+      throw missingOptionalPlatformModuleError(device.platform);
+    return false;
+  }
+  return plugin.providers?.platformGatedResolvers.includes(key) ?? false;
 }
 
 registerBuiltinPlatformPlugins();

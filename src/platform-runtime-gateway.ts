@@ -22,6 +22,10 @@ import {
 } from '@agent-device/contracts/platform-runtime-unavailable';
 import { runStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import {
+  isOptionalPlatform,
+  missingOptionalPlatformModuleError,
+} from '@agent-device/contracts/platform-module';
+import {
   deviceIdentity,
   deviceShape,
   sameDeviceIdentity,
@@ -117,7 +121,12 @@ export function createComposedPlatformRuntimeGateway(options: {
     const existing = localLoads.get(family);
     if (existing) return await existing;
     const module = options.modules.get(family);
-    if (!module) throw runtimeContractError(`Missing platform runtime module for ${family}`);
+    if (!module) {
+      // An explicitly requested optional family with no registered runtime module is a missing
+      // plugin (ADR 0034), reported before any host load or device binding.
+      if (isOptionalPlatform(family)) throw missingOptionalPlatformModuleError(family);
+      throw runtimeContractError(`Missing platform runtime module for ${family}`);
+    }
     if (module.family !== family) {
       throw runtimeContractError(
         `Platform runtime module registered for ${family} declares ${module.family}`,

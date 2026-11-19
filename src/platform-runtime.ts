@@ -85,6 +85,10 @@ const shutdownLoaders = Object.freeze({
     await loadAndroidShutdownRuntime(dependencies),
 });
 
+// All six families stay registered in the packed core today. The registry now completeness-
+// checks only the required families (apple, android); an optional family (ADR 0034) may be
+// absent from a composition, and every lookup then reports plugin-not-installed with its
+// install hint instead of a contract error.
 export function createPlatformModuleRegistryForHost(
   env: Readonly<Record<string, string | undefined>>,
 ) {
@@ -126,7 +130,9 @@ const androidRuntimeModule = createAndroidRuntimeModule({
   },
 });
 
-/** The root composition registry the platform runtime gateway reads. */
+/** The root composition registry the platform runtime gateway reads. All six families are
+ * registered today; an optional family absent from a composition fails lookups with the typed
+ * `plugin-not-installed` outcome before any device binding (see platform-runtime-gateway.ts). */
 const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
   Platform,
   PlatformRuntimeModule

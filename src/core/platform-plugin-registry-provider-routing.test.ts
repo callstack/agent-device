@@ -2,6 +2,7 @@ import type {
   PlatformGatedProviderResolverKey,
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
+import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -159,5 +160,17 @@ test('root provider composition invokes exactly the resolvers the former gate di
     for (const key of UNGATED_KEYS) {
       assert.ok(invoked.has(key), `ungated resolver ${key} must run for ${device.id}`);
     }
+  }
+});
+
+test('every required family is registered at the provider gate; optional families may be absent', () => {
+  // Completeness is enforced for the required families (ADR 0034): each resolves to a builtin
+  // plugin that owns it. The optional families stay registered today as well, so this run
+  // exercises the full gate; their absence path is covered by
+  // platform-plugin-registry-optional-family.test.ts.
+  for (const family of REQUIRED_PLATFORMS) {
+    const plugin = getPlugin(family);
+    assert.ok(plugin.platforms.includes(family), `${family} plugin owns ${family}`);
+    assert.equal(tryGetPlugin(family) !== undefined, true);
   }
 });
