@@ -35,6 +35,7 @@ Platform quirks:
   tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
   Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
   Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
+  Drag-to-reorder and drop targets: agent-device gesture drag @e12 @e40 moves one element onto another. It holds the source down first (800 ms by default; override with the positional sourceHoldMs), then moves (500 ms default) and releases at the destination. Swipe and fling never pause on the start point, so they do not engage a reorder handle. Endpoints are @refs or selectors, resolved before dispatch.
   On mobile, after scroll, swipe, or gesture swipe, the next read waits for two captures to agree; web and desktop targets do not wait. A caller whose own polling verifies the screen adds --no-post-gesture-stabilization to skip that wait; a directional scroll then also skips its movement check.
 
 macOS:

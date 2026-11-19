@@ -73,7 +73,8 @@ const interactionCommandDescriptions = {
     'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. The durationMs input overrides the default hold duration.',
   hover:
     'Move the pointer over a UI target by snapshot ref, selector, or coordinates without pressing, to reveal hover-gated UI such as row toolbars or menus. Web only; touch platforms have no hover state. The settle option returns the UI diff revealed by the hover.',
-  swipe: 'Quick coordinate fling with optional repeat pattern.',
+  swipe:
+    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
   type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
@@ -83,7 +84,7 @@ const interactionCommandDescriptions = {
   is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. This command checks the current condition without polling.',
   find: 'Find by text/label/value/role/id and run action; the action defaults to click. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window. The focus and type actions aim at a text field: the match or the field holding it, even beside other fields, or else the one enabled on-screen field inside the match. Several enabled on-screen fields inside the match refuse with AMBIGUOUS_MATCH and the field candidates, and a disabled target refuses with reason target_disabled. Web text boxes are not recognized as text fields.',
   gesture:
-    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition.',
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
