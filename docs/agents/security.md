@@ -11,11 +11,6 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers stage and commit inside the judged directory.
 Remote script delivery caps bytes as they arrive.
-ADR 0016's state-record amendment judges the daemon's state route and every state write, read and open (#4649).
-Where that judgment is refused, the record is refused and the daemon carries on.
-
-Stale-record cleanup (`clearStaleDaemonRecords`, the dead-pid marker sweep) removes names inside the state directory and does not take the judged-entry path.
-That is the intended boundary: an unlink costs one name and follows nothing, so cleanup cannot write through a planted entry, and it writes no bytes.
 
 ## Proposed in #4669
 
