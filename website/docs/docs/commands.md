@@ -356,7 +356,7 @@ agent-device back --session watch
 agent-device close --session watch --shutdown
 ```
 
-- Simulators only. A physical Apple Watch is refused with `reason: unsupported-device-kind`. The host needs the watchOS simulator runtime: `xcodebuild -downloadPlatform watchOS`.
+- Simulators only. Device discovery does not list a physical Apple Watch. The host needs the watchOS simulator runtime: `xcodebuild -downloadPlatform watchOS`.
 - `scroll up|down` turns the Digital Crown. The amount is a fraction of the screen height, so `scroll down 1` moves about one screen. The crown also moves pickers and steppers that have crown focus. `scroll left|right` is refused; swipe instead.
 - `swipe` and `gesture swipe|pan|fling` send one-finger touches to the session app: horizontal and vertical pages, row swipe actions, and pan in custom views. `gesture swipe right-edge` (from the left edge toward the right) goes back.
 - Commands act on the session app and bring it back to the foreground first. The watch face and its overlays, such as Notification Center and the Smart Stack, are not reachable.

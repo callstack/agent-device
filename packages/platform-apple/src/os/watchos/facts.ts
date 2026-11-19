@@ -72,8 +72,8 @@ function watchOsRefusal(operation: string): RuntimeOperationFact {
 
 /**
  * Applies the watchOS admission set to an Apple leaf's computed facts. An admitted operation, and a
- * refused one its own module already refuses, keep the module's fact and hint. A physical watch is
- * refused everywhere.
+ * refused one its own module already refuses, keep the module's fact and hint. Discovery never lists
+ * a physical watch; one that reaches here anyway is refused everywhere.
  */
 export function applyWatchOsOperationFacts<T extends Record<string, RuntimeOperationFact>>(
   device: DeviceInfo,
