@@ -1,11 +1,28 @@
 import { createHash } from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 
 export type LimrunPlatform = 'ios' | 'android';
 
 export const LIMRUN_PROVIDER = 'limrun';
+
+/**
+ * What a Limrun lease is, as the host must treat it: an instance the provider holds and selects,
+ * reached from the local daemon through its own tunnel, with the app chosen after `connect`.
+ */
+export const LIMRUN_CONNECTION_CAPABILITIES: ConnectionProviderCapabilities = {
+  leaseKind: 'direct-device-provider',
+  requiresAppAttachment: false,
+  requiresRemoteDaemon: false,
+  supportsArtifacts: false,
+  supportsDeferredAppSelection: true,
+  supportsDirectPortReverse: true,
+  usesCloudWebDriverLease: false,
+  holdsCloudDevice: true,
+  forgetsEndedConnectionLease: true,
+};
 
 /**
  * Limrun reads the app to preinstall and the network capture settings; it picks the instance
