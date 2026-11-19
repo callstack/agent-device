@@ -5,6 +5,7 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 ## Prepare
 
 1. Run `pnpm build`, then verify only with its `node bin/agent-device.mjs`.
+   Use a host binding, such as T3 Code `device_open`, only to view the device.
 2. For Android source verification, run `pnpm build:android`.
 3. For Swift runner changes, run `pnpm build:xcuitest`.
    A graceful shutdown can hand off an active runner. A new daemon can adopt the old binary.
@@ -25,7 +26,7 @@ Retry policy belongs in `runner-error-classification.ts`. Command typing belongs
 Keep the transport below session and client behavior. Keep xctestrun preparation outside request execution.
 After signing, run `node -e 0` before you measure Gatekeeper-sensitive startup.
 Before you measure on a physical iOS device, set Auto-Lock to Never.
-A failed command can look like a fast success. Before you record the time of a command, examine its exit status and output.
+A failed command can look like a fast success. Before you record its time, check its exit status and output.
 
 ## Ownership and cleanup
 
@@ -60,4 +61,4 @@ HarmonyOS has no provisioned CI device or HDC. Mocked tests do not replace local
 Before you run a live smoke harness, read it. Its environment contract is in its entry file under `test/integration/`.
 
 If a sandbox rejects localhost with `listen EPERM`, use host access, if permitted.
-First, examine the underlying error. A generic startup or cleanup failure does not prove a sandbox cause.
+A generic startup or cleanup failure does not prove a sandbox cause.
