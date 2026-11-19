@@ -7,7 +7,8 @@ The screen-recording amendment in ADR 0024 is accepted; its rollout (ADR 0024 se
 
 ## Rules at a glance
 
-- Each family owns one private platform package; composition uses cheap metadata and lazy gateways.
+- Each family owns one platform package; composition uses cheap metadata and lazy gateways.
+  Managed optional families may use public plugin packages under ADR 0034.
 - Package direction is `kernel < contracts < host-kit < capture-kit < provision-kit < platform/provider/daemon`.
 - `RequestExecutionScope.bindDevice(device, use)` checks owner facts and exposes only declared operations.
 - Provider ownership is exact and fail-closed; an owning provider never falls back to local behavior.
@@ -25,7 +26,9 @@ The decision preserves daemon request policy, provider-first scenarios, Apple le
 
 ### 1. Platform modules provide behavior through one composition seam
 
-Each canonical family has one private platform package with cheap metadata and lazy inventory and runtime gateways.
+Each canonical family has one platform package with cheap metadata and lazy inventory and runtime gateways.
+ADR 0034 amends the private-package rule for managed optional platform families.
+Those families may use public plugin packages.
 The family owns its mechanics, native tools, helper protocols, facts, parsers, recovery, and family tests.
 It owns no daemon orchestration, command policy, or cross-family defaults.
 Root composition constructs immutable inventory and provider-first runtime registries.
