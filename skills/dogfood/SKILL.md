@@ -22,7 +22,7 @@ Read current CLI guidance:
 agent-device help dogfood
 ```
 
-Loop: open app -> snapshot -i + screenshot -> explore flows -> capture evidence per issue -> close (`close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running).
+Loop: open app -> snapshot -i + screenshot -> explore flows -> capture evidence per issue -> close (plain close also stops a local simulator or emulator your open booted unless daemon policy denies `device-shutdown`; inspect warnings for a local device kept running). If an Android emulator reports a later boot, plain close leaves it running and warns.
 
 On the first screen, and after a screen changes meaningfully, run `agent-device audit` when the target supports snapshots. Report its findings as accessibility findings.
 

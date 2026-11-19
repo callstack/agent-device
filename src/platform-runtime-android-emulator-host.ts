@@ -1,4 +1,5 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
+import { observeAndroidEmulatorGeneration } from '@agent-device/platform-android/device-boot';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -84,6 +85,21 @@ export function createAndroidEmulatorHost(
       });
       if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
+    },
+    bindLaunchedEmulator: async (pid, device) => {
+      const record = launched.get(pid);
+      if (!record) return undefined;
+      try {
+        const startTime = await record.startTime;
+        if (!startTime) return undefined;
+        const first = await observeAndroidEmulatorGeneration(device);
+        if (first?.pid !== pid || first.startTime !== startTime) return undefined;
+        const second = await observeAndroidEmulatorGeneration(device);
+        if (second?.pid !== pid || second.startTime !== startTime) return undefined;
+        return { pid, startTime };
+      } catch {
+        return undefined;
+      }
     },
     terminate,
   });

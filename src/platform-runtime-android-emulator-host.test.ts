@@ -1,4 +1,10 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+
+const { observeAndroidEmulatorGeneration } = vi.hoisted(() => ({
+  observeAndroidEmulatorGeneration: vi.fn(),
+}));
+vi.mock('@agent-device/platform-android/device-boot', () => ({ observeAndroidEmulatorGeneration }));
 
 const { runCmd, runCmdDetached, runCmdDetachedMonitored, emitDiagnostic } = vi.hoisted(() => ({
   runCmd: vi.fn(async (_cmd: string, args: readonly string[]) => ({
@@ -38,11 +44,43 @@ vi.mock('@agent-device/host-kit/process', () => ({
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
 
 beforeEach(() => {
+  observeAndroidEmulatorGeneration.mockReset();
   runCmd.mockClear();
   runCmdDetached.mockClear();
   runCmdDetachedMonitored.mockClear();
   emitDiagnostic.mockClear();
   stopProcessAndConfirmExit.mockClear();
+});
+
+const emulator: DeviceInfo = {
+  platform: 'android',
+  kind: 'emulator',
+  id: 'emulator-5558',
+  name: 'Pixel_9',
+};
+const launchIdentity = { pid: 4242, startTime: 'Mon Nov  9 10:00:00 2026' };
+
+test('binds the launched process only when both serial observations match its recorded identity', async () => {
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+  observeAndroidEmulatorGeneration.mockResolvedValue(launchIdentity);
+  await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toEqual(launchIdentity);
+  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledTimes(2);
+  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledWith(emulator);
+});
+
+test('does not bind an unrelated listener, reused pid, or unavailable observation', async () => {
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+  observeAndroidEmulatorGeneration.mockResolvedValueOnce({ ...launchIdentity, pid: 4243 });
+  await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
+  observeAndroidEmulatorGeneration
+    .mockResolvedValueOnce(launchIdentity)
+    .mockResolvedValueOnce({ ...launchIdentity, startTime: 'new' });
+  await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
+  observeAndroidEmulatorGeneration.mockResolvedValueOnce(undefined);
+  await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
+  await expect(host.bindLaunchedEmulator!(4243, emulator)).resolves.toBeUndefined();
 });
 
 test('a windowed macOS launch hands focus back to the app frontmost before launch', async () => {

@@ -93,9 +93,19 @@ export function bindAndroidApplicationLifecycle(
       });
       const shutdown =
         input.shutdownTarget && device.kind === 'emulator'
-          ? await host.deviceShutdown.android.shutdownTarget(device, signal)
+          ? input.verifyAndroidShutdown
+            ? await host.deviceShutdown.android.shutdownTarget(
+                device,
+                signal,
+                input.verifyAndroidShutdown,
+              )
+            : await host.deviceShutdown.android.shutdownTarget(device, signal)
           : undefined;
-      return shutdown === undefined ? {} : { shutdown };
+      return shutdown === undefined
+        ? {}
+        : 'retained' in shutdown
+          ? { androidShutdownRetained: shutdown.retained }
+          : { shutdown };
     },
     prepareAppleRunner: unavailable,
     configureProviderPortReverse: unavailable,

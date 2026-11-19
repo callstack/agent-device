@@ -1,6 +1,7 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
+import type { DeviceShutdownGenerationService } from '@agent-device/contracts/device-boot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
@@ -44,6 +45,7 @@ import {
   type CloseRuntimeWithRuntimeHintClear,
   type RuntimeHintClearOperation,
 } from './session-close-runtime-admission.ts';
+import { appendResponseWarning } from './session-open-warnings.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -62,6 +64,7 @@ export type SessionCloseCommandInput = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup?: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
 }>;
 
 function toRepairPlatformCloseFailure(error: unknown): AppError {
@@ -355,6 +358,8 @@ export async function handleSessionCloseCommands(
       clearRuntimeHints: admission.clearRuntimeHints,
       repairArmed: repair.repairArmed,
       platformResourceCleanup,
+      observeDeviceBoot: params.platformServices.deviceBootObservation,
+      deviceShutdownDenied: params.deviceShutdownDenied,
     }),
   );
   if (closed.kind === 'response') return closed.response;
@@ -364,6 +369,10 @@ export async function handleSessionCloseCommands(
     requestedSaveScript: Boolean(req.flags?.saveScript),
     shutdownResult: closed.shutdownResult,
     providerData: closed.providerData,
+    implicitShutdownDeniedByPolicy: closed.implicitShutdownDeniedByPolicy,
+    implicitShutdownClaimLost: closed.implicitShutdownClaimLost,
+    implicitShutdownDeviceRebooted: closed.implicitShutdownDeviceRebooted,
+    implicitShutdownGenerationUnobserved: closed.implicitShutdownGenerationUnobserved,
   });
   return remoteCloseScriptDelivery(response, closed.remoteScript);
 }
@@ -393,6 +402,12 @@ type SessionCloseFinalization =
       shutdownResult?: TargetShutdownResult;
       /** What close delivers for a remote recording, taken from the close-time write (ADR 0016). */
       remoteScript?: RemoteCloseScript;
+      /** #4162: the policy denied the stop this close owed its own boot, so the device kept running. */
+      implicitShutdownDeniedByPolicy: boolean;
+      implicitShutdownClaimLost: boolean;
+      /** #4585: the device has been rebooted outside this session since its open, so close left it running. */
+      implicitShutdownDeviceRebooted: boolean;
+      implicitShutdownGenerationUnobserved: boolean;
     };
 
 // Everything between a settled repair decision and a success response:
@@ -413,6 +428,9 @@ async function runCloseTeardownAndRelease(params: {
   clearRuntimeHints?: RuntimeHintClearOperation;
   repairArmed: boolean;
   platformResourceCleanup: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
+  /** Boot observation for the implicit stop's #4585 check, forwarded to the teardown. */
+  observeDeviceBoot: DeviceShutdownGenerationService;
 }): Promise<SessionCloseFinalization> {
   const {
     req,
@@ -432,7 +450,12 @@ async function runCloseTeardownAndRelease(params: {
     saveScriptOutcome,
     shutdownPrepared,
     shutdownResult,
+    implicitShutdownDeniedByPolicy,
+    implicitShutdownClaimLost,
+    implicitShutdownDeviceRebooted,
+    implicitShutdownGenerationUnobserved,
   } = await runSessionCloseTeardown({
+    env: params.env,
     leaseRegistry,
     req,
     ref,
@@ -445,6 +468,8 @@ async function runCloseTeardownAndRelease(params: {
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
     platformResourceCleanup: params.platformResourceCleanup,
+    deviceShutdownDenied: params.deviceShutdownDenied,
+    observeDeviceBoot: params.observeDeviceBoot,
   });
   let session = sessionStore.requireCurrent(ref);
   // Each cleanup report is built where the session's fate is decided, so its diagnostic and hint
@@ -491,6 +516,10 @@ async function runCloseTeardownAndRelease(params: {
     providerData: leaseRelease.providerData,
     shutdownResult: leaseRelease.shutdownResult ?? shutdownResult,
     remoteScript: saveScriptOutcome.remote,
+    implicitShutdownDeniedByPolicy,
+    implicitShutdownClaimLost,
+    implicitShutdownDeviceRebooted,
+    implicitShutdownGenerationUnobserved,
   };
 }
 
@@ -500,8 +529,22 @@ function buildCloseSuccessResponse(params: {
   requestedSaveScript: boolean;
   shutdownResult: TargetShutdownResult | undefined;
   providerData: Record<string, unknown> | undefined;
+  implicitShutdownDeniedByPolicy: boolean;
+  implicitShutdownClaimLost: boolean;
+  implicitShutdownDeviceRebooted: boolean;
+  implicitShutdownGenerationUnobserved: boolean;
 }): DaemonResponse {
-  const { session, repair, requestedSaveScript, shutdownResult, providerData } = params;
+  const {
+    session,
+    repair,
+    requestedSaveScript,
+    shutdownResult,
+    providerData,
+    implicitShutdownDeniedByPolicy,
+    implicitShutdownClaimLost,
+    implicitShutdownDeviceRebooted,
+    implicitShutdownGenerationUnobserved,
+  } = params;
   if (repair.aborted && requestedSaveScript) {
     return {
       ok: false,
@@ -519,19 +562,42 @@ function buildCloseSuccessResponse(params: {
   const savedScript = repair.healedScriptPath ? { savedScript: repair.healedScriptPath } : {};
   const provider = providerData ? { provider: providerData } : {};
   const text = `Closed: ${session.name}`;
-  if (shutdownResult) {
-    return {
-      ok: true,
-      data: withSuccessText(
+  const data: Record<string, unknown> = shutdownResult
+    ? withSuccessText(
         { session: session.name, shutdown: shutdownResult, ...savedScript, ...provider },
         text,
-      ),
-    };
+      )
+    : { session: session.name, ...successText(text), ...savedScript, ...provider };
+  // #4162: the close owed this device a stop because its own open booted it, but the daemon's
+  // policy denies `device-shutdown`. The close still succeeded; say plainly what stayed up.
+  if (implicitShutdownDeniedByPolicy) {
+    appendResponseWarning(
+      data,
+      "This session's open booted this device and close would stop it, but this daemon's policy denies device-shutdown. The device is still running.",
+    );
   }
-  return {
-    ok: true,
-    data: { session: session.name, ...successText(text), ...savedScript, ...provider },
-  };
+  if (implicitShutdownClaimLost) {
+    appendResponseWarning(
+      data,
+      "This session's open booted this device, but close could not verify its device claim and did not request a stop.",
+    );
+  }
+  // #4585: the stop this session owed was a stop owed to the boot its own open caused. The device
+  // has since been through a boot this session never described, so stopping it now would stop
+  // someone else's device. Say which device close left running, and why.
+  if (implicitShutdownDeviceRebooted) {
+    appendResponseWarning(
+      data,
+      "This session's open booted this device, but its emulator process has changed, so close did not request a stop. The device is still running.",
+    );
+  }
+  if (implicitShutdownGenerationUnobserved) {
+    appendResponseWarning(
+      data,
+      "This session's open booted this device, but close could not verify its emulator process identity, so it did not request a stop and left the device as it found it.",
+    );
+  }
+  return { ok: true, data };
 }
 
 async function closeAppWithoutEndingSession(params: {

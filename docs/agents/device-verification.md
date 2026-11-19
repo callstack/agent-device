@@ -29,9 +29,11 @@ A failed command can look like a fast success. Before you record the time of a c
 
 ## Ownership and cleanup
 
-Use one session for each purpose. For more isolation, use a separate `--state-dir` under `/private/tmp`.
-Close each session that you opened manually, including failed attempts, with its original session, platform, UDID, and state directory.
-If your session booted a local simulator or emulator, add `--shutdown`, unless the user asks to keep it running.
+Use one session per purpose. For isolation, set `--state-dir` under `/private/tmp`.
+Close every session you opened, even after failure. Reuse its session, platform, UDID, and state directory.
+Use plain `close` for a local device your `open` booted.
+If policy denies `device-shutdown`, read the warning.
+Keep prebooted devices running unless the user requests shutdown.
 
 For `DEVICE_IN_USE`:
 
