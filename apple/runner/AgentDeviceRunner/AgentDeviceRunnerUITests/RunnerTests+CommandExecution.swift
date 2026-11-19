@@ -607,7 +607,9 @@ extension RunnerTests {
       }
       if command.command == .keyboardDismiss {
         guard !status.visible else {
-          return Response(ok: false, error: keyboardDismissRefusal())
+          return Response(ok: false, error: keyboardDismissRefusal(
+            returnKey: status.returnKey.flatMap(RunnerKeyboardReturnKey.init(rawValue:))
+          ))
         }
         return Response(ok: true, data: DataPayload(
           message: "keyboardDismiss", visible: false, wasVisible: false, dismissed: false
