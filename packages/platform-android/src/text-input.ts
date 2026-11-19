@@ -316,7 +316,11 @@ async function fillAndroidImeHelper(
   }
   const adb = resolveAndroidAdbExecutor(device);
   let dispatchedSteps = 0;
+  // Text chunks of the current attempt that the helper acked as committed. The clear is not one of
+  // them: its ack says nothing about where this attempt's text can go.
+  let ackedTextChunks = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
+    ackedTextChunks = 0;
     try {
       await clearAndroidImeHelperTextCommitted(adb, packageName);
     } catch (error) {
@@ -336,6 +340,7 @@ async function fillAndroidImeHelper(
       for (const piece of chunkAndroidImeHelperText(text)) {
         await sendAndroidImeHelperTextCommitted(adb, packageName, piece);
         dispatchedSteps += 1;
+        ackedTextChunks += 1;
       }
     }
     return await verifyAndroidFilledText(device, x, y, text, helper);
@@ -345,9 +350,13 @@ async function fillAndroidImeHelper(
     try {
       first = await attemptFill();
     } catch (error) {
+      // The rebind below is the recovery for a dispatch the editor never took, so it covers both
+      // rejection kinds even when the clear ahead of them committed: `dispatchedSteps` counts that
+      // clear and must not gate the recovery. Text the helper already acked as committed ends the
+      // fill instead, and a rejection thrown by the retried attempt escapes unwrapped: one retry.
       const canRetry =
         isImeDispatchRejection(error, 'commit-returned-false') ||
-        (dispatchedSteps === 0 && isImeDispatchRejection(error, 'no-input-connection'));
+        (ackedTextChunks === 0 && isImeDispatchRejection(error, 'no-input-connection'));
       if (!canRetry) {
         throw error;
       }
