@@ -14,11 +14,6 @@ export type RequiredPlatform = (typeof REQUIRED_PLATFORMS)[number];
 export const OPTIONAL_PLATFORMS = ['harmonyos', 'vega', 'linux', 'web'] as const;
 export type OptionalPlatform = (typeof OPTIONAL_PLATFORMS)[number];
 
-/** Whether the family must always be registered (completeness is enforced for it). */
-export function isRequiredPlatform(value: Platform): value is RequiredPlatform {
-  return (REQUIRED_PLATFORMS as readonly unknown[]).includes(value);
-}
-
 /** Whether the family may be absent, moved out into a `platform` plugin (ADR 0034). */
 export function isOptionalPlatform(value: Platform): value is OptionalPlatform {
   return (OPTIONAL_PLATFORMS as readonly unknown[]).includes(value);

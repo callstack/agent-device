@@ -14,7 +14,6 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   isOptionalPlatform,
-  isRequiredPlatform,
   OPTIONAL_PLATFORMS,
   REQUIRED_PLATFORMS,
 } from '@agent-device/contracts/platform-module';
@@ -96,7 +95,7 @@ test('the required/optional partition owner covers every canonical PLATFORMS fam
   const partition = [...REQUIRED_PLATFORMS, ...OPTIONAL_PLATFORMS];
   assert.deepEqual(partition, [...PLATFORMS]);
   for (const platform of PLATFORMS) {
-    assert.notEqual(isRequiredPlatform(platform), isOptionalPlatform(platform));
+    assert.notEqual(REQUIRED_PLATFORMS.includes(platform as never), isOptionalPlatform(platform));
   }
 });
 

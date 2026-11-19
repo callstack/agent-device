@@ -6,7 +6,6 @@ import {
   createPlatformModuleRegistry,
   getOptionalPlatformPluginDeclaration,
   isOptionalPlatform,
-  isRequiredPlatform,
   missingOptionalPlatformModuleError,
   optionalPlatformPluginInstallCommand,
   OPTIONAL_PLATFORMS,
@@ -62,10 +61,9 @@ test('required and optional families partition the canonical PLATFORMS exactly',
   assert.deepEqual([...OPTIONAL_PLATFORMS], ['harmonyos', 'vega', 'linux', 'web']);
   assert.deepEqual([...REQUIRED_PLATFORMS, ...OPTIONAL_PLATFORMS], [...PLATFORMS]);
   for (const platform of PLATFORMS) {
-    assert.equal(isRequiredPlatform(platform), REQUIRED_PLATFORMS.includes(platform as never));
     assert.equal(isOptionalPlatform(platform), OPTIONAL_PLATFORMS.includes(platform as never));
     // Every family is classified as exactly one of required or optional.
-    assert.notEqual(isRequiredPlatform(platform), isOptionalPlatform(platform));
+    assert.notEqual(REQUIRED_PLATFORMS.includes(platform as never), isOptionalPlatform(platform));
   }
 });
 
