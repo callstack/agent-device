@@ -434,6 +434,48 @@ extension RunnerTests {
         XCUIDevice.shared.perform(handGesture: .flick)
       case "crown-press":
         XCUIDevice.shared.press(.home)
+      case "crown-double":
+        XCUIDevice.shared.press(.home)
+        XCUIDevice.shared.press(.home)
+      case "xc-swipe-up": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.swipeUp() }
+      case "xc-swipe-down": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.swipeDown() }
+      case "xc-swipe-left": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.swipeLeft() }
+      case "xc-swipe-right": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.swipeRight() }
+      case "pinch-out": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.pinch(withScale: 2.0, velocity: 1.0) }
+      case "pinch-in": withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) { activeApp.windows.firstMatch.pinch(withScale: 0.5, velocity: -1.0) }
+      case "xc-drag":
+        // Public API with velocity: XCUICoordinate press-then-drag.
+        withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
+          let origin = activeApp.windows.firstMatch.coordinate(withNormalizedOffset: .zero)
+          let from = origin.withOffset(CGVector(dx: command.x ?? 0, dy: command.y ?? 0))
+          let to = origin.withOffset(CGVector(dx: command.x2 ?? 0, dy: command.y2 ?? 0))
+          from.press(forDuration: 0.01, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0)
+        }
+      case "synth1", "synth2":
+        let x1 = command.x ?? 0, y1 = command.y ?? 0, x2 = command.x2 ?? 0, y2 = command.y2 ?? 0
+        let duration = command.durationMs ?? 200
+        let fingers = command.remoteButton == "synth2" ? [-25.0, 25.0] : [0.0]
+        let steps = 10
+        let samples: [[[String: NSNumber]]] = fingers.map { dx in
+          (0...steps).map { i in
+            let t = Double(i) / Double(steps)
+            return [
+              "x": NSNumber(value: x1 + (x2 - x1) * t + dx),
+              "y": NSNumber(value: y1 + (y2 - y1) * t),
+              "offsetMs": NSNumber(value: duration * t),
+            ]
+          }
+        }
+        let error = RunnerSynthesizedGesture.synthesizeGesture(
+          withApplication: activeApp,
+          resolvedWindow: activeApp.windows.firstMatch,
+          interfaceOrientation: 1,
+          pointerSamples: samples,
+          dispatched: nil
+        )
+        if let error {
+          return Response(ok: false, error: ErrorPayload(message: "synth failed: \(error)"))
+        }
       default:
         return Response(ok: false, error: ErrorPayload(message: "unknown watch control"))
       }

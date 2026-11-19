@@ -100,3 +100,38 @@ agent-device has no Simlock code (ADR 0021). A leased simulator reaches agent-de
 That path works for a watch: in a private set, discovery, boot, `xcodebuild test-without-building -DVTSimulatorSetLocation`, open, snapshot, and screenshot all work (cold snapshot 7.3 s).
 `agent-device proxy` forwards daemon requests and has no Apple OS branch. It needs no change. It was not exercised in this spike.
 Whether Simlock itself provisions watch device types is a Simlock question.
+
+## Gesture research (swipes, pan, system surfaces)
+
+Apple's guidance:
+- [Use buttons and gestures](https://support.apple.com/en-gb/guide/watch/apd1d9d7efca/watchos): tap, touch and hold, swipe (one finger up, down, left, right), drag. Crown: press (watch face or Home Screen), double-click (App Switcher), press and hold (Siri), turn (scroll, zoom, adjust; on the face it opens the Smart Stack). Side button: press (Control Center), double-click (Apple Pay), hold (SOS and power). Action button on Ultra. Hand gestures: double tap, wrist flick. Cover to mute.
+- [Zoom](https://support.apple.com/en-mt/guide/watch/apd95f904443/watchos): the two-finger pan and two-finger double tap belong to the Zoom accessibility feature only.
+- [Notifications](https://support.apple.com/en-am/guide/watch/apde978ebff5/watchos): swipe down from the face opens Notification Center.
+- watchOS 27 SDK: SwiftUI `DragGesture`, `TapGesture`, `SpatialTapGesture`, `LongPressGesture`, and `SpatialEventGesture` (watchOS 11+) exist. `MagnifyGesture`, `MagnificationGesture`, `RotateGesture`, and `RotationGesture` are `@available(watchOS, unavailable)`. Apps cannot use pinch or rotate.
+
+Fixture: the host app has a navigation push (edge-swipe back), list rows with leading and trailing swipe actions, horizontal and vertical page `TabView`s, and a drag pad that prints its translation.
+Dispatch routes compared: the runner's `drag` (public `XCUICoordinate` press-then-drag), the private synthesizer (`RunnerSynthesizedGesture.synthesizeGesture`, which needs the resolved app window), and `XCUIElement.swipeUp/Down/Left/Right`.
+
+| Gesture | drag | synthesizer | XCUIElement swipe | Crown |
+| --- | --- | --- | --- | --- |
+| Back: swipe right from the left edge (x≈1) | Works | Works | No (starts at center) | n/a |
+| Swipe right from mid-screen | No back (correct) | No back (correct) | No | n/a |
+| Row trailing action (swipe left) | Shows Delete; tap deletes | n/a | n/a | n/a |
+| Row leading action (swipe right) | n/a | Shows Pin | n/a | n/a |
+| Horizontal pages | Works | Works | Works | Does not page |
+| Left-edge swipe on horizontal pages | Goes back, not to the previous page | | | |
+| Vertical pages | Works (up) | Works (down) | Up works; down did not | Pages coarsely: 0.5 turn did nothing, 1.0 moved one or two pages |
+| Pan in a custom view (`DragGesture`) | Exact translation (120,10) | Exact translation (-100,5) | n/a | n/a |
+| Two-finger pan (synthesizer, two pointers) | n/a | Not registered | n/a | n/a |
+| Notification Center: swipe down from top edge on the face | Works ("No Notifications" in the tree) | | | |
+| Smart Stack: swipe up from bottom edge on the face | Works; the tree is empty (gap) | | | 1.0 turn works; 0.3 does not |
+| Swipe left or right on the face | No face change (off by default) | | | |
+| Touch and hold on the face | Face editing ("Customizable", Edit) | | | |
+| App Switcher: crown double-click | Two `press(.home)` calls are too slow; they open the Home Screen. No double-press API. | | | |
+| Control Center: side button | No `XCUIDeviceButton` for the side button | | | |
+| Hand double tap → `handGestureShortcut(.primaryAction)` | Dispatched, no effect in the simulator | | | |
+
+Other findings:
+- `home` (crown press) toggles: from an app or overlay it goes to the face, and from the face it opens the Home Screen grid. The grid is readable in the `com.apple.Carousel` tree with app labels and frames.
+- `XCUIElement` swipes and the velocity form of press-then-drag wait for the app to idle first and stalled the main thread for 30 s+. Inside `withBoundedInteractionIdleTimeoutIfSupported` they work. The runner's `drag` already does this.
+- The first tap after a crown scroll was swallowed once. Settle after crown rotation.
