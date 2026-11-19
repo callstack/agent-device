@@ -3,6 +3,19 @@ import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/devi
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeadlineClock } from '@agent-device/host-kit/retry';
 
+/** Why one observation of the emulator console listener produced no identity. */
+export type AndroidEmulatorGenerationMiss =
+  | 'no-listener'
+  | 'ambiguous-listener'
+  | 'zombie-listener'
+  | 'listener-read-timeout'
+  | 'process-read-timeout'
+  | 'deadline-spent';
+
+export type AndroidEmulatorGenerationReading =
+  | Readonly<{ identity: AndroidEmulatorLaunchIdentity }>
+  | Readonly<{ miss: AndroidEmulatorGenerationMiss }>;
+
 /**
  * Observe the process listening on the ADB emulator console port without contacting it. A caller
  * that observes more than once passes one deadline, so all reads share one bounded budget.
@@ -11,29 +24,58 @@ export async function observeAndroidEmulatorGeneration(
   device: DeviceInfo,
   options: { deadline?: DeadlineClock } = {},
 ): Promise<AndroidEmulatorLaunchIdentity | undefined> {
-  if (device.platform !== 'android' || device.kind !== 'emulator') return undefined;
+  const reading = await inspectAndroidEmulatorGeneration(device, options);
+  return 'identity' in reading ? reading.identity : undefined;
+}
+
+/** {@link observeAndroidEmulatorGeneration} with the reason a read produced no identity. */
+export async function inspectAndroidEmulatorGeneration(
+  device: DeviceInfo,
+  options: { deadline?: DeadlineClock } = {},
+): Promise<AndroidEmulatorGenerationReading> {
+  if (device.platform !== 'android' || device.kind !== 'emulator') return { miss: 'no-listener' };
   const match = /^emulator-(\d+)$/.exec(device.id);
   const port = Number(match?.[1]);
-  if (!match || !Number.isInteger(port) || port < 1 || port > 65535) return undefined;
+  if (!match || !Number.isInteger(port) || port < 1 || port > 65535) return { miss: 'no-listener' };
+  let last: AndroidEmulatorGenerationMiss = 'deadline-spent';
   for (let attempt = 1; attempt <= LISTENER_PROBE_ATTEMPTS; attempt += 1) {
     const budgetMs = Math.min(
       LISTENER_PROBE_TIMEOUT_MS,
       options.deadline?.remainingMs() ?? LISTENER_PROBE_TIMEOUT_MS,
     );
-    if (budgetMs <= 0) return undefined;
+    if (budgetMs <= 0) return { miss: last };
     const reading = await readConsoleListener(port, budgetMs);
-    if (reading.kind === 'identity') return reading.identity;
-    if (reading.kind === 'absent') return undefined;
+    if (reading.kind === 'identity') return { identity: reading.identity };
+    if (reading.kind === 'absent') return { miss: reading.miss };
+    last = reading.miss;
   }
-  return undefined;
+  return { miss: last };
+}
+
+/**
+ * Read the start time of an emulator process this host just launched. It uses the same budget and
+ * retry as the console listener read, so a slow `ps` under load still records the launch identity.
+ */
+export async function readAndroidEmulatorLaunchStartTime(pid: number): Promise<string | null> {
+  const { readProcessIdentityFacts } = await import('@agent-device/host-kit/process');
+  for (let attempt = 1; attempt <= LISTENER_PROBE_ATTEMPTS; attempt += 1) {
+    try {
+      const facts = await readProcessIdentityFacts(pid, LISTENER_PROBE_TIMEOUT_MS);
+      if (facts.startTime) return facts.startTime;
+      if (facts.zombie === true) return null;
+    } catch {
+      // A timed-out read is retried; the second miss leaves no start time.
+    }
+  }
+  return null;
 }
 
 type ConsoleListenerReading =
   | { kind: 'identity'; identity: AndroidEmulatorLaunchIdentity }
-  /** The host answered: no single process listens on the port. A retry cannot change it. */
-  | { kind: 'absent' }
+  /** The host answered: no single live process listens on the port. A retry cannot change it. */
+  | { kind: 'absent'; miss: 'no-listener' | 'ambiguous-listener' | 'zombie-listener' }
   /** The host did not answer in time or a read failed. A retry can still observe the listener. */
-  | { kind: 'unread' };
+  | { kind: 'unread'; miss: 'listener-read-timeout' | 'process-read-timeout' };
 
 /**
  * `lsof -t` prints only process ids, one per line, and exits 1 with no output when nothing listens.
@@ -45,10 +87,12 @@ async function readConsoleListener(
   port: number,
   budgetMs: number,
 ): Promise<ConsoleListenerReading> {
+  const { hostPlatform, readProcessIdentityFacts } = await import('@agent-device/host-kit/process');
+  if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') {
+    return { kind: 'absent', miss: 'no-listener' };
+  }
+  let stdout: string;
   try {
-    const { hostPlatform, readProcessIdentityFacts } =
-      await import('@agent-device/host-kit/process');
-    if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') return { kind: 'absent' };
     const { runCmd } = await import('@agent-device/host-kit/command');
     const nonBlocking = hostPlatform() === 'darwin' ? ['-b', '-w'] : [];
     const result = await runCmd(
@@ -56,15 +100,22 @@ async function readConsoleListener(
       [...nonBlocking, '-t', '-nP', `-iTCP:${port}`, '-sTCP:LISTEN'],
       { allowFailure: true, timeoutMs: budgetMs },
     );
-    if (result.exitCode !== 0) return { kind: 'absent' };
-    const pid = soleListenerPid(result.stdout);
-    if (pid === undefined) return { kind: 'absent' };
+    if (result.exitCode !== 0) return { kind: 'absent', miss: 'no-listener' };
+    stdout = result.stdout;
+  } catch {
+    return { kind: 'unread', miss: 'listener-read-timeout' };
+  }
+  const pid = soleListenerPid(stdout);
+  if (pid === undefined) return { kind: 'absent', miss: 'ambiguous-listener' };
+  try {
     const facts = await readProcessIdentityFacts(pid, budgetMs);
-    if (facts.zombie === true) return { kind: 'absent' };
-    if (!facts.startTime || facts.zombie !== false) return { kind: 'unread' };
+    if (facts.zombie === true) return { kind: 'absent', miss: 'zombie-listener' };
+    if (!facts.startTime || facts.zombie !== false) {
+      return { kind: 'unread', miss: 'process-read-timeout' };
+    }
     return { kind: 'identity', identity: { pid, startTime: facts.startTime } };
   } catch {
-    return { kind: 'unread' };
+    return { kind: 'unread', miss: 'process-read-timeout' };
   }
 }
 

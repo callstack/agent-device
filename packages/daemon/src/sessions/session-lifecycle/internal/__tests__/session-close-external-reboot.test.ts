@@ -501,7 +501,9 @@ test('missing launch identity does not acquire ownership from a later observatio
   const closed = await runs.run({ name: 'close' });
   expect(closed.finalizeAsks[0]?.shutdownTarget).toBe(false);
   expect(runs.generationAsks()).toBe(0);
-  expect(closeWarningMessages(closed.response!)).toHaveLength(1);
+  expect(closeWarningMessages(closed.response!)).toEqual([
+    "This session's open booted this device, but open recorded no emulator process identity, so close did not request a stop and left the device as it found it.",
+  ]);
 });
 
 test('changing the device serial clears launch ownership', async () => {

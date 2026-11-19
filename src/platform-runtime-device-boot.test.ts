@@ -11,13 +11,17 @@ const mocks = vi.hoisted(() => ({
     reason: 'unobserved',
   })),
   ANDROID_EMULATOR_GENERATION_BUDGET_MS: 10_000,
-  observeAndroidEmulatorGeneration: vi.fn(
-    async (): Promise<{ pid: number; startTime: string } | undefined> => undefined,
+  inspectAndroidEmulatorGeneration: vi.fn(
+    async (): Promise<{ identity: { pid: number; startTime: string } } | { miss: string }> => ({
+      miss: 'no-listener',
+    }),
   ),
+  emitDiagnostic: vi.fn(),
 }));
 
 vi.mock('@agent-device/platform-apple/simulator-boot', () => mocks);
 vi.mock('@agent-device/platform-android/device-boot', () => mocks);
+vi.mock('@agent-device/host-kit/diagnostics', () => ({ emitDiagnostic: mocks.emitDiagnostic }));
 
 import {
   ANDROID_EMULATOR,
@@ -36,22 +40,24 @@ beforeEach(() => {
 
 test('generation is reported only when two serial observations agree', async () => {
   const identity = { pid: 42, startTime: 'start' };
-  mocks.observeAndroidEmulatorGeneration.mockResolvedValue(identity);
+  mocks.inspectAndroidEmulatorGeneration.mockResolvedValue({ identity });
   expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
     'same',
   );
   // The two agreeing reads share one deadline, so a slow host cannot double the budget.
-  const calls = mocks.observeAndroidEmulatorGeneration.mock.calls as unknown as Array<
+  const calls = mocks.inspectAndroidEmulatorGeneration.mock.calls as unknown as Array<
     [unknown, { deadline: unknown }]
   >;
   expect(calls[1]?.[1].deadline).toBe(calls[0]?.[1].deadline);
-  mocks.observeAndroidEmulatorGeneration
-    .mockResolvedValueOnce(identity)
-    .mockResolvedValueOnce({ ...identity, startTime: 'replacement' });
+  mocks.inspectAndroidEmulatorGeneration
+    .mockResolvedValueOnce({ identity })
+    .mockResolvedValueOnce({ identity: { ...identity, startTime: 'replacement' } });
   expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
     'unobserved',
   );
-  mocks.observeAndroidEmulatorGeneration.mockResolvedValue({ pid: 43, startTime: 'replacement' });
+  mocks.inspectAndroidEmulatorGeneration.mockResolvedValue({
+    identity: { pid: 43, startTime: 'replacement' },
+  });
   expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
     'changed',
   );
@@ -67,6 +73,22 @@ test('generation is reported only when two serial observations agree', async () 
   expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, undefined)).toBe(
     'unobserved',
   );
+});
+
+test('an unverified close names the step and the read that missed', async () => {
+  const identity = { pid: 42, startTime: 'start' };
+  mocks.inspectAndroidEmulatorGeneration
+    .mockResolvedValueOnce({ identity })
+    .mockResolvedValueOnce({ miss: 'process-read-timeout' });
+  expect(await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, identity)).toBe(
+    'unobserved',
+  );
+  await deviceBootObservation.assessShutdownGeneration(ANDROID_EMULATOR, undefined);
+  const causes = mocks.emitDiagnostic.mock.calls
+    .map(([event]) => event as { phase: string; data: { step: string; cause: string } })
+    .filter((event) => event.phase === 'android_launch_identity_unobserved')
+    .map((event) => `${event.data.step}:${event.data.cause}`);
+  expect(causes).toEqual(['assess:second-process-read-timeout', 'assess:unbound-at-open']);
 });
 
 test('an iOS Simulator is answered by the Apple probe alone', async () => {
