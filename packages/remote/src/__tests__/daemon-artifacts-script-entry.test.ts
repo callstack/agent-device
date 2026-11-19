@@ -587,7 +587,7 @@ test.each(CONTROL_CHARACTER_DESTINATIONS)(
       artifacts: [script('v1', 1, id)],
     });
 
-    // The response keeps the exact path; the CLI output boundary escapes control characters when it renders it.
+    // The response keeps the exact path in savedScript and in the warning; only the hint uses the placeholder.
     expect(closed).toMatchObject({
       ok: true,
       data: {
