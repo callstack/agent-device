@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   revylLease,
   startRevylFixtureBackend,
@@ -59,6 +60,10 @@ test('a lease start still fails on a worker-connection answer that is not a serv
         initialApp: 'https://apps.test/app.apk',
         flags: { device: 'Pixel 7' },
       }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNAUTHORIZED' &&
+      error.details?.providerStatus === 403,
   );
   assert.deepEqual(
     fixture.paths().filter((path) => path === CONNECTION),

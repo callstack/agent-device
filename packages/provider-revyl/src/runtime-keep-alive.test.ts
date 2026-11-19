@@ -44,6 +44,24 @@ test('a held session reads appearance on each keep-alive beat, and its release s
   assert.equal(fixture.paths().filter((path) => path === KEEP_ALIVE).length, 2);
 });
 
+test('a keep-alive read that finds the session gone stops the beat', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const fixture = await startRevylFixtureBackend({
+    respond: { [KEEP_ALIVE]: { status: 404, body: { detail: 'Session not found' } } },
+  });
+  openBackends.push(fixture);
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('android');
+  await runtime.leaseLifecycle?.allocate?.(lease);
+
+  vi.advanceTimersByTime(REVYL_KEEP_ALIVE_INTERVAL_MS);
+  await keepAlivesReach(fixture, 1);
+  await vi.waitFor(() => assert.equal(vi.getTimerCount(), 0));
+  vi.advanceTimersByTime(REVYL_KEEP_ALIVE_INTERVAL_MS * 3);
+  assert.equal(fixture.paths().filter((path) => path === KEEP_ALIVE).length, 1);
+  await runtime.leaseLifecycle?.release?.(lease);
+});
+
 test('a failed keep-alive read leaves the session held and the next beat reads again', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   const fixture = await startRevylFixtureBackend({

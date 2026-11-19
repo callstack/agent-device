@@ -5,6 +5,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, type RevylPlatform } from './device.ts';
 import {
   REVYL_START_DEVICE_TIMEOUT_MS,
+  isRevylSessionGone,
   revylFailureRefusedTheRequest,
   type RevylClient,
 } from './revyl-client.ts';
@@ -487,7 +488,8 @@ async function sleepBefore(deadline: RevylDeadline, signal?: AbortSignal): Promi
  * Refreshes a held session's idle clock on a timer, with a read that changes nothing on the device:
  * the worker counts a state read as device use and `health` as not. A failed refresh is not reported,
  * since the next one or any command refreshes the clock again; only a holder gone for the whole idle
- * timeout loses the device. The timer never keeps the process alive.
+ * timeout loses the device. A session Revyl reports gone stops the timer, since no later read can
+ * refresh it. The timer never keeps the process alive.
  */
 export function keepRevylSessionAlive(client: RevylClient, runId: string): () => void {
   let refreshing = false;
@@ -496,7 +498,9 @@ export function keepRevylSessionAlive(client: RevylClient, runId: string): () =>
     refreshing = true;
     void client
       .workerAction(runId, 'appearance')
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        if (isRevylSessionGone(error)) clearInterval(timer);
+      })
       .finally(() => {
         refreshing = false;
       });
