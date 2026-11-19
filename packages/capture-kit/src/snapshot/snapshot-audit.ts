@@ -57,13 +57,15 @@ type AuditFacts = {
 };
 
 type AuditScan = AuditFacts & {
-  /**
-   * Name groups that two or more evaluated controls of one role share on this screen, counted from
-   * the whole screen before any pass runs. A group joins role and lowercased name with NUL, because
-   * a name is any text.
-   */
+  /** Each control the audit judges, keyed by node index, resolved once per audit. */
+  evaluated: ReadonlyMap<number, EvaluatedControl>;
+  /** Name groups that two or more logical controls share on this screen. */
   sharedNames: ReadonlyMap<string, number>;
 };
+
+type EvaluatedControl = { role: string; ownership: ControlOwnership; name: string | undefined };
+
+/** A group joins role and lowercased name with NUL, because a name is any text. */
 
 function nameGroupKey(role: string, name: string): string {
   return `${role}\0${name.toLowerCase()}`;
@@ -80,14 +82,16 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
   };
+  const evaluated = new Map(
+    nodes.flatMap((node) => {
+      const control = evaluateControl(node, facts);
+      return control === undefined ? [] : [[node.index, control] as const];
+    }),
+  );
   const scan: AuditScan = {
     ...facts,
-    sharedNames: countSharedNames(
-      nodes.flatMap((node) => {
-        const role = controlRole(node);
-        return role === undefined ? [] : [evaluatedNameGroup(node, role, facts)];
-      }),
-    ),
+    evaluated,
+    sharedNames: countSharedNames(nodes, evaluated, facts),
   };
   const rule = resolveSizeRule(context);
   const findings = nodes.flatMap((node) => auditNode(node, scan, rule));
@@ -99,27 +103,26 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
   };
 }
 
-/**
- * The name group an evaluated control joins, or none when the audit does not judge it or it has no
- * accessible name.
- */
-function evaluatedNameGroup(
-  node: SnapshotNode,
-  role: string,
-  facts: AuditFacts,
-): string | undefined {
-  if (node.ref === undefined || !isActionable(node, controlOwnership(node, facts)))
-    return undefined;
-  // One control exposed twice counts once: the wrapper speaks for it.
-  if (isDuplicateExposure(node, role, facts)) return undefined;
-  const name = accessibleName(node, role, facts);
-  return name === undefined ? undefined : nameGroupKey(role, name);
+/** A control the app owns and the user can see, or none when the audit does not judge the node. */
+function evaluateControl(node: SnapshotNode, facts: AuditFacts): EvaluatedControl | undefined {
+  const role = controlRole(node);
+  if (role === undefined || node.ref === undefined) return undefined;
+  const ownership = controlOwnership(node, facts);
+  if (!isActionable(node, ownership)) return undefined;
+  return { role, ownership, name: accessibleName(node, role, facts) };
 }
 
-function countSharedNames(groups: readonly (string | undefined)[]): ReadonlyMap<string, number> {
+/** Counts logical controls per name group: one control exposed twice counts once. */
+function countSharedNames(
+  nodes: readonly SnapshotNode[],
+  evaluated: ReadonlyMap<number, EvaluatedControl>,
+  facts: AuditFacts,
+): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
-  for (const group of groups) {
-    if (group === undefined) continue;
+  for (const node of nodes) {
+    const control = evaluated.get(node.index);
+    if (control?.name === undefined || isDuplicateExposure(node, control.role, facts)) continue;
+    const group = nameGroupKey(control.role, control.name);
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
   return new Map([...counts].filter(([, count]) => count > 1));
@@ -148,13 +151,13 @@ function controlFindings(
   scan: AuditScan,
   rule: SizeRule,
 ): AuditFinding[] {
-  const ownership = controlOwnership(node, scan);
-  if (node.ref === undefined || !isActionable(node, ownership)) return [];
+  const control = scan.evaluated.get(node.index);
+  if (control === undefined) return [];
   const small =
-    ownership === 'platform-sized' || isInlineLink(node, role, scan)
+    control.ownership === 'platform-sized' || isInlineLink(node, role, scan)
       ? undefined
       : smallTargetFinding(node, role, rule);
-  const name = accessibleName(node, role, scan);
+  const name = control.name;
   const unnamed = name === undefined ? missingNameFinding(node, role) : undefined;
   const shared = ambiguousNameFinding(node, role, name, scan);
   return [small, unnamed, shared].filter((finding) => finding !== undefined);

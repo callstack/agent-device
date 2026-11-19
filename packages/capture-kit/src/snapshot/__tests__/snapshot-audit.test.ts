@@ -254,14 +254,27 @@ describe('ambiguous-name', () => {
     expect(summarize(findings)).toEqual([]);
   });
 
-  test('reports each wrapper once when two wrapped controls share one name', () => {
+  test('counts three wrapped Save buttons as three controls', () => {
     const { findings } = audit([
       node(1, { label: 'Save' }),
       node(2, { parentIndex: 1, label: 'Save' }),
       node(3, { label: 'Save' }),
       node(4, { parentIndex: 3, label: 'Save' }),
+      node(5, { label: 'Save' }),
+      node(6, { parentIndex: 5, label: 'Save' }),
     ]);
-    expect(summarize(findings)).toEqual(['ambiguous-name @e1', 'ambiguous-name @e3']);
+    expect(summarize(findings)).toEqual([
+      'ambiguous-name @e1',
+      'ambiguous-name @e3',
+      'ambiguous-name @e5',
+    ]);
+    expect(
+      findings.map((finding) => (finding.kind === 'ambiguous-name' ? finding.detail : undefined)),
+    ).toEqual([
+      { name: 'Save', count: 3 },
+      { name: 'Save', count: 3 },
+      { name: 'Save', count: 3 },
+    ]);
   });
 
   test('guides the caller to a unique label naming the target', () => {

@@ -77,6 +77,26 @@ test('renders an ambiguous-name line with the shared label and the count', () =>
   );
 });
 
+test('names an ambiguous control that takes its name from a child or content description', () => {
+  const output = auditCliOutput({
+    findings: [
+      {
+        kind: 'ambiguous-name',
+        severity: 'warning',
+        ref: '@e7',
+        role: 'button',
+        detail: { name: 'Add to cart', count: 2 },
+      },
+    ],
+    guidance: {},
+    checks: CHECKS,
+    limitations: [],
+  });
+  expect(output.text).toContain(
+    '@e7  ambiguous-name  button "Add to cart"  Name shared by 2 controls of this role',
+  );
+});
+
 test('prints plain refs when the result carries no generation to pin them to', () => {
   const output = auditCliOutput({
     findings: [{ kind: 'missing-name', severity: 'warning', ref: '@e9', role: 'button' }],

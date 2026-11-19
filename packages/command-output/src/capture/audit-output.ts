@@ -74,7 +74,12 @@ function sizeText({ width, height, unit, recommendedSize }: AuditSizeDetail): st
 }
 
 function elementText(finding: AuditFinding): string {
-  const name = finding.kind === 'missing-name' ? undefined : finding.label;
+  // A control named by its content description, text or a child has no label of its own; the
+  // shared name is still what a reader needs to find it.
+  const name =
+    finding.kind === 'missing-name'
+      ? undefined
+      : (finding.label ?? (finding.kind === 'ambiguous-name' ? finding.detail.name : undefined));
   const identity = name
     ? JSON.stringify(name)
     : finding.identifier
