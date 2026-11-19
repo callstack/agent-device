@@ -89,9 +89,9 @@ import {
   type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  recordDaemonStartupMarker,
-  removeDaemonStartupPhasesFile,
-  resolveDaemonStartupPhasesPath,
+  closeDaemonStartupProgressChannel,
+  reportDaemonStartupPhase,
+  type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
@@ -556,11 +556,9 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
-  const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
-  const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
-    recordDaemonStartupMarker(startupPhasesPath, phase, (error) => {
-      stderr.write(`Daemon startup marker write failed: ${error.message}\n`);
-    });
+  // Each phase goes to the launcher over the IPC channel it opened at spawn; without one (embedded
+  // or manual start) reporting is a no-op, and a failed send never affects startup.
+  const recordStartupPhase = (phase: DaemonStartupPhase): void => reportDaemonStartupPhase(phase);
   recordStartupPhase('lock-acquired');
 
   rollback.onRollback(() => {
@@ -669,7 +667,7 @@ async function startDaemonRuntimeOnHost(
   recordStartupPhase('listening');
   publishDaemonInfo(socketPort, httpPort);
   recordStartupPhase('registered');
-  removeDaemonStartupPhasesFile(startupPhasesPath);
+  closeDaemonStartupProgressChannel();
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {

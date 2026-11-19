@@ -12,8 +12,9 @@ export type DaemonFixtureLaunch<P, F> =
       fields: F;
       acquisitionBarrier?: string;
       fixtureOptions?: {
-        emitStartupMarker?: boolean;
-        emitStartupMarkerBeforeAcquisition?: boolean;
+        emitStartupPhase?: boolean;
+        emitStartupPhaseBeforeAcquisition?: boolean;
+        emitPhaseFromGate?: boolean;
       };
       exitGate?: Promise<void>;
       observe?: (child: RegisteredDaemonChild) => void;
@@ -104,6 +105,7 @@ export function createDaemonFixtureLaunchPlanner<P, F>(
                 await step.exitGate;
                 return exit;
               }),
+              ...(child.channel ? { channel: child.channel } : {}),
             }
           : child;
       };

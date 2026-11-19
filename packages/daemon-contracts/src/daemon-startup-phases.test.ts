@@ -1,144 +1,156 @@
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  readDaemonStartupPhaseMarkers,
-  recordDaemonStartupMarker,
-  removeDaemonStartupPhasesFile,
-  resolveDaemonStartupPhasesPath,
+  DAEMON_PROGRESS_CHANNEL_ENV,
+  DAEMON_STARTUP_PHASES,
+  createDaemonStartupProgressMessage,
+  parseDaemonStartupProgressMessage,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTest } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
-test('per-launch marker files: a fresh launch never reads an older launch phases', async () => {
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  const first = resolveDaemonStartupPhasesPath(stateDir, 1111);
-  const second = resolveDaemonStartupPhasesPath(stateDir, 2222);
-  recordDaemonStartupMarker(first, 'lock-acquired');
-  expect(second).not.toBe(first);
-  expect(existsSync(second)).toBe(false);
-  recordDaemonStartupMarker(second, 'modules-loaded');
-  const firstPhases = readDaemonStartupPhaseMarkers(readFileSync(first, 'utf8'));
-  const secondPhases = readDaemonStartupPhaseMarkers(readFileSync(second, 'utf8'));
-  expect(Object.keys(firstPhases)).toEqual(['lock-acquired']);
-  expect(Object.keys(secondPhases)).toEqual(['modules-loaded']);
+/** A spawn environment that marks the child as a launcher-spawned detached daemon. */
+const progressChannelEnv = { ...process.env, [DAEMON_PROGRESS_CHANNEL_ENV]: '1' };
+
+test('the phase vocabulary keeps exactly the six runtime phases', () => {
+  expect([...DAEMON_STARTUP_PHASES]).toEqual([
+    'modules-loaded',
+    'composition-loaded',
+    'lock-acquired',
+    'recovery-finished',
+    'listening',
+    'registered',
+  ]);
 });
 
-test('marker reading keeps the earliest record when a phase replays after a later one', () => {
-  const text = [
-    '{"data":{"startupPhase":"listening","timestampMs":500}}',
-    '{"data":{"startupPhase":"lock-acquired","timestampMs":20}}',
-    '{"data":{"startupPhase":"lock-acquired","timestampMs":35}}',
-  ].join('\n');
-  const phases = readDaemonStartupPhaseMarkers(text);
-  expect(phases['lock-acquired']).toBe(20);
-  expect(phases.listening).toBe(500);
-});
-
-test('marker reading ignores unknown phases and unparsable lines', () => {
-  const text = [
-    '{"data":{"startupPhase":"heartbeat","timestampMs":10}}',
-    '{"data":{"startupPhase":"registered","timestampMs":"7"}}',
-    'not json',
-    '{"data":{"startupPhase":"listening","timestampMs":30}}',
-  ].join('\n');
-  expect(readDaemonStartupPhaseMarkers(text)).toEqual({ listening: 30 });
-});
-
-test('the producer lifetime claim empties a same-pid leftover', async () => {
-  // Pid reuse after both the old client and daemon died before either cleanup: the entry removes
-  // its record before its first marker; this child repeats that producer sequence itself.
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  writeFileSync(path.join(stateDir, 'package.json'), '{"type":"module"}');
-  const entry = path.join(stateDir, 'claim-producer.js');
-  const registrationUrl = new URL('./daemon-startup-phases.ts', import.meta.url).href;
-  writeFileSync(
-    entry,
-    `import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
-const file = resolveDaemonStartupPhasesPath(${JSON.stringify(stateDir)}, process.pid);
-recordDaemonStartupMarker(file, 'listening');
-recordDaemonStartupMarker(file, 'registered');
-removeDaemonStartupPhasesFile(file);
-recordDaemonStartupMarker(file, 'modules-loaded');
-`,
-  );
-  const child = spawnSync(process.execPath, ['--experimental-strip-types', entry], {
-    encoding: 'utf8',
-  });
-  if (child.status !== 0) throw new Error(child.stderr);
-  const phases = readDaemonStartupPhaseMarkers(
-    readFileSync(resolveDaemonStartupPhasesPath(stateDir, child.pid!), 'utf8'),
-  );
-  expect(phases).toEqual({ 'modules-loaded': expect.any(Number) });
+test('a phase message is stamped with the sending pid and parses back', () => {
+  const message = createDaemonStartupProgressMessage('lock-acquired');
+  assert.equal(message.type, 'daemon-startup-phase');
+  assert.equal(message.pid, process.pid);
+  expect(parseDaemonStartupProgressMessage(message)).toEqual(message);
 });
 
 test.each([
-  ['remove', (p: string, cb: (e: unknown) => void) => removeDaemonStartupPhasesFile(p, cb)],
-  [
-    'record',
-    (p: string, cb: (e: unknown) => void) => recordDaemonStartupMarker(p, 'modules-loaded', cb),
-  ],
-] as const)('a refused %s reports through the callback instead of throwing', async (_name, run) => {
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 777);
-  mkdirSync(markerPath, { recursive: true });
-  const reported: unknown[] = [];
-  expect(() =>
-    run(markerPath, (error) => {
-      reported.push(error);
-    }),
-  ).not.toThrow();
-  expect(reported).toHaveLength(1);
-  expect(reported[0]).toHaveProperty('message');
+  ['null', null],
+  ['a string', 'daemon-startup-phase'],
+  ['an unknown type', { type: 'heartbeat', pid: 1, phase: 'listening' }],
+  ['an unknown phase', { type: 'daemon-startup-phase', pid: 1, phase: 'heartbeat' }],
+  ['a non-string phase', { type: 'daemon-startup-phase', pid: 1, phase: 7 }],
+  ['a missing pid', { type: 'daemon-startup-phase', phase: 'listening' }],
+  ['a non-integer pid', { type: 'daemon-startup-phase', pid: 1.5, phase: 'listening' }],
+  ['a zero pid', { type: 'daemon-startup-phase', pid: 0, phase: 'listening' }],
+])('parsing ignores %s', (_name, message) => {
+  expect(parseDaemonStartupProgressMessage(message)).toBeNull();
 });
 
-test('acquiring the registration retires files of dead or unowned pids only', async () => {
-  const paths = resolveDaemonPaths(await mkdtempForTest('agent-device-markers-'));
-  const dead = resolveDaemonStartupPhasesPath(paths.baseDir, spawnDeadPid());
-  const own = resolveDaemonStartupPhasesPath(paths.baseDir, process.pid);
-  const unparseable = path.join(paths.baseDir, 'daemon-startup-phases-.jsonl');
-  const legacy = path.join(paths.baseDir, 'daemon-startup-phases.jsonl');
-  await Promise.all([
-    writeFile(own, 'x\n', 'utf8'),
-    writeFile(dead, 'x\n', 'utf8'),
-    writeFile(unparseable, 'x\n', 'utf8'),
-    writeFile(legacy, 'x\n', 'utf8'),
+test('a process with an IPC channel but no launcher mark does not report over it', async () => {
+  // A forked host (or test worker) has a channel of its own; it is not a launch channel.
+  const stateDir = mkdtempForTestSync('agent-device-phase-unmarked-');
+  const phasesUrl = import.meta.resolve('@agent-device/daemon-contracts/daemon-startup-phases');
+  const entry = writeChildScript(
+    stateDir,
+    `import { reportDaemonStartupPhase, closeDaemonStartupProgressChannel } from ${JSON.stringify(phasesUrl)};
+reportDaemonStartupPhase('modules-loaded');
+closeDaemonStartupProgressChannel();
+`,
+  );
+  const child = spawn(process.execPath, ['--experimental-strip-types', entry], {
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    env: { ...process.env },
+  });
+  child.channel?.unref();
+  child.unref();
+  const messages: unknown[] = [];
+  child.on('message', (message) => messages.push(message));
+  const exit = await Promise.race([
+    new Promise<{ code: number | null; signal: string | null }>((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal })),
+    ),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error('child did not exit; the channel held its loop')), 5_000),
+    ),
   ]);
-  const attempt = await tryAcquireDaemonRegistration(paths);
-  expect(attempt.status).toBe('acquired');
-  if (attempt.status !== 'acquired') throw new Error('registration refused');
-  expect(existsSync(dead)).toBe(false);
-  expect(existsSync(unparseable)).toBe(false);
-  expect(existsSync(own)).toBe(true);
-  expect(existsSync(legacy)).toBe(true);
-  await attempt.owner.finish();
+  assert.equal(exit.code, 0);
+  assert.deepEqual(messages, [], 'an unmarked channel must not receive phase reports');
 });
 
-test('removeDaemonStartupPhasesFile removes a file and tolerates one already gone', async () => {
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  const file = resolveDaemonStartupPhasesPath(stateDir, 4242);
-  await writeFile(file, 'x\n', 'utf8');
-  removeDaemonStartupPhasesFile(file);
-  expect(existsSync(file)).toBe(false);
-  expect(() => removeDaemonStartupPhasesFile(file)).not.toThrow();
+test('a child spawned without an IPC channel reports nothing and exits cleanly', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-phase-no-channel-');
+  const phasesUrl = import.meta.resolve('@agent-device/daemon-contracts/daemon-startup-phases');
+  const entry = writeChildScript(
+    stateDir,
+    `import { reportDaemonStartupPhase, closeDaemonStartupProgressChannel } from ${JSON.stringify(phasesUrl)};
+console.log('has-channel ' + (process.channel !== undefined));
+reportDaemonStartupPhase('modules-loaded');
+closeDaemonStartupProgressChannel();
+`,
+  );
+  const child = spawn(process.execPath, ['--experimental-strip-types', entry], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: progressChannelEnv,
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk) => (stdout += chunk));
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk) => (stderr += chunk));
+  const exit = await new Promise<{ code: number | null; signal: string | null }>((resolve) =>
+    child.once('exit', (code, signal) => resolve({ code, signal })),
+  );
+  assert.equal(exit.code, 0);
+  assert.equal(exit.signal, null);
+  assert.match(stdout, /^has-channel false$/m);
+  assert.equal(stderr, '');
 });
 
-test('a crash-replay append keeps the file valid JSONL', async () => {
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 999);
-  await appendFile(markerPath, '{"data":{"startupPhase":"modules-lo', 'utf8');
-  recordDaemonStartupMarker(markerPath, 'composition-loaded');
-  const tail = await readFile(markerPath, 'utf8');
-  expect(Object.keys(readDaemonStartupPhaseMarkers(tail))).toEqual(['composition-loaded']);
-});
-
-function spawnDeadPid(): number {
-  const child = spawnSync(process.execPath, ['-e', ''], { encoding: 'utf8' });
-  if (child.error) throw child.error;
-  const pid = child.pid;
-  if (pid === undefined) throw new Error('spawnSync returned no pid');
-  return pid;
+function writeChildScript(stateDir: string, body: string): string {
+  const entry = path.join(stateDir, 'phase-child.mjs');
+  fs.writeFileSync(entry, body);
+  return entry;
 }
+
+test('a spawned child reports each phase over the IPC channel, and closing it lets the child exit', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-phase-channel-');
+  const phasesUrl = import.meta.resolve('@agent-device/daemon-contracts/daemon-startup-phases');
+  const entry = writeChildScript(
+    stateDir,
+    `import { reportDaemonStartupPhase, closeDaemonStartupProgressChannel } from ${JSON.stringify(phasesUrl)};
+reportDaemonStartupPhase('modules-loaded');
+reportDaemonStartupPhase('lock-acquired');
+reportDaemonStartupPhase('lock-acquired');
+closeDaemonStartupProgressChannel();
+`,
+  );
+  const child = spawn(process.execPath, ['--experimental-strip-types', entry], {
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    env: progressChannelEnv,
+  });
+  child.channel?.unref();
+  child.unref();
+  const messages: unknown[] = [];
+  child.on('message', (message) => messages.push(message));
+  let stderr = '';
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk) => (stderr += chunk));
+  const exit = await Promise.race([
+    new Promise<{ code: number | null; signal: string | null }>((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal })),
+    ),
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error('child did not exit; the channel held its loop')), 5_000),
+    ),
+  ]);
+  assert.equal(exit.code, 0);
+  assert.equal(stderr, '');
+  assert.deepEqual(
+    messages.map((message) => parseDaemonStartupProgressMessage(message)),
+    [
+      { type: 'daemon-startup-phase', pid: child.pid, phase: 'modules-loaded' },
+      { type: 'daemon-startup-phase', pid: child.pid, phase: 'lock-acquired' },
+      { type: 'daemon-startup-phase', pid: child.pid, phase: 'lock-acquired' },
+    ],
+  );
+});

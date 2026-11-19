@@ -6,9 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ExecDetachedExit } from '@agent-device/host-kit/command';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  readDaemonStartupPhaseMarkers,
-  recordDaemonStartupMarker,
-  resolveDaemonStartupPhasesPath,
+  parseDaemonStartupProgressMessage,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import {
@@ -87,14 +85,14 @@ function fields(httpPort: number) {
 }
 
 /** A deferred-publication fixture that never exits on its own; retirement can still stop it. */
-function unregisteredDaemonLaunch(paths: DaemonPaths, emitStartupMarker = false) {
+function unregisteredDaemonLaunch(paths: DaemonPaths, emitStartupPhase = false) {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
   return {
     kind: 'registered' as const,
     paths,
     fields: fields(1),
-    fixtureOptions: { emitStartupMarker },
+    fixtureOptions: { emitStartupPhase },
   };
 }
 
@@ -135,8 +133,11 @@ function virtualClock(): { value: number } {
   return now;
 }
 
-/** The startup phase records left in this state dir, by file name. */
-function phaseRecordEntries(paths: DaemonPaths): string[] {
+/**
+ * Entries named like the marker files an older daemon version wrote. This client never creates,
+ * reads, sweeps or removes one, so the only entries a start can leave behind are planted ones.
+ */
+function startupPhaseFileEntries(paths: DaemonPaths): string[] {
   return fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases'));
 }
 
@@ -145,22 +146,24 @@ function registrationBooted(paths: DaemonPaths): () => boolean {
   return () => (booted ||= fs.existsSync(path.join(paths.baseDir, 'registration-held')));
 }
 
-test('a daemon slower than the retired 15 s budget starts successfully while it keeps progressing', async (t) => {
+test('a daemon slower than the retired 15 s budget starts successfully while it keeps reporting phases', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '150000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));
-  // The success must rest on the markers: four successive phases 20 s apart across 80 s of virtual
-  // time under a 150 s ceiling keep progress inside the 60 s stall window; the same span with no
-  // readable markers fails as startup-stalled, one rewritten phase never advances progress.
+  // The success must rest on the channel phases: four successive phases 20 s apart across 80 s of
+  // virtual time under a 150 s ceiling keep progress inside the 60 s stall window; the same span
+  // with no reported phase fails as startup-stalled, and one repeated phase never advances progress.
   const phases: readonly DaemonStartupPhase[] = [
     'modules-loaded',
     'composition-loaded',
     'lock-acquired',
     'recovery-finished',
   ];
+  const gate = path.join(paths.baseDir, 'emit-phase');
   const now = virtualClock();
   const spawned = { at: 0, child: undefined as { pid: number } | undefined };
+  const reported: unknown[] = [];
   const booted = registrationBooted(paths);
   spawn.mockImplementation(
     planRegisteredDaemonLaunches([
@@ -168,9 +171,11 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
         kind: 'registered',
         paths,
         fields: fields(http.port),
+        fixtureOptions: { emitPhaseFromGate: true },
         observe(child) {
           spawned.at = now.value;
           spawned.child = child;
+          child.channel?.onMessage((message) => reported.push(message));
         },
       },
     ]),
@@ -182,11 +187,13 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     if (spawned.child && now.value - spawned.at < 80_000) {
       now.value += 20_000;
       if (nextPhase < phases.length) {
-        recordDaemonStartupMarker(
-          resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid),
-          phases[nextPhase]!,
-        );
+        fs.writeFileSync(gate, phases[nextPhase]!);
         nextPhase += 1;
+        // Wait for the child's real channel message before advancing the clock again, so each
+        // receipt lands on the virtual time this pause just set.
+        const expected = nextPhase;
+        for (let attempt = 0; reported.length < expected && attempt < 400; attempt += 1)
+          await realPause(5);
       }
       if (nextPhase === phases.length)
         fs.rmSync(path.join(paths.baseDir, 'defer-publication'), { force: true });
@@ -201,13 +208,21 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     assert.equal(spawn.mock.calls.length, 1);
     assert.equal(http.rpcRequests.length, 1);
     assert.ok(spawned.child && isProcessAlive(spawned.child.pid), 'the client must not retire it');
-    // The wait survived on four distinct phases, not one repeated marker.
-    const markers = readDaemonStartupPhaseMarkers(
-      fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child!.pid), 'utf8'),
+    // The wait survived on four distinct phases the child really sent over its own channel.
+    const reportedPhases = reported.map(
+      (message) => parseDaemonStartupProgressMessage(message)?.phase,
     );
     for (const phase of phases) {
-      assert.equal(typeof markers[phase], 'number', `the ${phase} phase was never observed`);
+      assert.ok(reportedPhases.includes(phase), `the ${phase} phase was never reported`);
     }
+    for (const message of reported) {
+      assert.equal(parseDaemonStartupProgressMessage(message)?.pid, spawned.child?.pid);
+    }
+    assert.deepEqual(
+      startupPhaseFileEntries(paths),
+      [],
+      'a channel-reported start must not write any marker file',
+    );
   } finally {
     await closeLoopbackServer(http.server);
   }
@@ -241,7 +256,7 @@ test('a daemon that exits during startup fails with startup-exited within one se
   assert.ok(Date.now() - exitObservedAt <= 1_000, 'the failure must follow the exit within 1 s');
 });
 
-test('a live daemon that publishes no startup marker is retired as stalled before the ceiling', async () => {
+test('a live daemon that reports no startup phase is retired as stalled before the ceiling', async () => {
   // Unsets the variable, even when the host exports it: the resolved ceiling must be the default.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', undefined);
   const now = virtualClock();
@@ -278,16 +293,16 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
     assert.equal(spawn.mock.calls.length, 1, 'a stalled daemon is not retried');
     await (child?.exited ?? Promise.resolve());
     assert.deepEqual(
-      phaseRecordEntries(paths),
+      startupPhaseFileEntries(paths),
       [],
-      'a joined startup must sweep its own phase-marker file',
+      'a channel-watched startup must not write any marker file',
     );
   } finally {
     await (child?.exited ?? Promise.resolve());
   }
 });
 
-test('a live daemon that keeps progressing but never registers fails at the env ceiling with phases', async () => {
+test('a live daemon that keeps reporting phases but never registers fails at the env ceiling with phases', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
   const now = virtualClock();
   const started = now.value;
@@ -319,29 +334,25 @@ test('a live daemon that keeps progressing but never registers fails at the env 
       typeof phases['lock-acquired'] === 'number' &&
         phases['lock-acquired'] >= 0 &&
         phases['lock-acquired'] < 30_000,
-      'the observed marker must be reported relative to the spawn',
+      'the channel-reported phase must be reported relative to the spawn',
     );
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
+    assert.deepEqual(startupPhaseFileEntries(paths), [], 'no marker file may be written');
   } finally {
     await (child?.exited ?? Promise.resolve());
   }
 });
 
-test("a startup progressed by a fresh launch is not judged stalled by an earlier launch's leftover markers", async () => {
+test("a startup progressed by its own channel is not judged by another launch's leftover marker file", async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-stale-history-'));
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
-  const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
-    emitStartupMarker: true,
-  });
-  await waitForFixtureFile(registrationHeldFor(paths, leftover.pid));
-  process.kill(leftover.pid, 'SIGTERM');
-  await leftover.exited;
-  assert.ok(
-    phaseRecordEntries(paths).length > 0,
-    'the leftover launch must have left a real daemon-written marker record',
-  );
+  // A leftover marker file an older daemon version wrote for a dead pid: it claims a phase this
+  // launch never reports, so any phase the failure details carry must have come from the channel.
+  const leftover = path.join(paths.baseDir, 'daemon-startup-phases-999999.jsonl');
+  const leftoverContent = '{"data":{"startupPhase":"listening","timestampMs":1}}\n';
+  fs.writeFileSync(leftover, leftoverContent);
   const now = virtualClock();
   const started = now.value;
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
@@ -371,12 +382,23 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
     assert.equal(
       typeof phases['lock-acquired'],
       'number',
-      'the fresh launch must observe its own marker despite the older record',
+      'the fresh launch must observe its own channel phase despite the older record',
+    );
+    assert.equal(
+      phases['listening'],
+      undefined,
+      'a leftover marker file from another pid must never be read as progress',
     );
     await (child?.exited ?? Promise.resolve());
-    assert.ok(
-      !phaseRecordEntries(paths).some((entry) => entry.includes(String(child?.pid))),
-      "the joined exit must sweep this launch's own marker file",
+    assert.equal(
+      fs.readFileSync(leftover, 'utf8'),
+      leftoverContent,
+      'the leftover record must be left byte-identical: never read, swept or removed',
+    );
+    assert.deepEqual(
+      startupPhaseFileEntries(paths),
+      [path.basename(leftover)],
+      'only the planted leftover may remain; this start must add no marker file',
     );
   } finally {
     await (child?.exited ?? Promise.resolve());
@@ -388,8 +410,9 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-holder-ceiling-'));
   const deferred = path.join(paths.baseDir, 'defer-publication');
   fs.writeFileSync(deferred, 'wait');
+  // The winner is spawned without an IPC channel: its phase report is a no-op and writes nothing.
   const winner = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
-    emitStartupMarker: true,
+    emitStartupPhase: true,
   });
   await waitForFixtureFile(registrationHeldFor(paths, winner.pid));
   let contender: ReturnType<typeof runCmdDetachedMonitored> | undefined;
@@ -399,7 +422,7 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
         kind: 'registered',
         paths,
         fields: fields(1),
-        fixtureOptions: { emitStartupMarkerBeforeAcquisition: true },
+        fixtureOptions: { emitStartupPhaseBeforeAcquisition: true },
         observe(child) {
           contender = child;
         },
@@ -415,7 +438,11 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
     assert.equal(failure.details?.reason, 'startup-ceiling');
     assert.equal(failure.details?.startupTimeoutMs, 2_000);
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
-    assert.equal(typeof startupPhases(failure)['modules-loaded'], 'number');
+    assert.equal(
+      typeof startupPhases(failure)['modules-loaded'],
+      'number',
+      "the contender's own channel phase must be observed",
+    );
     assert.equal(isProcessAlive(winner.pid), true);
     assert.equal(
       signal.mock.calls.some(([pid, kind]) => pid === winner.pid && kind !== 0),
@@ -423,14 +450,114 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
     );
     assert.ok(contender);
     assert.deepEqual(
-      phaseRecordEntries(paths).sort(),
-      [path.basename(resolveDaemonStartupPhasesPath(paths.baseDir, winner.pid))],
-      'the exited contender record must be swept; only the live winner record may remain',
+      startupPhaseFileEntries(paths),
+      [],
+      'neither the channel-less winner nor the contender may leave a marker file',
     );
   } finally {
     signal.mockRestore();
     fs.rmSync(deferred, { force: true });
     await (contender?.exited ?? Promise.resolve());
+  }
+});
+
+test('a repeated phase message keeps the first receipt time', async () => {
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-duplicate-phase-'));
+  fs.mkdirSync(paths.baseDir, { recursive: true });
+  fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+  const gate = path.join(paths.baseDir, 'emit-phase');
+  const now = virtualClock();
+  const started = now.value;
+  let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
+  const reported: unknown[] = [];
+  const booted = registrationBooted(paths);
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      () => ({
+        ...unregisteredDaemonLaunch(paths),
+        fixtureOptions: { emitPhaseFromGate: true },
+        observe(launched) {
+          child = launched;
+          launched.channel?.onMessage((message) => reported.push(message));
+        },
+      }),
+    ]),
+  );
+  let sent = 0;
+  pause.mockImplementation(async () => {
+    if (!booted()) return await realPause();
+    if (now.value - started < 30_000) {
+      now.value += 1_000;
+      const elapsed = now.value - started;
+      if (elapsed === 1_000 || elapsed === 10_000) {
+        fs.writeFileSync(gate, 'lock-acquired');
+        sent += 1;
+        for (let attempt = 0; reported.length < sent && attempt < 400; attempt += 1)
+          await realPause(5);
+      }
+    }
+    await realPause(20);
+  });
+  try {
+    const failure = await expectStartupFailure(sendToDaemon(request(paths)));
+    assert.equal(failure.details?.reason, 'startup-ceiling');
+    assert.equal(reported.length, 2, 'the child must have sent the phase twice');
+    assert.equal(
+      startupPhases(failure)['lock-acquired'],
+      1_000,
+      'the duplicate must keep the first receipt time, not the latest',
+    );
+  } finally {
+    await (child?.exited ?? Promise.resolve());
+  }
+});
+
+test('a planted symlink named like an old marker file is never followed or modified by a full start', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const http = await startHttpDaemonFixture({ devices: [] });
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-symlink-'));
+  const outsideDir = mkdtempForTestSync('daemon-start-symlink-outside-');
+  const outside = path.join(outsideDir, 'outside.jsonl');
+  const outsideContent = '{"data":{"startupPhase":"registered","timestampMs":1}}\n';
+  fs.writeFileSync(outside, outsideContent);
+  let planted = '';
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        observe(child) {
+          // Plant the link under the spawned child's own pid, the name the old design would append to.
+          planted = path.join(paths.baseDir, `daemon-startup-phases-${child.pid}.jsonl`);
+          fs.symlinkSync(outside, planted);
+        },
+      },
+    ]),
+  );
+  try {
+    const response = await sendToDaemon(request(paths));
+    assert.equal(response.ok, true);
+    assert.equal(http.rpcRequests.length, 1);
+    assert.ok(planted, 'the symlink must have been planted under the child pid');
+    assert.equal(
+      fs.readFileSync(outside, 'utf8'),
+      outsideContent,
+      'the planted link target must be byte-identical after the full start',
+    );
+    assert.equal(
+      fs.lstatSync(planted).isSymbolicLink(),
+      true,
+      'the planted link must still be a link: never followed, replaced or removed',
+    );
+    assert.deepEqual(
+      startupPhaseFileEntries(paths),
+      [path.basename(planted)],
+      'the only marker-named entry is the planted one; the start added none',
+    );
+  } finally {
+    await closeLoopbackServer(http.server);
   }
 });
 

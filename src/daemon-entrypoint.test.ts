@@ -7,6 +7,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { KNOWN_APP_ERROR_CODES } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_STARTUP_PHASES } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
@@ -539,5 +540,176 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     fs.rmSync(daemonStateDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+const registrationOwnerUrl = import.meta
+  .resolve('@agent-device/daemon-contracts/daemon-registration-owner');
+const daemonResolutionUrl = import.meta.resolve('@agent-device/daemon-contracts/daemon-resolution');
+const daemonSourceEntry = path.resolve('src/daemon.ts');
+
+// The test daemons reap themselves when idle, so the worker never has to signal the launcher's
+// child (a grandchild of the worker, which the hermetic signal guard refuses).
+const TEST_DAEMON_IDLE_TIMEOUT_MS = '2500';
+
+/** A launcher process that starts the real daemon entry through the production launch path. */
+function writeLauncherScript(scriptDir: string, stateDir: string, onPhase: string): string {
+  const entry = path.join(scriptDir, 'launcher.mjs');
+  fs.writeFileSync(
+    entry,
+    `import { launchDaemonProcess } from ${JSON.stringify(registrationOwnerUrl)};
+import { resolveDaemonPaths } from ${JSON.stringify(daemonResolutionUrl)};
+const paths = resolveDaemonPaths(${JSON.stringify(stateDir)});
+const launch = launchDaemonProcess({
+  paths,
+  args: ['--experimental-strip-types', ${JSON.stringify(daemonSourceEntry)}],
+  serverMode: 'http',
+  env: { ...process.env, AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: ${JSON.stringify(TEST_DAEMON_IDLE_TIMEOUT_MS)} },
+  cwd: ${JSON.stringify(process.cwd())},
+});
+console.log('child-pid ' + launch.pid);
+${onPhase}
+`,
+  );
+  return entry;
+}
+
+async function readPublishedInfo(paths: { infoPath: string }): Promise<DaemonInfoFile | null> {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (fs.existsSync(paths.infoPath)) {
+      try {
+        const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as DaemonInfoFile;
+        if (typeof info.pid === 'number') return info;
+      } catch {
+        // A partially written record is retried.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
+
+test('a detached launch reports every startup phase to its launcher, and the channel holds neither process alive', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-launch-channel-');
+  const paths = resolveDaemonPaths(stateDir);
+  const outsideDir = mkdtempForTestSync('agent-device-launch-channel-outside-');
+  const outside = path.join(outsideDir, 'outside.jsonl');
+  const outsideContent = 'outside\n';
+  fs.writeFileSync(outside, outsideContent);
+  // A link named like the marker files the old design appended to: a full start must never
+  // follow, modify or remove it.
+  const planted = path.join(paths.baseDir, 'daemon-startup-phases-424242.jsonl');
+  fs.symlinkSync(outside, planted);
+  const scriptDir = mkdtempForTestSync('agent-device-launch-channel-script-');
+  const entry = writeLauncherScript(
+    scriptDir,
+    stateDir,
+    `const keepAlive = setTimeout(() => {}, 60_000);
+launch.channel?.onMessage((message) => {
+  console.log('phase ' + JSON.stringify(message));
+  if (message?.phase === 'registered') clearTimeout(keepAlive);
+});
+`,
+  );
+  const launcher = runCmdBackground(process.execPath, ['--experimental-strip-types', entry], {
+    allowFailure: true,
+  });
+  const launcherPid = launcher.child.pid;
+  assert.ok(launcherPid);
+  let stdout = '';
+  launcher.child.stdout?.setEncoding('utf8');
+  launcher.child.stdout?.on('data', (chunk) => (stdout += chunk));
+  let daemonPid: number | undefined;
+  try {
+    // The launcher exits on its own once `registered` arrived: the unref'd channel holds it no longer.
+    assert.equal(
+      await waitForProcessExit(launcherPid, 60_000),
+      true,
+      'the launcher must exit by itself',
+    );
+    const launcherResult = await launcher.wait;
+    assert.equal(launcherResult.exitCode, 0);
+    const lines = stdout.split('\n').filter(Boolean);
+    daemonPid = Number(
+      lines.find((line) => line.startsWith('child-pid '))?.slice('child-pid '.length),
+    );
+    assert.ok(daemonPid, 'the launcher must have reported its child pid');
+    const messages = lines
+      .filter((line) => line.startsWith('phase '))
+      .map((line) => JSON.parse(line.slice('phase '.length)) as { pid?: unknown; phase?: unknown });
+    assert.deepEqual(
+      messages.map((message) => message.phase),
+      [...DAEMON_STARTUP_PHASES],
+      'every startup phase must reach the launcher over the channel, in order',
+    );
+    for (const message of messages) assert.equal(message.pid, daemonPid);
+    // The daemon registered and serves.
+    const info = await readPublishedInfo(paths);
+    assert.ok(info, 'the daemon must publish its registration');
+    assert.equal(info.pid, daemonPid);
+    await waitForHttpOk(`http://127.0.0.1:${info.httpPort}/health`, 10_000);
+    // The planted marker-named symlink was never followed, modified or removed.
+    assert.equal(fs.readFileSync(outside, 'utf8'), outsideContent);
+    assert.equal(fs.lstatSync(planted).isSymbolicLink(), true);
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
+      [path.basename(planted)],
+      'the only marker-named entry is the planted one; the start added none',
+    );
+    // The daemon keeps serving after its launcher is gone; it reaps itself once idle, so the
+    // test run's teardown finds no live process holding the state dir.
+  } finally {
+    await launcher.wait.catch(() => {});
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.rmSync(scriptDir, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('a daemon whose launcher dies mid-startup finishes startup and serves', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-launch-orphan-');
+  const paths = resolveDaemonPaths(stateDir);
+  const scriptDir = mkdtempForTestSync('agent-device-launch-orphan-script-');
+  const entry = writeLauncherScript(
+    scriptDir,
+    stateDir,
+    `const keepAlive = setTimeout(() => {}, 30_000);
+launch.channel?.onMessage((message) => {
+  console.log('phase ' + JSON.stringify(message));
+  if (message?.phase === 'modules-loaded') process.kill(process.pid, 'SIGKILL');
+});
+`,
+  );
+  const launcher = runCmdBackground(process.execPath, ['--experimental-strip-types', entry], {
+    allowFailure: true,
+  });
+  const launcherPid = launcher.child.pid;
+  assert.ok(launcherPid);
+  try {
+    // The launcher dies on the first phase report, mid-startup.
+    assert.equal(await waitForProcessExit(launcherPid, 30_000), true, 'the launcher must die');
+    const launcherResult = await launcher.wait;
+    assert.notEqual(launcherResult.exitCode, 0, 'the launcher was killed by its own signal');
+    // The orphaned daemon still finishes startup: it registers and serves.
+    const info = await readPublishedInfo(paths);
+    assert.ok(info, 'the orphaned daemon must publish its registration without its launcher');
+    assert.ok(info.pid);
+    await waitForHttpOk(`http://127.0.0.1:${info.httpPort}/health`, 10_000);
+    // A failed phase send never crashed it: at most the one allowed stderr line reached the log,
+    // and no fatal daemon error was written.
+    const log = fs.readFileSync(paths.logPath, 'utf8');
+    const failedReports = log
+      .split('\n')
+      .filter((line) => line.includes('Daemon startup phase report failed'));
+    assert.ok(
+      failedReports.length <= 1,
+      `at most one failed-send line, got ${failedReports.length}`,
+    );
+    assert.equal(log.includes('Daemon error:'), false, 'no failed send may become a daemon error');
+    // It stays serving until its idle reap; teardown then finds no live process on the state dir.
+  } finally {
+    await launcher.wait.catch(() => {});
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.rmSync(scriptDir, { recursive: true, force: true });
   }
 });
