@@ -7,6 +7,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { commandSynopsis, parseRawArgs } from './parser/args.ts';
+import { writeStderr } from './process-exit.ts';
 
 /** Where the `--debug` log tail printed after a failure comes from. */
 export type FailureLogSource = {
@@ -45,7 +46,7 @@ export async function printHumanError(
   const lines = [summary, ...body, ...(trailer ? [trailer] : [])];
   if (lines.length > 1) lines.push(summary);
   for (const line of lines) {
-    process.stderr.write(`${line}\n`);
+    writeStderr(`${line}\n`);
   }
 }
 

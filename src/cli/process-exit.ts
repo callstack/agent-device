@@ -1,4 +1,5 @@
 import { settleWithin } from '@agent-device/host-kit/retry';
+import { escapeTerminalText } from '@agent-device/kernel/success-text';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -26,4 +27,26 @@ function drainStream(stream: NodeJS.WriteStream): Promise<void> {
   return new Promise((resolve) => {
     stream.once('drain', resolve);
   });
+}
+
+/**
+ * The CLI's stdout and stderr writes. Every CLI write goes through one of these: the plain ones escape C0 (except
+ * newline and tab), DEL and C1 characters, so no value a peer or a device chose can drive the terminal. The raw ones
+ * are for text that already escaped its own values to carry intended color, and for another program's output the
+ * CLI passes through unchanged.
+ */
+export function writeStdout(text: string): void {
+  process.stdout.write(escapeTerminalText(text));
+}
+
+export function writeStderr(text: string): void {
+  process.stderr.write(escapeTerminalText(text));
+}
+
+export function writeStdoutRaw(text: string | Uint8Array): void {
+  process.stdout.write(text);
+}
+
+export function writeStderrRaw(text: string | Uint8Array): void {
+  process.stderr.write(text);
 }

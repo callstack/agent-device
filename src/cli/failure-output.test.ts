@@ -89,3 +89,23 @@ test.each(['local', 'remote'] as const)(
     assert.ok(stderr.includes('original failure evidence'));
   },
 );
+
+test('printHumanError writes a warning once, escaped, and a details block that still parses', async () => {
+  const warning = 'The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.';
+  const stderr = await withCapturedStderrAsync(async () => {
+    await printHumanError(new AppError('COMMAND_FAILED', 'boom', { warnings: [warning] }), {
+      debugTier: true,
+    });
+  });
+
+  assert.equal(stderr.split(String.raw`/tmp/a\x1b[8mb\x9bc.ad.`).length - 1, 1, stderr);
+  assert.deepEqual(
+    [...stderr].filter(
+      (char) =>
+        (char < ' ' && char !== '\n' && char !== '\t') || (char >= '\u007f' && char <= '\u009f'),
+    ),
+    [],
+  );
+  const details = stderr.slice(stderr.indexOf('{'), stderr.lastIndexOf('}') + 1);
+  assert.deepEqual((JSON.parse(details) as { warnings: string[] }).warnings, [warning]);
+});

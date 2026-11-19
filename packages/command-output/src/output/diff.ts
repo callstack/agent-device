@@ -1,5 +1,6 @@
 import type { HostEnvironment, EnvMap } from '@agent-device/kernel/source-value';
 import path from 'node:path';
+import { escapeTerminalText } from '@agent-device/kernel/success-text';
 import { colorize, supportsColor, type ColorStream } from './color.ts';
 import { readSnapshotWarnings } from './snapshot.ts';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
@@ -20,7 +21,8 @@ export function formatSnapshotDiffText(
   const removals = toNumber(summaryRaw.removals);
   const unchanged = toNumber(summaryRaw.unchanged);
   const useColor = supportsColor(env, stdout);
-  const notices = readSnapshotWarnings(data);
+  // This text is written through the raw path to keep its colors, so every value in it is escaped here.
+  const notices = readSnapshotWarnings(data).map(escapeTerminalText);
   const noticesBlock = notices.length > 0 ? `${notices.join('\n')}\n` : '';
   if (baselineInitialized) {
     return `${noticesBlock}Baseline initialized (${unchanged} lines).\n`;
@@ -28,7 +30,7 @@ export function formatSnapshotDiffText(
   const rawLines = Array.isArray(data.lines) ? (data.lines as SnapshotDiffLine[]) : [];
   const contextLines = applyContextWindow(rawLines, 1);
   const lines = contextLines.map((line) => {
-    const text = typeof line.text === 'string' ? line.text : '';
+    const text = typeof line.text === 'string' ? escapeTerminalText(line.text) : '';
     if (line.kind === 'added') {
       const prefix = text.startsWith(' ') ? `+${text}` : `+ ${text}`;
       return useColor ? colorize(prefix, 'green') : prefix;
@@ -103,13 +105,13 @@ function formatScreenshotDiffArtifactLines(
   if (match) return [];
   const lines: string[] = [];
   if (data.diffPath) {
-    const relativePath = toRelativePath(data.diffPath, cwd);
+    const relativePath = escapeTerminalText(toRelativePath(data.diffPath, cwd));
     const label = useColor ? colorize('Diff image:', 'dim') : 'Diff image:';
     const displayPath = useColor ? colorize(relativePath, 'green') : relativePath;
     lines.push(`  ${label} ${displayPath}`);
   }
   if (data.currentOverlayPath) {
-    const relativePath = toRelativePath(data.currentOverlayPath, cwd);
+    const relativePath = escapeTerminalText(toRelativePath(data.currentOverlayPath, cwd));
     const label = useColor ? colorize('Current overlay:', 'dim') : 'Current overlay:';
     const displayPath = useColor ? colorize(relativePath, 'green') : relativePath;
     const refCount = toNumber(data.currentOverlayRefCount);
@@ -153,9 +155,9 @@ function formatScreenshotDiffRegionEntryLines(region: ScreenshotDiffRegion): str
 
   const bestMatch = region.currentOverlayMatches?.[0];
   if (bestMatch) {
-    const label = bestMatch.label ? ` "${bestMatch.label}"` : '';
+    const label = bestMatch.label ? ` "${escapeTerminalText(bestMatch.label)}"` : '';
     lines.push(
-      `       overlaps @${bestMatch.ref}${label}, ` +
+      `       overlaps @${escapeTerminalText(bestMatch.ref)}${label}, ` +
         `${bestMatch.regionCoveragePercentage}% of region`,
     );
   }

@@ -1,5 +1,6 @@
 import type { CommandProgressState } from '@agent-device/command-output';
 import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
+import { writeStderr } from '../cli/process-exit.ts';
 
 export function createCommandProgressState(): CommandProgressState {
   return { renderedToStderr: false };
@@ -14,6 +15,6 @@ export function createStderrCommandProgressSink(state: CommandProgressState): Re
   return (event: RequestProgressEvent) => {
     if (event.type !== 'command') return;
     state.renderedToStderr = true;
-    process.stderr.write(`${event.message}\n`);
+    writeStderr(`${event.message}\n`);
   };
 }

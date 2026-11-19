@@ -34,3 +34,38 @@ export function readResponseWarnings(data: Record<string, unknown> | undefined):
     ? warnings.filter((warning): warning is string => typeof warning === 'string')
     : [];
 }
+
+// Terminal-safe output: text the CLI writes can name values a peer or a device chose (paths, labels,
+// messages), so C0, DEL and C1 characters are shown as escapes instead of reaching the terminal raw.
+
+/** C0 except newline and tab, DEL, and C1. Newline and tab are layout; every other one is escaped. */
+function isEscapedControl(char: string): boolean {
+  return (char < ' ' && char !== '\n' && char !== '\t') || (char >= '\u007f' && char <= '\u009f');
+}
+
+/** Text with C0 (except newline and tab), DEL and C1 characters shown as `\xNN`. */
+export function escapeTerminalText(text: string): string {
+  let escaped = '';
+  for (const char of text) {
+    escaped += isEscapedControl(char)
+      ? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+      : char;
+  }
+  return escaped;
+}
+
+/**
+ * `JSON.stringify(value, null, 2)` with DEL and C1 escaped as `\uNNNN`, which `JSON.stringify` leaves raw. It already
+ * escapes C0, and these characters occur only inside strings, so the output is valid JSON that parses back exact and
+ * holds no character `escapeTerminalText` would change.
+ */
+export function stringifyTerminalJson(value: unknown): string {
+  let escaped = '';
+  for (const char of JSON.stringify(value, null, 2) ?? 'undefined') {
+    escaped +=
+      char >= '\u007f' && char <= '\u009f'
+        ? `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+        : char;
+  }
+  return escaped;
+}

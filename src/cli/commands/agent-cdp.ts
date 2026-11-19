@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { writeStdoutRaw, writeStderrRaw } from '../process-exit.ts';
 
 const AGENT_CDP_VERSION = '1.6.1';
 export const AGENT_CDP_PACKAGE = `agent-cdp@${AGENT_CDP_VERSION}`;
@@ -88,10 +89,10 @@ export async function runAgentCdpCommand(
     env: options.env,
     allowFailure: true,
     onStdoutChunk: (chunk) => {
-      process.stdout.write(chunk);
+      writeStdoutRaw(chunk);
     },
     onStderrChunk: (chunk) => {
-      process.stderr.write(chunk);
+      writeStderrRaw(chunk);
     },
   });
   return result.exitCode;

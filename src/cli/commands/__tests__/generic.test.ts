@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   mkdtempForTestSync,
   createTestHostEnvironment,
+  withCapturedOutput,
   withCapturedStdoutAsync,
 } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -173,4 +174,71 @@ test('open --json at a non-default response level still prints lease.device', as
     }),
   );
   assert.deepEqual((JSON.parse(json) as { data: Record<string, unknown> }).data.lease, { device });
+});
+
+// One warning naming a path with an SGR conceal sequence and a C1 character, as a peer could send it.
+const CONTROL_WARNING = 'The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.';
+const ESCAPED_CONTROL_WARNING = String.raw`/tmp/a\x1b[8mb\x9bc.ad.`;
+
+/** The CLI output of one command answered with `data`, stdout and stderr together. */
+async function terminalOutputOf(command: string, data: Record<string, unknown>, json = false) {
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    { transport: async (): Promise<DaemonResponse> => ({ ok: true, data }) },
+  );
+  const { stdout, stderr } = await withCapturedOutput(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: command as ClientBackedCliCommandName,
+      positionals: command === 'open' ? ['Demo'] : [],
+      flags: { json } as CliFlags,
+      client,
+    }),
+  );
+  return { stdout, stderr, all: `${stdout}${stderr}` };
+}
+
+function rawControls(text: string): string[] {
+  return [...text].filter(
+    (char) =>
+      (char < ' ' && char !== '\n' && char !== '\t') || (char >= '\u007f' && char <= '\u009f'),
+  );
+}
+
+test.each([
+  { command: 'open', data: { session: 'qa', appName: 'Demo', warnings: [CONTROL_WARNING] } },
+  { command: 'snapshot', data: { nodes: [], truncated: false, warnings: [CONTROL_WARNING] } },
+  { command: 'close', data: { session: 'qa', warnings: [CONTROL_WARNING] } },
+])(
+  '$command writes one escaped warning and no raw control character',
+  async ({ command, data }) => {
+    const { all } = await terminalOutputOf(command, data);
+
+    assert.equal(all.split(ESCAPED_CONTROL_WARNING).length - 1, 1, all);
+    assert.deepEqual(rawControls(all), []);
+  },
+);
+
+test('--json escapes DEL and C1 and still parses to the exact warning', async () => {
+  const { stdout } = await terminalOutputOf(
+    'close',
+    { session: 'qa', warnings: [CONTROL_WARNING] },
+    true,
+  );
+
+  assert.deepEqual(rawControls(stdout), []);
+  assert.ok(stdout.includes(String.raw`\u001b[8mb\u009bc.ad`), stdout);
+  const parsed = JSON.parse(stdout) as { data: { warnings?: string[] } };
+  assert.deepEqual(parsed.data.warnings, [CONTROL_WARNING]);
+});
+
+test('default open writes a multi-line warning once', async () => {
+  const { all } = await terminalOutputOf('open', {
+    session: 'qa',
+    appName: 'Demo',
+    warnings: ['First line\nsecond line'],
+  });
+
+  assert.equal(all.split('First line second line').length - 1, 1, all);
+  assert.ok(!all.includes('First line\nsecond line'), all);
 });

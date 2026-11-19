@@ -23,6 +23,7 @@ import { snapshotCliOutput } from '../capture/output.ts';
 import {
   type CliOutputFormatter,
   type CliOutputFormatterParams,
+  collapseWarningText,
   messageCliOutput,
   messageOutput,
   resultOutput,
@@ -98,8 +99,9 @@ export async function openCliOutput(
   if (reader === 'terminal' && typeof data.sessionStateDir === 'string') {
     lines.push(`Session state: ${data.sessionStateDir}`);
   }
+  // Folded the way the warning dispatcher folds them, so it finds each one here and does not add it a second time.
   for (const warning of result.warnings ?? []) {
-    lines.push(`Warning: ${warning}`);
+    lines.push(`Warning: ${collapseWarningText(warning)}`);
   }
   // open --foreground: the composed initial snapshot renders through the SAME
   // path `snapshot -i` uses (label dedupe + interactive tree text), after the

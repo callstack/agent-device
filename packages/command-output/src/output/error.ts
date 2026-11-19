@@ -7,7 +7,7 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { readResponseWarnings, stringifyTerminalJson } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { collapseWarningText } from '../output-common.ts';
@@ -162,7 +162,8 @@ function formatBody(
   const divergenceText = formatReplayDivergenceReport(normalized.details);
   if (divergenceText) body.push(divergenceText);
   if (options.showDetails && normalized.details) {
-    body.push(JSON.stringify(normalized.details, null, 2));
+    // Serialized for the terminal, so the details block stays parseable JSON after the CLI writer escapes its text.
+    body.push(stringifyTerminalJson(normalized.details));
   }
   return body;
 }

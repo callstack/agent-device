@@ -29,7 +29,9 @@ export const proxyCommand: ClientCommandHandler = async ({
     throw new AppError('INVALID_ARGS', 'proxy does not accept positional arguments.');
   }
   const startup = await startProxy(flags, clientHost);
-  await writeCommandOutput(flags, startup, () => renderProxyStartup(startup));
+  await writeCommandOutput(flags, startup, () => renderProxyStartup(startup), {
+    terminalSafe: true,
+  });
   await waitForever();
   return true;
 };
