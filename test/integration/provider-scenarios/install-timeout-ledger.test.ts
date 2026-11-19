@@ -4,7 +4,6 @@ import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/regi
 import {
   INSTALL_SOURCE_DAEMON_DEADLINE_MS,
   INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS,
-  INSTALL_SOURCE_READINESS_WORST_CASE_MS,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
 import * as hostCommands from '@agent-device/host-kit/command';
@@ -87,6 +86,10 @@ type InstallLedgerScenario = ClosableProviderScenarioResource &
   }>;
 
 const REQUIRED_DAEMON_RESULT_MARGIN_MS = 30_000;
+// The worst case readiness (`ensureReady`, cold boot included) may spend before materialization
+// starts. The cold-booting routes below reach about 145 s and none more. The deploy reserve
+// excludes this share.
+const INSTALL_SOURCE_READINESS_WORST_CASE_MS = 150_000;
 // The standalone materialization aggregate, which only applies when no daemon deadline is armed.
 const EXPECTED_STANDALONE_SOURCE_BUDGET_MS = 600_000;
 // The most materialization may take inside the daemon's source-install work budget: the request
