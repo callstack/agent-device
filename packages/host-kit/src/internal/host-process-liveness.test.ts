@@ -19,6 +19,7 @@ import {
   readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessStartTime,
+  readProcessStartTimeRaw,
   readProcessIdentities,
   readProcessIdentityFacts,
   processStartTimesDiffer,
@@ -58,6 +59,26 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+test('raw start time preserves the released ps rendering and does not pin its locale', () => {
+  psReturns('mar. 17 nov. 19:42:27 2026\n');
+  assert.equal(readProcessStartTimeRaw(4242), 'mar. 17 nov. 19:42:27 2026');
+  const [command, args, options] = mockRunCmdSync.mock.calls[0]!;
+  assert.ok(PINNED_PS_COMMANDS.includes(command));
+  assert.deepEqual(args, ['-p', '4242', '-o', 'lstart=']);
+  assert.equal(options.envOverrides, undefined);
+});
+
+test('raw start time treats invalid pids and failed ps reads as unknown', () => {
+  assert.equal(readProcessStartTimeRaw(-1), null);
+  assert.equal(mockRunCmdSync.mock.calls.length, 0);
+  psReturns('', 1);
+  assert.equal(readProcessStartTimeRaw(4242), null);
+  mockRunCmdSync.mockImplementation(() => {
+    throw new Error('ps unavailable');
+  });
+  assert.equal(readProcessStartTimeRaw(4242), null);
 });
 
 test('isProcessZombie detects the Z state code with trailing flags', () => {
