@@ -197,28 +197,23 @@ public final class SnapshotInstrumentation extends Instrumentation {
 
       while (!Thread.currentThread().isInterrupted()) {
         try (LocalSocket socket = server.accept()) {
+          long deadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_TIMEOUT_MS;
           // Positive peer identity first: a peer that is not adbd (shell uid 2000, or root uid 0
           // under `adb root`) — or whose credentials cannot be read at all — is rejected before
           // any command byte is read and before any response is written.
           if (!admitSessionPeer(socket)) {
             continue;
           }
-          long deadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_TIMEOUT_MS;
           try {
-            String command;
-            try {
-              command =
-                  SessionPeerPolicy.readSessionCommandLine(
-                      socket.getInputStream(),
-                      socket::setSoTimeout,
-                      SystemClock::elapsedRealtime,
-                      deadlineAtMs,
-                      SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
-            } catch (IOException error) {
-              socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
-              SessionResponseWriter.writeSessionError(socket.getOutputStream(), "", error);
-              continue;
-            }
+            // An expired, incomplete or failed read closes the connection without a reply: a peer
+            // that never reads could otherwise hold the only accept loop with the reply.
+            String command =
+                SessionPeerPolicy.readSessionCommandLine(
+                    socket.getInputStream(),
+                    socket::setSoTimeout,
+                    SystemClock::elapsedRealtime,
+                    deadlineAtMs,
+                    SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             // LocalSocket applies setSoTimeout to both directions.
             socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
             SessionPeerPolicy.LineDecision lineDecision =

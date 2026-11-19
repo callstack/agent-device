@@ -3,7 +3,10 @@ import {
   getLiveAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
-import { sendAndroidSnapshotHelperSessionCommand } from '../snapshot-helper-session-protocol.ts';
+import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
+  sendAndroidSnapshotHelperSessionCommand,
+} from '../snapshot-helper-session-protocol.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from '../snapshot-helper-session.ts';
 
 vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
@@ -30,7 +33,7 @@ test('an oversized input frame skips session dispatch and leaves the live helper
       action: 'input',
       helper,
       // The action and request ID also occupy bytes in the frame.
-      payloadBase64: 'A'.repeat(256 * 1024),
+      payloadBase64: 'A'.repeat(ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES),
       timeoutMs: 2_000,
     }),
   ).resolves.toBeUndefined();

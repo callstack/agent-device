@@ -46,7 +46,9 @@ export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
 const SESSION_SOCKET_PREFIX = 'agentdevice-snapshot-helper-';
 
 // The host checks the command before opening a connection. The APK enforces the same byte limit.
-export const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 256 * 1024;
+// A 64 KiB `fill --text-stdin` value of JSON-escaped control characters encodes to 524,368 Base64
+// bytes, and the action and request id follow; SessionPeerPolicy.java owns the full derivation.
+export const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 513 * 1024;
 
 export function androidSnapshotHelperSessionSocketName(port: number): string {
   return `${SESSION_SOCKET_PREFIX}${port}`;

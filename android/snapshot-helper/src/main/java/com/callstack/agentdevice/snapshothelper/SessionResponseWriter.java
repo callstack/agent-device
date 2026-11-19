@@ -56,10 +56,14 @@ final class SessionResponseWriter {
     writeFrame(output, headers.toString(), body);
   }
 
+  /**
+   * Writes a frame with bounded socket writes and no flush. LocalSocket flush polls until the peer
+   * drains the send queue, and the send timeout does not bound that poll. The socket owner closes
+   * the connection after the frame.
+   */
   static void writeFrame(OutputStream output, String headers, String body) throws IOException {
     output.write(headers.getBytes(StandardCharsets.UTF_8));
     output.write(body.getBytes(StandardCharsets.UTF_8));
-    output.flush();
   }
 
   /** One response frame, encoded and ready to write. */
@@ -79,13 +83,19 @@ final class SessionResponseWriter {
     Reply of(Throwable error);
   }
 
+  /**
+   * Writes exactly one frame. Only command execution and encoding can turn into the error reply. A
+   * failed write reaches the socket owner, which closes the connection without another frame.
+   */
   static void respondOnce(OutputStream output, Execution execution, FailureReply failure)
       throws IOException {
+    Reply reply;
     try {
-      execution.run().writeTo(output);
+      reply = execution.run();
     } catch (Throwable error) {
-      failure.of(error).writeTo(output);
+      reply = failure.of(error);
     }
+    reply.writeTo(output);
   }
 
   private static String sanitizeHeaderValue(String value) {

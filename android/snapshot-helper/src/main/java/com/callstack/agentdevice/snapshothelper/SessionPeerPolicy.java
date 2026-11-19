@@ -30,13 +30,14 @@ final class SessionPeerPolicy {
 
   /**
    * The per-connection command-line byte cap. Derived from the largest supported producer of this
-   * channel, measured with the repository's own plan builders: a 10 s two-contact gesture carries
-   * 1,252 densified samples (2 pointers x 626 samples on the 16 ms grid), whose base64 command line
-   * is at most ~130 KB, and the documented 64 KiB {@code fill --text-stdin} contract encodes to
-   * ~88 KB. 256 KiB bounds both with at least 2x headroom. The IME helper's 64,000-base64-char
-   * cap belongs to its separate am/broadcast channel and is deliberately not reused here.
+   * channel. A 10 s two-contact gesture carries 1,252 densified samples, at most ~130 KB of Base64.
+   * The documented 64 KiB {@code fill --text-stdin} contract is larger in the worst case: each
+   * accepted control character such as U+001E is one UTF-8 byte that JSON escapes to six, so a
+   * 65,536-byte value becomes 524,368 Base64 bytes before the action and request id. 513 KiB
+   * (525,312 bytes) carries that frame. The IME helper's 64,000-Base64-char cap belongs to its
+   * separate am/broadcast channel and is deliberately not reused here.
    */
-  static final int MAX_COMMAND_LINE_BYTES = 256 * 1024;
+  static final int MAX_COMMAND_LINE_BYTES = 513 * 1024;
 
   enum Admission {
     ADMITTED,
@@ -93,7 +94,11 @@ final class SessionPeerPolicy {
     long nowMs();
   }
 
-  /** Reads one command using the deadline fixed at accept and at most maxBytes + 1 bytes. */
+  /**
+   * Reads one newline-terminated command using the deadline fixed at accept and at most
+   * maxBytes + 1 bytes. A read that expires or reaches EOF before the newline throws
+   * {@link SessionReadClosed}; a line over the cap returns its first maxBytes + 1 bytes.
+   */
   static String readSessionCommandLine(
       InputStream input, ReadTimeout timeout, MonotonicClock clock, long deadlineAtMs, int maxBytes)
       throws IOException {
@@ -105,13 +110,17 @@ final class SessionPeerPolicy {
         throw new SessionReadClosed(ReadFailure.EXPIRED);
       }
       timeout.setMillis((int) remainingMs);
-      int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
+      int count;
+      try {
+        count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
+      } catch (SocketTimeoutException expired) {
+        throw new SessionReadClosed(ReadFailure.EXPIRED);
+      }
       if (clock.nowMs() > deadlineAtMs) {
         throw new SessionReadClosed(ReadFailure.EXPIRED);
       }
       if (count < 0) {
-        if (bytes.size() == 0) return null;
-        break;
+        throw new SessionReadClosed(ReadFailure.INCOMPLETE);
       }
       int end = 0;
       while (end < count && chunk[end] != '\n') end++;
@@ -122,7 +131,7 @@ final class SessionPeerPolicy {
   }
 
   static LineDecision commandLineDecision(String line, int maxLineBytes) {
-    if (line == null || line.isEmpty()) {
+    if (line.isEmpty()) {
       return LineDecision.REJECTED_EMPTY;
     }
     return line.getBytes(StandardCharsets.UTF_8).length > maxLineBytes

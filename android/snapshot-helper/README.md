@@ -117,13 +117,16 @@ trust boundary; any other uid (or an unreadable credential) is closed without a 
 name derives from the port and carries no secret, and no token travels in argv.
 
 Each connection gets a two-second command read deadline from acceptance, independent of the capture
-`timeoutMs`. A
-silent or drip-feeding peer cannot hold the command reader past that deadline. The line is capped
-at 256 KiB, a bound derived from the largest supported producer of this channel (a 10 s
-two-contact gesture carries 1,252 densified samples, at most ~130 KB base64; the documented 64 KiB
-`fill --text-stdin` contract encodes to ~88 KB — the cap keeps at least 2x headroom over both). A
-connection that hits either read bound receives a session error and closes. A response write failure
-closes that connection. The session keeps serving the next connection:
+`timeoutMs`. A silent or drip-feeding peer cannot hold the command reader past that deadline. A
+command ends with a newline. A connection whose read expires, or whose stream ends before the
+newline, closes without a response, so a peer that never reads cannot hold the accept loop with a
+reply. The line is capped at 513 KiB, a bound derived from the largest supported producer of this
+channel. A 10 s two-contact gesture carries 1,252 densified samples, at most ~130 KB Base64. The
+documented 64 KiB `fill --text-stdin` contract is larger in the worst case: JSON escapes an accepted
+control character such as U+001E from one byte to six, so the value encodes to 524,368 Base64 bytes
+before the action and request id. A line over the cap receives a session error and closes. Each
+response is one frame of bounded writes with no flush, and the connection then closes. A response
+write failure closes that connection without another frame. The session keeps serving the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling
