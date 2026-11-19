@@ -171,7 +171,7 @@ function addStatusLine(record: StatusRecord, line: string): void {
 
 /**
  * Classifies one complete status record. A ready record decides capability only when it is well
- * formed: this protocol, a numeric session port, no duplicate or unparsed line. Then the
+ * formed: this protocol, the session port this host launched, no duplicate or unparsed line. Then the
  * authenticated transport makes it ready, and no transport field means the helper predates that
  * transport. Any other ready record is malformed and takes the transient path. A record that is
  * not readiness is ignored, so the wait goes on.
@@ -179,6 +179,7 @@ function addStatusLine(record: StatusRecord, line: string): void {
 function classifyReadinessRecord(
   statusLine: string,
   record: StatusRecord,
+  launchedPort: number,
 ): ReadinessOutcome | undefined {
   const { fields } = record;
   if (statusLine !== 'INSTRUMENTATION_STATUS_CODE: 2' || fields.get('sessionReady') !== 'true') {
@@ -188,7 +189,7 @@ function classifyReadinessRecord(
   if (
     record.malformed ||
     fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL ||
-    !/^\d+$/.test(fields.get('sessionPort') ?? '') ||
+    fields.get('sessionPort') !== String(launchedPort) ||
     (transport !== undefined && transport !== SESSION_TRANSPORT)
   ) {
     return {
@@ -229,11 +230,16 @@ function settleAfterDrain(record: AndroidInstrumentationProcessRecord): Promise<
   });
 }
 
+/**
+ * Waits for the helper's readiness record. `launchedPort` is the session port this host launched
+ * the helper with; a record that reports any other port is not this helper's readiness.
+ */
 export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
   signal: AbortSignal | undefined,
   record: AndroidInstrumentationProcessRecord,
+  launchedPort: number,
 ): Promise<ReadonlySet<string>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -262,7 +268,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       for (const rawLine of lines) {
         const line = rawLine.replace(/\r$/, '');
         if (line.startsWith('INSTRUMENTATION_STATUS_CODE: ')) {
-          const outcome = classifyReadinessRecord(line, statusRecord);
+          const outcome = classifyReadinessRecord(line, statusRecord, launchedPort);
           statusRecord = newStatusRecord();
           if (outcome) {
             settle(outcome);

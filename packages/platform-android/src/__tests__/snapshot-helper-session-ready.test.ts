@@ -8,6 +8,8 @@ import {
 } from '../snapshot-helper-session-protocol.ts';
 import { FakeAndroidProcess } from './snapshot-helper-session.fixtures.ts';
 
+const LAUNCHED_PORT = 18093;
+
 const READY_HEAD = [
   'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
   'INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate',
@@ -20,6 +22,7 @@ function waitForReady(process: FakeAndroidProcess) {
     5_000,
     undefined,
     recordInstrumentationProcess(process),
+    LAUNCHED_PORT,
   );
 }
 
@@ -58,6 +61,7 @@ async function readinessReason(stdout: string): Promise<unknown> {
     1_000,
     undefined,
     recordInstrumentationProcess(process),
+    LAUNCHED_PORT,
   ).catch((error: unknown) => error);
   process.stdout.write(stdout);
   const outcome = await ready;
@@ -89,6 +93,16 @@ test.each([
     label: 'an unparsed status line',
     stdout: `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTransport\n${READY_TAIL}`,
   },
+  ...['18094', '0', '65536', '018093'].flatMap((port) => [
+    {
+      label: `session port ${port} and the transport`,
+      stdout: `${READY_HEAD.replace('sessionPort=18093', `sessionPort=${port}`)}\n${TRANSPORT}\n${READY_TAIL}`,
+    },
+    {
+      label: `session port ${port} and no transport`,
+      stdout: `${READY_HEAD.replace('sessionPort=18093', `sessionPort=${port}`)}\n${READY_TAIL}`,
+    },
+  ]),
   {
     label: 'a missing session port',
     stdout: `${READY_HEAD.replace('INSTRUMENTATION_STATUS: sessionPort=18093\n', '').replace('\nINSTRUMENTATION_STATUS: sessionPort=18093', '')}\n${TRANSPORT}\n${READY_TAIL}`,
@@ -104,6 +118,7 @@ test('fields from an earlier record never complete a later ready record', async 
     1_000,
     undefined,
     recordInstrumentationProcess(process),
+    LAUNCHED_PORT,
   ).catch((error: unknown) => error);
   // The transport line belongs to a record that INSTRUMENTATION_CODE ended. The ready record after
   // it has no transport line, and the protocol line of an earlier status record does not count.
@@ -116,4 +131,12 @@ test('fields from an earlier record never complete a later ready record', async 
   const outcome = await ready;
   assert.ok(outcome instanceof AppError);
   assert.equal(outcome.details?.reason, MALFORMED);
+});
+
+test('a terminal record ends its fields before the next ready record', async () => {
+  // Every readiness field but sessionReady arrives in a record that INSTRUMENTATION_CODE ends.
+  const reason = await readinessReason(
+    `${READY_HEAD}\n${TRANSPORT}\nINSTRUMENTATION_CODE: -1\n${READY_TAIL}`,
+  );
+  assert.equal(reason, MALFORMED);
 });

@@ -406,6 +406,7 @@ async function startAndroidSnapshotHelperSession(params: {
       params.startBudgetMs,
       params.options.signal,
       processRecord,
+      port,
     );
     sessions().set(params.deviceKey, session);
     failedSessions().delete(params.identity);

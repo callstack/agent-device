@@ -463,6 +463,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
       timeoutMs,
       undefined,
       recordInstrumentationProcess(process),
+      18093,
     );
 
   const exited = new FakeAndroidProcess();
@@ -812,7 +813,9 @@ test('a malformed helper report names its size, never the snapshot text it held'
 test('a ready timeout in the middle of a record leaves the final fields intact', async () => {
   const child = new FakeAndroidProcess();
   const record = recordInstrumentationProcess(child);
-  const failure = rejection(waitForAndroidSnapshotHelperSessionReady(child, 30, undefined, record));
+  const failure = rejection(
+    waitForAndroidSnapshotHelperSessionReady(child, 30, undefined, record, 18093),
+  );
   child.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
   const timedOut = await failure;
 
@@ -882,6 +885,7 @@ test('a session that exits while its streams stay open still fails startup promp
       5_000,
       controller.signal,
       recordInstrumentationProcess(child),
+      18093,
     ),
   );
   child.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
