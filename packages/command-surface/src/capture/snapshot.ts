@@ -113,7 +113,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
         type: 'array',
         items: objectSchema(
           {
-            kind: enumSchema(['small-target', 'missing-name', 'covered-control']),
+            kind: enumSchema(['small-target', 'missing-name', 'ambiguous-name', 'covered-control']),
             severity: enumSchema(['warning', 'observation']),
             ref: stringSchema('Plain ref, usable in the frame this audit published.'),
             rect: objectSchema(
@@ -128,15 +128,22 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
             role: stringSchema(),
             label: stringSchema(),
             identifier: stringSchema(),
-            detail: objectSchema(
-              {
-                unit: enumSchema(['pt', 'dp']),
-                width: numberSchema(),
-                height: numberSchema(),
-                recommendedSize: numberSchema(),
-              },
-              ['unit', 'width', 'height', 'recommendedSize'],
-            ),
+            detail: {
+              oneOf: [
+                // A `small-target` detail.
+                objectSchema(
+                  {
+                    unit: enumSchema(['pt', 'dp']),
+                    width: numberSchema(),
+                    height: numberSchema(),
+                    recommendedSize: numberSchema(),
+                  },
+                  ['unit', 'width', 'height', 'recommendedSize'],
+                ),
+                // An `ambiguous-name` detail.
+                objectSchema({ name: stringSchema(), count: numberSchema() }, ['name', 'count']),
+              ],
+            },
           },
           ['kind', 'severity', 'ref', 'role'],
         ),
@@ -145,6 +152,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
         {
           'small-target': stringSchema(),
           'missing-name': stringSchema(),
+          'ambiguous-name': stringSchema(),
           'covered-control': stringSchema(),
         },
         [],
@@ -169,7 +177,7 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
 } satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'audit'>;
 
 const auditCommandDescription =
-  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, and covered controls. Each finding shows its role. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
+  'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, controls of one role that share one accessible name, and covered controls. Each finding shows its role. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
 
 export const auditCommandFacet = defineParameterlessCommandFacet({
   name: AUDIT_COMMAND_NAME,
@@ -179,7 +187,7 @@ export const auditCommandFacet = defineParameterlessCommandFacet({
     summary: 'Report advisory accessibility findings',
     searchHint: 'a11y lint voiceover talkback',
     cliDetail:
-      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role.',
+      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name.',
   },
   run: (client, input) => client.capture.audit(input),
 });

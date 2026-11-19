@@ -206,7 +206,7 @@ export const qaReportHelpTopics = {
 Use this when asked for an accessibility review, a11y audit, or a screen-reader or touch-target check of an app.
 
 Scope:
-  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, and covered controls.
+  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, controls of one role that share one accessible name, and covered controls.
   This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance.
 
 Loop for each screen:

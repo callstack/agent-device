@@ -1,5 +1,6 @@
 import type {
   AuditFinding,
+  AuditNameDetail,
   AuditSizeDetail,
   AuditSnapshotCommandResult,
 } from '@agent-device/contracts/capture';
@@ -57,9 +58,15 @@ function findingText(finding: AuditFinding): string {
       return sizeText(finding.detail);
     case 'missing-name':
       return 'No accessible name';
+    case 'ambiguous-name':
+      return sharedNameText(finding.detail);
     case 'covered-control':
       return 'Accessible action is unavailable to touch';
   }
+}
+
+function sharedNameText({ count }: AuditNameDetail): string {
+  return `Name shared by ${count} controls of this role`;
 }
 
 function sizeText({ width, height, unit, recommendedSize }: AuditSizeDetail): string {

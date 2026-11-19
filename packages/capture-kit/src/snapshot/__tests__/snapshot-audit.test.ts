@@ -167,6 +167,102 @@ describe('missing-name', () => {
   });
 });
 
+describe('ambiguous-name', () => {
+  test('reports each of three buttons that share one name with the label and the count', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save' }),
+      node(2, { label: 'Save' }),
+      node(3, { label: 'Save' }),
+    ]);
+    expect(findings).toEqual([
+      expect.objectContaining({
+        kind: 'ambiguous-name',
+        severity: 'warning',
+        ref: '@e1',
+        role: 'button',
+        detail: { name: 'Save', count: 3 },
+      }),
+      expect.objectContaining({ ref: '@e2', detail: { name: 'Save', count: 3 } }),
+      expect.objectContaining({ ref: '@e3', detail: { name: 'Save', count: 3 } }),
+    ]);
+  });
+
+  test('accepts names that name their target', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save Lemon Herb Rice' }),
+      node(2, { label: 'Save Tomato Pasta' }),
+    ]);
+    expect(findings).toEqual([]);
+  });
+
+  test('ignores controls that share one name through different roles', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save' }),
+      node(2, { type: 'Link', label: 'Save' }),
+      node(3, { type: 'Switch', label: 'Save' }),
+    ]);
+    expect(findings).toEqual([]);
+  });
+
+  test('counts names that differ only by case or surrounding whitespace as one name', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save' }),
+      node(2, { label: 'save' }),
+      node(3, { label: '  Save  ' }),
+    ]);
+    expect(findings).toEqual([
+      expect.objectContaining({ ref: '@e1', detail: { name: 'Save', count: 3 } }),
+      expect.objectContaining({ ref: '@e2', detail: { name: 'save', count: 3 } }),
+      expect.objectContaining({ ref: '@e3', detail: { name: 'Save', count: 3 } }),
+    ]);
+  });
+
+  test('counts a name the control takes from a child or a content description', () => {
+    const { findings } = audit([
+      node(1),
+      node(4, { parentIndex: 1, type: 'StaticText', label: 'Save' }),
+      node(2, { contentDescription: 'Save' }),
+    ]);
+    expect(summarize(findings)).toEqual(['ambiguous-name @e1', 'ambiguous-name @e2']);
+  });
+
+  test('excludes system bars, keyboard keys, and controls the audit does not evaluate', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save', systemBar: 'navigation' }),
+      node(2, { label: 'Save', keyboardOwned: true }),
+      node(3, { label: 'Save', enabled: false }),
+      node(4, { label: 'Save', hittable: false }),
+      node(5, { label: 'Save', interactionBlocked: 'covered', hittable: false }),
+      node(6, { label: 'Save', ref: undefined }),
+    ]);
+    expect(findings.filter((finding) => finding.kind === 'ambiguous-name')).toEqual([]);
+  });
+
+  test('does not pair controls that have no accessible name', () => {
+    const { findings } = audit([
+      node(1, { identifier: 'save-1' }),
+      node(2, { identifier: 'save-2' }),
+    ]);
+    expect(summarize(findings)).toEqual(['missing-name @e1', 'missing-name @e2']);
+  });
+
+  test('collapses the duplicated wrapper that shares its parent control name', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save' }),
+      node(2, { parentIndex: 1, label: 'Save' }),
+    ]);
+    expect(summarize(findings)).toEqual(['ambiguous-name @e1']);
+  });
+
+  test('guides the caller to a unique label naming the target', () => {
+    const result = audit([node(1, { label: 'Save' }), node(2, { label: 'Save' })]);
+    expect(result.guidance).toEqual({
+      'ambiguous-name':
+        'Give each control a unique label that names its target, for example "Save Lemon Herb Rice".',
+    });
+  });
+});
+
 describe('duplicate wrappers', () => {
   const small = { x: 0, y: 0, width: 20, height: 20 };
 

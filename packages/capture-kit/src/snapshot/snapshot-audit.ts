@@ -48,23 +48,46 @@ type SizeRule =
   | { kind: 'checked'; unit: AuditSizeUnit; recommended: number; scale: number }
   | { kind: 'unchecked'; limitation: string };
 
-type AuditScan = {
+/** The captured-screen facts every audit pass reads. */
+type AuditFacts = {
   platform: AuditContext['platform'];
   producer: AuditContext['producer'];
   byIndex: ReadonlyMap<number, SnapshotNode>;
   children: ChildrenByParent;
 };
 
+type AuditScan = AuditFacts & {
+  /**
+   * Name groups that two or more evaluated controls of one role share on this screen, counted from
+   * the whole screen before any pass runs. A group joins role and lowercased name with NUL, because
+   * a name is any text.
+   */
+  sharedNames: ReadonlyMap<string, number>;
+};
+
+function nameGroupKey(role: string, name: string): string {
+  return `${role}\0${name.toLowerCase()}`;
+}
+
 /**
  * Advisory accessibility findings for one captured screen. Runs on the semantic nodes as
  * captured, before display label dedup, and reads only facts the capture already published.
  */
 export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditContext): AuditResult {
-  const scan: AuditScan = {
+  const facts: AuditFacts = {
     platform: context.platform,
     producer: context.producer,
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
+  };
+  const scan: AuditScan = {
+    ...facts,
+    sharedNames: countSharedNames(
+      nodes.flatMap((node) => {
+        const role = controlRole(node);
+        return role === undefined ? [] : [evaluatedNameGroup(node, role, facts)];
+      }),
+    ),
   };
   const rule = resolveSizeRule(context);
   const findings = nodes.flatMap((node) => auditNode(node, scan, rule));
@@ -74,6 +97,30 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
     checks: { snapshot: snapshotCompleteness(context) },
     limitations: collectLimitations(context, rule),
   };
+}
+
+/**
+ * The name group an evaluated control joins, or none when the audit does not judge it or it has no
+ * accessible name.
+ */
+function evaluatedNameGroup(
+  node: SnapshotNode,
+  role: string,
+  facts: AuditFacts,
+): string | undefined {
+  if (node.ref === undefined || !isActionable(node, controlOwnership(node, facts)))
+    return undefined;
+  const name = accessibleName(node, role, facts);
+  return name === undefined ? undefined : nameGroupKey(role, name);
+}
+
+function countSharedNames(groups: readonly (string | undefined)[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const group of groups) {
+    if (group === undefined) continue;
+    counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  return new Map([...counts].filter(([, count]) => count > 1));
 }
 
 function snapshotCompleteness(context: AuditContext): AuditChecks['snapshot'] {
@@ -105,8 +152,10 @@ function controlFindings(
     ownership === 'platform-sized' || isInlineLink(node, role, scan)
       ? undefined
       : smallTargetFinding(node, role, rule);
-  const unnamed = hasAccessibleName(node, role, scan) ? undefined : missingNameFinding(node, role);
-  return [small, unnamed].filter((finding) => finding !== undefined);
+  const name = accessibleName(node, role, scan);
+  const unnamed = name === undefined ? missingNameFinding(node, role) : undefined;
+  const shared = ambiguousNameFinding(node, role, name, scan);
+  return [small, unnamed, shared].filter((finding) => finding !== undefined);
 }
 
 /**
@@ -134,7 +183,7 @@ function controlRole(node: SnapshotNode): string | undefined {
 
 type ControlOwnership = 'app' | 'platform-sized' | 'system';
 
-function controlOwnership(node: SnapshotNode, scan: AuditScan): ControlOwnership {
+function controlOwnership(node: SnapshotNode, scan: AuditFacts): ControlOwnership {
   if (node.systemBar !== undefined || node.keyboardOwned === true) return 'system';
   if (scan.platform !== 'ios') return 'app';
   if (node.role === '_UIGrabber' || node.subrole === '_UIGrabber') return 'system';
@@ -153,12 +202,12 @@ function isActionable(node: SnapshotNode, ownership: ControlOwnership): boolean 
   );
 }
 
-function parentOf(node: SnapshotNode, scan: AuditScan): SnapshotNode | undefined {
+function parentOf(node: SnapshotNode, scan: AuditFacts): SnapshotNode | undefined {
   return node.parentIndex === undefined ? undefined : scan.byIndex.get(node.parentIndex);
 }
 
 /** A link inside a text container keeps the text's own line height. */
-function isInlineLink(node: SnapshotNode, role: string, scan: AuditScan): boolean {
+function isInlineLink(node: SnapshotNode, role: string, scan: AuditFacts): boolean {
   const parent = parentOf(node, scan);
   return role === 'link' && parent !== undefined && isTextNode(parent);
 }
@@ -237,10 +286,32 @@ function missingNameFinding(node: SnapshotNode, role: string): AuditFinding {
 }
 
 /**
+ * Two or more evaluated controls of this role carry the same normalized name, so neither the
+ * screen-reader user nor an agent can pick one by name. The detail spells the name as this
+ * control exposes it.
+ */
+function ambiguousNameFinding(
+  node: SnapshotNode,
+  role: string,
+  name: string | undefined,
+  scan: AuditScan,
+): AuditFinding | undefined {
+  if (name === undefined) return undefined;
+  const count = scan.sharedNames.get(nameGroupKey(role, name));
+  if (count === undefined) return undefined;
+  return {
+    ...findingBase(node, role),
+    kind: 'ambiguous-name',
+    severity: 'warning',
+    detail: { name, count },
+  };
+}
+
+/**
  * The occlusion pass already decided this node is covered. Only controls and rows are reported,
  * and the sole child of a covered control or row collapses into that parent, which reports.
  */
-function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
+function coveredFinding(node: SnapshotNode, scan: AuditFacts): AuditFinding | undefined {
   const role = coveredRole(node);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
@@ -256,7 +327,7 @@ function isRow(node: SnapshotNode): boolean {
   return normalizeType(node.type ?? '').endsWith('cell');
 }
 
-function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditScan): boolean {
+function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditFacts): boolean {
   const parent = parentOf(node, scan);
   if (!parent || parent.ref === undefined || coveredRole(parent) === undefined) return false;
   return scan.children.get(parent.index)?.length === 1;
@@ -273,14 +344,16 @@ function findingBase(node: SnapshotNode, role: string) {
 }
 
 /**
- * The control's own label or content description, a hint for a field, or a named descendant
- * such as the text inside a button. An identifier is a test handle and a value is content, so
- * neither names a control; a resource id is never a label.
+ * How this control is named: its own label, content description, or a field hint, else a named
+ * descendant such as the text inside a button. None means no accessible name.
  */
-function hasAccessibleName(node: SnapshotNode, role: string, scan: AuditScan): boolean {
-  if (ownName(node, EDITABLE_ROLES.has(role))) return true;
-  if (EDITABLE_ROLES.has(role)) return false;
-  return collectDescendants(scan.children, node.index).some((child) => ownName(child, false));
+function accessibleName(node: SnapshotNode, role: string, scan: AuditFacts): string | undefined {
+  const own = ownName(node, EDITABLE_ROLES.has(role));
+  if (own !== undefined) return own;
+  if (EDITABLE_ROLES.has(role)) return undefined;
+  return collectDescendants(scan.children, node.index)
+    .map((child) => ownName(child, false))
+    .find((name) => name !== undefined);
 }
 
 function ownName(node: SnapshotNode, editable: boolean): string | undefined {
@@ -316,6 +389,8 @@ function auditGuidance(
     'small-target': `${size} Enlarge the touch area with padding, a minimum size, or hitSlop.`,
     'missing-name':
       'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
+    'ambiguous-name':
+      'Give each control a unique label that names its target, for example "Save Lemon Herb Rice".',
     'covered-control':
       'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
   };

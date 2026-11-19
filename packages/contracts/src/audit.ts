@@ -2,7 +2,11 @@ import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { SnapshotProducer } from './snapshot-producers.ts';
 
-export type AuditFindingKind = 'small-target' | 'missing-name' | 'covered-control';
+export type AuditFindingKind =
+  | 'small-target'
+  | 'missing-name'
+  | 'ambiguous-name'
+  | 'covered-control';
 
 /** `warning` asks for review; `observation` reports a fact the screen already proved. */
 export type AuditSeverity = 'warning' | 'observation';
@@ -15,6 +19,14 @@ export type AuditSizeDetail = {
   width: number;
   height: number;
   recommendedSize: number;
+};
+
+/** An `ambiguous-name` finding's shared label and how many controls of the role share it. */
+export type AuditNameDetail = {
+  /** The name the controls share, spelled as the reporting control exposes it. */
+  name: string;
+  /** Controls of this role carrying that name on the audited screen, including this one. */
+  count: number;
 };
 
 type AuditFindingBase = {
@@ -33,6 +45,7 @@ type AuditFindingBase = {
 export type AuditFinding =
   | (AuditFindingBase & { kind: 'small-target'; severity: 'warning'; detail: AuditSizeDetail })
   | (AuditFindingBase & { kind: 'missing-name'; severity: 'warning' })
+  | (AuditFindingBase & { kind: 'ambiguous-name'; severity: 'warning'; detail: AuditNameDetail })
   | (AuditFindingBase & { kind: 'covered-control'; severity: 'observation' });
 
 export type AuditContext = {
