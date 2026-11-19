@@ -605,7 +605,7 @@ const scrollCommandFacet = defineCommandFacet({
     summary: 'Scroll in a direction or to an edge',
     searchHint: 'swipe down list',
     cliDetail:
-      'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture.',
+      'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture. On watchOS, scroll turns the Digital Crown: up and down only, and the amount is a fraction of the screen height. Use swipe for horizontal pages.',
   },
   metadata: metadata('scroll'),
   run: (client, input) => client.interactions.scroll(input as ScrollOptions),
