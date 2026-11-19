@@ -55,7 +55,6 @@ test('a local write reports the normalized Windows entry it commits', () => {
     vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined),
     vi.spyOn(fs, 'writeFileSync').mockReturnValue(undefined),
     vi.spyOn(fs, 'chmodSync').mockReturnValue(undefined),
-    vi.spyOn(fs, 'rmSync').mockReturnValue(undefined),
   ];
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
   Object.defineProperty(process, 'platform', { value: 'win32' });
@@ -66,6 +65,7 @@ test('a local write reports the normalized Windows entry it commits', () => {
 
     expect(result).toMatchObject({ written: true, path: entry });
     expect(rename).toHaveBeenCalledExactlyOnceWith(expect.any(String), entry);
+    expect(fs.existsSync(rename.mock.calls[0]![0])).toBe(false);
   } finally {
     Object.defineProperty(process, 'platform', platform);
     for (const mock of mocks) mock.mockRestore();

@@ -44,6 +44,22 @@ test.each([
   },
 );
 
+test('a live detached daemon without a start time is not stopped or attributed a report', async () => {
+  const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-no-start-'));
+  const record = JSON.stringify({ pid: process.pid, ownership: 'detached' });
+  fs.writeFileSync(paths.infoPath, record);
+  const signals = vi.spyOn(process, 'kill');
+
+  await expect(
+    stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
+      paths,
+      host: createTestHostEnvironment(),
+    }),
+  ).rejects.toMatchObject({ details: { terminationReason: 'missing-start-time' } });
+  expect(signals.mock.calls.filter(([, signal]) => signal !== 0)).toEqual([]);
+  expect(fs.readFileSync(paths.infoPath, 'utf8')).toBe(record);
+});
+
 test('stop refuses an unreadable record without a request or signal', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-unreadable-'));
   fs.writeFileSync(paths.infoPath, '{not json');
