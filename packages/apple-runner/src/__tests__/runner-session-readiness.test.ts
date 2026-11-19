@@ -184,6 +184,33 @@ beforeEach(async () => {
   );
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
 });
+// #4687: a session keeps `booted` from its open. When an external pool deletes that simulator, the
+// runner start must name the missing device before xcodebuild waits out its destination timeout.
+test('runner session start refuses a booted session simulator the listing no longer has', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-deleted-sim' };
+  const listing = JSON.stringify({
+    devices: {
+      'com.apple.CoreSimulator.SimRuntime.iOS-27-2': [{ udid: 'other-sim', state: 'Booted' }],
+    },
+  });
+  mockRunXcrun.mockImplementation(async (args: string[]) =>
+    args.includes('list')
+      ? { exitCode: 0, stdout: listing, stderr: '' }
+      : { exitCode: 0, stdout: '', stderr: '' },
+  );
+
+  await assert.rejects(ensureRunnerSession(device, {}), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'DEVICE_NOT_FOUND');
+    assert.equal(error.details?.deviceId, device.id);
+    assert.equal(error.details?.dispatched, 'no');
+    // The runner cache is shared by every agent on the host; a missing device is no reason to wipe it.
+    assert.doesNotMatch(String(error.details?.hint), /apple-runner\/derived|clean:xcuitest/);
+    return true;
+  });
+  assert.equal(mockRunCmdBackground.mock.calls.length, 0);
+});
+
 test('runner session executes read-only commands without uptime preflight', async () => {
   const session = makeRunnerSession({ state: 'starting' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));

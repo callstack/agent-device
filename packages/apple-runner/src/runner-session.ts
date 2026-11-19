@@ -867,19 +867,20 @@ export async function stopAllIosRunnerSessions(): Promise<string[]> {
   }
 }
 
-function ensureBootedIfNeeded(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
-  if (device.kind !== 'simulator') {
-    return Promise.resolve();
-  }
+async function ensureBootedIfNeeded(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
+  if (device.kind !== 'simulator') return;
   if (device.booted) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_startup_ensure_booted_skipped',
       data: { deviceId: device.id },
     });
-    return Promise.resolve();
+    // Loaded at a start only, outside the Apple facades' eager import closure.
+    const { assertBootedSimulatorStillListed } = await import('./runner-simulator-presence.ts');
+    await assertBootedSimulatorStillListed(device, signal);
+    return;
   }
-  return ensureBooted(device, signal);
+  await ensureBooted(device, signal);
 }
 
 async function ensureBooted(device: DeviceInfo, signal?: AbortSignal): Promise<void> {

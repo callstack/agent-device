@@ -49,6 +49,8 @@ type AppleRunnerToolPort = {
   ) => Promise<Record<string, unknown> | null>;
   hasScopedAppleToolProvider: () => boolean;
   buildSimctlArgsForDevice: (device: DeviceInfo, args: readonly string[]) => ScopedSimctlCommand;
+  /** True while this process saw the simulator Booted moments ago, which proves it still exists. */
+  wasSimulatorRecentlyObservedBooted: (device: DeviceInfo) => Promise<boolean>;
   /** A simulator udid with the simulator set that holds it; two devices match only when both do. */
   simulatorAddressFor: (
     device: DeviceInfo,
@@ -228,6 +230,7 @@ export const readApplePlistJson = delegate('readApplePlistJson');
 export const hasScopedAppleToolProvider = delegate('hasScopedAppleToolProvider');
 export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');
 export const simulatorAddressFor = delegate('simulatorAddressFor');
+export const wasSimulatorRecentlyObservedBooted = delegate('wasSimulatorRecentlyObservedBooted');
 export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDeviceControl');
 export const leaseOwnerStateDir = delegate('leaseOwnerStateDir');
 export const hasDeviceClaimAuthority = delegate('hasDeviceClaimAuthority');
