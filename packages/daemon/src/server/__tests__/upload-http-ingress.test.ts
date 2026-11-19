@@ -167,6 +167,88 @@ test('upload route progress renews the ticket idle lifetime and keeps 308 framin
   }
 });
 
+test('both upload JSON routes accept a progressing body across the 120 s idle window', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const bytes = Buffer.from('ABCD');
+  const auth = { authorization: 'Bearer daemon-secret' };
+  const sendSlowJson = async (path: string, json: string) => {
+    const firstRead = ioBarrier();
+    const secondRead = ioBarrier();
+    let client: http.ClientRequest | undefined;
+    server.prependOnceListener('request', (req) => {
+      const read = req.read.bind(req);
+      let bodyBytes = 0;
+      req.read = (size?: number) => {
+        const chunk = read(size);
+        if (Buffer.isBuffer(chunk)) {
+          bodyBytes += chunk.length;
+          if (bodyBytes >= 1) firstRead.resolve();
+          if (bodyBytes >= 2) secondRead.resolve();
+        }
+        return chunk;
+      };
+    });
+    const reply = routeRequest(
+      port,
+      {
+        method: 'POST',
+        path,
+        headers: {
+          ...auth,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(json),
+        },
+      },
+      (req) => {
+        client = req;
+        req.write(json.slice(0, 1));
+      },
+    );
+    void reply.catch(() => {});
+    try {
+      await withIO(firstRead.promise);
+      assert.ok(client);
+      await vi.advanceTimersByTimeAsync(90_000);
+      client.write(json.slice(1, 2));
+      await withIO(secondRead.promise);
+      await vi.advanceTimersByTimeAsync(90_000);
+      client.end(json.slice(2));
+      return await withIO(reply);
+    } finally {
+      client?.destroy();
+    }
+  };
+
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const preflight = await sendSlowJson('/upload/preflight', preflightBody(bytes));
+    assert.equal(preflight.status, 200);
+    const { uploadId } = JSON.parse(preflight.body) as { uploadId: string };
+    const put = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'PUT',
+          path: `/upload/direct/${uploadId}`,
+          headers: { ...auth, 'content-range': 'bytes 0-3/4' },
+        },
+        (req) => req.end(bytes),
+      ),
+    );
+    assert.equal(put.status, 200);
+
+    const finalized = await sendSlowJson('/upload/finalize', JSON.stringify({ uploadId }));
+    assert.equal(finalized.status, 200);
+    const artifact = JSON.parse(finalized.body) as { ok: boolean; uploadId: string };
+    assert.equal(artifact.ok, true);
+    cleanupUploadedArtifact(artifact.uploadId);
+  } finally {
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
 test('client cancellation mid-chunk aborts the receive, rolls back, and the ticket expires on schedule', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();

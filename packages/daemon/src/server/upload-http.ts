@@ -151,7 +151,7 @@ async function handleUploadPreflight(
     });
     if (!auth) return;
 
-    const body = await readRestJsonBody(req, 64 * 1024);
+    const body = await readRestJsonBody(req, 64 * 1024, ingress.onAcceptedBodyBytes);
     // The JSON body is fully received: inactivity stops here and the remaining work
     // observes only the aggregate (#4441).
     ingress.bodyComplete();
@@ -235,7 +235,7 @@ async function handleUploadFinalize(
     });
     if (!auth) return;
 
-    const body = await readRestJsonBody(req, 64 * 1024);
+    const body = await readRestJsonBody(req, 64 * 1024, ingress.onAcceptedBodyBytes);
     // The JSON body is fully received: inactivity stops here, so the post-body hash,
     // extraction and registration observe only the aggregate (#4441).
     ingress.bodyComplete();
@@ -285,9 +285,10 @@ function sendUploadedArtifactResponse(
 async function readRestJsonBody(
   req: http.IncomingMessage,
   maxBodyBytes: number,
+  onAcceptedBytes: (bytes: number) => void,
 ): Promise<Record<string, unknown>> {
   const raw = (
-    await readNodeHttpRequestBody(req, maxBodyBytes, 'Request body is too large.')
+    await readNodeHttpRequestBody(req, maxBodyBytes, 'Request body is too large.', onAcceptedBytes)
   ).toString('utf8');
   try {
     const parsed = JSON.parse(raw) as unknown;

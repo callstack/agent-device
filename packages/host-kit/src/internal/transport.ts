@@ -64,6 +64,7 @@ export async function readNodeHttpRequestBody(
   req: IncomingMessage,
   maxBodyBytes: number,
   tooLargeMessage: string,
+  onAcceptedBytes?: (bytes: number) => void,
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let bodyBytes = 0;
@@ -74,6 +75,7 @@ export async function readNodeHttpRequestBody(
       throw new AppError('INVALID_ARGS', tooLargeMessage);
     }
     chunks.push(buffer);
+    if (buffer.length > 0) onAcceptedBytes?.(buffer.length);
   }
   return Buffer.concat(chunks);
 }

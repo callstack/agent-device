@@ -56,16 +56,24 @@ test('readNodeHttpResponseBody decodes the complete response stream', async () =
 test('readNodeHttpRequestBody returns bytes and preserves the caller error message at the limit', async () => {
   const request = Readable.from([
     Buffer.from('hello '),
+    Buffer.alloc(0),
     Buffer.from('world'),
   ]) as unknown as IncomingMessage;
+  const accepted: number[] = [];
+  const onAcceptedBytes = (bytes: number) => accepted.push(bytes);
   assert.deepEqual(
-    await readNodeHttpRequestBody(request, 11, 'body exceeded'),
+    await readNodeHttpRequestBody(request, 11, 'body exceeded', onAcceptedBytes),
     Buffer.from('hello world'),
   );
+  assert.deepEqual(accepted, [6, 5]);
 
-  const oversized = Readable.from([Buffer.from('hello world!')]) as unknown as IncomingMessage;
+  const oversized = Readable.from([
+    Buffer.from('hello '),
+    Buffer.from('world!'),
+  ]) as unknown as IncomingMessage;
+  accepted.length = 0;
   await assert.rejects(
-    readNodeHttpRequestBody(oversized, 11, 'body exceeded'),
+    readNodeHttpRequestBody(oversized, 11, 'body exceeded', onAcceptedBytes),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'INVALID_ARGS');
@@ -73,6 +81,7 @@ test('readNodeHttpRequestBody returns bytes and preserves the caller error messa
       return true;
     },
   );
+  assert.deepEqual(accepted, [6]);
 });
 
 test('timingSafeStringEqual handles equal, unequal, and unequal-length secrets', () => {
