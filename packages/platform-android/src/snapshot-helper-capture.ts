@@ -15,7 +15,6 @@ import {
   isRefusedInstrumentationStart,
 } from './instrumentation-helper.ts';
 import {
-  type AndroidSnapshotHelperInstallResult,
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
@@ -30,6 +29,7 @@ import type {
   AndroidAdbExecutor,
   AndroidSnapshotHelperArtifact,
   AndroidSnapshotHelperCaptureOptions,
+  AndroidSnapshotHelperInstallResult,
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
