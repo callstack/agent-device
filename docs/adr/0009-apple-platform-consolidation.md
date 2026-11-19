@@ -27,7 +27,7 @@ Keep macOS as a distinct AppKit leaf with its helper binary and menubar and desk
 Do not flatten the tvOS focus-only interaction contract, which has no coordinate `tap`, across OSes.
 Support watchOS simulators through the shared XCUITest runner.
 The runner's host app and UI-test targets build for the watchOS simulator SDK. A SwiftUI host replaces the UIKit host there.
-The watchOS leaf (`os/watchos/facts.ts`) admits only operations with a watch meaning and refuses every other operation.
+The watchOS leaf (`packages/platform-apple/src/os/watchos/facts.ts`) admits only operations with a watch meaning and refuses every other operation.
 The Digital Crown is `scroll` (rotation) and `home` (press). One-finger swipe and pan are admitted. Multi-touch is refused.
 Physical watches are out of scope: a watch reaches the Mac only through its paired iPhone.
 
