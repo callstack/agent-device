@@ -33,3 +33,13 @@ test('the stderr sink leaves reporter-owned event types alone', () => {
   assert.equal(stderr, '');
   assert.equal(state.renderedToStderr, false);
 });
+
+test('the stderr sink escapes control characters in a progress message', () => {
+  const sink = createStderrCommandProgressSink(createCommandProgressState());
+
+  const stderr = withCapturedStderr(() => {
+    sink({ type: 'command', status: 'progress', message: 'Installing /tmp/a\u001b[8mb\u009b.app' });
+  });
+
+  assert.equal(stderr, String.raw`Installing /tmp/a\x1b[8mb\x9b.app` + '\n');
+});

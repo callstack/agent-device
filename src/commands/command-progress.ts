@@ -1,6 +1,6 @@
 import type { CommandProgressState } from '@agent-device/command-output';
 import type { RequestProgressEvent, RequestProgressSink } from '@agent-device/contracts/progress';
-import { writeStderr } from '../cli/process-exit.ts';
+import { escapeTerminalText } from '@agent-device/kernel/success-text';
 
 export function createCommandProgressState(): CommandProgressState {
   return { renderedToStderr: false };
@@ -15,6 +15,7 @@ export function createStderrCommandProgressSink(state: CommandProgressState): Re
   return (event: RequestProgressEvent) => {
     if (event.type !== 'command') return;
     state.renderedToStderr = true;
-    writeStderr(`${event.message}\n`);
+    // Escaped like every CLI write, since a progress message can name a value a device chose.
+    process.stderr.write(escapeTerminalText(`${event.message}\n`));
   };
 }
