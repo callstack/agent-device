@@ -56,7 +56,7 @@ Never call a failing gate passed.
 | Evidence | Required action |
 | --- | --- |
 | Failure caused by this change | Fix its owner and rerun. Until a run passes, report failed validation. |
-| Suspected host or infrastructure fault | Save the log. Compare the same command on unchanged base in an isolated checkout without competing tests. Until compared, report cause unproven. A solo pass does not prove contention. |
+| Suspected host or infrastructure fault | Save the log; compare the same command on the unchanged base without competing tests. Until compared, report cause unproven. |
 | Matching failure on unchanged base | Report Base-blocked with SHAs, command, and logs. Name the blocker and owner or issue. For authorized publication, use a draft with remaining checks. Do not mark merge-ready. |
 | Unavailable or inconclusive base comparison | Record the missing evidence and next action. Report blocked with cause unproven. |
 | Repaired fault or upstream fix | Rerun the failed check and affected gate at head. Require new evidence to change blocked status. |
