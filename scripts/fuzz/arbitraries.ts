@@ -43,6 +43,7 @@ const BOOLEAN_SELECTOR_KEYS = [
   'hidden',
   'editable',
   'selected',
+  'checked',
   'focused',
   'enabled',
   'hittable',
