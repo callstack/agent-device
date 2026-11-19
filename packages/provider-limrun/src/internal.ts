@@ -5,7 +5,6 @@
  */
 export { limrunPlugin } from './plugin.ts';
 export {
-  LIMRUN_CREDENTIAL_VARIABLES,
   limrunInstanceVariables,
   limrunPlatformForLeaseBackend,
   readLimrunCredentials,

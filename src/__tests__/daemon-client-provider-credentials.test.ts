@@ -15,7 +15,7 @@ import {
 import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
 import { builtinPluginInventory } from './test-utils/builtin-plugin-inventory.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { LIMRUN_CREDENTIAL_VARIABLES } from '@agent-device/provider-limrun/internal';
+import { pluginCredentialVariables } from '@agent-device/contracts/plugin-inventory';
 import { readDaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
 const inventory = await builtinPluginInventory();
@@ -143,7 +143,9 @@ function readFingerprint(body: string): unknown {
 }
 
 function clearCredentialEnv(): void {
-  for (const name of LIMRUN_CREDENTIAL_VARIABLES) vi.stubEnv(name, undefined);
+  const variables = pluginCredentialVariables(inventory, 'limrun');
+  if (!variables?.length) throw new Error('Limrun credential variables are missing from inventory');
+  for (const name of variables) vi.stubEnv(name, undefined);
 }
 
 async function startLocalDaemon(
