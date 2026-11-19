@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import { readGesturePayload } from '@agent-device/contracts/gesture-input';
 import type { DevicePin } from '@agent-device/command-surface';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -156,4 +157,15 @@ test('a config holdMs never becomes a gesture pan hold; a typed field and gestur
     host,
   );
   assert.equal(tap.input.holdMs, 300);
+
+  // A kind that never reads holdMs must not fail on a config default the caller never sent.
+  const fling = resolveMcpConfigDefaults(
+    'gesture',
+    { kind: 'fling', direction: 'up', origin: { x: 200, y: 420 }, distance: 90 },
+    gestureFields,
+    host,
+  );
+  assert.equal('holdMs' in fling.input, false);
+  assert.doesNotThrow(() => readGesturePayload(fling.input));
+  assert.equal('holdMs' in readGesturePayload(fling.input), false);
 });

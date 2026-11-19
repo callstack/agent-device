@@ -36,14 +36,10 @@ export function resolveMcpConfigDefaults(
       applicableDefaults[key] = value;
     }
   }
-  // A config default must never change a gesture kind it was not requested for: pan reads its
-  // hold only from the tool call's own holdMs field, so a press-oriented config holdMs neither
-  // makes a pan hold nor fails a two-finger pan.
-  if (
-    name === 'gesture' &&
-    explicitInput.kind === 'pan' &&
-    !Object.hasOwn(explicitInput, 'holdMs')
-  ) {
+  // A config default must never change a gesture kind it was not requested for: only gesture tap
+  // reads holdMs as a config default. Pan reads it only from the tool call's own field, and every
+  // other kind refuses the field, so a press-oriented config holdMs must not reach any of them.
+  if (name === 'gesture' && explicitInput.kind !== 'tap') {
     delete applicableDefaults.holdMs;
   }
   return {
