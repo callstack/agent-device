@@ -146,6 +146,50 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
 const SESSION_TRANSPORT = 'localabstract-peer-uid-v1';
 const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
 const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
+const SESSION_READY_MALFORMED_REASON = 'android_snapshot_helper_session_ready_malformed';
+
+type ReadinessOutcome =
+  | { kind: 'ready'; commands: ReadonlySet<string> }
+  | { kind: 'failed'; error: AppError };
+
+/**
+ * Classifies one complete status record. Only a ready record of this protocol decides capability:
+ * with the authenticated transport it is ready, and without it the helper predates that
+ * transport. A ready record of another protocol is malformed and takes the transient path. Any
+ * other record is not readiness, so the wait goes on.
+ */
+function classifyReadinessRecord(
+  statusLine: string,
+  fields: ReadonlyMap<string, string>,
+): ReadinessOutcome | undefined {
+  if (statusLine !== 'INSTRUMENTATION_STATUS_CODE: 2' || fields.get('sessionReady') !== 'true') {
+    return undefined;
+  }
+  if (fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL) {
+    return {
+      kind: 'failed',
+      error: new AppError('COMMAND_FAILED', 'Android snapshot helper readiness is malformed', {
+        reason: SESSION_READY_MALFORMED_REASON,
+      }),
+    };
+  }
+  if (fields.get('sessionTransport') !== SESSION_TRANSPORT) {
+    return {
+      kind: 'failed',
+      error: new AppError(
+        'COMMAND_FAILED',
+        'Android snapshot helper lacks authenticated sessions',
+        {
+          reason: SESSION_TRANSPORT_UNSUPPORTED_REASON,
+        },
+      ),
+    };
+  }
+  return {
+    kind: 'ready',
+    commands: new Set(fields.get('sessionCommands')?.split(',').filter(Boolean)),
+  };
+}
 
 const SESSION_EXIT_DRAIN_MS = 250;
 
@@ -167,7 +211,6 @@ export function waitForAndroidSnapshotHelperSessionReady(
   record: AndroidInstrumentationProcessRecord,
 ): Promise<ReadonlySet<string>> {
   return new Promise((resolve, reject) => {
-    let output = '';
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
       reject(
@@ -178,29 +221,33 @@ export function waitForAndroidSnapshotHelperSessionReady(
         }),
       );
     }, timeoutMs);
-    const onData = (chunk: Buffer | string) => {
-      output += chunk.toString();
-      if (
-        output.includes(`agentDeviceProtocol=${ANDROID_SNAPSHOT_HELPER_PROTOCOL}`) &&
-        output.includes('sessionReady=true') &&
-        output.includes('INSTRUMENTATION_STATUS_CODE: 2')
-      ) {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-        if (
-          !output
-            .split(/\r?\n/)
-            .includes(`INSTRUMENTATION_STATUS: sessionTransport=${SESSION_TRANSPORT}`)
-        ) {
-          reject(
-            new AppError('COMMAND_FAILED', 'Android snapshot helper lacks authenticated sessions', {
-              reason: SESSION_TRANSPORT_UNSUPPORTED_REASON,
-            }),
-          );
+    const settle = (outcome: ReadinessOutcome) => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (outcome.kind === 'ready') resolve(outcome.commands);
+      else reject(outcome.error);
+    };
+    // Instrumentation status records arrive on stdout. Only complete lines from that stream form a
+    // record, so an adb warning on stderr cannot split a line.
+    let pendingLine = '';
+    let recordFields = new Map<string, string>();
+    const onStdout = (chunk: Buffer | string) => {
+      const lines = (pendingLine + chunk.toString()).split('\n');
+      pendingLine = lines.pop() ?? '';
+      for (const rawLine of lines) {
+        const line = rawLine.replace(/\r$/, '');
+        const field = /^INSTRUMENTATION_STATUS: ([^=]+)=(.*)$/.exec(line);
+        if (field) {
+          recordFields.set(field[1]!, field[2]!);
+          continue;
+        }
+        if (!line.startsWith('INSTRUMENTATION_STATUS_CODE: ')) continue;
+        const outcome = classifyReadinessRecord(line, recordFields);
+        recordFields = new Map();
+        if (outcome) {
+          settle(outcome);
           return;
         }
-        const commands = output.match(/INSTRUMENTATION_STATUS: sessionCommands=([^\r\n]*)\r?\n/);
-        resolve(new Set(commands?.[1]?.split(',').filter(Boolean)));
       }
     };
     const onAbort = () => {
@@ -212,8 +259,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       onAbort();
       return;
     }
-    childProcess.stdout?.on('data', onData);
-    childProcess.stderr?.on('data', onData);
+    childProcess.stdout?.on('data', onStdout);
     childProcess.once('exit', (code, exitSignal) => {
       clearTimeout(timer);
       // The exit result waits for the streams to drain, but not for an adb whose forked server
