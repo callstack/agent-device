@@ -2,7 +2,6 @@ import path from 'node:path';
 import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
 import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
-import type { LimrunConnectionVerifier } from './connection.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
@@ -20,12 +19,6 @@ export type LimrunPluginOptions = Readonly<{
    * beside the session files under it; without it the capture is unavailable.
    */
   stateDir?: string;
-  /**
-   * Replaces the read-only check `connection.verify` performs. The provider's own verification is
-   * the default; the composing root names the entry it reads verification through when it already
-   * owns one, the same way it supplies the runtime's host adapters.
-   */
-  verifyConnection?: LimrunConnectionVerifier;
 }>;
 
 /**
@@ -38,7 +31,7 @@ export type LimrunPluginOptions = Readonly<{
  * reading, the runtime, and its host adapters all load in the path that asks for them.
  */
 export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
-  const { createDependencies, stateDir, verifyConnection } = options;
+  const { createDependencies, stateDir } = options;
   return {
     apiVersion: 2,
     provider: LIMRUN_PROVIDER,
@@ -48,17 +41,9 @@ export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
     connection: {
       capabilities: LIMRUN_CONNECTION_CAPABILITIES,
       resolve: async (context) =>
-        await (
-          await import('./connection.ts')
-        )
-          .createLimrunConnection({ verify: verifyConnection })
-          .resolve(context),
+        await (await import('./connection.ts')).createLimrunConnection().resolve(context),
       verify: async (context) =>
-        await (
-          await import('./connection.ts')
-        )
-          .createLimrunConnection({ verify: verifyConnection })
-          .verify(context),
+        await (await import('./connection.ts')).createLimrunConnection().verify(context),
     },
     setup: async (host) => {
       const credentials = requireLimrunCredentials(host.env);

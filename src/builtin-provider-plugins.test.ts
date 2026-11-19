@@ -1,18 +1,53 @@
 import assert from 'node:assert/strict';
-import { test, vi } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { readVersion } from '@agent-device/host-kit/version';
 import { createEmbeddedProviderRuntimeComposition } from './provider-device-runtimes.ts';
 import { builtinLimrunConnection } from './builtin-provider-plugins.ts';
 
 // The built-in candidate is composed by the daemon's own registry, so the case runs the real plugin
 // contract with the Limrun SDK stubbed out: nothing here reaches the provider's API.
+const limrunSdk = vi.hoisted(() => {
+  const clients: Array<Record<string, unknown>> = [];
+  const androidList = vi.fn(async () => ({ getPaginatedItems: () => [] }));
+  const iosList = vi.fn(async () => ({ getPaginatedItems: () => [] }));
+  return { clients, androidList, iosList };
+});
+
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
-    readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
-    readonly androidInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
-    readonly assets = { list: vi.fn(async () => []) };
+    readonly iosInstances = { list: limrunSdk.iosList };
+    readonly androidInstances = { list: limrunSdk.androidList };
+
+    constructor(options: Record<string, unknown>) {
+      limrunSdk.clients.push(options);
+    }
   },
 }));
+
+// The root's own runtime-adapter factory is the runtime half of the built-in composition. Spying on
+// it in place, and answering with the real adapters, is what proves a `connect` composes the
+// provider's callbacks without setting up a runtime.
+const runtimeDependencies = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock('./sdk/limrun-runtime-dependencies.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./sdk/limrun-runtime-dependencies.ts')>();
+  return {
+    ...original,
+    createLimrunRuntimeDependencies: (
+      ...args: Parameters<typeof original.createLimrunRuntimeDependencies>
+    ) => {
+      runtimeDependencies.create(...args);
+      return original.createLimrunRuntimeDependencies(...args);
+    },
+  };
+});
+
+afterEach(() => {
+  limrunSdk.clients.length = 0;
+  limrunSdk.androidList.mockClear();
+  limrunSdk.iosList.mockClear();
+  runtimeDependencies.create.mockClear();
+});
 
 test('an unconfigured built-in Limrun claims its id without an inventory entry or a runtime', async () => {
   const composition = await createEmbeddedProviderRuntimeComposition(
@@ -97,7 +132,7 @@ test('a configured built-in Limrun registers through the plugin contract with it
   }
 });
 
-test('the built-in connection answers connect with the provider callbacks and the root verifier', async () => {
+test('the built-in connection answers connect with the provider callbacks and its own verification', async () => {
   const stateDir = mkdtempForTestSync('agent-device-builtin-limrun-connection-');
   const host = {
     env: { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_STATE_DIR: stateDir },
@@ -105,6 +140,11 @@ test('the built-in connection answers connect with the provider callbacks and th
   };
 
   const connection = await builtinLimrunConnection(host);
+  // Composing the connection reads nothing about a runtime: the host adapters are what `setup`
+  // asks for, and `connect` never calls it.
+  assert.deepEqual(runtimeDependencies.create.mock.calls, []);
+  assert.deepEqual(limrunSdk.clients, []);
+
   // `resolve` runs the provider's own flag, backend, and credential rules.
   const resolved = await connection.resolve({
     flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
@@ -114,9 +154,11 @@ test('the built-in connection answers connect with the provider callbacks and th
   });
   assert.equal(resolved.profile.leaseProvider, 'limrun');
   assert.equal(resolved.profile.leaseBackend, 'android-instance');
+  assert.deepEqual(limrunSdk.clients, []);
 
-  // `verify` reaches the SDK through the root's published verification entry and runs the
-  // read-only account check the stubbed SDK above answers; no instance is created.
+  // `verify` runs the provider's own read-only account check through the SDK: the credentials of
+  // this call's env, this host's version, and only the platform this call selected. No instance is
+  // created, and no runtime is set up.
   const verification = await connection.verify({
     flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
     cwd: host.cwd,
@@ -127,4 +169,36 @@ test('the built-in connection answers connect with the provider callbacks and th
     verification.verificationMessage,
     'Credentials and Android instance access verified.',
   );
+  assert.deepEqual(limrunSdk.clients, [
+    {
+      apiKey: 'lim_test_key',
+      userAgent: `agent-device-cli/${readVersion()}`,
+      timeout: 15_000,
+      maxRetries: 0,
+    },
+  ]);
+  assert.deepEqual(limrunSdk.androidList.mock.calls, [[{ limit: 1 }]]);
+  assert.deepEqual(limrunSdk.iosList.mock.calls, []);
+  assert.deepEqual(runtimeDependencies.create.mock.calls, []);
+});
+
+test('the built-in connection verifies the iOS platform another connect call selected', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-builtin-limrun-connection-ios-');
+  const host = {
+    env: { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_STATE_DIR: stateDir },
+    cwd: process.cwd(),
+  };
+  const connection = await builtinLimrunConnection(host);
+  const verification = await connection.verify({
+    flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
+    cwd: host.cwd,
+    env: { ...host.env, LIMRUN_REGION: 'eu', LIMRUN_API_KEY: '  lim_test_key  ' },
+  });
+
+  assert.equal(verification.verificationMessage, 'Credentials and iOS instance access verified.');
+  // The key is read the provider reads it, the region narrows the query, and the platform decides
+  // which service is asked.
+  assert.equal(limrunSdk.clients[0]?.apiKey, 'lim_test_key');
+  assert.deepEqual(limrunSdk.iosList.mock.calls, [[{ limit: 1, region: 'eu' }]]);
+  assert.deepEqual(limrunSdk.androidList.mock.calls, []);
 });

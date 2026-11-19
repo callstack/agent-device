@@ -6,4 +6,3 @@
 export { limrunPlugin, type LimrunPluginOptions } from './plugin.ts';
 export { LIMRUN_CONNECTION_CAPABILITIES } from './device.ts';
 export { readLimrunCredentials } from './credentials.ts';
-export type { LimrunConnectionVerifier } from './connection.ts';

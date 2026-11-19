@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { test, vi } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
-import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
@@ -11,6 +10,9 @@ import { limrunPlugin } from './plugin.ts';
 
 const sdk = vi.hoisted(() => ({
   runtimeCalls: [] as { options: Record<string, unknown>; mode: unknown }[],
+  clients: [] as Array<Record<string, unknown>>,
+  androidList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
+  iosList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
 }));
 
 // The runtime module is stubbed so a case reads what the plugin hands the runtime builder without
@@ -34,6 +36,25 @@ vi.mock('./runtime.ts', () => ({
     };
   },
 }));
+
+// The SDK is stubbed for the same reason on the other side: a case reads the read-only check's
+// request instead of reaching the provider's API.
+vi.mock('@limrun/api', () => ({
+  default: class MockLimrun {
+    readonly androidInstances = { list: sdk.androidList };
+    readonly iosInstances = { list: sdk.iosList };
+
+    constructor(options: Record<string, unknown>) {
+      sdk.clients.push(options);
+    }
+  },
+}));
+
+afterEach(() => {
+  sdk.clients.length = 0;
+  sdk.androidList.mockClear();
+  sdk.iosList.mockClear();
+});
 
 function pluginHost(env: Record<string, string | undefined> = {}): ProviderPluginHost {
   return {
@@ -104,51 +125,32 @@ test('the plugin declares the connection callbacks without setting up any runtim
   assert.equal(sdk.runtimeCalls.length, 0);
 });
 
-test('a composed verifier answers verify in place of the provider SDK check', async () => {
-  const seen: Array<Record<string, unknown>> = [];
-  const verify = vi.fn(
-    async (options: Record<string, unknown>): Promise<ProviderConnectionVerification> => {
-      seen.push(options);
-      return {
-        provider: 'limrun',
-        service: 'Limrun',
-        verificationMessage: 'verified by the composing root',
-        device: {
-          status: 'deferred',
-          name: 'Provider-selected Android emulator',
-          platform: 'android',
-        },
-        app: {
-          status: 'missing',
-          message: 'Run apps to choose an uploaded asset before allocation.',
-        },
-      };
-    },
-  );
-  const plugin = limrunPlugin({
-    createDependencies: () => stubDependencies(),
-    verifyConnection: verify,
-  });
+test('verify runs its own SDK check over scoped credentials, version and platform', async () => {
+  // The provider owns its read-only check: no caller names the entry it verifies through. The SDK
+  // is asked for the credentials of this call's env, the host's version, and this call's platform,
+  // and nothing here sets up a runtime.
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
 
   const verification = await plugin.connection?.verify({
     flags: { json: false, help: false, version: false, platform: 'ios' },
-    env: { LIMRUN_API_KEY: 'lim_test_key' },
+    env: { LIMRUN_API_KEY: ' lim_test_key ', LIMRUN_REGION: 'eu', LIMRUN_KEEP_ALIVE: '1' },
     host: pluginHost({ LIMRUN_API_KEY: 'lim_test_key' }),
   });
 
-  assert.equal(verification?.verificationMessage, 'verified by the composing root');
-  // The provider hands the verifier its full credential read, the host's version, and the platform.
-  assert.deepEqual(seen, [
+  assert.equal(verification?.verificationMessage, 'Credentials and iOS instance access verified.');
+  assert.deepEqual(sdk.clients, [
     {
       apiKey: 'lim_test_key',
-      region: undefined,
-      keepAlive: false,
-      instances: undefined,
-      clientVersion: '1.2.3',
-      platform: 'ios',
+      userAgent: 'agent-device-cli/1.2.3',
+      timeout: 15_000,
+      maxRetries: 0,
     },
   ]);
-  assert.equal(verify.mock.calls.length, 1);
+  // Only the platform this call selected is asked, and the region narrows its query. `keepAlive`
+  // leases an instance and has no part in a read-only check.
+  assert.deepEqual(sdk.iosList.mock.calls, [[{ limit: 1, region: 'eu' }]]);
+  assert.deepEqual(sdk.androidList.mock.calls, []);
+  assert.equal(sdk.runtimeCalls.length, 0);
 });
 
 test('setup builds the runtime over the credentials, host and HAR directory it was given', async () => {
