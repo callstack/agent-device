@@ -38,7 +38,7 @@ type Grant = Readonly<{ id: string; destination: string; createdAtMs: number; ac
 
 /** A real path is much shorter. With the per-scope bound, a scope file stays near 1 MiB. */
 const MAX_DESTINATION_BYTES = 64 * 1024;
-/** A full scope evicts pending grants first, so a refused start cannot evict a live grant. */
+/** A full scope evicts only pending grants, so no start can evict a live grant. */
 const MAX_GRANTS_PER_SCOPE = 16;
 const MAX_SCOPE_FILE_BYTES = MAX_GRANTS_PER_SCOPE * (MAX_DESTINATION_BYTES + 512);
 const GRANT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -228,7 +228,9 @@ async function saveGrant(scope: Scope, destination: string): Promise<string> {
       const kept = grants.filter((grant) => grant.createdAtMs >= now - STALE_RECORD_MS);
       while (kept.length >= MAX_GRANTS_PER_SCOPE) {
         const pending = kept.findIndex((grant) => !grant.accepted);
-        kept.splice(pending === -1 ? 0 : pending, 1);
+        // Accepted grants are live recordings: a full scope of them degrades this start instead.
+        if (pending === -1) throw storeError('Every recording grant in this scope is live.');
+        kept.splice(pending, 1);
       }
       return [...kept, { id, destination, createdAtMs: now, accepted: false }];
     },

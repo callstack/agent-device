@@ -391,6 +391,22 @@ test.for(['refused', 'unknown'] as const)(
   },
 );
 
+test('a scope of sixteen accepted grants degrades a new start and keeps every live grant', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const oldest = path.join(world.root, 'live-0.mp4');
+    for (let index = 0; index < 16; index += 1) {
+      await start(world, path.join(world.root, `live-${index}.mp4`));
+    }
+    const req = startRequest(world, path.join(world.root, 'extra.mp4'));
+    const started = await materialize(world, req, await bind(world, req), { ok: true, data: {} });
+    expect(started.ok && started.data?.recordingDestinationWarnings).toEqual([
+      { reason: 'capture_destination_store_unavailable' },
+    ]);
+    expect(grantCount(world)).toBe(16);
+    expect((await stop(world, oldest)).outPath).toBe(oldest);
+  });
+});
+
 test('a destination over the per-record cap degrades the start', async (t) => {
   await withServer(t, serveVideo, async (world) => {
     const req = startRequest(world, `/${'x'.repeat(64 * 1024)}`);
