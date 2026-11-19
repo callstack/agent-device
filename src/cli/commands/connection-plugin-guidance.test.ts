@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import { readVersion } from '@agent-device/host-kit/version';
 import { runCliCapture } from '../../__tests__/cli-capture.ts';
 import { usageForCommand } from '../parser/args.ts';
@@ -98,7 +98,7 @@ test('connect keeps an unknown provider separate from a known missing plugin', a
 
 test('connect reports a failed selected plugin even when its error text describes a missing plugin', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@agent-device/testmu',
     'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
@@ -120,7 +120,7 @@ test('connect reports a failed selected plugin even when its error text describe
 
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, '@agent-device/testmu', v2RegistrationSource('testmu'));
+  selectPlugin(home, '@agent-device/testmu', pluginSource('testmu'));
   const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
@@ -160,7 +160,7 @@ test('a main-channel 0.22 nightly repairs a failed BrowserStack selection with t
   const version = '0.22.0-nightly.20261118.186';
   vi.mocked(readVersion).mockReturnValue(version);
   const { home, env } = pluginHome();
-  selectV2Plugin(home, '@agent-device/browserstack', 'throw new Error("Plugin failed to load.");');
+  selectPlugin(home, '@agent-device/browserstack', 'throw new Error("Plugin failed to load.");');
   const result = await runCliCapture(
     ['connect', 'browserstack', '--platform', 'android', '--session', 'checkout', '--json'],
     { cwd: home, env, stateDirPrefix: 'connect-nightly-broken-browserstack-' },

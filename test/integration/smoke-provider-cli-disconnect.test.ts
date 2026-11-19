@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 import { formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import './support/provider-disconnect-fetch.mjs';
 
@@ -89,7 +89,7 @@ function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
     path.join(import.meta.dirname, 'support/provider-disconnect-fetch.mjs'),
   ).href;
   const { home, env: pluginEnv } = pluginHome();
-  selectV2Plugin(home, '@agent-device/smoke-cloud', PROVIDER_PLUGIN_SOURCE);
+  selectPlugin(home, '@agent-device/smoke-cloud', PROVIDER_PLUGIN_SOURCE);
   return {
     ...process.env,
     ...pluginEnv,

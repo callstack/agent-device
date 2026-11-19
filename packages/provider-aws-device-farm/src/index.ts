@@ -13,28 +13,33 @@ async function loadConnection(host: ProviderPluginHost) {
  */
 function awsDeviceFarm(): AgentDevicePlugin {
   return {
-    apiVersion: 2,
-    provider: 'aws-device-farm',
-    // The AWS CLI credential chain has no environment fingerprint.
-    credentials: { variables: [] },
-    connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: true,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: true,
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: true,
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'aws-device-farm',
+        // The AWS CLI credential chain has no environment fingerprint.
+        credentials: { variables: [] },
+        connection: {
+          capabilities: {
+            leaseKind: 'direct-device-provider',
+            requiresAppAttachment: true,
+            requiresRemoteDaemon: false,
+            supportsArtifacts: true,
+            supportsDeferredAppSelection: false,
+            supportsDirectPortReverse: false,
+            usesCloudWebDriverLease: true,
+          },
+          resolve: async (context) => await (await loadConnection(context.host)).resolve(context),
+          verify: async (context) => await (await loadConnection(context.host)).verify(context),
+        },
+        setup: async (host) => ({
+          webDriver: (await import('./aws-device-farm-webdriver.ts')).createAwsDeviceFarmWebDriver(
+            host,
+          ),
+        }),
       },
-      resolve: async (context) => await (await loadConnection(context.host)).resolve(context),
-      verify: async (context) => await (await loadConnection(context.host)).verify(context),
-    },
-    setup: async (host) => ({
-      webDriver: (await import('./aws-device-farm-webdriver.ts')).createAwsDeviceFarmWebDriver(
-        host,
-      ),
-    }),
+    ],
   };
 }
 

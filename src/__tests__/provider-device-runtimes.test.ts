@@ -3,11 +3,11 @@ import { test } from 'vitest';
 import { createDaemonProviderRuntimeComposition } from '../provider-device-runtimes.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -23,7 +23,7 @@ test('daemon composition registers installed provider runtimes and their lazy pl
 
 test('an unconfigured Limrun stays dormant while the store provider registers', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -42,7 +42,7 @@ test('an unconfigured Limrun stays dormant while the store provider registers', 
 
 test('daemon composition records Limrun as failed for a partial instance set and still loads every other provider', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: {
       ...env,
@@ -67,7 +67,7 @@ test('daemon composition records Limrun as failed for a partial instance set and
 test('a plugin claiming a built-in provider ID is recorded as failed and the built-in keeps the ID', async () => {
   for (const provider of ['limrun']) {
     const { home, env } = pluginHome();
-    selectV2Plugin(home, 'example', v2RegistrationSource(provider));
+    selectPlugin(home, 'example', pluginSource(provider));
     const composition = await createDaemonProviderRuntimeComposition({
       env: env,
       cwd: process.cwd(),
@@ -83,7 +83,7 @@ test('a plugin claiming a built-in provider ID is recorded as failed and the bui
 
 test('BrowserStack registers as an ordinary store plugin, not a built-in', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, '@agent-device/browserstack', v2RegistrationSource('browserstack'));
+  selectPlugin(home, '@agent-device/browserstack', pluginSource('browserstack'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -100,7 +100,7 @@ test('BrowserStack registers as an ordinary store plugin, not a built-in', async
 
 test('AWS Device Farm registers as an ordinary store plugin, not a built-in', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, '@agent-device/aws-device-farm', v2RegistrationSource('aws-device-farm'));
+  selectPlugin(home, '@agent-device/aws-device-farm', pluginSource('aws-device-farm'));
   const composition = await createDaemonProviderRuntimeComposition({
     env: env,
     cwd: process.cwd(),
@@ -118,7 +118,7 @@ test('AWS Device Farm registers as an ordinary store plugin, not a built-in', as
 test('a plugin claiming a routing identity is refused before the registry settles claims', async () => {
   for (const provider of ['cloud', 'proxy']) {
     const { home, env } = pluginHome();
-    selectV2Plugin(home, 'example', v2RegistrationSource(provider));
+    selectPlugin(home, 'example', pluginSource(provider));
     const composition = await createDaemonProviderRuntimeComposition({
       env: env,
       cwd: process.cwd(),
@@ -209,7 +209,7 @@ function assertPlatformModuleCoverage(
 test('composition shutdown is the only route the daemon uses: it shuts every runtime down and runs plugin cleanup', async () => {
   const { home, env } = pluginHome();
   const log = path.join(home, 'shutdown-log');
-  selectV2Plugin(
+  selectPlugin(
     home,
     'cleaning',
     `import fs from 'node:fs';

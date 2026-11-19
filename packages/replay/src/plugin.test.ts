@@ -5,6 +5,20 @@ import { expect, test, vi } from 'vitest';
 import { createPluginHost } from '@agent-device/plugins/host';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import replayPlugin from './plugin.ts';
+import type {
+  AgentDevicePlugin,
+  ReplayBackendContribution,
+  ReplayExecutionContribution,
+} from 'agent-device/plugins';
+
+function contributionOf(
+  plugin: AgentDevicePlugin,
+): ReplayBackendContribution | ReplayExecutionContribution {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind === 'provider') throw new Error('expected a replay contribution');
+  return contribution;
+}
+
 
 test('the first-party factory uses the managed registry and preserves native script syntax', async () => {
   const registry = await startProviderRegistry(
@@ -70,7 +84,7 @@ test('the first-party factory uses the managed registry and preserves native scr
 
 test.each(['0.23.0', '0.21.39-dev'])('the package rejects unverified core %s', (clientVersion) => {
   const host = { ...createPluginHost({ env: {}, cwd: '/' }, undefined), clientVersion };
-  expect(() => replayPlugin().setup(host)).toThrow(
+  expect(() => contributionOf(replayPlugin()).setup(host)).toThrow(
     expect.objectContaining({
       details: expect.objectContaining({ reason: 'incompatible_plugin' }),
     }),
@@ -81,7 +95,7 @@ test.each(['0.21.38-dev', '0.22.0-beta.1', '0.22.0'])(
   'the package accepts declared core %s',
   (clientVersion) => {
     expect(
-      replayPlugin().setup({
+      contributionOf(replayPlugin()).setup({
         ...createPluginHost({ env: {}, cwd: '/' }, undefined),
         clientVersion,
       }),

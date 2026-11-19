@@ -7,8 +7,8 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import {
   mkdtempForTestSync,
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
 } from '@agent-device/test-kit';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
@@ -19,6 +19,7 @@ import revyl from '@agent-device/revyl';
 import manifest from '@agent-device/revyl/package.json' with { type: 'json' };
 import { resolveConnectProviderProfile } from '../../connection/connect-provider-adapters.ts';
 import { connectWithGeneratedProviderProfile } from '../../../__tests__/test-utils/connect-command.ts';
+import { providerContributionOf } from '@agent-device/plugins/validate';
 
 // Mirrors src/__tests__/cloud-connect-testmu.test.ts: the store declares the Revyl plugin installed
 // and its connection callbacks are loaded from the workspace source, so the assertions read the HTTP
@@ -88,11 +89,11 @@ beforeEach(() => {
   const { home } = pluginHome();
   // The store declares the plugin installed with Revyl's capabilities; the mocked loader below
   // supplies the workspace factory those assertions exercise.
-  selectV2Plugin(
+  selectPlugin(
     home,
     manifest.name,
-    v2RegistrationSource('revyl', {
-      extra: `connection: { capabilities: ${JSON.stringify(revyl().connection?.capabilities)}, resolve() {}, verify() {} },`,
+    pluginSource('revyl', {
+      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(revyl()).connection?.capabilities)}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["REVYL_API_KEY"] }',
     }),
   );

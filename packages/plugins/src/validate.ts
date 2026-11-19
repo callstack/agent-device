@@ -1,7 +1,10 @@
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
-import type { ReplayEnginePlugin, ReplayEngineSetup } from './replay-backend.ts';
+import type {
+  ReplayBackendSetup,
+  ReplayExecutionSetup,
+} from './replay-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { isProviderId } from './discovery.ts';
@@ -9,36 +12,100 @@ import type { ConnectionProviderCapabilities } from '@agent-device/contracts/rem
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import {
-  PROVIDER_PLUGIN_API_VERSION,
+  PLUGIN_API_VERSION,
   ROUTING_PROVIDER_IDENTITIES,
   type AgentDevicePlugin,
+  type Contribution,
+  type ProviderContribution,
 } from './contract.ts';
 
 const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 
-/** The one validation of what a plugin factory returned, whichever source produced it. */
+/**
+ * The one validation of what a plugin factory returned, whichever source produced it: the whole
+ * declaration is validated before any of its claims is published.
+ */
 export function validateAgentDevicePlugin(value: unknown): AgentDevicePlugin {
   if (!isRecord(value)) throw invalidPlugin('Plugin factory must return a plugin object');
-  if (value.apiVersion !== PROVIDER_PLUGIN_API_VERSION) {
-    throw new AppError('INVALID_ARGS', 'Plugin does not declare a compatible provider contract', {
-      reason: 'incompatible_plugin',
-      apiVersion: PROVIDER_PLUGIN_API_VERSION,
-      hint: `Install a plugin release supporting provider plugin apiVersion ${PROVIDER_PLUGIN_API_VERSION}.`,
-    });
+  if (value.apiVersion !== PLUGIN_API_VERSION) throw incompatiblePluginApi(value.apiVersion);
+  if (!Array.isArray(value.contributes) || value.contributes.length === 0) {
+    throw invalidPlugin('Plugin must declare a nonempty contributes list');
   }
+  const keys = new Set<string>();
+  for (const contribution of value.contributes) {
+    const key = claimKeyOfContribution(contribution);
+    if (keys.has(key)) {
+      throw invalidPlugin(`Plugin declares the same claim twice: ${key}`);
+    }
+    keys.add(key);
+  }
+  return value as AgentDevicePlugin;
+}
+
+/** A factory result on an older contract gets the typed incompatibility, without a shim. */
+export function incompatiblePluginApi(declared: unknown): AppError {
+  return new AppError('INVALID_ARGS', 'Plugin does not declare a compatible contract version', {
+    reason: 'incompatible-plugin-api',
+    apiVersion: PLUGIN_API_VERSION,
+    ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
+    hint: `Install a plugin release supporting plugin contract apiVersion ${PLUGIN_API_VERSION}.`,
+  });
+}
+
+/** The claim key a contribution names, after validating the contribution's own shape. */
+export function claimKeyOfContribution(value: unknown): string {
+  if (!isRecord(value)) throw invalidPlugin('Each contribution must be an object');
+  switch (value.kind) {
+    case 'provider':
+      return `provider:${validateProviderContribution(value)}`;
+    case 'replay-backend': {
+      if (!isProviderId(value.backend) || typeof value.setup !== 'function') {
+        throw invalidPlugin('A replay-backend contribution must declare a backend id and setup(host)');
+      }
+      return `replay-backend:${value.backend as string}`;
+    }
+    case 'replay-execution': {
+      if (value.id !== NATIVE_REPLAY_BACKEND || typeof value.setup !== 'function') {
+        throw invalidPlugin(
+          `A replay-execution contribution must declare id ${NATIVE_REPLAY_BACKEND} and setup(host)`,
+        );
+      }
+      return `replay-execution:${NATIVE_REPLAY_BACKEND}`;
+    }
+    default:
+      throw invalidPlugin(`Unknown contribution kind: ${String(value.kind)}`);
+  }
+}
+
+/** The claim keys a validated declaration expands into, in declaration order. */
+export function claimKeysOf(plugin: AgentDevicePlugin): string[] {
+  return plugin.contributes.map((contribution) => claimKeyOfContribution(contribution));
+}
+
+/** The `provider` contribution of a validated declaration; the registry claims it in the provider space. */
+export function providerContributionOf(plugin: AgentDevicePlugin): ProviderContribution {
+  const contribution = plugin.contributes.find(
+    (entry): entry is ProviderContribution => entry.kind === 'provider',
+  );
+  if (!contribution) throw invalidPlugin('Plugin declares no provider contribution');
+  return contribution;
+}
+
+function validateProviderContribution(value: Record<string, unknown>): string {
   if (!isProviderId(value.provider)) {
     throw invalidPlugin('Plugin provider must be a lowercase id such as "example"');
   }
-  if (ROUTING_PROVIDER_IDENTITIES.includes(value.provider)) {
-    throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${value.provider}`, {
+  const provider = value.provider as string;
+  if (ROUTING_PROVIDER_IDENTITIES.includes(provider)) {
+    throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${provider}`, {
       reason: 'reserved_provider',
-      provider: value.provider,
+      provider,
     });
   }
   assertCredentials(value.credentials);
   if (value.connection !== undefined) assertConnection(value.connection);
   if (typeof value.setup !== 'function') throw invalidPlugin('Plugin must provide setup(host)');
-  return value as AgentDevicePlugin;
+  return provider;
 }
 
 function assertCredentials(credentials: unknown): void {
@@ -139,43 +206,32 @@ export function invalidPlugin(message: string): AppError {
   return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
 }
 
-export function validateReplayEnginePlugin(value: unknown): ReplayEnginePlugin {
-  if (!isRecord(value) || value.kind !== 'replay-backend')
-    throw invalidPlugin('Plugin must declare kind: replay-backend');
-  if (value.apiVersion !== 2)
-    throw new AppError('INVALID_ARGS', 'Replay plugin requires apiVersion 2', {
-      reason: 'incompatible_plugin',
-      apiVersion: 2,
-    });
+/** A format backend's setup must provide the lazy backend factory and nothing else. */
+export function validateReplayBackendSetup(value: unknown): ReplayBackendSetup {
   if (
-    value.provider !== undefined ||
-    value.connection !== undefined ||
-    value.credentials !== undefined
-  )
-    throw invalidPlugin(
-      'Replay plugins cannot declare provider identity, connection or credentials',
-    );
-  if (!isProviderId(value.backend) || typeof value.setup !== 'function')
-    throw invalidPlugin('Replay plugin must declare a backend id and setup(host)');
-  return value as ReplayEnginePlugin;
+    !isRecord(value) ||
+    (value.dispose !== undefined && typeof value.dispose !== 'function') ||
+    value.execution !== undefined ||
+    !isRecord(value.replayBackend) ||
+    typeof value.replayBackend.create !== 'function'
+  ) {
+    throw invalidPlugin('Format backend setup must provide replayBackend.create(host)');
+  }
+  return value as ReplayBackendSetup;
 }
 
-export function validateReplayEngineSetup<TBackend extends string>(
-  value: unknown,
-  backend: TBackend,
-): ReplayEngineSetup<TBackend> {
-  if (!isRecord(value) || (value.dispose !== undefined && typeof value.dispose !== 'function'))
-    throw invalidPlugin('Replay plugin setup must provide a factory and optional dispose()');
-  const native = backend === NATIVE_REPLAY_BACKEND;
-  const factory = native ? value.execution : value.replayBackend;
-  const other = native ? value.replayBackend : value.execution;
-  if (other !== undefined || !isRecord(factory) || typeof factory.create !== 'function')
-    throw invalidPlugin(
-      native
-        ? 'Native ad backend setup must provide execution.create()'
-        : 'Format backend setup must provide replayBackend.create(host)',
-    );
-  return value as ReplayEngineSetup<TBackend>;
+/** Native execution's setup must provide the lazy execution factory and nothing else. */
+export function validateReplayExecutionSetup(value: unknown): ReplayExecutionSetup {
+  if (
+    !isRecord(value) ||
+    (value.dispose !== undefined && typeof value.dispose !== 'function') ||
+    value.replayBackend !== undefined ||
+    !isRecord(value.execution) ||
+    typeof value.execution.create !== 'function'
+  ) {
+    throw invalidPlugin('Native ad execution setup must provide execution.create()');
+  }
+  return value as ReplayExecutionSetup;
 }
 
 export function validateReplayExecution(value: unknown): ReplayExecution {
@@ -184,10 +240,11 @@ export function validateReplayExecution(value: unknown): ReplayExecution {
     (['inspectAdReplay', 'runAdReplay', 'runReplayTestSuite'] as const).some(
       (name) => typeof value[name] !== 'function',
     )
-  )
+  ) {
     throw invalidPlugin(
       'Native replay execution must provide inspection, replay and suite execution',
     );
+  }
   return value as ReplayExecution;
 }
 
@@ -198,7 +255,10 @@ export function validateReplayBackend(id: string, value: unknown): ReplayBackend
     (['collectSourceFiles', 'inspectSource', 'runReplay', 'exportReplayScript'] as const).some(
       (name) => typeof value[name] !== 'function',
     )
-  )
+  ) {
     throw invalidPlugin(`Replay plugin runtime does not match its backend: ${id}`);
+  }
   return value as ReplayBackend;
 }
+
+export type { Contribution };

@@ -11,7 +11,9 @@ async function awsDeviceFarmWebDriver(
   clientVersion: string,
   runHostCommand: RunHostCommand,
 ) {
-  const setup = await awsDeviceFarm().setup({
+  const [contribution] = awsDeviceFarm().contributes;
+  if (contribution.kind !== 'provider') throw new Error('AWS Device Farm sets up a provider');
+  const setup = await contribution.setup({
     ...createPluginHost({ env, cwd: '/' }, undefined),
     clientVersion,
     runHostCommand,

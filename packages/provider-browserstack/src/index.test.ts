@@ -3,6 +3,14 @@ import { afterEach, test, vi } from 'vitest';
 import type { ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import browserstack from './index.ts';
+import type { AgentDevicePlugin } from 'agent-device/plugins';
+
+function providerOf<P extends AgentDevicePlugin>(plugin: P) {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind !== 'provider') throw new Error('expected a provider contribution');
+  return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
+}
+
 import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 
 vi.mock('./browserstack-connection-verification.ts', () => ({
@@ -37,8 +45,11 @@ function capturedAuthorization(): { read(): string | undefined } {
   return { read: () => authorization };
 }
 
-async function listArtifacts(plugin: ReturnType<typeof browserstack>, env: Record<string, string>) {
-  const setup = await plugin.setup(host(env));
+async function listArtifacts(
+  provider: Extract<AgentDevicePlugin['contributes'][number], { kind: 'provider' }>,
+  env: Record<string, string>,
+) {
+  const setup = await provider.setup(host(env));
   if (!('webDriver' in setup)) throw new Error('BrowserStack sets up a WebDriver descriptor');
   await setup.webDriver.listArtifacts!({ provider: 'browserstack', providerSessionId: 'SESSION1' });
 }
@@ -48,12 +59,12 @@ const basic = (username: string, accessKey: string) =>
 
 test('the plugin declares its provider, capabilities and credential variables', () => {
   const plugin = browserstack();
-  assert.equal(plugin.apiVersion, 2);
-  assert.equal(plugin.provider, 'browserstack');
-  assert.deepEqual(plugin.credentials, {
+  assert.equal(plugin.apiVersion, 3);
+  assert.equal(providerOf(plugin).provider, 'browserstack');
+  assert.deepEqual(providerOf(plugin).credentials, {
     variables: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   });
-  assert.deepEqual(plugin.connection?.capabilities, {
+  assert.deepEqual(providerOf(plugin).connection?.capabilities, {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,
@@ -65,7 +76,7 @@ test('the plugin declares its provider, capabilities and credential variables', 
 });
 
 test('setup builds a WebDriver descriptor that reads its hub endpoint from the environment', async () => {
-  const setup = await browserstack().setup(
+  const setup = await providerOf(browserstack()).setup(
     host({
       BROWSERSTACK_USERNAME: 'user',
       BROWSERSTACK_ACCESS_KEY: 'key',
@@ -79,19 +90,19 @@ test('setup builds a WebDriver descriptor that reads its hub endpoint from the e
 });
 
 test('the plugin declares the BrowserStack variables only when it reads credentials from the environment', () => {
-  assert.deepEqual(browserstack().credentials, {
+  assert.deepEqual(providerOf(browserstack()).credentials, {
     variables: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   });
-  assert.deepEqual(browserstack({ credentials: { username: 'u', accessKey: 'k' } }).credentials, {
+  assert.deepEqual(providerOf(browserstack({ credentials: { username: 'u', accessKey: 'k' } })).credentials, {
     variables: [],
   });
 });
 
 test('a credentials object missing one key still declares the variable it reads from the environment', () => {
-  assert.deepEqual(browserstack({ credentials: { username: 'u' } }).credentials, {
+  assert.deepEqual(providerOf(browserstack({ credentials: { username: 'u' } })).credentials, {
     variables: ['BROWSERSTACK_ACCESS_KEY'],
   });
-  assert.deepEqual(browserstack({ credentials: { accessKey: 'k' } }).credentials, {
+  assert.deepEqual(providerOf(browserstack({ credentials: { accessKey: 'k' } })).credentials, {
     variables: ['BROWSERSTACK_USERNAME'],
   });
 });
@@ -101,28 +112,28 @@ test('credentials passed as options replace the environment, which stays the fal
   const env = { BROWSERSTACK_USERNAME: 'env-user', BROWSERSTACK_ACCESS_KEY: 'env-key' };
 
   await listArtifacts(
-    browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } }),
+    providerOf(browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     env,
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
   await listArtifacts(
-    browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } }),
+    providerOf(browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     {},
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(browserstack(), env);
+  await listArtifacts(providerOf(browserstack()), env);
   assert.equal(captured.read(), basic('env-user', 'env-key'));
-  await assert.rejects(listArtifacts(browserstack(), {}), { code: 'INVALID_ARGS' });
+  await assert.rejects(listArtifacts(providerOf(browserstack()), {}), { code: 'INVALID_ARGS' });
 });
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
   const captured = capturedAuthorization();
-  await listArtifacts(browserstack({ credentials: { username: 'opt-user' } }), {
+  await listArtifacts(providerOf(browserstack({ credentials: { username: 'opt-user' } })), {
     BROWSERSTACK_USERNAME: 'env-user',
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });
   assert.equal(captured.read(), basic('opt-user', 'env-key'));
-  await listArtifacts(browserstack({ credentials: { accessKey: 'opt-key' } }), {
+  await listArtifacts(providerOf(browserstack({ credentials: { accessKey: 'opt-key' } })), {
     BROWSERSTACK_USERNAME: 'env-user',
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });
@@ -150,15 +161,15 @@ test.each([
     const plugin = browserstack({ credentials });
     const [resolve, artifacts] = await Promise.allSettled([
       Promise.resolve().then(() =>
-        plugin.connection!.resolve({ flags, stateDir: '/state', cwd: '/', env, host: host(env) }),
+        providerOf(plugin).connection!.resolve({ flags, stateDir: '/state', cwd: '/', env, host: host(env) }),
       ),
-      listArtifacts(plugin, env),
+      listArtifacts(providerOf(plugin), env),
     ]);
     assert.equal(resolve.status, 'rejected');
     if (resolve.status === 'rejected') assert.equal(resolve.reason.code, 'INVALID_ARGS');
     assert.equal(artifacts.status, 'rejected');
     if (artifacts.status === 'rejected') assert.equal(artifacts.reason.code, 'INVALID_ARGS');
-    assert.deepEqual(plugin.credentials, { variables });
+    assert.deepEqual(providerOf(plugin).credentials, { variables });
     assert.equal(fetch.mock.calls.length, 0);
   },
 );
@@ -171,9 +182,11 @@ test('connect uses the option credentials without an environment and verifies wi
     device: { status: 'verified', name: 'Google Pixel 8', platform: 'android', osVersion: '14.0' },
     app: { status: 'verified', reference: 'bs://app-id' },
   });
-  const { connection } = browserstack({
-    credentials: { username: 'opt-user', accessKey: 'opt-key' },
-  });
+  const { connection } = providerOf(
+    browserstack({
+      credentials: { username: 'opt-user', accessKey: 'opt-key' },
+    }),
+  );
   const flags = {
     json: false,
     help: false,
@@ -202,7 +215,7 @@ test('connect uses the option credentials without an environment and verifies wi
   );
   await assert.rejects(
     async () =>
-      await browserstack().connection!.resolve({
+      await providerOf(browserstack()).connection!.resolve({
         flags,
         stateDir: '/state',
         cwd: '/work',

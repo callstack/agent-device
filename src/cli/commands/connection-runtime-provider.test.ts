@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import browserstack from '@agent-device/browserstack';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import {
   connectionWorkspace,
   createTestClient,
@@ -11,17 +11,18 @@ import {
   seedConnectionState,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/host-bound-commands.ts';
+import { providerContributionOf } from '@agent-device/plugins/validate';
 
 afterEach(() => vi.unstubAllEnvs());
 
 test('deferred provider materialization forwards provider profile fields to lease allocation', async () => {
   const { home } = pluginHome();
   vi.stubEnv('AGENT_DEVICE_HOME', home);
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@agent-device/browserstack',
-    v2RegistrationSource('browserstack', {
-      extra: `connection: { capabilities: ${JSON.stringify(browserstack().connection?.capabilities)}, resolve() {}, verify() {} },`,
+    pluginSource('browserstack', {
+      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(browserstack()).connection?.capabilities)}, resolve() {}, verify() {} },`,
     }),
   );
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-provider-lease-flags-');

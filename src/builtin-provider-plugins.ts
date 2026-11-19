@@ -1,4 +1,5 @@
 import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import { providerContributionOf } from '@agent-device/plugins/validate';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
@@ -66,6 +67,6 @@ export async function builtinLimrunConnection(
 ): Promise<PluginConnectionCallbacks> {
   const { withConnectionHost } = await import('@agent-device/plugins/registry');
   const plugin = limrunPlugin(builtinLimrunPluginOptions(host));
-  const connection = withConnectionHost(plugin.connection, undefined);
+  const connection = withConnectionHost(providerContributionOf(plugin).connection!, undefined);
   return { resolve: connection.resolve, verify: connection.verify };
 }

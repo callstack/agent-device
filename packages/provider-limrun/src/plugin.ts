@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { AgentDevicePlugin, PluginConnection } from '@agent-device/plugins/contract';
+import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
 import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
@@ -22,7 +22,7 @@ export type LimrunPluginOptions = Readonly<{
 }>;
 
 /**
- * Limrun as a version 2 plugin: instances are rented from the Limrun API and driven through their
+ * Limrun as a version 3 plugin: instances are rented from the Limrun API and driven through their
  * own ADB tunnel or Simulator bridge.
  *
  * The credentials are read from the setup host's environment, so the plugin declares exactly the
@@ -30,42 +30,45 @@ export type LimrunPluginOptions = Readonly<{
  * list, fingerprint, or route a `connect` to the provider: the connection's flags and credential
  * reading, the runtime, and its host adapters all load in the path that asks for them.
  */
-export function limrunPlugin(
-  options: LimrunPluginOptions,
-): AgentDevicePlugin & { connection: PluginConnection } {
+export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
   const { createDependencies, stateDir } = options;
   return {
-    apiVersion: 2,
-    provider: LIMRUN_PROVIDER,
-    credentials: limrunCredentialDeclaration(),
-    // The connect callbacks are the provider's own and load when the first `connect` runs them, so
-    // a process that only lists or fingerprints this provider evaluates none of them.
-    connection: {
-      capabilities: LIMRUN_CONNECTION_CAPABILITIES,
-      resolve: async (context) =>
-        await (await import('./connection.ts')).createLimrunConnection().resolve(context),
-      verify: async (context) =>
-        await (await import('./connection.ts')).createLimrunConnection().verify(context),
-    },
-    setup: async (host) => {
-      const credentials = requireLimrunCredentials(host.env);
-      const [register, dependencies] = await Promise.all([
-        import('./runtime.ts'),
-        Promise.resolve(createDependencies(host)),
-      ]);
-      return register.createLimrunRuntime(
-        {
-          ...credentials,
-          ...(stateDir === undefined
-            ? {}
-            : {
-                // HAR captures land beside the session files, under the daemon's own state dir.
-                networkHarDir: path.join(stateDir, 'network-har'),
-              }),
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: LIMRUN_PROVIDER,
+        credentials: limrunCredentialDeclaration(),
+        // The connect callbacks are the provider's own and load when the first `connect` runs them,
+        // so a process that only lists or fingerprints this provider evaluates none of them.
+        connection: {
+          capabilities: LIMRUN_CONNECTION_CAPABILITIES,
+          resolve: async (context) =>
+            await (await import('./connection.ts')).createLimrunConnection().resolve(context),
+          verify: async (context) =>
+            await (await import('./connection.ts')).createLimrunConnection().verify(context),
         },
-        dependencies,
-        { includePlatformModule: true },
-      );
-    },
+        setup: async (host) => {
+          const credentials = requireLimrunCredentials(host.env);
+          const [register, dependencies] = await Promise.all([
+            import('./runtime.ts'),
+            Promise.resolve(createDependencies(host)),
+          ]);
+          return register.createLimrunRuntime(
+            {
+              ...credentials,
+              ...(stateDir === undefined
+                ? {}
+                : {
+                    // HAR captures land beside the session files, under the daemon's own state dir.
+                    networkHarDir: path.join(stateDir, 'network-har'),
+                  }),
+            },
+            dependencies,
+            { includePlatformModule: true },
+          );
+        },
+      },
+    ],
   };
 }

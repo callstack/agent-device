@@ -16,13 +16,14 @@ import { resolveConnectProviderProfile } from '../connection/connect-provider-ad
 import {
   mkdtempForTestSync,
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
   bindTestCommandHost,
 } from '@agent-device/test-kit';
 import manifest from '@agent-device/browserstack/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
+import { providerContributionOf } from '@agent-device/plugins/validate';
 
 bindTestCommandHost();
 
@@ -62,11 +63,11 @@ beforeEach(() => {
   pluginHomeDir = home;
   // The store declares the plugin installed with BrowserStack's capabilities; the mocked loader
   // above supplies the workspace factory those assertions exercise.
-  selectV2Plugin(
+  selectPlugin(
     home,
     manifest.name,
-    v2RegistrationSource('browserstack', {
-      extra: `connection: { capabilities: ${JSON.stringify(browserstack().connection?.capabilities)}, resolve() {}, verify() {} },`,
+    pluginSource('browserstack', {
+      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(browserstack()).connection?.capabilities)}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["BROWSERSTACK_USERNAME", "BROWSERSTACK_ACCESS_KEY"] }',
     }),
   );

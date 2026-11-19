@@ -2,6 +2,20 @@ import assert from 'node:assert/strict';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import type { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
+import type {
+  AgentDevicePlugin,
+  ReplayBackendContribution,
+  ReplayExecutionContribution,
+} from 'agent-device/plugins';
+
+function contributionOf(
+  plugin: AgentDevicePlugin,
+): ReplayBackendContribution | ReplayExecutionContribution {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind === 'provider') throw new Error('expected a replay contribution');
+  return contribution;
+}
+
 
 const state = vi.hoisted(() => ({
   engineLoads: 0,
@@ -39,13 +53,18 @@ beforeEach(() => {
 test('factory setup and unused disposal leave the engine and PNG worker unloaded', async () => {
   const { default: maestroPlugin } = await import('./plugin.ts');
   const plugin = maestroPlugin();
-  expect({ apiVersion: plugin.apiVersion, kind: plugin.kind, backend: plugin.backend }).toEqual({
-    apiVersion: 2,
+  const contribution = contributionOf(plugin);
+  expect({
+    apiVersion: plugin.apiVersion,
+    kind: contribution.kind,
+    ...(contribution.kind === 'replay-backend' ? { backend: contribution.backend } : {}),
+  }).toEqual({
+    apiVersion: 3,
     kind: 'replay-backend',
     backend: 'maestro',
   });
 
-  const setup = await plugin.setup(setupHost);
+  const setup = await contributionOf(plugin).setup(setupHost);
   await setup.dispose?.();
 
   expect(state.engineLoads).toBe(0);
@@ -84,7 +103,8 @@ test('selected creation retains one worker, forwards its diagnostic to the host 
     buildActionFailureResponse: () => Promise.reject(new Error('failure response unused')),
   };
   const { default: maestroPlugin } = await import('./plugin.ts');
-  const setup = await maestroPlugin().setup(setupHost);
+  const setup = await contributionOf(maestroPlugin()).setup(setupHost);
+  if (!('replayBackend' in setup)) throw new Error('Maestro sets up a format backend');
   const backend = await setup.replayBackend.create(host);
   const nextBackend = await setup.replayBackend.create(host);
 

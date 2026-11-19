@@ -8,14 +8,14 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 
 test.each(['missing', 'failed'] as const)(
   'AWS profile and stored connection refuse a %s plugin before lease actions',
   async (kind) => {
     const { home, env } = pluginHome();
     if (kind === 'failed')
-      selectV2Plugin(
+      selectPlugin(
         home,
         '@agent-device/aws-device-farm',
         'throw new Error("registration failed")',

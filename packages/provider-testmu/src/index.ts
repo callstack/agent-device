@@ -38,29 +38,34 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
     ...(credentials?.accessKey ? [] : ['LT_ACCESS_KEY']),
   ];
   return {
-    apiVersion: 2,
-    provider: 'testmu',
-    credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: false,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: true,
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: true,
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'testmu',
+        credentials: { variables: environmentVariables },
+        connection: {
+          capabilities: {
+            leaseKind: 'direct-device-provider',
+            requiresAppAttachment: false,
+            requiresRemoteDaemon: false,
+            supportsArtifacts: true,
+            supportsDeferredAppSelection: false,
+            supportsDirectPortReverse: false,
+            usesCloudWebDriverLease: true,
+          },
+          resolve: async (context) =>
+            (await loadConnection(withCredentials(context.host))).resolve(context),
+          verify: async (context) =>
+            await (await loadConnection(withCredentials(context.host))).verify(context),
+        },
+        setup: async (host) => ({
+          webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
+            withCredentials(host),
+          ),
+        }),
       },
-      resolve: async (context) =>
-        (await loadConnection(withCredentials(context.host))).resolve(context),
-      verify: async (context) =>
-        await (await loadConnection(withCredentials(context.host))).verify(context),
-    },
-    setup: async (host) => ({
-      webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
-        withCredentials(host),
-      ),
-    }),
+    ],
   };
 }
 

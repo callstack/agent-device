@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '@agent-device/client';
 import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
 
 const capabilities = {
@@ -23,10 +23,10 @@ test('direct materialization uses supplied host store without an ambient command
   const { home } = pluginHome();
   const ambient = pluginHome();
   vi.stubEnv('AGENT_DEVICE_HOME', ambient.home);
-  selectV2Plugin(
+  selectPlugin(
     home,
     'example-v2',
-    v2RegistrationSource('example-v2', {
+    pluginSource('example-v2', {
       extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() {} },`,
     }),
   );

@@ -2,10 +2,10 @@ import { expect, test, vi } from 'vitest';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
 import type { PluginCandidate, PluginRegistryPolicy } from './registry.ts';
 import type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
-import { validateReplayEngineSetup } from './validate.ts';
+import { validateReplayBackendSetup, validateReplayExecutionSetup } from './validate.ts';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ProviderPluginHost } from './host.ts';
-import type { ReplayEnginePlugin } from './replay-backend.ts';
+import type { AgentDevicePlugin } from './contract.ts';
 
 const host = {} as ReplayBackendHost;
 const policy: PluginRegistryPolicy = {
@@ -28,7 +28,10 @@ function engine(backend = 'maestro') {
   const dispose = vi.fn();
   const setup = vi.fn((_host: ProviderPluginHost) => ({ replayBackend: { create }, dispose }));
   return {
-    plugin: { apiVersion: 2, kind: 'replay-backend', backend, setup } satisfies ReplayEnginePlugin,
+    plugin: {
+      apiVersion: 3,
+      contributes: [{ kind: 'replay-backend', backend, setup }],
+    } satisfies AgentDevicePlugin,
     runtime,
     create,
     dispose,
@@ -294,7 +297,8 @@ test.each([
   ['maestro', { execution: { create: vi.fn() } }],
   ['custom', { execution: { create: vi.fn() } }],
 ])('setup validates the factory against backend %s', (backend, setup) => {
-  expect(() => validateReplayEngineSetup(setup, backend)).toThrow(
+  const validate = backend === 'ad' ? validateReplayExecutionSetup : validateReplayBackendSetup;
+  expect(() => validate(setup)).toThrow(
     expect.objectContaining({ details: { reason: 'invalid_plugin' } }),
   );
 });

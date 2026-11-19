@@ -12,7 +12,7 @@ import {
   createPluginSelectionGuard,
   storePluginCandidates,
 } from './store.ts';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd: vi.fn() }));
 afterEach(() => vi.mocked(runCmd).mockReset());
@@ -55,7 +55,7 @@ function installFixture(name = packageName, provider = 'example') {
         exports: { './agent-device': { import: './plugin.mjs' } },
       }),
     );
-    fs.writeFileSync(path.join(directory, 'plugin.mjs'), v2RegistrationSource(provider));
+    fs.writeFileSync(path.join(directory, 'plugin.mjs'), pluginSource(provider));
     return { stdout: '', stderr: '', exitCode: 0 };
   });
 }
@@ -161,7 +161,7 @@ test('concurrent additions serialize without dropping the other package', async 
     );
     fs.writeFileSync(
       path.join(directory, 'plugin.mjs'),
-      v2RegistrationSource(name.toLowerCase().replaceAll(/[^a-z0-9-]/g, '-')),
+      pluginSource(name.toLowerCase().replaceAll(/[^a-z0-9-]/g, '-')),
     );
     return { stdout: '', stderr: '', exitCode: 0 };
   });
@@ -203,8 +203,8 @@ test('invalid package sources and damaged selections fail before invoking npm', 
 
 test('a duplicate provider id is settled by the registry when the store composes', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'first', v2RegistrationSource('example'));
-  selectV2Plugin(home, 'second', v2RegistrationSource('example'));
+  selectPlugin(home, 'first', pluginSource('example'));
+  selectPlugin(home, 'second', pluginSource('example'));
   const listed = await listPlugins(env, []);
   assert.deepEqual(
     listed.map(({ name, compatible, error }) => [name, compatible, error?.reason]),
@@ -215,7 +215,7 @@ test('a duplicate provider id is settled by the registry when the store composes
   );
   // A dormant built-in claims the id first, so a store package cannot take it either.
   const { home: otherHome, env: otherEnv } = pluginHome();
-  selectV2Plugin(otherHome, 'limrun-plugin', v2RegistrationSource('limrun'));
+  selectPlugin(otherHome, 'limrun-plugin', pluginSource('limrun'));
   const limrun = await listPlugins(otherEnv, ['limrun']);
   assert.deepEqual(
     limrun.map(({ name, compatible, error }) => [name, compatible, error?.reason]),
@@ -228,7 +228,7 @@ test('broken siblings do not block pinned updates or unrelated additions', async
     const { home, env } = pluginHome();
     installFixture();
     await changePlugin('add', `${packageName}@1.2.3`, env);
-    selectV2Plugin(home, 'broken', 'throw new Error("must not evaluate");');
+    selectPlugin(home, 'broken', 'throw new Error("must not evaluate");');
     const config = readPluginConfig(env);
     config.plugins![packageName]!.options = { region: 'eu' };
     fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify(config));
@@ -258,12 +258,12 @@ test('broken siblings do not block pinned updates or unrelated additions', async
 test('a fixed daemon detects replacement of a selected replay installation without importing it', async () => {
   const { home, env } = pluginHome();
   const name = '@agent-device/replay';
-  selectV2Plugin(home, name, 'throw new Error("selection checks must not import this package");');
+  selectPlugin(home, name, 'throw new Error("selection checks must not import this package");');
   const guard = createPluginSelectionGuard(await storePluginCandidates(env), env);
   assert.doesNotThrow(() => guard(name));
-  selectV2Plugin(home, '@example/unrelated', 'throw new Error("unrelated");');
+  selectPlugin(home, '@example/unrelated', 'throw new Error("unrelated");');
   assert.doesNotThrow(() => guard(name));
-  selectV2Plugin(home, name, 'throw new Error("replacement, same npm version");');
+  selectPlugin(home, name, 'throw new Error("replacement, same npm version");');
   assert.throws(
     () => guard(name),
     (error: unknown) => {
@@ -295,7 +295,7 @@ test('a null replay selection is invalid configuration rather than an absent pac
 test('equivalent nested option key order keeps the daemon selection current', async () => {
   const { home, env } = pluginHome();
   const name = '@agent-device/replay';
-  selectV2Plugin(home, name, 'throw new Error("must not import");');
+  selectPlugin(home, name, 'throw new Error("must not import");');
   const config = readPluginConfig(env);
   const selection = config.plugins[name];
   selection.options = { region: 'eu', nested: { retries: 2, labels: ['a', 'b'] } };
@@ -331,7 +331,7 @@ test.each([
   ['1.2.3+01', true],
 ] as const)('artifact selection validates exact SemVer %s', async (version, valid) => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'), { manifest: { version } });
+  selectPlugin(home, 'example', pluginSource('example'), { manifest: { version } });
   const config = readPluginConfig(env);
   config.plugins.example.artifact = {
     version,
@@ -383,7 +383,7 @@ test('registry staging cleanup failure reports both errors and releases the stor
 
 test('removal does not create or remove a staging project', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const before = fs.readdirSync(path.join(home, 'plugins'));
   const spy = vi.spyOn(fs, 'rmSync');
   try {

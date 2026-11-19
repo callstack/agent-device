@@ -5,9 +5,13 @@ import type {
   RemoteConfigProfile,
 } from '@agent-device/contracts/remote';
 import type { ProviderPluginHost } from './host.ts';
+import type {
+  ReplayBackendContribution,
+  ReplayExecutionContribution,
+} from './replay-backend.ts';
 
-/** The provider plugin contract version this module defines. */
-export const PROVIDER_PLUGIN_API_VERSION = 2;
+/** The plugin contract version this module defines. Version 2 had no compatibility shim. */
+export const PLUGIN_API_VERSION = 3;
 
 /** Provider ids that name daemon routing; no plugin can claim either of them. */
 export const ROUTING_PROVIDER_IDENTITIES: readonly string[] = ['cloud', 'proxy'];
@@ -89,17 +93,35 @@ export type PluginSetupResult<WebDriver extends WebDriverDescriptor = WebDriverD
   | PluginRuntimeSetup
   | PluginWebDriverSetup<WebDriver>;
 
+/** A `provider` contribution: the current provider declaration plus setup with a provider host. */
+export type ProviderContribution<
+  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
+> = Readonly<{
+  kind: 'provider';
+  /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
+  provider: string;
+  credentials: PluginCredentials;
+  connection?: PluginConnection;
+  /** Builds the runtime. Keep it free of network I/O and device allocation. */
+  setup(
+    host: ProviderPluginHost,
+  ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
+}>;
+
+/** One independently activated claim a plugin declares. New kinds need an explicit decision. */
+export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+  | ProviderContribution<WebDriver>
+  | ReplayBackendContribution
+  | ReplayExecutionContribution;
+
+/**
+ * The object a plugin factory returns: the contract version plus every contribution the package
+ * claims. Each contribution activates and cleans up independently of the others.
+ */
 export type AgentDevicePlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
   Readonly<{
-    apiVersion: typeof PROVIDER_PLUGIN_API_VERSION;
-    /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
-    provider: string;
-    credentials: PluginCredentials;
-    connection?: PluginConnection;
-    /** Builds the runtime. Keep it free of network I/O and device allocation. */
-    setup(
-      host: ProviderPluginHost,
-    ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
+    apiVersion: typeof PLUGIN_API_VERSION;
+    contributes: readonly [Contribution<WebDriver>, ...Contribution<WebDriver>[]];
   }>;
 
 /**

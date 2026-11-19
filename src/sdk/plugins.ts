@@ -9,9 +9,11 @@ import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdr
 export type {
   HostCommandResult,
   ProviderPluginHost,
+  ReplaySetupHost,
   RunHostCommand,
 } from '@agent-device/plugins/host';
 export type {
+  Contribution,
   PluginConnection,
   PluginConnectionContext,
   PluginConnectionResolution,
@@ -19,6 +21,7 @@ export type {
   PluginPlatformModule,
   PluginProviderRuntime,
   PluginRuntimeSetup,
+  ProviderContribution,
 } from '@agent-device/plugins/contract';
 
 /** A hosted WebDriver service; the host builds the runtime from the descriptor. */
@@ -30,7 +33,12 @@ export type AgentDevicePluginFactory<Options = Record<string, unknown>> = Contra
   CloudWebDriverProviderOptions
 >;
 
-export type { ReplayEnginePlugin, ReplayEngineSetup } from '@agent-device/plugins/replay-backend';
+export type {
+  ReplayBackendContribution,
+  ReplayBackendSetup,
+  ReplayExecutionContribution,
+  ReplayExecutionSetup,
+} from '@agent-device/plugins/replay-backend';
 export type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 
 export type {

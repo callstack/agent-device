@@ -45,21 +45,26 @@ function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
     ...(credentials?.accessKey !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]),
   ];
   return {
-    apiVersion: 2,
-    provider: 'browserstack',
-    credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
-      resolve: async (context) =>
-        (await loadConnection(withCredentials(context.host))).resolve(context),
-      verify: async (context) =>
-        await (await loadConnection(withCredentials(context.host))).verify(context),
-    },
-    setup: async (host) => ({
-      webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(
-        withCredentials(host),
-      ),
-    }),
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'browserstack',
+        credentials: { variables: environmentVariables },
+        connection: {
+          capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
+          resolve: async (context) =>
+            (await loadConnection(withCredentials(context.host))).resolve(context),
+          verify: async (context) =>
+            await (await loadConnection(withCredentials(context.host))).verify(context),
+        },
+        setup: async (host) => ({
+          webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(
+            withCredentials(host),
+          ),
+        }),
+      },
+    ],
   };
 }
 

@@ -12,8 +12,8 @@ import {
 import {
   beginStdoutCapture,
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
 } from '@agent-device/test-kit';
 
 const provider = 'browserstack';
@@ -74,7 +74,7 @@ test.each(['missing', 'failed'] as const)(
   async (kind) => {
     const { home, env } = pluginHome();
     if (kind === 'failed')
-      selectV2Plugin(home, packageName, 'throw new Error("registration failed")');
+      selectPlugin(home, packageName, 'throw new Error("registration failed")');
     const f = fixture(home);
     const opts = { cwd: home, env: { ...env, AGENT_DEVICE_SESSION: 'default' } };
     const expected = kind === 'missing' ? 'plugin-not-installed' : 'plugin-unavailable';
@@ -126,10 +126,10 @@ test('routed status uses capabilities from the supplied host store rather than t
   const { home } = pluginHome();
   const ambient = pluginHome();
   vi.stubEnv('AGENT_DEVICE_HOME', ambient.home);
-  selectV2Plugin(
+  selectPlugin(
     home,
     packageName,
-    v2RegistrationSource(provider, {
+    pluginSource(provider, {
       extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { return { provider: 'browserstack', service: 'BrowserStack', verificationMessage: 'verified' }; } },`,
     }),
   );

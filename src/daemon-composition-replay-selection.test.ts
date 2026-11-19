@@ -11,7 +11,7 @@ import {
   createTestHostEnvironment,
   mkdtempForTestSync,
   pluginHome,
-  selectV2Plugin,
+  selectPlugin,
 } from '@agent-device/test-kit';
 import { composeDaemonRuntimeDeps } from './daemon-composition.ts';
 
@@ -77,14 +77,14 @@ test.each([
     const { home, env } = pluginHome();
     const name = `@example/${backend}`;
     const source = pluginSource(backend);
-    selectV2Plugin(home, name, source);
+    selectPlugin(home, name, source);
     const runtime = await composedRuntime(env);
     try {
       const first = await runtime.resolve(backend);
-      selectV2Plugin(home, '@example/unrelated', pluginSource(backend));
+      selectPlugin(home, '@example/unrelated', pluginSource(backend));
       expect(await runtime.resolve(backend)).toBe(first);
       if (change === 'replace') {
-        selectV2Plugin(home, name, source);
+        selectPlugin(home, name, source);
       } else {
         const configPath = path.join(home, 'config.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -104,7 +104,7 @@ test.each(['ad', 'maestro'] as const)(
   'embedded %s implementations remain independent of store changes',
   async (backend) => {
     const { home, env } = pluginHome();
-    selectV2Plugin(home, `@example/${backend}`, pluginSource(backend));
+    selectPlugin(home, `@example/${backend}`, pluginSource(backend));
     const runtime = await composedRuntime(env, true);
     try {
       const first = await runtime.resolve(backend);
@@ -128,7 +128,7 @@ test.each([
       await expect(runtime.resolve(backend)).rejects.toMatchObject({
         details: { reason: 'plugin-not-installed', package: name },
       });
-      selectV2Plugin(home, name, pluginSource(backend));
+      selectPlugin(home, name, pluginSource(backend));
       await expect(runtime.resolve(backend)).rejects.toMatchObject({
         details: { reason: 'daemon-plugin-set-stale', package: name },
       });

@@ -2,7 +2,7 @@ import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import {
   withCapturedStderrAsync,
   pluginHome,
-  selectV2Plugin,
+  selectPlugin,
   restoreEnv,
 } from '@agent-device/test-kit';
 import { primePluginConnections } from '@agent-device/plugins/connection';
@@ -457,7 +457,7 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     sample: BROWSERSTACK_CONNECT_SAMPLE,
     render: async () => {
       const { home } = pluginHome();
-      selectV2Plugin(
+      selectPlugin(
         home,
         '@agent-device/browserstack',
         `import browserstack from ${JSON.stringify(import.meta.resolve('@agent-device/browserstack'))}; export default browserstack;`,
