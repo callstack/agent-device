@@ -377,6 +377,15 @@ test('starts and reuses a persistent Android snapshot helper session', async () 
     calls.filter((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:')).length,
     1,
   );
+  // The device end of the forward is the helper's abstract socket, so the helper can admit only
+  // the forwarded adbd peer before reading a command (#4519); never a device TCP port.
+  const forward = calls.find((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:'));
+  const forwardedPort = Number(String(forward?.[1]).slice('tcp:'.length));
+  assert.deepEqual(forward, [
+    'forward',
+    `tcp:${forwardedPort}`,
+    `localabstract:agentdevice-snapshot-helper-${forwardedPort}`,
+  ]);
 });
 
 test('restarts the helper session when capture options change', async () => {

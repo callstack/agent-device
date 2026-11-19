@@ -103,10 +103,27 @@ The `gesture` payload is a base64-encoded JSON object using protocol `android-to
 ## Persistent Session
 
 Passing `-e sessionPort <port>` keeps the instrumentation alive after startup and serves repeated
-commands over a local TCP server on `127.0.0.1:<port>`, instead of exiting after one snapshot. This
-avoids paying UiAutomation connect/teardown cost per call. Each command uses one short-lived
-connection: the client connects, sends a single command line, reads the response, and the server
-closes that connection; the process stays alive for the next connection:
+commands over an abstract `localabstract:` UNIX socket named `agentdevice-snapshot-helper-<port>`,
+reached from the host through `adb forward tcp:<port> localabstract:agentdevice-snapshot-helper-<port>`,
+instead of exiting after one snapshot. This avoids paying UiAutomation connect/teardown cost per
+call. Each command uses one short-lived connection: the client connects, sends a single command
+line, reads the response, and the server closes that connection; the process stays alive for the
+next connection.
+
+Each accepted connection is admitted before any command byte is read: the helper reads the
+forwarded peer's kernel credentials with `LocalSocket.getPeerCredentials()` and serves only adbd —
+shell uid 2000, or root uid 0 when adb runs in its supported root mode. Both are the adb operator
+trust boundary; any other uid (or an unreadable credential) is closed without a response. The socket
+name derives from the port and carries no secret, and no token travels in argv.
+
+The command line of each connection is bounded twice. Its read runs under an absolute per-connection
+deadline fixed at accept time, owned by the session's own `timeoutMs` (fallback 8000 ms), so a
+silent or drip-feeding peer cannot hold the command reader past that budget; and the line itself is
+capped at 256 KiB, a bound derived from the largest supported producer of this channel (a 10 s
+two-contact gesture carries 1,252 densified samples, at most ~130 KB base64; the documented 64 KiB
+`fill --text-stdin` contract encodes to ~88 KB — the cap keeps at least 2x headroom over both). A
+connection that hits either bound, or fails its read or response with an expected I/O error, is
+answered with a session error and closed; the session keeps serving the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling

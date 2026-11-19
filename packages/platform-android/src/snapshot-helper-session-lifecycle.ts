@@ -31,6 +31,7 @@ import {
 } from './snapshot-helper-capture.ts';
 import {
   allocateAndroidSnapshotHelperSessionPort,
+  androidSnapshotHelperSessionForwardTarget,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
@@ -311,11 +312,16 @@ async function startAndroidSnapshotHelperSession(params: {
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession> {
   const port = await allocateAndroidSnapshotHelperSessionPort();
-  await params.options.adb(['forward', `tcp:${port}`, `tcp:${port}`], {
-    allowFailure: false,
-    timeoutMs: FORWARD_TIMEOUT_MS,
-    signal: params.options.signal,
-  });
+  // The device end of the forward is the helper's abstract socket, not a device TCP port, so the
+  // helper can check the forwarded peer's adbd uid before reading any command byte (#4519).
+  await params.options.adb(
+    ['forward', `tcp:${port}`, androidSnapshotHelperSessionForwardTarget(port)],
+    {
+      allowFailure: false,
+      timeoutMs: FORWARD_TIMEOUT_MS,
+      signal: params.options.signal,
+    },
+  );
   const sessionArgs = buildAndroidSnapshotHelperArgs(
     { ...params.resolved, emitChunks: false },
     { sessionPort: port },

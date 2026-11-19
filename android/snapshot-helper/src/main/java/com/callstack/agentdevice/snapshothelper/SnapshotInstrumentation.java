@@ -3,22 +3,23 @@ package com.callstack.agentdevice.snapshothelper;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.res.Resources;
+import android.net.Credentials;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.lang.reflect.Field;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
@@ -178,8 +179,12 @@ public final class SnapshotInstrumentation extends Instrumentation {
       int maxDepth,
       int maxNodes)
       throws IOException {
-    try (ServerSocket server =
-        new ServerSocket(sessionPort, 1, InetAddress.getByName("127.0.0.1"))) {
+    // The session socket lives in the abstract namespace, reached from the host through
+    // `adb forward tcp:<port> localabstract:<name>`; the forwarded peer is adbd, and its uid is
+    // checked before any command byte is read. The name is derived from the port and carries no
+    // secret — admission is the peer uid, not name secrecy.
+    try (LocalServerSocket server =
+        new LocalServerSocket(SessionPeerPolicy.sessionSocketName(sessionPort))) {
       Bundle ready = new Bundle();
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
@@ -189,63 +194,163 @@ public final class SnapshotInstrumentation extends Instrumentation {
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
+      // Each connection's command read is bounded by the session's own timeout, fixed at accept
+      // time: a host sends its command immediately after connecting, so a peer silent past that
+      // budget is answered with an error instead of occupying the command reader.
+      long readBudgetMs =
+          SessionPeerPolicy.commandReadDeadlineMs(timeoutMs, DEFAULT_TIMEOUT_MS);
       while (!Thread.currentThread().isInterrupted()) {
-        try (Socket socket = server.accept()) {
-          String command =
-              new BufferedReader(
-                      new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-                  .readLine();
-          if (command == null) {
-            SessionResponseWriter.writeSessionError(
-                socket.getOutputStream(), "", new EOFException("empty command"));
+        try (LocalSocket socket = server.accept()) {
+          // Positive peer identity first: a peer that is not adbd (shell uid 2000, or root uid 0
+          // under `adb root`) — or whose credentials cannot be read at all — is rejected before
+          // any command byte is read and before any response is written.
+          if (!admitSessionPeer(socket)) {
             continue;
           }
-          String[] parts = command.trim().split("\\s+", 3);
-          String action = parts.length > 0 ? parts[0] : "";
-          String requestId = parts.length > 1 ? parts[1] : "";
-          if ("quit".equals(action)) {
-            SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
-            return;
-          }
-          if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
-            AutomationCommandHandler.writeSessionResponse(
-                socket.getOutputStream(), requestId, action,
-                parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked(), getContext());
-            continue;
-          }
-          if ("viewport".equals(action)) {
-            TouchCommandHandler.writeSessionViewport(
-                socket.getOutputStream(), requestId, getConnectedUiAutomationUnchecked());
-            continue;
-          }
-          if ("gesture".equals(action)) {
-            TouchCommandHandler.writeSessionGesture(
+          long deadlineAtMs =
+              SessionPeerPolicy.commandReadDeadlineAtMs(System.currentTimeMillis(), readBudgetMs);
+          String requestId = "";
+          try {
+            String command =
+                readSessionCommandLine(socket, deadlineAtMs, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+            SessionPeerPolicy.LineDecision lineDecision =
+                SessionPeerPolicy.commandLineDecision(command, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+            if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
+              SessionResponseWriter.writeSessionError(
+                  socket.getOutputStream(), "", new EOFException("empty command"));
+              continue;
+            }
+            if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+              SessionResponseWriter.writeSessionError(
+                  socket.getOutputStream(), "",
+                  new IllegalArgumentException("session command over the byte limit"));
+              continue;
+            }
+            String[] parts = command.trim().split("\\s+", 3);
+            String action = parts.length > 0 ? parts[0] : "";
+            requestId = parts.length > 1 ? parts[1] : "";
+            if ("quit".equals(action)) {
+              writeSessionOkQuietly(socket, requestId);
+              return;
+            }
+            // The automation context is acquired per connection, after admission: a connect
+            // failure is this connection's failure, answered like the capture failure below
+            // instead of ending the session for the next peer.
+            UiAutomation automation;
+            try {
+              automation = getConnectedUiAutomationUnchecked();
+            } catch (RuntimeException error) {
+              SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
+              continue;
+            }
+            if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
+              AutomationCommandHandler.writeSessionResponse(
+                  socket.getOutputStream(), requestId, action,
+                  parts.length > 2 ? parts[2] : "", automation, getContext());
+              continue;
+            }
+            if ("viewport".equals(action)) {
+              TouchCommandHandler.writeSessionViewport(
+                  socket.getOutputStream(), requestId, automation);
+              continue;
+            }
+            if ("gesture".equals(action)) {
+              TouchCommandHandler.writeSessionGesture(
+                  socket.getOutputStream(),
+                  requestId,
+                  parts.length > 2 ? parts[2] : "",
+                  automation);
+              continue;
+            }
+            if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
+                && !"snapshot-short-idle".equals(action)) {
+              SessionResponseWriter.writeSessionError(
+                  socket.getOutputStream(),
+                  requestId,
+                  new IllegalArgumentException("unknown session command"));
+              continue;
+            }
+            writeSessionSnapshot(
                 socket.getOutputStream(),
                 requestId,
-                parts.length > 2 ? parts[2] : "",
-                getConnectedUiAutomationUnchecked());
-            continue;
+                waitForIdleQuietMs,
+                "snapshot-immediate".equals(action) ? 0
+                    : "snapshot-short-idle".equals(action) ? Math.min(waitForIdleTimeoutMs, SHORT_IDLE_TIMEOUT_MS)
+                    : waitForIdleTimeoutMs,
+                timeoutMs,
+                maxDepth,
+                maxNodes);
+          } catch (IOException error) {
+            // One connection's expected I/O failure — a silent peer past the absolute read
+            // deadline, a command line over the byte cap, a response the peer never read — is
+            // answered with an error and contained here, so the session keeps serving the next
+            // connection. Command handlers contain their own throwables and answer with session
+            // errors themselves.
+            try {
+              SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
+            } catch (IOException ignored) {
+              // The peer is already gone; nothing is left to tell it.
+            }
           }
-          if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
-              && !"snapshot-short-idle".equals(action)) {
-            SessionResponseWriter.writeSessionError(
-                socket.getOutputStream(),
-                requestId,
-                new IllegalArgumentException("unknown session command"));
-            continue;
-          }
-          writeSessionSnapshot(
-              socket.getOutputStream(),
-              requestId,
-              waitForIdleQuietMs,
-              "snapshot-immediate".equals(action) ? 0
-                  : "snapshot-short-idle".equals(action) ? Math.min(waitForIdleTimeoutMs, SHORT_IDLE_TIMEOUT_MS)
-                  : waitForIdleTimeoutMs,
-              timeoutMs,
-              maxDepth,
-              maxNodes);
         }
       }
+    }
+  }
+
+  /**
+   * Reads the peer's kernel credentials and admits only adbd. A credential read that fails for any
+   * reason is a peer that cannot be positively identified, so it is rejected: the session never
+   * serves a peer it could not verify.
+   */
+  private static boolean admitSessionPeer(LocalSocket socket) {
+    Credentials credentials;
+    try {
+      credentials = socket.getPeerCredentials();
+    } catch (Throwable error) {
+      return false;
+    }
+    return SessionPeerPolicy.admitPeer(credentials.getUid()) == SessionPeerPolicy.Admission.ADMITTED;
+  }
+
+  /**
+   * Reads one newline-terminated command line under an absolute deadline fixed at accept time and
+   * a hard byte cap. Each read gets only the budget still left before the deadline, so a peer that
+   * drip-feeds bytes cannot extend the connection past it the way a rolling SO_TIMEOUT would. The
+   * buffer holds at most {@code maxBytes + 1} bytes: past the cap the read stops and the line is
+   * returned for the policy to reject, so the over-limit response has one owner. Returns null on
+   * end-of-stream before any byte.
+   */
+  private static String readSessionCommandLine(LocalSocket socket, long deadlineAtMs, int maxBytes)
+      throws IOException {
+    InputStream input = socket.getInputStream();
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    while (true) {
+      long remainingMs =
+          SessionPeerPolicy.remainingBudgetMs(deadlineAtMs, System.currentTimeMillis());
+      if (remainingMs <= 0) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
+      }
+      socket.setSoTimeout((int) remainingMs);
+      int next = input.read();
+      if (next < 0) {
+        return bytes.size() == 0 ? null : bytes.toString(StandardCharsets.UTF_8);
+      }
+      if (next == '\n') {
+        return bytes.toString(StandardCharsets.UTF_8);
+      }
+      bytes.write(next);
+      if (bytes.size() > maxBytes) {
+        return bytes.toString(StandardCharsets.UTF_8);
+      }
+    }
+  }
+
+  private static void writeSessionOkQuietly(LocalSocket socket, String requestId) {
+    try {
+      SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
+    } catch (IOException ignored) {
+      // A quit the peer never read still ends the session; the host reads release from the
+      // process exit, not from this acknowledgement.
     }
   }
 

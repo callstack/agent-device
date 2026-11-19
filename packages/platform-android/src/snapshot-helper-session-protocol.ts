@@ -36,6 +36,24 @@ export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
   });
 }
 
+/**
+ * The abstract device socket a session helper binds for a host port. The name derives from the
+ * port and carries no secret — the helper admits a connection only after reading the forwarded
+ * peer's adbd uid via `LocalSocket.getPeerCredentials()`, before any command byte is read — so the
+ * name is a routing label, not a credential, and nothing sensitive travels in argv. The helper
+ * derives the same name from its `sessionPort` argument; the two must stay in lockstep.
+ */
+const SESSION_SOCKET_PREFIX = 'agentdevice-snapshot-helper-';
+
+export function androidSnapshotHelperSessionSocketName(port: number): string {
+  return `${SESSION_SOCKET_PREFIX}${port}`;
+}
+
+/** The device-side end of the session forward: the helper's abstract socket, not a device TCP port. */
+export function androidSnapshotHelperSessionForwardTarget(port: number): `localabstract:${string}` {
+  return `localabstract:${androidSnapshotHelperSessionSocketName(port)}`;
+}
+
 const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
 
 /** The helper accepted the session request but sent no answer before the command deadline. */

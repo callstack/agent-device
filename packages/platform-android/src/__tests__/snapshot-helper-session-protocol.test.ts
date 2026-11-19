@@ -2,10 +2,26 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  androidSnapshotHelperSessionForwardTarget,
+  androidSnapshotHelperSessionSocketName,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   parseAndroidSnapshotHelperSessionTouchResponse,
   parseAndroidSnapshotHelperSessionSnapshotResponse,
 } from '../snapshot-helper-session-protocol.ts';
+
+test('the session forward targets the helper abstract socket derived from the host port', () => {
+  // The name is a routing label derived from the port, never a credential: the helper admits a
+  // connection only on the forwarded peer's adbd uid (#4519).
+  assert.equal(androidSnapshotHelperSessionSocketName(18093), 'agentdevice-snapshot-helper-18093');
+  assert.equal(
+    androidSnapshotHelperSessionForwardTarget(18093),
+    'localabstract:agentdevice-snapshot-helper-18093',
+  );
+  assert.notEqual(
+    androidSnapshotHelperSessionForwardTarget(1),
+    androidSnapshotHelperSessionForwardTarget(2),
+  );
+});
 
 test('parses the session envelope and snapshot metadata', () => {
   const xml = '<hierarchy><node text="catalog" /></hierarchy>';
