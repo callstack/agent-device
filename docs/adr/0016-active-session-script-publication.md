@@ -30,7 +30,9 @@ This section is a normative summary.
   What is missing is created one level at a time at 0700, inside the directory the walk just judged.
   The local file is exactly 0600. The remote client requests 0600, and the umask can narrow it.
   The rule is POSIX-only. A refusal before creation leaves nothing behind; a refusal after creation starts can leave the empty directories already created.
-  The daemon's own state-directory chain is outside this decision (#4649).
+  The daemon's own state directory is admitted by this same walk and vocabulary, once per operation before its
+  first state-directory I/O; the rules that differ for it are stated under
+  [Daemon state root admission](#daemon-state-root-admission) (#4649, slice 2).
 - Repair transactions (ADR 0012) are disjoint from this lifecycle.
   A session with `saveScriptBoundary` set refuses this action without a change to repair state.
 - A remote recording is delivered, not published (#4511 amendment).
@@ -260,7 +262,17 @@ Rejected: refusing every directory that appears concurrently, because two saves 
 Rejected: accepting a group-writable directory whose group looks private, because membership cannot be proven.
 Rejected: publishing relative to a verified directory handle, because Node exposes no `openat` or `renameat` without native code; the permissions rule substitutes for it.
 
-The daemon's own state-directory chain is OUT of this decision, and this ADR carries no verdict for it. A destination a caller names is the only thing this rule judges: the daemon's default recording under its `sessions/` directory, and `sessions/remote-scripts/`, keep `main`'s behavior and are not walked here. Whether that chain gets a guard of its own, and what becomes of a recording the daemon picks a path for, are decided in follow-up [#4649](https://github.com/callstack/agent-device/issues/4649), which also folds in [#4620](https://github.com/callstack/agent-device/issues/4620).
+### Daemon state root admission
+
+The daemon's own state directory is judged by this same walk and this same exposure vocabulary, admitted ONCE per operation before the first state-directory I/O: `admitPrivateRoot` in this module, asked by `admitDaemonStateRoot` in `packages/daemon-contracts/src/daemon-resolution.ts`. Its rules, and where the two differ from a one-shot publication, are this ADR's extension, not a second rule:
+
+- **Establish and inspect.** A start asks the walk to create the missing tail; attach, status and stop ask it to judge only. An absent state directory is therefore an answer for an inspecting caller (`absent`, nothing created) and a `mkdir` for a starting one. The creation question is asked once per operation, never per write.
+- **The root's own name, and one step more above it.** A symbolic link AT the root is refused where it stands (`planted_link`) and is never resolved into a directory somebody else chose, and the root's own mode bits must be `0700` (`not_private`) — a published script's parent has no such requirement, because the walk judges what it writes there and a root holds everything written below it for as long as the daemon runs. A root that another starter creates mid-race is judged by the same rule as the winner it is, not adopted for passing through.
+- **Managed names below it.** `sessions/` and `sessions/remote-scripts/` are created the same level-at-a-time way and must be real directories of this user if they exist; a link at either name is refused rather than followed. Their own mode bits are the daemon's to arrange, because it created them.
+- **Refuse, do not repair.** An unsafe state directory refuses with `daemon_state_root_unsafe`, the offending component and one concrete step. There is no degraded mode, no enrollment or layout receipt, and no automatic `chmod` of a directory this call did not create. The `fix` names `chmod 700 <dir>` only for a directory this user owns; for a link, a foreign owner or a shared parent it points at `AGENT_DEVICE_STATE_DIR` instead, because no mode change makes those private.
+- **Windows judges the shape only.** Multi-account protection is POSIX-only, so on Windows admission rejects unsupported path shapes (UNC, device, drive-relative) and nothing else. The user documentation states this.
+
+Once the root and its ancestry are admitted, no per-write check repeats: another account cannot plant a new name inside an admitted root, and historical exposure of files already there is out of scope.
 
 ### What the guarantee does not cover
 

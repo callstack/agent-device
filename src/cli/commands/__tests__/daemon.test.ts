@@ -413,9 +413,10 @@ test.each([
 // Status is the surface an operator reads before deciding what a stop may do, so an owner this build
 // cannot place is said out loud instead of reading as an ordinary detached daemon.
 test('daemon status names a record whose owner it cannot recognize', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-status-unknown-');
   mocks.readDaemonStatus.mockReturnValue({
     state: 'running',
-    stateDir: '/tmp/agent-device-daemon-status-unknown',
+    stateDir,
     pid: 321,
     ownership: 'unknown',
   });
@@ -423,7 +424,7 @@ test('daemon status names a record whose owner it cannot recognize', async () =>
   await daemonCommand({
     host: createTestHostEnvironment(),
     positionals: ['status'],
-    flags: { help: false, json: false, stateDir: '/tmp/x', version: false },
+    flags: { help: false, json: false, stateDir, version: false },
     client: {} as never,
   });
 

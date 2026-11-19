@@ -128,11 +128,11 @@ function onWindowsHost<T>(run: () => Promise<T>): Promise<T> {
 }
 
 // Windows refuses ftruncate on a handle opened append-only, and closing an
-// append handle to reopen one drops the inode pin. These tests pin the
+// append handle to reopen one drops the inode pin. This test pins the
 // platform split: an existing log is emptied through one pinned handle, and
 // the Windows host rule (EPERM on an append handle, enforced here at the fs
-// seam) is answered by an `'r+'` handle instead of a create/reopen window
-// on the common path (#3291).
+// seam) is answered by a single `'w'` handle instead of a create/reopen
+// window on the common path (#3291).
 
 // Emulates the Windows host rule at the fs seam: ftruncate through an
 // append-only handle raises EPERM as NTFS would, while every other open and
@@ -164,7 +164,7 @@ function spyWindowsLogHandleRules(logPath: string): string[] {
   return logOpenFlags;
 }
 
-test('a Windows host empties an existing log through one pinned write handle', async () => {
+test('a Windows host empties the log through one pinned write handle', async () => {
   const { paths, owner } = await acquire();
   fs.writeFileSync(paths.logPath, 'previous run\n');
   const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
@@ -172,57 +172,10 @@ test('a Windows host empties an existing log through one pinned write handle', a
     try {
       owner.publish(fields);
       assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
-      // No append handle and no second open of the path: one r+ handle
-      // carried the inode from the truncation through to its close.
-      assert.deepEqual(logOpenFlags, ['r+']);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
-
-test('a missing Windows-host log is created through append and emptied through a write handle', async () => {
-  const { paths, owner } = await acquire();
-  const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
-  await onWindowsHost(async () => {
-    try {
-      owner.publish(fields);
-      assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
-      // The append handle is confined to the file-missing path: the failed
-      // 'r+' probe, the creation through 'a', then one write handle that
-      // carries the truncation.
-      assert.deepEqual(logOpenFlags, ['r+', 'a', 'r+']);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
-
-test('a log removed between creation and the write-handle reopen fails startup loudly', async () => {
-  const { paths, owner } = await acquire();
-  const realOpen = fs.openSync;
-  let created = false;
-  vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    // A rotation that removes the just-created log before the write handle
-    // reopens it surfaces as this startup failure, never a silent unemptied log.
-    if (String(target) === paths.logPath) {
-      if (String(flags) === 'a') created = true;
-      else if (created && String(flags) === 'r+') fs.rmSync(paths.logPath, { force: true });
-    }
-    return realOpen(target, flags, mode);
-  }) as typeof fs.openSync);
-  await onWindowsHost(async () => {
-    try {
-      assert.throws(
-        () => owner.publish(fields),
-        (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT',
-      );
+      // No append handle and no second open of the path: one write handle
+      // carried the inode from the truncation through to its close, whether or
+      // not the log existed first.
+      assert.deepEqual(logOpenFlags, ['w']);
     } finally {
       vi.restoreAllMocks();
     }

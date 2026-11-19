@@ -16,6 +16,7 @@ import {
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
+  admitDaemonStateRoot,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
@@ -243,6 +244,8 @@ export async function ensureManagedDaemon(
     return await ensureRemoteDaemon(settings, healthRecovery);
   }
 
+  // Inspected once per operation, before the first lock or record read in it.
+  admitDaemonStateRoot({ paths: settings.paths, mode: 'inspect' });
   const ensured = await ensureLocalDaemon(settings);
   // Checked on both branches: a startup can resolve to a daemon another caller raced in.
   await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir, settings.host);

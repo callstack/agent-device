@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import { admitPrivateRoot, expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -57,6 +57,10 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   if (!value) {
     return resolveDefaultDaemonStateDir(options);
   }
+  // A raw parent step is refused before any expansion: what it names depends on ground nothing has judged.
+  if (value.split(/[\\/]/).includes('..')) {
+    throw unsafeStateRoot(value, value, 'parent-step');
+  }
   const expanded = expandUserHomePath(value, { env: options.env });
   if (path.isAbsolute(expanded)) return expanded;
   if (options.cwd === undefined) {
@@ -69,6 +73,102 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
     );
   }
   return resolveUserPath(value, { env: options.env, cwd: options.cwd });
+}
+
+const MANAGED_STATE_DIRS = ['sessions', path.join('sessions', 'remote-scripts')] as const;
+
+/** The one reason every unsafe-state-root refusal answers with; callers branch on it, never on text. */
+export const DAEMON_STATE_ROOT_UNSAFE_REASON = 'daemon_state_root_unsafe';
+
+const MOVE_STATE_DIR_FIX =
+  'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
+
+/**
+ * Why a state root is refused, and the one step that ends it. Only `not-private` is fixed in place, with a
+ * mode change: no mode change makes a foreign-owned directory, or one a cleaner removes, private.
+ */
+const STATE_ROOT_PROBLEMS = {
+  symlink: ['is a symbolic link.', MOVE_STATE_DIR_FIX],
+  'foreign-owner': ['is owned by another local user.', MOVE_STATE_DIR_FIX],
+  'group-or-other-writable-ancestor': [
+    'is writable by group or others, so another account can steer the path.',
+    MOVE_STATE_DIR_FIX,
+  ],
+  'not-private': ['is open to accounts besides its owner.', 'chmod 700'],
+  'not-a-directory': ['is not a directory.', MOVE_STATE_DIR_FIX],
+  'parent-step': ['steps out of its parent with "..".', 'Name a real path, without a `..` step.'],
+  'unsupported-windows-path': [
+    'is not a supported Windows path shape.',
+    String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`,
+  ],
+} as const;
+
+export type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
+
+/** The walk's verdict for one step, in the terms an operator can act on. */
+const PROBLEM_FOR_EXPOSURE: Partial<Record<string, DaemonStateRootProblem>> = {
+  planted_link: 'symlink',
+  link_loop_exceeded: 'symlink',
+  foreign_owned: 'foreign-owner',
+  not_a_directory: 'not-a-directory',
+  entry_appeared: 'not-a-directory',
+  not_private: 'not-private',
+};
+
+/**
+ * Admits the daemon's state root once, before the first state-directory I/O of an operation. A root that is
+ * private now is accepted as it stands: no enrollment, no repair, no migration. An unsafe one refuses with
+ * {@link DAEMON_STATE_ROOT_UNSAFE_REASON} before anything is read, locked or written in it. On Windows only
+ * the path shape is judged: multi-account protection is POSIX-only.
+ */
+export function admitDaemonStateRoot(options: {
+  paths: DaemonPaths;
+  /** `establish` (start: may create missing levels) or `inspect` (attach, status, stop: never creates). */
+  mode: 'establish' | 'inspect';
+  /** A seam for the foreign-owner case, which a CI host cannot create with `chown`. */
+  uid?: number;
+}): void {
+  const { baseDir } = options.paths;
+  if (process.platform === 'win32') {
+    if (windowsStatePathProblem(baseDir))
+      throw unsafeStateRoot(baseDir, baseDir, 'unsupported-windows-path');
+    return;
+  }
+  const admitted = admitPrivateRoot({
+    rootPath: baseDir,
+    create: options.mode === 'establish',
+    managedDirs: MANAGED_STATE_DIRS,
+    uid: options.uid,
+  });
+  if (admitted.status !== 'refused') return;
+  throw unsafeStateRoot(
+    baseDir,
+    admitted.component,
+    PROBLEM_FOR_EXPOSURE[admitted.exposure] ?? 'group-or-other-writable-ancestor',
+  );
+}
+
+/**
+ * The Windows path-shape rule, asked of `path.win32` whatever the host runs, so it is testable with
+ * Windows-style inputs. A local drive-absolute route is supported; UNC, device and drive-relative are not.
+ */
+export function windowsStatePathProblem(stateDir: string): boolean {
+  const rest = /^[A-Za-z]:[\\/](.*)$/.exec(path.win32.normalize(stateDir))?.[1];
+  return rest === undefined || rest.includes(':');
+}
+
+function unsafeStateRoot(
+  stateDir: string,
+  component: string,
+  problem: DaemonStateRootProblem,
+): AppError {
+  const [cause, step] = STATE_ROOT_PROBLEMS[problem];
+  const fix = problem === 'not-private' ? `${step} ${component}` : step;
+  return new AppError(
+    'COMMAND_FAILED',
+    `Refusing to use the daemon state directory ${stateDir}: ${component} ${cause}`,
+    { reason: DAEMON_STATE_ROOT_UNSAFE_REASON, stateDir, component, problem, fix, hint: fix },
+  );
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

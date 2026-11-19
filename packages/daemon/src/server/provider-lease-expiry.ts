@@ -550,13 +550,12 @@ function writeLeaseRecord(stateDir: string, file: string, leases: readonly Devic
     fs.rmSync(filePath, { force: true });
     return;
   }
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const record: PersistedProviderLeaseRecord = {
+  const contents = `${JSON.stringify({
     version: LEASE_RECORD_VERSION,
     leases: [...leases],
-  };
-  publishFileSync({ destination: filePath, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
-  fs.chmodSync(filePath, 0o600);
+  } satisfies PersistedProviderLeaseRecord)}\n`;
+  // The state root was admitted before startup, and `exactMode` is what makes 0600 exact under a wide umask.
+  publishFileSync({ destination: filePath, contents, mode: 0o600, exactMode: true });
 }
 
 /**
