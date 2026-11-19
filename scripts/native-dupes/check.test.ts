@@ -8,6 +8,9 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 const root = path.resolve(import.meta.dirname, '../..');
 const cli = path.join(root, 'node_modules/jscpd/run-jscpd.js');
 const { scripts } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const { path: scanRoots } = JSON.parse(
+  fs.readFileSync(path.join(root, '.jscpd-native.json'), 'utf8'),
+) as { path: string[] };
 const gateArgs: string[] = scripts['check:native-dupes'].split(' ').slice(1);
 const baselineArgs: string[] = scripts['native-dupes:baseline'].split(' ').slice(1);
 
@@ -20,7 +23,7 @@ function fixture() {
   const cwd = mkdtempForTestSync('native-dupes-');
   runCmdSync('git', ['init', '-q'], { cwd });
   fs.copyFileSync(path.join(root, '.jscpd-native.json'), path.join(cwd, '.jscpd-native.json'));
-  for (const dir of ['apple', 'android', 'linux']) fs.mkdirSync(path.join(cwd, dir));
+  for (const dir of scanRoots) fs.mkdirSync(path.join(cwd, dir), { recursive: true });
   const write = (file: string, source: string) => fs.writeFileSync(path.join(cwd, file), source);
   const run = (args = gateArgs) => {
     const result = runCmdSync(

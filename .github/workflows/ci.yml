@@ -48,9 +48,9 @@ jobs:
       # of silently passing.
       - name: Disallow trailing commas before closing parenthesis in Swift
         run: |
-          mapfile -d '' -t swift_files < <(git ls-files -z -- 'apple/runner' | grep -z '\.swift$')
+          mapfile -d '' -t swift_files < <(git ls-files -z -- 'apple/runner' 'packages/host-swift/swift' | grep -z '\.swift$')
           if [ "${#swift_files[@]}" -eq 0 ]; then
-            echo "No apple/runner/*.swift files are tracked; the trailing-comma check has nothing to scan." >&2
+            echo "No apple/runner or packages/host-swift/swift .swift files are tracked; the trailing-comma check has nothing to scan." >&2
             exit 1
           fi
           set +e
@@ -61,7 +61,7 @@ jobs:
             echo "Found trailing commas before ')' in Swift files. This syntax requires Swift 6.1+ and breaks older Xcode toolchains."
             exit 1
           elif [ "$status" -ne 1 ]; then
-            echo "grep exited $status while scanning apple/runner for trailing commas; treating an unreadable scan as a failure instead of a silent pass."
+            echo "grep exited $status while scanning apple/runner and packages/host-swift/swift for trailing commas; treating an unreadable scan as a failure instead of a silent pass."
             exit 1
           fi
 
