@@ -7,6 +7,7 @@ import {
   androidAdbHostTarget,
   androidAdbInvocation,
   androidAdbSerialTarget,
+  resolveAndroidTextInjector,
   serializeAndroidAdbInvocation,
   withAndroidHostAdbTransport,
 } from '@agent-device/platform-android/mechanics';
@@ -95,6 +96,34 @@ describe('provider host capabilities', () => {
       stderr: 'no device',
     });
     expect(addressless.details?.command).toBeUndefined();
+  });
+
+  test('withAdbProvider exposes the supplied text handler only in the provider scope', async () => {
+    const { android } = await createProviderHostCapabilities({ env: {}, cwd: '/' });
+    const device = {
+      platform: 'android' as const,
+      id: 'scoped-provider-serial',
+      name: 'Provider Android',
+      kind: 'emulator' as const,
+    };
+    const seen: unknown[] = [];
+    await android.withAdbProvider(
+      {
+        exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        text: async (request) => {
+          seen.push(request);
+        },
+      },
+      device.id,
+      async () => {
+        const inject = resolveAndroidTextInjector(device);
+        assert.ok(inject);
+        await inject({ action: 'type', text: 'hello' });
+        assert.equal(resolveAndroidTextInjector({ ...device, id: 'other-serial' }), undefined);
+      },
+    );
+    assert.deepEqual(seen, [{ action: 'type', text: 'hello' }]);
+    assert.equal(resolveAndroidTextInjector(device), undefined);
   });
 
   test('runShell quotes each word for the device shell and forwards the executor', async () => {
