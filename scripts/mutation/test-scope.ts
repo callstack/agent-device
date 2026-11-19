@@ -5,8 +5,9 @@
 //
 // Thread-hostile tests cannot run in the thread pool Stryker's vitest runner
 // forces: the in-process CLI-capture tests (`process.chdir` throws in a worker
-// thread) and the `node:worker_threads` PNG pipeline tests (a worker inside a
-// worker raises uncaught MessagePort errors that kill the runner).
+// thread), tests that set the process umask (`process.umask(mask)` throws in a
+// worker thread), and the `node:worker_threads` PNG pipeline tests (a worker
+// inside a worker raises uncaught MessagePort errors that kill the runner).
 //
 // Nothing here inflates the score: a mutant only an excluded test could kill
 // shows up as a survivor — visible work, never a silent pass.
@@ -44,17 +45,24 @@ function workerThreadModules(repoRoot: string): string[] {
     .map((file) => path.basename(file, '.ts'));
 }
 
+/** A call that sets the process umask; reading it (`process.umask()`) is allowed in a worker. */
+const SETS_PROCESS_UMASK = /process\.umask\(\s*[^)\s]/;
+
 /**
  * Repo-relative test files that cannot survive Stryker's thread pool, derived
- * from what they import rather than listed: the chdir-using CLI capture harness
- * and any module that itself starts a worker thread.
+ * from their source rather than listed: tests that import the chdir-using CLI
+ * capture harness or a module that itself starts a worker thread, and tests
+ * that set the process umask.
  */
 export function threadHostileTestFiles(repoRoot: string): string[] {
   const modules = [path.basename(CLI_CAPTURE_HARNESS, '.ts'), ...workerThreadModules(repoRoot)];
   const importsHostileModule = new RegExp(`from '[^']*/(${modules.join('|')})(\\.ts)?'`);
   return testFileRoots(repoRoot)
     .flatMap((root) => walkFiles(root, (file) => file.endsWith('.test.ts')))
-    .filter((file) => importsHostileModule.test(fs.readFileSync(file, 'utf8')))
+    .filter((file) => {
+      const source = fs.readFileSync(file, 'utf8');
+      return importsHostileModule.test(source) || SETS_PROCESS_UMASK.test(source);
+    })
     .map((file) => normalizePath(path.relative(repoRoot, file)))
     .sort();
 }
