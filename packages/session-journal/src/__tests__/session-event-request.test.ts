@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildRequestFinishedEvent, buildRequestStartedEvent } from '../session-event-log.ts';
+import {
+  appendSessionEvent,
+  buildRequestFinishedEvent,
+  buildRequestStartedEvent,
+  flushSessionEventLogWrites,
+  readSessionEventLog,
+  resolveSessionEventLogPath,
+} from '../session-event-log.ts';
 import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/contracts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 function buildSuccessEvent(
   command: string,
@@ -330,7 +338,8 @@ test('request lifecycle events omit internal diagnostic paths', () => {
   assert.equal(JSON.stringify([started, failed]).includes('private failure message'), false);
 });
 
-function buildNoteEvents(note: unknown) {
+/** Writes one request's lifecycle events to a fresh journal and reads them back. */
+async function writeAndReadNoteEvents(note: unknown) {
   const req: DaemonRequest = {
     token: 'test-token',
     session: 'public-session',
@@ -338,52 +347,75 @@ function buildNoteEvents(note: unknown) {
     positionals: [],
     meta: { requestId: 'req-1', note: note as string },
   };
-  return {
-    started: buildRequestStartedEvent({ req }),
-    finished: buildRequestFinishedEvent({ req, response: { ok: true, data: {} }, durationMs: 5 }),
-    failed: buildRequestFinishedEvent({
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('agent-device-event-note-'));
+  for (const event of [
+    buildRequestStartedEvent({ req }),
+    buildRequestFinishedEvent({ req, response: { ok: true, data: {} }, durationMs: 5 }),
+    buildRequestFinishedEvent({
       req,
       response: { ok: false, error: { code: 'COMMAND_FAILED', message: 'private failure' } },
       durationMs: 7,
     }),
-  };
+  ]) {
+    appendSessionEvent(eventLogPath, 'public-session', event, {});
+  }
+  await flushSessionEventLogWrites(eventLogPath);
+  const [started, finished, failed] = readSessionEventLog(eventLogPath).events;
+  return { started, finished, failed };
 }
 
-test('request lifecycle events record the client-written note', () => {
+test('request lifecycle events record the client-written note', async () => {
   const note = 'Open settings to check the order notifications. The toggle should be on.';
-  const { started, finished, failed } = buildNoteEvents(`  ${note}  `);
+  const { started, finished, failed } = await writeAndReadNoteEvents(`  ${note}  `);
 
-  assert.deepEqual(started.details, { note });
-  assert.deepEqual(finished.details, { durationMs: 5, note });
-  assert.deepEqual(failed.details, {
-    durationMs: 7,
-    code: 'COMMAND_FAILED',
-    diagnosticId: undefined,
-    note,
-  });
+  assert.deepEqual(started?.details, { note });
+  assert.deepEqual(finished?.details, { durationMs: 5, note });
+  assert.deepEqual(failed?.details, { durationMs: 7, code: 'COMMAND_FAILED', note });
 });
 
-test('request lifecycle events omit an absent, blank, or non-string note', () => {
+test('request lifecycle events omit an absent, blank, or non-string note', async () => {
   for (const note of [undefined, '', '   \n', 42, { text: 'not a string' }]) {
-    const { started, finished, failed } = buildNoteEvents(note);
+    const { started, finished, failed } = await writeAndReadNoteEvents(note);
 
-    assert.equal(started.details, undefined);
-    assert.deepEqual(finished.details, { durationMs: 5 });
-    assert.equal(Object.hasOwn(failed.details ?? {}, 'note'), false);
+    assert.equal(started?.details, undefined);
+    assert.deepEqual(finished?.details, { durationMs: 5 });
+    assert.deepEqual(failed?.details, { durationMs: 7, code: 'COMMAND_FAILED' });
   }
 });
 
-test('request event notes keep 300 code points without splitting one', () => {
-  const fitting = 'a'.repeat(300);
-  assert.equal(buildNoteEvents(fitting).started.details?.note, fitting);
+test('a request note of 300 emoji-heavy code points is written and read back whole', async () => {
+  const fitting = `a${'😀'.repeat(299)}`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(fitting);
 
-  const { started, finished, failed } = buildNoteEvents(`${'a'.repeat(298)}😀 and more text`);
-  const bounded = `${'a'.repeat(298)}😀…`;
+  assert.equal(started?.details?.note, fitting);
+  assert.equal(finished?.details?.note, fitting);
+  assert.equal(failed?.details?.note, fitting);
+});
+
+test('a longer emoji request note is cut at a code point and ends in an ellipsis', async () => {
+  const { started, finished, failed } = await writeAndReadNoteEvents(`a${'😀'.repeat(300)}`);
+  const bounded = `a${'😀'.repeat(298)}…`;
 
   assert.equal(Array.from(bounded).length, 300);
-  assert.equal(started.details?.note, bounded);
-  assert.equal(finished.details?.note, bounded);
-  assert.equal(failed.details?.note, bounded);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('a request note keeps credential and URL redaction and is bounded after it', async () => {
+  const prefix = 'Signed in with token=x at https://shop.example/cart?session=s3cr3t then ';
+  const redactedPrefix =
+    'Signed in with token=[REDACTED] at https://shop.example/cart?REDACTED then ';
+  // 299 code points as sent; redaction lengthens it past the 300 code point bound.
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `${prefix}${'a'.repeat(299 - prefix.length)}`,
+  );
+  const bounded = `${redactedPrefix}${'a'.repeat(299 - redactedPrefix.length)}…`;
+
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+  assert.equal(JSON.stringify([started, finished, failed]).includes('s3cr3t'), false);
 });
 
 test('unknown commands keep the existing generic completion event', () => {

@@ -1,7 +1,7 @@
 import type { SessionAction, SessionScope } from '@agent-device/contracts/session';
 import type { ReplayDaemonDependencies } from '@agent-device/replay-port/command-types';
 import type { ReplayDispatchRequest, ReplayInvoke } from '@agent-device/contracts/replay-backend';
-import { mergeParentFlags } from '@agent-device/command-registry/batch';
+import { childRequestMeta, mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   describeReplayGestureFlagError,
@@ -157,7 +157,7 @@ async function invokeResolvedReplayAction(params: {
     session: sessionName,
     flags,
     runtime: resolved.runtime,
-    meta: req.meta,
+    meta: childRequestMeta(req.meta),
     // #1271 stage 2: the single point every replay plan step is dispatched, so
     // the one place authored provenance can be stamped for all of them —
     // annotated or not, target-binding kinds and plain dispatches alike. The

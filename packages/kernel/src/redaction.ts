@@ -72,11 +72,23 @@ function redactObject(value: object, traversal: RedactionTraversal): unknown {
   return output;
 }
 
+/**
+ * Applies the credential and URL redaction of `redactDiagnosticData` to one free-text string,
+ * without its length cap. The caller owns the bound and applies it to the result.
+ */
+export function redactDiagnosticText(value: string): string {
+  return redactSensitiveText(value.trim());
+}
+
 function redactString(value: string, keyHint?: string): string {
   const trimmed = value.trim();
   if (!trimmed) return boundRedactedString(value, keyHint);
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
-  let output = redactUrls(trimmed);
+  return boundRedactedString(redactSensitiveText(trimmed), keyHint);
+}
+
+function redactSensitiveText(value: string): string {
+  let output = redactUrls(value);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
   output = output.replace(
     SENSITIVE_ASSIGNMENT_RE,
@@ -86,7 +98,7 @@ function redactString(value: string, keyHint?: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
-  return boundRedactedString(output, keyHint);
+  return output;
 }
 
 function boundRedactedString(value: string, keyHint?: string): string {

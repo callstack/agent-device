@@ -310,7 +310,7 @@ export function readBoundedSessionEventString(value: unknown): string | undefine
   return readBoundedString(value);
 }
 
-/** A client-written note about a request, bounded separately from labels. */
+/** A client-written request note, trimmed and bounded to 300 code points with `…` when cut. */
 export function readSessionEventNote(value: unknown): string | undefined {
   return readBoundedString(value, EVENT_NOTE_MAX_LENGTH);
 }

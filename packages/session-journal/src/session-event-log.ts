@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import { redactDiagnosticData, redactDiagnosticText } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
@@ -11,6 +11,7 @@ import { buildActionDetails, buildActionSummary } from './session-event-action.t
 import {
   buildRequestSuccessEventPresentation,
   readSessionEventNote,
+  readSessionEventString,
 } from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';
 import {
@@ -58,6 +59,11 @@ export type SessionEventLogPage = {
 
 export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' | 'session'> & {
   ts?: string;
+  /**
+   * The client-written note of a request event. The writer redacts it, bounds it to 300 code
+   * points, and records it as `details.note`.
+   */
+  note?: string;
 };
 
 type ReadSessionEventLogOptions = { cursor?: string; limit?: number | string };
@@ -79,13 +85,27 @@ export function appendSessionEvent(
   /** The runtime host's environment: the source of the active-file rotation cap. */
   env: NodeJS.ProcessEnv,
 ): void {
+  const { note, ...input } = event;
   const entry = redactDiagnosticData({
     version: EVENT_LOG_VERSION,
     ts: event.ts ?? new Date().toISOString(),
     session: sessionName,
-    ...event,
+    ...input,
   } satisfies SessionEventLogEntry);
-  queueEventLogWrite(eventLogPath, `${JSON.stringify(entry)}\n`, env);
+  queueEventLogWrite(eventLogPath, `${JSON.stringify(withRedactedNote(entry, note))}\n`, env);
+}
+
+/**
+ * The note keeps the diagnostic credential and URL redaction. The journal's code-point bound
+ * applies last, in place of the redactor's code-unit cap, so a cut never splits a character.
+ */
+function withRedactedNote(
+  entry: SessionEventLogEntry,
+  note: string | undefined,
+): SessionEventLogEntry {
+  const redactedNote =
+    note === undefined ? undefined : readSessionEventNote(redactDiagnosticText(note));
+  return redactedNote ? { ...entry, details: { ...entry.details, note: redactedNote } } : entry;
 }
 
 export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
@@ -199,13 +219,13 @@ export function appendActionEvent(
 
 export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {
   const { req } = params;
-  const note = readSessionEventNote(req.meta?.note);
+  const note = readSessionEventString(req.meta?.note);
   return {
     kind: 'request.started',
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
-    ...(note ? { details: { note } } : {}),
+    ...(note ? { note } : {}),
   };
 }
 
@@ -215,7 +235,7 @@ export function buildRequestFinishedEvent(params: {
   durationMs: number;
 }): SessionEventLogInput {
   const { req, response, durationMs } = params;
-  const note = readSessionEventNote(req.meta?.note);
+  const note = readSessionEventString(req.meta?.note);
   if (response.ok) {
     const presentation = buildRequestSuccessEventPresentation(req, response.data);
     return {
@@ -224,7 +244,8 @@ export function buildRequestFinishedEvent(params: {
       command: req.command,
       status: 'ok',
       summary: presentation.summary ?? `Finished ${req.command}`,
-      details: { durationMs, ...presentation.details, ...(note ? { note } : {}) },
+      details: { durationMs, ...presentation.details },
+      ...(note ? { note } : {}),
     };
   }
   return {
@@ -237,8 +258,8 @@ export function buildRequestFinishedEvent(params: {
       durationMs,
       code: response.error.code,
       diagnosticId: response.error.diagnosticId,
-      ...(note ? { note } : {}),
     },
+    ...(note ? { note } : {}),
   };
 }
 

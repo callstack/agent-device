@@ -3,7 +3,11 @@ import { test, expect } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import {
+  createRequestHandler,
+  lifecycleDeviceRuntimeGateway,
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosSession, makeSession } from '../../__tests__/support/session-factories.ts';
@@ -309,6 +313,85 @@ test('request timeline records the client-written note on start and finish', asy
       requestId: 'req-note',
       details: expect.objectContaining({ note: 'Open the cart to check the total' }),
     }),
+  ]);
+});
+
+/** Each request event's kind, command and note, in timeline order. */
+function requestEventNotes(
+  events: readonly { kind: string; command?: string; details?: Record<string, unknown> }[],
+) {
+  return events
+    .filter((event) => event.kind !== 'action.recorded')
+    .map((event) => [event.kind, event.command, event.details?.note]);
+}
+
+test('batch steps do not repeat the batch note on their request events', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-batch-note-');
+  sessionStore.publish('events-session', makeIosSession('events-session'));
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: createTouchCommandSurface(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: [{ command: 'app-switcher' }] },
+    meta: { requestId: 'req-batch-note', note: 'Open the app switcher' },
+  });
+
+  expect(response).toMatchObject({ ok: true });
+  await sessionStore.flushEvents('events-session');
+  expect(requestEventNotes(sessionStore.readEvents('events-session').events)).toEqual([
+    ['request.started', 'batch', 'Open the app switcher'],
+    ['request.started', 'app-switcher', undefined],
+    ['request.finished', 'app-switcher', undefined],
+    ['request.finished', 'batch', 'Open the app switcher'],
+  ]);
+});
+
+test('replay steps do not repeat the replay note on their request events', async () => {
+  const root = mkdtempForTestSync('agent-device-router-events-replay-note-');
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(replayPath, 'app-switcher\n');
+  const sessionStore = makeSessionStore('agent-device-router-events-replay-note-');
+  sessionStore.publish('events-session', makeIosSession('events-session'));
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: createTouchCommandSurface(),
+    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'replay',
+    positionals: [replayPath],
+    meta: { cwd: root, requestId: 'req-replay-note', note: 'Replay the app switcher flow' },
+  });
+
+  expect(response).toMatchObject({ ok: true });
+  await sessionStore.flushEvents('events-session');
+  expect(requestEventNotes(sessionStore.readEvents('events-session').events)).toEqual([
+    ['request.started', 'replay', 'Replay the app switcher flow'],
+    ['request.started', 'app-switcher', undefined],
+    ['request.finished', 'app-switcher', undefined],
+    ['request.finished', 'replay', 'Replay the app switcher flow'],
   ]);
 });
 
