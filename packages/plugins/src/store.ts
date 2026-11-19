@@ -133,6 +133,7 @@ type StoreInstallation = {
   directory: string;
   selection: PluginSelection;
   entry: string;
+  declaredClaims: readonly string[];
 };
 
 async function describeInstallation(
@@ -140,7 +141,8 @@ async function describeInstallation(
   directory: string,
   selection: PluginSelection,
 ): Promise<StoreInstallation> {
-  const { discoverPluginEntry, readPackageJson } = await import('./discovery.ts');
+  const { assertNodeFloor, discoverPluginEntry, readAgentDeviceClaims, readPackageJson } =
+    await import('./discovery.ts');
   const packageJson = readPackageJson(directory);
   if (packageJson.name !== name)
     throw new AppError('INVALID_ARGS', `Plugin package identity mismatch: ${name}`);
@@ -159,7 +161,12 @@ async function describeInstallation(
     throw new AppError('INVALID_ARGS', `Invalid artifact plugin metadata: ${name}`, {
       reason: 'invalid_plugin',
     });
-  return { name, version, directory, selection, entry: discoverPluginEntry(directory) };
+  const entry = discoverPluginEntry(directory);
+  // Before any import: the supported contract version, the Node floor, and the unique static
+  // claims. The factory's returned claim keys must equal these once it runs with its options.
+  const declaredClaims = readAgentDeviceClaims(packageJson);
+  assertNodeFloor(packageJson);
+  return { name, version, directory, selection, entry, declaredClaims };
 }
 
 async function readInstallation(home: string, name: string, selection: PluginSelection) {
@@ -211,6 +218,7 @@ async function readPluginSnapshot(env: NodeJS.ProcessEnv): Promise<{
           package: name,
           selectionStamp: selectionStamp(selection),
           version: installation.version,
+          declaredClaims: installation.declaredClaims,
           ...(selection.options ? { hostOptions: selection.options } : {}),
           load: () => loadInstallation(installation),
         };
