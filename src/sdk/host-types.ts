@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import type { AgentDevicePlugin } from './plugins.ts';
 import type { ShutdownReport } from '@agent-device/daemon';
 
 export type StartAgentDeviceOptions = Readonly<{

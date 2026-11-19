@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { REVYL_PROVIDER } from './device.ts';
 import { REVYL_API_KEY_VARIABLE, REVYL_API_URL_VARIABLE } from './credentials.ts';
 import { setupRevylPlugin } from './plugin-setup.ts';
@@ -19,7 +19,7 @@ export type RevylPluginOptions = {
  * environment: a credential passed as an option is not part of the environment the daemon
  * fingerprints.
  */
-function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
+function revyl(options: RevylPluginOptions = {}): ProviderAgentDevicePlugin {
   // Each option replaces its own variable and nothing else: an `apiUrl` with no `apiKey` still has
   // the key read from the environment, and a `apiKey` with no `apiUrl` still reads the URL there.
   const overridden: Record<string, string> = {};

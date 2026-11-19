@@ -104,7 +104,7 @@ export async function verifyPacked({ core, contracts, plugin }) {
       throw new Error(`Unexpected AWS command: ${subcommand}`);
     },
   };
-  const aws = plugin.default();
+  const aws = plugin.default().contributes[0];
   const capture = async (run) => {
     try {
       await run();

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import type { ProviderOnlyPlugin } from '@agent-device/plugins/contract';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
 import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
@@ -30,7 +30,7 @@ export type LimrunPluginOptions = Readonly<{
  * list, fingerprint, or route a `connect` to the provider: the connection's flags and credential
  * reading, the runtime, and its host adapters all load in the path that asks for them.
  */
-export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
+export function limrunPlugin(options: LimrunPluginOptions): ProviderOnlyPlugin {
   const { createDependencies, stateDir } = options;
   return {
     apiVersion: 3,

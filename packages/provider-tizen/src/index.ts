@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import { tvPluginConnection } from '@agent-device/tv-cdp/connection';
 
 import { PROVIDER, type TizenOptions } from './provider.ts';
@@ -20,7 +20,7 @@ function tizen(options: TizenOptions = {}) {
         setup: async (host) => (await import('./runtime.ts')).createTizenRuntime(options, host),
       },
     ],
-  } satisfies AgentDevicePlugin;
+  } satisfies ProviderAgentDevicePlugin;
 }
 
 export { tizen as default };

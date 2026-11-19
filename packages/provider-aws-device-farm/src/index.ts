@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 
 // The connection and WebDriver code load when they are first used, so importing the package for its
 // declaration stays small.
@@ -11,7 +11,7 @@ async function loadConnection(host: ProviderPluginHost) {
  * no environment fingerprint identifies, so the plugin declares no credential variables and works
  * with any non-interactive AWS CLI credential source the daemon's host has.
  */
-function awsDeviceFarm(): AgentDevicePlugin {
+function awsDeviceFarm(): ProviderAgentDevicePlugin {
   return {
     apiVersion: 3,
     contributes: [

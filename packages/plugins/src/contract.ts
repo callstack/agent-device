@@ -112,13 +112,25 @@ export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescri
 
 /**
  * The object a plugin factory returns: the contract version plus every contribution the package
- * claims. Each contribution activates and cleans up independently of the others.
+ * claims. Each contribution activates and cleans up independently of the others. A package that
+ * declares a single kind may narrow `C` (e.g. to `ProviderContribution`) so its published types
+ * stay within that kind's branch of the union.
  */
-export type AgentDevicePlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  Readonly<{
-    apiVersion: typeof PLUGIN_API_VERSION;
-    contributes: readonly [Contribution<WebDriver>, ...Contribution<WebDriver>[]];
-  }>;
+export type AgentDevicePlugin<
+  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
+  C extends Contribution<WebDriver> = Contribution<WebDriver>,
+> = Readonly<{
+  apiVersion: typeof PLUGIN_API_VERSION;
+  contributes: readonly [C, ...C[]];
+}>;
+
+/**
+ * A plugin whose only contribution is a `provider` claim. Provider packages declare this as the
+ * factory return type so their published declarations stay within the provider branch of the
+ * union.
+ */
+export type ProviderOnlyPlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+  AgentDevicePlugin<WebDriver, ProviderContribution<WebDriver>>;
 
 /**
  * The default export of a plugin package's `./agent-device` entry. The store calls it with

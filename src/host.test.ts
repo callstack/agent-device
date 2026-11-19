@@ -11,7 +11,7 @@ import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-re
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import type { AgentDevicePlugin } from './sdk/plugins.ts';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { stopRecordedDaemon } from '@agent-device/daemon-client';
 import { startAgentDevice } from './host.ts';
@@ -100,7 +100,7 @@ type Booted = {
 
 async function bootHost(
   options: {
-    plugins?: readonly import('@agent-device/plugins/contract').AgentDevicePlugin[];
+    plugins?: readonly AgentDevicePlugin[];
     env?: Record<string, string>;
   } = {},
 ): Promise<Booted> {

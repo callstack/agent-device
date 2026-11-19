@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 
 export type TestmuOptions = {
   /** Used instead of `LT_USERNAME` and `LT_ACCESS_KEY` when set. */
@@ -17,7 +17,7 @@ async function loadConnection(host: ProviderPluginHost) {
  * leave out. The plugin declares only the variables it reads from the environment; credentials passed
  * as options are not part of the environment the daemon fingerprints.
  */
-function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
+function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
   const { credentials } = options;
   const withCredentials = (host: ProviderPluginHost): ProviderPluginHost =>
     credentials

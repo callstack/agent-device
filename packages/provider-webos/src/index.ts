@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin } from 'agent-device/plugins';
 import { tvPluginConnection } from '@agent-device/tv-cdp/connection';
 
 import { PROVIDER, type WebosOptions } from './provider.ts';
@@ -20,7 +20,7 @@ function webos(options: WebosOptions = {}) {
         setup: async (host) => (await import('./runtime.ts')).createWebosRuntime(options, host),
       },
     ],
-  } satisfies AgentDevicePlugin;
+  } satisfies ProviderAgentDevicePlugin;
 }
 
 export { webos as default };

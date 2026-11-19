@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { HOSTED_WEBDRIVER_CONNECTION } from '@agent-device/provider-webdriver/providers';
 import { BROWSERSTACK_CREDENTIAL_VARIABLES } from './providers.ts';
 
@@ -20,7 +20,7 @@ async function loadConnection(host: ProviderPluginHost) {
  * environment; credentials passed as options are not part of the environment the daemon
  * fingerprints.
  */
-function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
+function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlugin {
   const { credentials } = options;
   const withCredentials = (host: ProviderPluginHost): ProviderPluginHost =>
     credentials

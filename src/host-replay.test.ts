@@ -4,7 +4,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { prepareDaemonCommandRequest } from '@agent-device/command-surface';
 import { createAgentDeviceClient } from '@agent-device/client';
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+import type { AgentDevicePlugin } from './sdk/plugins.ts';
 import type { ReplayBackendContribution } from '@agent-device/plugins/replay-backend';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { storePluginCandidates } from '@agent-device/plugins/store';
@@ -121,7 +121,10 @@ async function nativePlugin(): Promise<AgentDevicePlugin> {
     .flatMap((slot) => slot.claims)
     .find((claim) => claim.space === 'replay-execution' && claim.key === 'ad');
   if (!claim) throw new Error('Native replay test installation is missing');
-  return { apiVersion: 3, contributes: [claim.contribution] } satisfies AgentDevicePlugin;
+  return {
+    apiVersion: 3,
+    contributes: [claim.contribution as AgentDevicePlugin['contributes'][number]],
+  } satisfies AgentDevicePlugin;
 }
 
 async function trackedPlugin() {

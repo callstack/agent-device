@@ -43,17 +43,20 @@ try {
 } finally {
   await absent.close();
 }
+const withContribution = (overrides) => ({
+  ...replayPlugin(),
+  contributes: [{ ...replayPlugin().contributes[0], ...overrides }],
+});
 for (const [label, plugin, reason] of [
-  ['incompatible', { ...replayPlugin(), apiVersion: 99 }, 'incompatible_plugin'],
-  ['invalid', { ...replayPlugin(), setup: () => ({ execution: {} }) }, 'invalid_plugin'],
+  ['incompatible', { ...replayPlugin(), apiVersion: 99 }, 'incompatible-plugin-api'],
+  ['invalid', withContribution({ setup: () => ({ execution: {} }) }), 'invalid_plugin'],
   [
     'setup',
-    {
-      ...replayPlugin(),
+    withContribution({
       setup: () => {
         throw new Error('selected setup failed');
       },
-    },
+    }),
     'plugin_setup_failed',
   ],
 ]) {
