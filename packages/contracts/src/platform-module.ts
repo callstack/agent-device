@@ -53,25 +53,25 @@ export type OptionalPlatformPluginDeclaration = Readonly<{
   label: string;
 }>;
 
-export const HARMONYOS_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
+const HARMONYOS_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
   family: 'harmonyos',
   package: '@agent-device/harmonyos',
   label: 'HarmonyOS',
 };
 
-export const VEGA_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
+const VEGA_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
   family: 'vega',
   package: '@agent-device/vega',
   label: 'Vega',
 };
 
-export const LINUX_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
+const LINUX_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
   family: 'linux',
   package: '@agent-device/linux',
   label: 'Linux desktop',
 };
 
-export const WEB_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
+const WEB_PLATFORM_PLUGIN: OptionalPlatformPluginDeclaration = {
   family: 'web',
   package: '@agent-device/web',
   label: 'Web',

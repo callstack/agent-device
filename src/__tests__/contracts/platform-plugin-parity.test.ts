@@ -12,6 +12,7 @@ import {
 import {
   BUILTIN_PLATFORM_PLUGINS,
   registerBuiltinPlatformPlugins,
+  type BuiltinPluginsCoverRequiredPlatforms,
 } from '../../core/interactors/register-builtins.ts';
 
 // Idempotently populate the root-owned registry for this test module.
@@ -42,7 +43,10 @@ test('every required family is covered by a builtin plugin; optional families ma
   // Completeness (ADR 0034) is enforced for the required families only: apple and android must
   // always resolve. All six builtins stay registered today, so registeredPlatforms() still
   // equals PLATFORMS above; once an optional family moves to a `platform` plugin its row
-  // disappears here without breaking this guarantee.
+  // disappears here without breaking this guarantee. The guard type only resolves to true
+  // while every RequiredPlatform is covered, so materializing it pins the guarantee.
+  const pin: BuiltinPluginsCoverRequiredPlatforms = true;
+  assert.ok(pin);
   for (const family of REQUIRED_PLATFORMS) {
     assert.ok(registeredPlatforms().includes(family), `required family ${family} is registered`);
     assert.ok(getPlugin(family).platforms.includes(family));

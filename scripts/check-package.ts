@@ -39,7 +39,11 @@ import {
   parseNpmPackOutput,
   type NpmPackEntry,
 } from './size-report-package.mjs';
-import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
+import {
+  testOnlyContentFailures,
+  testOnlyPathFailures,
+  type PackedFile,
+} from './lib/shipped-test-code.ts';
 import {
   packedCoreAbsenceFailures,
   type PackedCoreFile,
@@ -172,20 +176,30 @@ function assertInstalledTreeIsNotASourceCheckout(installedRoot: string): void {
  * scripts/lib/shipped-test-code.ts owns the rule, and the tests it names prove it rejects a
  * test-laden package.
  */
+/**
+ * Reads the packed files under `prefix` from the installed tree, so a content rule sees the
+ * bytes the tarball actually carries. npm install may drop a packed file (a .gitignore becomes
+ * .npmignore); a missing counterpart is not a content finding, and a path finding already
+ * covers it.
+ */
+function readPackedFiles(
+  installedRoot: string,
+  packedPaths: readonly string[],
+  prefix: string,
+): readonly PackedFile[] {
+  return packedPaths
+    .filter((packedPath) => packedPath.startsWith(prefix))
+    .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
+    .map((packedPath) => ({
+      path: packedPath,
+      contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
+    }));
+}
+
 function assertPackedTreeCarriesNoTestCode(installedRoot: string, packedPaths: string[]): void {
   const failures = [
     ...testOnlyPathFailures(packedPaths),
-    ...testOnlyContentFailures(
-      packedPaths
-        .filter((packedPath) => packedPath.startsWith('dist/apple/runner/'))
-        // npm install may drop a packed file (a .gitignore becomes .npmignore); a missing
-        // counterpart is not a test-code finding, and a path finding above already covers it.
-        .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
-        .map((packedPath) => ({
-          path: packedPath,
-          contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
-        })),
-    ),
+    ...testOnlyContentFailures(readPackedFiles(installedRoot, packedPaths, 'dist/apple/runner/')),
   ];
   if (failures.length > 0) {
     throw new Error(`The package ships test code:\n${failures.map((f) => `- ${f}`).join('\n')}`);
@@ -214,15 +228,7 @@ function assertPackedCoreCarriesNoExtractedPlatforms(
   installedRoot: string,
   packedPaths: string[],
 ): void {
-  const distFiles: PackedCoreFile[] = packedPaths
-    .filter((packedPath) => packedPath.startsWith('dist/'))
-    // npm install may drop a packed file (a .gitignore becomes .npmignore); a missing
-    // counterpart is not an absence finding, and a path finding above already covers it.
-    .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
-    .map((packedPath) => ({
-      path: packedPath,
-      contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
-    }));
+  const distFiles: readonly PackedCoreFile[] = readPackedFiles(installedRoot, packedPaths, 'dist/');
   const failures = packedCoreAbsenceFailures(PACKED_CORE_FORBIDDEN, { packedPaths, distFiles });
   if (failures.length > 0) {
     throw new Error(

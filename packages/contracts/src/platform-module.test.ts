@@ -12,6 +12,7 @@ import {
   OPTIONAL_PLATFORMS,
   REQUIRED_PLATFORMS,
   type PlatformModuleMetadata,
+  type PlatformPartitionIsCanonical,
 } from './platform-module.ts';
 
 test('platform metadata registry is canonical, ordered, and immutable', () => {
@@ -53,6 +54,10 @@ test('platform metadata registry rejects an unknown runtime family value', () =>
 });
 
 test('required and optional families partition the canonical PLATFORMS exactly', () => {
+  // Materializes the compile-time pin: PlatformPartitionIsCanonical only resolves to true
+  // when the required and optional tuples partition PLATFORMS exactly.
+  const pin: PlatformPartitionIsCanonical = true;
+  assert.ok(pin);
   assert.deepEqual([...REQUIRED_PLATFORMS], ['apple', 'android']);
   assert.deepEqual([...OPTIONAL_PLATFORMS], ['harmonyos', 'vega', 'linux', 'web']);
   assert.deepEqual([...REQUIRED_PLATFORMS, ...OPTIONAL_PLATFORMS], [...PLATFORMS]);
