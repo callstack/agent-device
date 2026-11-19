@@ -32,11 +32,14 @@ export function createHostAudioProbeRecoveryOperations(params: {
       if (decoded.status !== 'decoded') return decoded;
       const descriptor = decoded.descriptor;
       const liveness = await host.inspectProcess(descriptor.marker);
-      if (liveness === 'owned-alive') {
-        return { status: 'unreattachable', reason: 'transport-not-reattachable' };
-      }
-      if (liveness === 'ownership-lost') {
-        return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+      switch (liveness) {
+        case 'owned-alive':
+        case 'unprovable':
+          return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+        case 'ownership-lost':
+          return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+        case 'missing':
+          break;
       }
       const status = await readStatusFile(descriptor);
       // Only a terminal publication proves the run finished: a `running` checkpoint with the
@@ -59,10 +62,16 @@ export function createHostAudioProbeRecoveryOperations(params: {
       }
       const descriptor = decoded.descriptor;
       const liveness = await host.inspectProcess(descriptor.marker);
-      if (liveness === 'ownership-lost') {
-        return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+      switch (liveness) {
+        case 'ownership-lost':
+          return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+        case 'unprovable':
+          return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+        case 'missing':
+          return { status: 'already-missing' };
+        case 'owned-alive':
+          break;
       }
-      if (liveness === 'missing') return { status: 'already-missing' };
       const terminated = await host.terminateProcess(descriptor.marker);
       if (terminated === 'ownership-lost') {
         return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };

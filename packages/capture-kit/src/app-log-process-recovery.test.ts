@@ -33,6 +33,7 @@ test.each([
   [decoded, 'missing', { status: 'missing' }],
   [decoded, 'ownership-lost', { status: 'unreattachable', reason: 'ownership-fence-lost' }],
   [decoded, 'owned-alive', { status: 'unreattachable', reason: 'transport-not-reattachable' }],
+  [decoded, 'unprovable', { status: 'unreattachable', reason: 'transport-not-reattachable' }],
 ] as const)(
   'cleanup-only reattach preserves marker trust state %#',
   async (read, ownership, expected) => {
@@ -93,6 +94,12 @@ test.each([
     { status: 'cleanup-pending', reason: 'ownership-fence-lost' },
   ],
   [decoded, 'missing', 'terminated', { status: 'already-missing' }],
+  [
+    decoded,
+    'unprovable',
+    'terminated',
+    { status: 'cleanup-pending', reason: 'manual-recovery-required' },
+  ],
   [
     decoded,
     'owned-alive',

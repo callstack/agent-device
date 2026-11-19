@@ -38,6 +38,7 @@ test('daemon-loss cleanup distinguishes live, dead, replaced, and corrupt simula
     ['owned-alive', 'cleaned', 1],
     ['missing', 'already-missing', 0],
     ['ownership-lost', 'cleanup-pending', 0],
+    ['unprovable', 'cleanup-pending', 0],
   ] as const) {
     const terminateProcess = vi.fn(async () => 'terminated' as const);
     const recovery = createAppleScreenRecordingOperations({

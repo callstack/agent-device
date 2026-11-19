@@ -33,14 +33,16 @@ export async function reattachCleanupOnlyAppLogProcess(
     };
   }
   const ownership = await host.processes.inspect(marker.marker);
-  if (ownership === 'missing') {
-    if (pidPath) await host.processes.clearMarker(pidPath);
-    return { status: 'missing' };
+  switch (ownership) {
+    case 'missing':
+      if (pidPath) await host.processes.clearMarker(pidPath);
+      return { status: 'missing' };
+    case 'ownership-lost':
+      return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+    case 'unprovable':
+    case 'owned-alive':
+      return { status: 'unreattachable', reason: 'transport-not-reattachable' };
   }
-  if (ownership === 'ownership-lost') {
-    return { status: 'unreattachable', reason: 'ownership-fence-lost' };
-  }
-  return { status: 'unreattachable', reason: 'transport-not-reattachable' };
 }
 
 /** Cleans only complete, still-owned marker evidence; uncertain evidence remains fail-closed. */
@@ -65,10 +67,16 @@ export async function cleanupManagedAppLogProcess(
     };
   }
   const ownership = await host.processes.inspect(marker.marker);
-  if (ownership === 'ownership-lost') return ownershipLostCleanup();
-  if (ownership === 'missing') {
-    await host.processes.clearMarker(pidPath);
-    return { status: 'already-missing' };
+  switch (ownership) {
+    case 'ownership-lost':
+      return ownershipLostCleanup();
+    case 'unprovable':
+      return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    case 'missing':
+      await host.processes.clearMarker(pidPath);
+      return { status: 'already-missing' };
+    case 'owned-alive':
+      break;
   }
   const terminated = await host.processes.terminate(marker.marker);
   if (terminated === 'ownership-lost') return ownershipLostCleanup();

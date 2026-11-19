@@ -20,6 +20,7 @@ import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   isProcessAlive,
+  compareBirthTokens,
   judgeProcessIdentity,
   readProcessIdentityFacts,
   stopProcessAndConfirmExit,
@@ -410,12 +411,21 @@ function markerIdentity(marker: AppLogProcessMarker): ProcessStopIdentity {
 /** Judged by the same identity rule the stop applies, so inspect and terminate agree. */
 async function inspectOwnedProcess(marker: AppLogProcessMarker): Promise<AppLogProcessOwnership> {
   if (!isProcessAlive(marker.pid)) return 'missing';
-  const verdict = judgeProcessIdentity(
-    markerIdentity(marker),
-    await readProcessIdentityFacts(marker.pid),
-  );
-  if (verdict === 'exited') return 'missing';
-  return verdict === 'ours' ? 'owned-alive' : 'ownership-lost';
+  const facts = await readProcessIdentityFacts(marker.pid);
+  const verdict = judgeProcessIdentity(markerIdentity(marker), facts);
+  switch (verdict) {
+    case 'exited':
+      return 'missing';
+    case 'ours':
+      return 'owned-alive';
+    case 'reassigned':
+      return 'ownership-lost';
+    case 'unverified':
+      return compareBirthTokens(marker.startTime, facts.startTime) === 'match' &&
+        facts.command !== null
+        ? 'ownership-lost'
+        : 'unprovable';
+  }
 }
 
 /**

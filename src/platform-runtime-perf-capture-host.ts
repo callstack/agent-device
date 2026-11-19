@@ -209,10 +209,16 @@ export async function cleanupApplePerfCaptureDescriptor(
     return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
   }
   const ownership = await inspectManagedProcess(decoded.descriptor.marker);
-  if (ownership === 'ownership-lost') {
-    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+  switch (ownership) {
+    case 'ownership-lost':
+      return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+    case 'unprovable':
+      return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    case 'missing':
+      return { status: 'already-missing' };
+    case 'owned-alive':
+      break;
   }
-  if (ownership === 'missing') return { status: 'already-missing' };
   const stopped = await terminateManagedProcessSet([decoded.descriptor.marker]);
   if (stopped === 'terminated') return { status: 'cleaned' };
   if (stopped === 'already-missing') return { status: 'already-missing' };
@@ -228,13 +234,15 @@ export async function inspectApplePerfCaptureDescriptor(
     return { status: 'unreattachable', reason: 'descriptor-invalid' };
   }
   const ownership = await inspectManagedProcess(decoded.descriptor.marker);
-  if (ownership === 'owned-alive') {
-    return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+  switch (ownership) {
+    case 'owned-alive':
+    case 'unprovable':
+      return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+    case 'ownership-lost':
+      return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+    case 'missing':
+      return { status: 'missing' };
   }
-  if (ownership === 'ownership-lost') {
-    return { status: 'unreattachable', reason: 'ownership-fence-lost' };
-  }
-  return { status: 'missing' };
 }
 
 export async function inspectAndroidPerfCaptureDescriptor(
