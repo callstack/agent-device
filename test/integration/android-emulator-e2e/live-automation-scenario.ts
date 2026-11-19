@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { LiveScenario } from '../live-device-e2e/runtime.ts';
 import {
   assertElementText,
   assertDiffLine,
@@ -14,12 +15,62 @@ import {
   requireAndroidResourceId,
   scrollToVisibleSelector,
 } from './live-assertions.ts';
-import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
+import {
+  type AndroidLiveHarness,
+  type LiveContext,
+  runStep,
+  verifyBehavior,
+  verifyCommand,
+} from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
+import { waitForSurfaceChange } from './live-surface-transition.ts';
 
 const C = PUBLIC_COMMANDS;
 
-export async function assertAutomationSystem(context: LiveContext): Promise<void> {
+/**
+ * The harness-bound steps one scenario runs through. The smoke scenario uses the live harness's
+ * steps; a harness-level regression constructs its own harness (with a scripted `runCli`) and
+ * passes its steps here, so the scenario runs through the harness entry instead of a direct call.
+ */
+export type AutomationScenarioSteps = {
+  assertElementText: typeof assertElementText;
+  assertWaitSelector: typeof assertWaitSelector;
+  assertWaitText: typeof assertWaitText;
+  capturePng: typeof capturePng;
+  runStep: AndroidLiveHarness['runStep'];
+  verifyBehavior: AndroidLiveHarness['verifyBehavior'];
+  verifyCommand: AndroidLiveHarness['verifyCommand'];
+};
+
+const automationScenarioSteps: AutomationScenarioSteps = {
+  assertElementText,
+  assertWaitSelector,
+  assertWaitText,
+  capturePng,
+  runStep,
+  verifyBehavior,
+  verifyCommand,
+};
+
+/**
+ * Scenario entry for the Home/Recents restoration lane. `smoke:automation-system` embeds this
+ * lane inline; harness-level regressions register the returned scenario with
+ * `createAndroidLiveHarness(...).runScenario` so the lane runs through the harness entry.
+ */
+export function createHomeAndRecentsRestorationScenario(
+  steps: AutomationScenarioSteps = automationScenarioSteps,
+): LiveScenario<LiveContext> {
+  return {
+    id: 'smoke:home-recents-restoration',
+    run: (context) => assertHomeAndRecentsRestoration(context, steps),
+  };
+}
+
+export async function assertAutomationSystem(
+  context: LiveContext,
+  steps: AutomationScenarioSteps = automationScenarioSteps,
+): Promise<void> {
+  const { assertElementText, assertWaitText, runStep, verifyBehavior, verifyCommand } = steps;
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(
     context,
@@ -189,7 +240,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await assertElementText(context, 'id="automation-alert-result"', 'Alert result: accepted');
   verifyCommand(context, C.alert, 'alert wait/get/dismiss/accept produce fixture-visible results');
 
-  await assertHomeAndRecentsRestoration(context);
+  await assertHomeAndRecentsRestoration(context, steps);
   await scrollToVisibleSelector(context, 'id="automation-open-alert"');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
@@ -220,20 +271,40 @@ async function assertOrientationFixtureState(
   await assertElementText(context, 'id="automation-window"', expectedWindow);
 }
 
-async function assertHomeAndRecentsRestoration(context: LiveContext): Promise<void> {
+async function assertHomeAndRecentsRestoration(
+  context: LiveContext,
+  steps: AutomationScenarioSteps,
+): Promise<void> {
+  const { assertWaitSelector, capturePng, runStep, verifyBehavior, verifyCommand } = steps;
   const foreground = path.join(context.artifactDir, 'foreground.png');
   await capturePng(context, 'capture Android fixture foreground', foreground);
   await runStep(context, 'send Android fixture Home', ['home']);
   const homeState = await runStep(context, 'read Android Home foreground state', ['appstate']);
   assert.notEqual(homeState.json?.data?.package, context.appId, JSON.stringify(homeState.json));
   const home = path.join(context.artifactDir, 'home.png');
-  await capturePng(context, 'capture Android Home surface', home);
+  // Home is dispatched before the launcher has drawn, so one capture can still show the fixture.
+  await waitForSurfaceChange(
+    context,
+    foreground,
+    home,
+    'capture Android Home surface',
+    'Android Home never replaced the fixture pixels',
+    { capturePng },
+  );
   assertFilesDiffer(foreground, home, 'Android Home should replace fixture pixels');
   verifyCommand(context, C.home, 'Home changes Android foreground package and system pixels');
 
   await runStep(context, 'open Android Recents', ['app-switcher']);
   const recents = path.join(context.artifactDir, 'recents.png');
-  await capturePng(context, 'capture Android Recents surface', recents);
+  // The Recents transition can still be animating when the switcher is dispatched.
+  await waitForSurfaceChange(
+    context,
+    home,
+    recents,
+    'capture Android Recents surface',
+    'Android Recents never differed from the Home pixels',
+    { capturePng },
+  );
   assertFilesDiffer(home, recents, 'Android Recents should differ from Home pixels');
   verifyCommand(context, C.appSwitcher, 'Recents pixels differ from Home system surface');
 
