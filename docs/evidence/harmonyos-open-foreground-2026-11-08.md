@@ -97,9 +97,12 @@ ledger.
 
 ## Suite
 
-`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 26 tests
+`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 31 tests
 pass on this branch's build; the full `check:unit` suite is green (20109
-tests, lint clean) with `origin/main` pointed at the upstream base.
+tests, lint clean) with `origin/main` pointed at the upstream base. The
+count includes the clamped probe-failed window case: a deadline about 2s
+out with every read failing asserts `within 2s`, so a revert to a literal
+`5s` fails the suite.
 
 ## 2026-11-19 re-attempt at head d295556df
 
