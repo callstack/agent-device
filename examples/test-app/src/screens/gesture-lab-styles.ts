@@ -71,5 +71,26 @@ export function createGestureLabStyles(colors: AppColors) {
       fontSize: 13,
       fontWeight: '700',
     },
+    reorderRow: {
+      alignItems: 'center',
+      borderBottomColor: colors.line,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+      height: 48,
+      justifyContent: 'space-between',
+    },
+    reorderLabel: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    reorderHandle: {
+      backgroundColor: colors.cardStrong,
+      borderColor: colors.line,
+      borderRadius: 6,
+      borderWidth: 1,
+      height: 32,
+      width: 44,
+    },
   });
 }

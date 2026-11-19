@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
+import {
+  Image,
+  PanResponder,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 import {
   Directions,
   FlingGestureHandler,
@@ -45,6 +53,15 @@ type MultiTapState = {
 
 const panDurationBucketMs = 400;
 
+/**
+ * The reorder handle arms only after this hold, the way a plain PanResponder
+ * drag-to-reorder handle behaves: a touch that moves first never captures.
+ */
+const reorderHoldArmMs = 600;
+const reorderRowHeightPx = 48;
+const reorderSwapThresholdPx = reorderRowHeightPx / 2;
+const initialReorderOrder = ['Alpha', 'Beta', 'Gamma'];
+
 type AndroidTouchStart = TransformState & {
   angle: number;
   centroidX: number;
@@ -74,6 +91,9 @@ export function GestureLab() {
   const [transform, setTransform] = useState<TransformState>(initialTransform);
   const [counts, setCounts] = useState<GestureCounts>(initialCounts);
   const [dragCompleted, setDragCompleted] = useState(false);
+  const [reorderOrder, setReorderOrder] = useState<string[]>(initialReorderOrder);
+  const [reorderHoldActivated, setReorderHoldActivated] = useState(false);
+  const [reorderLastDy, setReorderLastDy] = useState(0);
   const [panDurationStatus, setPanDurationStatus] = useState('pending');
   const [multiTap, setMultiTap] = useState<MultiTapState>(initialMultiTap);
   const multiTapRoundContactsRef = useRef(0);
@@ -424,6 +444,38 @@ export function GestureLab() {
       <Text style={styles.metric} testID="drag-gesture-status">
         drag completed {dragCompleted ? 'yes' : 'no'}
       </Text>
+      <View testID="reorder-list">
+        {reorderOrder.map((label) => (
+          <ReorderRow
+            key={label}
+            label={label}
+            onHoldActivated={() => setReorderHoldActivated(true)}
+            onMoveDy={(dy) => setReorderLastDy(dy)}
+            onSwap={(direction) =>
+              setReorderOrder((current) => {
+                const index = current.indexOf(label);
+                const target = index + direction;
+                if (direction === 0 || index < 0 || target < 0 || target >= current.length) {
+                  return current;
+                }
+                const next = [...current];
+                next[index] = current[target]!;
+                next[target] = label;
+                return next;
+              })
+            }
+          />
+        ))}
+      </View>
+      <Text style={styles.metric} testID="reorder-status">
+        reorder order {reorderOrder.join(',')}
+      </Text>
+      <Text style={styles.metric} testID="reorder-hold">
+        reorder hold activated {reorderHoldActivated ? 'yes' : 'no'}
+      </Text>
+      <Text style={styles.metric} testID="reorder-last-dy">
+        reorder last dy {Math.round(reorderLastDy)}
+      </Text>
 
       {Platform.OS === 'ios' ? (
         <GestureDetector gesture={panDurationGesture}>{targetView}</GestureDetector>
@@ -465,6 +517,87 @@ export function GestureLab() {
       </GestureDetector>
     </SectionCard>
   );
+}
+
+/**
+ * One reorderable row. The handle is a plain View with no accessibility props
+ * and no testID, so it never becomes an accessibility element and carries no
+ * @ref; the row label is the only addressable part. The PanResponder arms only
+ * after a hold, so a pan that starts moving immediately never captures it.
+ */
+function ReorderRow(props: {
+  label: string;
+  onHoldActivated: () => void;
+  onMoveDy: (dy: number) => void;
+  onSwap: (direction: 0 | 1 | -1) => void;
+}) {
+  const colors = useAppColors();
+  const styles = createGestureLabStyles(colors);
+  const armedRef = useRef(false);
+  const lastDyRef = useRef(0);
+  const swappedRef = useRef(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => {
+        armedRef.current = false;
+        swappedRef.current = false;
+        lastDyRef.current = 0;
+        if (holdTimerRef.current !== undefined) clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = setTimeout(() => {
+          armedRef.current = true;
+        }, reorderHoldArmMs);
+        return false;
+      },
+      // Capture wins over the surrounding scroll view once the hold has armed.
+      // In a shouldSet callback gestureState is measured from the touch start,
+      // so this move carries the full travel; after the grant no further move
+      // events may arrive, so the swap commits here, once per touch.
+      onMoveShouldSetPanResponderCapture: (_event, gestureState) => {
+        if (!armedRef.current || Math.hypot(gestureState.dx, gestureState.dy) <= 8) return false;
+        lastDyRef.current = gestureState.dy;
+        props.onMoveDy(gestureState.dy);
+        if (!swappedRef.current && Math.abs(gestureState.dy) >= reorderSwapThresholdPx) {
+          swappedRef.current = true;
+          props.onSwap(swapDirectionFromDy(gestureState.dy));
+        }
+        return true;
+      },
+      onPanResponderGrant: () => {
+        props.onHoldActivated();
+      },
+      onPanResponderMove: (_event, gestureState) => {
+        lastDyRef.current = Math.max(lastDyRef.current, gestureState.dy);
+        props.onMoveDy(gestureState.dy);
+      },
+      onPanResponderRelease: () => undefined,
+      onPanResponderTerminate: () => undefined,
+    }),
+  ).current;
+
+  useEffect(
+    () => () => {
+      if (holdTimerRef.current !== undefined) clearTimeout(holdTimerRef.current);
+    },
+    [],
+  );
+
+  return (
+    <View style={styles.reorderRow}>
+      <Text style={styles.reorderLabel} testID={`reorder-label-${props.label}`}>
+        {props.label}
+      </Text>
+      {/* Intentionally no accessibilityLabel, no accessible, no testID: this
+          handle must stay out of the accessibility tree. */}
+      <View collapsable={false} {...panResponder.panHandlers} style={styles.reorderHandle} />
+    </View>
+  );
+}
+
+function swapDirectionFromDy(dy: number): 0 | 1 | -1 {
+  if (Math.abs(dy) < reorderSwapThresholdPx) return 0;
+  return dy > 0 ? 1 : -1;
 }
 
 function clamp(value: number, min: number, max: number): number {

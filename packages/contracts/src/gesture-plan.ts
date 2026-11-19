@@ -262,7 +262,7 @@ function buildPanPlan(
   if ((input.pointerCount ?? 1) === 1) {
     const start = finitePoint(input.origin, 'gesture pan origin');
     const delta = finitePoint(input.delta, 'gesture pan delta');
-    return buildSinglePointerPlan(
+    const plan = buildSinglePointerPlan(
       'pan',
       start,
       addPoints(start, delta),
@@ -270,9 +270,20 @@ function buildPanPlan(
       viewport,
       input.executionProfile ?? 'timed-pan',
     );
+    const holdMs = normalizeNonNegativeDuration(input.holdMs, 0, 'gesture pan holdMs');
+    if (holdMs + durationMs > GESTURE_DURATION_MAX_MS) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `gesture pan holdMs plus durationMs must be at most ${GESTURE_DURATION_MAX_MS}`,
+      );
+    }
+    return holdMs > 0 ? withContactHolds(plan, holdMs, 0) : plan;
   }
   if (input.pointerCount !== 2) {
     throw new AppError('INVALID_ARGS', 'gesture pan pointerCount must be 1 or 2');
+  }
+  if (input.holdMs !== undefined) {
+    throw new AppError('INVALID_ARGS', 'gesture pan holdMs is supported only for pointerCount 1');
   }
   return buildTransformPlan(
     {

@@ -944,11 +944,15 @@ test('an .ad gesture line refuses a flag its kind does not read, as the CLI does
       'gesture tap 80 300 200 450 --pointer-count 3',
       'gesture tap does not read --pointer-count (line 1).',
     ],
-    [
-      'gesture pan 100 400 0 -200 500 --hold-ms 40',
-      'gesture pan does not read --hold-ms (line 1).',
-    ],
+    ['gesture fling up 100 400 --hold-ms 40', 'gesture fling does not read --hold-ms (line 1).'],
   ] as const) {
     assert.throws(() => parseReplayScriptDetailed(`${line}\n`), { code: 'INVALID_ARGS', message });
   }
+});
+
+test('an .ad gesture pan line accepts --hold-ms and parses it into the flags', () => {
+  const script = 'gesture pan 100 400 0 160 500 --hold-ms 800\n';
+  const [parsed] = parseReplayScriptDetailed(script).actions;
+  assert.deepEqual(parsed?.positionals, ['pan', '100', '400', '0', '160', '500']);
+  assert.deepEqual(parsed?.flags, { holdMs: 800 });
 });
