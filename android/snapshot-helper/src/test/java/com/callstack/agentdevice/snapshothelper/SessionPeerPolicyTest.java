@@ -10,6 +10,7 @@ public final class SessionPeerPolicyTest {
     rejectsNonAdbdUids();
     deadlineFollowsTheSessionTimeout();
     deadlineFallsBackWhenTheSessionTimeoutIsUnset();
+    deadlineFitsSocketTimeout();
     deadlineIsAbsoluteFromAcceptTime();
     remainingBudgetNeverGoesNegative();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
@@ -48,6 +49,12 @@ public final class SessionPeerPolicyTest {
     }
     if (SessionPeerPolicy.commandReadDeadlineMs(-5, 8_000) != 8_000) {
       throw new AssertionError("Expected a negative session timeout to fall back");
+    }
+  }
+
+  private static void deadlineFitsSocketTimeout() {
+    if (SessionPeerPolicy.commandReadDeadlineMs(Long.MAX_VALUE, 8_000) != Integer.MAX_VALUE) {
+      throw new AssertionError("Expected the read budget to fit LocalSocket.setSoTimeout");
     }
   }
 

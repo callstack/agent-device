@@ -8,6 +8,7 @@ import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -208,7 +209,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
             continue;
           }
           long deadlineAtMs =
-              SessionPeerPolicy.commandReadDeadlineAtMs(System.currentTimeMillis(), readBudgetMs);
+              SessionPeerPolicy.commandReadDeadlineAtMs(SystemClock.elapsedRealtime(), readBudgetMs);
           String requestId = "";
           try {
             String command =
@@ -326,23 +327,18 @@ public final class SnapshotInstrumentation extends Instrumentation {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     while (true) {
       long remainingMs =
-          SessionPeerPolicy.remainingBudgetMs(deadlineAtMs, System.currentTimeMillis());
+          SessionPeerPolicy.remainingBudgetMs(deadlineAtMs, SystemClock.elapsedRealtime());
       if (remainingMs <= 0) {
         throw new SocketTimeoutException("session command read deadline exceeded");
       }
       socket.setSoTimeout((int) remainingMs);
       int next = input.read();
-      if (next < 0) {
-        return bytes.size() == 0 ? null : bytes.toString(StandardCharsets.UTF_8);
-      }
-      if (next == '\n') {
-        return bytes.toString(StandardCharsets.UTF_8);
-      }
+      if (next < 0 && bytes.size() == 0) return null;
+      if (next < 0 || next == '\n') break;
       bytes.write(next);
-      if (bytes.size() > maxBytes) {
-        return bytes.toString(StandardCharsets.UTF_8);
-      }
+      if (bytes.size() > maxBytes) break;
     }
+    return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
   }
 
   private static void writeSessionOkQuietly(LocalSocket socket, String requestId) {

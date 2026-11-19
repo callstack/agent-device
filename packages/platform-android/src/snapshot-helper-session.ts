@@ -115,6 +115,9 @@ export function discloseHelperTouchDispatch(
   return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
 }
 
+// Keep in sync with SessionPeerPolicy.MAX_COMMAND_LINE_BYTES in the snapshot APK.
+const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 256 * 1024;
+
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
   action: AndroidTouchHelperAction;
@@ -146,6 +149,9 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   const command = params.payloadBase64
     ? `${params.action} ${requestId} ${params.payloadBase64}`
     : `${params.action} ${requestId}`;
+  if (Buffer.byteLength(command) > ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES) {
+    return undefined;
+  }
   let headers: Record<string, string>;
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(

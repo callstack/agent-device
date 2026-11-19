@@ -69,7 +69,8 @@ final class SessionPeerPolicy {
    * timeout, never to an unbounded read.
    */
   static long commandReadDeadlineMs(long sessionTimeoutMs, long fallbackTimeoutMs) {
-    return sessionTimeoutMs > 0 ? sessionTimeoutMs : Math.max(0, fallbackTimeoutMs);
+    long budgetMs = sessionTimeoutMs > 0 ? sessionTimeoutMs : Math.max(0, fallbackTimeoutMs);
+    return Math.min(Integer.MAX_VALUE, budgetMs);
   }
 
   /**
