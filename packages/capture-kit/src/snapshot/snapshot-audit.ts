@@ -121,7 +121,8 @@ function countSharedNames(
   const counts = new Map<string, number>();
   for (const node of nodes) {
     const control = evaluated.get(node.index);
-    if (control?.name === undefined || isDuplicateExposure(node, control.role, facts)) continue;
+    if (control?.name === undefined || isDuplicateExposure(node, control.role, facts, evaluated))
+      continue;
     const group = nameGroupKey(control.role, control.name);
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
@@ -175,18 +176,27 @@ function collapseIntoParent(
   rule: SizeRule,
 ): AuditFinding[] {
   const parent = parentOf(node, scan);
-  if (!parent || !isDuplicateExposure(node, role, scan)) return findings;
+  if (!parent || !isDuplicateExposure(node, role, scan, scan.evaluated)) return findings;
   const parentKinds = new Set(controlFindings(parent, role, scan, rule).map(({ kind }) => kind));
   return findings.filter(({ kind }) => !parentKinds.has(kind));
 }
 
-/** The only child of a control of the same role: the same control, exposed twice. */
-function isDuplicateExposure(node: SnapshotNode, role: string, scan: AuditFacts): boolean {
-  const parent = parentOf(node, scan);
+/**
+ * The only child of an evaluated control of the same role: the same control, exposed twice. A
+ * parent the audit does not judge (disabled, unhittable, system-owned, ref-less) cannot speak for
+ * the child, so the child stays a control of its own.
+ */
+function isDuplicateExposure(
+  node: SnapshotNode,
+  role: string,
+  facts: AuditFacts,
+  evaluated: ReadonlyMap<number, EvaluatedControl>,
+): boolean {
+  const parent = parentOf(node, facts);
   return (
     parent !== undefined &&
-    controlRole(parent) === role &&
-    scan.children.get(parent.index)?.length === 1
+    evaluated.get(parent.index)?.role === role &&
+    facts.children.get(parent.index)?.length === 1
   );
 }
 

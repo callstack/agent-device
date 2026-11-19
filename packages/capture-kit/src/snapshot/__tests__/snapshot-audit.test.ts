@@ -254,6 +254,24 @@ describe('ambiguous-name', () => {
     expect(summarize(findings)).toEqual([]);
   });
 
+  test.each([
+    ['disabled', { enabled: false }],
+    ['ref-less', { ref: undefined }],
+  ])('counts a control under a %s same-role wrapper as its own control', (_case, wrapper) => {
+    const { findings } = audit([
+      node(1, { label: 'Save', ...wrapper }),
+      node(2, { parentIndex: 1, label: 'Save' }),
+      node(3, { label: 'Save' }),
+    ]);
+    expect(summarize(findings)).toEqual(['ambiguous-name @e2', 'ambiguous-name @e3']);
+    expect(
+      findings.map((finding) => (finding.kind === 'ambiguous-name' ? finding.detail : undefined)),
+    ).toEqual([
+      { name: 'Save', count: 2 },
+      { name: 'Save', count: 2 },
+    ]);
+  });
+
   test('counts three wrapped Save buttons as three controls', () => {
     const { findings } = audit([
       node(1, { label: 'Save' }),
