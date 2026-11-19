@@ -63,8 +63,8 @@ test('runtime drag resolves generic selector endpoints before one continuous poi
     offsetMs: 1_500,
     point: { x: 290, y: 440 },
   });
-  assert.equal(result.recording?.sourceSelector?.split(' || ')[0], 'id="drag-source"');
-  assert.equal(result.recording?.destinationSelector?.split(' || ')[0], 'id="drop-target"');
+  assert.equal(result.recording?.sourceSelector, 'id="drag-source"');
+  assert.equal(result.recording?.destinationSelector, 'id="drop-target"');
   assert.deepEqual(result.targets?.source.resolution, {
     source: 'runtime',
     phase: 'pre-action',

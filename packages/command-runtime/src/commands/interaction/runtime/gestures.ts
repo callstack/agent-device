@@ -12,6 +12,7 @@ import {
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
+import { recordedSelectorExpression } from '@agent-device/selectors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
@@ -301,8 +302,8 @@ function dragRecordingDetails(
 }
 
 function selectorExpression(target: ResolvedInteractionTarget): string | undefined {
-  return 'selectorChain' in target && target.selectorChain?.length
-    ? target.selectorChain.join(' || ')
+  return 'selectorChain' in target && target.selectorChain
+    ? recordedSelectorExpression(target.selectorChain)
     : undefined;
 }
 
