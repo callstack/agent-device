@@ -17,7 +17,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { compileSwiftSources, compileSwiftSourceText } from './swift-cache.ts';
+import { compileSwiftSources } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -162,7 +162,7 @@ test('an ownerless cache lock is retained with verified-recovery guidance regard
   expect(fs.existsSync(lockDir)).toBe(true);
 });
 
-test('compileSwiftSourceText resolves a cache name with a long interior dash run in sub-second time', async () => {
+test('compileSwiftSources resolves a cache name with a long interior dash run in sub-second time', async () => {
   // Regression pin for the polynomial-regex ReDoS fix in `sanitizeCacheName`'s edge-dash
   // trim. The interior dashes are never touched by the trim, so a correct sanitizer never
   // needs to inspect this whole run — only a backtracking one pays for its length.
@@ -173,9 +173,9 @@ test('compileSwiftSourceText resolves a cache name with a long interior dash run
   // call is expected to reject once it reaches disk I/O; that happens only *after* the
   // (now fast) sanitize step this test pins, so timing the settle either way still proves
   // no catastrophic backtracking occurred.
-  await compileSwiftSourceText({
+  await compileSwiftSources({
     host: createTestHost(),
-    source: 'print(1)',
+    sources: [{ fileName: 'helper.swift', text: 'print(1)' }],
     cacheName: value,
   }).catch(() => {});
   const elapsedMs = Date.now() - start;
@@ -192,9 +192,9 @@ test('a canceled compile kills swiftc through its signal and leaves no temp outp
       }),
   );
 
-  const compiled = compileSwiftSourceText({
+  const compiled = compileSwiftSources({
     host: createTestHost(),
-    source: 'print(1)',
+    sources: [{ fileName: 'helper.swift', text: 'print(1)' }],
     cacheName: 'canceled',
     signal: cancel.signal,
   });
@@ -211,9 +211,9 @@ test('a canceled compile kills swiftc through its signal and leaves no temp outp
 
 test('a canceled wait on another process compile stops waiting and leaves its lock alone', async () => {
   const compile = (signal?: AbortSignal) =>
-    compileSwiftSourceText({
+    compileSwiftSources({
       host: createTestHost(),
-      source: 'print(1)',
+      sources: [{ fileName: 'helper.swift', text: 'print(1)' }],
       cacheName: 'held-elsewhere',
       signal,
     });
@@ -239,10 +239,10 @@ test('a canceled wait on another process compile stops waiting and leaves its lo
   expect(fs.existsSync(path.join(lockDir, 'owner.json'))).toBe(true);
 });
 
-test('compileSwiftSourceText falls back to swift-helper when the cache name sanitizes to nothing', async () => {
-  const executablePath = await compileSwiftSourceText({
+test('compileSwiftSources falls back to swift-helper when the cache name sanitizes to nothing', async () => {
+  const executablePath = await compileSwiftSources({
     host: createTestHost(),
-    source: 'print(1)',
+    sources: [{ fileName: 'helper.swift', text: 'print(1)' }],
     cacheName: '---',
   });
 
@@ -343,12 +343,12 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
 test('the cache root and tool environment come from the host it is given, not the process', async () => {
   const hostCacheDir = path.join(tmpDir, 'host-cache');
 
-  const executablePath = await compileSwiftSourceText({
+  const executablePath = await compileSwiftSources({
     host: {
       env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, LANG: 'host-locale' },
       cwd: tmpDir,
     },
-    source: 'print("host")',
+    sources: [{ fileName: 'helper.swift', text: 'print("host")' }],
     cacheName: 'host-helper',
   });
 
@@ -372,27 +372,18 @@ test('an executable keyed without the compiler arguments is never reused', async
   const binDir = path.join(cacheRoot, 'v3', 'bin');
   fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
   for (const level of [cacheRoot, path.dirname(binDir), binDir]) fs.chmodSync(level, 0o700);
-  const plantedText = path.join(binDir, entryKeyedWithoutCompilerArguments('helper', ['print(1)']));
-  const plantedSources = path.join(
+  const planted = path.join(
     binDir,
     entryKeyedWithoutCompilerArguments('sources', ['main.swift', 'print(2)']),
   );
-  for (const planted of [plantedText, plantedSources]) {
-    fs.writeFileSync(planted, 'built with other flags', { mode: 0o755 });
-  }
+  fs.writeFileSync(planted, 'built with other flags', { mode: 0o755 });
 
-  const textHelper = await compileSwiftSourceText({
-    host: createTestHost(),
-    source: 'print(1)',
-    cacheName: 'helper',
-  });
-  const sourcesHelper = await compileSwiftSources({
+  const helper = await compileSwiftSources({
     host: createTestHost(),
     cacheName: 'sources',
     sources: [{ fileName: 'main.swift', text: 'print(2)' }],
   });
 
-  expect([textHelper, sourcesHelper]).not.toContain(plantedText);
-  expect([textHelper, sourcesHelper]).not.toContain(plantedSources);
-  expect(mockRunCmd).toHaveBeenCalledTimes(2);
+  expect(helper).not.toBe(planted);
+  expect(mockRunCmd).toHaveBeenCalledOnce();
 });

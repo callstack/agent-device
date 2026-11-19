@@ -3,7 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import {
-  compileSwiftSourceText,
+  compileSwiftSources,
   getSwiftCacheRoot,
   isUntrustedSwiftCacheError,
   runSwiftHelper,
@@ -66,9 +66,9 @@ export function prepareVideoValidator(host: HostEnvironment): Promise<string> {
   const cacheRoot = getSwiftCacheRoot(host.env);
   let resolution = videoValidatorResolutions.get(cacheRoot);
   if (!resolution) {
-    resolution = compileSwiftSourceText({
+    resolution = compileSwiftSources({
       host,
-      source: VIDEO_VALIDATION_SCRIPT,
+      sources: [{ fileName: 'video-validator.swift', text: VIDEO_VALIDATION_SCRIPT }],
       cacheName: 'video-validator',
     })
       .catch((error: unknown) => {

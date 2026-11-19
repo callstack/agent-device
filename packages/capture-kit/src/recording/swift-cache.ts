@@ -391,6 +391,8 @@ export async function compileSwiftSources(params: {
   cacheName: string;
   sources: readonly EmbeddedSwiftSource[];
   timeoutMs?: number;
+  /** Cancels the compile: kills `swiftc`, or stops waiting for another process's compile. */
+  signal?: AbortSignal;
 }): Promise<string> {
   const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([
@@ -404,30 +406,6 @@ export async function compileSwiftSources(params: {
   return await ensureSwiftExecutable({
     host: params.host,
     sources: params.sources,
-    entryName: `${cacheName}-${key}`,
-    timeoutMs: params.timeoutMs,
-  });
-}
-
-export async function compileSwiftSourceText(params: {
-  host: HostEnvironment;
-  source: string;
-  cacheName: string;
-  timeoutMs?: number;
-  /** Cancels the compile: kills `swiftc`, or stops waiting for another process's compile. */
-  signal?: AbortSignal;
-}): Promise<string> {
-  const cacheName = sanitizeCacheName(params.cacheName);
-  const key = hashParts([
-    SWIFT_CACHE_VERSION,
-    process.platform,
-    process.arch,
-    ...COMPILER_ARGS,
-    params.source,
-  ]);
-  return await ensureSwiftExecutable({
-    host: params.host,
-    sources: [{ fileName: `${cacheName}-${key}.swift`, text: params.source }],
     entryName: `${cacheName}-${key}`,
     timeoutMs: params.timeoutMs,
     signal: params.signal,

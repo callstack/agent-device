@@ -15,7 +15,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 
 import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { compileSwiftSourceText, getSwiftCacheRoot, runSwiftHelper } from './swift-cache.ts';
+import { compileSwiftSources, getSwiftCacheRoot, runSwiftHelper } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -46,12 +46,15 @@ afterEach(() => {
   tmpDir = '';
 });
 
+const SOURCE_FILE_NAME = 'helper.swift';
+const compileText = (
+  host: Parameters<typeof compileSwiftSources>[0]['host'],
+  text: string,
+  cacheName = 'helper',
+) => compileSwiftSources({ host, cacheName, sources: [{ fileName: SOURCE_FILE_NAME, text }] });
+
 const compile = (env?: NodeJS.ProcessEnv) =>
-  compileSwiftSourceText({
-    host: env ? { env, cwd: tmpDir } : createTestHost(),
-    source: 'print(1)',
-    cacheName: 'helper',
-  });
+  compileText(env ? { env, cwd: tmpDir } : createTestHost(), 'print(1)');
 
 const untrusted = (details: Record<string, unknown> = {}) => ({
   code: 'COMMAND_FAILED',
@@ -173,13 +176,13 @@ test('something other than a regular file at the entry name is never handed back
 });
 
 test('source text is written exclusively, never through a name already standing in the temp directory', async () => {
-  const name = path.basename(await plantCachedExecutable(() => {}));
+  await plantCachedExecutable(() => {});
   const target = path.join(tmpDir, 'victim');
   fs.writeFileSync(target, 'untouched');
   const realMkdtemp = fs.mkdtempSync.bind(fs);
   vi.spyOn(fs, 'mkdtempSync').mockImplementation(((prefix: string) => {
     const directory = realMkdtemp(prefix);
-    fs.symlinkSync(target, path.join(directory, `${name}.swift`));
+    fs.symlinkSync(target, path.join(directory, SOURCE_FILE_NAME));
     return directory;
   }) as typeof fs.mkdtempSync);
 
@@ -698,17 +701,9 @@ test('a cold and a warm helper launch pass no loader variable, request DEVELOPER
   // The host's own DEVELOPER_DIR is only a selection for the compile; it must be one the compile accepts.
   const compileHost = { ...host, env: { ...host.env, DEVELOPER_DIR: '' } };
 
-  const cold = await compileSwiftSourceText({
-    host: compileHost,
-    source: 'print(1)',
-    cacheName: 'helper',
-  });
+  const cold = await compileText(compileHost, 'print(1)');
   const coldEnv = await helperProcessEnv(cold, host);
-  const warm = await compileSwiftSourceText({
-    host: compileHost,
-    source: 'print(1)',
-    cacheName: 'helper',
-  });
+  const warm = await compileText(compileHost, 'print(1)');
   const warmEnv = await helperProcessEnv(warm, host);
 
   expect(warm).toBe(cold);
@@ -785,7 +780,7 @@ test('a request-scoped DEVELOPER_DIR others can write is refused on a cold cache
 
   await expect(
     withCommandHost({ host, requestEnv: { DEVELOPER_DIR: open } }, () =>
-      compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'helper' }),
+      compileText(host, 'print(1)'),
     ),
   ).rejects.toMatchObject(
     untrusted({ exposure: 'untrusted_developer_dir', ancestor: open, hint: expect.any(String) }),
@@ -798,13 +793,13 @@ test('a valid request-scoped DEVELOPER_DIR wins over an invalid host one, and an
   const host = hostWith({ DEVELOPER_DIR: developerDirectory('open-host-developer', 0o777) });
 
   await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: trusted } }, () =>
-    compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'with-request' }),
+    compileText(host, 'print(1)', 'with-request'),
   );
   expect(compilerLaunch().env.DEVELOPER_DIR).toBe(trusted);
 
   vi.clearAllMocks();
   await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: '' } }, () =>
-    compileSwiftSourceText({ host, source: 'print(2)', cacheName: 'xcode-select' }),
+    compileText(host, 'print(2)', 'xcode-select'),
   );
   expect(compilerLaunch().env).not.toHaveProperty('DEVELOPER_DIR');
 });
@@ -827,7 +822,7 @@ test('the compiler process gets the judged DEVELOPER_DIR, which the request over
   });
 
   await withCommandHost({ host, requestEnv: { DEVELOPER_DIR: linked } }, () =>
-    compileSwiftSourceText({ host, source: 'print(1)', cacheName: 'overlay' }),
+    compileText(host, 'print(1)', 'overlay'),
   );
 
   expect(childDeveloperDir).toBe(trusted);
