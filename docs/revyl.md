@@ -73,7 +73,9 @@ agent-device disconnect
 ```
 
 `close` ends the app on the device. `disconnect`, and any daemon shutdown, ends the Revyl session, so
-the device is returned. Revyl also releases an idle session on its own after its idle timeout.
+the device is returned. While the session is connected, the plugin tells Revyl it is still in use
+once a minute, so a pause between commands does not end it. If the process exits without
+disconnecting, Revyl releases the session after five idle minutes.
 
 ## What works on a Revyl session
 
@@ -92,6 +94,14 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   bundle identifier or package name, `open` with a deep link or URL, and `close` for the app the
   session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
+- `orientation`. An Android emulator rotates to all four sides. An iOS simulator rotates to
+  `portrait` and `landscape-left` only, and refuses the other two. Neither releases the rotation lock,
+  so `orientation auto` refuses.
+- `settings appearance` (`light`, `dark`, or `toggle`), `settings location set <lat> <lon>`,
+  `settings permission`, and `settings clear-app-state`. On iOS, `settings reset-keychain` also
+  works. `settings location on|off` refuses, because Revyl moves the device's coordinates but cannot
+  switch location services. `settings permission` refuses `location-always`, `contacts-limited`, and
+  `--mode limited`. Revyl's iOS simulators refuse `camera` and `notifications`.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
 report a refused command as a success:
@@ -99,8 +109,10 @@ report a refused command as a success:
 - `type` refuses and points at `fill`, because Revyl enters text at a point rather than into the
   field the platform happens to focus.
 - `swipe` and `gesture` refuse. Use `scroll`, which plans the path itself and sends one drag.
-- `keyboard`, `clipboard`, `settings`, `orientation`, `alert`, `fold`, `telephony`, and `tv-remote`
-  are not supported.
+- `keyboard`, `clipboard`, `alert`, `fold`, `telephony`, and `tv-remote` are not supported.
+- The other `settings` refuse: `wifi`, `airplane`, `mobile-data`, `bluetooth`, `animations`,
+  `text-size`, `faceid`, `touchid`, and `fingerprint`. Revyl's devices refuse airplane mode, and the
+  worker has no action for the rest.
 - `reinstall` refuses, as described above.
 - `uninstall`, `apps`, `push`, `logs`, `network dump`, `artifacts`, and `recordings` are not
   supported by this version of the plugin.
