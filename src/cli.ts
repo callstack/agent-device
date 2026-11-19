@@ -1,5 +1,5 @@
-import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
-import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
+import { parseRawArgs, usage } from './cli/parser/args.ts';
+import { exitAfterHelp } from './cli/help-output.ts';
 import {
   asAppError,
   AppError,
@@ -310,29 +310,6 @@ async function parseCliInputOrExit(
   }
 
   return { parsed, command: parsed.command, positionals: parsed.positionals };
-}
-
-async function exitAfterHelp(
-  parsed: ParsedCliInput['parsed'],
-  isHelpAlias: boolean,
-): Promise<never> {
-  if (isHelpAlias && parsed.positionals.length > 1) {
-    await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
-    return exitAfterFlush(1);
-  }
-  const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
-  if (!helpTarget) {
-    writeStdout(`${await usage()}\n`);
-    return exitAfterFlush(0);
-  }
-  const commandHelp = await usageForCommand(helpTarget);
-  if (commandHelp) {
-    writeStdout(commandHelp);
-    return exitAfterFlush(0);
-  }
-  await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
-  writeStdout(`${await usage()}\n`);
-  return exitAfterFlush(1);
 }
 
 async function exitOnParseFailure(
@@ -723,13 +700,6 @@ function isDebugRequested(argv: string[]): boolean {
   } catch {
     return argv.includes('--debug') || argv.includes('-v') || argv.includes('--verbose');
   }
-}
-
-function formatUnknownHelpTargetMessage(helpTarget: string): string {
-  const hint = suggestCommandFor(helpTarget);
-  return hint
-    ? `Unknown command: ${helpTarget}. Did you mean ${hint}?`
-    : `Unknown command: ${helpTarget}`;
 }
 
 function formatUnhandledCommandMessage(command: string): string {
