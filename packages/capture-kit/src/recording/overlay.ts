@@ -3,7 +3,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { runSwiftHelper, compileSwiftSources } from './swift-cache.ts';
+import { runSwiftHelper, compileSwiftSources } from '@agent-device/host-swift/swift-cache';
 import { waitForPlayableVideo } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
@@ -52,7 +52,8 @@ async function exportProcessedVideo(params: {
   let exportOverran = false;
   try {
     // The shipped sources, loaded only when a recording is composited.
-    const { RECORDING_OVERLAY_SOURCES } = await import('./recording-swift-sources.ts');
+    const { RECORDING_OVERLAY_SOURCES } =
+      await import('@agent-device/host-swift/recording-swift-sources');
     const executablePath = await compileSwiftSources({
       host,
       cacheName: 'recording-overlay',

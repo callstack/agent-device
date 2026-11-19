@@ -592,6 +592,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...captureKitPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
     '@agent-device/host-kit',
+    '@agent-device/host-swift',
     '@agent-device/kernel',
   ]);
   const hostKitPackage = packages.find((pkg) => pkg.name === '@agent-device/host-kit');

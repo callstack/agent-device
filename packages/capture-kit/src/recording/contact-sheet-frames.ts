@@ -12,7 +12,7 @@ import {
   errorMessage,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import { runSwiftHelper, compileSwiftSources } from './swift-cache.ts';
+import { runSwiftHelper, compileSwiftSources } from '@agent-device/host-swift/swift-cache';
 
 const EXTRACTION_TIMEOUT_MS = 90_000;
 const COMPILATION_TIMEOUT_MS = 120_000;
@@ -261,7 +261,8 @@ async function compileDecoder(input: {
 }): Promise<string> {
   try {
     // The shipped sources, loaded only when a contact sheet is built.
-    const { RECORDING_FRAMES_SOURCES } = await import('./recording-swift-sources.ts');
+    const { RECORDING_FRAMES_SOURCES } =
+      await import('@agent-device/host-swift/recording-swift-sources');
     return await compileSwiftSources({
       host: input.host,
       sources: RECORDING_FRAMES_SOURCES,

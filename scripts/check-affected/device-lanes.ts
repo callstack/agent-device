@@ -137,6 +137,8 @@ const RUNTIME_SURFACE: ReadonlyArray<{ root: string; owns: (file: string) => boo
   { root: 'apple/', owns: () => true },
   { root: 'android/', owns: () => true },
   { root: 'linux/', owns: () => true },
+  // macOS host Swift helpers that recording post-processing compiles on the daemon host.
+  { root: 'packages/host-swift/swift/', owns: () => true },
   // TS/Swift golden tables (own:golden-table in model.ts): the parity XCTest runs on the lane.
   { root: 'contracts/fixtures/', owns: () => true },
 ];

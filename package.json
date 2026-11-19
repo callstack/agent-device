@@ -319,6 +319,7 @@
     "@agent-device/daemon-contracts": "workspace:*",
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
+    "@agent-device/host-swift": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
