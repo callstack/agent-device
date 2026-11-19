@@ -47,8 +47,11 @@ export async function resolveInstallableCandidate(
     budget: ArchiveBudget;
     archiveDepth: number;
     onArchiveAccepted?: (depth: number) => void;
+    /** The shared materialization budget; extraction observes the same remaining deadline. */
+    signal?: AbortSignal;
   },
 ): Promise<ResolvedInstallableCandidate> {
+  params.signal?.throwIfAborted();
   const stat = await fs.stat(candidatePath).catch(() => null);
   if (!stat) throw new AppError('INVALID_ARGS', `App source not found: ${candidatePath}`);
   if (params.isInstallablePath(candidatePath, stat)) {
@@ -93,7 +96,12 @@ async function resolveExtractedArchive(
   archivePath: string,
   params: Parameters<typeof resolveInstallableCandidate>[1],
 ): ReturnType<typeof resolveInstallableCandidate> {
-  const extracted = await extractArchive(archivePath, params.budget, params.archiveDepth + 1);
+  const extracted = await extractArchive(
+    archivePath,
+    params.budget,
+    params.archiveDepth + 1,
+    params.signal,
+  );
   params.onArchiveAccepted?.(params.archiveDepth + 1);
   params.registerCleanup(extracted.cleanup);
   return await resolveInstallableCandidate(extracted.outputPath, {
@@ -108,13 +116,21 @@ async function extractArchive(
   archivePath: string,
   budget: ArchiveBudget,
   depth: number,
+  signal?: AbortSignal,
 ): Promise<{ outputPath: string; cleanup: () => Promise<void> }> {
   const type = archiveTypeFromPath(archivePath);
   if (!type) throw new AppError('INVALID_ARGS', `Unsupported archive: ${archivePath}`);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-archive-'));
   const outputPath = path.join(tempDir, 'extracted');
   try {
-    await extractArchiveSafely({ archivePath, outputRoot: outputPath, type, budget, depth });
+    await extractArchiveSafely({
+      archivePath,
+      outputRoot: outputPath,
+      type,
+      budget,
+      depth,
+      signal,
+    });
     return {
       outputPath,
       cleanup: async () => await fs.rm(tempDir, { recursive: true, force: true }),

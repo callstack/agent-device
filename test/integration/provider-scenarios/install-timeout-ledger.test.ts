@@ -434,15 +434,23 @@ function assertLedgerFitsEnvelope(
   command: InstallCommand,
   ledger: readonly InstallLedgerCall[],
 ): void {
-  const virtualElapsedMs = ledger.reduce(
-    (total, call) => total + Math.max(0, call.timeoutMs - 1),
-    0,
-  );
   const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy(command), {
     positionals: [],
     flags: {},
   });
   assert.ok(envelopeMs !== undefined, `${command} must declare a bounded envelope`);
+  // The source download no longer carries the retired fixed 120s transfer ceiling: it consumes
+  // the shared source-work budget (envelope minus the daemon result margin) together with the
+  // other phases, so it counts only what remains after the phases that do not share that budget.
+  const sourceWorkBudgetMs = envelopeMs - REQUIRED_DAEMON_RESULT_MARGIN_MS;
+  const otherPhasesMs = ledger
+    .filter((call) => call.tool !== 'download')
+    .reduce((total, call) => total + Math.max(0, call.timeoutMs - 1), 0);
+  const downloadCall = ledger.find((call) => call.tool === 'download');
+  const downloadShareMs = downloadCall
+    ? Math.max(0, Math.min(downloadCall.timeoutMs, sourceWorkBudgetMs - otherPhasesMs) - 1)
+    : 0;
+  const virtualElapsedMs = otherPhasesMs + downloadShareMs;
   assert.ok(
     virtualElapsedMs + REQUIRED_DAEMON_RESULT_MARGIN_MS <= envelopeMs,
     `${route} ${command} ledger worst case (${virtualElapsedMs}ms) + ` +

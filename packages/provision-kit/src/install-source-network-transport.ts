@@ -16,6 +16,8 @@ export async function requestApprovedUrl(params: {
   signal: AbortSignal;
   /** The host environment whose proxy variables apply to the request. */
   environment: NodeJS.ProcessEnv;
+  /** Called once the dispatcher's connection to the upstream is established. */
+  onConnected?: () => void;
 }): Promise<InstallSourceNetworkResponse> {
   const proxy = resolveProxyForUrl(params.url, params.environment);
   const dispatcher = proxy
@@ -24,6 +26,7 @@ export async function requestApprovedUrl(params: {
   const dispatchUrl = proxy
     ? approvedAddressUrl(params.url, params.approvedAddress, params.family)
     : params.url;
+  if (params.onConnected) dispatcher.once('connect', params.onConnected);
   try {
     const requestOptions = {
       dispatcher,
@@ -42,6 +45,8 @@ export async function requestApprovedUrl(params: {
   } catch (error) {
     await closeDispatcher(dispatcher);
     throw error;
+  } finally {
+    if (params.onConnected) dispatcher.off('connect', params.onConnected);
   }
 }
 

@@ -45,15 +45,43 @@ const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const
  * @public Archive extensions accepted by install-source resolution.
  */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
-const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * The finite aggregate a standalone source-materialization call spends from entry, covering
+ * download and extraction. A caller's own earlier deadline (the shared request budget armed at
+ * admission) always wins over this one; the aggregate only keeps the API from silently becoming an
+ * unbounded download (#4441).
+ */
+export const SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS = 600_000;
+
+const SOURCE_MATERIALIZATION_DEADLINE_REASON = 'source_materialization_deadline_exceeded';
+
+function sourceMaterializationDeadlineError(cause?: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `App source materialization timed out after ${SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS}ms`,
+    {
+      reason: SOURCE_MATERIALIZATION_DEADLINE_REASON,
+      transferPhase: 'materialization',
+      timeoutMs: SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS,
+    },
+    cause,
+  );
+}
 
 export async function materializeInstallablePath(
   options: MaterializeInstallableOptions,
 ): Promise<MaterializedInstallable> {
   const cleanupTasks: Array<() => Promise<void>> = [];
+  const aggregateSignal = AbortSignal.timeout(SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, aggregateSignal])
+    : aggregateSignal;
   try {
     const localSource = await materializeLocalSource(options.source, {
-      signal: options.signal,
+      signal,
+      callerSignal: options.signal,
+      aggregateSignal,
       environment: options.environment,
     });
     cleanupTasks.push(localSource.cleanup);
@@ -67,6 +95,7 @@ export async function materializeInstallablePath(
       budget: (installArtifactArchiveBudget() as ArchiveBudget | undefined) ?? new ArchiveBudget(),
       archiveDepth: 0,
       onArchiveAccepted: noteInstallArtifactArchiveDepth,
+      signal,
     });
     return {
       archivePath: resolved.archivePath,
@@ -90,7 +119,12 @@ function expandSourcePath(inputPath: string, env: NodeJS.ProcessEnv): string {
 
 async function materializeLocalSource(
   source: LocalInstallSource,
-  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
+  options: {
+    signal: AbortSignal;
+    callerSignal?: AbortSignal;
+    aggregateSignal: AbortSignal;
+    environment: NodeJS.ProcessEnv;
+  },
 ): Promise<MaterializeLocalSourceResult> {
   if (source.kind === 'path') {
     return {
@@ -118,48 +152,48 @@ async function downloadToTempFile(
   tempDir: string,
   url: string,
   headers: Record<string, string> | undefined,
-  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
+  options: {
+    signal: AbortSignal;
+    callerSignal?: AbortSignal;
+    aggregateSignal: AbortSignal;
+    environment: NodeJS.ProcessEnv;
+  },
 ): Promise<string> {
-  const requestSignal = options.signal;
-  if (requestSignal?.aborted) {
-    throw createRequestCanceledError();
+  if (options.signal.aborted) {
+    throw await classifyDownloadError(options.signal.reason, options);
   }
-  const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
-  const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
     return await downloadInstallSource({
       tempDir,
       url,
       headers,
-      signal,
+      signal: options.signal,
       environment: options.environment,
     });
   } catch (error) {
-    throw classifyDownloadError(
-      error,
-      requestSignal,
-      timeoutSignal,
-      DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS,
-    );
+    throw await classifyDownloadError(error, options);
   }
 }
 
-function classifyDownloadError(
+/**
+ * Keeps the typed first failure: caller cancellation stays cancellation, a transfer phase timeout
+ * keeps its phase and budget, and only a standalone aggregate expiry is reported as such.
+ */
+async function classifyDownloadError(
   error: unknown,
-  requestSignal: AbortSignal | undefined,
-  timeoutSignal: AbortSignal,
-  timeoutMs: number,
-): unknown {
-  if (requestSignal?.aborted) {
+  options: { callerSignal?: AbortSignal; aggregateSignal: AbortSignal },
+): Promise<unknown> {
+  if (options.callerSignal?.aborted) {
     return createRequestCanceledError(undefined, error);
   }
-  if (timeoutSignal.aborted) {
-    return new AppError(
-      'COMMAND_FAILED',
-      `App source download timed out after ${timeoutMs}ms`,
-      { timeoutMs },
-      error,
-    );
+  // Loaded on demand: this module sits in the CLI's eager import closure, and the transport
+  // owner must stay behind a function-scoped edge (ADR 0027).
+  const { isTransferPhaseTimeoutError } = await import('@agent-device/host-kit/transport');
+  if (isTransferPhaseTimeoutError(error)) {
+    return error;
+  }
+  if (options.aggregateSignal.aborted) {
+    return sourceMaterializationDeadlineError(error);
   }
   return error;
 }
