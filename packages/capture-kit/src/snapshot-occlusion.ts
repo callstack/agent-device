@@ -7,6 +7,7 @@ import {
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
+  findNearestScrollableAncestor,
   isScrollableNodeLike,
   type SnapshotProducer,
   snapshotBarKind,
@@ -135,10 +136,12 @@ export function annotateCoveredSnapshotNodes(
     if (!isCandidateTouchNode(node)) continue;
     const coveringNode = findCoveringNode(scan, position, node, options);
     if (!coveringNode) continue;
-    const coveredBy = describeCoveringNode(
-      coveringNode,
-      snapshotBarKind(coveringNode, options.producer),
-    );
+    const barKind = snapshotBarKind(coveringNode, options.producer);
+    const described = describeCoveringNode(coveringNode, barKind);
+    const coveredBy =
+      described && barKind && scrollCanRevealTarget(scan, node, coveringNode)
+        ? { ...described, scrollCanReveal: true as const }
+        : described;
     coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
@@ -191,6 +194,30 @@ function describeCoveringNode(
     ...(rect ? { rect } : {}),
     ...(barKind ? { persistentBar: true } : {}),
   };
+}
+
+/**
+ * Whether scrolling can reveal a target a persistent bar covers. The target's nearest scrollable
+ * ancestor is the container a scroll moves it in; when the bar does not contain that container's
+ * whole frame, part of its viewport is clear of the bar and a scroll can move the target there.
+ * A bar that contains the scroller's whole frame leaves no clear area — for example a horizontal
+ * scroller wholly behind a bottom bar — and no scroll can reveal the target. A target with no
+ * scrollable ancestor is fixed, so no scroll reveals it either. Purely geometric: the scan cannot
+ * see the scroller's current offset, so a scroller already at the far edge still counts as
+ * revealable.
+ */
+function scrollCanRevealTarget(
+  scan: OcclusionScan,
+  target: RawSnapshotNode,
+  cover: RawSnapshotNode,
+): boolean {
+  const coverRect = positiveRect(cover.rect);
+  if (!coverRect) return false;
+  const scroller = findNearestScrollableAncestor(target, scan.byIndex);
+  if (!scroller) return false;
+  const scrollerRect = positiveRect(scroller.rect);
+  if (!scrollerRect) return false;
+  return !rectContains(coverRect, scrollerRect);
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */

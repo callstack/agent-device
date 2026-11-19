@@ -274,6 +274,14 @@ export type SnapshotCoveringNode = {
    * navigation), read from the cover's type, role, and subrole. Absent for any other cover.
    */
   persistentBar?: true;
+  /**
+   * Set when the cover is a persistent bar and the covered node sits in scrollable content whose
+   * frame is not wholly inside the bar, so scrolling can reveal the node clear of the bar. The
+   * touch refusal still stands at the current scroll position; the audit reads this fact to stay
+   * silent about rows a scroll can reveal. Absent for any other cover and when no scroll can
+   * reveal the node, such as a scroller wholly behind the bar or a fixed control.
+   */
+  scrollCanReveal?: true;
 };
 
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */

@@ -246,10 +246,13 @@ test('runtime covered refusal suggests inspection for a covered target in a scro
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'target_covered');
+      // The target sits in a scroll view the bar does not wholly contain, so the scan publishes
+      // that a scroll can reveal it clear of the bar.
       assert.deepEqual(details?.coveredBy, {
         kind: 'tab-bar',
         rect: { x: 0, y: 791, width: 402, height: 83 },
         persistentBar: true,
+        scrollCanReveal: true,
       });
       assert.match(
         String(details?.hint),

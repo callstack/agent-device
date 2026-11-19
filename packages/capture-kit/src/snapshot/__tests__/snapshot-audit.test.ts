@@ -774,15 +774,22 @@ test.for<CoverPublication>([
     name: 'Android bottom navigation',
     type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
   },
-])('reports both covered controls under a scanned bar from the $name publication', (cover) => {
-  const nodes = scannedCoverTree(cover);
-  expect(nodes[3]).toMatchObject({
-    interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true },
-  });
-  expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
-  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
-});
+])(
+  'reports the fixed control but not the scroll-revealed row under a scanned bar from the $name publication',
+  (cover) => {
+    const nodes = scannedCoverTree(cover);
+    // The row sits in a full-viewport scroll container the bar does not wholly contain, so a scroll
+    // can reveal it: the scan publishes `scrollCanReveal` on the cover and the audit drops the row.
+    expect(nodes[3]).toMatchObject({
+      interactionBlocked: 'covered',
+      coveredBy: { persistentBar: true, scrollCanReveal: true },
+    });
+    // The fixed control has no scrollable ancestor, so no scroll can reveal it: it stays reported.
+    expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
+    expect(nodes[4]?.coveredBy?.scrollCanReveal).toBeUndefined();
+    expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
+  },
+);
 
 test('keeps the covered-control finding for a button in a horizontal scroller wholly behind a bottom bar', () => {
   // The bar contains the scroller's whole usable viewport (400x65 inside the 400x75 bar), so no
@@ -825,7 +832,87 @@ test('keeps the covered-control finding for a button in a horizontal scroller wh
     interactionBlocked: 'covered',
     coveredBy: { persistentBar: true },
   });
+  // The bar contains the scroller's whole frame, so no scroll can reveal the button.
+  expect(nodes[2]?.coveredBy?.scrollCanReveal).toBeUndefined();
   expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e2']);
+});
+
+test('drops the covered-control finding for a row under the floating tab bar that scrolling reveals (#4763)', () => {
+  // The captured Pantry Recipes shape (iOS 26.2, dev.uisdk.nativeproto, initial scroll position):
+  // a full-viewport ScrollView holds the recipe rows and the UITabBar at (0,791 402x83) covers the
+  // Berry Overnight Oats row. Scrolling down reveals the row, so the occlusion scan publishes
+  // `scrollCanReveal` on the bar cover and the audit reports nothing for the row. The occlusion
+  // scan produces the `coveredBy`, as in a real capture.
+  const raw: RawSnapshotNode[] = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      role: 'UIApplication',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'ScrollView',
+      role: 'RCTEnhancedScrollView',
+      subrole: 'UIScrollView',
+      hiddenContentBelow: true,
+      hittable: true,
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      role: 'RCTViewComponentView',
+      label: 'Chicken Harvest Bowl, 35 minutes',
+      hittable: true,
+      rect: { x: 32, y: 679, width: 308, height: 90 },
+    },
+    {
+      index: 3,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      role: 'RCTViewComponentView',
+      label: 'Berry Overnight Oats, 5 minutes',
+      hittable: true,
+      rect: { x: 32, y: 805, width: 308, height: 69 },
+    },
+    {
+      index: 4,
+      parentIndex: 1,
+      depth: 2,
+      type: 'Button',
+      role: 'RCTViewComponentView',
+      label: 'Unsave Berry Overnight Oats',
+      hittable: true,
+      rect: { x: 348, y: 807, width: 22, height: 22 },
+    },
+    {
+      index: 5,
+      parentIndex: 0,
+      depth: 1,
+      type: 'TabBar',
+      role: 'UITabBar',
+      label: 'Tab Bar',
+      hittable: true,
+      rect: { x: 0, y: 791, width: 402, height: 83 },
+    },
+  ];
+  const nodes = annotateCoveredSnapshotNodes(raw, { producer: 'apple-runner' }).map((scanned) => ({
+    ...scanned,
+    ref: `e${scanned.index}`,
+  }));
+  expect(nodes[3]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { kind: 'tab-bar', persistentBar: true, scrollCanReveal: true },
+  });
+  expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true, scrollCanReveal: true });
+  expect(summarize(audit(nodes).findings)).toEqual([]);
 });
 
 test.for<CoverPublication>([
