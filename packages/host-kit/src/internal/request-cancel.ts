@@ -224,29 +224,6 @@ export function getRequestDeadlineMs(requestId: string | undefined): number | un
   return deadlines.length > 0 ? Math.min(...deadlines) : undefined;
 }
 
-/** The earliest cutoff registered on the controller: its execution deadlines or its result deadline. */
-function earliestRegisteredDeadlineMs(controller: RequestAbortController): number | undefined {
-  const deadlines = [
-    effectiveExecutionDeadline(controller)?.deadlineMs,
-    controller.resultDeadlineMs,
-  ].filter((deadlineMs) => deadlineMs !== undefined);
-  return deadlines.length > 0 ? Math.min(...deadlines) : undefined;
-}
-
-/**
- * Refuses task entry when the request's earliest registered execution/result deadline has
- * already passed (#4441): expired work must not start, so the owner expires the request
- * before the task runs.
- */
-function refuseIfEarliestDeadlineExpired(
-  controller: RequestAbortController,
-  expire: () => void,
-): void {
-  if (controller.signal.aborted) return;
-  const cutoffMs = earliestRegisteredDeadlineMs(controller);
-  if (cutoffMs !== undefined && Date.now() >= cutoffMs) expire();
-}
-
 /**
  * The deadline a resend loop may spend, which is the request's deadline only when the request is
  * read-only. A read inside an action leaves that budget to the action dispatched after it.
@@ -313,7 +290,10 @@ export async function withRequestDeadline(
     : registerRequestAbort(requestId);
   const controller = requestAbortControllers().get(requestId)!;
   if (ownedRegistration) controller.deadlineRegistration = ownedRegistration;
-  const deadlineMs = Date.now() + timeoutMs;
+  const deadlineMs = Math.min(
+    Date.now() + timeoutMs,
+    controller.resultDeadlineMs ?? Number.POSITIVE_INFINITY,
+  );
   const expire = () => {
     if (controller.signal.aborted) return;
     controller.executionDeadlineCancellation = { timeoutMs, requestId };
@@ -334,7 +314,6 @@ export async function withRequestDeadline(
   let timer = arm();
   try {
     enforceExecutionDeadline(controller);
-    refuseIfEarliestDeadlineExpired(controller, expire);
     controller.signal.throwIfAborted();
     const result = await task();
     enforceExecutionDeadline(controller);

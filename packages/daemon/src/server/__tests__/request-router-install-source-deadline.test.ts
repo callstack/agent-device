@@ -26,8 +26,8 @@ import {
 import {
   clearRequestAbortRegistration,
   emitRequestProgress,
-  getRequestDeadlineMs,
   getRequestSignal,
+  markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -518,30 +518,41 @@ test('an install_source whose earlier registered result deadline already passed 
   }
 });
 
-test('a live earlier result deadline is the effective cutoff an admitted install_source observes', async () => {
+test('an earlier result deadline aborts a running source install before deployment', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(START_MS);
-  const earlierResultDeadlineMs = START_MS + 60_000;
-  let observedDeadlineMs: number | undefined;
-  const { gateway, spies } = makeProviderGateway(() => async () => {
-    observedDeadlineMs = getRequestDeadlineMs('req-install-source-earlier-caller');
-    return { installablePath: '/tmp/materialized/app.apk', cleanup: async () => {} };
-  });
+  const resultBudgetMs = 60_000;
+  const { gateway, spies } = makeProviderGateway((getSignal) =>
+    abortOnSignalMaterialize(getSignal),
+  );
   const { handler } = makeRouterHarness(gateway);
   const requestId = 'req-install-source-earlier-caller';
   const registration = registerRequestAbort(requestId, undefined, {
-    resultDeadlineMs: earlierResultDeadlineMs,
+    resultDeadlineMs: START_MS + resultBudgetMs,
   });
+  const answer = handler(installSourceRequest(requestId));
   try {
-    const response = await handler(installSourceRequest(requestId));
-    assert.equal(response.ok, true, 'a live earlier deadline admits task entry');
-    assert.equal(
-      observedDeadlineMs,
-      earlierResultDeadlineMs,
-      "the earlier registered result deadline wins over the router's own 570s execution deadline",
+    await waitFor(
+      () => spies.materializeAppSource.mock.calls.length === 1,
+      'the provider materialization to start',
     );
-    assert.equal(spies.materializeAppSource.mock.calls.length, 1);
+    await vi.advanceTimersByTimeAsync(resultBudgetMs - 1);
+    assert.equal(spies.scopeSignal?.aborted, false, 'work is still admitted before the cutoff');
+
+    await vi.advanceTimersByTimeAsync(2);
+    assert.equal(
+      spies.scopeSignal?.aborted,
+      true,
+      'the earlier result deadline aborts active work',
+    );
+    const response = await withRealGuard(answer);
+    assert.equal(response.ok, false);
+    if (response.ok) return;
+    assert.equal(response.error.details?.reason, 'daemon_request_timeout');
+    assert.equal(spies.deployMaterializedApp.mock.calls.length, 0);
   } finally {
+    markRequestCanceled(requestId);
+    await withRealGuard(answer).catch(() => {});
     clearRequestAbortRegistration(registration);
     vi.useRealTimers();
   }

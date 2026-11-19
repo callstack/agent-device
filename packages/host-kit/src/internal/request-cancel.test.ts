@@ -533,23 +533,24 @@ test('synchronous execution admission does not adopt a transport result deadline
   }
 });
 
-test('an existing execution owner keeps its cutoff when a transport result cutoff passes first', async () => {
+test('an armed request enforces an earlier result cutoff before timer delivery', async () => {
   vi.useFakeTimers();
-  const requestId = 'execution-before-result-adoption';
-  const startedAt = Date.now();
-  const registration = registerRequestAbort(requestId, undefined, {
-    resultDeadlineMs: startedAt + 25,
-  });
+  const requestId = 'armed-result-cutoff';
+  const resultDeadlineMs = Date.now() + 25;
+  const registration = registerRequestAbort(requestId, undefined, { resultDeadlineMs });
   try {
-    const result = await withRequestDeadline(requestId, 100, async () => {
-      vi.setSystemTime(startedAt + 25);
-      throwIfRequestExecutionDeadlineExceeded(requestId);
-      assert.equal(getRequestSignal(requestId)?.aborted, false);
-      assert.equal(getRequestExecutionDeadlineMs(requestId), startedAt + 100);
-      return { ok: true };
-    });
-    assert.equal(result.ok, true);
-    assert.equal(getRequestSignal(requestId)?.aborted, false);
+    await assert.rejects(
+      withRequestDeadline(requestId, 100, async () => {
+        assert.equal(getRequestExecutionDeadlineMs(requestId), resultDeadlineMs);
+        vi.setSystemTime(resultDeadlineMs);
+        assert.equal(getRequestSignal(requestId)?.aborted, false);
+        throwIfRequestExecutionDeadlineExceeded(requestId);
+        assert.fail('the result cutoff admitted work');
+      }),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_request_timeout',
+    );
+    assert.equal(getRequestSignal(requestId)?.aborted, true);
     assert.equal(vi.getTimerCount(), 0);
   } finally {
     clearRequestAbortRegistration(registration);

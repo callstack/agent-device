@@ -330,8 +330,6 @@ function makeRequest(command: string, positionals: string[] = []): DaemonRequest
   };
 }
 
-// The fact the transports stamp on each admitted request: only a request with no action in any of
-// its steps may let a resend loop spend its deadline.
 // #4441 (decision 6856998913): the router's daemon request timeout for both source-install
 // commands is the one 570 s source work budget; the admitting transport registers the same
 // result deadline (admittedAt + 570 s), and unrelated commands keep no daemon deadline.
@@ -358,6 +356,8 @@ test('source-install requests resolve the 570 s daemon deadline and result deadl
   }
 });
 
+// The fact the transports stamp on each admitted request: only a request with no action in any of
+// its steps may let a resend loop spend its deadline.
 test('isReadOnlyRequest marks reads, and never a request that dispatches an action', () => {
   const request = (command: string, positionals: string[] = []) => ({
     token: 't',
