@@ -243,6 +243,75 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
   }
 });
 
+test('connect limrun repeated for the same session reuses its connection and profile', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-repeat-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const connect = async () =>
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'android',
+          session: 'limrun-repeat',
+        },
+        client: {} as AgentDeviceClient,
+      });
+    });
+
+  try {
+    vi.setSystemTime(1_000);
+    await connect();
+    const first = readRequiredActiveState(stateDir);
+    // Time passes between the two connects; the connection identity must not depend on it.
+    vi.setSystemTime(90_000);
+    await connect();
+    const second = readRequiredActiveState(stateDir);
+
+    assert.equal(second.runId, first.runId);
+    assert.equal(second.remoteConfigPath, first.remoteConfigPath);
+    assert.deepEqual(fs.readdirSync(path.join(stateDir, 'remote-connections', 'generated')), [
+      path.basename(first.remoteConfigPath),
+    ]);
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('separate unscoped connect limrun calls get separate run ids', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-unscoped-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+  const connect = async () => {
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['limrun'],
+        flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
+        client: {} as AgentDeviceClient,
+      });
+    });
+    return readRequiredActiveState(stateDir);
+  };
+
+  try {
+    const first = await connect();
+    const second = await connect();
+
+    assert.notEqual(second.session, first.session);
+    assert.notEqual(second.runId, first.runId);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect limrun requires LIMRUN_API_KEY or access to an existing instance', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-env-');
   const stateDir = path.join(tempRoot, '.state');

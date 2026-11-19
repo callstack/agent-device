@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
+import type { LimrunPlatform } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
 /** The Limrun account and instance facts one host gives the provider. */
@@ -29,13 +29,6 @@ const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
   ...INSTANCE_VARS.android,
 ];
 
-/** The platform whose instance a Limrun lease backend reaches. */
-export function limrunPlatformForLeaseBackend(
-  leaseBackend: string | undefined,
-): LimrunPlatform | undefined {
-  return leaseBackend === undefined ? undefined : platformForLimrunLeaseBackend(leaseBackend);
-}
-
 /**
  * The variables a Limrun lease reads: the account variables plus the leased platform's instance
  * variables, or every variable when the lease backend names no platform. The per-backend narrowing
@@ -61,6 +54,23 @@ export function limrunCredentialDeclaration(): Readonly<{
 /** The variables that give access to an existing instance of a platform. */
 export function limrunInstanceVariables(platform: LimrunPlatform): readonly string[] {
   return INSTANCE_VARS[platform];
+}
+
+/**
+ * The credentials one host must hold before Limrun can act on them: this reader's answer, or the
+ * typed refusal that names both ways in.
+ */
+export function requireLimrunCredentials(env: EnvMap): LimrunCredentials {
+  const credentials = readLimrunCredentials(env);
+  if (credentials) return credentials;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
+    {
+      reason: 'missing_provider_credentials',
+      hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
+    },
+  );
 }
 
 /**

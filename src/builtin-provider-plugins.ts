@@ -1,9 +1,15 @@
 import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { limrunPlugin, readLimrunCredentials } from '@agent-device/provider-limrun/internal';
+import {
+  limrunPlugin,
+  readLimrunCredentials,
+  type LimrunConnectionVerifier,
+  type LimrunPluginOptions,
+} from '@agent-device/provider-limrun/internal';
 
 /**
  * The built-in providers as registry candidates, in the shape a plugin has. Their implementations
@@ -27,21 +33,55 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
   if (!configured) return { ...base, dormant: true, load: () => undefined };
   return {
     ...base,
-    load: (): AgentDevicePlugin =>
-      limrunPlugin({
-        // The host adapters are the root's own: the provider names what a runtime needs, and this
-        // composition answers with its platform owners and this host's env/cwd.
-        createDependencies: async (pluginHost) =>
-          (await import('./sdk/limrun-runtime-dependencies.ts')).createLimrunRuntimeDependencies(
-            host,
-            pluginHost,
-          ),
-        // HAR captures land beside the session files, under the daemon's own state dir. The state
-        // dir is resolved with the load, so an unconfigured process never probes for one.
-        stateDir: resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, {
-          env: host.env,
-          cwd: host.cwd,
-        }).baseDir,
-      }),
+    load: (): AgentDevicePlugin => limrunPlugin(builtinLimrunPluginOptions(host)),
   };
+}
+
+/**
+ * How the composing root answers what the built-in provider asks for: the platform's own host
+ * adapters build its runtime. The optional verifier replaces the connection's read-only check, so
+ * the root can route it through an entry it already owns.
+ */
+function builtinLimrunPluginOptions(
+  host: HostEnvironment,
+  verifyConnection?: LimrunConnectionVerifier,
+): LimrunPluginOptions {
+  return {
+    // The host adapters are the root's own: the provider names what a runtime needs, and this
+    // composition answers with its platform owners and this host's env/cwd.
+    createDependencies: async (pluginHost) =>
+      (await import('./sdk/limrun-runtime-dependencies.ts')).createLimrunRuntimeDependencies(
+        host,
+        pluginHost,
+      ),
+    // HAR captures land beside the session files, under the daemon's own state dir. The state
+    // dir is resolved with the load, so an unconfigured process never probes for one.
+    stateDir: resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, {
+      env: host.env,
+      cwd: host.cwd,
+    }).baseDir,
+    ...(verifyConnection === undefined ? {} : { verifyConnection }),
+  };
+}
+
+/**
+ * The built-in Limrun connection the CLI `connect` runs: the provider's own callbacks, composed as
+ * a plugin and wired to this host the same way the daemon's registry wires an installed plugin's.
+ * The verification is the root's published entry, so the same read-only check answers for both.
+ */
+export async function builtinLimrunConnection(
+  host: HostEnvironment,
+): Promise<PluginConnectionCallbacks> {
+  const [{ withConnectionHost }, { verifyLimrunConnection }] = await Promise.all([
+    import('@agent-device/plugins/registry'),
+    import('@agent-device/provider-limrun'),
+  ]);
+  const plugin = limrunPlugin(
+    builtinLimrunPluginOptions(host, async (options) => await verifyLimrunConnection(options)),
+  );
+  if (!plugin.connection) {
+    throw new Error('The built-in Limrun plugin declares no connection.');
+  }
+  const connection = withConnectionHost(plugin.connection, undefined);
+  return { resolve: connection.resolve, verify: connection.verify };
 }

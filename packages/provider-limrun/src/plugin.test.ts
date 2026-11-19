@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
+import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
@@ -80,6 +81,74 @@ test('the plugin declares its provider and the credential variables per lease ba
       ],
     },
   });
+});
+
+test('the plugin declares the connection callbacks without setting up any runtime', async () => {
+  const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
+  assert.ok(plugin.connection, 'the plugin routes connect');
+  assert.equal(plugin.connection.capabilities.requiresRemoteDaemon, false);
+
+  // `resolve` runs the provider's own callbacks: the refusal comes from the provider, and nothing
+  // here calls setup, loads a runtime, or reads the SDK.
+  await assert.rejects(
+    async () =>
+      await plugin.connection?.resolve({
+        flags: { json: false, help: false, version: false },
+        stateDir: '/state',
+        cwd: '/project',
+        env: {},
+        host: {} as never,
+      }),
+    { code: 'INVALID_ARGS', message: 'connect limrun requires --platform ios or android.' },
+  );
+  assert.equal(sdk.runtimeCalls.length, 0);
+});
+
+test('a composed verifier answers verify in place of the provider SDK check', async () => {
+  const seen: Array<Record<string, unknown>> = [];
+  const verify = vi.fn(
+    async (options: Record<string, unknown>): Promise<ProviderConnectionVerification> => {
+      seen.push(options);
+      return {
+        provider: 'limrun',
+        service: 'Limrun',
+        verificationMessage: 'verified by the composing root',
+        device: {
+          status: 'deferred',
+          name: 'Provider-selected Android emulator',
+          platform: 'android',
+        },
+        app: {
+          status: 'missing',
+          message: 'Run apps to choose an uploaded asset before allocation.',
+        },
+      };
+    },
+  );
+  const plugin = limrunPlugin({
+    createDependencies: () => stubDependencies(),
+    verifyConnection: verify,
+  });
+
+  const verification = await plugin.connection?.verify({
+    flags: { json: false, help: false, version: false, platform: 'ios' },
+    env: { LIMRUN_API_KEY: 'lim_test_key' },
+    host: pluginHost({ LIMRUN_API_KEY: 'lim_test_key' }),
+  });
+
+  assert.equal(verification?.verificationMessage, 'verified by the composing root');
+  // The provider hands the verifier its full credential read, the host's version, and the platform.
+  assert.deepEqual(seen, [
+    {
+      apiKey: 'lim_test_key',
+      region: undefined,
+      keepAlive: false,
+      instances: undefined,
+      clientVersion: '1.2.3',
+      platform: 'ios',
+    },
+  ]);
+  assert.equal(verify.mock.calls.length, 1);
 });
 
 test('setup builds the runtime over the credentials, host and HAR directory it was given', async () => {
