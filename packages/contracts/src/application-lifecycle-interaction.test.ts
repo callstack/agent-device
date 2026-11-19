@@ -55,7 +55,6 @@ function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicati
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/state',
-    runtimeHints: {},
     execution: {},
     ...overrides,
   };

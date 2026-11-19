@@ -283,7 +283,6 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/state',
-    runtimeHints: {},
     execution: {},
   });
   expect(providerClose).not.toHaveBeenCalled();

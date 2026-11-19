@@ -288,8 +288,8 @@ test('failed relaunch retains the claim for close while allowing daemon idle rea
   }
 });
 
-test.each([{ dispatched: 'no' as const }, { reason: 'runtime-hints-operation-missing' }])(
-  'a relaunch refusal with confirmed or undispatched effects leaves the daemon active: %o',
+test.each([{ dispatched: 'no' as const }])(
+  'a relaunch refusal with undispatched effects leaves the daemon active: %o',
   async (details) => {
     const sessionStore = makeSessionStore();
     publishSession(sessionStore, 'android-session', ANDROID_EMULATOR);

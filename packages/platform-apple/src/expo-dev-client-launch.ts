@@ -13,10 +13,11 @@ export async function resolveExpoDevClientLaunchUrl(
   input: OpenApplicationInput,
 ): Promise<string | undefined> {
   if (!input.appBundleId || input.runtimeLaunchUrl?.trim()) return undefined;
+  const values = input.runtimeHints?.values;
   const serverUrl = resolveRuntimeServerUrl({
-    metroHost: input.runtimeHints.metroHost,
-    metroPort: input.runtimeHints.metroPort ? Number(input.runtimeHints.metroPort) : undefined,
-    bundleUrl: input.runtimeHints.bundleUrl,
+    metroHost: values?.metroHost,
+    metroPort: values?.metroPort ? Number(values.metroPort) : undefined,
+    bundleUrl: values?.bundleUrl,
   });
   if (!serverUrl) return undefined;
   let scheme: string | undefined;

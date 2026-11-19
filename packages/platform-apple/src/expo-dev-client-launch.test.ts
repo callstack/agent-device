@@ -1,5 +1,8 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  OpenApplicationInput,
+  OpenApplicationRuntimeHints,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { openInput as lifecycleOpenInput, simulator as SIMULATOR } from './lifecycle.fixtures.ts';
 
@@ -12,10 +15,14 @@ import { resolveExpoDevClientLaunchUrl } from './expo-dev-client-launch.ts';
 
 const resolveScheme = vi.mocked(resolveIosSimulatorExpoDevClientScheme);
 
+function hints(values: Record<string, string>): OpenApplicationRuntimeHints {
+  return { values, apply: async () => {} };
+}
+
 function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
   return {
     ...lifecycleOpenInput(),
-    runtimeHints: { metroHost: '127.0.0.1', metroPort: '8085' },
+    runtimeHints: hints({ metroHost: '127.0.0.1', metroPort: '8085' }),
     ...overrides,
   };
 }
@@ -36,7 +43,7 @@ test.each([
 ])('points an expo-dev-client at %s', async (_name, bundleUrl, expected) => {
   resolveScheme.mockResolvedValue('exp+dev-slug');
 
-  const input = openInput(bundleUrl ? { runtimeHints: { bundleUrl } } : {});
+  const input = openInput(bundleUrl ? { runtimeHints: hints({ bundleUrl }) } : {});
   await expect(resolveExpoDevClientLaunchUrl(SIMULATOR, input)).resolves.toBe(expected);
   expect(resolveScheme).toHaveBeenCalledWith(SIMULATOR, 'com.example.app', {
     timeoutMs: 3_000,
@@ -46,9 +53,9 @@ test.each([
 test('points at the server origin of a bundle URL, not at the bundle itself', async () => {
   resolveScheme.mockResolvedValue('exp+dev-slug');
   const input = openInput({
-    runtimeHints: {
+    runtimeHints: hints({
       bundleUrl: 'http://10.0.0.5:8090/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true',
-    },
+    }),
   });
 
   await expect(resolveExpoDevClientLaunchUrl(SIMULATOR, input)).resolves.toBe(
@@ -59,7 +66,7 @@ test('points at the server origin of a bundle URL, not at the bundle itself', as
 test('keeps a single pair of brackets around an IPv6 bundle URL host', async () => {
   resolveScheme.mockResolvedValue('exp+dev-slug');
   const input = openInput({
-    runtimeHints: { bundleUrl: 'http://[::1]:8090/index.bundle?platform=ios' },
+    runtimeHints: hints({ bundleUrl: 'http://[::1]:8090/index.bundle?platform=ios' }),
   });
 
   await expect(resolveExpoDevClientLaunchUrl(SIMULATOR, input)).resolves.toBe(
@@ -70,10 +77,10 @@ test('keeps a single pair of brackets around an IPv6 bundle URL host', async () 
 test('keeps the server mount when opening a path-prefixed Expo bundle', async () => {
   resolveScheme.mockResolvedValue('exp+dev-slug');
   const input = openInput({
-    runtimeHints: {
+    runtimeHints: hints({
       bundleUrl:
         'https://metro.example.test/tenant-42/.expo/.virtual-metro-entry.bundle?platform=ios',
-    },
+    }),
   });
 
   const launchUrl = await resolveExpoDevClientLaunchUrl(SIMULATOR, input);
@@ -88,7 +95,7 @@ test.each([
     'exp+dev-slug',
   ],
   ['an open without an app bundle id', openInput({ appBundleId: undefined }), 'exp+dev-slug'],
-  ['hints without a host and port', openInput({ runtimeHints: {} }), 'exp+dev-slug'],
+  ['hints without a host and port', openInput({ runtimeHints: hints({}) }), 'exp+dev-slug'],
 ])('keeps the plain launch for %s', async (_name, input, scheme) => {
   resolveScheme.mockResolvedValue(scheme);
 
