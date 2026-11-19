@@ -326,3 +326,22 @@ test('formatHumanError adds the command synopsis to an INVALID_ARGS Next step', 
   const notArgs = formatHumanError(new AppError('COMMAND_FAILED', 'boom'), { synopsis });
   assert.equal(notArgs.summary.includes('Usage:'), false);
 });
+
+test('formatHumanError shows control characters in a refused path escaped', () => {
+  // A preflight refusal names the caller's path, which may hold an escape sequence or a C1 character.
+  const err = new AppError('INVALID_ARGS', 'A file already exists at /tmp/a\u001b[8mb\u009bc.ad', {
+    hint: 'Remove /tmp/a\u001b[8mb\u009bc.ad, or pass --force.',
+  });
+
+  const { summary, body } = formatHumanError(err, { showDetails: true });
+  const rendered = [summary, ...body].join('\n');
+
+  assert.match(rendered, /\/tmp\/a\\x1b\[8mb\\x9bc\.ad/);
+  assert.match(rendered, /pass --force/);
+  assert.deepEqual(
+    [...rendered].filter(
+      (char) => (char < ' ' && char !== '\n') || (char >= '\u007f' && char <= '\u009f'),
+    ),
+    [],
+  );
+});

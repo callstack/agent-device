@@ -566,27 +566,17 @@ test('a closing repeat names the file to record again to, quoted for a shell', a
   });
 });
 
-// Windows refuses a control character in the final name, so the first version never commits there.
-test.skipIf(process.platform === 'win32').each([
-  { name: 'a newline', file: 'line\nbreak.ad', shown: String.raw`line\x0abreak.ad` },
-  {
-    name: 'a C1 next-line character',
-    file: 'line\u0085break.ad',
-    shown: String.raw`line\x85break.ad`,
-  },
-  {
-    name: 'a C1 control sequence introducer',
-    file: 'line\u009bbreak.ad',
-    shown: String.raw`line\x9bbreak.ad`,
-  },
-  {
-    name: 'an SGR conceal sequence',
-    file: 'line\u001b[8mbreak.ad',
-    shown: String.raw`line\x1b[8mbreak.ad`,
-  },
-])(
-  'a closing repeat whose path holds $name shows it escaped and names no command a text line would change',
-  async ({ file, shown }) => {
+// Windows refuses a character below U+0020 in the final name, so those rows never commit there.
+const CONTROL_CHARACTER_DESTINATIONS = [
+  { name: 'a newline', file: 'line\nbreak.ad', posixOnly: true },
+  { name: 'an SGR conceal sequence', file: 'line\u001b[8mbreak.ad', posixOnly: true },
+  { name: 'a C1 next-line character', file: 'line\u0085break.ad', posixOnly: false },
+  { name: 'a C1 control sequence introducer', file: 'line\u009bbreak.ad', posixOnly: false },
+].filter(({ posixOnly }) => !posixOnly || process.platform !== 'win32');
+
+test.each(CONTROL_CHARACTER_DESTINATIONS)(
+  'a closing repeat whose path holds $name names no command a text line would change',
+  async ({ file }) => {
     const { stateDir, directory } = caller();
     const destination = path.join(directory, file);
     const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
@@ -597,19 +587,15 @@ test.skipIf(process.platform === 'win32').each([
       artifacts: [script('v1', 1, id)],
     });
 
-    // savedScript stays exact; only the warning text escapes the control characters it would otherwise print.
+    // The response keeps the exact path; the CLI output boundary escapes control characters when it renders it.
     expect(closed).toMatchObject({
       ok: true,
       data: {
         savedScript: destination,
         warnings: [
-          `Revision 1 of the recording was already saved to ${path.join(directory, shown)}. It is not checked again. If that file is missing, reuse your original open command with --save-script=<path> --force, with the path quoted for your shell.`,
+          `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=<path> --force, with the path quoted for your shell.`,
         ],
       },
     });
-    const [warning] = (closed.ok && (closed.data?.warnings as string[])) || [];
-    expect(
-      [...(warning ?? '')].filter((char) => char < ' ' || (char >= '\u007f' && char <= '\u009f')),
-    ).toEqual([]);
   },
 );

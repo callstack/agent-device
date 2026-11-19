@@ -48,7 +48,8 @@ export async function runGenericClientBackedCommand({
       command === 'open' && leaseDevice && isRecord(result)
         ? { ...result, lease: { device: leaseDevice } }
         : result;
-    await writeCommandOutput(flags, leveled, () => JSON.stringify(leveled, null, 2));
+    const { stringifyJson } = await import('../../commands/output/json.ts');
+    await writeCommandOutput(flags, leveled, () => stringifyJson(leveled));
     return true;
   }
   if (cliOutput) {

@@ -319,30 +319,17 @@ function noteRepeatedVersion(
  * C0 or C1 control character cannot survive a rendered text line, so they name a placeholder for it instead.
  */
 function recordAgainArguments(destination: string): string {
-  if ([...destination].some(isControlCharacter)) {
+  const control = (char: string) => char < ' ' || (char >= '\u007f' && char <= '\u009f');
+  if ([...destination].some(control)) {
     return '--save-script=<path> --force, with the path quoted for your shell';
   }
   return `--save-script=${shellQuoteIfNeeded(destination)} --force`;
 }
 
-function isControlCharacter(char: string): boolean {
-  return char < ' ' || (char >= '\u007f' && char <= '\u009f');
-}
-
-/** A destination as warning text shows it: C0, DEL and C1 characters escaped, so none can reach a terminal raw. */
-function displayedPath(destination: string): string {
-  return [...destination]
-    .map((char) =>
-      isControlCharacter(char) ? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}` : char,
-    )
-    .join('');
-}
-
 function repeatedVersionText(
   repeat: Readonly<{ requested: number; committed: number; pending?: number }>,
-  destination: string,
+  published: string,
 ): string {
-  const published = displayedPath(destination);
   const answer =
     repeat.requested === repeat.committed
       ? `Revision ${repeat.requested} of the recording was already saved to ${published}.`

@@ -134,7 +134,23 @@ export function routeResponseWarnings(
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
-  return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
+  return escapeControlCharacters(
+    warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace)),
+  );
+}
+
+/**
+ * Message text as a terminal shows it: C0 (except newline and tab), DEL and C1 characters become `\xNN`, so a path
+ * or other value inside a message cannot drive the terminal or hide the rest of the line.
+ */
+export function escapeControlCharacters(text: string): string {
+  return [...text]
+    .map((char) =>
+      (char < ' ' && char !== '\n' && char !== '\t') || (char >= '\u007f' && char <= '\u009f')
+        ? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+        : char,
+    )
+    .join('');
 }
 
 /**
