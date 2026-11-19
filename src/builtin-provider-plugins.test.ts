@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createEmbeddedProviderRuntimeComposition } from './provider-device-runtimes.ts';
+import { builtinLimrunConnection } from './builtin-provider-plugins.ts';
 
 // The built-in candidate is composed by the daemon's own registry, so the case runs the real plugin
 // contract with the Limrun SDK stubbed out: nothing here reaches the provider's API.
@@ -94,4 +95,36 @@ test('a configured built-in Limrun registers through the plugin contract with it
   } finally {
     await composition.shutdown();
   }
+});
+
+test('the built-in connection answers connect with the provider callbacks and the root verifier', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-builtin-limrun-connection-');
+  const host = {
+    env: { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_STATE_DIR: stateDir },
+    cwd: process.cwd(),
+  };
+
+  const connection = await builtinLimrunConnection(host);
+  // `resolve` runs the provider's own flag, backend, and credential rules.
+  const resolved = await connection.resolve({
+    flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
+    stateDir,
+    cwd: host.cwd,
+    env: host.env,
+  });
+  assert.equal(resolved.profile.leaseProvider, 'limrun');
+  assert.equal(resolved.profile.leaseBackend, 'android-instance');
+
+  // `verify` reaches the SDK through the root's published verification entry and runs the
+  // read-only account check the stubbed SDK above answers; no instance is created.
+  const verification = await connection.verify({
+    flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
+    cwd: host.cwd,
+    env: host.env,
+  });
+  assert.equal(verification.service, 'Limrun');
+  assert.equal(
+    verification.verificationMessage,
+    'Credentials and Android instance access verified.',
+  );
 });

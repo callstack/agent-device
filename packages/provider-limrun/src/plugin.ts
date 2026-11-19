@@ -1,13 +1,9 @@
 import path from 'node:path';
 import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  limrunCredentialDeclaration,
-  readLimrunCredentials,
-  type LimrunCredentials,
-} from './credentials.ts';
-import { LIMRUN_PROVIDER } from './device.ts';
+import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
+import type { LimrunConnectionVerifier } from './connection.ts';
+import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 export type LimrunPluginOptions = Readonly<{
@@ -24,6 +20,12 @@ export type LimrunPluginOptions = Readonly<{
    * beside the session files under it; without it the capture is unavailable.
    */
   stateDir?: string;
+  /**
+   * Replaces the read-only check `connection.verify` performs. The provider's own verification is
+   * the default; the composing root names the entry it reads verification through when it already
+   * owns one, the same way it supplies the runtime's host adapters.
+   */
+  verifyConnection?: LimrunConnectionVerifier;
 }>;
 
 /**
@@ -32,14 +34,32 @@ export type LimrunPluginOptions = Readonly<{
  *
  * The credentials are read from the setup host's environment, so the plugin declares exactly the
  * variables it reads there, narrowed per lease backend. Only this module's declaration is needed to
- * list or fingerprint the provider: the runtime and its host adapters load in `setup`.
+ * list, fingerprint, or route a `connect` to the provider: the connection's flags and credential
+ * reading, the runtime, and its host adapters all load in the path that asks for them.
  */
 export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
-  const { createDependencies, stateDir } = options;
+  const { createDependencies, stateDir, verifyConnection } = options;
   return {
     apiVersion: 2,
     provider: LIMRUN_PROVIDER,
     credentials: limrunCredentialDeclaration(),
+    // The connect callbacks are the provider's own and load when the first `connect` runs them, so
+    // a process that only lists or fingerprints this provider evaluates none of them.
+    connection: {
+      capabilities: LIMRUN_CONNECTION_CAPABILITIES,
+      resolve: async (context) =>
+        await (
+          await import('./connection.ts')
+        )
+          .createLimrunConnection({ verify: verifyConnection })
+          .resolve(context),
+      verify: async (context) =>
+        await (
+          await import('./connection.ts')
+        )
+          .createLimrunConnection({ verify: verifyConnection })
+          .verify(context),
+    },
     setup: async (host) => {
       const credentials = requireLimrunCredentials(host.env);
       const [register, dependencies] = await Promise.all([
@@ -61,21 +81,4 @@ export function limrunPlugin(options: LimrunPluginOptions): AgentDevicePlugin {
       );
     },
   };
-}
-
-/**
- * The credentials this host's environment holds, refusing the shapes a runtime cannot act on:
- * nothing at all, or an instance set missing one of its variables.
- */
-function requireLimrunCredentials(env: Record<string, string | undefined>): LimrunCredentials {
-  const credentials = readLimrunCredentials(env);
-  if (credentials) return credentials;
-  throw new AppError(
-    'INVALID_ARGS',
-    'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
-    {
-      reason: 'missing_provider_credentials',
-      hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
-    },
-  );
 }
