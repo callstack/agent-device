@@ -41,7 +41,7 @@ import {
 import { SessionStore } from '../../../core/session-store.ts';
 import {
   countConfiguredRuntimeHints,
-  runtimeHintValues,
+  openApplicationRuntimeHints,
   setSessionRuntimeHintsForOpen,
 } from '../../session-runtime.ts';
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
@@ -307,8 +307,7 @@ export async function completeOpenCommand(params: {
       prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
       enableTestIme: shouldActivateAndroidTestIme(device, req),
       stateDir: sessionStore.resolveDaemonStateDir(),
-      runtimeHints: runtimeHintValues(runtimeHints),
-      applyRuntimeHints,
+      runtimeHints: openApplicationRuntimeHints(runtimeHints, applyRuntimeHints),
       execution: applicationLifecycleExecutionFromRequest(
         req,
         logPath,
@@ -317,9 +316,7 @@ export async function completeOpenCommand(params: {
     })
     .catch((error: unknown) => {
       const effectsConfirmedOrUndispatched =
-        error instanceof AppError &&
-        (readDispatchDisclosure(error.details) === 'no' ||
-          error.details?.reason === 'runtime-hints-operation-missing');
+        error instanceof AppError && readDispatchDisclosure(error.details) === 'no';
       if (!effectsConfirmedOrUndispatched) markUnconfirmedRelaunch();
       throw error;
     });

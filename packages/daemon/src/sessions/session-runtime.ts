@@ -1,6 +1,8 @@
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import {
+  type OpenApplicationRuntimeHints,
   type RuntimeHintValues,
+  type RuntimeHintsApplicationInput,
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
@@ -52,6 +54,19 @@ export function runtimeHintValues(runtime: SessionRuntimeHints | undefined): Run
 
 export function hasRuntimeTransportHints(runtime: SessionRuntimeHints | undefined): boolean {
   return hasRuntimeTransportHintValues(runtimeHintValues(runtime));
+}
+
+/**
+ * Pairs the open's requested transport hints with the fact-admitted apply operation, so the
+ * lifecycle input cannot carry a hints request without its transport. Absent when the open
+ * requests no transport hint; facts admission guarantees the operation whenever it is requested.
+ */
+export function openApplicationRuntimeHints(
+  runtime: SessionRuntimeHints | undefined,
+  apply: ((input: RuntimeHintsApplicationInput) => Promise<void>) | undefined,
+): OpenApplicationRuntimeHints | undefined {
+  if (apply === undefined || !hasRuntimeTransportHints(runtime)) return undefined;
+  return { values: runtimeHintValues(runtime), apply };
 }
 
 function normalizeRuntimeStringInput(

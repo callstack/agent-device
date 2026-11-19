@@ -52,7 +52,6 @@ export function openInput(): OpenApplicationInput {
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/tmp/agent-device-lifecycle-test',
-    runtimeHints: {},
     execution: {},
   };
 }

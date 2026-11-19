@@ -8,7 +8,6 @@ import {
   type OpenApplicationOutcome,
   type PrepareAppleRunnerInput,
   type PrepareAppleRunnerResult,
-  hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
@@ -257,22 +256,14 @@ async function applyAppleOpenRuntimeHints(
   localIosSimulator: boolean,
   timing: MutableOpenTiming,
 ): Promise<string | undefined> {
-  if (!hasRuntimeTransportHintValues(input.runtimeHints)) return undefined;
+  const runtimeHints = input.runtimeHints;
+  if (!runtimeHints) return undefined;
   const startedAtMs = Date.now();
   const devClientLaunchUrl = localIosSimulator
     ? await host.resolveDevClientLaunchUrl(binding.device, input)
     : undefined;
   if (!devClientLaunchUrl) {
-    if (!input.applyRuntimeHints) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Runtime hint operation was not admitted for this open.',
-        {
-          reason: 'runtime-hints-operation-missing',
-        },
-      );
-    }
-    await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+    await runtimeHints.apply({ appId: input.appBundleId, values: runtimeHints.values });
   }
   timing.runtimeHintsDurationMs = elapsed(startedAtMs);
   return devClientLaunchUrl;

@@ -1,4 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import {
+  type OpenApplicationRuntimeHints,
+  hasRuntimeTransportHintValues,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 
 import { alertNotFound } from './launch-confirmation.fixtures.ts';
 import { launchUrlSimulator, openInput, resetUrlOwner } from './lifecycle.fixtures.ts';
@@ -33,11 +37,17 @@ test.each([
     const { lifecycle, events } = launchUrlSimulator(async () => {
       throw alertNotFound();
     });
+    // The daemon producer pairs the values with the apply operation only when a transport
+    // hint is requested, so this mirrors that rule.
+    const hints: OpenApplicationRuntimeHints | undefined = hasRuntimeTransportHintValues(
+      runtimeHints,
+    )
+      ? { values: runtimeHints, apply: applyRuntimeHints }
+      : undefined;
 
     await lifecycle.openApplication({
       ...openInput(),
-      runtimeHints,
-      applyRuntimeHints,
+      runtimeHints: hints,
       execution: { plannedOperations: ['captureSnapshot'] },
     });
 
