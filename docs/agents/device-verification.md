@@ -4,7 +4,7 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 
 ## Prepare
 
-1. To build runtime changes, run `pnpm build`.
+1. Run `pnpm build`, then verify only with its `node bin/agent-device.mjs`.
 2. For Android source verification, run `pnpm build:android`.
 3. For Swift runner changes, run `pnpm build:xcuitest`.
    A graceful shutdown can hand off an active runner. A new daemon can adopt the old binary.
