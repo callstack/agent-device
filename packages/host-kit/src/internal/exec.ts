@@ -8,11 +8,15 @@ import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  bindCommandLifecycle,
+  destroyCommandStreams,
+  killProcessTree,
   commandSettlementReason,
   createExecTraceContext,
   normalizeTimeoutMs,
   type ExecSettlementReason,
 } from './exec-trace.ts';
+export { signalProcessGroupBestEffort } from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
@@ -887,149 +891,6 @@ async function isFilePath(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * A killed command settles when its direct child exits: descendants can keep inherited pipes
- * open indefinitely. Both kill/exit orderings must settle once without waiting for `close`.
- */
-
-function bindCommandLifecycle(
-  child: ReturnType<typeof spawn>,
-  options: Pick<ExecOptions, 'detached' | 'signal' | 'kill'>,
-  trace: ReturnType<typeof createExecTraceContext>,
-  settle: (code: number | null) => void,
-) {
-  const settlement = createCommandKillSettlement({
-    killProcessTree: () => killProcessTree(child, options),
-    settle,
-  });
-  const abort = watchCommandAbort(options, () => {
-    trace.emit('abort');
-    settlement.requestKill();
-  });
-  child.once('exit', (code, signal) => {
-    trace.emit('exit', { exitCode: code, signal });
-    settlement.recordExit(code);
-  });
-  child.once('close', (code, signal) => {
-    trace.emit('close', { exitCode: code, signal });
-    settle(code);
-  });
-  return { settlement, abort };
-}
-
-type CommandKillSettlement = {
-  /** Signals the command's process tree, then settles the command if its child is gone. */
-  readonly requestKill: () => void;
-  /** Records the child's exit, then settles the command if a kill was already requested. */
-  readonly recordExit: (code: number | null) => void;
-};
-
-function createCommandKillSettlement(input: {
-  readonly killProcessTree: () => void;
-  readonly settle: (exitCode: number | null) => void;
-}): CommandKillSettlement {
-  let killRequested = false;
-  let exited = false;
-  let exitCode: number | null = null;
-  const settleIfKilledAndGone = (): void => {
-    if (killRequested && exited) input.settle(exitCode);
-  };
-  return {
-    requestKill: () => {
-      killRequested = true;
-      input.killProcessTree();
-      settleIfKilledAndGone();
-    },
-    recordExit: (code) => {
-      exited = true;
-      exitCode = code ?? 1;
-      settleIfKilledAndGone();
-    },
-  };
-}
-
-function watchCommandAbort(
-  options: Pick<ExecOptions, 'detached' | 'signal'>,
-  onKill: () => void,
-): { readonly didAbort: boolean; dispose: () => void } {
-  let didAbort = false;
-  const onAbort = () => {
-    didAbort = true;
-    onKill();
-  };
-  if (options.signal?.aborted) {
-    onAbort();
-  } else {
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-  }
-  return {
-    get didAbort() {
-      return didAbort;
-    },
-    dispose: () => {
-      options.signal?.removeEventListener('abort', onAbort);
-    },
-  };
-}
-
-/**
- * Best-effort process-group signalling, shared by host-kit callers. This lives below
- * host-process.ts to avoid an import cycle. Only positive integer pids are accepted:
- * zero targets this process's group, and negative values can target unrelated processes.
- */
-export function signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(-pid, signal);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Surviving descendants keep a detached process group reserved after its direct child exits.
-function killProcessTree(
-  child: ChildProcess,
-  options: Pick<ExecOptions, 'detached' | 'kill'>,
-): void {
-  if (!options.kill) {
-    signalProcessTree(child, options.detached, 'SIGKILL');
-    return;
-  }
-  // Escalation bounds graceful cleanup; the unref timer cannot keep a worker alive.
-  signalProcessTree(child, options.detached, options.kill.signal);
-  const escalation = setTimeout(
-    () => signalProcessTree(child, options.detached, 'SIGKILL'),
-    options.kill.graceMs,
-  );
-  escalation.unref();
-  child.once('exit', () => clearTimeout(escalation));
-}
-
-function signalProcessTree(
-  child: ChildProcess,
-  detached: boolean | undefined,
-  signal: NodeJS.Signals,
-): void {
-  if (detached && child.pid && process.platform !== 'win32') {
-    signalProcessGroupBestEffort(child.pid, signal);
-    return;
-  }
-  // A reaped, non-detached child can have its pid reassigned to an unrelated process.
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill(signal);
-}
-
-/**
- * A kill that cannot reach an inherited-pipe holder must at least stop this process
- * from holding the other end of those pipes open after it has settled.
- */
-function destroyCommandStreams(child: ChildProcess): void {
-  child.stdin?.destroy();
-  child.stdout?.destroy();
-  child.stderr?.destroy();
 }
 
 async function writeChildStdin(
