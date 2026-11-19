@@ -186,6 +186,7 @@ export async function createDaemonHttpServer(options: {
             authHook,
             expectedToken: token,
             daemonRequest: request.daemonRequest,
+            signal: request.signal,
           }),
       })
     ) {

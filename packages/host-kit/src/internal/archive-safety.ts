@@ -201,16 +201,23 @@ export function extractedEntryMode(
  * Creates one directory entry with its own mode. Parents an archive never declared are created
  * with the default mode. Whether the directory is new or an earlier entry already implied it, it
  * ends up with the declared mode under the process umask, as the kernel applies to files, so entry
- * order does not change the extracted permissions.
+ * order does not change the extracted permissions. A given signal is checked between the
+ * directory mutations.
  */
-export async function createExtractedDirectory(outputPath: string, mode: number): Promise<void> {
+export async function createExtractedDirectory(
+  outputPath: string,
+  mode: number,
+  signal?: AbortSignal,
+): Promise<void> {
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  signal?.throwIfAborted();
   try {
     await fs.mkdir(outputPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     if (!(await fs.lstat(outputPath)).isDirectory()) throw error;
   }
+  signal?.throwIfAborted();
   await fs.chmod(outputPath, (mode & ~process.umask()) | OWNER_ENTRY_ACCESS.directory);
 }
 

@@ -100,7 +100,7 @@
     "packages/daemon/src/server/http/http-rpc-methods.ts#COMMAND_RPC_METHODS": "sha256:4b675a84ef475c2fe0e864457c254c2e888de942e4ae428d5b3e1fa72101e97b",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthDecision": "sha256:a7fc2a91f998ce62b107b14dd9b6fcf1f4ca5abe2e30d4df5a0896d56a0a52f8",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHook": "sha256:1ed0ba84708f040787d81d7f546c8b6e0cb8c319625d6c654ece3819be2de8e6",
-    "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext": "sha256:c555532dcc31c106d893445d2cff01ad6c5e5b3390b86fad982385059ec69663",
+    "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext": "sha256:f6b0b0ff2db474168b53af51994c81d32459b5010f643c965eba66f3ca89b737",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookResult": "sha256:d52c3f14ff05da925a8efc53b9eac4538826ba615ab9fc073eeed4f3df678086",
     "packages/daemon/src/server/http/http-rpc-methods.ts#INSTALL_FROM_SOURCE_RPC_METHODS": "sha256:d0dc3f3d872e7384343e28aaaf2b57e0da822e654a2e345fb108d160f520c16d",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcRequest": "sha256:7c299fe17818993a0bacbb48e12dcd1fd28b3595cf8efcae3484acbec383ce22",
@@ -110,7 +110,7 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_REQUEST_MAX_BYTES": "sha256:4348e1d7a6d025d6d75fddf075e52fe0555ce7c7b69b4dd4d64dc28ce1f73a87",
     "packages/daemon/src/server/http/http-rpc-methods.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "packages/daemon/src/server/http/http-rpc-methods.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
+    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:fb9e27061647c54004dff224e21c6bf7067bfbce20b26a67f852b47314685560",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "packages/daemon/src/server/http/http-authorization.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "packages/daemon/src/server/http/http-rpc-methods.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -128,16 +128,16 @@
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
     "packages/daemon/src/core/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
     "packages/daemon/src/core/session-tenant-scope.ts#isTenantAddressableSessionName": "sha256:cc8ae18094b7f57d4bb694678f84ba767637b1087fd28058ffd6a3c92c79f05d",
-    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:6521ffa355c57af97bfc8095699f2a2b38745a6ef8d61a34c8cfc80ee690b6b5",
+    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:02ded2a09bfc09e5b45666ec00e72913c77a00c6118ffcff087fdceb7d1aa243",
     "packages/daemon/src/server/upload-http.ts#DIRECT_UPLOAD_PATH_PREFIX": "sha256:6fe7d42a65baceb595d96b6aa83fe9aa84527d9aa2e448d7ef47882d31a03276",
     "packages/daemon/src/server/upload-http.ts#UploadFinalizeBody": "sha256:c358aea9b3c341f51f3fa263032dfda8a3fbbf729396fcf7f2d8aa051b231b8b",
     "packages/daemon/src/server/upload-http.ts#UploadHttpRoute": "sha256:3fee66976292bedc9587e266f7f584ff27574e939329bb3ecb98f100c4c54b2e",
     "packages/daemon/src/server/upload-http.ts#UploadPreflightBody": "sha256:05b5e8bd75887f821c44cd54b027f09de1ea08c6e41c44d4dc9ec7cf09fc1ea5",
     "packages/daemon/src/server/upload-http.ts#buildUploadTicketAuthHeaders": "sha256:04d65207c440424257ea04a86fa50fd27f5e6b62e8cede884d9af1db4fb86475",
-    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:ef8045a0d5c267e51842f5a6d205885d455a678e9eb6183bc2a4706b28158fd2",
-    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:63184210d79fbe0f5cb514cb69637db020c3b13513c4441b7041170ae0df043d",
-    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:688d98edb33e00cd736e47af03c85fa36b7a02c2d655850ac3e230277c3a1687",
-    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:3dd32f24bdd20dd5f703251f6c9945a49fea84b4c2a0cab07e14513bb1174685",
+    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:7b40e37651593d0b8f24a7b9677654258d551461bc930f84c81c01dff0492546",
+    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:1be0a0f0210081bf3d8754073a1863945604e9ab6710e1055285b9660e91d400",
+    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:4304c79637cceac7782497ac71879b8006f438669a1d4857fcd2872e1e0f4063",
+    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:1eb40a7adbb18c40fc37d50db3a2f6e09a542a80360fbd5257aefa8d4f707689",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
     "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
@@ -307,8 +307,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
-      "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "digest": "sha256:fb9e27061647c54004dff224e21c6bf7067bfbce20b26a67f852b47314685560",
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -567,23 +567,23 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
-      "digest": "sha256:3dd32f24bdd20dd5f703251f6c9945a49fea84b4c2a0cab07e14513bb1174685",
-      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, renewed only after body bytes pass the bounded JSON reader or file writer, and stopped at body completion so post-body work observes just the aggregate, plus explicit 30s/600s header and body ceilings on the daemon listener. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before."
+      "digest": "sha256:1eb40a7adbb18c40fc37d50db3a2f6e09a542a80360fbd5257aefa8d4f707689",
+      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, renewed only after body bytes pass the bounded JSON reader or file writer, and stopped at body completion so post-body work observes just the aggregate, plus explicit 30s/600s header and body ceilings on the daemon listener. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUpload",
-      "digest": "sha256:63184210d79fbe0f5cb514cb69637db020c3b13513c4441b7041170ae0df043d",
-      "rationale": "#4441 bounds the single-shot upload with the same finite ingress budgets and threads the request's ingress signal into the owned post-body hash and extraction; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
+      "digest": "sha256:1be0a0f0210081bf3d8754073a1863945604e9ab6710e1055285b9660e91d400",
+      "rationale": "#4441 bounds the single-shot upload with the same finite ingress budgets and threads the request's ingress signal into the owned post-body hash and extraction; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleResumableUpload",
-      "digest": "sha256:ef8045a0d5c267e51842f5a6d205885d455a678e9eb6183bc2a4706b28158fd2",
-      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before."
+      "digest": "sha256:7b40e37651593d0b8f24a7b9677654258d551461bc930f84c81c01dff0492546",
+      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadFinalize",
-      "digest": "sha256:688d98edb33e00cd736e47af03c85fa36b7a02c2d655850ac3e230277c3a1687",
-      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets, renews inactivity on JSON bytes accepted by the bounded reader, and passes the request's ingress signal through the serialized admission into the post-body hash, the owned extraction stream and the artifact registration boundary; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
+      "digest": "sha256:4304c79637cceac7782497ac71879b8006f438669a1d4857fcd2872e1e0f4063",
+      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets, renews inactivity on JSON bytes accepted by the bounded reader, and passes the request's ingress signal through the serialized admission into the post-body hash, the owned extraction stream and the artifact registration boundary; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse",
@@ -599,6 +599,16 @@
       "declaration": "packages/remote/src/artifact-download.ts#RemoteArtifactDownload",
       "digest": "sha256:e87a625bdff05fa55f6321ff09a35496f59edd228a1d7420268d54fcc2982868",
       "rationale": "#4511 adds the optional client-local privateFile field: the download creates a new 0600 file exclusively, never through a symbolic link, and stops once it crosses maxBytes. It is never sent, and every existing call site omits it, so the GET /artifacts/:id framing is unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext",
+      "digest": "sha256:f6b0b0ff2db474168b53af51994c81d32459b5010f643c965eba66f3ca89b737",
+      "rationale": "#4441 adds an optional signal to the auth hook context, aborted when the authorized upload request expires or its client disconnects. The field is server-internal to the hook module the operator loads; no wire request or response field changes, so a released peer parses everything as before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer",
+      "digest": "sha256:02ded2a09bfc09e5b45666ec00e72913c77a00c6118ffcff087fdceb7d1aa243",
+      "rationale": "#4441 adds the upload ingress signal to the internal authorizer callback the upload routes call. It is not a wire field; routes, headers, bodies and status codes are unchanged, so a released peer interoperates as before."
     }
   ]
 }

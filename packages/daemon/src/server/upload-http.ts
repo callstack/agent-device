@@ -41,6 +41,8 @@ type AuxiliaryHttpAuthorizer = (params: {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
+  /** The upload ingress signal: authorization stops at the same deadline or disconnect. */
+  signal: AbortSignal;
 }) => Promise<{ tenantId?: string } | null>;
 
 export function tryHandleUploadHttpRoute(params: {
@@ -108,6 +110,7 @@ async function handleUpload(
     const auth = await authorize({
       req,
       res,
+      signal: ingress.signal,
       daemonRequest: {
         command: 'upload',
         positionals: [],
@@ -144,6 +147,7 @@ async function handleUploadPreflight(
     const auth = await authorize({
       req,
       res,
+      signal: ingress.signal,
       daemonRequest: {
         command: 'upload',
         positionals: ['preflight'],
@@ -184,6 +188,7 @@ async function handleResumableUpload(
     const auth = await authorize({
       req,
       res,
+      signal: ingress.signal,
       daemonRequest: {
         command: 'upload',
         positionals: ['direct', uploadId],
@@ -228,6 +233,7 @@ async function handleUploadFinalize(
     const auth = await authorize({
       req,
       res,
+      signal: ingress.signal,
       daemonRequest: {
         command: 'upload',
         positionals: ['finalize'],

@@ -41,8 +41,9 @@ export type UploadTransferIngress = {
  * destroys the request stream and aborts owned work with a typed reason.
  *
  * The ingress also owns the early-answer rule: every answer sent before the body is
- * fully read carries `Connection: close`, and that connection ends after the answer
- * flushes, under these timers. A keep-alive connection never drains an unread body
+ * consumed carries `Connection: close`, and that connection ends after the answer
+ * flushes, under these timers. A failure while the body is being consumed destroys the
+ * request instead. A keep-alive connection never drains an unread body
  * outside the ingress budget. The close lingers (RFC 9112 §9.6): the server half-closes
  * after the answer and discards the rest of the body until the body ends, the client
  * closes, or a timer fires. A full close with unread bytes resets the connection, and
@@ -55,7 +56,7 @@ export function beginUploadTransferIngress(params: {
   const { req, res } = params;
   // Until the body is complete, any answer is an early answer.
   res.setHeader('connection', 'close');
-  const restoreClose = lingerUntilBodyEnds(req);
+  const releaseLinger = holdLingeringClose(req);
   const expiry = new AbortController();
   const signal = AbortSignal.any([expiry.signal, responseDisconnectSignal(req, res)]);
   const aggregateTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
@@ -90,7 +91,7 @@ export function beginUploadTransferIngress(params: {
     // A finished exchange may already have detached its socket.
     const socket = req.socket as IncomingMessage['socket'] | null;
     if (req.complete || !socket || socket.destroyed) {
-      restoreClose();
+      releaseLinger();
       stopTimers();
       return;
     }
@@ -131,7 +132,7 @@ export function beginUploadTransferIngress(params: {
       if (!disposed && bytes > 0) armInactivity();
     },
     bodyComplete() {
-      restoreClose();
+      releaseLinger();
       if (!res.headersSent) res.removeHeader('connection');
       if (!disposed) stopInactivity();
     },
@@ -140,29 +141,56 @@ export function beginUploadTransferIngress(params: {
 }
 
 /**
- * Makes the connection's close linger while this request's body is unread: the socket
- * half-closes after the answer, and the full close waits until the body ends. Node calls
- * `destroySoon` after a `Connection: close` answer; this request owns that call only
- * until it returns the original. Returns the function that restores it.
+ * The one close owner of a socket. Node calls `destroySoon` after a `Connection: close`
+ * answer. While any request on the socket still has an unread body, the owner only
+ * half-closes, and the full close waits until the last such body ends or its request
+ * closes. Requests register their interest; none of them replaces the owner.
  */
-function lingerUntilBodyEnds(req: IncomingMessage): () => void {
-  const socket = req.socket as IncomingMessage['socket'] | null;
-  if (!socket) return () => {};
-  const closeNow = socket.destroySoon;
-  let lingering = false;
+type SocketCloseOwner = {
+  readonly unread: Set<IncomingMessage>;
+  lingering: boolean;
+  readonly closeNow: () => void;
+};
+
+const socketCloseOwners = new WeakMap<Socket, SocketCloseOwner>();
+
+function socketCloseOwner(socket: Socket): SocketCloseOwner {
+  const existing = socketCloseOwners.get(socket);
+  if (existing) return existing;
+  const destroySoon = socket.destroySoon;
+  const owner: SocketCloseOwner = {
+    unread: new Set(),
+    lingering: false,
+    closeNow: () => destroySoon.call(socket),
+  };
   socket.destroySoon = function lingeringClose(this: Socket): void {
-    if (req.complete) {
-      closeNow.call(this);
+    if (owner.unread.size === 0) {
+      owner.closeNow();
       return;
     }
     if (this.writable) this.end();
-    if (lingering) return;
-    lingering = true;
-    req.once('end', () => closeNow.call(this));
+    owner.lingering = true;
   };
-  return () => {
-    if (!lingering) socket.destroySoon = closeNow;
+  socketCloseOwners.set(socket, owner);
+  return owner;
+}
+
+/**
+ * Registers this request's unread body with its socket's close owner. Returns the release
+ * for the moment the body no longer needs a lingering close; release is idempotent.
+ */
+function holdLingeringClose(req: IncomingMessage): () => void {
+  const socket = req.socket as IncomingMessage['socket'] | null;
+  if (!socket || req.complete) return () => {};
+  const owner = socketCloseOwner(socket);
+  owner.unread.add(req);
+  const release = () => {
+    if (!owner.unread.delete(req)) return;
+    if (owner.lingering && owner.unread.size === 0) owner.closeNow();
   };
+  req.once('end', release);
+  req.once('close', release);
+  return release;
 }
 
 /**
@@ -171,14 +199,14 @@ function lingerUntilBodyEnds(req: IncomingMessage): () => void {
  * failure, so its typed reason is reported. A failure that is already a typed AppError
  * (an earlier classification such as a byte limit or ticket expiry) is kept unchanged.
  */
-export function resolveIngressFailure(signal: AbortSignal | undefined, error: unknown): unknown {
-  if (!signal?.aborted || error instanceof AppError) return error;
+export function resolveIngressFailure(signal: AbortSignal | undefined, failure: unknown): unknown {
+  if (!signal?.aborted || failure instanceof AppError) return failure;
   try {
     throwIfIngressAborted(signal);
-  } catch (reason) {
-    return reason;
+  } catch (error) {
+    return error;
   }
-  return error;
+  return failure;
 }
 
 /** Throws the ingress owner's typed abort reason when its signal already fired. */

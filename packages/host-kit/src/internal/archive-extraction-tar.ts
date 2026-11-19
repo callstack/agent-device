@@ -50,7 +50,7 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
           'Archive contents changed after inspection',
         );
       }
-      await writeTarEntry(entry, manifestEntry, options.outputRoot, reservation);
+      await writeTarEntry(entry, manifestEntry, options.outputRoot, reservation, options.signal);
       reservation.commitEntry();
     }
     await extraction;
@@ -146,19 +146,27 @@ function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry |
   return { name, kind, size, mode: extractedEntryMode(kind, header.mode) };
 }
 
+/**
+ * Writes one entry under the extraction's signal. The signal is checked after each
+ * filesystem await, so no writer opens after a cancellation, and the entry pipeline joins
+ * its own writer before it settles, so cleanup never races an open write.
+ */
 async function writeTarEntry(
   entry: tar.Entry,
   manifestEntry: ArchiveManifestEntry,
   outputRoot: string,
   reservation: { chargeBytes(bytes: number): void },
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const outputPath = resolveArchiveOutputPath(outputRoot, manifestEntry.name);
   if (manifestEntry.kind === 'directory') {
-    await createExtractedDirectory(outputPath, manifestEntry.mode);
+    await createExtractedDirectory(outputPath, manifestEntry.mode, signal);
+    signal?.throwIfAborted();
     await drainTarEntry(entry);
     return;
   }
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  signal?.throwIfAborted();
   await pipeline(
     entry,
     async function* (source) {
@@ -168,6 +176,7 @@ async function writeTarEntry(
       }
     },
     createWriteStream(outputPath, { flags: 'wx', mode: manifestEntry.mode }),
+    { signal },
   );
 }
 

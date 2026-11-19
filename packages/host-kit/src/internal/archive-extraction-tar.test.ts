@@ -74,6 +74,8 @@ test('a tar extraction cancelled during an entry filesystem operation keeps its 
     assert.equal((error as AppError).details?.reason, 'transfer_ingress_deadline_exceeded');
     await flushIO();
     assert.deepEqual(rejections, []);
+    // No entry writer opened after the cancellation, so nothing outlives the cleanup.
+    assert.deepEqual(await fs.readdir(workspace.outputRoot), []);
   } finally {
     releaseEntry.resolve();
     process.off('unhandledRejection', observeRejection);
