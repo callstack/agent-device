@@ -43,9 +43,10 @@ export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS]
 
 /**
  * The finite aggregate a standalone source-materialization call spends from entry, covering
- * download and extraction. A caller's own earlier deadline (the shared request budget armed at
- * admission) always wins over this one; the aggregate only keeps the API from silently becoming an
- * unbounded download (#4441).
+ * download and extraction. A caller's own earlier deadline always wins over this one: the daemon
+ * hands the request's shared budget (its earliest registered deadline less the deploy-ledger
+ * reserve) to `options.signal`, and any standalone caller may pass its own. The aggregate only
+ * keeps the API from silently becoming an unbounded download (#4441).
  */
 export const SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS = 600_000;
 
@@ -145,11 +146,16 @@ async function classifyMaterializationError(
   signal: AbortSignal,
   aggregateSignal: AbortSignal,
 ): Promise<unknown> {
-  if (!signal.aborted) return error;
   // Keep the transport owner outside the CLI's eager import closure (ADR 0027).
   const { isTransferPhaseTimeoutError } = await import('@agent-device/host-kit/transport');
   if (isTransferPhaseTimeoutError(error)) return error;
-  if (aggregateSignal.aborted && signal.reason === aggregateSignal.reason) {
+  if (!signal.aborted) return error;
+  // Only an abort-shaped failure (the signal's own reason, or an error caused by it) is
+  // relabeled; a typed failure that merely raced an abort during cleanup stays itself.
+  const reason = signal.reason;
+  const abortShaped = error === reason || (error instanceof Error && error.cause === reason);
+  if (!abortShaped) return error;
+  if (aggregateSignal.aborted && reason === aggregateSignal.reason) {
     return sourceMaterializationDeadlineError(error);
   }
   return createRequestCanceledError(undefined, error);

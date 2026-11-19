@@ -1,7 +1,11 @@
 import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import * as inventoryContext from '@agent-device/device-selection/device-inventory-context';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
-import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
+import {
+  INSTALL_SOURCE_DAEMON_DEADLINE_MS,
+  INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS,
+  resolveCommandRequestTimeoutMs,
+} from '@agent-device/command-registry/timeout-policy';
 import * as hostCommands from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
@@ -59,7 +63,7 @@ class InstallLedger {
     elapsedMs?: number,
   ): void {
     assert.ok(
-      typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0,
+      typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs >= 0,
       `Unbounded install phase: ${tool} ${args.join(' ')}`,
     );
     this.calls.push({ tool, args: [...args], timeoutMs });
@@ -79,7 +83,12 @@ type InstallLedgerScenario = ClosableProviderScenarioResource &
   }>;
 
 const REQUIRED_DAEMON_RESULT_MARGIN_MS = 30_000;
+// The standalone materialization aggregate, which only applies when no daemon deadline is armed.
 const EXPECTED_STANDALONE_SOURCE_BUDGET_MS = 600_000;
+// The most materialization may take inside the daemon's source-install work budget: the request
+// deadline less the deploy-ledger reserve (#4441, decisions 6827686874/6856998913).
+const MAX_DAEMON_SOURCE_MATERIALIZATION_MS =
+  INSTALL_SOURCE_DAEMON_DEADLINE_MS - INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS;
 let nextAppleScenarioId = 0;
 
 for (const route of [
@@ -183,12 +192,13 @@ async function runInstallCommand(
 
 function stubSourceDownload(scenario: InstallLedgerScenario): void {
   const timeouts = new WeakMap<AbortSignal, number>();
-  const timeout = AbortSignal.timeout.bind(AbortSignal);
   const any = AbortSignal.any.bind(AbortSignal);
+  // Record the armed budget without letting the real timer fire: the ledger proves the derived
+  // values, while actual expiry is proven by the router and provision-kit deadline tests.
   vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
-    const signal = timeout(ms);
-    timeouts.set(signal, ms);
-    return signal;
+    const controller = new AbortController();
+    timeouts.set(controller.signal, ms);
+    return controller.signal;
   });
   vi.spyOn(AbortSignal, 'any').mockImplementation((signals) => {
     const signal = any(signals);
@@ -440,18 +450,27 @@ function assertLedgerFitsEnvelope(
     flags: {},
   });
   assert.ok(envelopeMs !== undefined, `${command} must declare a bounded envelope`);
-  // The observed download timer bounds standalone materialization. The daemon's shared
-  // source-work deadline applies to the whole route; its enforcement requires a route test.
+  // On a daemon route the download timer is the armed request cutoff: the request deadline less
+  // the deploy-ledger reserve, derived from the admission — never the standalone 600s aggregate,
+  // which cannot fit this sum once the download call is included below.
   for (const call of ledger.filter(({ tool }) => tool === 'download')) {
-    assert.equal(
+    assert.ok(
+      call.timeoutMs <= MAX_DAEMON_SOURCE_MATERIALIZATION_MS,
+      `${route} ${command} download must run under the daemon-derived cutoff ` +
+        `(<= ${MAX_DAEMON_SOURCE_MATERIALIZATION_MS}ms), got ${call.timeoutMs}ms`,
+    );
+    assert.notEqual(
       call.timeoutMs,
       EXPECTED_STANDALONE_SOURCE_BUDGET_MS,
-      `${route} ${command} must arm the finite standalone source budget`,
+      `${route} ${command} download must not fall back to the standalone 600s budget on a daemon route`,
     );
   }
-  const virtualElapsedMs = ledger
-    .filter((call) => call.tool !== 'download')
-    .reduce((total, call) => total + Math.max(0, call.timeoutMs - 1), 0);
+  // The whole route — readiness, download and the deploy ledger — must fit the envelope with the
+  // result margin left over, so a 600s download value fails this sum.
+  const virtualElapsedMs = ledger.reduce(
+    (total, call) => total + Math.max(0, call.timeoutMs - 1),
+    0,
+  );
   assert.ok(
     virtualElapsedMs + REQUIRED_DAEMON_RESULT_MARGIN_MS <= envelopeMs,
     `${route} ${command} ledger worst case (${virtualElapsedMs}ms) + ` +

@@ -2,6 +2,7 @@ export {
   cancelAllRequests,
   clearRequestAbortRegistration,
   clearRequestCanceled,
+  getRequestBudgetSignal,
   getRequestDeadlineMs,
   getRequestSignal,
   getRequestExecutionDeadlineMs,

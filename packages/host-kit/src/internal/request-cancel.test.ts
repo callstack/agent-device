@@ -12,6 +12,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
+  getRequestBudgetSignal,
   getRequestDeadlineMs,
   getRequestExecutionDeadlineMs,
   getRequestReadOnlyDeadlineMs,
@@ -841,4 +842,101 @@ test('an already-expired result deadline does not relabel an earlier explicit ca
     clearRequestAbortRegistration(registration);
     vi.useRealTimers();
   }
+});
+
+test('getRequestBudgetSignal derives deadline-minus-reserve and composes shared cancellation', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_900_000_000_000);
+  const start = Date.now();
+  const requestId = 'budget-signal-composed';
+  const reserveMs = 450_000;
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: start + 570_000,
+  });
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    const budget = getRequestBudgetSignal(requestId, reserveMs);
+    assert.ok(budget, 'a request with an armed deadline yields a budget signal');
+    assert.notEqual(
+      budget,
+      getRequestSignal(requestId),
+      'the budget adds the remaining-timeout part',
+    );
+    assert.equal(budget!.aborted, false);
+    assert.ok(
+      timeoutSpy.mock.calls.some(([ms]) => ms === 570_000 - reserveMs),
+      `the timeout part must be the remaining deadline less the reserve, got ${JSON.stringify(
+        timeoutSpy.mock.calls,
+      )}`,
+    );
+    // The shared runtime cancellation composes into the same signal.
+    markRequestCanceled(requestId);
+    assert.equal(budget!.aborted, true, 'operator cancellation aborts the composed signal');
+    assert.ok(isRequestCanceledError(budget!.reason), 'the cancellation reason is preserved');
+  } finally {
+    timeoutSpy.mockRestore();
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('getRequestBudgetSignal expires for real at the derived remaining budget', async () => {
+  const requestId = 'budget-signal-real-expiry';
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: Date.now() + 40,
+  });
+  try {
+    const budget = getRequestBudgetSignal(requestId, 10);
+    assert.ok(budget);
+    assert.equal(budget!.aborted, false);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(budget!.aborted, true, 'the timeout part fires at the derived remaining budget');
+    assert.equal(getRequestSignal(requestId)?.aborted, false, 'the request itself is not expired');
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+test('getRequestBudgetSignal honors an earlier execution deadline and clamps a spent reserve', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_900_000_000_000);
+  const start = Date.now();
+  const requestId = 'budget-signal-earlier-execution';
+  const registration = registerRequestAbort(requestId, undefined, {
+    resultDeadlineMs: start + 570_000,
+  });
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    // An earlier registered execution deadline wins over the result deadline.
+    await withRequestDeadline(requestId, 200_000, async () => {
+      const budget = getRequestBudgetSignal(requestId, 450_000);
+      assert.ok(budget);
+      assert.equal(getRequestDeadlineMs(requestId), start + 200_000);
+      assert.ok(
+        timeoutSpy.mock.calls.some(([ms]) => ms === 0),
+        'a reserve larger than the remaining deadline clamps to zero, not to an independent maximum',
+      );
+      return { ok: true };
+    });
+  } finally {
+    timeoutSpy.mockRestore();
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('getRequestBudgetSignal without an armed deadline returns the request signal unchanged', () => {
+  const requestId = 'budget-signal-no-deadline';
+  const registration = registerRequestAbort(requestId);
+  try {
+    const budget = getRequestBudgetSignal(requestId, 450_000);
+    assert.equal(
+      budget,
+      getRequestSignal(requestId),
+      'no deadline: the caller signal is the only cap',
+    );
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+  assert.equal(getRequestBudgetSignal('never-registered', 450_000), undefined);
 });

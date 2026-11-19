@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { afterEach, test, vi, type Mock } from 'vitest';
+import { INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS } from '@agent-device/command-registry/timeout-policy';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   AppDeploymentResult,
   MaterializedAppSource,
@@ -36,6 +39,7 @@ import { createRequestHandler } from '../../__tests__/support/test-device-runtim
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { startRpcServer } from './http-server-rpc.fixtures.ts';
+import { createSocketServer, listenNetServer } from '../http/transport.ts';
 
 // #4441 (decisions 6827686874/6856998913): the real-route proof for the descriptor candidate —
 // a source-install request admitted over loopback HTTP/RPC ingress, routed by the real request
@@ -205,6 +209,8 @@ type ProviderSpies = {
   deployMaterializedApp: Mock<PlatformRuntimeOperations['deployMaterializedApp']>;
   /** The request scope's signal, captured when the router binds the device. */
   scopeSignal: AbortSignal | undefined;
+  /** The cutoff signal the handler passed into materialization, captured per call. */
+  inputSignal: AbortSignal | undefined;
 };
 
 /**
@@ -226,13 +232,17 @@ function makeProviderGateway(
     inspectFacts: vi.fn(),
     bind: vi.fn(),
     ensureReady: vi.fn(async () => ({ ...ANDROID_DEVICE, booted: true })),
-    materializeAppSource: vi.fn(materializeFactory(() => spies.scopeSignal)),
+    materializeAppSource: vi.fn((input) => {
+      spies.inputSignal = input.signal;
+      return materializeFactory(() => spies.scopeSignal)(input);
+    }),
     deployMaterializedApp: vi.fn(async (): Promise<AppDeploymentResult> => ({
       packageName: 'com.example.app',
       appName: 'Example App',
       launchTarget: 'com.example.app',
     })),
     scopeSignal: undefined,
+    inputSignal: undefined,
   };
   const admittedFacts = (device: DeviceInfo) => {
     const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));
@@ -584,3 +594,137 @@ test('ordinary install_source over loopback RPC succeeds end to end (benign cont
     await closeLoopbackServer(server);
   }
 });
+
+// #4726 review f1: on BOTH daemon entry transports (HTTP /rpc and the newline socket), the armed
+// request cutoff must reach the materialization binding as the request's earliest registered
+// deadline less the deploy-ledger reserve (570s - 450s = 120s from admission), composed with the
+// request's shared cancellation — while the binding's scope signal keeps the full 570s deadline.
+const MATERIALIZATION_CUTOFF_MS = SOURCE_DEADLINE_MS - INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS;
+
+/** A materialization that observes the cutoff signal the handler passed in, as provision-kit does. */
+function inputSignalMaterialize(): PlatformRuntimeOperations['materializeAppSource'] {
+  const op: PlatformRuntimeOperations['materializeAppSource'] = (input) =>
+    new Promise<MaterializedAppSource>((_resolve, reject) => {
+      const signal = input.signal;
+      assert.ok(signal, 'materialization must receive the daemon-derived cutoff signal');
+      if (signal.aborted) reject(signal.reason);
+      else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  return op;
+}
+
+async function sendSocketRequest(port: number, request: DaemonRequest): Promise<DaemonResponse> {
+  return await withRealGuard(
+    new Promise<DaemonResponse>((resolve, reject) => {
+      const socket = net.createConnection({ host: '127.0.0.1', port });
+      socket.setEncoding('utf8');
+      let buffer = '';
+      socket.on('data', (chunk: string) => {
+        buffer += chunk;
+        const newline = buffer.indexOf('\n');
+        if (newline === -1) return;
+        socket.destroy();
+        resolve(JSON.parse(buffer.slice(0, newline)) as DaemonResponse);
+      });
+      socket.once('error', reject);
+      socket.once('connect', () => socket.write(`${JSON.stringify(request)}\n`));
+    }),
+  );
+}
+
+for (const transport of ['http-rpc', 'socket'] as const) {
+  test(`${transport}: the armed request cutoff reaches materialization as deadline less deploy-ledger reserve`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { gateway, spies } = makeProviderGateway(() => inputSignalMaterialize());
+    const { handler } = makeRouterHarness(gateway);
+    const requestId = `req-install-source-cutoff-${transport}`;
+    let answer: Promise<unknown>;
+    let server: http.Server | net.Server;
+    let port: number;
+    if (transport === 'http-rpc') {
+      const started = await startRpcServer(TOKEN, handler);
+      server = started.server;
+      port = started.port;
+    } else {
+      const socketServer = createSocketServer(handler);
+      server = socketServer;
+      port = await listenNetServer(socketServer);
+    }
+    try {
+      vi.useFakeTimers();
+      vi.setSystemTime(START_MS);
+      // AbortSignal.timeout runs on an internal timer the fake clock does not drive; rearm it on
+      // the faked setTimeout so the derived cutoff fires at its armed value under the fake clock.
+      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(
+          () => controller.abort(new DOMException('This operation timed out', 'TimeoutError')),
+          ms,
+        );
+        return controller.signal;
+      });
+      answer =
+        transport === 'http-rpc'
+          ? postRpc(port, installSourceRpcBody(requestId))
+          : sendSocketRequest(port, installSourceRequest(requestId));
+      await waitFor(
+        () => spies.materializeAppSource.mock.calls.length > 0,
+        'the provider materialization to start',
+      );
+      const inputSignal = spies.inputSignal;
+      assert.ok(inputSignal, 'the handler must pass the derived cutoff into materialization');
+      assert.equal(inputSignal!.aborted, false);
+      assert.ok(
+        timeoutSpy.mock.calls.some(([ms]) => ms === MATERIALIZATION_CUTOFF_MS),
+        `the cutoff must be armed at deadline less reserve (${MATERIALIZATION_CUTOFF_MS}ms), got ${JSON.stringify(
+          timeoutSpy.mock.calls,
+        )}`,
+      );
+
+      await vi.advanceTimersByTimeAsync(MATERIALIZATION_CUTOFF_MS - 1);
+      assert.equal(inputSignal!.aborted, false, 'no cutoff before deadline minus reserve');
+      assert.equal(spies.scopeSignal?.aborted, false, 'the shared deadline is still running');
+
+      await vi.advanceTimersByTimeAsync(1);
+      assert.equal(
+        inputSignal!.aborted,
+        true,
+        'materialization cutoff at the request deadline less the deploy-ledger reserve',
+      );
+      assert.equal(
+        spies.scopeSignal?.aborted,
+        false,
+        'the binding scope keeps the full 570s request deadline, not the materialization cutoff',
+      );
+
+      const raw = await withRealGuard(answer);
+      if (transport === 'http-rpc') {
+        const rpc = raw as RpcAnswer;
+        assert.equal(rpc.body.result, undefined, 'no success result on the wire');
+        assert.ok(rpc.body.error, 'the cutoff must answer as an error');
+      } else {
+        const response = raw as DaemonResponse;
+        assert.equal(
+          response.ok,
+          false,
+          'a request whose materialization cutoff passed must not succeed',
+        );
+        assert.ok(response.ok === false && response.error, 'the cutoff must answer as an error');
+      }
+      assert.equal(
+        spies.deployMaterializedApp.mock.calls.length,
+        0,
+        'deployment must not run after the materialization cutoff',
+      );
+      assert.equal(
+        getRequestSignal(requestId),
+        undefined,
+        'the request registration is released after the answer',
+      );
+    } finally {
+      vi.mocked(AbortSignal.timeout).mockRestore();
+      await closeLoopbackServer(server);
+      vi.useRealTimers();
+    }
+  });
+}

@@ -28,6 +28,17 @@ export const INSTALL_SOURCE_DAEMON_DEADLINE_MS =
   INSTALL_SOURCE_REQUEST_TIMEOUT_MS - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
 
 /**
+ * The worst case the install/reinstall/uninstall deploy ledger may still spend after source
+ * materialization, proven by the same ledger test. A source install reserves it inside the
+ * daemon's work budget (#4441, decisions 6827686874/6856998913): materialization may run only
+ * until the request's earliest registered deadline less this reserve, so materialization plus
+ * the deploy ledger still finish before the result deadline. Standalone materialization keeps
+ * its own 600 s aggregate instead.
+ */
+export const INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS =
+  INSTALL_REQUEST_TIMEOUT_MS - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+
+/**
  * The longest `alert wait` window the request envelope can be armed for.
  *
  * The client arms its envelope with a timer whose delay ceiling is 2^31-1 ms; past it Node does not

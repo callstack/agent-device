@@ -39,6 +39,12 @@ export type AppDeploymentResult = Readonly<{
 
 export type MaterializeAppSourceInput = Readonly<{
   source: AppDeploymentSource;
+  /**
+   * The cutoff materialization must observe, derived by the daemon from the request's earliest
+   * registered deadline less the deploy-ledger reserve (#4441). When absent, the binding's
+   * request scope signal applies.
+   */
+  signal?: AbortSignal;
 }>;
 
 export type DeployMaterializedAppInput = Readonly<{
