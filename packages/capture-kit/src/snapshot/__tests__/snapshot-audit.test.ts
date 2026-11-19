@@ -246,12 +246,22 @@ describe('ambiguous-name', () => {
     expect(summarize(findings)).toEqual(['missing-name @e1', 'missing-name @e2']);
   });
 
-  test('collapses the duplicated wrapper that shares its parent control name', () => {
+  test('counts one control exposed as a wrapper and its only child once', () => {
     const { findings } = audit([
       node(1, { label: 'Save' }),
       node(2, { parentIndex: 1, label: 'Save' }),
     ]);
-    expect(summarize(findings)).toEqual(['ambiguous-name @e1']);
+    expect(summarize(findings)).toEqual([]);
+  });
+
+  test('reports each wrapper once when two wrapped controls share one name', () => {
+    const { findings } = audit([
+      node(1, { label: 'Save' }),
+      node(2, { parentIndex: 1, label: 'Save' }),
+      node(3, { label: 'Save' }),
+      node(4, { parentIndex: 3, label: 'Save' }),
+    ]);
+    expect(summarize(findings)).toEqual(['ambiguous-name @e1', 'ambiguous-name @e3']);
   });
 
   test('guides the caller to a unique label naming the target', () => {

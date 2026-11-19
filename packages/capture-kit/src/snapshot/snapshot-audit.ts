@@ -110,6 +110,8 @@ function evaluatedNameGroup(
 ): string | undefined {
   if (node.ref === undefined || !isActionable(node, controlOwnership(node, facts)))
     return undefined;
+  // One control exposed twice counts once: the wrapper speaks for it.
+  if (isDuplicateExposure(node, role, facts)) return undefined;
   const name = accessibleName(node, role, facts);
   return name === undefined ? undefined : nameGroupKey(role, name);
 }
@@ -170,10 +172,19 @@ function collapseIntoParent(
   rule: SizeRule,
 ): AuditFinding[] {
   const parent = parentOf(node, scan);
-  if (!parent || controlRole(parent) !== role) return findings;
-  if (scan.children.get(parent.index)?.length !== 1) return findings;
+  if (!parent || !isDuplicateExposure(node, role, scan)) return findings;
   const parentKinds = new Set(controlFindings(parent, role, scan, rule).map(({ kind }) => kind));
   return findings.filter(({ kind }) => !parentKinds.has(kind));
+}
+
+/** The only child of a control of the same role: the same control, exposed twice. */
+function isDuplicateExposure(node: SnapshotNode, role: string, scan: AuditFacts): boolean {
+  const parent = parentOf(node, scan);
+  return (
+    parent !== undefined &&
+    controlRole(parent) === role &&
+    scan.children.get(parent.index)?.length === 1
+  );
 }
 
 function controlRole(node: SnapshotNode): string | undefined {
