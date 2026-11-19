@@ -8,6 +8,7 @@ let package = Package(
     .macOS(.v13),
     .tvOS(.v15),
     .visionOS(.v1),
+    .watchOS(.v10),
   ],
   products: [
     .library(

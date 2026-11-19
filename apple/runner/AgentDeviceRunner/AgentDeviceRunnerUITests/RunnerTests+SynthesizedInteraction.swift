@@ -774,6 +774,12 @@ extension RunnerTests {
     if plan.contactOrigin == runnerScreenEdgeContactOrigin {
       return .screenEdgeTouch
     }
+#elseif os(watchOS)
+    // The watchOS sampled path starts a screen-edge contact on the edge itself; a fast coordinate
+    // drag would start inside the plan's in-content margin and reach a row instead.
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin {
+      return .sampled(schedule: nil)
+    }
 #endif
     guard plan.topology == "single" else { return .sampled(schedule: nil) }
     return plan.executionProfile == "endpoint-hold" ? .fastSwipe : .sampled(schedule: plan.executionProfile)

@@ -952,8 +952,8 @@ function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
 }
 
 function appleDeviceSelectionRank(device: DeviceInfo): number {
-  // A watch answers `--platform ios` only when no other Apple simulator can.
-  if (device.kind === 'simulator' && device.appleOs === 'watchos') return 4;
+  // A watch answers `--platform ios` only when no other Apple device can.
+  if (device.appleOs === 'watchos') return 15;
   if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, 1, 2, 3);
   if (device.kind === 'device' && isApplePlatform(device.platform) && !isMacOs(device))
     return appleTargetSelectionRank(device, 10, 11, 12, 13);

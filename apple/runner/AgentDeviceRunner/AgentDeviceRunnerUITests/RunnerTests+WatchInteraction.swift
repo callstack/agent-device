@@ -11,6 +11,9 @@ extension RunnerTests {
   static let watchInputSheetTimeout: TimeInterval = 3.0
   /// The input sheet's commit button. The sheet exposes no identifier for it.
   static let watchInputSheetDoneLabel = "Done"
+  /// How long a crown scroll waits for its deceleration. A tap sent while the list still moves is
+  /// absorbed by the scroll view instead of reaching its target.
+  static let watchCrownSettleInterval: TimeInterval = 0.35
 
   /// `scroll` on a watch turns the Digital Crown, the watch's scroll input. The crown is vertical,
   /// so a horizontal scroll is refused; horizontal pages answer `swipe`.
@@ -41,6 +44,7 @@ extension RunnerTests {
         XCUIDevice.shared.rotateDigitalCrown(delta: direction == .down ? delta : -delta)
       }
     }
+    RunLoop.current.run(until: Date().addingTimeInterval(Self.watchCrownSettleInterval))
     return gestureResponse(message: "scrolled", timing: timing)
   }
 
@@ -48,8 +52,9 @@ extension RunnerTests {
   /// the two ways watchOS pops a navigation stack.
   @MainActor
   func performWatchBack(app: XCUIApplication) throws -> InAppBackOutcome {
-    let button = app.buttons[Self.navigationBarBackButtonIdentifier]
-    if button.exists, button.isHittable {
+    // A push transition can briefly show two back buttons; only an unambiguous one is pressed.
+    let buttons = app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex
+    if buttons.count == 1, let button = buttons.first, button.isHittable {
       let frame = button.frame
       _ = try tapAt(app: app, x: frame.midX, y: frame.midY)
       return .performed
@@ -76,6 +81,27 @@ extension RunnerTests {
         hint: "watchOS apps have no multi-touch gestures. Use swipe, gesture pan, or scroll."
       )
     }
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+      return .notDispatched(message: "gesture could not resolve the app window", hint: nil)
+    }
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin,
+      let first = plan.pointers[0].samples.first,
+      let last = plan.pointers[0].samples.last
+    {
+      // watchOS starts an edge swipe (back) only from a touch on the screen edge itself, and only
+      // a drag with real travel time; a short synthesized path is read as a tap on a row.
+      let edgeX = first.point.x < Double(resolved.frame.midX)
+        ? Double(resolved.frame.minX) + 1
+        : Double(resolved.frame.maxX) - 1
+      return try dragAt(
+        app: app,
+        x: edgeX,
+        y: first.point.y,
+        x2: last.point.x,
+        y2: last.point.y,
+        holdDuration: coordinateDragHoldDuration()
+      )
+    }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
         [
@@ -85,10 +111,11 @@ extension RunnerTests {
         ]
       }
     }
+    let window = resolved.window
     var dispatched: ObjCBool = false
     let failure = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
-      resolvedWindow: app.windows.firstMatch,
+      resolvedWindow: window,
       interfaceOrientation: 1,
       pointerSamples: pointerSamples,
       dispatched: &dispatched
@@ -120,8 +147,9 @@ extension RunnerTests {
       ))
     }
     withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
-      if resolveTextEntryMode(command) == .replacement {
-        let existing = (activeApp.textViews.firstMatch.value as? String) ?? ""
+      let sheetText = activeApp.textViews.firstMatch
+      if resolveTextEntryMode(command) == .replacement, sheetText.exists {
+        let existing = (sheetText.value as? String) ?? ""
         if !existing.isEmpty {
           activeApp.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
         }
