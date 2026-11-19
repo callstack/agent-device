@@ -270,7 +270,10 @@ test.each(
 )(
   'a remote open to the Windows IPC namespace $spelled (force=$force) is refused before anything else',
   async ({ spelled, force }) => {
-    await expectRefusedBeforeAnything({ saveScript: spelled, ...(force ? { force: true } : {}) });
+    await expectRefusedBeforeAnything(
+      { saveScript: spelled, ...(force ? { force: true } : {}) },
+      { exposure: 'windows_path_form' },
+    );
   },
 );
 
@@ -292,6 +295,7 @@ test.each(
       { saveScript: spelled, ...(force ? { force: true } : {}) },
       {
         cwd,
+        exposure: 'windows_path_form',
         ...(home === undefined ? {} : { host: createTestHostEnvironment({ env: { HOME: home } }) }),
       },
     );

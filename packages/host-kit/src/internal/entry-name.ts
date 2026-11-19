@@ -23,15 +23,23 @@ export function entryNameOrRefuse(spelled: string, rules: path.PlatformPath): st
   return name;
 }
 
+/**
+ * The only Windows path shapes a script is saved under: drive-absolute (`X:\…`), or plain UNC (`\\server\share\…`)
+ * outside the `pipe`, `IPC$` and `mailslot` shares, which open pipes and mailslots. Every other form is refused.
+ */
+function isWindowsVolumePath(candidate: string): boolean {
+  if (/^[a-z]:[\\/]/i.test(candidate)) return true;
+  const unc = /^[\\/]{2}([^\\/]+)[\\/]+([^\\/]+)/.exec(candidate);
+  return (
+    unc !== null &&
+    !/^(?:pipe|IPC\$|mailslot)$/i.test(unc[2] ?? '') &&
+    unc.slice(1).every((part) => !/[:?*<>"|]|[. ]$/.test(part) && !hasControlCharacter(part))
+  );
+}
+
 /** Returns the drive or complete ordinary UNC root of a Windows script path. */
 export function requireWindowsScriptVolume(spelled: string, candidate: string): string {
-  const drive = /^[a-z]:[\\/]/i.test(candidate);
-  const unc = /^[\\/]{2}([^\\/]+)[\\/]+([^\\/]+)/.exec(candidate);
-  if (
-    drive ||
-    (unc &&
-      unc.slice(1).every((part) => !/[:?*<>"|]|[. ]$/.test(part) && !hasControlCharacter(part)))
-  ) {
+  if (isWindowsVolumePath(candidate)) {
     return path.win32.parse(path.win32.normalize(candidate)).root;
   }
   throw new AppError(
@@ -93,36 +101,22 @@ export function scriptEntryName(spelled: string, rules: path.PlatformPath): stri
   }
   // The raw last segment first: a normalization folds a final `.` or `..` away.
   const { base } = rules.parse(spelled);
-  if (base === '' || base === '.' || base === '..' || exceedsNameMax(base, rules)) return undefined;
+  // A name longer than one directory entry holds, 255 UTF-8 bytes on the common POSIX filesystems and 255 UTF-16
+  // units on NTFS, is refused before anything is created, instead of failing after its parent was made.
+  const length = rules.sep === '\\' ? base.length : Buffer.byteLength(base);
+  if (base === '' || base === '.' || base === '..' || length > NAME_MAX) return undefined;
   return rules.sep === '\\' ? windowsEntryName(rules.normalize(spelled), rules) : base;
-}
-
-/**
- * Whether a name is longer than one directory entry can hold: 255 UTF-8 bytes on the common POSIX filesystems,
- * 255 UTF-16 units on NTFS. Refused before anything is created, instead of failing after its parent was made.
- */
-function exceedsNameMax(name: string, rules: path.PlatformPath): boolean {
-  return (rules.sep === '\\' ? name.length : Buffer.byteLength(name)) > NAME_MAX;
 }
 
 const NAME_MAX = 255;
 
 /**
  * The Windows answer, read from the spelling as the publisher's own joins normalize it, so a doubled separator
- * cannot hide a root. A device-namespace path, an extended UNC root that `parse` reads as names, a reserved
- * device name, and a stream after a `:` all name something other than one file.
+ * cannot hide a root. A rooted spelling outside the supported shapes, a reserved device name, and a stream after
+ * a `:` all name something other than one file.
  */
 function windowsEntryName(normalized: string, rules: path.PlatformPath): string | undefined {
-  // The device namespace, and an extended prefix that names anything but a drive or a UNC share.
-  if (/^\\\\\.\\/.test(normalized)) return undefined;
-  if (/^\\\\\?\\/.test(normalized) && !/^\\\\\?\\(?:[A-Z]:\\|UNC\\)/i.test(normalized))
-    return undefined;
-  if (/^\\\\\?\\UNC(?:\\[^\\]+){0,2}\\?$/i.test(normalized)) return undefined;
-  // An IPC share, ordinary or extended, opens a named pipe or a mailslot, not a file: `pipe`, `IPC$` (the SMB
-  // named-pipe share) and `mailslot`. The same names below an ordinary share are ordinary directories.
-  if (/^\\\\(?:\?\\UNC\\)?[^\\]+\\(?:pipe|IPC\$|mailslot)(?:\\|$)/i.test(normalized)) {
-    return undefined;
-  }
+  if (/^[\\/]/.test(normalized) && !isWindowsVolumePath(normalized)) return undefined;
   const { base } = rules.parse(normalized);
   if (base === '' || holdsColonAfterRoot(normalized, rules)) return undefined;
   // Microsoft's naming rules: no reserved character or control character, no trailing dot or space, and no
