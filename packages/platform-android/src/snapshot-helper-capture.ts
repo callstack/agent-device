@@ -29,7 +29,6 @@ import type {
   AndroidAdbExecutor,
   AndroidSnapshotHelperArtifact,
   AndroidSnapshotHelperCaptureOptions,
-  AndroidSnapshotHelperInstallResult,
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
@@ -165,7 +164,6 @@ export function buildAndroidSnapshotHelperCaptureOptions(params: {
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
-  install: AndroidSnapshotHelperInstallResult;
   deviceKey: string;
   signal?: AbortSignal;
 }): AndroidSnapshotHelperCaptureOptions {
@@ -176,7 +174,6 @@ export function buildAndroidSnapshotHelperCaptureOptions(params: {
     helperVersion: params.artifact.manifest.version,
     helperVersionCode: params.artifact.manifest.versionCode,
     helperSha256: params.artifact.manifest.sha256,
-    helperSha256Verified: params.install.verifiedSha256 === params.artifact.manifest.sha256,
     packageName: params.artifact.manifest.packageName,
     instrumentationRunner: params.artifact.manifest.instrumentationRunner,
     waitForIdleTimeoutMs: ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,

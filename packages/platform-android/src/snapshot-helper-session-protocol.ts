@@ -152,20 +152,45 @@ type ReadinessOutcome =
   | { kind: 'ready'; commands: ReadonlySet<string> }
   | { kind: 'failed'; error: AppError };
 
+type StatusRecord = { fields: Map<string, string>; malformed: boolean };
+
+function newStatusRecord(): StatusRecord {
+  return { fields: new Map(), malformed: false };
+}
+
+/** A status line that does not parse, or a key seen twice, makes the whole record malformed. */
+function addStatusLine(record: StatusRecord, line: string): void {
+  if (line === '') return;
+  const field = /^INSTRUMENTATION_STATUS: ([A-Za-z][\w.-]*)=(.*)$/.exec(line);
+  if (!field || record.fields.has(field[1]!)) {
+    record.malformed = true;
+    return;
+  }
+  record.fields.set(field[1]!, field[2]!);
+}
+
 /**
- * Classifies one complete status record. Only a ready record of this protocol decides capability:
- * with the authenticated transport it is ready, and without it the helper predates that
- * transport. A ready record of another protocol is malformed and takes the transient path. Any
- * other record is not readiness, so the wait goes on.
+ * Classifies one complete status record. A ready record decides capability only when it is well
+ * formed: this protocol, a numeric session port, no duplicate or unparsed line. Then the
+ * authenticated transport makes it ready, and no transport field means the helper predates that
+ * transport. Any other ready record is malformed and takes the transient path. A record that is
+ * not readiness is ignored, so the wait goes on.
  */
 function classifyReadinessRecord(
   statusLine: string,
-  fields: ReadonlyMap<string, string>,
+  record: StatusRecord,
 ): ReadinessOutcome | undefined {
+  const { fields } = record;
   if (statusLine !== 'INSTRUMENTATION_STATUS_CODE: 2' || fields.get('sessionReady') !== 'true') {
     return undefined;
   }
-  if (fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL) {
+  const transport = fields.get('sessionTransport');
+  if (
+    record.malformed ||
+    fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL ||
+    !/^\d+$/.test(fields.get('sessionPort') ?? '') ||
+    (transport !== undefined && transport !== SESSION_TRANSPORT)
+  ) {
     return {
       kind: 'failed',
       error: new AppError('COMMAND_FAILED', 'Android snapshot helper readiness is malformed', {
@@ -173,7 +198,7 @@ function classifyReadinessRecord(
       }),
     };
   }
-  if (fields.get('sessionTransport') !== SESSION_TRANSPORT) {
+  if (transport === undefined) {
     return {
       kind: 'failed',
       error: new AppError(
@@ -230,24 +255,27 @@ export function waitForAndroidSnapshotHelperSessionReady(
     // Instrumentation status records arrive on stdout. Only complete lines from that stream form a
     // record, so an adb warning on stderr cannot split a line.
     let pendingLine = '';
-    let recordFields = new Map<string, string>();
+    let statusRecord = newStatusRecord();
     const onStdout = (chunk: Buffer | string) => {
       const lines = (pendingLine + chunk.toString()).split('\n');
       pendingLine = lines.pop() ?? '';
       for (const rawLine of lines) {
         const line = rawLine.replace(/\r$/, '');
-        const field = /^INSTRUMENTATION_STATUS: ([^=]+)=(.*)$/.exec(line);
-        if (field) {
-          recordFields.set(field[1]!, field[2]!);
+        if (line.startsWith('INSTRUMENTATION_STATUS_CODE: ')) {
+          const outcome = classifyReadinessRecord(line, statusRecord);
+          statusRecord = newStatusRecord();
+          if (outcome) {
+            settle(outcome);
+            return;
+          }
           continue;
         }
-        if (!line.startsWith('INSTRUMENTATION_STATUS_CODE: ')) continue;
-        const outcome = classifyReadinessRecord(line, recordFields);
-        recordFields = new Map();
-        if (outcome) {
-          settle(outcome);
-          return;
+        if (/^INSTRUMENTATION_(CODE|RESULT|ABORTED):/.test(line)) {
+          // Another kind of record ends here, so its fields never reach the next status record.
+          statusRecord = newStatusRecord();
+          continue;
         }
+        addStatusLine(statusRecord, line);
       }
     };
     const onAbort = () => {

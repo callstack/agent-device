@@ -58,12 +58,6 @@ export type AndroidSnapshotHelperInstallResult = {
   versionCode: number;
   installedVersionCode?: number;
   installedSha256?: string;
-  /**
-   * The selected digest, set only when this check established it on the device: an inspection read
-   * it back, or an install of it succeeded. A remembered install leaves it unset, because an
-   * emulator restore or an external install can replace the APK behind the memo.
-   */
-  verifiedSha256?: string;
   installed: boolean;
   reason: AndroidSnapshotHelperInstallReason;
 };
@@ -76,8 +70,6 @@ export type AndroidSnapshotHelperCaptureOptions = {
   helperVersion?: string;
   helperVersionCode?: number;
   helperSha256?: string;
-  /** This command verified `helperSha256` on the device; a remembered install does not count. */
-  helperSha256Verified?: boolean;
   packageName?: string;
   instrumentationRunner?: string;
   waitForIdleTimeoutMs?: number;

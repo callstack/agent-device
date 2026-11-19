@@ -115,6 +115,7 @@ export function createFakeTouchHelperSessionProvider(
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
             'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
             'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
+            `INSTRUMENTATION_STATUS: sessionPort=${port}`,
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

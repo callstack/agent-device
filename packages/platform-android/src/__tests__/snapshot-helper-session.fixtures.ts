@@ -157,6 +157,7 @@ export function createPersistentSnapshotHelperProvider(
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
               `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionCommands?.join(',') ?? `${options.sessionInput ? 'input,' : ''}snapshot-immediate`}`,
               'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
+              `INSTRUMENTATION_STATUS: sessionPort=${port}`,
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',
@@ -308,6 +309,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
             ...(options.legacySessionTransport
               ? []
               : ['INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1']),
+            `INSTRUMENTATION_STATUS: sessionPort=${port}`,
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

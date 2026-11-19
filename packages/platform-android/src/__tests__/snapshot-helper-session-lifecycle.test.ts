@@ -64,16 +64,17 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('a verified unsupported build stays one-shot across time and capture settings until it is verified again', async () => {
+test('an unsupported build stays one-shot across capture settings until its finite backoff ends', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
   const startedAtMs = Date.now();
   const now = vi.spyOn(Date, 'now').mockReturnValue(startedAtMs);
-  const remembered = {
+  const options = {
     adb: provider.exec,
     adbProvider: provider,
     deviceKey: 'android:emulator-5554',
+    helperVersionCode: 21040,
     helperSha256: 'old-build',
   };
 
@@ -82,52 +83,47 @@ test('a verified unsupported build stays one-shot across time and capture settin
     'diagnostics.jsonl',
   );
   await withDiagnosticsScope({ debug: true, logPath }, async () => {
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+    now.mockReturnValue(startedAtMs + 5_000);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+    // The backoff belongs to the helper build, not to the budgets it was asked to capture under:
+    // a capture with other traversal limits must not respawn the build inside the backoff.
     assert.equal(
-      await captureAndroidSnapshotWithHelperSession({ ...remembered, helperSha256Verified: true }),
-      undefined,
-    );
-    // Later commands carry the install memo, not a fresh on-device verification.
-    now.mockReturnValue(startedAtMs + 61_000);
-    assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
-    // The decision belongs to the helper build, not to the budgets it was asked to capture under:
-    // a capture with other traversal limits must not respawn the build already known unsupported.
-    assert.equal(
-      await captureAndroidSnapshotWithHelperSession({ ...remembered, maxDepth: 8, maxNodes: 200 }),
+      await captureAndroidSnapshotWithHelperSession({ ...options, maxDepth: 8, maxNodes: 200 }),
       undefined,
     );
     assert.equal(spawnArgs.length, 1);
     assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
+    // No answer is final: once the backoff ends, the build is tried again.
+    now.mockReturnValue(startedAtMs + 61_000);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+    assert.equal(spawnArgs.length, 2);
   });
   const log = await fs.readFile(logPath, 'utf8');
   assert.equal(
     log.match(/"phase":"android_snapshot_helper_session_transport_unsupported"/g)?.length,
-    1,
+    2,
   );
   assert.match(log, /"helperSha256":"old-build"/);
   assert.doesNotMatch(log, /"phase":"android_snapshot_helper_session_start_failed"/);
 
-  // No timer retries the build: only a fresh on-device verification can.
-  now.mockReturnValue(startedAtMs + 60 * 60_000);
-  assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
-  assert.equal(spawnArgs.length, 1);
-
   const replacement = createSessionProvider({ calls, spawnArgs });
   const output = await captureAndroidSnapshotWithHelperSession({
-    ...remembered,
+    ...options,
     adb: replacement.exec,
     adbProvider: replacement,
     helperSha256: 'new-build',
   });
   assert.equal(output?.metadata.transport, 'persistent-session');
-  assert.equal(spawnArgs.length, 2);
+  assert.equal(spawnArgs.length, 3);
 });
 
-test('an unsupported build starts once unverified and once verified, then waits for a new verification', async () => {
+test('an unsupported build is started at most once per finite backoff', async () => {
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
   const startedAtMs = Date.now();
   const now = vi.spyOn(Date, 'now').mockReturnValue(startedAtMs);
-  const remembered = {
+  const options = {
     adb: provider.exec,
     adbProvider: provider,
     deviceKey: 'android:emulator-5554',
@@ -135,18 +131,14 @@ test('an unsupported build starts once unverified and once verified, then waits 
     helperSha256: 'legacy-build',
   };
 
-  // The memo served the first command, so its start is not bound to the APK that ran.
-  assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
-  // The next install check inspected the device and verified the selected APK.
-  now.mockReturnValue(startedAtMs + 1_000);
-  assert.equal(
-    await captureAndroidSnapshotWithHelperSession({ ...remembered, helperSha256Verified: true }),
-    undefined,
-  );
-  // Later commands carry the memo again; past every timed backoff they still must not start.
-  for (const elapsedMs of [61_000, 122_000, 11 * 60_000]) {
+  for (const elapsedMs of [0, 1_000, 5_000, 9_000]) {
     now.mockReturnValue(startedAtMs + elapsedMs);
-    assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  }
+  assert.equal(spawnArgs.length, 1, 'commands inside the backoff do not start the build');
+  for (const elapsedMs of [61_000, 65_000]) {
+    now.mockReturnValue(startedAtMs + elapsedMs);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
   }
   assert.equal(spawnArgs.length, 2);
 });
@@ -189,34 +181,6 @@ test('an unsupported start no check could verify stays finite, so a restored ses
     ...unverified,
     adb: restored.exec,
     adbProvider: restored,
-  });
-  assert.equal(output?.metadata.transport, 'persistent-session');
-  assert.equal(spawnArgs.length, 2);
-});
-
-test('a fresh on-device verification of a reinstalled APK clears the unsupported mark', async () => {
-  const spawnArgs: (readonly string[])[] = [];
-  const legacy = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
-  const options = {
-    deviceKey: 'android:emulator-5554',
-    helperSha256: 'same-build',
-    helperSha256Verified: true,
-  };
-  assert.equal(
-    await captureAndroidSnapshotWithHelperSession({
-      ...options,
-      adb: legacy.exec,
-      adbProvider: legacy,
-    }),
-    undefined,
-  );
-
-  // The APK at this digest was reinstalled and verified on the device again.
-  const reinstalled = createSessionProvider({ calls: [], spawnArgs });
-  const output = await captureAndroidSnapshotWithHelperSession({
-    ...options,
-    adb: reinstalled.exec,
-    adbProvider: reinstalled,
   });
   assert.equal(output?.metadata.transport, 'persistent-session');
   assert.equal(spawnArgs.length, 2);
@@ -279,7 +243,7 @@ test('an unsupported start on remembered install evidence makes the next install
   );
 });
 
-test('a marker-less binary with no verified digest and no version code earns only timed backoff', async () => {
+test('a marker-less binary with no version code earns only timed backoff', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });

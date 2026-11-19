@@ -111,9 +111,7 @@ const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
 /**
  * Session identity, or a helper build alone, → when this process may spawn that helper build again
  * after a failed start or a failed session capture. An unsupported session transport is a property
- * of the build, so it is recorded under the build alone: with no expiry when the APK that answered
- * was verified on the device, and for the timed backoff otherwise. A fresh on-device verification
- * of that build clears either.
+ * of the build, so it backs off under the build alone; every entry here is timed.
  */
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
@@ -187,9 +185,6 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  // A fresh on-device verification binds this command to the APK that will run, so the start that
-  // follows decides the unsupported mark again. Another digest or version is another build key.
-  if (params.options.helperSha256Verified) failedSessions().delete(params.buildIdentity);
   if (
     isAndroidSnapshotHelperSessionBackedOff(params.buildIdentity) ||
     isAndroidSnapshotHelperSessionBackedOff(params.identity)
@@ -217,10 +212,9 @@ async function retireUnusableAndroidSnapshotHelperSession(
 /**
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
  * command that failed — the caller answers with the one-shot transport. A transient failure earns
- * a timed backoff under the capture identity. An unsupported transport from an APK this command
- * verified on the device marks the helper build until a fresh verification. An unsupported answer
- * no check tied to an APK earns only a timed backoff under the build, and drops the install memo,
- * so the next install check inspects the device.
+ * a timed backoff under the capture identity. An unsupported transport earns the same timed
+ * backoff under the helper build, so other capture settings do not respawn it, and drops the
+ * install memo. No answer marks a build for good.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;
@@ -236,10 +230,20 @@ async function tryStartAndroidSnapshotHelperSession(params: {
   } catch (error) {
     params.options.signal?.throwIfAborted();
     const reason = error instanceof AppError ? error.details?.reason : undefined;
-    if (reason === SESSION_TRANSPORT_UNSUPPORTED_REASON && params.options.helperSha256Verified) {
-      // The APK that answered was verified on the device by this command, so the answer belongs
-      // to this build until another verification.
-      failedSessions().set(params.buildIdentity, Number.POSITIVE_INFINITY);
+    const retryAtMs =
+      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs);
+    if (reason === SESSION_TRANSPORT_UNSUPPORTED_REASON) {
+      // A digest checked before launch does not prove which APK answered, so no answer is final.
+      // The build backs off for a while whatever capture settings ask next, and the install memo
+      // is dropped so the next install check inspects the device.
+      failedSessions().set(params.buildIdentity, retryAtMs);
+      if (params.options.helperVersionCode !== undefined) {
+        forgetAndroidSnapshotHelperInstall({
+          deviceKey: params.deviceKey,
+          packageName: params.resolved.packageName,
+          versionCode: params.options.helperVersionCode,
+        });
+      }
       emitDiagnostic({
         level: 'warn',
         phase: 'android_snapshot_helper_session_transport_unsupported',
@@ -250,28 +254,12 @@ async function tryStartAndroidSnapshotHelperSession(params: {
           helperVersion: params.options.helperVersion,
           helperVersionCode: params.options.helperVersionCode,
           helperSha256: params.options.helperSha256,
+          retryAfterMs: retryAtMs - Date.now(),
         },
       });
       return undefined;
     }
-    const retryAtMs =
-      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs);
-    if (
-      reason === SESSION_TRANSPORT_UNSUPPORTED_REASON &&
-      params.options.helperVersionCode !== undefined
-    ) {
-      // No check tied this answer to an APK, and the memo may hide another one. The build backs
-      // off for a while, and the next install check inspects the device. A command it verifies
-      // clears this backoff and starts once more.
-      failedSessions().set(params.buildIdentity, retryAtMs);
-      forgetAndroidSnapshotHelperInstall({
-        deviceKey: params.deviceKey,
-        packageName: params.resolved.packageName,
-        versionCode: params.options.helperVersionCode,
-      });
-    } else {
-      failedSessions().set(params.identity, retryAtMs);
-    }
+    failedSessions().set(params.identity, retryAtMs);
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_session_start_failed',
