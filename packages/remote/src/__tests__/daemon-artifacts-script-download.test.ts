@@ -4,7 +4,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import * as file from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
 import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 import {
   answer,
@@ -591,4 +592,25 @@ test('an endpoint spelled with trailing slashes finds the record its open create
 
   expect(response).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(fs.readFileSync(destination, 'utf8')).toBe('close\n');
+});
+
+// #4518: a canceled record stop never publishes the script version its answer carries.
+test('a canceled stop does not publish the script version it carries', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    materializeRemoteArtifacts(
+      { baseUrl, token: 't' },
+      { ...request('record'), positionals: ['stop'] },
+      { ok: true, data: { artifacts: [script('v2', 2, id)] } },
+      createTestHostEnvironment(),
+      stateDir,
+      controller.signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });

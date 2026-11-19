@@ -203,3 +203,79 @@ test('a parent swapped during the transfer is refused without touching the new d
     expect(fs.existsSync(path.join(moved, path.basename(staging)))).toBe(true);
   });
 });
+
+// 1. A peer file name is ONE ordinary local file name, so it cannot switch drives or leave cwd.
+test.for(['C:foo.mp4', 'CON.mp4', 'clip.mp4:stream', 'nul', '..', 'clip.mp4.'])(
+  'a fallback name %s is replaced by a generated name inside cwd',
+  async (fileName, t) => {
+    await withServer(t, serveVideo, async (world) => {
+      const data = await materialize(world, [artifact({ field: 'outPath', fileName })]);
+      const written = String(data.outPath);
+      const name = path.basename(written);
+      expect(path.dirname(written)).toBe(world.cwd);
+      expect(name).toMatch(/^outPath-\d+$/);
+      // The chosen name stays one component under Windows rules too.
+      expect(path.win32.basename(name)).toBe(name);
+      expect(path.win32.resolve('D:\\work', name)).toBe(`D:\\work\\${name}`);
+    });
+  },
+);
+
+// 2. Chunk paths name the files this client published, not the daemon's paths.
+test('a multi-chunk recording reports the chunk paths this client published', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const response = await materializeRemoteArtifacts(
+      { baseUrl: world.baseUrl, token: 'secret' },
+      stopRequest(world),
+      {
+        ok: true,
+        data: {
+          chunks: [
+            { index: 0, path: '/daemon/demo.mp4' },
+            { index: 1, path: '/daemon/demo.part-001.mp4' },
+          ],
+          artifacts: [
+            artifact({ field: 'outPath', fileName: 'demo.mp4' }),
+            artifact({ artifactId: 'c1', field: 'chunkPath', fileName: 'demo.part-001.mp4' }),
+          ],
+        },
+      },
+      createTestHostEnvironment(),
+      path.join(world.root, 'state'),
+    );
+    expect(response.ok && response.data?.chunks).toEqual([
+      { index: 0, path: path.join(world.cwd, 'demo.mp4') },
+      { index: 1, path: path.join(world.cwd, 'demo.part-001.mp4') },
+    ]);
+  });
+});
+
+// 4. The fallback text also reaches details.warnings, which the human error renderer prints.
+test('a failed later artifact adds the fallback text to details.warnings', async (t) => {
+  await withServer(
+    t,
+    (req, res) => {
+      if (req.url?.includes('telemetry')) res.writeHead(500);
+      res.end('video-bytes');
+    },
+    async (world) => {
+      const failure = (await materialize(world, [
+        artifact({ field: 'outPath' }),
+        artifact({ artifactId: 'telemetry', field: 'telemetryPath', fileName: 't.json' }),
+      ]).catch((error: unknown) => error)) as AppError;
+      expect(failure.details?.warnings).toEqual([
+        expect.stringContaining(path.join(world.cwd, 'x.mp4')),
+      ]);
+    },
+  );
+});
+
+test('a recording that cannot be staged fails with a typed artifact reason', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const notADirectory = path.join(world.root, 'file');
+    fs.writeFileSync(notADirectory, '');
+    await expect(
+      materialize(world, [artifact({ field: 'outPath' })], { meta: { cwd: notADirectory } }),
+    ).rejects.toMatchObject({ details: { reason: 'artifact_publish_failed' } });
+  });
+});

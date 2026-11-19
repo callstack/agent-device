@@ -95,60 +95,76 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
 }
 
 function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestination {
-  const { destinationPath } = params;
+  const { destinationPath, artifactId } = params;
   const parent = path.dirname(destinationPath);
   // Staging, publishing and cleanup all use this one resolved parent and its identity.
   let anchor: { path: string; identity: string | undefined } | undefined;
   let staging: string | undefined;
   let file: fs.promises.FileHandle | undefined;
-  const anchorIntact = (): boolean =>
-    anchor?.identity !== undefined &&
-    directoryIdentity(anchor.path) === anchor.identity &&
-    fs.realpathSync(parent) === anchor.path;
+  /** Whether the anchored directory is still the one staging was created in. */
+  const anchorKept = (): boolean =>
+    anchor?.identity !== undefined && directoryIdentity(anchor.path) === anchor.identity;
+  /** Cleanup acts only inside the anchored directory, never inside one that replaced it. */
+  const removeStaging = async (): Promise<void> => {
+    await file?.close().catch(() => undefined);
+    if (staging && anchorKept()) fs.rmSync(staging, { recursive: true, force: true });
+  };
   return {
     prepare: async () => {
-      await fs.promises.mkdir(parent, { recursive: true });
-      const physical = fs.realpathSync(parent);
-      anchor = { path: physical, identity: directoryIdentity(physical) };
-      staging = fs.mkdtempSync(path.join(physical, '.agent-device-download-'));
-      file = await fs.promises.open(path.join(staging, 'artifact'), PRIVATE_FILE_FLAGS, 0o600);
-    },
-    // Cleanup never acts inside a directory that replaced the anchor.
-    cleanupOnError: async () => {
-      await file?.close().catch(() => undefined);
-      if (staging && safeAnchorIntact(anchorIntact)) {
-        fs.rmSync(staging, { recursive: true, force: true });
+      try {
+        await fs.promises.mkdir(parent, { recursive: true });
+        const physical = fs.realpathSync(parent);
+        anchor = { path: physical, identity: directoryIdentity(physical) };
+        staging = fs.mkdtempSync(path.join(physical, '.agent-device-download-'));
+        file = await fs.promises.open(path.join(staging, 'artifact'), PRIVATE_FILE_FLAGS, 0o600);
+      } catch (error) {
+        await removeStaging();
+        throw publishError(artifactId, error);
       }
     },
+    cleanupOnError: removeStaging,
     materialize: async (res, signal) => {
       const staged = path.join(staging!, 'artifact');
       await pipeline(res, file!.createWriteStream(), { signal });
       // The publish runs synchronously from here, so nothing interleaves after these checks.
       signal.throwIfAborted();
-      if (!safeAnchorIntact(anchorIntact)) {
+      if (!anchorKept() || realpathOrUndefined(parent) !== anchor!.path) {
         throw new AppError(
           'COMMAND_FAILED',
           'The download directory changed during the transfer.',
           {
             reason: 'artifact_destination_replaced',
-            artifactId: params.artifactId,
+            artifactId,
             stagingPath: staging,
           },
         );
       }
-      // A rename replaces a link at the destination name instead of writing through it.
-      fs.renameSync(staged, path.join(anchor!.path, path.basename(destinationPath)));
+      try {
+        // A rename replaces a link at the destination name instead of writing through it.
+        fs.renameSync(staged, path.join(anchor!.path, path.basename(destinationPath)));
+      } catch (error) {
+        throw publishError(artifactId, error);
+      }
       fs.rmSync(staging!, { recursive: true, force: true });
       return destinationPath;
     },
   };
 }
 
-function safeAnchorIntact(check: () => boolean): boolean {
+function publishError(artifactId: string, cause: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The downloaded artifact could not be saved on this machine.',
+    { reason: 'artifact_publish_failed', artifactId },
+    cause instanceof Error ? cause : undefined,
+  );
+}
+
+function realpathOrUndefined(directory: string): string | undefined {
   try {
-    return check();
+    return fs.realpathSync(directory);
   } catch {
-    return false;
+    return undefined;
   }
 }
 

@@ -154,8 +154,8 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:0b02eebe686d68db30671c44da6a11aa2ea4a8a04c310d8895a543ff8bba1e24",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:be330d932e69facb9f92fb2184011bd3082ff571abf6dafac0a93a4fc067eca6",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:ecb66e8e5ddc252209ca4e3e4ee6cd2cb0da7b456dee9b5a4586bb3718254e4c",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:ad35861d1469db77ae23650447865c31e0a803045630f18ce802a6fcb45fdfcf",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -212,7 +212,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:8b264dea5c5b2cb5a4be5ddcf1108715fa1b3a771ded9a94f6681fb56e2ffe9e",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:f92f9c73a9d9adbfe535167352277de651b978a260831e11c2edc1fd05c40401",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:d4fb07e7b2035bbe10e84948232343c9cfc2cb4ce7b6a113f7a1021a4c636243",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:52c7d164a1150bfdfa5636ca3b1938e9bfc818848545d0a3e89c42a9c3f9f061",
@@ -512,8 +512,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:be330d932e69facb9f92fb2184011bd3082ff571abf6dafac0a93a4fc067eca6",
-      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a trace stop or a perf stop or report, and any other artifact, including every record stop artifact the request named no path for, lands in cwd under the basename of its fileName (#4518). A released daemon echoes localPath equal to the registered destination for screenshot and test, so those land where they did before. A record stop artifact from a released daemon now lands in cwd, and the client reports it in recordingDestinationWarnings. The wire shape is unchanged."
+      "digest": "sha256:ad35861d1469db77ae23650447865c31e0a803045630f18ce802a6fcb45fdfcf",
+      "rationale": "The client, not the response, chooses the local download path: a destination it registered in this request wins, a response localPath is accepted only on a trace stop or a perf stop or report, and any other artifact, including every record stop artifact the request named no path for, lands in cwd under the basename of its fileName (#4518). A released daemon echoes localPath equal to the registered destination for screenshot and test, so those land where they did before. A record stop artifact from a released daemon now lands in cwd, and the client reports it in recordingDestinationWarnings. A peer fileName is used only as one plain file name; otherwise the client generates a name. The wire shape is unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
@@ -587,13 +587,13 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:0b02eebe686d68db30671c44da6a11aa2ea4a8a04c310d8895a543ff8bba1e24",
-      "rationale": "#4518 client-side only: the function takes the caller's AbortSignal so a cancel after the answer stops artifact delivery. Every field a released daemon sends is read as before; nothing new is sent or required."
+      "digest": "sha256:ecb66e8e5ddc252209ca4e3e4ee6cd2cb0da7b456dee9b5a4586bb3718254e4c",
+      "rationale": "#4518 client-side only: the function takes the caller's AbortSignal so a cancel after the answer stops artifact delivery in every branch, including session-script delivery. Every field a released daemon sends is read as before; nothing new is sent or required."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:8b264dea5c5b2cb5a4be5ddcf1108715fa1b3a771ded9a94f6681fb56e2ffe9e",
-      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields. A released daemon's fields are read as before."
+      "digest": "sha256:f92f9c73a9d9adbfe535167352277de651b978a260831e11c2edc1fd05c40401",
+      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A released daemon's fields are read as before."
     }
   ]
 }

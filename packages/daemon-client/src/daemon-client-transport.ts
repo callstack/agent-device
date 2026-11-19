@@ -838,7 +838,8 @@ async function sendHttpRequest(
     // Once the answer arrives, artifact delivery owns the caller abort and settles after cleanup.
     let delivering = false;
     const handleBody = (body: string): void => {
-      delivering = true;
+      // Only a remote answer starts artifact delivery, which owns the signal from here on.
+      delivering = isRemoteDaemon(info);
       handleDaemonHttpResponseBody(body, {
         info,
         req,

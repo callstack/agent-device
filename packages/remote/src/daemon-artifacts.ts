@@ -11,7 +11,7 @@ import {
   buildRemoteTempArtifactDirPath,
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
@@ -498,6 +498,23 @@ export async function materializeRemoteArtifacts(
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
+  const delivered = await deliverResponseArtifacts(endpoint, req, response, {
+    host,
+    stateDir,
+    signal,
+  });
+  // A caller abort during delivery wins over any branch that finished without seeing it.
+  throwIfCanceled(signal, req);
+  return delivered;
+}
+
+async function deliverResponseArtifacts(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  client: Readonly<{ host: HostEnvironment; stateDir: string; signal: AbortSignal | undefined }>,
+): Promise<DaemonResponse> {
+  const { host, signal } = client;
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const download = (scripts?: SessionScriptDelivery) =>
     downloadResponseArtifacts(endpoint, req, response, { host, scripts, signal });
@@ -511,8 +528,19 @@ export async function materializeRemoteArtifacts(
     return await download();
   }
   const { sessionScriptDelivery } = await import('./session-script-destination.ts');
-  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
+  // The script branch downloads with the caller's signal and never publishes after an abort.
+  const scriptDownload: typeof downloadRemoteArtifact = async (params) => {
+    const downloaded = await downloadRemoteArtifact({ ...params, signal });
+    throwIfCanceled(signal, req);
+    return downloaded;
+  };
+  const scripts = sessionScriptDelivery(endpoint, req, response, client.stateDir, scriptDownload);
   return await scripts.settleAfter(download);
+}
+
+function throwIfCanceled(signal: AbortSignal | undefined, req: DaemonWireRequest): void {
+  if (!signal?.aborted) return;
+  throw createRequestCanceledError({ requestId: req.meta?.requestId }, signal.reason);
 }
 
 async function downloadResponseArtifacts(
@@ -543,6 +571,7 @@ async function downloadResponseArtifacts(
     throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
   }
   nextData.artifacts = nextArtifacts;
+  if (req.command === 'record') projectPublishedChunks(nextData, nextArtifacts);
   if (fallbacks.length > 0) {
     nextData.recordingDestinationWarnings = fallbacks;
     const previous = Array.isArray(nextData.warnings) ? nextData.warnings : [];
@@ -609,6 +638,24 @@ async function downloadEachArtifact(
   }
 }
 
+/**
+ * A multi-chunk recording lists its chunks by the daemon's paths. The first chunk is published as
+ * `outPath`, and each later one as a `chunkPath` artifact in chunk order, so each entry is
+ * rewritten to the path this client published it at.
+ */
+function projectPublishedChunks(data: Record<string, unknown>, artifacts: DaemonArtifact[]): void {
+  if (!Array.isArray(data.chunks)) return;
+  const published = [
+    ...artifacts.filter((artifact) => artifact.field === 'outPath'),
+    ...artifacts.filter((artifact) => artifact.field === 'chunkPath'),
+  ].map((artifact) => artifact.localPath);
+  data.chunks = data.chunks.map((chunk: unknown, index: number) =>
+    typeof chunk === 'object' && chunk !== null && typeof published[index] === 'string'
+      ? { ...chunk, path: published[index] }
+      : chunk,
+  );
+}
+
 /** #4518: a recording file that landed in cwd because the request named no destination for it. */
 type RecordingDestinationWarning = Readonly<{
   reason: 'recording_destination_not_requested';
@@ -625,10 +672,15 @@ function withRecordingFallbacks(
   fallbacks: RecordingDestinationWarning[],
 ): AppError {
   const failure = asAppError(error);
+  const warnings = Array.isArray(failure.details?.warnings) ? failure.details.warnings : [];
   return new AppError(
     failure.code,
     failure.message,
-    { ...failure.details, recordingDestinationWarnings: fallbacks },
+    {
+      ...failure.details,
+      recordingDestinationWarnings: fallbacks,
+      warnings: [...warnings, ...fallbacks.map(fallbackWarningText)],
+    },
     failure.cause,
   );
 }
@@ -699,14 +751,39 @@ function resolveMaterializedArtifactPath(
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return { path: artifact.localPath, fallback: false };
   }
-  const responseName = path.basename(
-    typeof artifact.fileName === 'string' ? artifact.fileName.trim() : '',
-  );
+  const cwd = path.resolve(req.meta?.cwd ?? host.cwd);
   const fileName =
-    responseName && responseName !== '.' && responseName !== '..'
-      ? responseName
-      : `${path.basename(artifact.field)}-${Date.now()}`;
-  return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: true };
+    localFileName(artifact.fileName) ??
+    localFileName(`${artifact.field}-${Date.now()}`) ??
+    `artifact-${Date.now()}`;
+  const fallback = path.join(cwd, fileName);
+  if (path.dirname(fallback) !== cwd) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'The artifact fallback name leaves the working directory.',
+      {
+        reason: 'artifact_destination_invalid',
+        fileName,
+      },
+    );
+  }
+  return { path: fallback, fallback: true };
+}
+
+/** Device names Windows reserves in every directory, with or without an extension. */
+const RESERVED_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+/**
+ * The last component of a peer-named file as ONE ordinary file name on every platform, or
+ * `undefined`. No separator, drive or stream colon, control character, `.`/`..`, reserved device
+ * name, or trailing dot or space survives, so the name cannot leave the directory it is joined to.
+ */
+function localFileName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const name = value.trim().split(/[\\/]/).pop() ?? '';
+  if (name === '' || name === '.' || name === '..' || name.length > 255) return undefined;
+  if (/[:\u0000-\u001f<>"|?*]/.test(name) || /[. ]$/.test(name)) return undefined;
+  return RESERVED_DEVICE_NAME.test(name) ? undefined : name;
 }
 
 type DownloadRemoteArtifactParams = {
