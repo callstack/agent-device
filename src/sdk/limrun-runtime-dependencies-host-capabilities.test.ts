@@ -39,7 +39,7 @@ function recordingAndroid(calls: Call[]): AndroidFacet {
       calls.push({ name, args });
       throw new Error(`captured:${name}`);
     };
-  return {
+  const facet: AndroidFacet = {
     runAdb: record('runAdb') as ProviderAndroidHost['runAdb'],
     adbError: record('adbError') as ProviderAndroidHost['adbError'],
     withAdbProvider: record('withAdbProvider') as ProviderAndroidHost['withAdbProvider'],
@@ -49,11 +49,13 @@ function recordingAndroid(calls: Call[]): AndroidFacet {
     readLogs: record('readLogs') as ProviderAndroidHost['readLogs'],
     keyboardState: record('keyboardState') as ProviderAndroidHost['keyboardState'],
     dismissKeyboard: record('dismissKeyboard') as ProviderAndroidHost['dismissKeyboard'],
-    createInteractor: ((...args: unknown[]) => {
+    createInteractor(...args) {
+      assert.equal(this, facet);
       calls.push({ name: 'createInteractor', args });
       return FACET_INTERACTOR;
-    }) as NonNullable<AndroidFacet['createInteractor']>,
+    },
   };
+  return facet;
 }
 
 async function captured(task: () => Promise<unknown>): Promise<Call> {

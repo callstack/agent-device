@@ -58,7 +58,6 @@ export function createLimrunRuntimeDependencies(
   const runOnHost = <T>(task: () => Promise<T>) =>
     withCommandHost({ host, requestEnv: undefined }, task);
   const android: AndroidFacet | undefined = capabilities?.android;
-  const buildInteractor = android?.createInteractor;
   /**
    * Hands one of this adapter's executors to the capability boundary. The contract names a stdin
    * payload a plain byte array while this adapter's executors take a Node buffer, so a foreign
@@ -116,7 +115,7 @@ export function createLimrunRuntimeDependencies(
         );
       },
       createInteractor: (device, adb) =>
-        buildInteractor?.(device, toProviderAdbProvider(adb)) ??
+        android?.createInteractor?.(device, toProviderAdbProvider(adb)) ??
         // Without the capability facet, this adapter keeps its own deliberate static edge to the
         // same factory, under the same host scope and with the same provider scope installed.
         withMethodScope(createAndroidInteractor(device, adb), runOnHost),
