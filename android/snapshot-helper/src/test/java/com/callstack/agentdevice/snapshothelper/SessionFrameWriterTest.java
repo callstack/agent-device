@@ -18,6 +18,8 @@ public final class SessionFrameWriterTest {
 
   static void run() throws Exception {
     tricklingPeerCannotExtendTheDeadlinePerSend();
+    zeroProgressSendThatUsesTheBudgetNeverPolls();
+    pollWaitsOnlyForWhatIsLeft();
     stalledReaderUnderRealBackpressureClosesAtTheDeadline();
     readingPeerReceivesTheWholeFrame();
   }
@@ -50,6 +52,56 @@ public final class SessionFrameWriterTest {
     } catch (SocketTimeoutException expected) {
       if (nowMs[0] > 2_100 || sent[0] > 21) {
         throw new AssertionError("The deadline moved: " + nowMs[0] + " ms, " + sent[0] + " sends");
+      }
+    }
+  }
+
+  /** The send itself takes the rest of the budget and moves no bytes: no poll may start. */
+  private static void zeroProgressSendThatUsesTheBudgetNeverPolls() throws Exception {
+    long[] nowMs = {0};
+    SessionFrameWriter.Channel stalled = new SessionFrameWriter.Channel() {
+      @Override
+      public int send(byte[] data, int offset, int length) {
+        nowMs[0] += 5_000;
+        return 0;
+      }
+
+      @Override
+      public void awaitWritable(long timeoutMs) {
+        throw new AssertionError("Polled for " + timeoutMs + " ms after the deadline at " + nowMs[0]);
+      }
+    };
+    try {
+      new SessionFrameWriter(stalled, () -> nowMs[0], 1_000, Integer.MAX_VALUE).write(frame(10));
+      throw new AssertionError("Expected the used-up budget to end the write");
+    } catch (SocketTimeoutException expected) {
+      // The writer gave up without polling.
+    }
+  }
+
+  /** A slow zero-progress send leaves less to wait for; the poll gets only the remainder. */
+  private static void pollWaitsOnlyForWhatIsLeft() throws Exception {
+    long[] nowMs = {0};
+    java.util.List<Long> waits = new java.util.ArrayList<>();
+    SessionFrameWriter.Channel slow = new SessionFrameWriter.Channel() {
+      @Override
+      public int send(byte[] data, int offset, int length) {
+        nowMs[0] += 400;
+        return 0;
+      }
+
+      @Override
+      public void awaitWritable(long timeoutMs) {
+        waits.add(timeoutMs);
+        nowMs[0] += timeoutMs;
+      }
+    };
+    try {
+      new SessionFrameWriter(slow, () -> nowMs[0], 1_000, Integer.MAX_VALUE).write(frame(10));
+      throw new AssertionError("Expected the deadline to end the write");
+    } catch (SocketTimeoutException expected) {
+      if (!waits.equals(java.util.Arrays.asList(600L)) || nowMs[0] > 1_400) {
+        throw new AssertionError("Expected one 600 ms wait, got " + waits + " ending at " + nowMs[0]);
       }
     }
   }
