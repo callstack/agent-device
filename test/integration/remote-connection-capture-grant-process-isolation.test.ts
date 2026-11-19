@@ -30,17 +30,59 @@ type GrantRecord = {
   destination: string;
 };
 
+type FixtureStart = { grantId?: string; outPath?: string };
+type FixtureStopMode = 'echo' | 'unmatched' | 'error';
+
+function writeFixtureStop(
+  writeJson: (statusCode: number, payload: unknown) => void,
+  id: unknown,
+  start: FixtureStart | undefined,
+  mode: FixtureStopMode,
+): void {
+  if (mode === 'error') {
+    writeJson(200, {
+      jsonrpc: '2.0',
+      id,
+      error: { code: -32000, message: 'fixture stop failure', data: {} },
+    });
+    return;
+  }
+  const captureGrantId = mode === 'unmatched' ? UNMATCHED_GRANT_ID : start?.grantId;
+  const localPath = start?.outPath ? `${start.outPath}.mp4` : '/daemon/x.mp4';
+  writeJson(200, {
+    jsonrpc: '2.0',
+    id,
+    result: {
+      ok: true,
+      data: {
+        outPath: localPath,
+        captureGrantId,
+        artifacts: [
+          {
+            artifactId: 'rec-1',
+            path: '/daemon/rec-1',
+            fileName: 'demo.mp4',
+            field: 'outPath',
+            localPath,
+            captureGrantId,
+          },
+        ],
+      },
+    },
+  });
+}
+
 type FakeDaemon = {
   server: http.Server;
   port: number;
-  starts: Array<{ grantId?: string; outPath?: string }>;
-  setStopMode(mode: 'echo' | 'unmatched' | 'error'): void;
+  starts: FixtureStart[];
+  setStopMode(mode: FixtureStopMode): void;
   setCloseMode(mode: 'ok' | 'error'): void;
 };
 
 function createFakeDaemon(): FakeDaemon {
-  const starts: Array<{ grantId?: string; outPath?: string }> = [];
-  let stopMode: 'echo' | 'unmatched' | 'error' = 'echo';
+  const starts: FixtureStart[] = [];
+  let stopMode: FixtureStopMode = 'echo';
   let closeMode: 'ok' | 'error' = 'ok';
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://loopback');
@@ -111,38 +153,7 @@ function createFakeDaemon(): FakeDaemon {
         return;
       }
       if (params.command === 'record' && params.positionals?.[0] === 'stop') {
-        const last = starts.at(-1);
-        if (stopMode === 'error') {
-          writeJson(200, {
-            jsonrpc: '2.0',
-            id: payload.id,
-            error: { code: -32000, message: 'fixture stop failure', data: {} },
-          });
-          return;
-        }
-        const echoId = stopMode === 'unmatched' ? UNMATCHED_GRANT_ID : last?.grantId;
-        const localPath = last?.outPath ? `${last.outPath}.mp4` : '/daemon/x.mp4';
-        writeJson(200, {
-          jsonrpc: '2.0',
-          id: payload.id,
-          result: {
-            ok: true,
-            data: {
-              outPath: localPath,
-              captureGrantId: echoId,
-              artifacts: [
-                {
-                  artifactId: 'rec-1',
-                  path: '/daemon/rec-1',
-                  fileName: 'demo.mp4',
-                  field: 'outPath',
-                  localPath,
-                  captureGrantId: echoId,
-                },
-              ],
-            },
-          },
-        });
+        writeFixtureStop(writeJson, payload.id, starts.at(-1), stopMode);
         return;
       }
       if (params.command === 'close' && closeMode === 'error') {
