@@ -1,12 +1,12 @@
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  /// The library owns this code's literal — `SnapshotPresentationFailure.code` in
-  /// apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationFailure.swift
-  /// answers it for every case, and that library cannot import this target's enum. The bridge emits
-  /// the runner's own constant for it, so the code that reaches the wire is a named row of
-  /// `RunnerPassThroughErrorCode`; the two literals are kept equal by the parity guard's pass-through
-  /// set, and a library-side change to that string shows up there rather than drifting silently.
+  /// The library names this refusal by its own `SnapshotPresentationFailure.code` literal
+  /// (apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationFailure.swift).
+  /// That literal never reaches the wire: the library cannot import this target's enum, and the
+  /// runner's wire vocabulary is closed, so the bridge drops it and answers with the runner's own
+  /// `RunnerPassThroughErrorCode` constant, carrying the library's message and hint beside it. The
+  /// library owns WHEN the refusal happens; the parity guard owns the code the caller sees.
   static func snapshotCaptureFailure(
     for failure: SnapshotPresentationFailure
   ) -> SnapshotCaptureFailure {
