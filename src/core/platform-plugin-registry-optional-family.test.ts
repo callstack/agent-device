@@ -2,7 +2,6 @@ import type { PlatformProviderRequestContext } from '@agent-device/contracts/pla
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 
 // Simulates a composition whose builtin plugins do not include the extracted `vega` family:
 // the module-level self-registration inside request-providers must then register only the five
@@ -20,9 +19,11 @@ vi.mock('./interactors/register-builtins.ts', async (importOriginal) => {
   };
 });
 
-test('the request-provider lookup for an absent optional family fails plugin-not-installed before the task runs', async () => {
+test('the request-provider scope for an absent optional family gates nothing and lets the task run', async () => {
   // The private request-provider composition submodule is reached only through the root
-  // composition wrapper (R13), exactly as the daemon request path does.
+  // composition wrapper (R13), exactly as the daemon request path does. A provider-owned device
+  // of an absent family must still reach its provider interactor, so the scope does not fail;
+  // the typed plugin-not-installed outcome comes from the inventory and runtime lookups.
   const { createRequestPlatformProviders } = await import('../platform-runtime.ts');
   const vegaDevice: DeviceInfo = {
     platform: 'vega',
@@ -37,27 +38,22 @@ test('the request-provider lookup for an absent optional family fails plugin-not
     requestedSession: 'vega-session',
     requestId: 'req-vega-1',
   };
+  let resolverAsked = false;
   const providers = createRequestPlatformProviders({
-    providers: { vegaToolProvider: () => undefined },
+    providers: {
+      vegaToolProvider: () => {
+        resolverAsked = true;
+        return undefined;
+      },
+    },
   });
 
   let taskRan = false;
-  const failure = await providers
-    .run(context, async () => {
-      taskRan = true;
-    })
-    .then(
-      () => null,
-      (error: unknown) => error,
-    );
+  await providers.run(context, async () => {
+    taskRan = true;
+  });
 
-  assert.ok(failure instanceof AppError, `expected AppError, got ${String(failure)}`);
-  assert.equal(failure.code, 'UNSUPPORTED_PLATFORM');
-  assert.equal(failure.details?.reason, 'plugin-not-installed');
-  assert.equal(failure.details?.family, 'vega');
-  assert.equal(failure.details?.package, '@agent-device/vega');
-  assert.equal(failure.details?.installCommand, 'agent-device plugins add @agent-device/vega');
-  assert.match(String(failure.details?.hint), /agent-device plugins add @agent-device\/vega/);
-  // The lookup fails before the request task — and therefore before any device binding — runs.
-  assert.equal(taskRan, false);
+  assert.equal(taskRan, true);
+  // The vega-gated resolver does not apply while no vega plugin is registered.
+  assert.equal(resolverAsked, false);
 });
