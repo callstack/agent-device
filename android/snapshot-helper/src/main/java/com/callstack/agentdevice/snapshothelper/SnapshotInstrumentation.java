@@ -26,6 +26,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final int SESSION_COMMAND_READ_TIMEOUT_MS = 2_000;
   private static final int SESSION_RESPONSE_WRITE_TIMEOUT_MS = 8_000;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
@@ -194,11 +195,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
-      // Each connection's command read is bounded by the session's own timeout, fixed at accept
-      // time: a host sends its command immediately after connecting, so a peer silent past that
-      // budget is answered with an error instead of occupying the command reader.
-      long readBudgetMs =
-          SessionPeerPolicy.commandReadDeadlineMs(timeoutMs, DEFAULT_TIMEOUT_MS);
       while (!Thread.currentThread().isInterrupted()) {
         try (LocalSocket socket = server.accept()) {
           // Positive peer identity first: a peer that is not adbd (shell uid 2000, or root uid 0
@@ -207,7 +203,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
           if (!admitSessionPeer(socket)) {
             continue;
           }
-          long deadlineAtMs = SystemClock.elapsedRealtime() + readBudgetMs;
+          long deadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_TIMEOUT_MS;
           try {
             String command;
             try {

@@ -116,10 +116,10 @@ shell uid 2000, or root uid 0 when adb runs in its supported root mode. Both are
 trust boundary; any other uid (or an unreadable credential) is closed without a response. The socket
 name derives from the port and carries no secret, and no token travels in argv.
 
-The command line of each connection is bounded twice. Its read runs under an absolute per-connection
-deadline fixed at accept time, owned by the session's own `timeoutMs` (fallback 8000 ms), so a
-silent or drip-feeding peer cannot hold the command reader past that budget; and the line itself is
-capped at 256 KiB, a bound derived from the largest supported producer of this channel (a 10 s
+Each connection gets a two-second command read deadline from acceptance, independent of the capture
+`timeoutMs`. A
+silent or drip-feeding peer cannot hold the command reader past that deadline. The line is capped
+at 256 KiB, a bound derived from the largest supported producer of this channel (a 10 s
 two-contact gesture carries 1,252 densified samples, at most ~130 KB base64; the documented 64 KiB
 `fill --text-stdin` contract encodes to ~88 KB — the cap keeps at least 2x headroom over both). A
 connection that hits either read bound receives a session error and closes. A response write failure

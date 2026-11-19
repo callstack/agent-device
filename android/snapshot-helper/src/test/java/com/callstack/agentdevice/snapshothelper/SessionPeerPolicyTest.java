@@ -13,9 +13,7 @@ public final class SessionPeerPolicyTest {
   static void run() throws Exception {
     admitsTheAdbdUids();
     rejectsNonAdbdUids();
-    deadlineFollowsTheSessionTimeout();
-    deadlineFallsBackWhenTheSessionTimeoutIsUnset();
-    deadlineFitsSocketTimeout();
+    commandCompletedAtDeadlineIsAccepted();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
@@ -39,27 +37,19 @@ public final class SessionPeerPolicyTest {
     }
   }
 
-  private static void deadlineFollowsTheSessionTimeout() {
-    if (SessionPeerPolicy.commandReadDeadlineMs(8_000, 500) != 8_000) {
-      throw new AssertionError("Expected the session timeout to bound the read");
-    }
-    if (SessionPeerPolicy.commandReadDeadlineMs(1, 8_000) != 1) {
-      throw new AssertionError("Expected even a one-millisecond session timeout to be honored");
-    }
-  }
-
-  private static void deadlineFallsBackWhenTheSessionTimeoutIsUnset() {
-    if (SessionPeerPolicy.commandReadDeadlineMs(0, 8_000) != 8_000) {
-      throw new AssertionError("Expected a zero session timeout to fall back");
-    }
-    if (SessionPeerPolicy.commandReadDeadlineMs(-5, 8_000) != 8_000) {
-      throw new AssertionError("Expected a negative session timeout to fall back");
-    }
-  }
-
-  private static void deadlineFitsSocketTimeout() {
-    if (SessionPeerPolicy.commandReadDeadlineMs(Long.MAX_VALUE, 8_000) != Integer.MAX_VALUE) {
-      throw new AssertionError("Expected the read budget to fit LocalSocket.setSoTimeout");
+  private static void commandCompletedAtDeadlineIsAccepted() throws Exception {
+    long[] nowMs = {100};
+    ByteArrayInputStream input = new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        nowMs[0] = 110;
+        return super.read(data, offset, length);
+      }
+    };
+    String command = SessionPeerPolicy.readSessionCommandLine(
+        input, ignored -> {}, () -> nowMs[0], 110, 8);
+    if (!"ab".equals(command)) {
+      throw new AssertionError("Expected a complete command returned at the deadline");
     }
   }
 

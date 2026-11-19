@@ -66,17 +66,6 @@ final class SessionPeerPolicy {
     return SESSION_SOCKET_PREFIX + sessionPort;
   }
 
-  /**
-   * The per-connection command read budget, owned by the session's own configured timeout: a host
-   * sends its command immediately after connecting, so a peer silent past that budget is rejected
-   * instead of occupying the command reader. Zero or negative falls back to the caller's default
-   * timeout, never to an unbounded read.
-   */
-  static long commandReadDeadlineMs(long sessionTimeoutMs, long fallbackTimeoutMs) {
-    long budgetMs = sessionTimeoutMs > 0 ? sessionTimeoutMs : Math.max(0, fallbackTimeoutMs);
-    return Math.min(Integer.MAX_VALUE, budgetMs);
-  }
-
   @FunctionalInterface
   interface ReadTimeout {
     void setMillis(int timeoutMs) throws IOException;
@@ -100,7 +89,7 @@ final class SessionPeerPolicy {
       }
       timeout.setMillis((int) remainingMs);
       int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
-      if (clock.nowMs() >= deadlineAtMs) {
+      if (clock.nowMs() > deadlineAtMs) {
         throw new SocketTimeoutException("session command read deadline exceeded");
       }
       if (count < 0) {
