@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
-import { mkdtempForTest } from '@agent-device/test-kit';
+import { mkdtempForTest, withCapturedStderr } from '@agent-device/test-kit';
+import { createReplayTestReporterRuntime } from '../reporting.ts';
 
 test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', async (json) => {
   const root = await mkdtempForTest('agent-device-reporter-exit-');
@@ -50,4 +51,18 @@ test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', 
     assert.match(result.stderr, /INVALID_ARGS/);
     assert.match(result.stderr, /wrapping.*getExitCode.*0 to 255/);
   }
+});
+
+test('a test run prints command progress, such as an upload, to stderr escaped', async () => {
+  const runtime = await createReplayTestReporterRuntime({});
+
+  const stderr = withCapturedStderr(() => {
+    runtime.onProgress({
+      type: 'command',
+      status: 'progress',
+      message: 'Uploading app\u001b[8m.apk (10 B) via direct upload',
+    });
+  });
+
+  assert.equal(stderr, String.raw`Uploading app\u001b[8m.apk (10 B) via direct upload` + '\n');
 });

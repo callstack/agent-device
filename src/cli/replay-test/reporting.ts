@@ -1,5 +1,6 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import {
   getReplayTestReporterExitCode,
   resolveReplayTestReporters,
@@ -66,6 +67,12 @@ export async function createReplayTestReporterRuntime(options: {
     reporters,
     context,
     onProgress(event) {
+      // A command progress line (an upload, for one) is not a reporter event, so it goes to stderr as it does for every
+      // other command, escaped like every CLI write.
+      if (event.type === 'command') {
+        context.stderr.write(escapeTerminalText(`${event.message}\n`));
+        return;
+      }
       runReplayTestReporterProgress(reporters, event, context);
     },
   };
