@@ -3,7 +3,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { parseSelectorChain } from './parse.ts';
-import { findSelectorChainMatch, resolveSelectorChain } from './resolve.ts';
+import {
+  findSelectorChainMatch,
+  listSelectorChainMatches,
+  resolveSelectorChain,
+} from './resolve.ts';
 import { loginFormNodes } from './__tests__/login-form-nodes.ts';
 import { formatRole } from '@agent-device/kernel/snapshot';
 
@@ -213,6 +217,93 @@ test('focused selector matches snapshot focus state', () => {
 
   assert.ok(resolved);
   assert.equal(resolved.node.ref, 'tv2');
+});
+
+// ── checked= key (switches, checkboxes, radios) ────────────────────────────
+
+// `checked` is published only on checkable controls, so an Android node without the fact is not
+// checkable, and iOS can publish 'mixed' (ios-node-interpretation.ts). Neither matches
+// checked=true or checked=false; only an explicit true/false matches the same value.
+const CHECKED_NODES: SnapshotState['nodes'] = [
+  {
+    ref: 'sw1',
+    index: 0,
+    type: 'android.widget.Switch',
+    kind: formatRole('android.widget.Switch'),
+    label: 'Wi-Fi',
+    checked: true,
+  },
+  {
+    ref: 'sw2',
+    index: 1,
+    type: 'android.widget.Switch',
+    kind: formatRole('android.widget.Switch'),
+    label: 'Bluetooth',
+    checked: false,
+  },
+  {
+    ref: 'cb1',
+    index: 2,
+    type: 'XCUIElementTypeButton',
+    kind: formatRole('XCUIElementTypeButton'),
+    label: 'Select all',
+    // iOS React Native value semantics can carry 'mixed' where the wire type narrows to boolean.
+    checked: 'mixed' as unknown as boolean,
+  },
+  {
+    ref: 'btn1',
+    index: 3,
+    type: 'android.widget.Button',
+    kind: formatRole('android.widget.Button'),
+    label: 'Continue',
+    // Android publishes no `checked` fact on a non-checkable control.
+  },
+];
+
+function resolveChecked(selector: string) {
+  return resolveSelectorChain(CHECKED_NODES, parseSelectorChain(selector), {
+    platform: 'android',
+    requireUnique: true,
+  });
+}
+
+test('checked=true matches only an explicitly checked node, and a bare checked means true', () => {
+  assert.equal(resolveChecked('checked=true')?.node.ref, 'sw1');
+  assert.equal(resolveChecked('checked')?.node.ref, 'sw1');
+});
+
+test('checked=false matches only an explicitly unchecked node', () => {
+  assert.equal(resolveChecked('checked=false')?.node.ref, 'sw2');
+});
+
+test('mixed and absent checked facts match neither checked=true nor checked=false', () => {
+  // Nearest negatives: the iOS 'mixed' checkbox (cb1) and the Android button without a
+  // `checked` fact (btn1) must not appear under either value, on either platform.
+  for (const platform of ['android', 'ios'] as const) {
+    for (const selector of ['checked=true', 'checked=false']) {
+      const listed = listSelectorChainMatches(CHECKED_NODES, parseSelectorChain(selector), {
+        platform,
+      });
+      const refs = (listed?.matchedNodes ?? []).map((node) => node.ref);
+      assert.ok(!refs.includes('cb1'), `${selector} on ${platform} must not match the mixed node`);
+      assert.ok(
+        !refs.includes('btn1'),
+        `${selector} on ${platform} must not match the fact-less node`,
+      );
+    }
+  }
+  assert.deepEqual(
+    listSelectorChainMatches(CHECKED_NODES, parseSelectorChain('checked=true'), {
+      platform: 'ios',
+    })?.matchedNodes.map((node) => node.ref),
+    ['sw1'],
+  );
+  assert.deepEqual(
+    listSelectorChainMatches(CHECKED_NODES, parseSelectorChain('checked=false'), {
+      platform: 'ios',
+    })?.matchedNodes.map((node) => node.ref),
+    ['sw2'],
+  );
 });
 
 test('editable selector follows a published editable fact and infers from type without one', () => {

@@ -55,7 +55,8 @@ const FINDING_NODES = [
   },
 ];
 
-// The same screen with every finding resolved: no small target, every control named.
+// The same screen with every finding resolved: no small target, every control named, and no two
+// controls of one role sharing a name.
 const CLEAN_NODES = [
   SCREEN,
   {
@@ -66,9 +67,9 @@ const CLEAN_NODES = [
     hittable: true,
     rect: { x: 10, y: 60, width: 60, height: 60 },
   },
-  ...FINDING_NODES.slice(2).map((node) => ({
+  ...FINDING_NODES.slice(2).map((node, position) => ({
     ...node,
-    ...(node.type === 'Button' ? { label: 'Continue' } : {}),
+    ...(node.type === 'Button' ? { label: `Continue ${position}` } : {}),
   })),
 ];
 

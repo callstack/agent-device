@@ -1,0 +1,29 @@
+{
+  "name": "@agent-device/host-swift",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private Swift helpers that the daemon compiles and runs on a macOS host, with their owner-only compile cache: the recording touch overlay, the contact-sheet frame decoder, and the video validator. Recording post-processing for every device platform runs them. Internal workspace package bundled into the published artifact.",
+  "dependencies": {
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./recording-swift-sources": {
+      "types": "./src/recording-swift-sources.ts",
+      "default": "./src/recording-swift-sources.ts"
+    },
+    "./swift-cache": {
+      "types": "./src/swift-cache.ts",
+      "default": "./src/swift-cache.ts"
+    },
+    "./video-validator-source": {
+      "types": "./src/video-validator-source.ts",
+      "default": "./src/video-validator-source.ts"
+    }
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0"
+  }
+}

@@ -753,7 +753,6 @@ function relaunchInput(app: string) {
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/tmp',
-    runtimeHints: {},
     execution: { requestId: 'request-1' },
   };
 }

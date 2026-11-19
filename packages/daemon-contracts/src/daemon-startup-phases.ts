@@ -1,13 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import { isProcessAlive } from '@agent-device/host-kit/process';
-
 /**
- * Startup phase markers: a per-launch record, named for the writing pid, of how far that startup
- * got, so a waiting client tells "slow but progressing" from "stuck" without a heartbeat. The
- * writer removes it on completion, the client after a joined exit, and each new registration
- * owner sweeps the files of provably dead pids.
+ * The daemon startup phase vocabulary and the one typed message that carries it. The launcher opens
+ * a Node IPC channel when it spawns the detached child (`stdio: [..., 'ipc']`); the daemon entry
+ * reports each phase over it and closes it after `registered`.
  */
 const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',
@@ -22,116 +16,83 @@ export type DaemonStartupPhase = (typeof DAEMON_STARTUP_PHASES)[number];
 
 const DAEMON_STARTUP_PHASE_SET: ReadonlySet<string> = new Set<string>(DAEMON_STARTUP_PHASES);
 
-const DAEMON_STARTUP_PHASES_ENTRY = /^daemon-startup-phases-(\d*)\.jsonl$/;
+const DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE = 'daemon-startup-phase';
 
-/** The marker file the daemon process `pid` writes in `stateDir`; an absent file is no evidence. */
-export function resolveDaemonStartupPhasesPath(stateDir: string, pid: number): string {
-  return path.join(stateDir, `daemon-startup-phases-${pid}.jsonl`);
-}
+/**
+ * One phase report from a daemon child to its launcher. The IPC channel connects exactly one
+ * launcher to the child it spawned, so the message needs no sender identity.
+ */
+export type DaemonStartupProgressMessage = Readonly<{
+  type: typeof DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE;
+  phase: DaemonStartupPhase;
+}>;
 
-/** Appends one phase marker; a refused append goes to `reportFailure`, never fatal to a startup. */
-export function recordDaemonStartupMarker(
-  startupPhasesPath: string,
-  phase: DaemonStartupPhase,
-  reportFailure?: (error: NormalizedError) => void,
-): void {
-  try {
-    const timestampMs = Date.now();
-    fs.mkdirSync(path.dirname(startupPhasesPath), { recursive: true });
-    // A crash mid-append can leave no trailing newline; glue two appends and both are lost.
-    const separator = endsWithoutNewline(startupPhasesPath) ? '\n' : '';
-    fs.appendFileSync(
-      startupPhasesPath,
-      `${separator}${JSON.stringify({ data: { startupPhase: phase, timestampMs } })}\n`,
-    );
-  } catch (error) {
-    reportFailure?.(normalizeError(error));
-  }
-}
-
-function endsWithoutNewline(file: string): boolean {
-  let fd: number | undefined;
-  try {
-    const stats = fs.statSync(file);
-    if (stats.size === 0) return false;
-    const buffer = Buffer.alloc(1);
-    fd = fs.openSync(file, 'r');
-    if (fs.readSync(fd, buffer, 0, 1, stats.size - 1) !== 1) return false;
-    return buffer[0] !== 0x0a;
-  } catch {
-    return false;
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
+function daemonStartupProgressMessage(phase: DaemonStartupPhase): DaemonStartupProgressMessage {
+  return { type: DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE, phase };
 }
 
 /**
- * Removes this launch's record: before its first marker (a per-pid name identifies a writer, not
- * a lifetime, so the entry claims its file first), and after a finished startup or joined exit.
- * A refused removal only reports through `reportFailure`; it never stops a startup.
+ * The phase one channel message reports. Anything unknown or malformed parses to null, so a
+ * receiver never fails a startup over a message it does not recognize.
  */
-export function removeDaemonStartupPhasesFile(
-  startupPhasesPath: string,
-  reportFailure?: (error: NormalizedError) => void,
-): void {
-  try {
-    fs.rmSync(startupPhasesPath, { force: true });
-  } catch (error) {
-    reportFailure?.(normalizeError(error));
-  }
-}
-
-/** Sweeps marker files of provably dead (or unnameable) pids; a live pid's file is kept. */
-export function sweepDeadDaemonStartupPhasesFiles(stateDir: string): void {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(stateDir);
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    const match = DAEMON_STARTUP_PHASES_ENTRY.exec(entry);
-    if (match === null) continue;
-    const deadPid = Number(match[1]);
-    if (deadPid === process.pid) continue;
-    if (!Number.isSafeInteger(deadPid) || deadPid <= 0 || !isProcessAlive(deadPid)) {
-      removeDaemonStartupPhasesFile(path.join(stateDir, entry));
-    }
-  }
+export function parseDaemonStartupProgressMessage(message: unknown): DaemonStartupPhase | null {
+  if (typeof message !== 'object' || message === null) return null;
+  const { type, phase } = message as Record<string, unknown>;
+  if (type !== DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE) return null;
+  return typeof phase === 'string' && DAEMON_STARTUP_PHASE_SET.has(phase)
+    ? (phase as DaemonStartupPhase)
+    : null;
 }
 
 /**
- * The phases observed in a marker tail, keeping each phase's earliest occurrence. Unknown and
- * unparsable lines are ignored: a client never fails a startup over a line it does not know.
+ * The launcher sets this on the detached child it spawns. A process that holds an IPC channel for
+ * another reason (a forked host, a test worker) has no mark, so its channel is never used.
  */
-export function readDaemonStartupPhaseMarkers(
-  markerTail: string,
-): Partial<Record<DaemonStartupPhase, number>> {
-  const phases: Partial<Record<DaemonStartupPhase, number>> = {};
-  for (const line of markerTail.split('\n')) {
-    if (!line.includes('"startupPhase"')) continue;
-    let record: DaemonStartupMarkerRecord;
-    try {
-      record = JSON.parse(line) as DaemonStartupMarkerRecord;
-    } catch {
-      continue;
-    }
-    const phase = record.data?.startupPhase;
-    const timestampMs = record.data?.timestampMs;
-    if (
-      typeof phase !== 'string' ||
-      !DAEMON_STARTUP_PHASE_SET.has(phase) ||
-      typeof timestampMs !== 'number' ||
-      !Number.isFinite(timestampMs)
-    ) {
-      continue;
-    }
-    const seen = phases[phase as DaemonStartupPhase];
-    if (seen === undefined || timestampMs < seen) phases[phase as DaemonStartupPhase] = timestampMs;
-  }
-  return phases;
-}
+export const DAEMON_PROGRESS_CHANNEL_ENV = 'AGENT_DEVICE_DAEMON_PROGRESS_CHANNEL';
 
-type DaemonStartupMarkerRecord = {
-  data?: { startupPhase?: unknown; timestampMs?: unknown };
-};
+/**
+ * Where a runtime reports its startup phases. The process entry owns the channel behind it; an
+ * embedded host passes none. Reporting never fails a startup.
+ */
+export type DaemonStartupProgress = Readonly<{
+  report(phase: DaemonStartupPhase): void;
+  /** Ends reporting after `registered`. */
+  close(): void;
+}>;
+
+/** The parts of a Node process that carry its IPC channel to the parent. */
+export type DaemonStartupProgressProcess = Pick<
+  NodeJS.Process,
+  'channel' | 'send' | 'connected' | 'disconnect' | 'stderr'
+>;
+
+/**
+ * The launch channel of the daemon process `proc`. Without the launcher's mark in `env` or a
+ * channel, reporting is a no-op. The channel is unref'd so it never holds the daemon alive. A
+ * failed send (launcher gone) writes one stderr line: the callback form keeps it out of the
+ * uncaughtException handler, which would otherwise end the daemon.
+ */
+export function openDaemonStartupProgress(
+  env: Readonly<Record<string, string | undefined>>,
+  proc: DaemonStartupProgressProcess,
+): DaemonStartupProgress {
+  const { channel, send } = proc;
+  if (env[DAEMON_PROGRESS_CHANNEL_ENV] !== '1' || !channel || !send) {
+    return { report() {}, close() {} };
+  }
+  channel.unref();
+  let failed = false;
+  return {
+    report(phase) {
+      if (failed || !proc.connected) return;
+      send.call(proc, daemonStartupProgressMessage(phase), (error: Error | null) => {
+        if (!error || failed) return;
+        failed = true;
+        proc.stderr.write(`Daemon startup phase report failed: ${error.message}\n`);
+      });
+    },
+    close() {
+      if (proc.connected) proc.disconnect();
+    },
+  };
+}

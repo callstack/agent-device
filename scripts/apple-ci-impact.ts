@@ -44,7 +44,8 @@ export function selectAppleBridgeProof(changedPaths: readonly string[] | null): 
     (file) =>
       file.startsWith('apple/') ||
       file.startsWith('packages/platform-apple/src/') ||
-      file.startsWith('packages/apple-runner/src/'),
+      file.startsWith('packages/apple-runner/src/') ||
+      file.startsWith('packages/host-swift/'),
   );
   return input
     ? { run: true, reason: `Apple implementation changed: ${input}` }

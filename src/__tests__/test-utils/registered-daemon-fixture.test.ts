@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { resolveDaemonStartupPhasesPath } from '@agent-device/daemon-contracts/daemon-startup-phases';
+import { parseDaemonStartupProgressMessage } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   launchRegisteredDaemonFixtureArgs,
@@ -45,7 +45,7 @@ test('a launch plan returns the registered child identity and joins that child a
 });
 
 test('args built before any launch keep their own entry script under a concurrent second build', async () => {
-  // Under a shared entry path child 1 would run child 2's switches and carry the wrong marker.
+  // Under a shared entry path child 1 would run child 2's switches and carry the wrong phase.
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-fixture-entry-isolation-'));
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
@@ -57,20 +57,49 @@ test('args built before any launch keep their own entry script under a concurren
     codeSignature: 'fixture',
   };
   const firstArgs = registeredDaemonFixtureArgs(paths, fields, undefined, {
-    emitStartupMarkerBeforeAcquisition: true,
+    emitStartupPhaseBeforeAcquisition: true,
   });
   const secondArgs = registeredDaemonFixtureArgs(paths, fields, undefined, {
-    emitStartupMarker: true,
+    emitStartupPhase: true,
   });
   assert.notEqual(firstArgs[1], secondArgs[1]);
-  const first = launchRegisteredDaemonFixtureArgs(paths, firstArgs, { stdio: 'ignore' });
+  const ipc = ['ignore', 'ignore', 'ignore', 'ipc'] as const;
+  const channelEnv = {
+    ...process.env,
+    AGENT_DEVICE_DAEMON_PROGRESS_CHANNEL: '1',
+  };
+  const first = launchRegisteredDaemonFixtureArgs(paths, firstArgs, {
+    stdio: [...ipc],
+    env: channelEnv,
+  });
+  const firstMessages: unknown[] = [];
+  const secondMessages: unknown[] = [];
+  first.channel?.onMessage((message) => firstMessages.push(message));
   try {
     await waitForFixtureFile(path.join(paths.baseDir, `registration-held-${first.pid}`));
-    const second = launchRegisteredDaemonFixtureArgs(paths, secondArgs, { stdio: 'ignore' });
+    const second = launchRegisteredDaemonFixtureArgs(paths, secondArgs, {
+      stdio: [...ipc],
+      env: channelEnv,
+    });
+    second.channel?.onMessage((message) => secondMessages.push(message));
     assert.equal((await second.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-    const text = fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, first.pid), 'utf8');
-    assert.match(text, /modules-loaded/);
-    assert.doesNotMatch(text, /lock-acquired/, 'child 1 must run the script built for it');
+    const firstPhases = firstMessages.map((m) => parseDaemonStartupProgressMessage(m));
+    assert.deepEqual(firstPhases, ['modules-loaded']);
+    assert.equal(
+      firstPhases.includes('lock-acquired'),
+      false,
+      'child 1 must run the script built for it, not child 2’s',
+    );
+    assert.deepEqual(
+      secondMessages.map((m) => parseDaemonStartupProgressMessage(m)),
+      [],
+      'the busy child exits before its post-acquisition phase',
+    );
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      [],
+      'channel-reported phases must not write any marker file',
+    );
   } finally {
     await finishRegisteredDaemonFixture(paths.baseDir);
   }

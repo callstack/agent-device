@@ -85,7 +85,7 @@ export function createContractClock(startMs = 0): {
 export function ref(
   value: string,
   options: { fallbackLabel?: string } = {},
-): import('@agent-device/contracts/interaction').RefTarget {
+): import('@agent-device/contracts/interaction').InteractionRefTarget {
   return {
     kind: 'ref',
     ref: value,
@@ -94,6 +94,6 @@ export function ref(
 }
 export function selector(
   value: string,
-): import('@agent-device/contracts/interaction').SelectorTarget {
+): import('@agent-device/contracts/interaction').InteractionSelectorTarget {
   return { kind: 'selector', selector: value };
 }

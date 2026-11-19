@@ -177,6 +177,8 @@ test('each runner SDK reads its version and build from its own platform director
     macosx: 'MacOSX',
     xrsimulator: 'XRSimulator',
     xros: 'XROS',
+    watchsimulator: 'WatchSimulator',
+    watchos: 'WatchOS',
   };
   const expected = Object.entries(sdkDirectories).map(([sdkName, directory], index) => {
     const sdk = path.join(

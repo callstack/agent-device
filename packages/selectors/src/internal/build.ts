@@ -2,6 +2,7 @@ import { uniqueStrings } from '@agent-device/kernel/collections';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isNodeVisible } from './node.ts';
+import { tryParseSelectorChain } from './parse.ts';
 import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
 import { idMatchCountInTree, readNodeLocalIdentity } from '@agent-device/ad-script';
 
@@ -66,6 +67,22 @@ export function buildSelectorChainForNode(
     if (visible) deduped.push('visible=true');
   }
   return deduped;
+}
+
+/**
+ * The selector expression a recorded step writes for a chain from
+ * `buildSelectorChainForNode`. A leading id passed `selectableId`'s
+ * record-time uniqueness check, so it is the whole expression: a fallback
+ * after it could only re-bind a node without that id, which `target-v1`
+ * verification refuses. Any other chain keeps its ` || ` alternatives.
+ */
+export function recordedSelectorExpression(chain: readonly string[]): string | undefined {
+  const [first] = chain;
+  if (first === undefined) return undefined;
+  const leading = tryParseSelectorChain(first)?.selectors;
+  const isLoneId =
+    leading?.length === 1 && leading[0]?.terms.length === 1 && leading[0].terms[0]?.key === 'id';
+  return isLoneId ? first : chain.join(' || ');
 }
 
 /**

@@ -17,9 +17,7 @@ export {
 // still emits; the internal `Platform` no longer carries them — every Apple OS
 // collapses to the single `apple` platform (ADR-0009 / issue #979).
 export type ApplePlatform = 'ios' | 'macos';
-// Explicit, stored Apple operating system. All six literals are reserved so the
-// type is stable as platform support grows, but discovery only ever populates
-// the four currently supported ones ('ios' | 'ipados' | 'tvos' | 'macos').
+// Explicit, stored Apple operating system. Discovery produces watchOS for simulators only.
 const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'] as const;
 export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
@@ -526,7 +524,7 @@ export function platformSelectorsConflict(
 export function resolveApplePlatformName(
   platformOrTarget: ApplePlatform | DeviceTarget | undefined,
   appleOs?: AppleOS,
-): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS' {
   // Prefer the explicit, stored Apple OS when present; legacy records without
   // it keep resolving through the existing target-based inference below.
   if (appleOs) return resolveRunnerPlatformNameForAppleOs(appleOs);
@@ -537,7 +535,7 @@ export function resolveApplePlatformName(
 
 function resolveRunnerPlatformNameForAppleOs(
   appleOs: AppleOS,
-): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS' {
   switch (appleOs) {
     case 'tvos':
       return 'tvOS';
@@ -545,10 +543,9 @@ function resolveRunnerPlatformNameForAppleOs(
       return 'macOS';
     case 'visionos':
       return 'visionOS';
-    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS remains
-    // reserved in the type but is never produced by discovery; defaulting it to
-    // iOS keeps any future record on a valid runner profile without introducing
-    // watchOS support.
+    case 'watchos':
+      return 'watchOS';
+    // iOS and iPadOS share the single iOS runner profile and SDK.
     default:
       return 'iOS';
   }
@@ -955,6 +952,8 @@ function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
 }
 
 function appleDeviceSelectionRank(device: DeviceInfo): number {
+  // A watch answers `--platform ios` only when no other Apple device can.
+  if (device.appleOs === 'watchos') return 15;
   if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, 1, 2, 3);
   if (device.kind === 'device' && isApplePlatform(device.platform) && !isMacOs(device))
     return appleTargetSelectionRank(device, 10, 11, 12, 13);

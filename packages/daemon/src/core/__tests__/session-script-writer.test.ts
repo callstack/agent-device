@@ -409,7 +409,7 @@ test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallb
 
 // (a) publishing to an ABSENT target succeeds.
 test('write() publishes cleanly when the target does not exist yet', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-absent-');
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-absent-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
 
@@ -485,7 +485,7 @@ test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad a
 // atomically instead of refusing. ---
 
 test('write(session, { force: true }) overwrites an existing COMPLETE target atomically', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-force-');
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-force-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
@@ -723,7 +723,7 @@ test('an ordinary recording returns a filesystem write failure as a typed error,
 // (f) confirm the absent-target case still succeeds for ordinary recording —
 // the refusal is scoped to an EXISTING target, not a blanket block.
 test('an ordinary (non-repair) recording still publishes cleanly when its target does not exist yet', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-ordinary-absent-');
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-ordinary-absent-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'fresh.ad');
 
@@ -743,7 +743,7 @@ test('an ordinary (non-repair) recording still publishes cleanly when its target
 });
 
 test('close --save-script=<explicit path> re-points a defaulted-healed repair, and a write to that (absent) explicit path succeeds', () => {
-  const root = mkdtempForTestSync('agent-device-script-writer-close-explicit-');
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-script-writer-close-explicit-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const defaultedHealed = path.join(root, 'flows', 'login.healed.ad');
   const explicitOut = path.join(root, 'flows', 'promoted.ad');

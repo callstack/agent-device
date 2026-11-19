@@ -13,7 +13,6 @@
   "@agent-device/contracts/app-inventory-runtime",
   "@agent-device/contracts/app-log-runtime",
   "@agent-device/contracts/app-state-runtime",
-  "@agent-device/contracts/apple-runner-request",
   "@agent-device/contracts/apple-session-observation",
   "@agent-device/contracts/application-lifecycle-interaction",
   "@agent-device/contracts/application-lifecycle-runtime",

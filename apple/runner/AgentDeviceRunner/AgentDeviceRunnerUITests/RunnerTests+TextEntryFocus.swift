@@ -115,7 +115,7 @@ extension RunnerTests {
     reusingFocusedInput: Bool = false,
     tapContext: SynthesizedCoordinateContext? = nil
   ) throws -> TextEntryTarget {
-    let contentTranslation = liveContentTranslation(app: app)
+    let contentTranslation = liveContentTranslation(app: app, reusing: tapContext)
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)
       if !softwareKeyboardVisible, let rememberedTarget = rememberedTextEntryTarget(contentTranslation: contentTranslation) {

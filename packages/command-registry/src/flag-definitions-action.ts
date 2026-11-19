@@ -373,7 +373,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'booleanOrString',
     usageLabel: '--save-script [path]',
     usageDescription:
-      'Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path.',
+      'Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share.',
     projectConfig: false,
     recorded: true,
   },

@@ -10,6 +10,7 @@ type LogsActionFields = {
   marked?: true;
   cleared?: true;
   restarted?: true;
+  relaunched?: true;
   removedRotatedFiles?: number;
 };
 
@@ -48,6 +49,7 @@ const LOG_ACTION_FIELD_KEYS = [
   'marked',
   'cleared',
   'restarted',
+  'relaunched',
   'removedRotatedFiles',
 ] as const satisfies readonly (keyof LogsActionFields)[];
 

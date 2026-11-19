@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+import type {
+  MaterializeAppSourceInput,
+  MaterializedAppSource,
+} from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -264,6 +268,60 @@ test.each([
     expect(materializeAndroid).toHaveBeenCalledTimes(runtimeDevice.platform === 'android' ? 1 : 0);
   },
 );
+
+test('materialization passes the input with its daemon-derived deadline to the executor', async () => {
+  // #4726: the cutoff travels as data (materializationDeadlineMs) on the input, which the binding
+  // forwards untouched to the host executor that arms its own timer. The binding keeps only the
+  // request scope signal for cancellation; a dropped input or deadline data starves the deploy
+  // ledger exactly as the old per-binding signal merge did.
+  const prepareArtifact = vi.fn(
+    async (
+      _input: MaterializeAppSourceInput,
+      _options: Readonly<{ signal: AbortSignal }>,
+    ): Promise<MaterializedAppSource> => ({
+      installablePath: '/tmp/app.apk',
+      cleanup: async () => {},
+    }),
+  );
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: {
+      ...host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      androidDeployment: {
+        prepareArtifact,
+      } as unknown as PlatformRuntimeHost['androidDeployment'],
+    },
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities(),
+    deployment: {
+      fact: () => ({ available: true }),
+      deployApp: async () => ({ launchTarget: 'provider-installed' }),
+      deployMaterializedApp: async () => ({ launchTarget: 'provider-materialized' }),
+    },
+  });
+  const controller = new AbortController();
+  const binding = await owner.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: controller.signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  const materializationDeadlineMs = Date.now() + 120_000;
+  const input: MaterializeAppSourceInput = {
+    source: { kind: 'url', url: 'https://apps.test/app.apk' },
+    materializationDeadlineMs,
+  };
+  await binding.operations.materializeAppSource?.(input);
+  expect(prepareArtifact.mock.lastCall?.[0]).toBe(input);
+  expect(prepareArtifact.mock.lastCall?.[0]?.materializationDeadlineMs).toBe(
+    materializationDeadlineMs,
+  );
+  expect(prepareArtifact.mock.lastCall?.[1]?.signal).toBe(controller.signal);
+});
 
 test('captures through only the active exact WebDriver interactor', async () => {
   const snapshot = vi.fn(async () => ({ backend: 'android' as const, nodes: [] }));

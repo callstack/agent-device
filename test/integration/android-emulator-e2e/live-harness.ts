@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   createLiveDeviceContext,
   createLiveDeviceHarness,
+  type LiveRunCli,
   requiredEnv,
   type LiveDeviceContext,
 } from '../live-device-e2e/runtime.ts';
@@ -38,27 +39,38 @@ export function createContext(): LiveContext {
   };
 }
 
-const harness = createLiveDeviceHarness<LiveContext, AndroidEmulatorBehaviorId>({
-  behaviorsForScenario: liveBehaviorsForScenario,
-  commandsForScenario: liveCommandsForScenario,
-  deviceEvidence: (context) => readAndroidDeviceEvidence(context),
-  // Seven adb reads, two of them dumpsys: the default bound would drop the whole file,
-  // including the crash stack, on a loaded runner.
-  deviceEvidenceTimeoutMs: 25_000,
-  commonFlags: (context, args) => [
-    ...args,
-    '--platform',
-    'android',
-    '--serial',
-    context.serial,
-    '--session',
-    context.session,
-    '--daemon-server-mode',
-    'dual',
-    ...(args.includes('--json') ? [] : ['--json']),
-  ],
-  writeCoverageReport,
-});
+/**
+ * Builds the Android live harness. `overrides.runCli` is the harness-owned CLI runner injection:
+ * harness-level regressions script a device through it and run a scenario via `runScenario`.
+ */
+export function createAndroidLiveHarness(overrides: { runCli?: LiveRunCli } = {}) {
+  return createLiveDeviceHarness<LiveContext, AndroidEmulatorBehaviorId>({
+    behaviorsForScenario: liveBehaviorsForScenario,
+    commandsForScenario: liveCommandsForScenario,
+    deviceEvidence: (context) => readAndroidDeviceEvidence(context),
+    // Seven adb reads, two of them dumpsys: the default bound would drop the whole file,
+    // including the crash stack, on a loaded runner.
+    deviceEvidenceTimeoutMs: 25_000,
+    commonFlags: (context, args) => [
+      ...args,
+      '--platform',
+      'android',
+      '--serial',
+      context.serial,
+      '--session',
+      context.session,
+      '--daemon-server-mode',
+      'dual',
+      ...(args.includes('--json') ? [] : ['--json']),
+    ],
+    writeCoverageReport,
+    ...(overrides.runCli === undefined ? {} : { runCli: overrides.runCli }),
+  });
+}
+
+export const androidLiveHarness = createAndroidLiveHarness();
+
+export type AndroidLiveHarness = ReturnType<typeof createAndroidLiveHarness>;
 
 export const {
   runScenario,
@@ -67,7 +79,7 @@ export const {
   verifyBehavior,
   verifyCommand,
   verifyNestedCommand: verifyNestedReplayCommand,
-} = harness;
+} = androidLiveHarness;
 
 export async function cleanupSession(context: LiveContext): Promise<void> {
   const failures: unknown[] = [];

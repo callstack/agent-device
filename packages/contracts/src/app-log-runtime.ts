@@ -68,6 +68,8 @@ export type AppLogStartInput = Readonly<{
 export type AppLogStartResult = Readonly<{
   pendingHandle: PendingTransferGuard<AppLogLiveHandle>;
   envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>;
+  /** Set when the capture relaunched the session app to attach to it; stopping it ends the app. */
+  relaunched?: true;
 }>;
 
 type AppLogReattachInput = Readonly<{

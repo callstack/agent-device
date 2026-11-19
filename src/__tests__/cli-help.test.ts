@@ -42,6 +42,16 @@ test('appstate --help prints command help and skips daemon dispatch', async () =
   assert.doesNotMatch(result.stdout, /Global Flags:/);
 });
 
+test('help logs discloses the physical iOS device relaunch on start and app end on stop', async () => {
+  const result = await runCliCapture(['help', 'logs']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stdout,
+    /On iOS physical devices, starting the stream relaunches the session app and reports relaunched: true, and stopping the stream ends the app\./,
+  );
+});
+
 test('prepare help documents iOS runner CI setup', async () => {
   const result = await runCliCapture(['help', 'prepare']);
   assert.equal(result.code, 0);

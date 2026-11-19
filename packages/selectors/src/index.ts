@@ -7,7 +7,11 @@ import {
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
 } from './internal/arguments.ts';
-import { buildSelectorChainForNode, normalizeSelectorText } from './internal/build.ts';
+import {
+  buildSelectorChainForNode,
+  normalizeSelectorText,
+  recordedSelectorExpression,
+} from './internal/build.ts';
 import {
   detectUnknownSelectorKeyToken,
   isRoleHintWord,
@@ -78,6 +82,7 @@ export {
   parseFindSelectorExpression,
   projectSelectorExpression,
   readSimpleSelectorTarget,
+  recordedSelectorExpression,
   readSelectorAlternatives,
   readReplaySelectorDisplayValue,
   readSelectorExpression,

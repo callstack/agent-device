@@ -97,8 +97,17 @@ Text keys:
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches
 `Sign In` but not `Sign In Now`. For partial matches, use `find`.
 
-Boolean keys: `visible`, `hidden`, `editable`, `selected`, `focused`, `enabled`, `hittable`. Write
+On Android, `id=` matches the element's full resource-id, which keeps its `pkg:id/name` form for
+native XML ids, while a React Native `testID` arrives bare (`id="login"`). A Jetpack Compose
+`Modifier.testTag` is exposed to agent-device only when the app sets
+`semantics { testTagsAsResourceId = true }`; then `id="<tag>"` matches it.
+
+Boolean keys: `visible`, `hidden`, `editable`, `selected`, `checked`, `focused`, `enabled`, `hittable`. Write
 `visible=true` or `visible=false`; a bare `visible` means `visible=true`.
+
+`checked` (and `is checked`) reads the state of a checkable control (switch, checkbox, radio).
+`checked=true` matches only an explicitly checked control and `checked=false` only an explicitly
+unchecked one; an iOS `mixed` state and a control with no checked state match neither.
 
 `editable` (and `is editable`) uses the node's native `editable` fact when the snapshot carries one,
 so a custom text view can match and a read-only field cannot. Without the fact it is inferred from

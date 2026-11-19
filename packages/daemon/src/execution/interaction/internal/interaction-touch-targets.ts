@@ -1,7 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   FillCommandResult,
-  InteractionTarget,
+  InteractionRequestTarget,
   LongPressCommandResult,
   PressCommandResult,
 } from '@agent-device/contracts/interaction';
@@ -16,7 +16,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 
 /** What a decoded touch target carries: the target plus optional ref-plan provenance. */
 type ParsedTouchTargetOk = {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   refGeneration?: number;
   /** Multi-ref press sequence members in dispatch order, bare ref bodies (`e13`). */
   refs?: string[];
@@ -207,7 +207,7 @@ export function parseLongPressTarget(positionals: string[]): ParsedLongPressTarg
 }
 
 export type ParsedFillTarget =
-  | { ok: true; target: InteractionTarget; refGeneration?: number; text: string }
+  | { ok: true; target: InteractionRequestTarget; refGeneration?: number; text: string }
   | { ok: false; response: DaemonResponse };
 
 function missingFillTextResponse(place: 'ref' | 'coordinates' | 'selector'): ParsedFillTarget {
@@ -328,7 +328,7 @@ export function interactionResultExtra(
 }
 
 export function formatTouchTargetLabel(
-  target: InteractionTarget,
+  target: InteractionRequestTarget,
   result: PressCommandResult | LongPressCommandResult,
 ): string {
   if (target.kind === 'point') return 'coordinate tap';

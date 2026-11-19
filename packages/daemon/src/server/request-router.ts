@@ -57,7 +57,7 @@ import {
   prepareLockedRequestScope,
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
-import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
+import { saveScriptFlagResponse } from './request-save-script-policy.ts';
 import {
   deviceSpecInvalidError,
   deviceSpecUnsupportedError,
@@ -270,10 +270,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     if (invalidRecordingFlags) return invalidRecordingFlags;
     const invalidCustomActionFlags = customActionFlagsResponse(req);
     if (invalidCustomActionFlags) return invalidCustomActionFlags;
-    // #1478: raw `flags.saveScript` on a non-owner command never reaches
-    // admission, device work, or a handler that could arm publication.
-    const unsupportedSaveScript = unsupportedSaveScriptFlagResponse(req);
-    if (unsupportedSaveScript) return unsupportedSaveScript;
+    // Validate save-script before dispatch can launch or tear down a backend.
+    const invalidSaveScript = saveScriptFlagResponse(req, sessionStore.host.cwd);
+    if (invalidSaveScript) return invalidSaveScript;
     // A device spec is honoured only by a backend in front of this daemon, which strips it; one that
     // reaches here is refused before admission, so no lease is recorded and no device is picked.
     const unsupportedDeviceSpec = deviceSpecFlagsResponse(req);

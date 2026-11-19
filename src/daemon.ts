@@ -1,29 +1,14 @@
-import { asAppError, normalizeError } from '@agent-device/kernel/errors';
+import { asAppError } from '@agent-device/kernel/errors';
 import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
-import {
-  removeDaemonStartupPhasesFile,
-  recordDaemonStartupMarker,
-  resolveDaemonStartupPhasesPath,
-} from '@agent-device/daemon-contracts/daemon-startup-phases';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { openDaemonStartupProgress } from '@agent-device/daemon-contracts/daemon-startup-phases';
 
-// A refused marker append goes to stderr, which the launcher redirects into the daemon log.
-const reportMarkerFailure = (error: unknown): void => {
-  process.stderr.write(`Daemon startup marker write failed: ${normalizeError(error).message}\n`);
-};
-
-// Captured once: the earliest marker and the runtime resolve the state dir from this one host,
-// so a relative AGENT_DEVICE_STATE_DIR cannot land the markers beside another directory's lock.
+// Captured once: the runtime resolves the state dir from this one host, so a relative
+// AGENT_DEVICE_STATE_DIR cannot land the daemon beside another directory's lock.
 const host = captureHostEnvironment(process);
-const ownPhasesPath = resolveDaemonStartupPhasesPath(
-  resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, { env: host.env, cwd: host.cwd }).baseDir,
-  process.pid,
-);
-// The claim first: after pid reuse it is the only defense against a dead lifetime's phases.
-removeDaemonStartupPhasesFile(ownPhasesPath, reportMarkerFailure);
-recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
-
+// The launch channel the launcher opened at spawn; without one (a manual start) reporting is a no-op.
+const startupProgress = openDaemonStartupProgress(host.env, process);
+startupProgress.report('modules-loaded');
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
 // The root's composition enters as a factory behind a function-scoped `await import`: the server
@@ -32,13 +17,10 @@ recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
     host,
+    startupProgress,
     composeDeps: async (input) => {
       const deps = await (await import('./daemon-composition.ts')).createDaemonRuntimeDeps(input);
-      recordDaemonStartupMarker(
-        resolveDaemonStartupPhasesPath(input.baseDir, process.pid),
-        'composition-loaded',
-        reportMarkerFailure,
-      );
+      startupProgress.report('composition-loaded');
       return deps;
     },
   });

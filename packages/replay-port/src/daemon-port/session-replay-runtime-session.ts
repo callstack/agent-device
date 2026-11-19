@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayCoordinator, ReplaySessionView } from '@agent-device/replay-port/command-types';
 import type { ReplaySessionStore } from '@agent-device/contracts/replay-backend';
-import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import { resolveScriptDestination } from '@agent-device/host-kit/file';
 import { healedScriptSiblingPath } from '@agent-device/replay-port/session-replay-heal';
 import {
   errorResponse,
@@ -188,7 +188,7 @@ function preflightSaveScriptTarget(params: {
   if (!saveScript) return undefined;
   const targetPath =
     typeof saveScript === 'string'
-      ? expandSessionPath(saveScript, hostCwd)
+      ? resolveScriptDestination(saveScript, { cwd: hostCwd })
       : (existingSaveScriptPath ?? healedScriptSiblingPath(sourcePath));
   const effectiveForce =
     Boolean(liveForce) || (Boolean(persistedForce) && targetPath === existingSaveScriptPath);

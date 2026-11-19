@@ -97,6 +97,16 @@ export type OpenApplicationPreparationInput = Readonly<{
  */
 export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
 
+/**
+ * A runtime-hints request paired with the fact-admitted operation that applies it natively. The
+ * pair is one field, so a hints request cannot exist without its transport; `openApplication`
+ * never imports or falls back to a sibling implementation behind a false runtime-hints fact.
+ */
+export type OpenApplicationRuntimeHints = Readonly<{
+  values: RuntimeHintValues;
+  apply: (input: RuntimeHintsApplicationInput) => Promise<void>;
+}>;
+
 /** The normalized public application launch, independent of daemon request shape. */
 export type OpenApplicationInput = Readonly<{
   target?: string;
@@ -110,13 +120,11 @@ export type OpenApplicationInput = Readonly<{
   prewarmRunnerBeforeOpen: boolean;
   enableTestIme: boolean;
   stateDir: string;
-  runtimeHints: RuntimeHintValues;
   /**
-   * The fact-admitted runtime-hint operation for this open. It is optional only when no
-   * transport hint is requested; `openApplication` never imports or falls back to a sibling
-   * implementation behind a false runtime-hints fact.
+   * The transport hints this open must apply natively, paired with their fact-admitted apply
+   * operation. Absent when the open requests no transport hint.
    */
-  applyRuntimeHints?: (input: RuntimeHintsApplicationInput) => Promise<void>;
+  runtimeHints?: OpenApplicationRuntimeHints;
   execution: ApplicationLifecycleExecution;
 }>;
 

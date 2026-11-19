@@ -229,6 +229,26 @@ test('bounded install_source refusal names public install-from-source', async ()
   expect(fs.readFileSync(claimPath)).toEqual(before);
 });
 
+test('a top-level source install reaches runtime admission under its own deadline', async () => {
+  const device = { ...makeIosDevice('SIM-DIRECT-SOURCE-RECOVERY'), appleOs: 'ios' as const };
+  seedClaim(device);
+  const { handler, runtime } = route(device);
+  const request = openRequest('takeover', { platform: 'ios' }, 'direct-source-recovery');
+  const sourcePath = path.join(root('source-recovery-input-'), 'app.ipa');
+  fs.writeFileSync(sourcePath, 'owned fixture');
+  const response = await handler({
+    ...request,
+    command: 'install_source',
+    positionals: ['com.example.app'],
+    meta: { ...request.meta, installSource: { kind: 'path', path: sourcePath } },
+  });
+  expect(response).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'owner-capability-missing' } },
+  });
+  expect(runtime.inspectFacts).toHaveBeenCalled();
+});
+
 test('bounded install preserves the handler selector error before inventory resolution', async () => {
   const device = { ...makeIosDevice('SIM-NO-SELECTOR'), appleOs: 'ios' as const };
   const { handler, runtime, recovery } = route(device, { inventory: [] });

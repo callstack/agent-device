@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
 import type {
@@ -12,51 +11,21 @@ import type {
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  acquireProcessLock,
-  confirmScriptDestination,
-  scriptAncestryReason,
-  prepareScriptDestination,
-  publishFileSync,
-  withProcessLock,
-  type ScriptDestination,
-} from '@agent-device/host-kit/file';
-import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
-
-/** The download stops at this size, so a daemon cannot fill the caller's disk. */
-const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
-/** A record untouched for this long is removed the next time a record is created. */
-const STALE_RECORD_MS = 7 * 24 * 60 * 60 * 1000;
-const RECORD_LOCK_TIMEOUT_MS = 30_000;
-
-/**
- * This client's record of one remote `open --save-script`, keyed by the endpoint, tenant, session
- * and the publication ID this client minted for that open. Only this client creates records, so a
- * daemon response never establishes a destination. `revision` is the newest version published.
- * `publishing` names a version, the staged file's identity, and its staging directory before the
- * rename, so a crash between the rename and the revision update is settled from the destination's
- * identity, and the staging directory is removed once nothing can name it. `staging` lists every
- * staging directory allocated and not yet removed, so retiring or sweeping the record reclaims the
- * ones a crashed download left behind. `retired` marks a record a close has ended: it authorizes no
- * further version and stays on disk only until its staging directories are removed.
- */
-/** A published destination, `undefined` when no record matches, or a typed delivery failure. */
-type PublishOutcome =
-  | Readonly<{ published: string | undefined }>
-  | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
-
-type ScriptRecord = Readonly<{
-  destination: string;
-  force: boolean;
-  revision: number;
-  publishing?: Readonly<{ revision: number; file: string; staging: string }>;
-  staging?: readonly string[];
-  retired?: true;
-}>;
+import {
+  createRecord,
+  readRecord,
+  recordPath,
+  removeRecord,
+  withRecordLock,
+} from './script-publication-record.ts';
+import {
+  publishScriptVersion,
+  recordAgainArguments,
+  type PublishOutcome,
+} from './script-version-publisher.ts';
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
 
@@ -117,11 +86,11 @@ async function settleScriptReceipt(
     download: typeof downloadRemoteArtifact;
   }>,
   receipt: ScriptDeliveryReceipt,
-  disclose: (failure: ScriptDeliveryFailure, error: unknown) => void,
+  data: Record<string, unknown>,
 ): Promise<ReceiptSettlement> {
   const { endpoint, req, stateDir } = context;
   const failures = [...(receipt.failures ?? [])];
-  for (const failure of failures) disclose(failure, undefined);
+  for (const failure of failures) discloseDeliveryFailure(data, req, failure, undefined);
   const file = recordPath(stateDir, endpoint.baseUrl, req, receipt.publicationId);
   const record = readRecord(file);
   if (!record) {
@@ -136,8 +105,11 @@ async function settleScriptReceipt(
   const published = receipt.version
     ? await publishScriptVersion(context, receipt.version, closesOwnPlan)
     : undefined;
-  if (published && 'failure' in published) disclose(published.failure, published.error);
+  if (published && 'failure' in published) {
+    discloseDeliveryFailure(data, req, published.failure, published.error);
+  }
   const destination = published && 'published' in published ? published.published : undefined;
+  if (published) noteRepeatedVersion(data, published, closesOwnPlan);
   return {
     ...(closesOwnPlan ? { retire: file } : {}),
     ...(destination !== undefined && receipt.version?.artifactId !== undefined
@@ -230,17 +202,14 @@ export function sessionScriptDelivery(
       }
       const { published } = outcome;
       if (published === undefined) return;
+      noteRepeatedVersion(data, outcome, req.command === 'close');
       data.savedScript = published;
       kept.push({ ...artifact, localPath: published });
     },
     settleAfter: async (run) => {
       const data = response.data ?? {};
       if (rejected) discloseDeliveryFailure(data, req, rejected, undefined);
-      settled = receipt
-        ? await settleScriptReceipt(context, receipt, (failure, error) =>
-            discloseDeliveryFailure(data, req, failure, error),
-          )
-        : undefined;
+      settled = receipt ? await settleScriptReceipt(context, receipt, data) : undefined;
       try {
         return await run(delivery);
       } finally {
@@ -284,6 +253,40 @@ function discloseDeliveryFailure(
 }
 
 /**
+ * Adds a warning for a version answered from the record alone: the saved file is not looked at again, so the
+ * warning names how to recover a file removed since.
+ */
+function noteRepeatedVersion(
+  data: Record<string, unknown>,
+  outcome: PublishOutcome,
+  closing: boolean,
+): void {
+  if (!('published' in outcome) || outcome.published === undefined) return;
+  const { repeat } = outcome;
+  if (repeat === undefined) return;
+  const recovery = closing
+    ? `reuse your original open command with ${recordAgainArguments(outcome.published)}.`
+    : 'while the session is still recording, the next recorded action writes the recording to the destination again.';
+  data.warnings = [
+    ...readResponseWarnings(data),
+    `${repeatedVersionText(repeat, outcome.published)} It is not checked again. If that file is missing, ${recovery}`,
+  ];
+}
+
+function repeatedVersionText(
+  repeat: Readonly<{ requested: number; committed: number; pending?: number }>,
+  published: string,
+): string {
+  const answer =
+    repeat.requested === repeat.committed
+      ? `Revision ${repeat.requested} of the recording was already saved to ${published}.`
+      : `Revision ${repeat.requested} of the recording is superseded: the record last confirmed revision ${repeat.committed} at ${published}.`;
+  return repeat.pending === undefined
+    ? answer
+    : `${answer} Revision ${repeat.pending} may already have replaced that file; its save was interrupted.`;
+}
+
+/**
  * Settles the one delivery receipt a FAILED response names (#4595), where no successful-artifact
  * path runs: a batch that stopped mid-plan still delivers what its completed steps wrote. The
  * disclosure rides the error the caller receives. A close retires the record only when the failure
@@ -320,7 +323,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
   const settled = await settleScriptReceipt(
     { endpoint, req, stateDir, download },
     honored ? receipt : withoutClose(receipt),
-    (failure, failureError) => discloseDeliveryFailure(data, req, failure, failureError),
+    data,
   );
   if (settled.retire) await retireQuietly(req, settled.retire);
   const disclosure: Record<string, unknown> = {
@@ -363,376 +366,4 @@ function validatedFailedBatchStep(req: DaemonWireRequest, error: DaemonError): n
   }
   if (step < 1 || step > steps.length || typeof command !== 'string') return undefined;
   return normalizeBatchCommandName(steps[step - 1]?.command) === command ? step : undefined;
-}
-
-/**
- * Publishes one version and returns the destination, `undefined` when no record of this client
- * matches the artifact, or a typed delivery failure. A version no newer than the one published is
- * skipped. `closesRecording` says this version is the last one any later command will ask for, so
- * the failure hint offers the recovery that is actually left.
- *
- * The download streams, capped at `MAX_SCRIPT_BYTES`, into a new private file in a private staging
- * directory beside the destination, so it moves into place by one rename or link. The compare and
- * the publish run under the record lock. The first version is linked exclusively unless the open
- * granted `--force`, as a local close-time write is.
- */
-async function publishScriptVersion(
-  context: Readonly<{
-    endpoint: Required<DaemonArtifactEndpoint>;
-    req: DaemonWireRequest;
-    stateDir: string;
-    download: typeof downloadRemoteArtifact;
-  }>,
-  artifact: DaemonArtifact,
-  closesRecording: boolean,
-): Promise<PublishOutcome> {
-  const { endpoint, req, stateDir } = context;
-  const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
-  const file =
-    artifact.field === 'savedScript' &&
-    artifact.artifactType === 'session-script' &&
-    typeof id === 'string' &&
-    typeof artifactId === 'string' &&
-    Number.isSafeInteger(revision) &&
-    (revision as number) > 0
-      ? recordPath(stateDir, endpoint.baseUrl, req, id)
-      : undefined;
-  const record = file ? readRecord(file) : undefined;
-  if (!file || !record) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'session_script_artifact_dropped',
-      data: { session: req.session, artifactId },
-    });
-    return { published: undefined };
-  }
-  if ((revision as number) <= record.revision) return { published: record.destination };
-  const pending = { named: false };
-  let staging: string | undefined;
-  try {
-    // host-kit owns the whole creation sequence (ADR 0016), and its answer is where staging goes.
-    const prepared = prepareScriptDestination(record.destination);
-    const allocated = await withRecordLock(file, async () => allocateStaging(file, prepared));
-    staging = allocated;
-    if (!allocated) return { published: undefined };
-    const staged = path.join(allocated, 'script.ad');
-    await context.download({
-      ...endpoint,
-      artifactId: artifactId as string,
-      destinationPath: staged,
-      requestScope: req.meta,
-      privateFile: { maxBytes: MAX_SCRIPT_BYTES },
-    });
-    const version = {
-      revision: revision as number,
-      staging: allocated,
-      staged,
-      // What host-kit answered above, carried for the one confirmation before the rename.
-      prepared,
-      pending,
-    };
-    return { published: await withRecordLock(file, async () => publishStaged(file, version)) };
-  } catch (error) {
-    return {
-      failure: scriptDeliveryFailure(record.destination, id as string, error, closesRecording),
-      error,
-    };
-  } finally {
-    const removed = staging;
-    if (removed && !pending.named) {
-      // A directory that cannot be released here stays listed, so retirement or the sweep removes it.
-      await withRecordLock(file, async () => releaseStaging(file, removed)).catch(() => undefined);
-    }
-  }
-}
-
-/**
- * Creates a staging directory in the ground host-kit judged, and lists it in the record before any script
- * bytes reach it, or nothing when the record went away (ADR 0016).
- */
-function allocateStaging(file: string, prepared: ScriptDestination): string | undefined {
-  const record = readRecord(file);
-  if (!record) return undefined;
-  const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
-  try {
-    writeRecord(file, { ...record, staging: [...(record.staging ?? []), staging] });
-  } catch (error) {
-    fs.rmSync(staging, { recursive: true, force: true });
-    throw error;
-  }
-  return staging;
-}
-
-/**
- * Removes a staging directory the record can no longer name, then unlists it, so a directory that
- * cannot be removed stays listed for retirement or the sweep.
- */
-function releaseStaging(file: string, staging: string): void {
-  fs.rmSync(staging, { recursive: true, force: true });
-  const record = readRecord(file);
-  if (record) writeRecord(file, withoutStaging(record, staging));
-}
-
-function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
-  return { ...record, staging: (record.staging ?? []).filter((listed) => listed !== staging) };
-}
-
-/**
- * Ends a record, then removes every staging directory it lists and the record itself. The record is
- * first written retired, so it authorizes nothing more even when a staging directory cannot be
- * removed; the sweep finishes the cleanup later. Writing it retired also stops it naming an
- * interrupted version, so no anchor is removed while the record names its inode. A record that
- * cannot be written retired is removed at once. Only a state directory that allows neither write
- * leaves the record active; the close logs that failure and keeps its own outcome.
- */
-function removeRecord(file: string): void {
-  const record = parseRecord(file);
-  if (record && !record.retired) {
-    try {
-      writeRecord(file, { ...settlePublishing(record), retired: true });
-    } catch (error) {
-      removeUnretirableRecord(file, record);
-      throw error;
-    }
-  }
-  for (const staging of record?.staging ?? []) {
-    fs.rmSync(staging, { recursive: true, force: true });
-  }
-  fs.rmSync(file, { force: true });
-}
-
-/**
- * Removes a record that could not be written retired, then its staging. A record still on disk may
- * name the anchor in its interrupted version's staging, so that directory stays with it.
- */
-function removeUnretirableRecord(file: string, record: ScriptRecord): void {
-  const kept = removeQuietly(file) ? undefined : record.publishing?.staging;
-  for (const staging of record.staging ?? []) {
-    if (staging !== kept) removeQuietly(staging);
-  }
-}
-
-/**
- * One removal attempt for a record that could not be written retired, and for the staging it listed.
- * A failure here never replaces the error that made the record unwritable. Reports whether the
- * target is gone.
- */
-function removeQuietly(target: string): boolean {
-  try {
-    fs.rmSync(target, { recursive: true, force: true });
-    return true;
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'session_script_record_cleanup_failed',
-      data: { target, error: String(error) },
-    });
-    return false;
-  }
-}
-
-/**
- * Runs under the record lock. While `pending.named` is set the record may name the staged file, so
- * the staged file stays on disk and no later file can reuse its inode and pass as that version.
- */
-function publishStaged(
-  file: string,
-  version: Readonly<{
-    revision: number;
-    staging: string;
-    staged: string;
-    prepared: ScriptDestination;
-    pending: { named: boolean };
-  }>,
-): string | undefined {
-  const { revision, staging, staged, prepared, pending } = version;
-  const record = readRecord(file);
-  if (!record) return undefined;
-  let current = settlePublishing(record);
-  if (record.publishing) {
-    // Once the settled record is written, its staging directory can no longer be named.
-    writeRecord(file, current);
-    releaseStaging(file, record.publishing.staging);
-    current = withoutStaging(current, record.publishing.staging);
-  }
-  if (revision <= current.revision) return current.destination;
-  // Confirmed here, under the record lock and right before the entry is created, because the download ran in
-  // between (ADR 0016).
-  const judged = confirmScriptDestination(current.destination, prepared);
-  const publishing = { revision, file: fileIdentity(staged) ?? 'missing', staging };
-  // A second name keeps the inode on disk after the rename while the record may name it.
-  fs.linkSync(staged, `${staged}.anchor`);
-  writeRecord(file, { ...current, publishing });
-  pending.named = true;
-  const exclusive = current.revision === 0 && !current.force;
-  // The entry is spelled FROM that answer, never through the destination's own spelling, as the local
-  // publisher does (ADR 0016).
-  const entry = path.join(judged, path.basename(current.destination));
-  try {
-    if (exclusive) fs.linkSync(staged, entry);
-    else fs.renameSync(staged, entry);
-  } catch (error) {
-    writeRecord(file, settlePublishing({ ...current, publishing }));
-    pending.named = false;
-    throw error;
-  }
-  writeRecord(file, { ...current, revision });
-  pending.named = false;
-  return current.destination;
-}
-
-/** An interrupted version counts as published only when the destination is that very file. */
-function settlePublishing(record: ScriptRecord): ScriptRecord {
-  const { publishing, ...settled } = record;
-  if (!publishing) return record;
-  if (fileIdentity(record.destination) !== publishing.file) return settled;
-  return { ...settled, revision: Math.max(settled.revision, publishing.revision) };
-}
-
-function fileIdentity(file: string): string | undefined {
-  const stat = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
-  return stat ? `${stat.dev}:${stat.ino}` : undefined;
-}
-
-function scriptDeliveryFailure(
-  destination: string,
-  publicationId: string,
-  error: unknown,
-  closing: boolean,
-): ScriptDeliveryFailure {
-  // Only the exclusive link of the first version can find an existing entry.
-  const exists = (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
-  const refusal = scriptAncestryReason(error);
-  if (refusal) {
-    return {
-      reason: 'script_delivery_failed',
-      cause: refusal,
-      publicationId,
-      message:
-        error instanceof AppError
-          ? error.message
-          : `The remote script could not be saved to ${destination}.`,
-      hint: error instanceof AppError ? (error.details?.hint ?? '') : '',
-    };
-  }
-  const recovery = closing
-    ? 'The session is closed, so no later version follows.'
-    : 'The next recorded action or close delivers the full recording again.';
-  return exists
-    ? {
-        reason: 'script_delivery_failed',
-        cause: 'script_target_exists',
-        publicationId,
-        message: `A file already exists at ${destination}.`,
-        hint: 'Remove the existing file, or start a new recording with open --save-script --force.',
-      }
-    : {
-        reason: 'script_delivery_failed',
-        cause: 'script_download_failed',
-        publicationId,
-        message: `The remote script could not be saved to ${destination}.`,
-        hint: `The file may still hold the previous version. ${recovery}`,
-      };
-}
-
-function recordPath(
-  stateDir: string,
-  baseUrl: string,
-  req: DaemonWireRequest,
-  publicationId: string,
-): string {
-  const key = crypto
-    .createHash('sha256')
-    .update(
-      JSON.stringify([
-        withoutTrailingSlashes(baseUrl),
-        req.meta?.tenantId ?? '',
-        req.session ?? '',
-        publicationId,
-      ]),
-    )
-    .digest('hex');
-  return path.join(stateDir, 'remote-connections', 'session-scripts', `${key}.json`);
-}
-
-function withoutTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value[end - 1] === '/') end -= 1;
-  return value.slice(0, end);
-}
-
-/**
- * Creates a record, and removes the records a close retired and those nobody has touched for
- * `STALE_RECORD_MS`.
- */
-async function createRecord(file: string, record: ScriptRecord): Promise<void> {
-  const directory = path.dirname(file);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const isStale = (entry: string) =>
-    (fs.lstatSync(entry, { throwIfNoEntry: false })?.mtimeMs ?? Infinity) <
-    Date.now() - STALE_RECORD_MS;
-  const sweepable = (entry: string) => isStale(entry) || parseRecord(entry)?.retired === true;
-  for (const name of fs.readdirSync(directory)) {
-    const entry = path.join(directory, name);
-    if (!name.endsWith('.json') || !sweepable(entry)) continue;
-    // Rechecked under the lock, so a record that a publish just refreshed stays. A record that
-    // cannot be swept now is retried by a later sweep and never blocks this open.
-    await withRecordLock(entry, async () => {
-      if (sweepable(entry)) removeRecord(entry);
-    }).catch((error: unknown) =>
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'session_script_sweep_failed',
-        data: { record: name, error: String(error) },
-      }),
-    );
-  }
-  writeRecord(file, record);
-}
-
-/** A record that does not parse, or that a close has retired, authorizes nothing. */
-function readRecord(file: string): ScriptRecord | undefined {
-  const record = parseRecord(file);
-  return record?.retired ? undefined : record;
-}
-
-function parseRecord(file: string): ScriptRecord | undefined {
-  let record: Partial<ScriptRecord> | null = null;
-  try {
-    record = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return undefined;
-  }
-  const publishing = record?.publishing;
-  const valid =
-    typeof record?.destination === 'string' &&
-    typeof record.force === 'boolean' &&
-    Number.isSafeInteger(record.revision) &&
-    (publishing === undefined ||
-      (Number.isSafeInteger(publishing?.revision) &&
-        typeof publishing?.file === 'string' &&
-        typeof publishing?.staging === 'string')) &&
-    (record.retired === undefined || record.retired === true) &&
-    (record.staging === undefined ||
-      (Array.isArray(record.staging) &&
-        record.staging.every((staging) => typeof staging === 'string')));
-  return valid ? (record as ScriptRecord) : undefined;
-}
-
-function writeRecord(file: string, record: ScriptRecord): void {
-  publishFileSync({ destination: file, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
-}
-
-async function withRecordLock<T>(file: string, task: () => Promise<T>): Promise<T> {
-  const { pid, startTime } = readCurrentOwnerIdentity();
-  return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        lockDirPath: `${file}.lock`,
-        owner: { pid, startTime, acquiredAtMs: Date.now() },
-        timeoutMs: RECORD_LOCK_TIMEOUT_MS,
-        description: 'remote session script record',
-      }),
-    task,
-  });
 }

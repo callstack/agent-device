@@ -2,6 +2,7 @@ import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/co
 import { annotateCoveredSnapshotNodes } from '@agent-device/capture-kit/snapshot-occlusion';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { createAgentDevice } from '../../../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
@@ -188,35 +189,101 @@ export function coveredByTabBarSnapshot(): SnapshotState {
  * The same tab-bar-over-button shape run through the real annotation pass, so the covered node
  * carries the scan's `coveredBy` description exactly as a capture publishes it.
  */
-export function coveredByScanSnapshot(): SnapshotState {
+export function coveredByScanSnapshot(coverType = 'TabBar'): SnapshotState {
   return makeSnapshotState(
-    annotateCoveredSnapshotNodes([
-      {
-        index: 0,
-        depth: 0,
-        type: 'Application',
-        label: 'Example',
-        rect: { x: 0, y: 0, width: 390, height: 844 },
-      },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'Button',
-        label: 'Save draft',
-        rect: { x: 16, y: 790, width: 140, height: 44 },
-        hittable: true,
-      },
-      {
-        index: 2,
-        depth: 1,
-        parentIndex: 0,
-        type: 'TabBar',
-        label: 'Media',
-        rect: { x: 0, y: 760, width: 390, height: 84 },
-        hittable: true,
-      },
-    ]),
+    annotateCoveredSnapshotNodes(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          label: 'Example',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Save draft',
+          rect: { x: 16, y: 790, width: 140, height: 44 },
+          hittable: true,
+        },
+        {
+          index: 2,
+          depth: 1,
+          parentIndex: 0,
+          type: coverType,
+          label: 'Media',
+          rect: { x: 0, y: 760, width: 390, height: 84 },
+          hittable: true,
+        },
+      ],
+      { producer: 'apple-runner' },
+    ),
+  );
+}
+
+/**
+ * An unnamed bar published as type `Other` with its UIKit class in `role`, run through the real
+ * annotation pass: the scan reads the bar identity from the role, not the generic type. The Save draft
+ * button is fixed beside the bar by default; `scrollable` puts it inside a scroll view instead;
+ * `horizontal` puts it inside a horizontal scroller whose viewport the bar contains entirely, so no
+ * scroll can reveal it.
+ */
+export function coveredByAnonymousTabBarScanSnapshot(
+  options: { scrollable?: boolean; horizontal?: boolean } = {},
+): SnapshotState {
+  const scroller: RawSnapshotNode[] =
+    options.scrollable || options.horizontal
+      ? [
+          {
+            index: 1,
+            depth: 1,
+            parentIndex: 0,
+            type: options.horizontal ? 'android.widget.HorizontalScrollView' : 'ScrollView',
+            hiddenContentBelow: options.scrollable ? true : undefined,
+            rect: options.horizontal
+              ? { x: 0, y: 800, width: 402, height: 65 }
+              : { x: 0, y: 0, width: 402, height: 874 },
+          },
+        ]
+      : [];
+  const buttonIndex = scroller.length + 1;
+  return makeSnapshotState(
+    annotateCoveredSnapshotNodes(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          label: 'Example',
+          rect: { x: 0, y: 0, width: 402, height: 874 },
+        },
+        ...scroller,
+        {
+          index: buttonIndex,
+          depth: scroller.length + 1,
+          parentIndex: scroller.length > 0 ? 1 : 0,
+          type: 'Button',
+          label: 'Save draft',
+          rect: options.horizontal
+            ? { x: 16, y: 810, width: 140, height: 44 }
+            : { x: 16, y: 800, width: 140, height: 44 },
+          hittable: true,
+        },
+        {
+          index: buttonIndex + 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Other',
+          role: 'UITabBar',
+          rect: { x: 0, y: 791, width: 402, height: 83 },
+          hittable: true,
+        },
+      ],
+      { producer: 'apple-runner' },
+    ),
   );
 }
 

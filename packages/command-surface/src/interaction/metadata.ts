@@ -73,17 +73,18 @@ const interactionCommandDescriptions = {
     'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. The durationMs input overrides the default hold duration.',
   hover:
     'Move the pointer over a UI target by snapshot ref, selector, or coordinates without pressing, to reveal hover-gated UI such as row toolbars or menus. Web only; touch platforms have no hover state. The settle option returns the UI diff revealed by the hover.',
-  swipe: 'Quick coordinate fling with optional repeat pattern.',
+  swipe:
+    'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
   type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
   scroll:
     'Scroll in a direction, or toward the top/bottom edge of scrollable content. The until input scrolls to an off-screen selector in one command. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, where a settle observation or a replay already owns that observation, or where the operator opted out of it.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. The text format returns visible content; attrs returns the element attribute map.',
-  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. This command checks the current condition without polling.',
+  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, checked, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. This command checks the current condition without polling.',
   find: 'Find by text/label/value/role/id and run action; the action defaults to click. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window. The focus and type actions aim at a text field: the match or the field holding it, even beside other fields, or else the one enabled on-screen field inside the match. Several enabled on-screen fields inside the match refuse with AMBIGUOUS_MATCH and the field candidates, and a disabled target refuses with reason target_disabled. Web text boxes are not recognized as text fields.',
   gesture:
-    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition.',
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Each gesture kind has its own inputs. A tap touches 2 to 5 points at once; count and pauseMs control repetition. A drag takes a source and a destination ref or selector and holds the source down for 800 ms by default before carrying it over, which is how a list item changes position or a drop target is hit.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;

@@ -102,6 +102,33 @@ test('a remote recording keeps the caller script current and close writes the fi
   );
 }, 20_000);
 
+test('remote open succeeds and reports an untrusted script ancestor when the parent is a file', async () => {
+  await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
+    const root = fs.realpathSync(mkdtempForTestSync('remote-script-file-parent-'));
+    const parent = path.join(root, 'notes.txt');
+    fs.writeFileSync(parent, 'notes');
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'script-client' });
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: proxy.baseUrl,
+      daemonAuthToken: 'script-client',
+      session: 'script-author',
+      stateDir: path.join(root, 'client-state'),
+    });
+    try {
+      const result = await client.apps.open({
+        app: 'settings',
+        saveScript: path.join(parent, 'journey.ad'),
+        ...world.selection,
+      });
+      assert.equal(result.scriptDeliveryFailure?.cause, 'script_ancestor_untrusted');
+      assert.equal(fs.readFileSync(parent, 'utf8'), 'notes');
+      await client.sessions.close();
+    } finally {
+      await proxy.close();
+    }
+  });
+}, 20_000);
+
 test('raw remote RPC without a caller path receives script versions by artifact ID', async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: 'raw-client' });

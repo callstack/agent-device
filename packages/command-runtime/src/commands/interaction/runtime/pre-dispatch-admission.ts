@@ -13,7 +13,7 @@
  * a tap at its centre would land on another element.
  */
 import type {
-  InteractionTarget,
+  InteractionRequestTarget,
   ResolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
@@ -43,7 +43,7 @@ import type { ResolveInteractionTargetParams } from './interaction-resolution-re
  * when the platform says the element is not hittable, so it keeps the hittability read out.
  */
 type AdmissionOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   allowNonHittableCoordinateFallback?: boolean;
 };
 
@@ -165,7 +165,7 @@ function assertWithinBudget(
  */
 async function awaitRest(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
+  options: CommandContext & { target: InteractionRequestTarget },
   params: ResolveInteractionTargetParams,
   resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
   wait: MotionWait,

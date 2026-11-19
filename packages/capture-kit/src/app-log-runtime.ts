@@ -19,8 +19,13 @@ const APP_LOG_RESOURCE_KIND = 'app-log' as const;
 export function createAppLogStartResult(
   handle: AppLogLiveHandle,
   envelope: DurableResourceEnvelope<typeof APP_LOG_RESOURCE_KIND>,
+  options: Readonly<{ relaunched?: boolean }> = {},
 ): AppLogStartResult {
-  return Object.freeze({ pendingHandle: new PendingTransferGuard(handle), envelope });
+  return Object.freeze({
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope,
+    ...(options.relaunched ? { relaunched: true as const } : {}),
+  });
 }
 
 type AppLogRecoveryContext = Readonly<{

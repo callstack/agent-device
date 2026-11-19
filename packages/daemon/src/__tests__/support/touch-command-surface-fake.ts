@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/backend';
 import type {
   InteractionEvidence,
-  InteractionTarget,
+  InteractionRequestTarget,
   PreresolvedInteractionTarget,
   ResolvedInteractionTarget,
   SettleObservation,
@@ -33,7 +33,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
-import { buildSelectorChainForNode } from '@agent-device/selectors';
+import { buildSelectorChainForNode, recordedSelectorExpression } from '@agent-device/selectors';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
 import {
   captureAndStoreSnapshot,
@@ -203,7 +203,7 @@ function touchInteractions(
   rules: Rules,
 ): DaemonCommandSurface['interactions'] {
   const press = async (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options: CommandOptions & { button?: unknown; [key: string]: unknown } = {},
   ) => {
     const resolved = await resolveTarget(config, rules, target, options, undefined, 'tapTarget');
@@ -326,8 +326,8 @@ async function dragOrInert(
       destination: { selectorChain: destinationTarget.selectorChain, resolution: exact },
     },
     recording: {
-      sourceSelector: sourceTarget.selectorChain.join(' || '),
-      destinationSelector: destinationTarget.selectorChain.join(' || '),
+      sourceSelector: recordedSelectorExpression(sourceTarget.selectorChain),
+      destinationSelector: recordedSelectorExpression(destinationTarget.selectorChain),
       sourceTarget,
       destinationTarget,
     },
@@ -343,7 +343,7 @@ const resolvedTreeQuality = new WeakMap<object, SnapshotQualityVerdict | undefin
 async function resolveTarget(
   config: AgentDeviceRuntimeConfig,
   rules: Rules,
-  target: InteractionTarget,
+  target: InteractionRequestTarget,
   options: CommandOptions,
   captureOptions: BackendSnapshotOptions = { interactiveOnly: true },
   nativeRefRoute?: 'tapTarget' | 'fillTarget' | 'hoverTarget',
@@ -435,7 +435,7 @@ function selectorChainFor(
 
 function resolvedFromNode(
   config: AgentDeviceRuntimeConfig,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   node: SnapshotNode,
   tree: Pick<SnapshotState, 'nodes' | 'snapshotQuality'>,
   action?: 'click' | 'fill',

@@ -18,7 +18,7 @@ import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
-  InteractionTarget,
+  InteractionRequestTarget,
   PreresolvedInteractionTarget,
   RefObservationSource,
   ResolvedInteractionTarget,
@@ -63,7 +63,7 @@ type RefResolution = {
  * future internal plumbing lets them drift.
  */
 function adoptPreresolvedRefTarget(
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   preresolved: PreresolvedInteractionTarget,
 ): RefResolution {
   const ref = normalizeRef(target.ref);
@@ -90,7 +90,7 @@ function adoptPreresolvedRefTarget(
 async function readRefResolution(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
 ): Promise<RefResolution> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
   return {
@@ -104,7 +104,7 @@ async function readRefResolution(
 export async function resolveRefInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   const { tree, keyboard, resolved, adoptedFrom } = params.preresolvedTarget
@@ -156,7 +156,7 @@ type RefObservationReconciliation = InteractionSnapshot & {
 async function resolveSnapshotForRef(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
 ): Promise<RefObservationReconciliation> {
   const { session, snapshot: frameTree } = await requireSnapshotSession(runtime, options.session);
 
@@ -194,7 +194,7 @@ function reconcileFreshObservation(params: {
   platform: string;
   session: CommandSessionRecord;
   frameTree: SnapshotState;
-  target: Extract<InteractionTarget, { kind: 'ref' }>;
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>;
   fallbackLabel: string;
   authorized: ResolvedRefNode;
 }): RefObservationReconciliation {

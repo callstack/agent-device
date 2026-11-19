@@ -3,7 +3,6 @@ import {
   type OpenApplicationInput,
   type OpenApplicationOutcome,
   type OpenApplicationTiming,
-  hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
@@ -122,18 +121,10 @@ async function openAndroidApplication(
     });
     timing.relaunchCloseDurationMs = elapsed(closeStartedAtMs);
   }
-  if (hasRuntimeTransportHintValues(input.runtimeHints)) {
-    if (!input.applyRuntimeHints) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Runtime hint operation was not admitted for this open.',
-        {
-          reason: 'runtime-hints-operation-missing',
-        },
-      );
-    }
+  const runtimeHints = input.runtimeHints;
+  if (runtimeHints) {
     const hintsStartedAtMs = Date.now();
-    await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+    await runtimeHints.apply({ appId: input.appBundleId, values: runtimeHints.values });
     timing.runtimeHintsDurationMs = elapsed(hintsStartedAtMs);
   }
   const openStartedAtMs = Date.now();

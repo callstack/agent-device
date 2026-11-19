@@ -1,14 +1,14 @@
 import fs from 'node:fs';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { compileSwiftSourceText } from './swift-cache.ts';
+import { compileSwiftSources, runSwiftHelper } from '@agent-device/host-swift/swift-cache';
 import {
   hasVideoContainer,
   isPlayableVideo,
@@ -20,14 +20,35 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
-vi.mock('./swift-cache.ts', () => ({
-  buildSwiftToolEnv: () => ({}),
+vi.mock('@agent-device/host-swift/swift-cache', async () => ({
+  // The launcher every helper goes through; it reaches the mocked runCmd, so a launch that skips it is visible.
+  runSwiftHelper: vi.fn(
+    async (_host: unknown, executablePath: string, args: readonly string[], options: object) =>
+      await (await import('@agent-device/host-kit/command')).runCmd(executablePath, args, options),
+  ),
   getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR ?? '',
-  compileSwiftSourceText: vi.fn(async () => '/bin/true'),
+  compileSwiftSources: vi.fn(async () => '/bin/true'),
+  isUntrustedSwiftCacheError: (
+    await vi.importActual<typeof import('@agent-device/host-swift/swift-cache')>(
+      '@agent-device/host-swift/swift-cache',
+    )
+  ).isUntrustedSwiftCacheError,
 }));
+
+const hostPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+function runOnPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { ...hostPlatform, value: platform });
+}
 
 beforeEach(() => {
   vi.mocked(runCmd).mockClear();
+  // The validator compiles on macOS hosts only; these cases are about that host wherever the suite runs.
+  runOnPlatform('darwin');
+});
+
+afterEach(() => {
+  Object.defineProperty(process, 'platform', hostPlatform);
 });
 
 const directory = mkdtempForTestSync('agent-device-video-webm-');
@@ -57,23 +78,24 @@ const moov = mp4Atom(
   mp4Atom('mvhd', mp4MovieHeader({ version: 0, timescale: 1_000, duration: 2_000 })),
 );
 
-test('each Swift cache root compiles its own validator, and a root reuses the one it has', async () => {
+test('each validator resolution after one settles runs the cache check again, per cache root', async () => {
   const mp4 = writeFixture('validated.mp4', Buffer.concat([ftyp, moov]));
   const hostIn = (cacheDir: string) => ({
     env: { AGENT_DEVICE_SWIFT_CACHE_DIR: cacheDir },
     cwd: directory,
   });
-  vi.mocked(compileSwiftSourceText).mockClear();
+  vi.mocked(compileSwiftSources).mockClear();
 
   await isPlayableVideo(mp4, hostIn('/cache/one'));
   await isPlayableVideo(mp4, hostIn('/cache/one'));
   await isPlayableVideo(mp4, hostIn('/cache/two'));
 
+  // A kept path would be run later without the reuse check, after its cache directory could have changed.
   expect(
     vi
-      .mocked(compileSwiftSourceText)
+      .mocked(compileSwiftSources)
       .mock.calls.map(([params]) => params.host.env.AGENT_DEVICE_SWIFT_CACHE_DIR),
-  ).toEqual(['/cache/one', '/cache/two']);
+  ).toEqual(['/cache/one', '/cache/one', '/cache/two']);
 });
 
 test('callers share one validator compile, and each waits for it within its own budget', async () => {
@@ -85,7 +107,7 @@ test('callers share one validator compile, and each waits for it within its own 
   await hasVideoContainer(mp4);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   try {
-    vi.mocked(compileSwiftSourceText)
+    vi.mocked(compileSwiftSources)
       .mockClear()
       .mockImplementationOnce(
         () => new Promise((resolve) => setTimeout(() => resolve('/bin/true'), 45_000)),
@@ -106,10 +128,13 @@ test('callers share one validator compile, and each waits for it within its own 
 
     await withoutDeadlineRejected;
     await expect(withDeadline).resolves.toBe(true);
-    expect(compileSwiftSourceText).toHaveBeenCalledOnce();
-    const [compile] = vi.mocked(compileSwiftSourceText).mock.calls[0]!;
+    expect(compileSwiftSources).toHaveBeenCalledOnce();
+    const [compile] = vi.mocked(compileSwiftSources).mock.calls[0]!;
     expect(compile.timeoutMs).toBeUndefined();
     expect(compile.signal).toBeUndefined();
+    expect(compile.sources).toEqual([
+      { fileName: 'video-validator.swift', text: expect.stringContaining('AVURLAsset') },
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -122,7 +147,7 @@ test('an expired waiter leaves the compile running for the next stop', async () 
   const pending = new Promise<string>((resolve) => {
     resolveCompile = resolve;
   });
-  vi.mocked(compileSwiftSourceText).mockClear().mockReturnValueOnce(pending);
+  vi.mocked(compileSwiftSources).mockClear().mockReturnValueOnce(pending);
   void prepareVideoValidator(host);
   await hasVideoContainer(mp4);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -135,9 +160,10 @@ test('an expired waiter leaves the compile running for the next stop', async () 
     await vi.advanceTimersByTimeAsync(5_000);
     await timedOut;
     expect(runCmd).not.toHaveBeenCalled();
+    const nextStop = prepareVideoValidator(host);
     resolveCompile('/bin/true');
-    await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
-    expect(compileSwiftSourceText).toHaveBeenCalledOnce();
+    await expect(nextStop).resolves.toBe('/bin/true');
+    expect(compileSwiftSources).toHaveBeenCalledOnce();
   } finally {
     resolveCompile('/bin/true');
     vi.useRealTimers();
@@ -147,7 +173,7 @@ test('an expired waiter leaves the compile running for the next stop', async () 
 test('a rejected compile is evicted so the next attempt compiles and verifies', async () => {
   const mp4 = writeFixture('failed-compile.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/failed' }, cwd: directory };
-  vi.mocked(compileSwiftSourceText)
+  vi.mocked(compileSwiftSources)
     .mockClear()
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'xcrun timed out after 120000ms'));
 
@@ -155,8 +181,43 @@ test('a rejected compile is evicted so the next attempt compiles and verifies', 
     details: { reason: 'video_validator_unavailable' },
   });
   await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
-  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+  expect(compileSwiftSources).toHaveBeenCalledTimes(2);
   expect(runCmd).toHaveBeenCalledOnce();
+});
+
+test('a Swift cache that is not private keeps its own reason through the validator', async () => {
+  const mp4 = writeFixture('untrusted-cache.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/untrusted' }, cwd: directory };
+  const refusal = new AppError(
+    'COMMAND_FAILED',
+    'Refusing to use the Swift helper cache directory',
+    {
+      reason: 'swift_cache_untrusted',
+      hint: 'Set AGENT_DEVICE_SWIFT_CACHE_DIR to a directory you own that only you can write.',
+    },
+  );
+  vi.mocked(compileSwiftSources).mockRejectedValueOnce(refusal);
+
+  await expect(isPlayableVideo(mp4, host)).rejects.toBe(refusal);
+  expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('a non-macOS host keeps the container verdict and never reaches the Swift cache', async () => {
+  const mp4 = writeFixture('non-apple-host.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/legacy-shared' }, cwd: directory };
+  runOnPlatform('linux');
+  vi.mocked(compileSwiftSources)
+    .mockClear()
+    .mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'Refusing to use the Swift helper cache directory', {
+        reason: 'swift_cache_untrusted',
+      }),
+    );
+
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+  expect(compileSwiftSources).not.toHaveBeenCalled();
+  expect(runCmd).not.toHaveBeenCalled();
+  vi.mocked(compileSwiftSources).mockReset().mockResolvedValue('/bin/true');
 });
 
 test('preserves compiler stderr and recovery hint without replacing the typed validator reason', async () => {
@@ -175,7 +236,7 @@ test('preserves compiler stderr and recovery hint without replacing the typed va
     reason: 'xcrun-tool-not-found',
     hint,
   });
-  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  vi.mocked(compileSwiftSources).mockRejectedValueOnce(failure);
   await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: {
@@ -193,11 +254,22 @@ test('preserves compiler stderr and recovery hint without replacing the typed va
 test('retains main container-only completion when the Swift compiler is missing', async () => {
   const mp4 = writeFixture('missing-compiler.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/missing-compiler' }, cwd: directory };
-  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(
+  vi.mocked(compileSwiftSources).mockRejectedValueOnce(
     new AppError('TOOL_MISSING', 'xcrun not found in PATH'),
   );
   await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
   expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('the validator launches through the Swift helper launcher, with the host it is given', async () => {
+  const mp4 = writeFixture('launcher.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/launcher' }, cwd: directory };
+  vi.mocked(runSwiftHelper).mockClear();
+
+  await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
+
+  expect(runSwiftHelper).toHaveBeenCalledWith(host, '/bin/true', [mp4], expect.any(Object));
+  expect(runCmd).toHaveBeenCalledOnce();
 });
 
 test('a missing validator executable after compilation returns the typed unavailable error', async () => {

@@ -32,7 +32,7 @@ export const SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES = [
   SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
 ] as const;
 
-export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
+export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS' | 'watchOS';
 
 type RunnerPlatformDeviceKind = 'simulator' | 'device';
 
@@ -128,6 +128,35 @@ const RUNNER_PLATFORM_PROFILES: Record<RunnerApplePlatformName, RunnerPlatformPr
         preferred: ['xros'],
         disallowed: [
           'xrsimulator',
+          'iphoneos',
+          'iphonesimulator',
+          'appletvos',
+          'appletvsimulator',
+          'macos',
+        ],
+      },
+    },
+  },
+  // The runner project builds watchOS for the simulator only. The device row exists because every
+  // profile names both kinds; discovery never produces a physical watch.
+  watchOS: {
+    sdkName: {
+      simulator: 'watchsimulator',
+      device: 'watchos',
+    },
+    derivedBaseName: {
+      simulator: 'watchos-simulator',
+      device: 'watchos-device',
+    },
+    xctestrunHints: {
+      simulator: {
+        preferred: ['watchsimulator'],
+        disallowed: ['iphoneos', 'iphonesimulator', 'appletvos', 'appletvsimulator', 'macos'],
+      },
+      device: {
+        preferred: ['watchos'],
+        disallowed: [
+          'watchsimulator',
           'iphoneos',
           'iphonesimulator',
           'appletvos',

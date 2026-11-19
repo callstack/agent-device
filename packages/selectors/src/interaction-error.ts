@@ -88,6 +88,12 @@ function coveredInteractionHint(coveredBy: SnapshotCoveringNode | undefined): st
   if (!coveredBy) {
     return 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.';
   }
+  if (coveredBy.persistentBar) {
+    return (
+      `Covered by ${describeCoverForHint(coveredBy)}. Use a different visible target, ` +
+      'or inspect with snapshot/screenshot before retrying.'
+    );
+  }
   return (
     `Covered by ${describeCoverForHint(coveredBy)}. Dismiss or close that element, ` +
     'scroll the target clear of it, or inspect with snapshot/screenshot before retrying.'

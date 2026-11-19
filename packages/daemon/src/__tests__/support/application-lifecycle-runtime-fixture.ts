@@ -111,7 +111,8 @@ const openApplicationFixture = vi.fn(
     direct: ApplicationLifecycleRuntimeOperations,
     input: Parameters<ApplicationLifecycleRuntimeOperations['openApplication']>[0],
   ) => {
-    if (input.applyRuntimeHints) {
+    const runtimeHints = input.runtimeHints;
+    if (runtimeHints) {
       // The direct owner's close-before-relaunch happens inside its open; a hinted relaunch
       // must close before the hints land, so take the close here and open as a fresh launch.
       if (input.relaunch && input.target !== undefined) {
@@ -120,10 +121,10 @@ const openApplicationFixture = vi.fn(
           surface: input.surface,
           execution: input.execution,
         });
-        await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+        await runtimeHints.apply({ appId: input.appBundleId, values: runtimeHints.values });
         return await direct.openApplication({ ...input, relaunch: false });
       }
-      await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+      await runtimeHints.apply({ appId: input.appBundleId, values: runtimeHints.values });
     }
     return await direct.openApplication(input);
   },

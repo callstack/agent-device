@@ -45,6 +45,8 @@ export type RevylWorkerHealth = Readonly<{
   screen_height?: number;
   /** Set when the worker's `/drag` body accepts `duration_ms`; without it the worker picks the speed. */
   supports_explicit_drag_duration?: boolean;
+  /** Set when `/set_orientation` rotates to a named landscape side and upside down. */
+  supports_precise_orientation?: boolean;
 }>;
 
 export type RevylDeviceSessionStopResponse = Readonly<{

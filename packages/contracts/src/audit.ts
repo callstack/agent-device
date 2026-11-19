@@ -1,7 +1,12 @@
 import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer } from './snapshot-producers.ts';
 
-export type AuditFindingKind = 'small-target' | 'missing-name' | 'covered-control';
+export type AuditFindingKind =
+  | 'small-target'
+  | 'missing-name'
+  | 'ambiguous-name'
+  | 'covered-control';
 
 /** `warning` asks for review; `observation` reports a fact the screen already proved. */
 export type AuditSeverity = 'warning' | 'observation';
@@ -16,6 +21,14 @@ export type AuditSizeDetail = {
   recommendedSize: number;
 };
 
+/** An `ambiguous-name` finding's shared label and how many controls of the role share it. */
+export type AuditNameDetail = {
+  /** The name the controls share, spelled as the reporting control exposes it. */
+  name: string;
+  /** Controls of this role carrying that name on the audited screen, including this one. */
+  count: number;
+};
+
 type AuditFindingBase = {
   /** Plain ref (`@e7`) of the node. It is valid only with the response's `refsGeneration`. */
   ref: string;
@@ -23,15 +36,21 @@ type AuditFindingBase = {
   rect?: Rect;
   /** Control role as the snapshot presents it, such as `button`. */
   role: string;
+  /** Accessible label from the captured node. */
+  label?: string;
+  /** Accessibility identifier or resource id from the captured node. */
+  identifier?: string;
 };
 
 export type AuditFinding =
   | (AuditFindingBase & { kind: 'small-target'; severity: 'warning'; detail: AuditSizeDetail })
   | (AuditFindingBase & { kind: 'missing-name'; severity: 'warning' })
+  | (AuditFindingBase & { kind: 'ambiguous-name'; severity: 'warning'; detail: AuditNameDetail })
   | (AuditFindingBase & { kind: 'covered-control'; severity: 'observation' });
 
 export type AuditContext = {
   platform: PublicPlatform;
+  producer?: SnapshotProducer;
   /** Absent means a mobile target. */
   target?: DeviceTarget;
   /** Physical pixels per dp, from the Android capture. */
@@ -50,6 +69,7 @@ export type AuditChecks = {
 
 export type AuditResult = {
   findings: AuditFinding[];
+  guidance: Partial<Record<AuditFindingKind, string>>;
   checks: AuditChecks;
   /** Checks the audit could not run or could only partly run, with the reason. */
   limitations: string[];

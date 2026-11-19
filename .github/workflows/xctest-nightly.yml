@@ -15,13 +15,13 @@ permissions:
   actions: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
   full-suite:
     name: iOS Runner Full XCTest Suite (${{ matrix.leg.name }})
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: blacksmith-6vcpu-macos-26${{ github.event_name == 'schedule' && ';scheduling=flex' || '' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false

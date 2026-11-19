@@ -132,6 +132,7 @@ export const TEXT_ENTRY_ROUTES = [
   'synthesized-first-responder',
   'synthesized-first-responder-replacement',
   'xctest-application-fallback',
+  'watch-input-sheet',
 ] as const;
 
 export type TextEntryRoute = (typeof TEXT_ENTRY_ROUTES)[number];

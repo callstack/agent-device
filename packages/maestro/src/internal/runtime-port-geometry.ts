@@ -19,7 +19,10 @@ import type {
 } from './program-ir.ts';
 import { operationContext } from './runtime-port-context.ts';
 import { resolveMaestroTarget } from './runtime-port-observation.ts';
-import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
+import {
+  filterVisibleMaestroMatches,
+  type MaestroRuntimePlatform,
+} from './runtime-target-policy.ts';
 import { createMaestroResolver } from './runtime-target-ranking.ts';
 import { resolveMaestroClickability } from './runtime-clickability.ts';
 import type { MaestroResolutionProbe } from './runtime-selector-resolution.ts';
@@ -27,7 +30,7 @@ import type {
   MaestroRuntimeOperations,
   MaestroSinglePointerGestureInput,
   MaestroSwipeOperation,
-  MaestroTargetResolution,
+  MaestroInputTargetResolution,
 } from './runtime-port-types.ts';
 
 /**
@@ -41,7 +44,7 @@ export function resolveMaestroScrollableGesture(
   selector: MaestroSelector,
   direction: MaestroDirection,
   durationMs: number,
-  platform: MaestroPlatform,
+  platform: MaestroRuntimePlatform,
   probe: MaestroResolutionProbe = {},
 ): { gesture: MaestroSinglePointerGestureInput; viewport: Rect } | undefined {
   const viewport = selectMaestroScrollableViewport(snapshot, selector, direction, platform, probe);
@@ -61,7 +64,7 @@ function selectMaestroScrollableViewport(
   snapshot: SnapshotState,
   selector: MaestroSelector,
   direction: MaestroDirection,
-  platform: MaestroPlatform,
+  platform: MaestroRuntimePlatform,
   probe: MaestroResolutionProbe,
 ): Rect | undefined {
   const vertical = direction === 'up' || direction === 'down';
@@ -300,7 +303,7 @@ function pointInViewport(
 }
 
 function targetSwipeEndpoints(
-  target: MaestroTargetResolution,
+  target: MaestroInputTargetResolution,
   direction: MaestroDirection,
   viewport: {
     readonly x: number;

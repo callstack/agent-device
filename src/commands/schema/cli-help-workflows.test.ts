@@ -7,7 +7,11 @@ test('usageForCommand resolves debugging help topic', async () => {
   if (help === null) throw new Error('Expected debugging help text');
   assert.match(help, /^agent-device \S+ — debugging/);
   assert.match(help, /Use logs when you need the lead-up timeline/);
-  assert.match(help, /relaunches the session app through devicectl process launch --console/);
+  assert.match(
+    help,
+    /logs start and logs clear --restart relaunch the session app through devicectl process launch --console/,
+  );
+  assert.match(help, /logs stop ends the app/);
   assert.match(help, /Use debug symbols when you have crash\.ips\/crash\.log/);
   assert.match(help, /Use Xcode\/LLDB when you need live state/);
   assert.match(help, /debug symbols --artifact crash\.ips --search-path \.\/build/);
@@ -66,6 +70,16 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /wait_target_absent: readable capture, no match/);
   assert.match(help, /wait_target_present: absence timeout/);
   assert.match(help, /wait_capture_stalled: no readable capture by deadline/);
+  assert.match(help, /Target covered by other visible UI: refused with target_covered/);
+  assert.match(
+    help,
+    /dismiss or close the cover only when it is dismissible \(sheet, dialog, alert\)/,
+  );
+  assert.match(
+    help,
+    /under a persistent bar \(tab bar, toolbar, navigation bar, bottom navigation\) use a different visible target or inspect with snapshot\/screenshot/,
+  );
+  assert.doesNotMatch(help, /Dismiss\/close it or scroll the target clear/);
 });
 
 test('usageForCommand resolves validate help topic', async () => {

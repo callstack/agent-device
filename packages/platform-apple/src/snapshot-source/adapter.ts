@@ -17,12 +17,12 @@ export type SimulatorSnapshotSourceOptions = Readonly<{
   cacheRoot?: string;
 }>;
 
-export type SimulatorSnapshotSource = SnapshotBridgeSource<SnapshotSourceTarget>;
+export type SimulatorBridgeSnapshotSource = SnapshotBridgeSource<SnapshotSourceTarget>;
 
 /** The bridge read on a local Simulator, through a guest bridge process the host starts and owns. */
 export function createSimulatorSnapshotSource(
   options: SimulatorSnapshotSourceOptions,
-): SimulatorSnapshotSource {
+): SimulatorBridgeSnapshotSource {
   const host = options.host;
   const manager = new SnapshotBridgeManager(host);
   // Preparation is daemon-scoped work: it reads the toolchain identity, fingerprints the bridge

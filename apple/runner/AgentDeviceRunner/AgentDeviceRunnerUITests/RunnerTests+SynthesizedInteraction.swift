@@ -774,6 +774,12 @@ extension RunnerTests {
     if plan.contactOrigin == runnerScreenEdgeContactOrigin {
       return .screenEdgeTouch
     }
+#elseif os(watchOS)
+    // The watchOS sampled path starts a screen-edge contact on the edge itself; a fast coordinate
+    // drag would start inside the plan's in-content margin and reach a row instead.
+    if plan.contactOrigin == runnerScreenEdgeContactOrigin {
+      return .sampled(schedule: nil)
+    }
 #endif
     guard plan.topology == "single" else { return .sampled(schedule: nil) }
     return plan.executionProfile == "endpoint-hold" ? .fastSwipe : .sampled(schedule: plan.executionProfile)
@@ -826,6 +832,32 @@ extension RunnerTests {
   }
 #endif
 
+#if os(iOS) || os(watchOS)
+  /// Hands one planned gesture's `{ x, y, offsetMs }` pointer samples to the private synthesizer and
+  /// maps its result. The iOS and watchOS sampled paths differ only in how they build the samples.
+  @MainActor
+  func dispatchSynthesizedPointerSamples(
+    app: XCUIApplication,
+    window: XCUIElement?,
+    orientation: Int,
+    pointerSamples: [[[String: NSNumber]]]
+  ) throws -> RunnerInteractionOutcome {
+    var dispatched: ObjCBool = false
+    let failure = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: app,
+      resolvedWindow: window,
+      interfaceOrientation: orientation,
+      pointerSamples: pointerSamples,
+      dispatched: &dispatched
+    )
+    return try Self.synthesizedGestureOutcome(
+      failure: failure,
+      dispatched: dispatched.boolValue,
+      refusalHint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
+    )
+  }
+#endif
+
   /// A synthesized gesture's result. A failure before its events reached XCTest sent nothing, so it
   /// is a `.notDispatched` refusal, which a policy may still answer with an XCTest fallback. A failure
   /// after may have run, so it throws `RunnerGestureOutcomeUnknown`, which no fallback repeats.
@@ -853,24 +885,19 @@ extension RunnerTests {
     case .resolved(let resolved): planned = resolved
     case .refused(let outcome): return outcome
     }
-    var dispatched: ObjCBool = false
-    let failure = RunnerSynthesizedGesture.synthesizeGesture(
-      withApplication: app,
-      resolvedWindow: planned.context.resolvedWindow,
-      interfaceOrientation: planned.orientation,
-      pointerSamples: planned.pointerSamples,
-      dispatched: &dispatched
-    )
-    return try Self.synthesizedGestureOutcome(
-      failure: failure,
-      dispatched: dispatched.boolValue,
-      refusalHint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
+    return try dispatchSynthesizedPointerSamples(
+      app: app,
+      window: planned.context.resolvedWindow,
+      orientation: planned.orientation,
+      pointerSamples: planned.pointerSamples
     )
 #elseif os(tvOS)
     return .unsupported(
       message: "multi-touch gestures are not supported on tvOS",
       hint: "tvOS has no touch input; use remote-driven navigation."
     )
+#elseif os(watchOS)
+    return try watchSampledPlannedGesture(app: app, plan: plan)
 #elseif os(visionOS)
     return .unsupported(
       message: "multi-touch gestures are not supported on visionOS",

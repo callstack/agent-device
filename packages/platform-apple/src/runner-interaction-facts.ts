@@ -2,7 +2,7 @@ import {
   unavailableFact,
   type RuntimeOperationFact,
 } from '@agent-device/contracts/platform-runtime';
-import { isIosFamily, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
@@ -33,11 +33,6 @@ const appStateUnavailable = unavailableFact(
   "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
 );
 
-const elementTextLeafUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS has no XCUITest-driveable UI, so element text comes from the captured tree only.',
-);
-
 const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
 
 const snapshotKindUnavailable = unsupportedAppleDeviceKind(
@@ -61,7 +56,7 @@ const snapshotActiveAppRequired = unavailableFact(
  * app took the screen stays nobody's to tell.
  */
 function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
+  if (!isIosFamily(device)) return appStateUnavailable;
   return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
 }
 
@@ -71,18 +66,16 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
 
 /**
  * The live point read is the XCUITest runner's `readText` for app sessions and the macOS helper
- * for desktop/menubar surfaces. Both need a driveable Apple UI, so watchOS and the non
- * simulator/device kinds have no read at all.
+ * for desktop/menubar surfaces. Both need a driveable Apple UI, so the non simulator/device kinds
+ * have no read at all.
  */
 function appleElementTextFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return elementTextLeafUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : elementTextKindUnavailable;
 }
 
 function appleSnapshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return snapshotKindUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
@@ -125,17 +118,11 @@ export function appleRunnerInteractionFacts(device: DeviceInfo) {
   };
 }
 
-const watchPrepareUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS runner preparation is not supported because XCUITest cannot drive watchOS UI.',
-);
-
 const applePrepareKindUnavailable = unsupportedAppleDeviceKind(
   'prepare is supported only for Apple simulators and devices.',
 );
 
 export function applePrepareAppleRunnerFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchPrepareUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : applePrepareKindUnavailable;

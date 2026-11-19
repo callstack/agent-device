@@ -12,6 +12,7 @@ import { revylSessionIdForLease } from './session-identity.ts';
 import type {
   RevylStartDeviceRequest,
   RevylStartDeviceResponse,
+  RevylWorkerConnection,
   RevylWorkerHealth,
 } from './revyl-types.ts';
 
@@ -27,10 +28,17 @@ export const REVYL_ALLOCATION_TIMEOUT_MS =
   REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS + READY_ANSWER_MARGIN_MS;
 /** Revyl's worker answers `health` with 503 until the device is attached; the CLI polls on that beat. */
 const READY_POLL_INTERVAL_MS = 2_000;
-/** Revyl releases an idle session on its own; this is the lease the runtime asks for. */
-const DEFAULT_IDLE_TIMEOUT_SECONDS = 30 * 60;
+/**
+ * Revyl releases a session that sees no device action for this long. The runtime refreshes that clock
+ * while it holds the lease, so the timeout ends only a device whose holder is gone without `/stop`.
+ */
+const DEFAULT_IDLE_TIMEOUT_SECONDS = 5 * 60;
+/** How often a held session refreshes Revyl's idle clock: well inside `DEFAULT_IDLE_TIMEOUT_SECONDS`. */
+export const REVYL_KEEP_ALIVE_INTERVAL_MS = 60_000;
 /** Revyl answers a device-proxy action the worker cannot serve yet with these. */
 const NOT_READY_STATUSES = new Set([503, 409]);
+/** A server error on the worker-connection read, which changes nothing, leaves the start pending. */
+const CONNECTION_PENDING_STATUSES = new Set([500, 502, 503, 504]);
 
 export type RevylScreenSize = Readonly<{ width: number; height: number }>;
 
@@ -45,6 +53,11 @@ export type RevylSession = Readonly<{
   screen: RevylScreenSize | undefined;
   /** Read from `health`: whether `/drag` takes the finger's travel time as `duration_ms`. */
   dragDuration: boolean;
+  /**
+   * Read from `health`: whether `/set_orientation` rotates to a named landscape side and upside down.
+   * A worker without it rotates only to portrait or to a landscape side it does not name.
+   */
+  preciseOrientation: boolean;
   device: DeviceInfo;
   client: RevylClient;
   lease: DeviceLease;
@@ -181,6 +194,7 @@ export async function startRevylSession(
         sessionId,
         screen: readRevylScreenSize(health),
         dragDuration: health.supports_explicit_drag_duration === true,
+        preciseOrientation: health.supports_precise_orientation === true,
         device: buildRevylDevice(input.platform, lease, runId),
         client,
         lease,
@@ -398,12 +412,12 @@ async function untilRevylWorkerReady(
 ): Promise<void> {
   for (;;) {
     requireTime(deadline, input);
-    const connection = await runWithinDeadline(
-      () => client.getWorkerConnection(runId, pollSignal(deadline, input)),
-      deadline,
-      input,
-    );
+    const connection = await readWorkerConnection(client, runId, deadline, input);
     requireTime(deadline, input);
+    if (connection === undefined) {
+      await sleepBefore(deadline, input.signal);
+      continue;
+    }
     if (connection.status === 'ready' && connection.worker_ws_url) return;
     if (
       connection.status === 'cancelled' ||
@@ -421,6 +435,29 @@ async function untilRevylWorkerReady(
       );
     }
     await sleepBefore(deadline, input.signal);
+  }
+}
+
+/**
+ * One worker-connection read, or `undefined` when Revyl answered it with a server error: the read
+ * changes nothing, so the next poll asks again within the same deadline.
+ */
+async function readWorkerConnection(
+  client: RevylClient,
+  runId: string,
+  deadline: RevylDeadline,
+  input: RevylReadyInput,
+): Promise<RevylWorkerConnection | undefined> {
+  try {
+    return await runWithinDeadline(
+      () => client.getWorkerConnection(runId, pollSignal(deadline, input)),
+      deadline,
+      input,
+    );
+  } catch (error) {
+    const status = error instanceof AppError ? error.details?.providerStatus : undefined;
+    if (typeof status === 'number' && CONNECTION_PENDING_STATUSES.has(status)) return undefined;
+    throw error;
   }
 }
 
@@ -444,6 +481,28 @@ async function sleepBefore(deadline: RevylDeadline, signal?: AbortSignal): Promi
     undefined,
     signal === undefined ? {} : { signal },
   ).catch(() => undefined);
+}
+
+/**
+ * Refreshes a held session's idle clock on a timer, with a read that changes nothing on the device:
+ * the worker counts a state read as device use and `health` as not. A failed refresh is not reported,
+ * since the next one or any command refreshes the clock again; only a holder gone for the whole idle
+ * timeout loses the device. The timer never keeps the process alive.
+ */
+export function keepRevylSessionAlive(client: RevylClient, runId: string): () => void {
+  let refreshing = false;
+  const timer = setInterval(() => {
+    if (refreshing) return;
+    refreshing = true;
+    void client
+      .workerAction(runId, 'appearance')
+      .catch(() => undefined)
+      .finally(() => {
+        refreshing = false;
+      });
+  }, REVYL_KEEP_ALIVE_INTERVAL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 /**

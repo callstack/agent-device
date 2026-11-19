@@ -5,13 +5,13 @@ import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { CliJsonResult } from '../cli-json.ts';
-import type { LiveDeviceContext } from './runtime.ts';
+import type { LiveDeviceContext, RunStepOptions } from './runtime.ts';
 
 type RunStep<Context> = (
   context: Context,
   step: string,
   args: string[],
-  options?: { allowFailure?: boolean },
+  options?: RunStepOptions,
 ) => Promise<CliJsonResult>;
 
 export function createLiveDeviceAssertions<
@@ -65,8 +65,13 @@ export function createLiveDeviceAssertions<
     );
   }
 
-  async function capturePng(context: Context, step: string, outputPath: string): Promise<void> {
-    await runStep(context, step, ['screenshot', outputPath, '--scale', '0.5']);
+  async function capturePng(
+    context: Context,
+    step: string,
+    outputPath: string,
+    options: RunStepOptions = {},
+  ): Promise<void> {
+    await runStep(context, step, ['screenshot', outputPath, '--scale', '0.5'], options);
     assertPngFile(outputPath);
   }
 
@@ -78,8 +83,12 @@ export function assertJsonContains(result: CliJsonResult, expected: string, mess
   assert.ok(serialized.includes(expected), `${message}\nreceived: ${serialized}`);
 }
 
+export function filesDiffer(first: string, second: string): boolean {
+  return !fs.readFileSync(first).equals(fs.readFileSync(second));
+}
+
 export function assertFilesDiffer(first: string, second: string, message: string): void {
-  assert.notDeepEqual(fs.readFileSync(first), fs.readFileSync(second), message);
+  assert.ok(filesDiffer(first, second), message);
 }
 
 export function assertNonEmptyFile(filePath: string, name: string): void {

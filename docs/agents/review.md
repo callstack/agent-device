@@ -11,8 +11,7 @@ Apply each check only when the change affects its subject.
 Reopen a resolved concern only when new evidence changes the conclusion.
 
 - Dependencies and ADRs: for each relevant ADR, read its Status and "Rules at a glance" first.
-  If it has no "Rules at a glance", read its Decision section.
-  Read other sections only for the rules that the change touches.
+  Without one, read its Decision section, and other sections only for the touched rules.
   Resolve prerequisite conflicts.
   Update or supersede conflicting decisions explicitly.
 - Routing and surfaces: trace through daemon and backend to the affected entrypoints.
@@ -32,6 +31,7 @@ Reopen a resolved concern only when new evidence changes the conclusion.
 - Changed code: flag dead code, redundant guards, casts, narrating comments, and competing owners.
 - Help and user docs: trace changed behavior claims to code paths.
   Block unsupported claims.
+  State outcomes, not internal tuning: tuned constants live in `apple/runner/RUNNER_PROTOCOL.md` by Swift symbol name.
 - New trust boundary: before you write code, get a rule and a case table reviewed.
   The table names who chooses the path, what the kernel resolves, what can change between checks, where bytes are first written, which failures keep the action result, and the accepted cases.
   If prose, tests, configuration, or dependencies change the security contract, review again.

@@ -76,9 +76,9 @@ test('cancellation during the final simulator-state probe is not swallowed', asy
   expect(run).toHaveBeenCalledTimes(2);
 });
 
-test('watchOS and non-simulator Apple targets are unavailable', () => {
+test('only Apple simulators can be shut down', () => {
   expect(canShutdownTarget(appleDevice())).toBe(true);
-  expect(canShutdownTarget(appleDevice({ appleOs: 'watchos' }))).toBe(false);
+  expect(canShutdownTarget(appleDevice({ appleOs: 'watchos' }))).toBe(true);
   expect(canShutdownTarget(appleDevice({ kind: 'device' }))).toBe(false);
 });
 

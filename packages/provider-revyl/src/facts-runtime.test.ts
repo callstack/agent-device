@@ -18,7 +18,7 @@ type RevylOperation = keyof ReturnType<typeof revylFacts>['operations'];
 
 /**
  * Every operation cell Revyl's facts report, with the verdict each one has to carry. `available` is
- * a cell the facts admit; `mode` is a cell refused because the worker has no action for it; `kind` is
+ * a cell the facts admit; `subjects` is a cell admitted for the subjects it lists; `mode` is a cell refused because the worker has no action for it; `kind` is
  * a cell refused because the rented device is the wrong shape for the command at all.
  *
  * The map is typed over the whole catalog, so a cell added to or dropped from `revylFacts` is a
@@ -40,6 +40,8 @@ const EXPECTED_CELLS = {
   prepareApplicationOpen: 'available',
   resolveOpenTarget: 'available',
   scrollDirection: 'available',
+  setOrientation: 'available',
+  setSetting: 'subjects',
   tapPoint: 'available',
 
   acceptAlert: 'mode',
@@ -106,8 +108,6 @@ const EXPECTED_CELLS = {
   sendPushNotification: 'mode',
   sendTelephonyEvent: 'mode',
   setFoldPose: 'mode',
-  setOrientation: 'mode',
-  setSetting: 'mode',
   setViewport: 'mode',
   shutdownTarget: 'mode',
   sleep: 'mode',
@@ -123,7 +123,7 @@ const EXPECTED_CELLS = {
   volumeUp: 'mode',
   wake: 'mode',
   writeClipboard: 'mode',
-} as const satisfies Readonly<Record<RevylOperation, 'available' | 'mode' | 'kind'>>;
+} as const satisfies Readonly<Record<RevylOperation, 'available' | 'subjects' | 'mode' | 'kind'>>;
 
 /** The typed reason one verdict of the matrix carries. */
 const REFUSAL_REASONS = { mode: 'unsupported-provider-mode', kind: 'unsupported-device-kind' };
@@ -138,11 +138,16 @@ test('every operation cell reports the verdict its matrix row promises', () => {
   );
   for (const [cell, expected] of Object.entries(EXPECTED_CELLS) as [
     RevylOperation,
-    'available' | 'mode' | 'kind',
+    'available' | 'subjects' | 'mode' | 'kind',
   ][]) {
     const fact = operations[cell];
     if (expected === 'available') {
       assert.deepEqual(fact, { available: true }, cell);
+      continue;
+    }
+    if (expected === 'subjects') {
+      assert.equal(fact.available, true, cell);
+      assert.ok(fact.available && fact.subjects !== undefined, cell);
       continue;
     }
     assert.equal(fact.available, false, cell);
@@ -172,6 +177,29 @@ test('back is an Android button; iOS refuses it with the substitute', () => {
   const ios = revylFacts(IOS_DEVICE).operations.back;
   assert.equal(ios.available, false);
   assert.match(ios.available ? '' : (ios.hint ?? ''), /only on Android/);
+});
+
+test('settings admit what the worker has actions for, and the keychain only on iOS', () => {
+  const android: DeviceInfo = {
+    ...IOS_DEVICE,
+    platform: 'android',
+    appleOs: undefined,
+    id: 'revyl:android:lease-1',
+    kind: 'emulator',
+  };
+  const subjects = (device: DeviceInfo) => {
+    const fact = revylFacts(device).operations.setSetting;
+    assert.ok(fact.available && fact.subjects !== undefined);
+    return Object.fromEntries(
+      Object.entries(fact.subjects).map(([name, subject]) => [name, subject.available]),
+    );
+  };
+  const served = { appearance: true, location: true, permission: true, 'clear-app-state': true };
+  assert.deepEqual(subjects(IOS_DEVICE), { ...served, 'reset-keychain': true });
+  assert.deepEqual(subjects(android), { ...served, 'reset-keychain': false });
+  const setSetting = revylFacts(android).operations.setSetting;
+  assert.ok(setSetting.available);
+  assert.equal(setSetting.unlisted?.reason, 'unsupported-provider-mode');
 });
 
 test('the facts report the canonical device shape beside the provider mode', () => {

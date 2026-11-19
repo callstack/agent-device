@@ -64,10 +64,6 @@
       "types": "./src/app-state-runtime.ts",
       "default": "./src/app-state-runtime.ts"
     },
-    "./apple-runner-request": {
-      "types": "./src/apple-runner-request.ts",
-      "default": "./src/apple-runner-request.ts"
-    },
     "./apple-session-observation": {
       "types": "./src/apple-session-observation.ts",
       "default": "./src/apple-session-observation.ts"

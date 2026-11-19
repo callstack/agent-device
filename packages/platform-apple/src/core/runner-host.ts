@@ -119,6 +119,8 @@ export const appleRunnerHost: AppleRunnerHost = {
   hasScopedAppleToolProvider,
   buildSimctlArgsForDevice,
   simulatorAddressFor,
+  wasSimulatorRecentlyObservedBooted: async (device) =>
+    (await import('./simulator.ts')).wasSimulatorRecentlyObservedBooted(device),
   resolveIosPhysicalDeviceControl,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
   runnerRuntimeSlot: runtimeSlot,

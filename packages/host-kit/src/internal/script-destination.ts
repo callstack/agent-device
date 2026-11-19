@@ -1,18 +1,33 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from './diagnostics.ts';
+import { publishFileSync, type AtomicPublishMode } from './atomic-publish.ts';
+import {
+  entryNameOrRefuse,
+  requireWindowsScriptVolume,
+  scriptEntryNameOrRefuse,
+} from './entry-name.ts';
+import { hostPathRules } from './path-resolution.ts';
+import {
+  scriptAncestryFailure,
+  type ScriptAncestryExposure,
+} from './script-destination-refusal.ts';
 
 /**
  * What this process may rely on when it judges ground: who it is, as the kernel answers. The rule reads no
  * account database, so the answer does not depend on which name services run (ADR 0016). Every judgment below
  * decides over the fields of one `lstat`, so each is testable on its values.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number }>;
+export type ScriptDestinationTrust = Readonly<{ uid: number; privateAncestry?: boolean }>;
 
-function scriptTrust(): ScriptDestinationTrust {
-  return { uid: process.getuid?.() ?? -1 };
+/**
+ * How strictly a caller's destination is judged. `privateAncestry` is for executable state, such as the Swift
+ * helper cache: no directory the walk traverses may be group- or world-writable, sticky or not, because a
+ * sticky shared directory lets another user claim a name a cleaner removed (ADR 0016).
+ */
+export type ScriptDestinationOptions = Readonly<{ privateAncestry?: boolean }>;
+
+function scriptTrust(options: ScriptDestinationOptions): ScriptDestinationTrust {
+  return { uid: process.getuid?.() ?? -1, privateAncestry: options.privateAncestry === true };
 }
 
 /**
@@ -22,21 +37,6 @@ function scriptTrust(): ScriptDestinationTrust {
 export type DirectoryAuthority = Readonly<{ uid: number; mode: number }>;
 
 export type LinkAuthority = Readonly<{ uid: number }>;
-
-/** The ways a step can be unsafe; `untrustedGroundWording` words each one for the caller. */
-export type ScriptAncestryExposure =
-  | 'foreign_owned'
-  | 'world_writable'
-  | 'shared_group_writable'
-  | 'shared_parent'
-  | 'planted_link'
-  | 'link_loop_exceeded'
-  | 'not_a_directory'
-  | 'entry_appeared'
-  | 'relative_destination'
-  | 'unresolvable_parent'
-  | 'unreachable_parent'
-  | 'parent_replaced';
 
 /**
  * Whether this user can rely on a destination being inside `directory`, and why not if they cannot. The
@@ -49,7 +49,7 @@ export function untrustedAncestryExposure(
   trust: ScriptDestinationTrust,
 ): ScriptAncestryExposure | undefined {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
-  if (directory.mode & 0o1000) return undefined;
+  if (directory.mode & 0o1000 && !trust.privateAncestry) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
   if (directory.mode & 0o020) return 'shared_group_writable';
   return undefined;
@@ -83,49 +83,6 @@ export function untrustedLinkExposure(
   return 'planted_link';
 }
 
-export type AtomicPublishMode = 'replace' | 'link-exclusive';
-
-/**
- * Publishes a complete file from a same-directory temporary sibling. Contents are text or bytes: an
- * encoding is passed only for text, so a PNG or a video chunk reaches the disk as the caller built it.
- *
- * The temporary file is always removed. Cleanup is best effort and never replaces the write or publish
- * error; a cleanup failure is retained as secondary evidence when a request diagnostics scope exists.
- */
-export function publishFileSync(options: {
-  destination: string;
-  contents: string | Uint8Array;
-  mode?: number;
-  preserveExistingMode?: boolean;
-  publish?: AtomicPublishMode;
-  /** The asked-for mode is MADE exact on the sibling instead of paid for with the umask. */
-  exactMode?: boolean;
-}): void {
-  withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
-    const existing = options.preserveExistingMode
-      ? fs.statSync(options.destination, { throwIfNoEntry: false })
-      : undefined;
-    const preservedMode = existing?.isFile() ? existing.mode & 0o777 : undefined;
-    const mode = preservedMode ?? options.mode;
-    const writeOptions = {
-      encoding: typeof options.contents === 'string' ? ('utf8' as const) : undefined,
-      ...(mode === undefined ? {} : { mode }),
-    };
-    fs.writeFileSync(temporaryPath, options.contents, writeOptions);
-    // A file CREATE ANDs its mode with the umask, so a mode that has to be EXACT is SAID on the temporary
-    // sibling before the entry exists and no reader sees a wider file. Preserving an existing mode is always
-    // exact. An asked-for mode is NOT, which is what a generic caller has always relied on: with `mode` 0600
-    // under umask 0200 it gets 0400, and only {@link publishScriptFileSync} asks for the exact number.
-    const exactMode = preservedMode ?? (options.exactMode ? mode : undefined);
-    if (exactMode !== undefined) fs.chmodSync(temporaryPath, exactMode);
-    if (options.publish === 'link-exclusive') {
-      fs.linkSync(temporaryPath, options.destination);
-    } else {
-      fs.renameSync(temporaryPath, options.destination);
-    }
-  });
-}
-
 /**
  * Publishes a session script, and nothing else: {@link publishFileSync} at {@link SCRIPT_FILE_MODE}, with the
  * destination-ancestry rule asked through {@link prepareScriptDestination}. A recording is a transcript of what
@@ -136,46 +93,18 @@ export function publishScriptFileSync(options: {
   destination: string;
   contents: string;
   publish?: AtomicPublishMode;
-}): void {
-  // The entry is spelled FROM the directory the rule judged, never from the caller's spelling: a `..` or a
-  // link sends the entry elsewhere, and a temporary sibling beside that spelling is one another local user
-  // can reach (ADR 0016). Spelling it here puts the sibling where the entry lands, on its own.
-  const judged = prepareScriptDestination(options.destination).directory;
+}): string {
+  // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
+  // elsewhere, and a temporary sibling beside that spelling is one another local user can reach (ADR 0016).
+  const { entry } = prepareScriptDestination(options.destination);
   publishFileSync({
-    destination: path.join(judged, path.basename(options.destination)),
+    destination: entry,
     contents: options.contents,
     mode: SCRIPT_FILE_MODE,
     publish: options.publish,
     exactMode: true,
   });
-}
-
-/**
- * The canonical temp path for a destination: a sibling of the name, inside the directory the publish will
- * create the entry in — the walk's answer for a script destination, `path.dirname` for every other one.
- */
-function createAtomicPublishTempPath(directory: string, destination: string): string {
-  return path.join(
-    directory,
-    `.${path.basename(destination)}.${process.pid}-${crypto.randomUUID()}.tmp`,
-  );
-}
-
-function removeTempBestEffort(destination: string, temporaryPath: string | undefined): void {
-  if (temporaryPath === undefined) return;
-  try {
-    fs.rmSync(temporaryPath, { force: true });
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'atomic_file_cleanup_failed',
-      data: {
-        destination,
-        temporaryPath,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+  return entry;
 }
 
 /** A recording holds literals a `fill` did not parameterize (ADR 0017), so it is written private. */
@@ -191,22 +120,29 @@ const SCRIPT_DIR_MODE = 0o700;
  * Readies a script destination and reports the PHYSICAL directory to create the entry in, in ADR 0016's order:
  * walk, refuse before anything is created, create what is missing, walk the completed chain again, answer.
  */
-export function prepareScriptDestination(destination: string): ScriptDestination {
-  return scriptDestination(destination, true);
+export function prepareScriptDestination(
+  destination: string,
+  options: ScriptDestinationOptions = {},
+): ScriptDestination {
+  return scriptDestination(destination, true, options);
 }
 
 /**
  * ADR 0016's judgment of one destination. `create` says whether the caller needs the missing tail created:
  * a walk that stops short is an answer for that caller and a refusal for the other.
  */
-function scriptDestination(destination: string, create: boolean): ScriptDestination {
-  const spelled = spelledParent(destination);
+function scriptDestination(
+  destination: string,
+  create: boolean,
+  options: ScriptDestinationOptions = {},
+): ScriptDestination {
   if (process.platform === 'win32') {
-    // Access is an ACL here, so no walk runs, and `lstat` answers no usable directory identity.
-    if (create) fs.mkdirSync(spelled, { recursive: true, mode: SCRIPT_DIR_MODE });
-    return { directory: spelled, identity: 'windows' };
+    return windowsScriptDestination(destination, create);
   }
-  const trust = scriptTrust();
+  // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
+  const spelled = spelledParent(destination);
+  const name = scriptEntryNameOrRefuse(destination);
+  const trust = scriptTrust(options);
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
   // `mkdir -p <sticky shared>/recordings`, where those levels are 0700 of this call's own (ADR 0016).
@@ -214,115 +150,104 @@ function scriptDestination(destination: string, create: boolean): ScriptDestinat
   if (othersCreateEntriesIn(arrived.authority, trust)) {
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  return { directory: arrived.deepest, identity: arrived.identity };
+  return authorizedEntry(arrived.deepest, arrived.identity, name);
+}
+
+function windowsScriptDestination(destination: string, create: boolean): ScriptDestination {
+  const rules = path.win32;
+  const root = requireWindowsScriptVolume(destination, destination);
+  const name = entryNameOrRefuse(destination, rules);
+  const directory = rules.dirname(rules.normalize(destination));
+  requireWindowsScriptDirectory(destination, root);
+  if (directory === root) return authorizedEntry(directory, 'windows', name);
+  if (create) createWindowsScriptParents(destination, root, directory);
+  else requireWindowsScriptDirectory(destination, directory);
+  return authorizedEntry(directory, 'windows', name);
+}
+
+function createWindowsScriptParents(destination: string, root: string, directory: string): void {
+  const missing: string[] = [];
+  let parent = directory;
+  // Start at the requested parent so a traverse-only ancestor needs no attribute read.
+  while (parent !== root && !makeWindowsScriptDirectory(destination, parent)) {
+    missing.push(parent);
+    parent = path.win32.dirname(parent);
+  }
+  if (parent === root) throw scriptAncestryFailure(destination, root, 'unreachable_parent');
+  for (const child of missing.reverse()) {
+    if (!makeWindowsScriptDirectory(destination, child)) {
+      throw scriptAncestryFailure(destination, child, 'unreachable_parent');
+    }
+  }
+}
+
+function makeWindowsScriptDirectory(destination: string, directory: string): boolean {
+  try {
+    fs.mkdirSync(directory, { mode: SCRIPT_DIR_MODE });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+    if (code !== 'EEXIST') throw error;
+    requireWindowsScriptDirectory(destination, directory);
+  }
+  return true;
+}
+
+function requireWindowsScriptDirectory(destination: string, directory: string): void {
+  let stats: fs.Stats | undefined;
+  try {
+    stats = fs.statSync(directory, { throwIfNoEntry: false });
+  } catch (error) {
+    if (!isWindowsShareUnavailable(directory, error)) throw error;
+  }
+  if (!stats) throw scriptAncestryFailure(destination, directory, 'unreachable_parent');
+  if (!stats.isDirectory()) throw scriptAncestryFailure(destination, directory, 'not_a_directory');
+}
+
+/** Windows reports a deleted share as a connection reset through libuv. */
+function isWindowsShareUnavailable(file: string, error: unknown): boolean {
+  return (
+    process.platform === 'win32' &&
+    /^[\\/]{2}/.test(file) &&
+    (error as NodeJS.ErrnoException | undefined)?.code === 'ECONNRESET'
+  );
+}
+
+function authorizedEntry(
+  directory: string,
+  identity: string | undefined,
+  name: string,
+): ScriptDestination {
+  return { directory, identity, name, entry: hostPathRules().join(directory, name) };
 }
 
 /**
- * Where a script entry is created: the PHYSICAL directory the rule judged, and that directory's identity as
- * the walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename.
+ * The entry a script is created as: the PHYSICAL directory the rule judged, that directory's identity as the
+ * walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename — and the
+ * validated name. `entry` is the one path a publisher creates.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
   identity: string | undefined;
+  name: string;
+  entry: string;
 }>;
 
-export type DurableFilePublishMode = 'replace' | 'link-exclusive';
-
-/** Publishes complete UTF-8 contents with a durable file and directory fence. */
-export function publishDurableFileSync(options: {
-  destination: string;
-  contents: string;
-  mode?: number;
-  publish?: DurableFilePublishMode;
-}): void {
-  const directory = path.dirname(options.destination);
-  withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
-    let descriptor: number | undefined;
-    let failed = false;
-    let primaryError: unknown;
-    try {
-      assertSafeDestination(options.destination);
-      descriptor = fs.openSync(temporaryPath, 'wx', options.mode ?? 0o600);
-      fs.writeFileSync(descriptor, options.contents, 'utf8');
-      fs.fsyncSync(descriptor);
-      fs.closeSync(descriptor);
-      descriptor = undefined;
-      assertSafeDestination(options.destination);
-      if (options.publish === 'link-exclusive') {
-        fs.linkSync(temporaryPath, options.destination);
-      } else {
-        fs.renameSync(temporaryPath, options.destination);
-      }
-      syncDirectoryBestEffort(directory);
-    } catch (error) {
-      failed = true;
-      primaryError = error;
-    }
-    if (descriptor !== undefined) {
-      try {
-        fs.closeSync(descriptor);
-      } catch (error) {
-        if (!failed) {
-          failed = true;
-          primaryError = error;
-        }
-      }
-    }
-    if (failed) throw primaryError;
-  });
-}
-
 /**
- * Gives a publisher a canonical temp path and cleanup ownership while it performs its own write protocol.
- * The sibling goes in `directory`, which the caller must name when it knows the physical directory the entry
- * is created in; a spelling that sends `..` or a link elsewhere is not where a temporary file may land.
+ * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
+ * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
+ * the same directory.
  */
-export function withAtomicPublishTempPathSync<T>(
+export function confirmScriptDestination(
   destination: string,
-  publish: (temporaryPath: string) => T,
-): T {
-  const temporaryPath = createAtomicPublishTempPath(path.dirname(destination), destination);
-  try {
-    return publish(temporaryPath);
-  } finally {
-    removeTempBestEffort(destination, temporaryPath);
-  }
-}
-
-/** Syncs a containing directory where the filesystem supports directory fsync. */
-function syncDirectoryBestEffort(directory: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directory, 'r');
-    fs.fsyncSync(descriptor);
-  } catch {
-  } finally {
-    if (descriptor !== undefined) {
-      try {
-        fs.closeSync(descriptor);
-      } catch {}
-    }
-  }
-}
-
-/** Identifies a temp path produced for a particular destination. */
-export function isAtomicPublishTemporaryPath(value: unknown, destination: string): boolean {
-  if (typeof value !== 'string') return false;
-  if (path.dirname(value) !== path.dirname(destination)) return false;
-  const name = path.basename(value);
-  return name.startsWith(`.${path.basename(destination)}.`) && name.endsWith('.tmp');
-}
-
-/**
- * Confirms a destination host-kit ANSWERED earlier, and reports the directory to create the entry in. The one
- * check a caller that stages bytes owes, for the reason ADR 0016 states.
- */
-export function confirmScriptDestination(destination: string, prepared: ScriptDestination): string {
+  prepared: ScriptDestination,
+): ScriptDestination {
   const current = scriptDestination(destination, false);
-  if (current.identity !== prepared.identity) {
+  // The directory is compared too: Windows answers one constant identity for every directory.
+  if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
     throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
   }
-  return current.directory;
+  return current;
 }
 
 /**
@@ -538,85 +463,6 @@ function pathComponents(directory: string): string[] {
  */
 export const MAX_SCRIPT_PATH_LINK_HOPS = 30;
 
-/** `lstat` where absence is `undefined` and any other failure is the caller's to answer for. */
-function lstatIfPresent(pathname: string): fs.Stats | undefined {
-  try {
-    return fs.lstatSync(pathname);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
-/** Why each exposure makes that ground unsafe, in the caller's terms. */
-const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
-  foreign_owned: 'another local user owns that part of the path.',
-  world_writable: 'any local user can write that part of the path.',
-  shared_group_writable:
-    'the group can write that part of the path, and agent-device cannot tell who else belongs to that group.',
-  shared_parent: 'another local user could create the script file there first.',
-  planted_link: 'another local user could have put that symbolic link there, or could replace it.',
-  link_loop_exceeded:
-    'that part of the path follows more symbolic links than the system allows, so where the script would land is not established.',
-  not_a_directory: 'a directory was expected there, and something else stands in the way.',
-  entry_appeared:
-    'a directory the script path needs was missing when the path was checked and appeared before this save could create it.',
-  relative_destination:
-    'the script path has to be absolute, so the directories it names are the ones that get checked.',
-  unresolvable_parent:
-    'the script path names a directory that does not exist and steps back out of it with `..`, so where the script would land is not established.',
-  unreachable_parent:
-    'the directory the script path names does not exist, so the script has nowhere to be written.',
-  parent_replaced:
-    'that directory was replaced while the script was staged, so the script may not be created in what stands there now.',
-};
-
-/**
- * The typed reasons a destination-ancestry refusal answers with, named here rather than spelled again by
- * whoever reads them.
- */
-const SCRIPT_ANCESTRY_REASONS = ['script_ancestor_untrusted', 'script_ancestry_replaced'] as const;
-
-/** A reason this rule answers with, or `undefined` for an error that came from somewhere else. */
-export function scriptAncestryReason(error: unknown): string | undefined {
-  if (!(error instanceof AppError)) return undefined;
-  const reason = error.details?.reason;
-  return typeof reason === 'string' &&
-    (SCRIPT_ANCESTRY_REASONS as readonly string[]).includes(reason)
-    ? reason
-    : undefined;
-}
-
-function scriptAncestryFailure(
-  destination: string,
-  ancestor: string,
-  exposure: ScriptAncestryExposure,
-): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
-    {
-      reason:
-        exposure === 'parent_replaced' ? SCRIPT_ANCESTRY_REASONS[1] : SCRIPT_ANCESTRY_REASONS[0],
-      exposure,
-      path: destination,
-      ancestor,
-      hint: ancestryHint(exposure, ancestor),
-    },
-  );
-}
-
-/** What to do about it. A group-writable directory is the one refusal the caller can fix in place. */
-function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
-  if (exposure === 'parent_replaced') {
-    return 'Re-record with open --save-script, or save under a directory nobody else can write.';
-  }
-  if (exposure === 'shared_group_writable') {
-    return `Close the directory to its group with \`chmod g-w ${ancestor}\`, or save the script under a directory only you can write.`;
-  }
-  return 'Save the script under a directory you own that only you can write, and keep the path out of directories other users own.';
-}
-
 /**
  * Creates the tail the walk found missing, ONE LEVEL AT A TIME, inside the directory the walk judged, for the
  * one-name-at-a-time reason ADR 0016 states. A name that arrived since the walk looked is judged here, not
@@ -673,16 +519,4 @@ function createMissingLevel(
     throw scriptAncestryFailure(destination, level, 'shared_parent');
   }
   return level;
-}
-
-function assertSafeDestination(destination: string): void {
-  const stats = lstatIfPresent(destination);
-  if (stats?.isSymbolicLink()) {
-    throw new Error(`Refusing to replace a durable file symbolic link: ${destination}`);
-  }
-  if (stats && !stats.isFile()) {
-    throw new Error(
-      `Refusing to replace a durable path that is not a regular file: ${destination}`,
-    );
-  }
 }

@@ -509,6 +509,7 @@ test('handleFindCommands focus uses the promoted actionable node center', async 
 test('handleFindCommands focus rejects covered matches before dispatching coordinates', async () => {
   const { response } = await runFindClickScenario({
     positionals: ['Save draft', 'focus'],
+    snapshotProvenance: { backend: 'xctest', producer: 'apple-runner' },
     nodes: [
       {
         index: 0,
@@ -521,14 +522,7 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
         ref: 'e2',
         type: 'Button',
         label: 'Save draft',
-        hittable: false,
-        interactionBlocked: 'covered',
-        coveredBy: {
-          kind: 'tab-bar',
-          label: 'Media',
-          rect: { x: 0, y: 760, width: 390, height: 84 },
-        },
-        presentationHints: ['covered'],
+        hittable: true,
         rect: { x: 16, y: 790, width: 140, height: 44 },
         parentIndex: 0,
       },
@@ -556,6 +550,7 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
       kind: 'tab-bar',
       label: 'Media',
       rect: { x: 0, y: 760, width: 390, height: 84 },
+      persistentBar: true,
     });
     expect(response.error.details?.hint).toContain('Covered by the tab-bar "Media"');
     expect(response.error.details?.hint).not.toMatch(/@e\d/);

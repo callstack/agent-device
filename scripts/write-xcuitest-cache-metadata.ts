@@ -17,7 +17,7 @@ import {
 } from '@agent-device/platform-apple/runner/operations';
 
 const USAGE =
-  'Usage: write-xcuitest-cache-metadata.ts <ios|macos|tvos|visionos> <derived> <destination> <build-log>';
+  'Usage: write-xcuitest-cache-metadata.ts <ios|macos|tvos|visionos|watchos> <derived> <destination> <build-log>';
 
 /**
  * Publishes the cache metadata for a `scripts/build-xcuitest-apple.sh` build. The identity half

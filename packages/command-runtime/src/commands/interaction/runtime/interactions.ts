@@ -20,7 +20,7 @@ import {
   planPostActionObservation,
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
-import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
+import { resolveInteractionTarget, type InteractionRequestTarget } from './resolution.ts';
 import { admitResolvedTarget } from './pre-dispatch-admission.ts';
 import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
@@ -36,11 +36,11 @@ export type {
   LongPressCommandOptions,
   LongPressCommandResult,
 } from './gestures.ts';
-export type { InteractionTarget } from './resolution.ts';
+export type { InteractionRequestTarget } from './resolution.ts';
 
 export type PressCommandOptions = CommandContext &
   RepeatedInput & {
-    target: InteractionTarget;
+    target: InteractionRequestTarget;
     button?: ClickButton;
     /**
      * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
@@ -63,7 +63,7 @@ export type ClickCommandOptions = PressCommandOptions;
 export type { FillCommandResult, PressCommandResult };
 
 export type FillCommandOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   text: string;
   delayMs?: number;
   /** Internal Maestro replay policy, forwarded only to the platform action. */

@@ -91,6 +91,9 @@ export async function startAppleAppLogs(
         fence: input.fence,
         descriptor,
       }),
+      // devicectl --console --terminate-existing relaunches the app, and devicectl forwards the
+      // stop signal to the app, which ends it.
+      { relaunched: backend === 'ios-device' },
     );
     adopted = true;
     return result;
@@ -100,9 +103,6 @@ export async function startAppleAppLogs(
 }
 
 function assertAppleLogStartSupported(device: DeviceInfo): void {
-  if (device.appleOs === 'watchos') {
-    throw new AppError('UNSUPPORTED_PLATFORM', 'watchOS app logs are not supported');
-  }
   if (
     isIosFamily(device) &&
     device.kind === 'device' &&

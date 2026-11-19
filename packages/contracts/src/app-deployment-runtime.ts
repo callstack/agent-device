@@ -39,6 +39,14 @@ export type AppDeploymentResult = Readonly<{
 
 export type MaterializeAppSourceInput = Readonly<{
   source: AppDeploymentSource;
+  /**
+   * The epoch-ms instant materialization must finish by, derived by the daemon from the request's
+   * earliest registered deadline less the deploy-ledger reserve (#4441). The materializer arms its
+   * own timer for it and reports its expiry as `source_materialization_deadline_exceeded` with the
+   * armed timeout. Request cancellation stays on the binding's own scope signal. When absent, the
+   * materializer keeps only its standalone aggregate.
+   */
+  materializationDeadlineMs?: number;
 }>;
 
 export type DeployMaterializedAppInput = Readonly<{

@@ -186,11 +186,15 @@ export async function prepareOpenCommandDetails(params: {
   });
   if (runtimeHintPlan.clearRemovedRuntimeHints) {
     if (!clearRuntimeHints) {
+      // prepareApplicationOpen above may already have booted the device — a device-reaching
+      // step of this operation — so the disclosure is 'unknown', not 'no' ('no' holds only
+      // while no step was dispatched).
       throw new AppError(
         'COMMAND_FAILED',
         'Runtime hint clear operation was not admitted for this open.',
         {
           reason: 'runtime-hints-operation-missing',
+          dispatched: 'unknown',
         },
       );
     }

@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import type {
   FillCommandResult,
-  InteractionTarget,
+  InteractionRequestTarget,
   LongPressCommandResult,
   PressCommandResult,
   ResolvedInteractionTarget,
@@ -63,7 +63,7 @@ export async function dispatchRuntimeInteraction<
     refContext?: RefAdmissionContext;
     /** A failed local iOS tap may be corroborated against one same-scope capture. */
     iosTapCorroboration?: {
-      target: InteractionTarget;
+      target: InteractionRequestTarget;
       extra: Record<string, unknown>;
     };
     run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
@@ -166,7 +166,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
   /** The capture this request's own pre-action baseline was taken with, when it holds one (#3510). */
   observationCapture: BoundSnapshotCapture | undefined;
   session: SessionState;
-  target: InteractionTarget | undefined;
+  target: InteractionRequestTarget | undefined;
   extra: Record<string, unknown> | undefined;
   actionStartedAt: number;
   androidFreshnessBaseline: SessionState['snapshot'] | undefined;
@@ -214,7 +214,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
 }
 
 function buildIosCorroboratedPayloads(params: {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   resolvedTarget: ResolvedInteractionTarget | undefined;
   warning: string;
   referenceFrame: GestureReferenceFrame | undefined;
@@ -243,7 +243,7 @@ function buildIosCorroboratedPayloads(params: {
 }
 
 function pointFromInteractionTarget(
-  target: InteractionTarget,
+  target: InteractionRequestTarget,
 ): { x: number; y: number } | undefined {
   return target.kind === 'point' ? { x: target.x, y: target.y } : undefined;
 }

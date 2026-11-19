@@ -257,6 +257,25 @@ for (const [transport, send] of TRANSPORTS) {
     expect(response.error.message).not.toMatch(/tenant/);
   });
 
+  test(`${transport}: an owner's path that names no file is refused before its handler runs`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const { root, handleRequest } = setup();
+
+    // Past the seam, `replay` fails on its missing script sources; the spelling refusal has to come first.
+    const response = await send(handleRequest, {
+      command: 'replay',
+      positionals: [],
+      flags: { saveScript: './missing/.' },
+    });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).not.toBe(REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+    expect(response.error.hint).toMatch(/valid file name/);
+    expect(listAdArtifacts(root)).toEqual([]);
+  });
+
   test(`${transport}: the released owners still carry the flag to their handlers`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
     const { handleRequest } = setup();
@@ -316,6 +335,6 @@ test('an owner-armed session still records its target and publishes its script',
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
   const result = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
-  expect(result).toEqual({ written: true, path: target, actionCount: 1 });
+  expect(result).toEqual({ written: true, path: fs.realpathSync(target), actionCount: 1 });
   expect(fs.readFileSync(target, 'utf8')).toMatch(/^open /m);
 });

@@ -104,7 +104,7 @@ The handler must not silently use a path known to lose the observation.
 
 The registry owns each family exactly once.
 Support coverage is separate and must preserve legacy supported and unsupported cells and hints unless a separate decision changes behavior.
-Apple coverage includes iOS simulator and physical differences, iPadOS, tvOS focus-only/no-coordinate behavior, macOS, visionOS deferred or supported cells, and the watchOS unsupported/discovery-absence sentinel.
+Apple coverage includes iOS simulator and physical differences, iPadOS, tvOS focus-only/no-coordinate behavior, macOS, visionOS deferred or supported cells, and the watchOS simulator leaf, which admits only its listed operations.
 Each fixture matches one family; a generic Apple fixture does not prove leaf coverage.
 
 ### 3. Provider ownership is exact and fail-closed

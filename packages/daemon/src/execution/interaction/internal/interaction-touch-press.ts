@@ -3,7 +3,7 @@ import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
-  InteractionTarget,
+  InteractionRequestTarget,
   PreresolvedInteractionTarget,
 } from '@agent-device/contracts/interaction';
 import type { resolveClickButton } from '@agent-device/contracts/click-button';
@@ -158,7 +158,7 @@ function buildTargetedRuntimeOptions(
 async function runTargetedTouchInteraction(params: {
   runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
   command: TargetedTouchCommand;
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   refs: readonly string[] | undefined;
   sessionName: string;
   requestId: string | undefined;

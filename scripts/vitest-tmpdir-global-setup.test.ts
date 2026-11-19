@@ -11,13 +11,13 @@ import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-mod
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('the configured Vitest lifecycle redirects worker TMPDIR and removes it after the run', async () => {
+test('the configured Vitest lifecycle redirects worker TMPDIR and removes it, and its checkout-local directory, after the run', async () => {
   const probeName = `vitest-tmpdir-probe-${process.pid}-${Date.now()}.test.ts`;
   const probePath = path.join(REPOSITORY_ROOT, 'src', '__tests__', probeName);
   const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-tmpdir-lifecycle-test-'));
   const evidencePath = path.join(evidenceRoot, 'worker-tmpdir.txt');
-  const expectedSwiftCacheDir = path.join(os.tmpdir(), 'agent-device-swift-cache');
   let workerTmpDir: string | undefined;
+  let unsharedRunDir: string | undefined;
 
   fs.writeFileSync(
     probePath,
@@ -32,9 +32,9 @@ test('worker inherits the run-owned temp directory', () => {
   expect(path.basename(tmpdir)).toMatch(new RegExp(${JSON.stringify(
     `^${TEST_RUN_TMP_PREFIX}\\d+-`,
   )}));
-  expect(process.env.AGENT_DEVICE_SWIFT_CACHE_DIR).toBe(${JSON.stringify(expectedSwiftCacheDir)});
-  expect(process.env.AGENT_DEVICE_SWIFT_CACHE_DIR?.startsWith(tmpdir)).toBe(false);
-  fs.writeFileSync(process.env.AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH!, tmpdir);
+  const unshared = process.env.AGENT_DEVICE_TEST_UNSHARED_DIR!;
+  expect(fs.statSync(unshared).isDirectory()).toBe(true);
+  fs.writeFileSync(process.env.AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH!, JSON.stringify({ tmpdir, unshared }));
 });
 `,
   );
@@ -47,14 +47,16 @@ test('worker inherits the run-owned temp directory', () => {
         cwd: REPOSITORY_ROOT,
         env: {
           ...process.env,
-          AGENT_DEVICE_SWIFT_CACHE_DIR: '',
           AGENT_DEVICE_TEST_TMPDIR_EVIDENCE_PATH: evidencePath,
         },
         timeoutMs: 30_000,
       },
     );
 
-    workerTmpDir = fs.readFileSync(evidencePath, 'utf8');
+    ({ tmpdir: workerTmpDir, unshared: unsharedRunDir } = JSON.parse(
+      fs.readFileSync(evidencePath, 'utf8'),
+    ));
+    assert.ok(workerTmpDir && unsharedRunDir);
     assert.equal(path.dirname(workerTmpDir), TEST_RUN_TMP_ROOT);
     assert.match(path.basename(workerTmpDir), new RegExp(`^${TEST_RUN_TMP_PREFIX}\\d+-`));
     assert.equal(
@@ -62,8 +64,19 @@ test('worker inherits the run-owned temp directory', () => {
       false,
       'global teardown must remove the run directory',
     );
+    assert.equal(path.basename(unsharedRunDir), path.basename(workerTmpDir));
+    assert.equal(
+      path.dirname(unsharedRunDir),
+      path.join(REPOSITORY_ROOT, '.tmp', `unshared-test-dirs-${process.getuid?.() ?? 'user'}`),
+    );
+    assert.equal(
+      fs.existsSync(unsharedRunDir),
+      false,
+      'global teardown must remove the checkout-local run directory',
+    );
   } finally {
     if (workerTmpDir) fs.rmSync(workerTmpDir, { recursive: true, force: true });
+    if (unsharedRunDir) fs.rmSync(unsharedRunDir, { recursive: true, force: true });
     fs.rmSync(probePath, { force: true });
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }
@@ -161,3 +174,24 @@ function isAlive(pid: number): boolean {
     return false;
   }
 }
+
+test('global teardown after a setup that failed part-way leaves that failure as the only one', async () => {
+  // A fresh module instance stands for a setup that threw before it made the run directory.
+  const { teardown } = (await import(
+    `./vitest-tmpdir-global-setup.ts?partial-setup-${process.pid}`
+  )) as typeof import('./vitest-tmpdir-global-setup.ts');
+  const keys = [
+    'TMPDIR',
+    'AGENT_DEVICE_TEST_UNSHARED_DIR',
+    'AGENT_DEVICE_TEST_UNSHARED_UNAVAILABLE',
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    await assert.doesNotReject(teardown());
+  } finally {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+});

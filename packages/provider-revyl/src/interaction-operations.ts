@@ -70,10 +70,10 @@ const clipboardUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not expose the pasteboard.',
 );
-/** Revyl keeps the device in the orientation its session started in. */
-const orientationUnavailable = unavailableFact(
+/** Revyl's `/set_orientation` locks a rotation; no action hands rotation back to the sensor. */
+const orientationUnlockUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'Revyl does not expose orientation control.',
+  'Revyl sets an orientation but cannot hand rotation back to the sensor.',
 );
 /** Revyl's worker answers `/back` only on Android: iOS has no system back button to press. */
 const iosBackUnavailable = unavailableFact(
@@ -85,9 +85,18 @@ const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl exposes the home button only.',
 );
-const settingsUnavailable = unavailableFact(
+/**
+ * The worker has no action for Wi-Fi, mobile data, Bluetooth, animations, text size, or biometrics,
+ * and refuses airplane mode on the devices it rents.
+ */
+const settingUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'Revyl does not expose settings control.',
+  'Revyl sets appearance, location, permissions, and app state; it does not expose this setting.',
+);
+/** `/clear_keychain` resets a simulator keychain, and an Android emulator has none. */
+const keychainUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'reset-keychain resets an iOS simulator keychain; an Android emulator has none.',
 );
 /** Revyl's worker has no push action, so a push and an app event refuse with one reason. */
 export const REVYL_PUSH_UNAVAILABLE = unavailableFact(
@@ -179,8 +188,8 @@ export function revylNavigationOperationFacts(
       back: device.platform === 'android' ? available : iosBackUnavailable,
     }),
     ...orientationRuntimeOperationFacts({
-      orientation: orientationUnavailable,
-      unlock: orientationUnavailable,
+      orientation: available,
+      unlock: orientationUnlockUnavailable,
     }),
     ...systemButtonRuntimeOperationFacts({
       unsupported: systemButtonUnavailable,
@@ -199,13 +208,6 @@ export function revylUnsupportedOperationFacts(liveSession?: RuntimeOperationUna
     ...clipboardRuntimeOperationFacts({
       unsupported: liveSession ?? clipboardUnavailable,
     }),
-    // `target` admits the device as a settings target; `unsupported` then refuses every setting, for the
-    // provider-mode reason on a live session and the session reason on a gone one.
-    ...settingsRuntimeOperationFacts({
-      target: liveSession ?? available,
-      unsupported: liveSession ?? settingsUnavailable,
-      write: {},
-    }),
     ...appEventRuntimeOperationFacts({
       triggerAppEvent: liveSession ?? REVYL_PUSH_UNAVAILABLE,
     }),
@@ -217,6 +219,24 @@ export function revylUnsupportedOperationFacts(liveSession?: RuntimeOperationUna
     }),
     setFoldPose: liveSession ?? REVYL_FOLD_UNAVAILABLE,
     sendTelephonyEvent: liveSession ?? REVYL_TELEPHONY_UNAVAILABLE,
+  });
+}
+
+/**
+ * The settings a live session writes through the worker's own actions. Each one is a device action
+ * of its own rather than a point action, and `reset-keychain` exists only on an iOS simulator.
+ */
+export function revylSettingsOperationFacts(device: Pick<DeviceInfo, 'platform'>) {
+  return settingsRuntimeOperationFacts({
+    target: available,
+    unsupported: settingUnavailable,
+    write: {
+      appearance: available,
+      location: available,
+      permission: available,
+      'clear-app-state': available,
+      'reset-keychain': device.platform === 'apple' ? available : keychainUnavailable,
+    },
   });
 }
 

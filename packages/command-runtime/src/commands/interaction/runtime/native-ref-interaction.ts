@@ -5,7 +5,7 @@ import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
-  InteractionTarget,
+  InteractionRequestTarget,
   ResolutionDisclosure,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
@@ -53,7 +53,7 @@ import {
 export async function preflightNativeRefInteraction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   action: InteractionAction,
 ): Promise<{
   targetHittable?: boolean;
@@ -113,7 +113,7 @@ export async function preflightNativeRefInteraction(
 export async function dispatchNativeRefInteraction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   action: InteractionAction,
   dispatch: (
     context: BackendCommandContext,

@@ -12,7 +12,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
@@ -129,24 +129,20 @@ function prepareRemoteScriptOutput(
   host: HostEnvironment,
 ): DaemonWireRequest['flags'] {
   const requested = flags?.saveScript;
-  if (!requested) return flags;
+  // An empty path is a spelling to refuse, not an absent flag.
+  if (requested === undefined || requested === false) return flags;
   if (req.command !== 'open') {
     throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
       reason: 'remote_script_lifecycle_unsupported',
       hint: 'Use open --save-script. A remote close writes the recording to that path. Remote repaired-script output is not supported.',
     });
   }
-  const localPath = resolveUserPath(
+  // The spelling is judged before it is expanded, and before anything asks whether it exists (ADR 0016).
+  const localPath = resolveScriptDestination(
     typeof requested === 'string' ? requested : `recording-${Date.now()}.ad`,
     { cwd: req.meta?.cwd ?? host.cwd, env: host.env },
   );
-  if (requested !== true && !req.flags?.force && fs.existsSync(localPath)) {
-    throw new AppError('COMMAND_FAILED', `A file already exists at ${localPath}.`, {
-      reason: 'script_target_exists',
-      path: localPath,
-      hint: 'Choose another output path or pass --force/--overwrite.',
-    });
-  }
+  if (requested !== true && !req.flags?.force) assertScriptTargetVacant(localPath);
   clientPaths.savedScript = localPath;
   return { ...flags, saveScript: true };
 }

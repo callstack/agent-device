@@ -1,10 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+  requireUnsharedTestRunDir,
+  unsharedTestRunDir,
+} from '@agent-device/test-kit';
 import * as video from '@agent-device/capture-kit/recording-video';
 import { runtimeModule } from '@agent-device/platform-apple';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
@@ -24,15 +29,30 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(),
 }));
-afterEach(() => vi.restoreAllMocks());
+const hostPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+// These cases record an iOS target, which only a macOS host does, and the validator compiles only there.
+beforeEach(() => {
+  Object.defineProperty(process, 'platform', { ...hostPlatform, value: 'darwin' });
+});
+const swiftCaches: string[] = [];
+afterEach(() => {
+  for (const cache of swiftCaches.splice(0)) fs.rmSync(cache, { recursive: true, force: true });
+  Object.defineProperty(process, 'platform', hostPlatform);
+  vi.restoreAllMocks();
+});
 
 async function harness(device: DeviceInfo, launch = () => {}) {
   const root = mkdtempForTestSync('warm-video-validator-');
+  // Only a path: the Swift helper cache creates it privately on the first compile, so a case that never compiles
+  // needs nothing from the run's checkout-local directory. A case that does skips without one.
+  const swiftCache = path.join(unsharedTestRunDir() ?? root, `swift-cache-${path.basename(root)}`);
+  swiftCaches.push(swiftCache);
   const unused = async (): Promise<never> => {
     throw new Error('unused');
   };
   const host = createPlatformRuntimeHost({
-    host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: root } },
+    host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCache } },
     sessionsDir: root,
     resolveSessionArtifacts: () => {
       throw new Error('unused');
@@ -128,9 +148,11 @@ test.each(devices)(
   },
 );
 
-test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
+test.for(['COMMAND_FAILED', 'TOOL_MISSING'])(
   'a %s compiler failure preserves capture and main stop semantics',
-  async (code) => {
+  async (code, context) => {
+    // The compile runs through the real cache, whose ancestry walk needs the run's checkout-local directory.
+    requireUnsharedTestRunDir(context);
     const { start, input } = await harness(devices[1]!);
     const failure = new AppError(code, 'xcrun exited with code 72', {
       stderr:
@@ -179,7 +201,7 @@ test.each(['COMMAND_FAILED', 'TOOL_MISSING'])(
     }
     expect(runCmd).toHaveBeenCalledTimes(2);
     expect(runCmd).toHaveBeenCalledWith(
-      'xcrun',
+      '/usr/bin/xcrun',
       expect.arrayContaining(['swiftc']),
       expect.any(Object),
     );

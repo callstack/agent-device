@@ -303,6 +303,9 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
+#if os(watchOS)
+      return try watchCrownScroll(app: activeApp, command: command, direction: direction)
+#endif
       guard let scrollContext = try synthesizedCoordinateContext(app: activeApp) else {
         return Response(
           ok: false,
@@ -576,7 +579,7 @@ extension RunnerTests {
           error: ErrorPayload(
             code: RunnerWireErrorCode.hardwareControlUnavailable,
             message: "actionButton requires a device model with an Action Button",
-            hint: "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
+            hint: Self.actionButtonUnavailableHint
           )
         )
       }
@@ -607,7 +610,9 @@ extension RunnerTests {
       }
       if command.command == .keyboardDismiss {
         guard !status.visible else {
-          return Response(ok: false, error: keyboardDismissRefusal())
+          return Response(ok: false, error: keyboardDismissRefusal(
+            returnKey: status.returnKey.flatMap(RunnerKeyboardReturnKey.init(rawValue:))
+          ))
         }
         return Response(ok: true, data: DataPayload(
           message: "keyboardDismiss", visible: false, wasVisible: false, dismissed: false

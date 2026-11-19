@@ -1,64 +1,59 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails, isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
+import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
-import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
+import {
+  compileSwiftSources,
+  getSwiftCacheRoot,
+  isUntrustedSwiftCacheError,
+  runSwiftHelper,
+} from '@agent-device/host-swift/swift-cache';
+import { VIDEO_VALIDATION_SCRIPT } from '@agent-device/host-swift/video-validator-source';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
-
-// Duration zero must pass: a recording of a fully static screen legitimately contains a single
-// frame (screenrecord only encodes on screen updates), and AVFoundation reports its duration as 0.
-const VIDEO_VALIDATION_SCRIPT = `
-import Foundation
-import AVFoundation
-
-let url = URL(fileURLWithPath: CommandLine.arguments[1])
-let asset = AVURLAsset(url: url)
-let semaphore = DispatchSemaphore(value: 0)
-var exitCode: Int32 = 1
-
-Task {
-  defer { semaphore.signal() }
-  do {
-    let playable = try await asset.load(.isPlayable)
-    let duration = try await asset.load(.duration)
-    if playable && duration.isValid && !duration.isIndefinite {
-      exitCode = 0
-    }
-  } catch {
-    exitCode = 1
-  }
-}
-
-semaphore.wait()
-exit(exitCode)
-`.trim();
 
 // A cold Swift module cache makes the validator compile take over 30 s on a loaded CI runner, so a
 // caller with a deadline, such as `record stop`, waits for the compile until that deadline instead.
 const VALIDATOR_COMPILE_WAIT_MS = 30_000;
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
-const videoValidatorCompiles = new Map<string, Promise<string>>();
+/** Validator resolutions still running, one per Swift cache root. A settled one is never kept. */
+const videoValidatorResolutions = new Map<string, Promise<string>>();
 
-/** Starts one cached compile per Swift cache root. Callers may warm it without awaiting it. */
+/**
+ * Resolves the validator executable, sharing one in-flight resolution per Swift cache root. Callers may warm it
+ * without awaiting it. Every later resolution runs the cache's reuse check again, so a path is never trusted
+ * after the cache directory it was judged in could have changed.
+ */
 export function prepareVideoValidator(host: HostEnvironment): Promise<string> {
-  const cacheRoot = getSwiftCacheRoot(host.env);
-  let compiled = videoValidatorCompiles.get(cacheRoot);
-  if (!compiled) {
-    compiled = compileSwiftSourceText({
-      host,
-      source: VIDEO_VALIDATION_SCRIPT,
-      cacheName: 'video-validator',
-    }).catch((error: unknown) => {
-      if (videoValidatorCompiles.get(cacheRoot) === compiled)
-        videoValidatorCompiles.delete(cacheRoot);
-      throw unavailableVideoValidator(error);
-    });
-    videoValidatorCompiles.set(cacheRoot, compiled);
+  // The validator is a Swift helper compiled with xcrun. Elsewhere there is no toolchain to compile it, so the
+  // answer is the no-toolchain one, given before the cache directory is touched or judged.
+  if (process.platform !== 'darwin') {
+    return Promise.reject(
+      unavailableVideoValidator(
+        new AppError('TOOL_MISSING', 'The video validator compiles only on macOS hosts.'),
+      ),
+    );
   }
-  return compiled;
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  let resolution = videoValidatorResolutions.get(cacheRoot);
+  if (!resolution) {
+    resolution = compileSwiftSources({
+      host,
+      sources: [{ fileName: 'video-validator.swift', text: VIDEO_VALIDATION_SCRIPT }],
+      cacheName: 'video-validator',
+    })
+      .catch((error: unknown) => {
+        throw unavailableVideoValidator(error);
+      })
+      .finally(() => {
+        if (videoValidatorResolutions.get(cacheRoot) === resolution)
+          videoValidatorResolutions.delete(cacheRoot);
+      });
+    videoValidatorResolutions.set(cacheRoot, resolution);
+  }
+  return resolution;
 }
 
 export async function waitForStableFile(
@@ -131,10 +126,9 @@ export async function isPlayableVideo(
     );
     // A budget with no time left reads as not playable; `runCmd` would read a timeout of 0 as none.
     if (runTimeoutMs <= 0) return false;
-    const result = await runCmd(validatorPath, [filePath], {
+    const result = await runSwiftHelper(host, validatorPath, [filePath], {
       allowFailure: true,
       timeoutMs: runTimeoutMs,
-      env: buildSwiftToolEnv(host.env),
     }).catch((error: unknown) => {
       if (isCommandTimeoutError(error)) return undefined;
       throw error;
@@ -190,6 +184,8 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
 function unavailableVideoValidator(cause: unknown): AppError {
   if (cause instanceof AppError && cause.details?.reason === 'video_validator_unavailable')
     return cause;
+  // A cache the validator may not be run from keeps its own reason: the fix is the cache, not the toolchain.
+  if (isUntrustedSwiftCacheError(cause)) return cause;
   const details = cause instanceof AppError ? cause.details : undefined;
   return new AppError(
     'COMMAND_FAILED',

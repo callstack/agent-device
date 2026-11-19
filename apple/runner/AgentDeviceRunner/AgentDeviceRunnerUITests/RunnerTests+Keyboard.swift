@@ -211,12 +211,25 @@ extension RunnerTests {
   }
 #endif
 
-  func keyboardDismissRefusal() -> ErrorPayload {
-    ErrorPayload(
+  /// `returnKey` is the Return key the refusing status observed: where Return itself ends the edit,
+  /// the hint names `keyboard enter` and what it will do. Dismiss never presses Return (#4644).
+  func keyboardDismissRefusal(returnKey: RunnerKeyboardReturnKey?) -> ErrorPayload {
+    let dismissal = "Inspect the screen and press the visible Hide Keyboard key or an app control that ends editing. If the app supports interactive dismissal, use gesture pan to drag a finger down from inside its scrollable content and check the keyboard state again."
+    return ErrorPayload(
       code: RunnerWireErrorCode.keyboardDismissUnavailable,
       message: "The Apple runner cannot dismiss this keyboard automatically",
-      hint: "Inspect the screen and press the visible Hide Keyboard key or an app control that ends editing. If the app supports interactive dismissal, use gesture pan to drag a finger down from inside its scrollable content and check the keyboard state again."
+      hint: [Self.keyboardReturnEndsEditingHint(returnKey), dismissal].compactMap { $0 }.joined(separator: " ")
     )
+  }
+
+  static func keyboardReturnEndsEditingHint(_ returnKey: RunnerKeyboardReturnKey?) -> String? {
+    switch returnKey {
+    case .search: return "To submit this search, run keyboard enter."
+    case .go: return "To submit this field, run keyboard enter (Return is Go)."
+    case .done: return "To finish editing, run keyboard enter (Return is Done)."
+    case .send: return "keyboard enter would send this message (Return is Send); run it only to send."
+    default: return nil
+    }
   }
 
   var keyboardReturnRefusal: ErrorPayload {

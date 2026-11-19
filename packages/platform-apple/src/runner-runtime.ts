@@ -19,6 +19,7 @@ import { bindAppleApplicationLifecycleWithServices } from './lifecycle.ts';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { createAppleInteractor } from './interactor.ts';
 import { appleRunnerInteractionFacts } from './runner-interaction-facts.ts';
+import { applyWatchOsOperationFacts } from './os/watchos/facts.ts';
 import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
 import { bindAppleFindTextRuntime } from './runtime-snapshot.ts';
 import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
@@ -121,7 +122,7 @@ export function createAppleRunnerRuntime(options: {
     });
   };
   return {
-    facts: appleRunnerInteractionFacts(options.device),
+    facts: applyWatchOsOperationFacts(options.device, appleRunnerInteractionFacts(options.device)),
     bindDeployment: (
       request: Omit<Parameters<typeof createAppleAppDeploymentOperations>[0], 'device'>,
     ) => createAppleAppDeploymentOperations({ ...request, device: options.device }),

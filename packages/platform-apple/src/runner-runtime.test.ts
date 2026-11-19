@@ -149,3 +149,19 @@ test('an observe-only capture on a provider Simulator still fails closed and nev
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
   expect(commands).toHaveLength(0);
 });
+
+test('a watch device on the runner seam reports the watch admission', () => {
+  const runner = createAppleRunnerRuntime({
+    device: { ...IOS_SIMULATOR, appleOs: 'watchos' },
+    host: { env: {}, cwd: process.cwd() },
+    provider: {
+      hasLiveSession: () => false,
+      runCommand: async () => ({}),
+    },
+  });
+  expect(runner.facts.writeClipboard).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(runner.facts.tapPoint).toEqual({ available: true });
+});
