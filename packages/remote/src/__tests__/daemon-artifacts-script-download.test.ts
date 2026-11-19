@@ -594,8 +594,13 @@ test('an endpoint spelled with trailing slashes finds the record its open create
   expect(fs.readFileSync(destination, 'utf8')).toBe('close\n');
 });
 
-// #4518: a canceled record stop never publishes the script version its answer carries.
-test('a canceled stop does not publish the script version it carries', async () => {
+// #4518: a caller abort after the answer never publishes the script version it carries, on any
+// command that delivers one.
+test.for([
+  { name: 'record stop', req: { ...request('record'), positionals: ['stop'] } },
+  { name: 'close', req: request('close') },
+  { name: 'open --save-script', req: { ...request('open'), flags: { saveScript: true } } },
+])('a canceled $name does not publish the script version it carries', async ({ req }) => {
   const { stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
   const { id } = await open(baseUrl, stateDir, destination);
@@ -605,8 +610,8 @@ test('a canceled stop does not publish the script version it carries', async () 
   await expect(
     materializeRemoteArtifacts(
       { baseUrl, token: 't' },
-      { ...request('record'), positionals: ['stop'] },
-      { ok: true, data: { artifacts: [script('v2', 2, id)] } },
+      req,
+      { ok: true, data: { scriptPublicationId: id, artifacts: [script('v2', 2, id)] } },
       createTestHostEnvironment(),
       stateDir,
       controller.signal,
