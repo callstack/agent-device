@@ -126,6 +126,7 @@ async function sendToDaemonOnHost(
         settings,
         requestWithoutAuthFlag,
         options.signal,
+        options.onProgress,
       ),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
@@ -388,6 +389,7 @@ async function protectArtifactUploadWithLeaseBeats(
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
   callerSignal: AbortSignal | undefined,
+  onProgress: DaemonTransportOptions['onProgress'],
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
@@ -396,6 +398,7 @@ async function protectArtifactUploadWithLeaseBeats(
       info,
       callerSignal ?? new AbortController().signal,
       settings.host,
+      onProgress,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -410,6 +413,7 @@ async function protectArtifactUploadWithLeaseBeats(
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
         settings.host,
+        onProgress,
       ),
     callerSignal,
   });

@@ -30,10 +30,10 @@ function drainStream(stream: NodeJS.WriteStream): Promise<void> {
 }
 
 /**
- * The CLI's stdout and stderr writes. Every CLI write goes through one of these: the plain ones escape C0 (except
- * newline and tab), DEL and C1 characters, so no value a peer or a device chose can drive the terminal. The raw ones
- * are for text that already escaped its own values to carry intended color, and for another program's output the
- * CLI passes through unchanged.
+ * The cli zone's stdout and stderr writes. The plain ones escape C0 (except newline and tab), DEL and C1 characters,
+ * so no value a peer or a device chose can drive the terminal. The raw ones are for text that already escaped its own
+ * values to carry intended color, and for another program's output the CLI passes through unchanged. Lower zones apply
+ * the same `escapeTerminalText` themselves.
  */
 export function writeStdout(text: string): void {
   process.stdout.write(escapeTerminalText(text));

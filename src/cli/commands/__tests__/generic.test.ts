@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
@@ -178,7 +179,7 @@ test('open --json at a non-default response level still prints lease.device', as
 
 // One warning naming a path with an SGR conceal sequence and a C1 character, as a peer could send it.
 const CONTROL_WARNING = 'The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.';
-const ESCAPED_CONTROL_WARNING = String.raw`/tmp/a\x1b[8mb\x9bc.ad.`;
+const ESCAPED_CONTROL_WARNING = String.raw`/tmp/a\u001b[8mb\u009bc.ad.`;
 
 /** The CLI output of one command answered with `data`, stdout and stderr together. */
 async function terminalOutputOf(command: string, data: Record<string, unknown>, json = false) {
@@ -198,11 +199,9 @@ async function terminalOutputOf(command: string, data: Record<string, unknown>, 
   return { stdout, stderr, all: `${stdout}${stderr}` };
 }
 
+/** The characters the CLI writer would escape, by the writer's own rule. */
 function rawControls(text: string): string[] {
-  return [...text].filter(
-    (char) =>
-      (char < ' ' && char !== '\n' && char !== '\t') || (char >= '\u007f' && char <= '\u009f'),
-  );
+  return [...text].filter((char) => escapeTerminalText(char) !== char);
 }
 
 test.each([
@@ -241,4 +240,36 @@ test('default open writes a multi-line warning once', async () => {
 
   assert.equal(all.split('First line second line').length - 1, 1, all);
   assert.ok(!all.includes('First line\nsecond line'), all);
+});
+
+test('snapshot folds a multi-line capture warning onto one line', async () => {
+  const { all } = await terminalOutputOf('snapshot', {
+    nodes: [],
+    truncated: false,
+    warnings: ['Capture degraded\nretry with --raw'],
+  });
+
+  assert.equal(all.split('Capture degraded retry with --raw').length - 1, 1, all);
+  assert.ok(!all.includes('Capture degraded\nretry'), all);
+});
+
+test('get attrs prints the node as JSON that parses exactly despite a C1 character in a label', async () => {
+  const node = { ref: 'e1', type: 'button', label: 'Pay\u009bnow' };
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    { transport: async (): Promise<DaemonResponse> => ({ ok: true, data: { node } }) },
+  );
+
+  const { stdout } = await withCapturedOutput(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: 'get' as ClientBackedCliCommandName,
+      positionals: ['attrs', '@e1'],
+      flags: {} as CliFlags,
+      client,
+    }),
+  );
+
+  assert.equal(stdout.includes('\u009b'), false);
+  assert.deepEqual(JSON.parse(stdout), node);
 });

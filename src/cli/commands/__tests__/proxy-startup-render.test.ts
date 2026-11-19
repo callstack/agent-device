@@ -50,3 +50,14 @@ test('renderProxyStartup colors status, urls, and token', () => {
 function colored(text: string, format: Parameters<typeof colorize>[1]): string {
   return colorize(text, format, { validateStream: false });
 }
+
+test.each([false, true])(
+  'renderProxyStartup escapes control characters in a value (color %s)',
+  (useColor) => {
+    const output = renderProxyStartup({ ...STARTUP, token: 'tok\u001b[8men\u009b' }, { useColor });
+
+    assert.ok(output.includes(String.raw`tok\u001b[8men\u009b`), output);
+    assert.equal(output.includes('\u001b[8m'), false);
+    assert.equal(output.includes('\u009b'), false);
+  },
+);

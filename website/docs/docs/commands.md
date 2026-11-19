@@ -32,7 +32,7 @@ In text mode, every command prints each response warning as a `Warning:` line af
 `value=$(agent-device get text …)` captures only the value. With `--json`, warnings stay in
 `data.warnings` and no `Warning:` line is printed.
 
-Text that the CLI prints can name values that a device or a remote daemon chose, such as file paths and labels. So text output shows control characters as escapes: a C0 character other than newline and tab, DEL, or a C1 character prints as `\xNN`, for example `\x1b`. Newlines and tabs are kept as layout, and a newline inside one warning is folded into a space so each warning stays on one `Warning:` line. Colored output keeps its own color codes, and a command that runs another tool passes that tool's output through unchanged. With `--json`, DEL and C1 characters print as `\u00NN` escapes, which JSON already does for C0, so the output parses back to the exact values. `--level full` prints the full result the same way.
+Text that the CLI prints can name values that a device or a remote daemon chose, such as file paths and labels. So the CLI shows control characters as escapes: a C0 character other than newline and tab, DEL, or a C1 character prints as `\u00NN`, for example `\u001b`. That is a JSON escape too, so JSON the CLI prints, with or without `--json`, still parses back to the exact values. Newlines and tabs are kept as layout, and a newline inside one warning is folded into a space so each warning stays on one `Warning:` line. Colored output keeps its own color codes. Two outputs are written as they are: the built-in help and version text, and the output of the tool `agent-device` runs for a command that wraps another tool, which passes through unchanged.
 
 ## Navigation
 

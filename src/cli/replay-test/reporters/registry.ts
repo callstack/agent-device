@@ -12,6 +12,7 @@ import type {
   ReplayTestReporterContext,
   ReplayTestReporterProgressEvent,
 } from './types.ts';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 type ReplayTestReporterLiveHook = 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult';
 
@@ -90,7 +91,9 @@ function reportReplayTestReporterHookError(
   error: unknown,
 ): void {
   const message = error instanceof Error ? error.message : String(error);
-  context.stderr.write(`Reporter ${reporter.name} ${String(hookName)} failed: ${message}\n`);
+  context.stderr.write(
+    escapeTerminalText(`Reporter ${reporter.name} ${String(hookName)} failed: ${message}\n`),
+  );
 }
 
 export function getReplayTestReporterExitCode(

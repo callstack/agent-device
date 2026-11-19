@@ -907,7 +907,7 @@ function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDevi
   const onProgress =
     command === 'test' && replayTestReporterRuntime
       ? replayTestReporterRuntime.onProgress
-      : createStderrCommandProgressSink(options.commandProgress);
+      : createStderrCommandProgressSink(options.commandProgress, options.host.env);
   return async (req, context) => {
     const transportOptions = { ...context, onProgress };
     return await sendClientRequestToCliTransport(

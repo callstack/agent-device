@@ -128,8 +128,10 @@ function formatReplayTestLiveProgressLine(
   options: ReplayTestProgressFormatOptions,
   spinnerFrame: string,
 ): string {
-  const title = event.title?.trim();
-  const file = path.basename(event.file);
+  // A live row is redrawn in place, so it must stay one row: newlines and tabs become spaces before its width
+  // is measured.
+  const title = oneRow(event.title ?? '').trim();
+  const file = oneRow(path.basename(event.file));
   const useColor = supportsColor(process.env, process.stderr);
   const spinner = formatReplayTestProgressSpinner(spinnerFrame, { useColor });
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
@@ -144,6 +146,10 @@ function formatReplayTestLiveProgressLine(
   );
   const formattedTitle = trimToColumns(title, availableTitleColumns);
   return trimToColumns(`${prefix}${formattedTitle}${suffix}`, options.columns);
+}
+
+function oneRow(text: string): string {
+  return text.replaceAll(/[\n\t]+/g, ' ');
 }
 
 function formatReplayTestProgressSpinner(

@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import assert from 'node:assert/strict';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { createDefaultReplayTestReporter } from '../default.ts';
@@ -263,4 +264,71 @@ test('default replay test reporter surfaces the divergence repair report on a fa
   assert.match(out, /@e5 \[button\] "Save"/);
   assert.match(out, /Suggestions:/);
   assert.match(out, /\[id\] "Save" id="save"/);
+});
+
+/** The characters the CLI writer would escape, by the writer's own rule. */
+function rawControls(text: string): string[] {
+  return [...text].filter((char) => escapeTerminalText(char) !== char);
+}
+
+test('default replay test reporter escapes daemon-supplied text in its summary', () => {
+  const reporter = createDefaultReplayTestReporter();
+  const { context, stdout } = createReporterContext({ stderrIsTty: false });
+  const failed = {
+    file: '/tmp/flow.ad',
+    title: 'checkout \u001b[8mhidden\u009b',
+    session: 'test-session',
+    status: 'failed' as const,
+    durationMs: 10,
+    attempts: 1,
+    error: { code: 'COMMAND_FAILED', message: 'boom \u001b[2J' },
+  };
+
+  reporter.onSuiteEnd?.(
+    {
+      ...emptySuite(),
+      total: 1,
+      executed: 1,
+      failed: 1,
+      failures: [failed],
+      tests: [failed],
+    } as ReplaySuiteResult,
+    context,
+  );
+
+  const out = stdout.join('');
+  assert.ok(out.includes(String.raw`checkout \u001b[8mhidden\u009b`), out);
+  assert.ok(out.includes(String.raw`boom \u001b[2J`), out);
+  assert.deepEqual(rawControls(out), []);
+});
+
+test('default replay test reporter keeps a live row on one line and escapes its title', () => {
+  withEnv('CI', undefined, () => {
+    const reporter = createDefaultReplayTestReporter();
+    const { context, stderr } = createReporterContext({ stderrIsTty: true });
+    context.stderr.columns = 200;
+    reporter.onSuiteStart?.(
+      { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
+      context,
+    );
+    reporter.onTestStep?.(
+      {
+        file: '/tmp/checkout.yaml',
+        title: 'Check\nout \u001b[8mhidden',
+        index: 1,
+        total: 1,
+        stepIndex: 1,
+        stepTotal: 1,
+        stepCommand: 'tapOn',
+        stepValue: 'Continue',
+      },
+      context,
+    );
+    reporter.onSuiteEnd?.(emptySuite(), context);
+
+    const live = stderr.find((text) => text.includes('Check')) ?? '';
+    assert.ok(live.includes(String.raw`Check out \u001b[8mhidden`), live);
+    assert.equal(live.includes('\n'), false);
+    assert.equal(live.includes('\u001b[8m'), false);
+  });
 });

@@ -1,4 +1,6 @@
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { RequestProgressSink } from '@agent-device/contracts/progress';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { Transform } from 'node:stream';
 
 const DEFAULT_UPLOAD_PROGRESS_STEP_BYTES = 8 * 1024 * 1024;
@@ -59,12 +61,19 @@ export function createUploadProgressTransform(options: {
   });
 }
 
+/**
+ * Upload progress for an interactive terminal. With the caller's progress sink (the CLI passes its own, which escapes
+ * what it renders), each event goes there as a command progress line; without one, it is written to stderr escaped.
+ */
 export function createStderrUploadProgressReporter(
   env: Readonly<EnvMap>,
+  onProgress?: RequestProgressSink,
 ): UploadProgressSink | undefined {
   if (process.stderr.isTTY !== true || env.CI) return undefined;
   return (event) => {
-    process.stderr.write(`${formatUploadProgressEvent(event)}\n`);
+    const message = formatUploadProgressEvent(event);
+    if (onProgress) onProgress({ type: 'command', status: 'progress', message });
+    else process.stderr.write(`${escapeTerminalText(message)}\n`);
   };
 }
 

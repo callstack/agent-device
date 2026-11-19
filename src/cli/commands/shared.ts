@@ -30,5 +30,6 @@ export async function writeCliOutput(
     flags,
     flags.json ? (output.jsonData ?? output.data) : output.data,
     () => output.text,
+    { terminalSafe: output.terminalSafe },
   );
 }

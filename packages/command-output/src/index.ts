@@ -7,6 +7,7 @@ import type { FormatCliOutputParams } from './cli-output.ts';
 export type { CliOutput, CommandProgressState } from './output-common.ts';
 export type { FormatCliOutputParams } from './cli-output.ts';
 export {
+  appendWarningLinesText,
   collapseWarningText,
   responseWarningRoute,
   routeResponseWarnings,

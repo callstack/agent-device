@@ -1,6 +1,6 @@
 import type { HostEnvironment, EnvMap } from '@agent-device/kernel/source-value';
 import path from 'node:path';
-import { escapeTerminalText } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { colorize, supportsColor, type ColorStream } from './color.ts';
 import { readSnapshotWarnings } from './snapshot.ts';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';

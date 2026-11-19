@@ -98,7 +98,13 @@ test('printHumanError writes a warning once, escaped, and a details block that s
     });
   });
 
-  assert.equal(stderr.split(String.raw`/tmp/a\x1b[8mb\x9bc.ad.`).length - 1, 1, stderr);
+  assert.equal(
+    stderr.split(
+      String.raw`Warning: The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.`,
+    ).length - 1,
+    1,
+    stderr,
+  );
   assert.deepEqual(
     [...stderr].filter(
       (char) =>

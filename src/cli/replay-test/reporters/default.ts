@@ -13,6 +13,7 @@ import type {
   ReplayTestReporterProgressEvent,
 } from './types.ts';
 import {
+  escapeReporterInput,
   getReplayTestExitCode,
   isDefinedString,
   isFailedReplayTestResult,
@@ -84,19 +85,19 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     name: 'default',
     onSuiteStart: (suite, context) => {
       hideCursor(context);
-      renderProgress({ type: 'suite-start', suite }, context);
+      renderProgress({ type: 'suite-start', suite: escapeReporterInput(suite) }, context);
     },
     onTestStep: (test, context) => {
-      renderProgress({ type: 'test-step', test }, context);
+      renderProgress({ type: 'test-step', test: escapeReporterInput(test) }, context);
     },
     onTestResult: (test, context) => {
-      renderProgress({ type: 'test-result', test }, context);
+      renderProgress({ type: 'test-result', test: escapeReporterInput(test) }, context);
     },
     onSuiteEnd: (suite, context) => {
       stopLiveProgressInterval();
       latestLiveProgressEvent = undefined;
       showCursor(context);
-      renderReplayTestSummary(suite, context);
+      renderReplayTestSummary(escapeReporterInput(suite), context);
     },
     getExitCode: getReplayTestExitCode,
   };

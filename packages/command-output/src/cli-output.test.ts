@@ -1,6 +1,7 @@
 import type { AuditSnapshotCommandResult } from '@agent-device/contracts/capture';
 import { bindTestCommandHost } from '@agent-device/test-kit';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { findCommandMetadata, listCommandMetadata } from '@agent-device/command-surface';
 import { listCliOutputFormatters } from './cli-output.ts';
 import { formatCliOutput } from './index.ts';
@@ -285,4 +286,69 @@ describe('the two stdout contracts in one run', () => {
       ].join('\n'),
     );
   });
+});
+
+// A device-chosen value with a C1 character and DEL, which JSON.stringify leaves raw.
+const C1_VALUE = 'a\u009bb\u007fc';
+
+test.each([
+  {
+    name: 'get attrs',
+    command: 'get',
+    input: { format: 'attrs' },
+    result: { node: { label: C1_VALUE } },
+  },
+  { name: 'find node', command: 'find', input: {}, result: { node: { label: C1_VALUE } } },
+  { name: 'metro', command: 'metro', input: { action: 'status' }, result: { status: C1_VALUE } },
+  {
+    name: 'session list',
+    command: 'session',
+    input: { action: 'list' },
+    result: {
+      sessions: [
+        { name: C1_VALUE, createdAt: 1, device: { platform: 'ios', id: 'd1', name: 'iPhone' } },
+      ],
+    },
+  },
+] as const)(
+  '$name prints JSON that stays valid after the CLI text escape',
+  async ({ command, input, result }) => {
+    const output = await render(command, result, input);
+
+    const written = escapeTerminalText(output.text ?? '');
+    expect(JSON.stringify(JSON.parse(written))).toContain(JSON.stringify(C1_VALUE));
+  },
+);
+
+test('snapshot --raw prints JSON lines that stay valid after the CLI text escape', async () => {
+  const output = await render(
+    'snapshot',
+    {
+      nodes: [{ index: 0, ref: 'e1', type: 'button', label: C1_VALUE, depth: 0 }],
+      truncated: false,
+    },
+    { raw: true },
+  );
+
+  const written = escapeTerminalText(output.text ?? '');
+  const line = written.split('\n').find((candidate) => candidate.startsWith('{'));
+  expect(line).toBeDefined();
+  expect((JSON.parse(line!) as { label?: string }).label).toBe(C1_VALUE);
+});
+
+test('doctor keeps its colored status markers and escapes the check text', async () => {
+  vi.stubEnv('FORCE_COLOR', '1');
+  try {
+    const output = await render('doctor', {
+      status: 'pass',
+      checks: [{ id: 'device', status: 'pass', summary: 'ok \u001b[8mhidden' }],
+    });
+
+    expect(output.terminalSafe).toBe(true);
+    expect(output.text).toMatch(new RegExp(`${String.fromCharCode(27)}\\[\\d+m✓`));
+    expect(output.text).toContain(String.raw`device: ok \u001b[8mhidden`);
+    expect(output.text).not.toContain('ok \u001b[8m');
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

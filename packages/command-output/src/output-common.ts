@@ -1,5 +1,6 @@
 import type { CommandMetadata, CommandName } from '@agent-device/command-surface';
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
 /**
@@ -22,6 +23,11 @@ export type CliOutput = {
   jsonData?: unknown;
   text?: string | null;
   stderr?: string | null;
+  /**
+   * The text escaped its own values to carry intended color, so the CLI writes it raw. Warnings the dispatcher appends
+   * come escaped from `collapseWarningText`.
+   */
+  terminalSafe?: boolean;
 };
 
 export type CliOutputFormatterParams = {
@@ -134,7 +140,10 @@ export function routeResponseWarnings(
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
-  return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
+  // Escaped too, so a warning stays safe inside text a formatter marks `terminalSafe`.
+  return escapeTerminalText(
+    warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace)),
+  );
 }
 
 /**

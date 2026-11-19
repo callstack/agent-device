@@ -9,6 +9,9 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { attachAdbFailureHint } from '@agent-device/platform-android/mechanics';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { appendDeviceInventoryCheck } from '../session-doctor-device.ts';
+import { appendDoctorCheck } from '../session-doctor-output.ts';
+import { withRequestProgressSink } from '@agent-device/host-kit/request';
+import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 const BOOTED_IOS_SIMULATOR: DeviceInfo = {
@@ -48,7 +51,7 @@ test('doctor android inventory timeout surfaces the wedged-adb-server hint', asy
       return [];
     },
     async () => {
-      await appendDeviceInventoryCheck(checks, req, undefined, process.env, false);
+      await appendDeviceInventoryCheck(checks, req, undefined, process.env);
     },
   );
 
@@ -84,7 +87,7 @@ test('doctor reads every platform inventory concurrently and keeps platform orde
       }
       return [];
     },
-    async () => await appendDeviceInventoryCheck(checks, req, undefined, process.env, false),
+    async () => await appendDeviceInventoryCheck(checks, req, undefined, process.env),
   );
 
   assert.deepEqual(
@@ -114,7 +117,7 @@ test('doctor inventory names as host devices only the platforms this host discov
       },
       local: async () => [androidEmulator],
     },
-    async () => await appendDeviceInventoryCheck([], req, undefined, process.env, false),
+    async () => await appendDeviceInventoryCheck([], req, undefined, process.env),
   );
 
   assert.deepEqual(
@@ -125,4 +128,30 @@ test('doctor inventory names as host devices only the platforms this host discov
     inventory?.hostDevices.map((device) => device.id),
     [androidEmulator.id],
   );
+});
+
+test('a doctor check streams an uncolored line and its status as a marker', async () => {
+  const events: RequestProgressEvent[] = [];
+  const checks: DoctorCheck[] = [];
+
+  await withRequestProgressSink(
+    (event) => events.push(event),
+    async () => {
+      appendDoctorCheck(checks, {
+        id: 'device',
+        status: 'warn',
+        summary: 'No device',
+        hint: 'Boot one',
+      });
+    },
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'command',
+      status: 'progress',
+      message: '! device: No device\n  hint: Boot one',
+      marker: 'warn',
+    },
+  ]);
 });

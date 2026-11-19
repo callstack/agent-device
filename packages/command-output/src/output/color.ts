@@ -1,6 +1,6 @@
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { styleText } from 'node:util';
-import { escapeTerminalText } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 export type ColorStream = { isTTY?: boolean };
 

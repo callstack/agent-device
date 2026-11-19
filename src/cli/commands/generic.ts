@@ -7,7 +7,7 @@ import {
 import { findCommandMetadata, type CommandName } from '@agent-device/command-surface';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { readCommandMessage, stringifyTerminalJson } from '@agent-device/kernel/success-text';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput, writeCliOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
@@ -48,7 +48,7 @@ export async function runGenericClientBackedCommand({
       command === 'open' && leaseDevice && isRecord(result)
         ? { ...result, lease: { device: leaseDevice } }
         : result;
-    await writeCommandOutput(flags, leveled, () => stringifyTerminalJson(leveled));
+    await writeCommandOutput(flags, leveled, () => JSON.stringify(leveled, null, 2));
     return true;
   }
   if (cliOutput) {

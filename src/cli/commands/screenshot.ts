@@ -1,5 +1,9 @@
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { formatScreenshotDiffText, formatSnapshotDiffText } from '@agent-device/command-output';
+import {
+  appendWarningLinesText,
+  formatScreenshotDiffText,
+  formatSnapshotDiffText,
+} from '@agent-device/command-output';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
@@ -12,7 +16,6 @@ import { pickScreenshotResultData } from '@agent-device/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
-import { stringifyTerminalJson } from '@agent-device/kernel/success-text';
 
 export const screenshotCommand: ClientCommandHandler = async ({
   positionals,
@@ -31,7 +34,7 @@ export const screenshotCommand: ClientCommandHandler = async ({
   // artifacts, leveled overlayRefs. Rebuilding the default { path, overlayRefs }
   // shape would drop those, so emit the leveled payload verbatim.
   if (isNonDefaultResponseLevel(flags.responseLevel)) {
-    await writeCommandOutput(flags, result, () => stringifyTerminalJson(result));
+    await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
   // The disclosure fields (ADR 0016, #4564) sit beside the capture fields on the result, and
@@ -46,8 +49,7 @@ export const screenshotCommand: ClientCommandHandler = async ({
     const summary = result.overlayRefs
       ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
       : formatScreenshotSummary(result);
-    const warnings = result.warnings ?? [];
-    return warnings.length > 0 ? [summary, ...warnings].join('\n') : summary;
+    return appendWarningLinesText(summary, { warnings: result.warnings ?? [] });
   });
   return true;
 };

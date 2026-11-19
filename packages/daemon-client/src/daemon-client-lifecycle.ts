@@ -47,6 +47,8 @@ export type DaemonClientSettings = {
    * and judges the winner again instead.
    */
   retireIncompatibleContender: boolean;
+  /** Told when this client retires an incompatible daemon to start its own; stderr gets a notice otherwise. */
+  onTakeover?: (notice: DaemonTakeoverNotice) => void;
   transportPreference: DaemonTransportPreference;
   serverMode: DaemonServerMode;
   ownedStateDir?: OwnedReplayStateDir;
@@ -54,6 +56,13 @@ export type DaemonClientSettings = {
   remoteAuthToken?: string;
   /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
   daemonBinding?: DaemonBinding;
+};
+
+/** A daemon this client is about to retire so it can start its own, in structured fields for the caller to render. */
+export type DaemonTakeoverNotice = {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: string;
 };
 
 export type EnsuredDaemon = {
