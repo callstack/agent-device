@@ -443,6 +443,10 @@ async function performRefreshPull(
   const durationMs = options.durationMs;
   return {
     report: {
+      // The route the pull took: the profile of the plan that was dispatched. An Apple runner
+      // echoes its own execution profile back; the Android helper names the lowered single-contact
+      // form it synthesized, so the plan's own profile keeps the route readable on every platform.
+      ...('executionProfile' in plan ? { executionProfile: plan.executionProfile } : {}),
       ...(gestureResult ?? {}),
       x1: pull.x1,
       y1: pull.y1,

@@ -167,6 +167,10 @@ test('bound scroll refresh admits on iPadOS and dispatches the pull there', asyn
   assert.equal(plans.length, 1, 'iPadOS declares a touch scroll surface, so the pull runs');
   assert.equal(result.refresh, true);
   assert.notEqual(result.movement, 'at-edge');
+  // An owner that answers only its own helper fields (the Android helper names the lowered form it
+  // synthesized) still reports the profile of the plan the daemon dispatched, so the route is
+  // readable from the report on every platform.
+  assert.equal(result.executionProfile, 'timed-pan');
 });
 
 test('bound scroll refresh refuses where the owner runs no gesture plan, naming that cell', async () => {
