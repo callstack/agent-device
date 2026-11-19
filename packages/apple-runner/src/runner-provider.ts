@@ -1,6 +1,6 @@
 import type { RunnerLauncher } from './runner-launcher.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
+import type { AppleRunnerRequestOptions } from './apple-runner-request.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Deadline } from './host.ts';
 import type { RunnerCommand } from './runner-contract.ts';
