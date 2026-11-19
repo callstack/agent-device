@@ -1,16 +1,14 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import {
   ANDROID_EMULATOR_GENERATION_BUDGET_MS,
-  observeAndroidEmulatorGeneration,
+  inspectAndroidEmulatorGeneration,
+  readAndroidEmulatorLaunchStartTime,
 } from '@agent-device/platform-android/device-boot';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  readProcessIdentityFacts,
-  stopProcessAndConfirmExit,
-} from '@agent-device/host-kit/process';
+import { stopProcessAndConfirmExit } from '@agent-device/host-kit/process';
 
 const LSAPPINFO_PID = /"pid"=(\d+)/;
 const EMULATOR_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;
@@ -85,7 +83,7 @@ export function createAndroidEmulatorHost(
       const pid = runCmdDetached('emulator', args);
       launched.set(pid, {
         avdName,
-        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
+        startTime: readAndroidEmulatorLaunchStartTime(pid),
       });
       if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
@@ -93,17 +91,29 @@ export function createAndroidEmulatorHost(
     bindLaunchedEmulator: async (pid, device) => {
       const record = launched.get(pid);
       if (!record) return undefined;
+      const unbound = (cause: string) => {
+        // Close reads this as "open recorded no identity", so the miss is named where it happened.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'android_launch_identity_unbound',
+          data: { step: 'bind', cause, pid, serial: device.id },
+        });
+        return undefined;
+      };
       try {
         const startTime = await record.startTime;
-        if (!startTime) return undefined;
+        if (!startTime) return unbound('launch-start-time-unread');
         const deadline = Deadline.fromTimeoutMs(ANDROID_EMULATOR_GENERATION_BUDGET_MS);
-        const first = await observeAndroidEmulatorGeneration(device, { deadline });
-        if (first?.pid !== pid || first.startTime !== startTime) return undefined;
-        const second = await observeAndroidEmulatorGeneration(device, { deadline });
-        if (second?.pid !== pid || second.startTime !== startTime) return undefined;
+        for (const read of ['first', 'second'] as const) {
+          const reading = await inspectAndroidEmulatorGeneration(device, { deadline });
+          if (!('identity' in reading)) return unbound(`${read}-${reading.miss}`);
+          if (reading.identity.pid !== pid || reading.identity.startTime !== startTime) {
+            return unbound(`${read}-launch-mismatch`);
+          }
+        }
         return { pid, startTime };
       } catch {
-        return undefined;
+        return unbound('bind-failed');
       }
     },
     terminate,

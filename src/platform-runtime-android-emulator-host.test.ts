@@ -1,12 +1,16 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { observeAndroidEmulatorGeneration } = vi.hoisted(() => ({
-  observeAndroidEmulatorGeneration: vi.fn(),
+const { inspectAndroidEmulatorGeneration, readAndroidEmulatorLaunchStartTime } = vi.hoisted(() => ({
+  inspectAndroidEmulatorGeneration: vi.fn(),
+  readAndroidEmulatorLaunchStartTime: vi.fn(
+    async (): Promise<string | null> => 'Mon Nov  9 10:00:00 2026',
+  ),
 }));
 vi.mock('@agent-device/platform-android/device-boot', () => ({
   ANDROID_EMULATOR_GENERATION_BUDGET_MS: 10_000,
-  observeAndroidEmulatorGeneration,
+  inspectAndroidEmulatorGeneration,
+  readAndroidEmulatorLaunchStartTime,
 }));
 
 const { runCmd, runCmdDetached, runCmdDetachedMonitored, emitDiagnostic } = vi.hoisted(() => ({
@@ -47,7 +51,8 @@ vi.mock('@agent-device/host-kit/process', () => ({
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
 
 beforeEach(() => {
-  observeAndroidEmulatorGeneration.mockReset();
+  inspectAndroidEmulatorGeneration.mockReset();
+  readAndroidEmulatorLaunchStartTime.mockClear();
   runCmd.mockClear();
   runCmdDetached.mockClear();
   runCmdDetachedMonitored.mockClear();
@@ -66,31 +71,55 @@ const launchIdentity = { pid: 4242, startTime: 'Mon Nov  9 10:00:00 2026' };
 test('binds the launched process only when both serial observations match its recorded identity', async () => {
   const host = createAndroidEmulatorHost('linux');
   await host.launch('Pixel_9', true, 90_000);
-  observeAndroidEmulatorGeneration.mockResolvedValue(launchIdentity);
+  expect(readAndroidEmulatorLaunchStartTime).toHaveBeenCalledWith(4242);
+  inspectAndroidEmulatorGeneration.mockResolvedValue({ identity: launchIdentity });
   await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toEqual(launchIdentity);
-  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledTimes(2);
-  expect(observeAndroidEmulatorGeneration).toHaveBeenCalledWith(emulator, {
-    deadline: expect.any(Object),
-  });
+  expect(inspectAndroidEmulatorGeneration).toHaveBeenCalledTimes(2);
   // Both observations share one deadline, so the pair is bounded together.
-  const calls = observeAndroidEmulatorGeneration.mock.calls as unknown as Array<
+  const calls = inspectAndroidEmulatorGeneration.mock.calls as unknown as Array<
     [unknown, { deadline: unknown }]
   >;
+  expect(calls[0]?.[1].deadline).toBeDefined();
   expect(calls[1]?.[1].deadline).toBe(calls[0]?.[1].deadline);
 });
 
-test('does not bind an unrelated listener, reused pid, or unavailable observation', async () => {
+test('does not bind an unrelated listener, reused pid, or unavailable observation, and names the miss', async () => {
   const host = createAndroidEmulatorHost('linux');
   await host.launch('Pixel_9', true, 90_000);
-  observeAndroidEmulatorGeneration.mockResolvedValueOnce({ ...launchIdentity, pid: 4243 });
+  inspectAndroidEmulatorGeneration.mockResolvedValueOnce({
+    identity: { ...launchIdentity, pid: 4243 },
+  });
   await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
-  observeAndroidEmulatorGeneration
-    .mockResolvedValueOnce(launchIdentity)
-    .mockResolvedValueOnce({ ...launchIdentity, startTime: 'new' });
+  inspectAndroidEmulatorGeneration
+    .mockResolvedValueOnce({ identity: launchIdentity })
+    .mockResolvedValueOnce({ identity: { ...launchIdentity, startTime: 'new' } });
   await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
-  observeAndroidEmulatorGeneration.mockResolvedValueOnce(undefined);
+  inspectAndroidEmulatorGeneration.mockResolvedValueOnce({ miss: 'listener-read-timeout' });
   await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
   await expect(host.bindLaunchedEmulator!(4243, emulator)).resolves.toBeUndefined();
+  const causes = emitDiagnostic.mock.calls
+    .map(([event]) => event as { phase: string; data: { step: string; cause: string } })
+    .filter((event) => event.phase === 'android_launch_identity_unbound')
+    .map((event) => `${event.data.step}:${event.data.cause}`);
+  expect(causes).toEqual([
+    'bind:first-launch-mismatch',
+    'bind:second-launch-mismatch',
+    'bind:first-listener-read-timeout',
+  ]);
+});
+
+test('a launch whose start time could not be read binds nothing and says so', async () => {
+  readAndroidEmulatorLaunchStartTime.mockResolvedValueOnce(null);
+  const host = createAndroidEmulatorHost('linux');
+  await host.launch('Pixel_9', true, 90_000);
+  await expect(host.bindLaunchedEmulator!(4242, emulator)).resolves.toBeUndefined();
+  expect(inspectAndroidEmulatorGeneration).not.toHaveBeenCalled();
+  expect(emitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      phase: 'android_launch_identity_unbound',
+      data: expect.objectContaining({ step: 'bind', cause: 'launch-start-time-unread' }),
+    }),
+  );
 });
 
 test('a windowed macOS launch hands focus back to the app frontmost before launch', async () => {

@@ -594,7 +594,9 @@ function buildCloseSuccessResponse(params: {
   if (implicitShutdownGenerationUnobserved) {
     appendResponseWarning(
       data,
-      "This session's open booted this device, but close could not verify its emulator process identity, so it did not request a stop and left the device as it found it.",
+      session.androidLaunchIdentity
+        ? "This session's open booted this device, but close could not verify its emulator process identity, so it did not request a stop and left the device as it found it."
+        : "This session's open booted this device, but open recorded no emulator process identity, so close did not request a stop and left the device as it found it.",
     );
   }
   return { ok: true, data };
