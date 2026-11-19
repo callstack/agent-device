@@ -97,8 +97,9 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   bundle identifier or package name, `open` with a deep link or URL, and `close` for the app the
   session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
-- `orientation`. An Android emulator rotates to all four sides. An iOS simulator rotates to
-  `portrait` and `landscape-left` only, and refuses the other two. Neither releases the rotation lock,
+- `orientation`. A worker that reports precise orientation, as Revyl's Android emulators do, rotates
+  to all four sides. Any other worker, such as an iOS simulator, rotates to `portrait` and
+  `landscape-left` only, and refuses the other two. Neither releases the rotation lock,
   so `orientation auto` refuses.
 - `settings appearance` (`light`, `dark`, or `toggle`), `settings location set <lat> <lon>`,
   `settings permission`, and `settings clear-app-state`. On iOS, `settings reset-keychain` also
