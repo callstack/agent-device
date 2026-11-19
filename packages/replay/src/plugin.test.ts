@@ -48,7 +48,11 @@ test('the first-party factory uses the managed registry and preserves native scr
       emitDiagnostic: () => {},
       bindAttemptCancellation: () => ({ cancel: () => {}, release }),
       discoverSources: () => [
-        { path: sourcePath, manifest: { device: { platform: { kind: 'unspecified' } } } },
+        {
+          path: sourcePath,
+          sourceText: 'open com.example.app\nclose\n',
+          manifest: { device: { platform: { kind: 'unspecified' } } },
+        },
       ],
       resolveShardTargets: async () => [],
     });
