@@ -27,7 +27,10 @@ type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 export async function createLimrunIosRunner(
   session: Session,
   host: HostEnvironment,
-  appleApplications: AppleApplicationTools,
+  appleApplications: Pick<
+    AppleApplicationTools,
+    'resolveOpenTarget' | 'applyRuntimeHints' | 'clearRuntimeHints'
+  >,
 ): Promise<LimrunIosRunner> {
   const {
     createAppleRunnerRuntime,
