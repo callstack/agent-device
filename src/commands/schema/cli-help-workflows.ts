@@ -212,9 +212,11 @@ Scope:
 Loop for each screen:
   1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
   2. Run agent-device audit, then agent-device snapshot -i. Audit captures the screen itself, so it goes first.
-  3. Record each finding with its kind, role, and size. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
+  3. Record each finding with its kind, role, element name, and size. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
      To act on a finding, use the ref from that snapshot -i. The ref numbers can differ, so do not match by ref number.
-     Find the element in the snapshot by role and position. To compare positions, use the rect from agent-device audit --json and from agent-device snapshot -i --json.
+     Use the element name or identifier that audit prints only when it matches exactly one element in the snapshot. Snapshot -i text prints an identifier only for an element with no label or value, so read identifiers from agent-device snapshot -i --json.
+     When the name matches more than one element, or the finding line shows only a role, match by role and by the rect from agent-device audit --json and agent-device snapshot -i --json.
+     Act only on a unique element. If no element is unique, report the finding and do not act.
   4. Capture evidence: agent-device screenshot ./a11y-output/<screen>.png --overlay-refs
 
 Coverage:
@@ -238,7 +240,7 @@ Fix loop (only when the user asks to fix):
   Run audit again on the same screen and confirm the finding is gone. Report the before and after audit output.
 
 Report:
-  Group findings by screen. For each finding, give the kind, element name, ref, screenshot path, and suggested fix.
+  Group findings by screen. For each finding, give the kind, element name or identifier when shown, ref, screenshot path, and suggested fix.
   List the checks you could not do. Include audit's limitation lines in that list.`,
   },
   dogfood: {
@@ -261,7 +263,7 @@ Loop:
   Keep stateful commands serial within the same session. Parallel runs can pollute text fields, focus, alerts, and navigation state.
 
 Platform checks:
-  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i. Find the element by role and position, not by ref number. Report audit's findings as accessibility findings.
+  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i. Match the finding by the element name or identifier that audit prints, only when it matches exactly one snapshot element, not by ref number. Otherwise use role and rect from the JSON output. Act only on a unique element. Report audit's findings as accessibility findings.
   For a whole-app accessibility review, read help accessibility.
   On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.
