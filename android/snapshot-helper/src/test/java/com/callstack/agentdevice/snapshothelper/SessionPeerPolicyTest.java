@@ -1,8 +1,7 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.EOFException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ public final class SessionPeerPolicyTest {
     maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline();
     frameBelowTheFloorRateExpires();
     eofBeforeTheNewlineIsAnIncompleteFrame();
-    socketReadTimeoutIsAnExpiredRead();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
     acceptsCommandLinesUpToTheByteLimit();
     rejectsEmptyCommandLines();
@@ -73,8 +71,7 @@ public final class SessionPeerPolicyTest {
     try {
       SessionPeerPolicy.readSessionCommandLine(input, timeouts::add, () -> nowMs[0], 110, 8);
       throw new AssertionError("Expected the deadline to stop an unfinished command");
-    } catch (SessionPeerPolicy.SessionReadClosed expected) {
-      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
+    } catch (SocketTimeoutException expected) {
       if (!timeouts.equals(Arrays.asList(10))) {
         throw new AssertionError("Expected one bounded read and no zero timeout: " + timeouts);
       }
@@ -94,8 +91,7 @@ public final class SessionPeerPolicyTest {
     try {
       SessionPeerPolicy.readSessionCommandLine(drip, timeouts::add, () -> nowMs[0], 110, 8);
       throw new AssertionError("A command completed after its absolute deadline was accepted");
-    } catch (SessionPeerPolicy.SessionReadClosed expected) {
-      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
+    } catch (SocketTimeoutException expected) {
       if (!timeouts.equals(Arrays.asList(10, 6, 2))) {
         throw new AssertionError("The timeout must shrink before each read: " + timeouts);
       }
@@ -122,38 +118,13 @@ public final class SessionPeerPolicyTest {
       try {
         String command = readFixture(input, 64);
         throw new AssertionError("EOF before the newline returned a command: " + command);
-      } catch (SessionPeerPolicy.SessionReadClosed expected) {
-        expectReason(expected, SessionPeerPolicy.ReadFailure.INCOMPLETE);
+      } catch (EOFException expected) {
+        // The connection closes before parsing.
       }
     }
   }
 
-  private static void socketReadTimeoutIsAnExpiredRead() throws Exception {
-    InputStream silent = new InputStream() {
-      @Override
-      public int read() throws IOException {
-        throw new SocketTimeoutException("Read timed out");
-      }
 
-      @Override
-      public int read(byte[] data, int offset, int length) throws IOException {
-        throw new SocketTimeoutException("Read timed out");
-      }
-    };
-    try {
-      SessionPeerPolicy.readSessionCommandLine(silent, ignored -> {}, () -> 100, 110, 8);
-      throw new AssertionError("Expected a socket read timeout to close the read");
-    } catch (SessionPeerPolicy.SessionReadClosed expected) {
-      expectReason(expected, SessionPeerPolicy.ReadFailure.EXPIRED);
-    }
-  }
-
-  private static void expectReason(
-      SessionPeerPolicy.SessionReadClosed closed, SessionPeerPolicy.ReadFailure reason) {
-    if (closed.reason != reason) {
-      throw new AssertionError("Expected read failure " + reason + ", got " + closed.reason);
-    }
-  }
 
   /** The largest fill frame over a slow remote adb link: 80 KiB/s, slower than 2 s allows. */
   private static void maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline() throws Exception {

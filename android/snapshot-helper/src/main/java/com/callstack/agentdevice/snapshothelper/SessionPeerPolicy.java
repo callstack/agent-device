@@ -1,6 +1,7 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
@@ -39,27 +40,16 @@ final class SessionPeerPolicy {
    */
   static final int MAX_COMMAND_LINE_BYTES = 513 * 1024;
 
+  /**
+   * The slowest command delivery the read deadline waits for past its base. Each byte that arrives
+   * extends the deadline by 1 / 64 KiB of a second (about 0.5 Mbit/s), so the largest frame gets
+   * about 10 s over a slow remote adb link, while a silent peer still closes at the base deadline.
+   */
+  static final int MIN_COMMAND_BYTES_PER_SECOND = 64 * 1024;
+
   enum Admission {
     ADMITTED,
     REJECTED_UNAUTHORIZED_PEER
-  }
-
-  /** Why a command read closes the connection without writing a response. */
-  enum ReadFailure {
-    /** The read deadline fixed at accept passed before the newline arrived. */
-    EXPIRED,
-    /** The stream ended before the newline that terminates every command. */
-    INCOMPLETE
-  }
-
-  /** A command read that ended without a complete frame. The connection closes without a reply. */
-  static final class SessionReadClosed extends IOException {
-    final ReadFailure reason;
-
-    SessionReadClosed(ReadFailure reason) {
-      super("session command read closed: " + reason);
-      this.reason = reason;
-    }
   }
 
   enum LineDecision {
@@ -95,34 +85,34 @@ final class SessionPeerPolicy {
   }
 
   /**
-   * Reads one newline-terminated command using the deadline fixed at accept and at most
-   * maxBytes + 1 bytes. A read past the deadline or EOF before the newline throws
-   * {@link SessionReadClosed}; a line over the cap returns its first maxBytes + 1 bytes. Android's
-   * LocalSocket reports an SO_TIMEOUT expiry as a plain IOException (EAGAIN), not as
-   * SocketTimeoutException, so the caller closes the connection on any IOException from here.
+   * Reads one newline-terminated command and at most maxBytes + 1 bytes. The deadline starts at
+   * baseDeadlineAtMs, fixed at accept, and each received byte extends it at
+   * {@link #MIN_COMMAND_BYTES_PER_SECOND}. A read past the deadline throws
+   * SocketTimeoutException, and EOF before the newline throws EOFException. A line over the cap
+   * returns its first maxBytes + 1 bytes. Android's LocalSocket reports an SO_TIMEOUT expiry as a
+   * plain IOException (EAGAIN), so the caller closes the connection on any IOException from here.
    */
   static String readSessionCommandLine(
-      InputStream input, ReadTimeout timeout, MonotonicClock clock, long deadlineAtMs, int maxBytes)
+      InputStream input,
+      ReadTimeout timeout,
+      MonotonicClock clock,
+      long baseDeadlineAtMs,
+      int maxBytes)
       throws IOException {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     byte[] chunk = new byte[8 * 1024];
     while (bytes.size() <= maxBytes) {
-      long remainingMs = deadlineAtMs - clock.nowMs();
+      long remainingMs = readDeadlineAtMs(baseDeadlineAtMs, bytes.size()) - clock.nowMs();
       if (remainingMs <= 0) {
-        throw new SessionReadClosed(ReadFailure.EXPIRED);
+        throw new SocketTimeoutException("session command read deadline exceeded");
       }
       timeout.setMillis((int) remainingMs);
-      int count;
-      try {
-        count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
-      } catch (SocketTimeoutException expired) {
-        throw new SessionReadClosed(ReadFailure.EXPIRED);
-      }
-      if (clock.nowMs() > deadlineAtMs) {
-        throw new SessionReadClosed(ReadFailure.EXPIRED);
-      }
+      int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
       if (count < 0) {
-        throw new SessionReadClosed(ReadFailure.INCOMPLETE);
+        throw new EOFException("session command ended before its newline");
+      }
+      if (clock.nowMs() > readDeadlineAtMs(baseDeadlineAtMs, bytes.size() + count)) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
       }
       int end = 0;
       while (end < count && chunk[end] != '\n') end++;
@@ -130,6 +120,10 @@ final class SessionPeerPolicy {
       if (end < count) break;
     }
     return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  private static long readDeadlineAtMs(long baseDeadlineAtMs, int receivedBytes) {
+    return baseDeadlineAtMs + receivedBytes * 1000L / MIN_COMMAND_BYTES_PER_SECOND;
   }
 
   static LineDecision commandLineDecision(String line, int maxLineBytes) {

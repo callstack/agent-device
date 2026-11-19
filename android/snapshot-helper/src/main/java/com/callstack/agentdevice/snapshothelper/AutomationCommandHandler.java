@@ -47,12 +47,12 @@ final class AutomationCommandHandler {
             input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
           }
           result.putString("ok", "true");
-          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+          return result;
         },
         error -> {
           SessionResponseWriter.putSessionError(result, error);
           if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
-          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+          return result;
         });
   }
 

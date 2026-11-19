@@ -26,7 +26,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
-  private static final int SESSION_COMMAND_READ_TIMEOUT_MS = 2_000;
+  private static final int SESSION_COMMAND_READ_BASE_TIMEOUT_MS = 2_000;
   private static final int SESSION_RESPONSE_WRITE_TIMEOUT_MS = 8_000;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
@@ -197,7 +197,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
 
       while (!Thread.currentThread().isInterrupted()) {
         try (LocalSocket socket = server.accept()) {
-          long deadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_TIMEOUT_MS;
+          long baseDeadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS;
           // Positive peer identity first: a peer that is not adbd (shell uid 2000, or root uid 0
           // under `adb root`) — or whose credentials cannot be read at all — is rejected before
           // any command byte is read and before any response is written.
@@ -212,7 +212,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
                     socket.getInputStream(),
                     socket::setSoTimeout,
                     SystemClock::elapsedRealtime,
-                    deadlineAtMs,
+                    baseDeadlineAtMs,
                     SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             // LocalSocket applies setSoTimeout to both directions.
             socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);

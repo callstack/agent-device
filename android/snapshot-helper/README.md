@@ -116,8 +116,11 @@ shell uid 2000, or root uid 0 when adb runs in its supported root mode. Both are
 trust boundary; any other uid (or an unreadable credential) is closed without a response. The socket
 name derives from the port and carries no secret, and no token travels in argv.
 
-Each connection gets a two-second command read deadline from acceptance, independent of the capture
-`timeoutMs`. A silent or drip-feeding peer cannot hold the command reader past that deadline. A
+Each connection gets a command read deadline from acceptance, independent of the capture
+`timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB that has arrived, so the
+largest frame can take about 10 s over a slow remote adb link (at least ~0.5 Mbit/s). A silent
+peer closes at two seconds, and a drip-feeding peer cannot hold the command reader past its
+deadline. A
 command ends with a newline. A connection whose read expires, or whose stream ends before the
 newline, closes without a response, so a peer that never reads cannot hold the accept loop with a
 reply. The line is capped at 513 KiB, a bound derived from the largest supported producer of this

@@ -41,9 +41,9 @@ final class TouchCommandHandler {
         () -> {
           Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
           populateViewport(result, automation);
-          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+          return result;
         },
-        error -> out -> SessionResponseWriter.writeSessionError(out, requestId, error));
+        error -> SessionResponseWriter.sessionErrorBundle(requestId, error));
   }
 
   static void writeSessionGesture(
@@ -54,9 +54,9 @@ final class TouchCommandHandler {
         () -> {
           Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
           populateGesture(result, automation, payloadBase64);
-          return out -> SessionResponseWriter.writeSessionResponse(out, result, "");
+          return result;
         },
-        error -> out -> SessionResponseWriter.writeSessionError(out, requestId, error));
+        error -> SessionResponseWriter.sessionErrorBundle(requestId, error));
   }
 
   private static void putViewportMetadata(Bundle result, Rect viewport) {
