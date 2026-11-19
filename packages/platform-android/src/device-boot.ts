@@ -10,42 +10,69 @@ export async function observeAndroidEmulatorGeneration(
   const match = /^emulator-(\d+)$/.exec(device.id);
   const port = Number(match?.[1]);
   if (!match || !Number.isInteger(port) || port < 1 || port > 65535) return undefined;
+  for (let attempt = 1; attempt <= LISTENER_PROBE_ATTEMPTS; attempt += 1) {
+    const reading = await readConsoleListener(port);
+    if (reading.kind === 'identity') return reading.identity;
+    if (reading.kind === 'absent') return undefined;
+  }
+  return undefined;
+}
+
+type ConsoleListenerReading =
+  | { kind: 'identity'; identity: AndroidEmulatorLaunchIdentity }
+  /** The host answered: no single process listens on the port. A retry cannot change it. */
+  | { kind: 'absent' }
+  /** The host did not answer in time or a read failed. A retry can still observe the listener. */
+  | { kind: 'unread' };
+
+/**
+ * `lsof -b -w -t` prints only process ids, one per line, skips kernel calls that can block under
+ * load (`-b`) and suppresses the warnings that `-b` causes (`-w`). It exits 1 with no output when
+ * nothing listens. An emulator listens on IPv4 and IPv6 from one process, so its id prints once.
+ */
+async function readConsoleListener(port: number): Promise<ConsoleListenerReading> {
   try {
     const { hostPlatform, readProcessIdentityFacts } =
       await import('@agent-device/host-kit/process');
-    if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') return undefined;
+    if (hostPlatform() !== 'darwin' && hostPlatform() !== 'linux') return { kind: 'absent' };
     const { runCmd } = await import('@agent-device/host-kit/command');
-    const result = await runCmd('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], {
-      allowFailure: true,
-      timeoutMs: BOOT_PROBE_TIMEOUT_MS,
-    });
-    if (result.exitCode !== 0) return undefined;
+    const result = await runCmd(
+      'lsof',
+      ['-b', '-w', '-t', '-nP', `-iTCP:${port}`, '-sTCP:LISTEN'],
+      { allowFailure: true, timeoutMs: LISTENER_PROBE_TIMEOUT_MS },
+    );
+    if (result.exitCode !== 0) return { kind: 'absent' };
     const pid = soleListenerPid(result.stdout);
-    if (pid === undefined) return undefined;
-    const facts = await readProcessIdentityFacts(pid, BOOT_PROBE_TIMEOUT_MS);
-    if (!facts.startTime || facts.zombie !== false) return undefined;
-    return { pid, startTime: facts.startTime };
+    if (pid === undefined) return { kind: 'absent' };
+    const facts = await readProcessIdentityFacts(pid, LISTENER_PROBE_TIMEOUT_MS);
+    if (facts.zombie === true) return { kind: 'absent' };
+    if (!facts.startTime || facts.zombie !== false) return { kind: 'unread' };
+    return { kind: 'identity', identity: { pid, startTime: facts.startTime } };
   } catch {
-    return undefined;
+    return { kind: 'unread' };
   }
 }
 
-/**
- * `lsof -F p` prints one `p<pid>` line per process and one `f<fd>` line per listening socket, so an
- * emulator that listens on IPv4 and IPv6 prints `p<pid>`, `f<fd>`, `f<fd>`. The listener counts
- * only when every socket belongs to one process.
- */
 function soleListenerPid(stdout: string): number | undefined {
-  const pids = new Set<string>();
-  for (const line of stdout.split(/\r?\n/)) {
-    if (line.startsWith('p')) pids.add(line.slice(1));
-  }
+  const pids = new Set(
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0),
+  );
   if (pids.size !== 1) return undefined;
   const [value] = pids;
   if (!/^[1-9]\d*$/.test(value ?? '')) return undefined;
   const pid = Number(value);
   return Number.isSafeInteger(pid) ? pid : undefined;
 }
+
+/**
+ * Under heavy host load one listener read took up to 4.2 s. Each attempt gets 5 s, and a read that
+ * did not answer is tried once more, so a slow host still binds and verifies the launch identity.
+ */
+const LISTENER_PROBE_TIMEOUT_MS = 5_000;
+const LISTENER_PROBE_ATTEMPTS = 2;
 
 /** The probe answers in tens of milliseconds and must not become the reason an `open` waits. */
 const BOOT_PROBE_TIMEOUT_MS = 3_000;
