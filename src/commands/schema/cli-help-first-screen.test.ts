@@ -104,7 +104,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   foldable: [
     "Each iOS simulator capture resolves the panel table, selects the sole lit panel when power identifies it. The simctl path normalizes density with that panel's point scale; runner fallback uses the display's reported pixels-per-point. The table comes from CoreDevice in the default simulator set and from a helper inside the simulator in a scoped set (--ios-simulator-device-set), which CoreDevice cannot reach. There is no screen flag. When panel power names no single lit panel, the capture names the table's primary panel, which may be dark and yield an all-black PNG. Check the pose with UIHinge.status before trusting that capture. With no primary panel either, capture fails with COMMAND_FAILED and reason capture-panel-unidentified rather than pick a panel by list order.",
     'The two panels are different sizes (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across',
-    'Expect a fold to take 2-4 seconds: half-open waits for two agreeing hinge reads one second apart, and the first fold after a boot can take longer while the hinge settles. Re-snapshot after every fold',
+    'Expect a fold to take 2-4 seconds, longer for the first fold after a boot while the hinge settles; half-open waits for agreeing hinge reads. Re-snapshot after every fold',
     'fold sends a private HID hinge event inside the selected simulator',
     'If a task asserts behavior for more than one pose, fold to each pose and re-snapshot, and report which poses the run covered',
   ],
