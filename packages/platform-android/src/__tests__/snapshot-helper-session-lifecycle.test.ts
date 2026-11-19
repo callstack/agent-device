@@ -122,6 +122,35 @@ test('a verified unsupported build stays one-shot across capture settings for a 
   assert.equal(spawnArgs.length, 3);
 });
 
+test('an unsupported build starts once unverified and once verified, then waits for a new verification', async () => {
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
+  const startedAtMs = Date.now();
+  const now = vi.spyOn(Date, 'now').mockReturnValue(startedAtMs);
+  const remembered = {
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    helperVersionCode: 21040,
+    helperSha256: 'legacy-build',
+  };
+
+  // The memo served the first command, so its start is not bound to the APK that ran.
+  assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
+  // The next install check inspected the device and verified the selected APK.
+  now.mockReturnValue(startedAtMs + 1_000);
+  assert.equal(
+    await captureAndroidSnapshotWithHelperSession({ ...remembered, helperSha256Verified: true }),
+    undefined,
+  );
+  // Later commands carry the memo again; past every timed backoff they still must not start.
+  for (const elapsedMs of [61_000, 122_000, 11 * 60_000]) {
+    now.mockReturnValue(startedAtMs + elapsedMs);
+    assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
+  }
+  assert.equal(spawnArgs.length, 2);
+});
+
 test('a fresh on-device verification retries a build inside its unsupported backoff', async () => {
   const spawnArgs: (readonly string[])[] = [];
   const legacy = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });

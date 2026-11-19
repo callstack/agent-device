@@ -19,6 +19,8 @@ public final class SessionPeerPolicyTest {
     incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
+    maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline();
+    frameBelowTheFloorRateExpires();
     eofBeforeTheNewlineIsAnIncompleteFrame();
     socketReadTimeoutIsAnExpiredRead();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
@@ -151,6 +153,42 @@ public final class SessionPeerPolicyTest {
     if (closed.reason != reason) {
       throw new AssertionError("Expected read failure " + reason + ", got " + closed.reason);
     }
+  }
+
+  /** The largest fill frame over a slow remote adb link: 80 KiB/s, slower than 2 s allows. */
+  private static void maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline() throws Exception {
+    int frameBytes = SessionPeerPolicy.MAX_COMMAND_LINE_BYTES;
+    String command = readPaced(frameBytes, 8 * 1024, 100);
+    if (command.length() != frameBytes) {
+      throw new AssertionError("Expected the whole frame, got " + command.length() + " bytes");
+    }
+  }
+
+  /** Below the floor rate the read still expires, so a slow peer cannot hold the loop for long. */
+  private static void frameBelowTheFloorRateExpires() throws Exception {
+    try {
+      readPaced(SessionPeerPolicy.MAX_COMMAND_LINE_BYTES, 8 * 1024, 200);
+      throw new AssertionError("Expected a frame below the floor rate to expire");
+    } catch (SocketTimeoutException expected) {
+      // The read deadline closed the connection.
+    }
+  }
+
+  /** Reads a newline-terminated frame delivered in chunks, each advancing the clock. */
+  private static String readPaced(int frameBytes, int chunkBytes, long msPerChunk) throws Exception {
+    byte[] frame = new byte[frameBytes + 1];
+    Arrays.fill(frame, (byte) 'A');
+    frame[frameBytes] = '\n';
+    long[] nowMs = {0};
+    ByteArrayInputStream paced = new ByteArrayInputStream(frame) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        nowMs[0] += msPerChunk;
+        return super.read(data, offset, Math.min(chunkBytes, length));
+      }
+    };
+    return SessionPeerPolicy.readSessionCommandLine(
+        paced, ignored -> {}, () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
   }
 
   private static String readFixture(String input, int maxBytes) throws Exception {
