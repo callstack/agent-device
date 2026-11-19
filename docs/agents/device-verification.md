@@ -5,6 +5,9 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 ## Prepare
 
 1. Run `pnpm build`, then verify only with its `node bin/agent-device.mjs`.
+   A host tool can bind the device to its own `agent-device`, for example T3 Code `device_open`.
+   Use that binding only to show the device and to take screenshots.
+   Run each evidence command with `node bin/agent-device.mjs` on the same device.
 2. For Android source verification, run `pnpm build:android`.
 3. For Swift runner changes, run `pnpm build:xcuitest`.
    A graceful shutdown can hand off an active runner. A new daemon can adopt the old binary.
