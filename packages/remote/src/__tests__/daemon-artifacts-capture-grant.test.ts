@@ -179,6 +179,8 @@ test('a record start persists its grant before dispatch, and an accepted start w
     // from the accepted capture and the extension-appended destination as localPath.
     const otherCwd = path.join(world.root, 'other-cwd');
     fs.mkdirSync(otherCwd, { recursive: true });
+    const chunkPath = `${granted}.part-002.mp4`;
+    const telemetryPath = `${granted}.gesture-telemetry.json`;
     const response = await materialize(
       world,
       port,
@@ -191,12 +193,30 @@ test('a record start persists its grant before dispatch, and an accepted start w
             fileName: 'demo.mp4',
             captureGrantId: grantId,
           }),
+          artifact({
+            artifactId: 'chunk-002',
+            field: 'chunkPath',
+            localPath: chunkPath,
+            fileName: 'demo.part-002.mp4',
+            captureGrantId: grantId,
+          }),
+          artifact({
+            artifactId: 'telemetry',
+            field: 'telemetryPath',
+            localPath: telemetryPath,
+            fileName: 'demo.gesture-telemetry.json',
+            captureGrantId: grantId,
+          }),
         ],
         { captureGrantId: grantId },
       ),
     );
     expect(response.ok && response.data?.outPath).toBe(`${granted}.mp4`);
+    expect(response.ok && response.data?.chunkPath).toBe(chunkPath);
+    expect(response.ok && response.data?.telemetryPath).toBe(telemetryPath);
     expect(fs.readFileSync(`${granted}.mp4`, 'utf8')).toBe('video-bytes');
+    expect(fs.readFileSync(chunkPath, 'utf8')).toBe('video-bytes');
+    expect(fs.readFileSync(telemetryPath, 'utf8')).toBe('video-bytes');
     expect(fs.existsSync(path.join(otherCwd, 'demo.mp4'))).toBe(false);
 
     // The matched stop settled the grant as finished.
