@@ -121,7 +121,11 @@ test('compiled plugin host declarations keep the provider-scoped facets', () => 
     );
     fs.writeFileSync(
       path.join(tempRoot, 'fixture.ts'),
-      `import type { ProviderAndroidHost, ProviderPluginHost } from 'agent-device/plugins';
+      `import type {
+  ProviderAndroidHost,
+  ProviderAndroidTextInjectionRequest,
+  ProviderPluginHost,
+} from 'agent-device/plugins';
 
 // The Apple facet a plugin's \`setup\` receives carries no daemon-wide Apple shutdown authority.
 type AppleTools = NonNullable<ProviderPluginHost['apple']>['applicationTools'];
@@ -147,6 +151,14 @@ async function capture() {
   return bytes;
 }
 void capture();
+
+function withTextEntry(text: (request: ProviderAndroidTextInjectionRequest) => Promise<void>) {
+  return android.withAdbProvider({
+    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    text,
+  }, 'provider-serial', async () => {});
+}
+void withTextEntry;
 
 // The published facet carries no interactor operation. A plugin package bundles this declaration into
 // its own copy, and an interactor's snapshot answer carries a brand no second copy answers to, so

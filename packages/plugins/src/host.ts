@@ -119,7 +119,7 @@ export type ProviderAndroidPortReverse = Readonly<{
 }>;
 
 /** One text-entry request adb or the helper would have performed, mirrored from the platform's typed grammar. */
-type ProviderAndroidTextInjectionRequest = Readonly<{
+export type ProviderAndroidTextInjectionRequest = Readonly<{
   /** Whether this is a plain entry or a replace-the-target's-text fill. */
   action: 'type' | 'fill';
   text: string;
