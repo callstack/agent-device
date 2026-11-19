@@ -61,7 +61,6 @@ const LEGACY_FILE_LINE_CAPS = {
   'packages/daemon-client/src/__tests__/index.test.ts': 1340,
   'src/mcp/__tests__/command-tools.test.ts': 1029,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
-  'packages/host-kit/src/internal/exec.ts': 1032,
   'packages/react-native/src/metro/client-metro.ts': 1123,
 };
 
@@ -296,7 +295,10 @@ export default defineConfig({
     },
     {
       // The host-kit process helpers are the sanctioned node:child_process importer.
-      files: ['packages/host-kit/src/internal/exec.ts'],
+      files: [
+        'packages/host-kit/src/internal/exec.ts',
+        'packages/host-kit/src/internal/exec-trace.ts',
+      ],
       rules: {
         'no-restricted-imports': ['error', { paths: [] }],
       },
