@@ -7,7 +7,6 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import {
   limrunPlugin,
   readLimrunCredentials,
-  type LimrunConnectionVerifier,
   type LimrunPluginOptions,
 } from '@agent-device/provider-limrun/internal';
 
@@ -39,13 +38,9 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
 
 /**
  * How the composing root answers what the built-in provider asks for: the platform's own host
- * adapters build its runtime. The optional verifier replaces the connection's read-only check, so
- * the root can route it through an entry it already owns.
+ * adapters build its runtime.
  */
-function builtinLimrunPluginOptions(
-  host: HostEnvironment,
-  verifyConnection?: LimrunConnectionVerifier,
-): LimrunPluginOptions {
+function builtinLimrunPluginOptions(host: HostEnvironment): LimrunPluginOptions {
   return {
     // The host adapters are the root's own: the provider names what a runtime needs, and this
     // composition answers with its platform owners and this host's env/cwd.
@@ -57,25 +52,20 @@ function builtinLimrunPluginOptions(
       env: host.env,
       cwd: host.cwd,
     }).baseDir,
-    ...(verifyConnection === undefined ? {} : { verifyConnection }),
   };
 }
 
 /**
  * The built-in Limrun connection the CLI `connect` runs: the provider's own callbacks, composed as
  * a plugin and wired to this host the same way the daemon's registry wires an installed plugin's.
- * The verification is the root's published entry, so the same read-only check answers for both.
+ * The read-only check is the provider's own, so both answers verify through one entry, and it loads
+ * only when `verify` runs.
  */
 export async function builtinLimrunConnection(
   host: HostEnvironment,
 ): Promise<PluginConnectionCallbacks> {
-  const [{ withConnectionHost }, { verifyLimrunConnection }] = await Promise.all([
-    import('@agent-device/plugins/registry'),
-    import('@agent-device/provider-limrun'),
-  ]);
-  const plugin = limrunPlugin(
-    builtinLimrunPluginOptions(host, async (options) => await verifyLimrunConnection(options)),
-  );
+  const { withConnectionHost } = await import('@agent-device/plugins/registry');
+  const plugin = limrunPlugin(builtinLimrunPluginOptions(host));
   if (!plugin.connection) {
     throw new Error('The built-in Limrun plugin declares no connection.');
   }

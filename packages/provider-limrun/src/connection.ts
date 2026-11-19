@@ -1,8 +1,5 @@
 import crypto from 'node:crypto';
-import type {
-  ProviderConnectionVerification,
-  RemoteConfigProfile,
-} from '@agent-device/contracts/remote';
+import type { RemoteConfigProfile } from '@agent-device/contracts/remote';
 import type { PluginConnection, PluginConnectionContext } from '@agent-device/plugins/contract';
 import {
   rejectRefusedProviderProfileFields,
@@ -21,19 +18,9 @@ import {
   LIMRUN_PROVIDER,
   type LimrunPlatform,
 } from './device.ts';
-import type { LimrunConnectionVerificationOptions } from './connection-verification.ts';
 
 /** The flags and environment one `connect` call gives the provider. */
 type ConnectContext = Pick<PluginConnectionContext, 'flags' | 'env' | 'stateDir'>;
-
-/**
- * The read-only account or instance check `verify` performs. The provider's own verification fills
- * this in; the composing root may name the entry it reads verification through, the same way it
- * supplies the runtime's host adapters.
- */
-export type LimrunConnectionVerifier = (
-  options: LimrunConnectionVerificationOptions,
-) => Promise<ProviderConnectionVerification>;
 
 /** The connection callbacks Limrun answers `agent-device connect limrun` with. */
 export type LimrunConnection = Pick<PluginConnection, 'capabilities' | 'resolve' | 'verify'>;
@@ -41,23 +28,18 @@ export type LimrunConnection = Pick<PluginConnection, 'capabilities' | 'resolve'
 /**
  * Limrun's `connect` callbacks: the one set both the built-in CLI composition and an installed
  * plugin answers with. `resolve` reads its own call's flags and environment and loads no SDK.
- * `verify` loads the Limrun SDK when it runs and asks the account or the instance for a read only,
- * so neither callback sets up a runtime, starts a daemon, or rents an instance.
+ * `verify` loads the provider's own verification only when it runs and asks the account or the
+ * instance for a read only, so neither callback sets up a runtime, starts a daemon, or rents an
+ * instance, and no caller names the verification entry from outside the provider.
  */
-export function createLimrunConnection(
-  options: Readonly<{ verify?: LimrunConnectionVerifier }> = {},
-): LimrunConnection {
-  const verify: LimrunConnectionVerifier =
-    options.verify ??
-    (async (verificationOptions) =>
-      await (
-        await import('./connection-verification.ts')
-      ).verifyLimrunConnection(verificationOptions));
+export function createLimrunConnection(): LimrunConnection {
   return {
     capabilities: LIMRUN_CONNECTION_CAPABILITIES,
     resolve: (context) => ({ profile: limrunConnectProfile(context) }),
     verify: async ({ flags, env, host }) =>
-      await verify({
+      await (
+        await import('./connection-verification.ts')
+      ).verifyLimrunConnection({
         ...requireLimrunCredentials(env),
         clientVersion: host.clientVersion,
         platform: requireResolvedProfilePlatform(flags.platform, 'Limrun'),
