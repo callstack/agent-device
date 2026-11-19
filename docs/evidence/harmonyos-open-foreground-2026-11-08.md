@@ -54,13 +54,14 @@ PIN, which this evidence session does not handle, so the end-to-end
 `no-foreground` open remains maintainer-runnable.
 
 One wider keyguard shape is pinned in the suite without a live row: a dump
-that answers with content but no `Mission ID #` block at all (a lock
-screen that hides the mission list). The parser classifies it as
-`no-foreground-mission` — the unlock-hint path — and keeps `unparseable`
-for an empty answer, so a locked unit cannot fall through to the
-connection hint. The maintainer-run protocol above also documents this
-shape: the raw dump should show mission blocks with zero `#FOREGROUND`
-lines, or no mission blocks at all.
+that answers with its section headers (`User ID #`) but no `Mission ID #`
+block at all (a lock screen that hides the mission list). The parser
+classifies it as `no-foreground-mission` — the unlock-hint path — and
+keeps `unparseable` for an empty answer and for `aa` error text, so a
+locked unit cannot fall through to the connection hint. The
+maintainer-run protocol above also documents this shape: the raw dump
+should show mission blocks with zero `#FOREGROUND` lines, or headers with
+no mission blocks at all.
 
 ## The failed-probe path, live at the head
 
