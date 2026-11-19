@@ -275,3 +275,73 @@ jobs:
         env:
           RESULT: ${{ needs.smoke-apple-platform.result }}
         run: test "$RESULT" = success
+
+  # PR-time compile guard for the runner platforms the smoke lanes never build. The iOS and
+  # macOS runners are compiled by smoke-apple-platform above, but tvOS and visionOS compiled
+  # only at release time (scripts/build-package-xcuitest.mjs), which let #4608 escape to
+  # release. This job runs the same xcodebuild build-for-testing compile for those two
+  # platforms, on the same PRs that own the runner sources, so a build break that only the
+  # release would have caught fails the PR instead.
+  build-runner-tvos-visionos:
+    name: Runner Build (tvOS + visionOS)
+    if: ${{ !github.event.pull_request.draft }}
+    # Same image as the smoke lane's runner build; its Xcode ships the tvOS and visionOS SDKs
+    # alongside iOS, so no separate image or toolchain selection is needed.
+    runs-on: blacksmith-6vcpu-macos-26
+    timeout-minutes: 60
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      TVOS_DERIVED_PATH: ${{ github.workspace }}/.tmp/tvos-runner-derived
+      VISIONOS_DERIVED_PATH: ${{ github.workspace }}/.tmp/visionos-runner-derived
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+      - name: Fetch the PR base for the runner selector
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; the runner selector will fail open."
+      # The same selector the iOS runner build rides on (scripts/device-lane-impact.ts over the
+      # affected-check model): the job pays macOS minutes only on PRs that own the runner build
+      # sources (apple/runner/** and the other own:swift trees), and fails open when the change
+      # set cannot be established. Pushes to main run both builds unconditionally.
+      - name: Select tvOS/visionOS runner builds
+        id: runner-impact
+        shell: bash
+        run: node --experimental-strip-types scripts/device-lane-impact.ts swift-runner-tvos swift-runner-visionos
+      # One build per platform, mirroring the iOS runner build step: separate DerivedData and
+      # cache key per platform, generic simulator destinations so no device or runtime boot is
+      # needed, and the release package build's variant (no unit-test flag), which is the
+      # compile the release actually ships.
+      - parallel:
+          - name: Restore and build tvOS XCTest runner
+            if: ${{ !cancelled() && steps.runner-impact.outputs.run != 'false' }}
+            uses: ./.github/actions/setup-apple-runner-build
+            with:
+              derived-path: ${{ env.TVOS_DERIVED_PATH }}
+              cache-key-prefix: tvos-runner-prebuilt
+              cache-key-suffix: -tvos-arm64
+              gate: swift-runner-tvos
+              xcuitest-platform: tvos
+              xcuitest-destination: generic/platform=tvOS Simulator
+            env:
+              AGENT_DEVICE_XCUITEST_ARCHS: arm64
+
+          - name: Restore and build visionOS XCTest runner
+            if: ${{ !cancelled() && steps.runner-impact.outputs.run != 'false' }}
+            uses: ./.github/actions/setup-apple-runner-build
+            with:
+              derived-path: ${{ env.VISIONOS_DERIVED_PATH }}
+              cache-key-prefix: visionos-runner-prebuilt
+              cache-key-suffix: -visionos-arm64
+              gate: swift-runner-visionos
+              xcuitest-platform: visionos
+              xcuitest-destination: generic/platform=visionOS Simulator
+            env:
+              AGENT_DEVICE_XCUITEST_ARCHS: arm64

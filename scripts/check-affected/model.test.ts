@@ -116,13 +116,15 @@ test('android-adb stub test delegates project ownership to Vitest', () => {
   assert.ok(result.includes('vitest-related'));
 });
 
-test('Swift runner change selects both XCUITest platform builds', () => {
-  // Each platform build is its own gate in its own lane, so a Swift change owns both.
+test('Swift runner change selects every XCUITest platform build', () => {
+  // Each platform build is its own gate in its own lane, so a Swift change owns all four.
   // (The Apple device lanes ride along: the runner is what those lanes boot — device-lanes.ts.)
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
     'native-dupes',
     'swift-runner-ios',
     'swift-runner-macos',
+    'swift-runner-tvos',
+    'swift-runner-visionos',
     'packaged-runner-swift',
     'replay-ios',
     'replay-ios-device',
@@ -141,6 +143,8 @@ test('a runner XCTest source also selects the test-list and package-source check
       'native-dupes',
       'swift-runner-ios',
       'swift-runner-macos',
+      'swift-runner-tvos',
+      'swift-runner-visionos',
       'xctest-selection',
       'packaged-runner-swift',
       'replay-ios',
@@ -173,10 +177,12 @@ test('the scripts that rewrite runner Swift select the packaged-source check', (
 
 test('the shared foreground geometry header selects the Apple runner builds', () => {
   // The runner's event bridge includes this bridge header by relative path, so its bytes change
-  // the compiled runner on both platform lanes; a change nothing builds cannot be reviewed safely.
+  // the compiled runner on every platform lane; a change nothing builds cannot be reviewed safely.
   for (const check of [
     'swift-runner-ios',
     'swift-runner-macos',
+    'swift-runner-tvos',
+    'swift-runner-visionos',
     'packaged-runner-swift',
   ] as const) {
     assert.ok(
