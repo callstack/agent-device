@@ -2,10 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
 import type { PluginCandidate, PluginRegistryPolicy } from './registry.ts';
 import type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
-import {
-  validateReplayBackendSetup,
-  validateReplayExecutionSetup,
-} from './validate.ts';
+import { validateReplayBackendSetup, validateReplayExecutionSetup } from './validate.ts';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { AgentDevicePlugin } from './contract.ts';
 import type { ReplaySetupHost } from './host.ts';
@@ -261,7 +258,10 @@ test('native execution retries failed lazy loads while sharing claims, caching a
 
 test.each([
   [{ apiVersion: 99 }, 'incompatible-plugin-api'],
-  [{ contributes: [{ kind: 'replay-execution', id: 'ad', setup: () => ({ execution: {} }) }] }, 'invalid_plugin'],
+  [
+    { contributes: [{ kind: 'replay-execution', id: 'ad', setup: () => ({ execution: {} }) }] },
+    'invalid_plugin',
+  ],
   [
     {
       contributes: [
@@ -279,7 +279,11 @@ test.each([
   [
     {
       contributes: [
-        { kind: 'replay-execution', id: 'ad', setup: () => ({ execution: { create: () => ({}) } }) },
+        {
+          kind: 'replay-execution',
+          id: 'ad',
+          setup: () => ({ execution: { create: () => ({}) } }),
+        },
       ],
     },
     'invalid_plugin',
@@ -292,7 +296,11 @@ test.each([
         candidate({
           apiVersion: 3,
           contributes: [
-            { kind: 'replay-execution', id: 'ad', setup: () => ({ execution: { create: () => ({}) } }) },
+            {
+              kind: 'replay-execution',
+              id: 'ad',
+              setup: () => ({ execution: { create: () => ({}) } }),
+            },
           ],
           ...override,
         }),
@@ -440,7 +448,12 @@ test('a multi-kind package activates its replay claim even when its provider set
   expect(backend.id).toBe('maestro');
   const outcomes = await registry.close();
   expect(outcomes).toEqual([
-    { backend: 'maestro', source: 'embedder', shutdown: { status: 'ok' }, dispose: { status: 'ok' } },
+    {
+      backend: 'maestro',
+      source: 'embedder',
+      shutdown: { status: 'ok' },
+      dispose: { status: 'ok' },
+    },
   ]);
 });
 
@@ -514,7 +527,10 @@ test('close runs activated claims in reverse order with per-step outcomes', asyn
     return plugin;
   };
   const registry = await startProviderRegistry(
-    await resolveProviderPlugins([candidate(make('first', false)), candidate(make('second', true))]),
+    await resolveProviderPlugins([
+      candidate(make('first', false)),
+      candidate(make('second', true)),
+    ]),
     { env: {}, cwd: '/' },
     policy,
   );
@@ -530,7 +546,12 @@ test('close runs activated claims in reverse order with per-step outcomes', asyn
       },
       dispose: { status: 'ok' },
     },
-    { provider: 'first', source: 'embedder', shutdown: { status: 'ok' }, dispose: { status: 'ok' } },
+    {
+      provider: 'first',
+      source: 'embedder',
+      shutdown: { status: 'ok' },
+      dispose: { status: 'ok' },
+    },
   ]);
   // Close is memoized: a second call returns the same outcomes and runs nothing again.
   expect(await registry.close()).toBe(outcomes);

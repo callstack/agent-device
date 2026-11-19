@@ -19,7 +19,6 @@ function contributionOf(
   return contribution;
 }
 
-
 test('the first-party factory uses the managed registry and preserves native script syntax', async () => {
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([{ source: 'embedder', load: replayPlugin }]),

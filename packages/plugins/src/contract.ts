@@ -5,10 +5,7 @@ import type {
   RemoteConfigProfile,
 } from '@agent-device/contracts/remote';
 import type { ProviderPluginHost } from './host.ts';
-import type {
-  ReplayBackendContribution,
-  ReplayExecutionContribution,
-} from './replay-backend.ts';
+import type { ReplayBackendContribution, ReplayExecutionContribution } from './replay-backend.ts';
 
 /** The plugin contract version this module defines. Version 2 had no compatibility shim. */
 export const PLUGIN_API_VERSION = 3;
@@ -94,19 +91,18 @@ export type PluginSetupResult<WebDriver extends WebDriverDescriptor = WebDriverD
   | PluginWebDriverSetup<WebDriver>;
 
 /** A `provider` contribution: the current provider declaration plus setup with a provider host. */
-export type ProviderContribution<
-  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
-> = Readonly<{
-  kind: 'provider';
-  /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
-  provider: string;
-  credentials: PluginCredentials;
-  connection?: PluginConnection;
-  /** Builds the runtime. Keep it free of network I/O and device allocation. */
-  setup(
-    host: ProviderPluginHost,
-  ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
-}>;
+export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+  Readonly<{
+    kind: 'provider';
+    /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
+    provider: string;
+    credentials: PluginCredentials;
+    connection?: PluginConnection;
+    /** Builds the runtime. Keep it free of network I/O and device allocation. */
+    setup(
+      host: ProviderPluginHost,
+    ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
+  }>;
 
 /** One independently activated claim a plugin declares. New kinds need an explicit decision. */
 export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =

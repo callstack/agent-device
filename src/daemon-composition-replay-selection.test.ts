@@ -86,7 +86,9 @@ test.each([
     const runtime = await composedRuntime(env);
     try {
       const first = await runtime.resolve(backend);
-      selectPlugin(home, '@example/unrelated', pluginSource(backend), { claims: claimsOf(backend) });
+      selectPlugin(home, '@example/unrelated', pluginSource(backend), {
+        claims: claimsOf(backend),
+      });
       expect(await runtime.resolve(backend)).toBe(first);
       if (change === 'replace') {
         selectPlugin(home, name, source, { claims: claimsOf(backend) });

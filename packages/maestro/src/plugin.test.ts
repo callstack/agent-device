@@ -16,7 +16,6 @@ function contributionOf(
   return contribution;
 }
 
-
 const state = vi.hoisted(() => ({
   engineLoads: 0,
   retain: vi.fn<typeof retainPngWorker>(),

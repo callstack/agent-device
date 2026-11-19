@@ -165,7 +165,10 @@ async function trackedPlugin() {
       };
     },
   };
-  return { plugin: { apiVersion: 3, contributes: [contribution] } satisfies AgentDevicePlugin, calls };
+  return {
+    plugin: { apiVersion: 3, contributes: [contribution] } satisfies AgentDevicePlugin,
+    calls,
+  };
 }
 
 test.each(['replay', 'test', 'batch-test'] as const)(

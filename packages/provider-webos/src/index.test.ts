@@ -11,7 +11,6 @@ function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
 }
 
-
 test('the plugin connection leases an Android TV device and passes on the requested TV', () => {
   const { connection } = providerOf(webos());
 
@@ -29,7 +28,9 @@ test('the plugin connection leases an Android TV device and passes on the reques
 });
 
 test('verify defers the TV and app to session open, naming the plugin default TV', async () => {
-  const verified = await providerOf(webos({ device: 'living-room' })).connection.verify({ flags: {} });
+  const verified = await providerOf(webos({ device: 'living-room' })).connection.verify({
+    flags: {},
+  });
 
   assert.equal(verified.service, 'LG webOS');
   assert.deepEqual(verified.device, { status: 'deferred', name: 'living-room' });

@@ -9,12 +9,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import {
-  beginStdoutCapture,
-  pluginHome,
-  selectPlugin,
-  pluginSource,
-} from '@agent-device/test-kit';
+import { beginStdoutCapture, pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 
 const provider = 'browserstack';
 const packageName = '@agent-device/browserstack';

@@ -56,10 +56,15 @@ const basic = (username: string, accessKey: string) =>
   `Basic ${Buffer.from(`${username}:${accessKey}`).toString('base64')}`;
 
 test('the plugin declares the LT variables only when it reads credentials from the environment', () => {
-  assert.deepEqual(providerOf(testmu()).credentials, { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'] });
-  assert.deepEqual(providerOf(testmu({ credentials: { username: 'u', accessKey: 'k' } })).credentials, {
-    variables: [],
+  assert.deepEqual(providerOf(testmu()).credentials, {
+    variables: ['LT_USERNAME', 'LT_ACCESS_KEY'],
   });
+  assert.deepEqual(
+    providerOf(testmu({ credentials: { username: 'u', accessKey: 'k' } })).credentials,
+    {
+      variables: [],
+    },
+  );
 });
 
 test('a credentials object missing one key still declares the variable it reads from the environment', () => {
@@ -75,9 +80,15 @@ test('credentials passed as options replace the environment, which stays the fal
   const captured = capturedAuthorization();
   const env = { LT_USERNAME: 'env-user', LT_ACCESS_KEY: 'env-key' };
 
-  await listArtifacts(providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })), env);
+  await listArtifacts(
+    providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
+    env,
+  );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })), {});
+  await listArtifacts(
+    providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
+    {},
+  );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
   await listArtifacts(providerOf(testmu()), env);
   assert.equal(captured.read(), basic('env-user', 'env-key'));

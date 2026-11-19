@@ -93,9 +93,12 @@ test('the plugin declares the BrowserStack variables only when it reads credenti
   assert.deepEqual(providerOf(browserstack()).credentials, {
     variables: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   });
-  assert.deepEqual(providerOf(browserstack({ credentials: { username: 'u', accessKey: 'k' } })).credentials, {
-    variables: [],
-  });
+  assert.deepEqual(
+    providerOf(browserstack({ credentials: { username: 'u', accessKey: 'k' } })).credentials,
+    {
+      variables: [],
+    },
+  );
 });
 
 test('a credentials object missing one key still declares the variable it reads from the environment', () => {
@@ -161,7 +164,13 @@ test.each([
     const plugin = browserstack({ credentials });
     const [resolve, artifacts] = await Promise.allSettled([
       Promise.resolve().then(() =>
-        providerOf(plugin).connection!.resolve({ flags, stateDir: '/state', cwd: '/', env, host: host(env) }),
+        providerOf(plugin).connection!.resolve({
+          flags,
+          stateDir: '/state',
+          cwd: '/',
+          env,
+          host: host(env),
+        }),
       ),
       listArtifacts(providerOf(plugin), env),
     ]);

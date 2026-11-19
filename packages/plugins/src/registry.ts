@@ -184,7 +184,12 @@ export async function resolveProviderPlugins(
           if (claim.space !== 'provider' || claim.failure !== undefined) return [];
           const connection = (claim.contribution as ProviderContribution).connection;
           return connection
-            ? [[claim.key, withConnectionHost(connection, claim.slot.candidate.hostOptions)] as const]
+            ? [
+                [
+                  claim.key,
+                  withConnectionHost(connection, claim.slot.candidate.hostOptions),
+                ] as const,
+              ]
             : [];
         }),
       ),
@@ -279,7 +284,9 @@ export async function startProviderRegistry(
     close: once(async () => {
       closed = true;
       const activated = resolved.slots.flatMap(({ claims }) =>
-        claims.filter((claim) => claim.registration !== undefined || claim.replaySetup !== undefined),
+        claims.filter(
+          (claim) => claim.registration !== undefined || claim.replaySetup !== undefined,
+        ),
       );
       const outcomes: PluginCleanupOutcome[] = [];
       for (const claim of [...activated].reverse()) {
@@ -350,19 +357,15 @@ function reserveClaim(
         ? claimed.backend
         : claimed.execution;
   if (space.has(claim.key)) {
-    claim.failure = new AppError(
-      'INVALID_ARGS',
-      `Duplicate ${claim.space} claim: ${claim.key}`,
-      {
-        reason:
-          claim.space === 'provider'
-            ? 'duplicate_provider'
-            : claim.space === 'replay-backend'
-              ? 'duplicate_replay_backend'
-              : 'duplicate_replay_execution',
-        ...(claim.space === 'provider' ? { provider: claim.key } : { backend: claim.key }),
-      },
-    );
+    claim.failure = new AppError('INVALID_ARGS', `Duplicate ${claim.space} claim: ${claim.key}`, {
+      reason:
+        claim.space === 'provider'
+          ? 'duplicate_provider'
+          : claim.space === 'replay-backend'
+            ? 'duplicate_replay_backend'
+            : 'duplicate_replay_execution',
+      ...(claim.space === 'provider' ? { provider: claim.key } : { backend: claim.key }),
+    });
     return;
   }
   space.add(claim.key);
@@ -514,7 +517,13 @@ async function cleanUpClaim(claim: Claim): Promise<PluginCleanupOutcome> {
     return { provider, source, shutdown, dispose: disposed };
   }
   const setup = claim.replaySetup;
-  if (!setup) return { backend: claim.key, source: claim.slot.candidate.source, shutdown: { status: 'ok' }, dispose: { status: 'ok' } };
+  if (!setup)
+    return {
+      backend: claim.key,
+      source: claim.slot.candidate.source,
+      shutdown: { status: 'ok' },
+      dispose: { status: 'ok' },
+    };
   await (claim.replayLoading ?? claim.executionLoading)?.catch(() => {});
   return {
     backend: claim.key,

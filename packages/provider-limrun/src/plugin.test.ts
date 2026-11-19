@@ -15,7 +15,6 @@ function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
 }
 
-
 const sdk = vi.hoisted(() => ({
   runtimeCalls: [] as { options: Record<string, unknown>; mode: unknown }[],
   clients: [] as Array<Record<string, unknown>>,
@@ -203,7 +202,9 @@ test('setup refuses a host with no Limrun credentials before asking for host ada
   const createDependencies = vi.fn(() => stubDependencies());
   await assert.rejects(
     async () => {
-      await providerOf(limrunPlugin({ createDependencies })).setup(pluginHost({ LIMRUN_REGION: 'eu' }));
+      await providerOf(limrunPlugin({ createDependencies })).setup(
+        pluginHost({ LIMRUN_REGION: 'eu' }),
+      );
     },
     (error: unknown) => {
       assert.ok(error instanceof AppError);

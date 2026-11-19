@@ -109,7 +109,10 @@ export function nodeRangeFloor(range: string): string | undefined {
         branchFloor = parsed;
       }
     }
-    if (branchFloor !== undefined && (lowest === undefined || compareVersionsTuple(branchFloor, lowest) < 0)) {
+    if (
+      branchFloor !== undefined &&
+      (lowest === undefined || compareVersionsTuple(branchFloor, lowest) < 0)
+    ) {
       lowest = branchFloor;
     }
   }

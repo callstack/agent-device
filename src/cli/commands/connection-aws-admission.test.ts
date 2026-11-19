@@ -15,11 +15,7 @@ test.each(['missing', 'failed'] as const)(
   async (kind) => {
     const { home, env } = pluginHome();
     if (kind === 'failed')
-      selectPlugin(
-        home,
-        '@agent-device/aws-device-farm',
-        'throw new Error("registration failed")',
-      );
+      selectPlugin(home, '@agent-device/aws-device-farm', 'throw new Error("registration failed")');
     const stateDir = path.join(home, 'state');
     const remoteConfigPath = path.join(home, 'aws.json');
     fs.writeFileSync(

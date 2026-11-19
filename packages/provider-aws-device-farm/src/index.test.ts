@@ -12,7 +12,6 @@ function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
 }
 
-
 const DEVICE_ARN = 'arn:aws:devicefarm:us-west-2::device:device-a';
 
 function host(env: Record<string, string | undefined> = {}): ProviderPluginHost {

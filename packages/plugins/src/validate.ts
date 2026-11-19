@@ -1,10 +1,7 @@
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
-import type {
-  ReplayBackendSetup,
-  ReplayExecutionSetup,
-} from './replay-backend.ts';
+import type { ReplayBackendSetup, ReplayExecutionSetup } from './replay-backend.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { isProviderId } from './discovery.ts';
@@ -60,7 +57,9 @@ export function claimKeyOfContribution(value: unknown): string {
       return `provider:${validateProviderContribution(value)}`;
     case 'replay-backend': {
       if (!isProviderId(value.backend) || typeof value.setup !== 'function') {
-        throw invalidPlugin('A replay-backend contribution must declare a backend id and setup(host)');
+        throw invalidPlugin(
+          'A replay-backend contribution must declare a backend id and setup(host)',
+        );
       }
       return `replay-backend:${value.backend as string}`;
     }

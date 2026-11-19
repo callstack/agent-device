@@ -4,12 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import {
-  mkdtempForTestSync,
-  pluginHome,
-  selectPlugin,
-  pluginSource,
-} from '@agent-device/test-kit';
+import { mkdtempForTestSync, pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
