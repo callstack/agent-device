@@ -21,7 +21,7 @@ const mockRunCmd = vi.mocked(runCmd);
 
 /**
  * Some other local user, never the one running the suite: CI runs as `nobody` (65534). The same rule is written
- * in test-kit's `host-ownership.fixtures.ts` and host-kit's `internal/atomic-file-host.fixtures.ts`; test-kit
+ * in test-kit's `host-ownership.fixtures.ts` and host-kit's `internal/script-destination-host.fixtures.ts`; test-kit
  * cannot be reached from this package, so it keeps its own copy — change all three together.
  */
 const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;

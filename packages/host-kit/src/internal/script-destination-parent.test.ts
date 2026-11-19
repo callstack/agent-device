@@ -13,8 +13,8 @@ import {
   modeOf,
   publish,
   withSharedUmask,
-} from './atomic-file-host.fixtures.ts';
-import { confirmScriptDestination, prepareScriptDestination } from './atomic-file.ts';
+} from './script-destination-host.fixtures.ts';
+import { confirmScriptDestination, prepareScriptDestination } from './script-destination.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 

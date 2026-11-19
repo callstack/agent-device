@@ -10,12 +10,12 @@ import {
   expectUntrustedReplaced,
   modeOf,
   publish,
-} from './atomic-file-host.fixtures.ts';
+} from './script-destination-host.fixtures.ts';
 import {
   confirmScriptDestination,
   prepareScriptDestination,
   MAX_SCRIPT_PATH_LINK_HOPS,
-} from './atomic-file.ts';
+} from './script-destination.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 /** The mode a test's own trusted ground stands at, so a runner's umask cannot widen it. */
@@ -112,7 +112,7 @@ skipOnWindows('publishes the script at 0600 under a umask that takes an OWNER bi
 
 skipOnWindows('publishes the script at 0600 under the group-only umask 0200', () => {
   // The narrowest umask that still reaches the owner bits, and the one a shared machine tends to carry. What
-  // {@link publishFileSync} answers for a generic caller under this umask is 0400 (see atomic-file.test.ts):
+  // {@link publishFileSync} answers for a generic caller under this umask is 0400 (see atomic-publish.test.ts):
   // the script route is the one that asks for the exact mode, and this is where that difference lives.
   const workflows = path.join(root(), 'workflows');
   privateDir(workflows);
