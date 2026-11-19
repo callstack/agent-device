@@ -1,14 +1,45 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
-import { reportDaemonStartupPhase } from '@agent-device/daemon-contracts/daemon-startup-phases';
+import {
+  DAEMON_PROGRESS_CHANNEL_ENV,
+  daemonStartupProgressMessage,
+  type DaemonStartupProgress,
+} from '@agent-device/daemon-contracts/daemon-startup-phases';
 
 // Captured once: the runtime resolves the state dir from this one host, so a relative
 // AGENT_DEVICE_STATE_DIR cannot land the daemon beside another directory's lock.
 const host = captureHostEnvironment(process);
-// The earliest phase, reported to the launcher over the IPC channel it opened at spawn. Without a
-// channel (embedded or manual start) this is a no-op.
-reportDaemonStartupPhase('modules-loaded');
+const startupProgress = openStartupProgressChannel();
+startupProgress.report('modules-loaded');
+
+/**
+ * The launch channel the launcher opened at spawn. Without its mark or a channel (a manual start),
+ * reporting is a no-op. The channel is unref'd so it never holds the daemon alive, and a failed
+ * send (launcher gone) writes one stderr line: the callback form keeps it out of the
+ * uncaughtException handler, which would otherwise end the daemon.
+ */
+function openStartupProgressChannel(): DaemonStartupProgress {
+  const send = process.send?.bind(process);
+  if (host.env[DAEMON_PROGRESS_CHANNEL_ENV] !== '1' || !process.channel || !send) {
+    return { report() {}, close() {} };
+  }
+  process.channel.unref();
+  let failed = false;
+  return {
+    report(phase) {
+      if (failed || !process.connected) return;
+      send(daemonStartupProgressMessage(phase), (error: Error | null) => {
+        if (!error || failed) return;
+        failed = true;
+        process.stderr.write(`Daemon startup phase report failed: ${error.message}\n`);
+      });
+    },
+    close() {
+      if (process.connected) process.disconnect();
+    },
+  };
+}
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
@@ -18,9 +49,10 @@ reportDaemonStartupPhase('modules-loaded');
 async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
     host,
+    startupProgress,
     composeDeps: async (input) => {
       const deps = await (await import('./daemon-composition.ts')).createDaemonRuntimeDeps(input);
-      reportDaemonStartupPhase('composition-loaded');
+      startupProgress.report('composition-loaded');
       return deps;
     },
   });

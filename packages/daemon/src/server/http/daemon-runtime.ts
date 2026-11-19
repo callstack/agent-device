@@ -88,10 +88,7 @@ import {
   DAEMON_STARTUP_EXIT_CODES,
   type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import {
-  closeDaemonStartupProgressChannel,
-  reportDaemonStartupPhase,
-} from '@agent-device/daemon-contracts/daemon-startup-phases';
+import type { DaemonStartupProgress } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
@@ -126,6 +123,8 @@ export type DaemonRuntimeOptions = {
   ownership?: DaemonRuntimeOwnership;
   /** The daemon code an embedder loaded; its process entry belongs to the host application. */
   codeIdentity?: { origin: DaemonCodeOrigin; codeSignature?: string };
+  /** Receives each startup phase; the detached daemon entry passes its launch channel here. */
+  startupProgress?: DaemonStartupProgress;
 };
 
 export type DaemonRuntimeController = {
@@ -555,7 +554,7 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
-  reportDaemonStartupPhase('lock-acquired');
+  options.startupProgress?.report('lock-acquired');
 
   rollback.onRollback(() => {
     stopMetadataLossWatch();
@@ -620,7 +619,7 @@ async function startDaemonRuntimeOnHost(
       error: error instanceof Error ? error.message : String(error),
     }).catch(() => undefined);
   });
-  reportDaemonStartupPhase('recovery-finished');
+  options.startupProgress?.report('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
   const { servers, socketPort, httpPort } = await openDaemonServers(
@@ -660,10 +659,10 @@ async function startDaemonRuntimeOnHost(
     },
     rollback,
   );
-  reportDaemonStartupPhase('listening');
+  options.startupProgress?.report('listening');
   publishDaemonInfo(socketPort, httpPort);
-  reportDaemonStartupPhase('registered');
-  closeDaemonStartupProgressChannel();
+  options.startupProgress?.report('registered');
+  options.startupProgress?.close();
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
