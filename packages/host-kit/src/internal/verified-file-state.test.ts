@@ -15,7 +15,9 @@ import {
 } from './atomic-file-host.fixtures.ts';
 import {
   appendPrivateStateFileSync,
+  ensurePrivateDirectoryChain,
   publishPrivateStateFileSync,
+  type PrivateDirectoryChain,
   readPrivateStateFileTailSync,
   tryOpenPrivateStateFileSync,
   type PrivateStateOpenPurpose,
@@ -129,7 +131,10 @@ skipOnWindows('publishing creates at 0600 whatever the umask, and leaves no sibl
   const state = stateDir();
   const report = path.join(state, 'daemon-shutdown.json');
 
-  const previous = process.umask(0o022);
+  // An umask that REMOVES the owner's own bits. Under the ordinary 0022 the file would land at 0600 even if
+  // the publish asked the host for no mode at all, so this is the only umask that tells a stated mode from a
+  // default one: 0600 & ~0277 is 0400, and a publish that stops saying `exactMode` answers 0400 here.
+  const previous = process.umask(0o277);
   try {
     publishPrivateStateFileSync(report, '{"a":1}\n');
   } finally {
@@ -138,6 +143,47 @@ skipOnWindows('publishing creates at 0600 whatever the umask, and leaves no sibl
 
   expect(modeOf(report)).toBe(0o600);
   expect(fs.readdirSync(state)).toEqual(['daemon-shutdown.json']);
+});
+
+skipOnWindows('a state directory swapped in as it is opened keeps its own mode', () => {
+  // Establishing the chain narrows a loose state directory, and it does that at a name it looked up a moment
+  // before the `fchmod`. Between the two, another local user who can write the parent moves the judged
+  // directory away and stands a different one at the same name. What stops the mode being said on the wrong
+  // inode is the identity comparison: the `lstat` the rule judged with against the `fstat` of the descriptor
+  // `O_DIRECTORY | O_NOFOLLOW` actually opened. Delete it and the replacement below is narrowed to 0700 and
+  // answers a clean chain — the repair would be reporting a directory it never judged as its own work.
+  const directory = root();
+  const judged = path.join(directory, 'state');
+  directoryWith(judged, 0o777);
+
+  const realOpenSync = fs.openSync.bind(fs);
+  const directoryFlags =
+    fs.constants.O_RDONLY | Number(fs.constants.O_DIRECTORY) | Number(fs.constants.O_NOFOLLOW);
+  let swapped = false;
+  const opened = vi.spyOn(fs, 'openSync').mockImplementation(((
+    name: fs.PathLike,
+    ...rest: unknown[]
+  ) => {
+    if (!swapped && rest[0] === directoryFlags && String(name) === judged) {
+      const moved = path.join(directory, 'moved');
+      fs.renameSync(judged, moved);
+      directoryWith(judged, 0o777);
+      swapped = true;
+    }
+    return (realOpenSync as (...args: unknown[]) => number)(name, ...rest);
+  }) as typeof fs.openSync);
+
+  let chain: PrivateDirectoryChain;
+  try {
+    chain = ensurePrivateDirectoryChain(judged);
+  } finally {
+    opened.mockRestore();
+  }
+
+  expect(swapped, 'the repair reached the directory open the guard is for').toBe(true);
+  expect(modeOf(judged)).toBe(0o777);
+  expect(modeOf(path.join(directory, 'moved'))).toBe(0o777);
+  expect(chain.exposure).toBe('world_writable');
 });
 
 skipOnWindows('a temporary sibling already standing is not this call to write', () => {

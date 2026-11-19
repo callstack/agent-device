@@ -370,6 +370,103 @@ test('a log path whose directory cannot be made costs a warning and never the ca
   assert.match(said, /"phase":"nowhere"/);
 });
 
+test('a directory that could not be made is asked for again, not remembered as made', () => {
+  // `ensuredDirectories` is the memo that keeps a per-line `mkdir` off a route that is already open. A parent
+  // whose `mkdir` THREW was not made, and remembering it anyway would spend every later line of the scope on
+  // a directory that does not exist: the line after a transient fault then lands nowhere, and the scope's log
+  // silently stops at the fault instead of recovering once the host answers again.
+  const directory = mkdtempForTestSync('agent-device-diag-mkdir-retry-');
+  const logPath = path.join(directory, 'nested', 'request.ndjson');
+  const realMkdir = fs.mkdirSync.bind(fs);
+  let mkdirFailsOnce = true;
+  const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+    target: unknown,
+    ...rest: unknown[]
+  ) => {
+    if (mkdirFailsOnce && target === path.dirname(logPath)) {
+      mkdirFailsOnce = false;
+      throw Object.assign(new Error('EROFS'), { code: 'EROFS' });
+    }
+    return (realMkdir as (...args: unknown[]) => unknown)(target, ...rest);
+  }) as typeof fs.mkdirSync);
+
+  try {
+    captureStderrWrites(() => {
+      withDiagnosticsScope({ command: 'fill', logPath, debug: true }, () => {
+        emitDiagnostic({ phase: 'first_after_fault' });
+        emitDiagnostic({ phase: 'second_after_fault' });
+      });
+    });
+
+    assert.equal(
+      mkdirSpyCallsFor(mkdir, path.dirname(logPath)),
+      2,
+      'the parent is asked for again',
+    );
+    const lines = fs.readFileSync(logPath, 'utf8');
+    assert.match(
+      lines,
+      /"phase":"second_after_fault"/,
+      'the line after a failed mkdir still reaches the log',
+    );
+  } finally {
+    mkdir.mockRestore();
+  }
+});
+
+/** Counts the calls a `mkdirSync` spy saw for exactly one directory. */
+function mkdirSpyCallsFor(spy: { mock: { calls: unknown[][] } }, dir: string): number {
+  return spy.mock.calls.filter(([target]) => target === dir).length;
+}
+
+test('a flush whose append did not land names no record, and keeps the events owed', () => {
+  // `flushDiagnosticsToSessionFile` answers WHERE the record is, and request finalization copies that answer
+  // into the error's `logPath` and `diagnosticsRecord`. On ENOSPC, EROFS, or a sessions directory that has
+  // gone away, a returned path is a pointer to a file holding none of the scope's events, which is worse than
+  // no pointer: the caller opens it, finds nothing, and distrusts the diagnostics. So a line that did not land
+  // makes the flush answer null, and the events stay owed to a later flush that can deliver them.
+  const directory = mkdtempForTestSync('agent-device-diag-flush-fails-');
+  const logPath = path.join(directory, 'request.ndjson');
+  const realAppend = fs.appendFileSync.bind(fs);
+  let appendIsBroken = true;
+  const append = vi.spyOn(fs, 'appendFileSync').mockImplementation(((
+    target: unknown,
+    ...rest: unknown[]
+  ) => {
+    if (appendIsBroken && target === logPath) {
+      throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+    }
+    return (realAppend as (...args: unknown[]) => unknown)(target, ...rest);
+  }) as typeof fs.appendFileSync);
+
+  let flushedOnce: unknown;
+  let standingAfterRefusal: boolean | undefined;
+  let flushedAfterRepair: unknown;
+  try {
+    withDiagnosticsScope({ command: 'fill', logPath, debug: true }, () => {
+      captureStderrWrites(() => emitDiagnostic({ phase: 'unwritten' }));
+      flushedOnce = flushDiagnosticsToSessionFile({ force: true });
+      standingAfterRefusal = fs.existsSync(logPath);
+      appendIsBroken = false;
+      flushedAfterRepair = flushDiagnosticsToSessionFile({ force: true });
+    });
+  } finally {
+    append.mockRestore();
+  }
+
+  assert.equal(flushedOnce, null, 'a record that never landed is not a record');
+  assert.equal(standingAfterRefusal, false, 'the refused append created nothing at the name');
+  assert.deepEqual(
+    flushedAfterRepair,
+    { path: logPath },
+    'the same events land once the route works',
+  );
+  const written = fs.readFileSync(logPath, 'utf8');
+  assert.match(written, /"phase":"unwritten"/, 'the flush did not silently drop the owed events');
+  const unwrittenLines = written.split('\n').filter((line) => line.includes('"phase":"unwritten"'));
+  assert.equal(unwrittenLines.length, 1, 'the owed event lands exactly once, not again per flush');
+});
+
 /** Runs `run` with every write to this process's stderr collected, and returns what was said. */
 function captureStderrWrites(run: () => void): string {
   let said = '';

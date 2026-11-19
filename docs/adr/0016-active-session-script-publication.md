@@ -414,6 +414,59 @@ The flag and the session action name the same persisted artifact.
 `session save-script` requests publication now.
 `save-replay` is rejected, because replay is the act of executing that script, not the artifact being saved.
 
+### State-record routes (amendment, #4649)
+
+The daemon's state directory is a caller-named destination of the same kind as the ones above.
+It holds the daemon's own records: the registration record, the startup marker, the shutdown report, and `daemon.log`.
+Two rules bind it — where a route resolves, and what may stand at a name once it does.
+Both bind at the owner that builds the names, never at an individual write.
+
+**Route input.** `resolveStateDir` (`packages/daemon-contracts/src/daemon-resolution.ts`) is the one owner of a state route.
+It resolves the route once, before any record name is derived from it.
+Every record name is a textual `path.join` of that resolved base, so nothing below it can be re-anchored later.
+The table is normative for what a `--state-dir` value answers. `<state>` is the resolved base, `<cwd>` the working directory, `<abs>` an absolute directory, and `<other>` a drive other than the working directory's.
+
+| Input | Answer |
+| --- | --- |
+| unset, empty, or whitespace | the per-user default state directory |
+| absolute | the expanded spelling, unchanged unless it carries `..` and the fold below proves otherwise |
+| `~`- or `~user`-rooted | the same rule after the home expansion |
+| bare relative, with a `cwd` | `path.resolve(<cwd>, value)` |
+| relative with no `cwd` | refused: `relative_state_dir_without_cwd` |
+| drive-relative on Windows (`C:work`), with a `cwd` absolute on that drive | the `cwd` joined textually with the remainder, `..` left for the fold below |
+| drive-relative with no `cwd`, a non-absolute `cwd`, or a `cwd` on another drive or a UNC scope | refused: `state_dir_drive_relative` |
+| any absolute route carrying `..`, where the directory a step backs out of is a link | refused: `state_dir_parent_step_through_link` |
+| any absolute route carrying `..`, where that directory's lookup failed for a reason other than `ENOENT` | refused: `state_dir_parent_step_unverified` |
+| any absolute route carrying `..` over plain or absent directories | folded once, at that host lookup |
+
+A drive-relative route is anchored by a textual join, never by a second `path.resolve`: a second resolve would fold the `..` that the fold must see, and the fold is the one place that question is answered. A step back out of an ABSENT directory folds textually, because a level that does not stand cannot be a link, and `../shared-state` beside a checkout is ordinary configuration before a daemon's first start.
+
+**Standing at the name.** `judgePrivateDirectoryChain` and `ensurePrivateDirectoryChain` (`packages/host-kit/src/internal/verified-file.ts`) answer whether the resolved directory may hold another local user's records. They walk from the filesystem root, and the exposure named is the answer for the component the walk stood on.
+
+Each component is accepted when it is owned by this user or by root and is neither group- nor world-writable, and a missing tail is accepted when every parent is accepted, so the caller creates it at `0700`. A sticky directory this user or root owns is accepted for PASSING THROUGH, as it is for a script destination.
+
+The state rule is stricter than the script rule at one point, deliberately. Before a name is created, `othersCreateEntriesIn` is asked of EVERY level of the route, and a sticky bit is no exception there:
+
+| Verdict | Component |
+| --- | --- |
+| accepted | owned by this user or root, with neither the group nor the world write bit set (a sticky bit changes nothing either way) |
+| accepted | absent, with every parent accepted, so the caller creates it at `0700` |
+| refused | `foreign_owned` — another local user owns it |
+| refused | `world_writable` or `shared_group_writable` — others can write it, sticky or not, because a sticky bit shields other people's entries and does not win the race to plant `daemon-shutdown.json` first |
+| refused | `shared_parent` — the same refusal at the level an entry would be created in, or for a record whose bytes carry a second name |
+| refused | `planted_link` — a link the walk cannot attribute, at or below the state root's own route position |
+| refused | `state_dir_unreadable`, `not_a_directory`, `link_loop_exceeded`, `unreachable_parent` — the host could not say what stands there |
+| refused | `outside_state_dir` — the spelling carries `..` or a name that is not one component |
+| refused | `record_mode_unproven` — this host would not carry the record's `0600` |
+
+Links ABOVE the state root stay allowed, as they are for a script destination: `/var` is an alias on macOS, and a daemon whose home is under it has a legitimate state route. Below the state root's own route position, a link is refused. A level of this user's or root's own tree that is merely loose is narrowed to `0700` and the route is judged again once; a refusal about a level ABOVE the state directory is judged and left exactly as it stands, because nobody's home directory is agent-device's to tighten.
+
+**Judging bytes, not names.** After a directory is accepted, the walk must keep the position it proved.
+A `..` carried by a link's target moves that position back, and a route component's own step-back does not clear it: a link below the root that resolves above where it stands makes every name below it unprovable. The walk carries the position across a link's own step-backs and refuses a state route that a link can carry above the state base, with `..` resolved in lexical form so an absent leaf is judged too.
+Every state entry is opened through the one state opener in `packages/host-kit/src/internal/verified-file.ts` — the registration record, the startup marker, the shutdown report, and `daemon.log`, including the launcher and the diagnostics sink. Its POSIX walk re-asks `O_NOFOLLOW` at each component, compares the `lstat` it judged with the `fstat` of the descriptor it holds, and re-asks the open once after it repairs a directory it narrowed. Mode is said and read back on a descriptor only, never at a name; a POSIX mode that will not carry `0600` is a refusal of the open, not a warning beside it. `readStateEntrySync` is the optional read of the same chain: an absent entry is the textual `absent` verdict, and every other host fault is a refusal verdict, never a throw through a caller that already succeeded.
+
+**Where the guarantee does not reach.** This amendment covers the daemon's state records. It is not a promise that no local user can read a record whose directory is sticky and shared. It says nothing about caller-named artifacts outside the state directory, which remain scoped to #4669.
+
 ## Consequences
 
 - Agents can record onboarding or deep navigation as one self-contained starting state, replay it from scratch, and continue from the resulting live session.

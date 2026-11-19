@@ -31,6 +31,10 @@ const report = {
   claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
 };
 
+/** Bytes the launched child says on stdout, and on stderr, so a log fd that redirects them is visible. */
+const STDOUT_MARKER = 'AGENT_DEVICE_CHILD_STDOUT\n';
+const STDERR_MARKER = 'AGENT_DEVICE_CHILD_STDERR\n';
+
 afterEach(() => vi.restoreAllMocks());
 
 async function acquire(): Promise<Acquired> {
@@ -146,7 +150,13 @@ test.skipIf(process.platform === 'win32')(
         paths,
         args: [
           '-e',
-          `require('node:fs').writeFileSync(${JSON.stringify(reported)}, process.cwd())`,
+          // The child SAYS something on both streams. Where those bytes land is the thing under test: the
+          // launcher hands the child one fd for stdout and stderr, so if a refused log were reopened by
+          // name, the link's target would become the destination of everything the daemon ever prints.
+          // Bytes that never leave the child would prove the refusal either way.
+          `process.stdout.write(${JSON.stringify(STDOUT_MARKER)});` +
+            `process.stderr.write(${JSON.stringify(STDERR_MARKER)});` +
+            `require('node:fs').writeFileSync(${JSON.stringify(reported)}, process.cwd())`,
         ],
         serverMode: 'socket',
       });
@@ -157,7 +167,13 @@ test.skipIf(process.platform === 'win32')(
 
     // The child ran, and its output reached neither the link's target nor the refused name.
     assert.equal(fs.readFileSync(reported, 'utf8'), process.cwd());
-    assert.equal(fs.readFileSync(victim, 'utf8'), 'not yours\n');
+    const victimText = fs.readFileSync(victim, 'utf8');
+    assert.equal(
+      victimText,
+      'not yours\n',
+      "the refused log's target received none of the child's output",
+    );
+    assert.doesNotMatch(victimText, /AGENT_DEVICE_CHILD_/, 'no child byte reached the target');
     assert.equal(fs.lstatSync(paths.logPath).isSymbolicLink(), true);
     assert.match(written.join(''), /daemon_log_open_refused/);
   },

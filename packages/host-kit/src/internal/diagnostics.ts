@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import { writeHostStderrBestEffort } from './host-stderr.ts';
 import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
@@ -253,8 +254,11 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
     if (!scope.debug && !scope.traceLogPath) return;
     const fileLine = `${stringifyDiagnosticEvent(payload, sortedScopeSensitiveValues(scope))}\n`;
     if (scope.debug && scope.logPath) {
-      appendDiagnosticLine(scope, scope.logPath, fileLine);
-      scope.liveWrittenEventCount = scope.events.length;
+      // Only count a line as already written when it is on the file. A line the route could not deliver
+      // stays owed, so the final flush asks for it again rather than reporting a record that lacks it.
+      if (appendDiagnosticLine(scope, scope.logPath, fileLine)) {
+        scope.liveWrittenEventCount = scope.events.length;
+      }
     }
     if (scope.traceLogPath) {
       appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
@@ -334,7 +338,11 @@ export function flushDiagnosticsToSessionFile(
         // longer re-normalized here. Replacement output is not length-bounded:
         // a short literal can grow past `[REDACTED]`.
         const lines = pendingEvents.map((entry) => stringifyDiagnosticEvent(entry, values));
-        appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`);
+        if (!appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`)) {
+          // The line did not land, so there is no record to hand out. The events stay owed: a caller
+          // is told no record exists rather than pointed at a file that holds none of them.
+          return null;
+        }
       }
       const logRecord = scope.logRecord;
       scope.events = [];
@@ -406,13 +414,22 @@ function sanitizePathPart(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): void {
+/**
+ * Sends one line to the route that log path has, and answers whether it LANDED there.
+ *
+ * The answer is what makes a record's promise honest: `flushDiagnosticsToSessionFile` reports the path it
+ * wrote, and a caller told about a file can open it expecting this scope's events. Every route that gives up
+ * — a plain append that breaks, a sink its owner refuses, a line diverted to stderr while its own path is
+ * being judged or reported on — answers `false`, so the flush says no record exists instead of naming a file
+ * that holds none of them.
+ */
+function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: string): boolean {
   // A warning ABOUT a failed write is itself a line, and the route it would take is the one that just failed.
   // Sending it there would ask the same I/O that is failing, once per warning, until the stack gives out, so
   // while one is being reported every line leaves by stderr and nothing touches the path.
   if (scope.reportingUndeliverableLine) {
     sayDiagnosticLineOnStderr(line);
-    return;
+    return false;
   }
   // A judged sink is owed only to the path its owner named, and only while that is still the path in
   // play: a scope that moved on to another log asks that one with a sink of its own.
@@ -421,11 +438,12 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     try {
       ensureDirectoryForLog(scope, logPath);
       fs.appendFileSync(logPath, line, 'utf8');
+      return true;
     } catch (error) {
       reportUndeliverableDiagnosticLine(scope, error);
       sayDiagnosticLineOnStderr(line);
+      return false;
     }
-    return;
   }
   // Asked at the FIRST line, never before one exists: a scope that logs nothing creates nothing,
   // changes no mode, and holds no descriptor. Every line after that answer, the forced final flush
@@ -436,15 +454,16 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
   // judgment is what is being made, and asking the factory again would open the path once per warning.
   if (scope.establishingLogSink) {
     sayDiagnosticLineOnStderr(line);
-    return;
+    return false;
   }
   const sink = scope.logSink ?? establishDiagnosticLineSink(scope, factory, logPath);
   if (!sink) {
     sayDiagnosticLineOnStderr(line);
-    return;
+    return false;
   }
   try {
-    if (!sink.write(line)) closeDiagnosticLineSink(scope);
+    if (sink.write(line)) return true;
+    closeDiagnosticLineSink(scope);
   } catch (error) {
     // A sink's `write` is not owed the caller's flow: the route is dropped so the next line is judged
     // again, and this one is said where a broken handle cannot swallow it.
@@ -452,6 +471,7 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     reportUndeliverableDiagnosticLine(scope, error);
     sayDiagnosticLineOnStderr(line);
   }
+  return false;
 }
 
 /**
@@ -490,11 +510,7 @@ function establishDiagnosticLineSink(
 
 /** One event's text, handed to the route that needs no path at all. */
 function sayDiagnosticLineOnStderr(line: string): void {
-  try {
-    process.stderr.write(line);
-  } catch {
-    // No sink is left to say it with.
-  }
+  writeHostStderrBestEffort(line);
 }
 
 /**
@@ -523,21 +539,21 @@ function reportUndeliverableDiagnosticLine(scope: DiagnosticsScope, reason: unkn
   } finally {
     scope.reportingUndeliverableLine = false;
   }
-  try {
-    process.stderr.write(
-      `${DIAGNOSTIC_STDERR_PREFIX}${JSON.stringify({ level: 'warn', phase: 'diagnostic_log_write_failed', error })}\n`,
-    );
-  } catch {
-    // No sink is left to say it with.
-  }
+  writeHostStderrBestEffort(
+    `${DIAGNOSTIC_STDERR_PREFIX}${JSON.stringify({ level: 'warn', phase: 'diagnostic_log_write_failed', error })}\n`,
+  );
 }
 
-/** Makes the directory a plain (unjudged) log path needs, and remembers it did. */
+/**
+ * Makes the directory a plain (unjudged) log path needs, and remembers it did — only once the host says
+ * it stands. A directory that failed to be made stays un-remembered, so a later line asks again instead
+ * of going quietly blind on a parent that was never created.
+ */
 function ensureDirectoryForLog(scope: DiagnosticsScope, logPath: string): void {
   const dir = path.dirname(logPath);
   if (scope.ensuredDirectories.has(dir)) return;
-  scope.ensuredDirectories.add(dir);
   fs.mkdirSync(dir, { recursive: true });
+  scope.ensuredDirectories.add(dir);
 }
 
 /** Lets go of the sink a scope holds so its descriptor cannot outlive the scope that earned it. */

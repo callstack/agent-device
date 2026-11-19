@@ -12,6 +12,7 @@ import {
 import {
   readCurrentOwnerIdentity,
   readProcessStartTime,
+  writeHostStderrBestEffort,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import {
@@ -207,22 +208,15 @@ function reportStateRecordFailure(logPath: string, phase: string, error: unknown
 }
 
 /**
- * Says out loud that a state sink was refused, on this process's own stderr, and survives a host that will
- * not take the write.
+ * Says out loud that a state sink was refused.
  *
  * For a detached daemon this stream is the log already: the launcher holds this process's stdout and stderr
  * open on the verified log descriptor. For an embedded runtime it is the host's own stream. Either way it is a
  * descriptor no entry inside a refused directory can steer, which is why refusals go here and never back to the
- * refused name. A redirected stderr whose pipe is closed throws out of `write`, and a refusal is not worth
- * losing a shutdown or a registration release over, so the write itself is the one thing here that is best
- * effort.
+ * refused name.
  */
 function reportRefusedStateSink(refusedPath: string, error: unknown, phase = 'refused'): void {
-  try {
-    process.stderr.write(`Daemon ${phase}: ${refusedPath}: ${normalizeError(error).message}\n`);
-  } catch {
-    // No sink is left. The refusal still stands as the answer the caller got.
-  }
+  writeHostStderrBestEffort(`Daemon ${phase}: ${refusedPath}: ${normalizeError(error).message}\n`);
 }
 
 /**
@@ -292,13 +286,9 @@ export function establishPrivateDaemonStateDir(stateDir: string): void {
  * is contained; the verdict is what the caller keeps either way.
  */
 function sayStateDirExposure(exposure: PrivateDirectoryExposure, directory: string): void {
-  try {
-    process.stderr.write(
-      `Daemon state dir ${directory} is not private: ${privateDirectoryWordingOf(exposure)}\n`,
-    );
-  } catch {
-    // The verdict stands; only the route it was said on failed.
-  }
+  writeHostStderrBestEffort(
+    `Daemon state dir ${directory} is not private: ${privateDirectoryWordingOf(exposure)}\n`,
+  );
 }
 
 /**

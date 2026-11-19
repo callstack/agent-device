@@ -17,7 +17,7 @@
 | [0013 Unified Gesture Plans](0013-unified-gesture-plans.md) | gesture API/routing, contact topology, multi-touch geometry, native pointer injection, two-finger pan |
 | [0014 Session Ref-Frame Lifetime](0014-session-ref-frame-lifetime.md) | ref authorization epochs, complete/partial issuance, pre-side-effect expiration, replay/batch compatibility, and cross-platform stale-mutation policy |
 | [0015 Direct Maestro Compatibility Engine](0015-direct-maestro-engine.md) | Maestro YAML parsing/execution, compatibility observation policy, conformance, performance gates, gesture integration |
-| [0016 Active-Session Script Publication](0016-active-session-script-publication.md) | publication of an armed open-to-destination `.ad` script that retains its live session |
+| [0016 Active-Session Script Publication](0016-active-session-script-publication.md) | publication of an armed open-to-destination `.ad` script that retains its live session, a caller-named destination guard, and the daemon state directory's route and standing-name rules |
 | [0017 Parameterized Recorded Inputs](0017-parameterized-recorded-inputs.md) | safe authoring of sensitive fill inputs as `${VAR}` placeholders across recording, replay, and repair |
 | [0018 Unified Request Event Journal (Partly accepted)](0018-unified-event-journal.md) | event/diagnostic vocabulary, journal scopes and sinks, progress-channel separation, observability-only state |
 | [0019 Request-Bound Platform Runtime](0019-request-bound-platform-runtime.md) | platform-package boundaries/composition, device discovery, runtime facts/facets, request binding, provider ownership, platform-shaped session resources, durable reattachment, daemon-handler migration |

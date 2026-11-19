@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { writeHostStderrBestEffort } from '@agent-device/host-kit/process';
 import {
   type DiagnosticLineSink,
   flushDiagnosticsToSessionFile,
@@ -147,11 +148,7 @@ function stderrSink(): DiagnosticLineSink {
 }
 
 function writeLineToStderr(line: string): void {
-  try {
-    process.stderr.write(line);
-  } catch {
-    // No sink left to say it with.
-  }
+  writeHostStderrBestEffort(line);
 }
 
 function sayOnStderr(line: string): void {
