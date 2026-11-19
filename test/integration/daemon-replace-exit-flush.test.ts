@@ -20,7 +20,7 @@ import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {
   pid: number;
-  processStartTime?: string;
+  processStartTimeToken?: string;
 };
 
 test('daemon replace mid-command returns a structured, parseable error and exits normally', async (t) => {
@@ -75,7 +75,7 @@ test('daemon replace mid-command returns a structured, parseable error and exits
     info = readDaemonInfo(stateDir);
     daemonPids.push(info.pid);
     const termination = await stopDaemonProcess(
-      { pid: info.pid, startTime: info.processStartTime ?? null },
+      { pid: info.pid, startTime: info.processStartTimeToken ?? null },
       { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
     );
     assert.notEqual(termination.status, 'retained', JSON.stringify(termination));

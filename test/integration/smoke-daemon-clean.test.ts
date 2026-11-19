@@ -16,7 +16,7 @@ import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {
   pid: number;
-  processStartTime?: string;
+  processStartTimeToken?: string;
 };
 
 test('clean daemon retains metadata when a live recorded process is not a verified daemon', () => {
@@ -129,7 +129,7 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
       // daemon: what the row retires is that lifetime, under that owner.
       observed: {
         pid: info.pid,
-        startTime: info.processStartTime ?? null,
+        startTime: info.processStartTimeToken ?? null,
         ownership: 'detached',
       },
       mode: 'force',
@@ -151,9 +151,9 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
  * daemon is a zombie until its new parent reaps it, and `kill(pid, 0)` still finds a zombie.
  */
 async function assertDaemonLifetimeEnded(info: DaemonInfo): Promise<void> {
-  assert.ok(info.processStartTime, 'the daemon record names its process start time');
+  assert.ok(info.processStartTimeToken, 'the daemon record names its process birth token');
   const wait = await waitForDaemonExit(
-    { pid: info.pid, startTime: info.processStartTime },
+    { pid: info.pid, startTime: info.processStartTimeToken },
     { timeoutMs: 0 },
   );
   assert.equal(wait.exited, true, `daemon pid ${info.pid} still runs its recorded lifetime`);

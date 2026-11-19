@@ -13,7 +13,11 @@ import {
   readRegisteredDaemonOwnership,
 } from '@agent-device/daemon-contracts/daemon-registration';
 
-type TestDaemonIdentity = { pid: number; processStartTime?: string };
+type TestDaemonIdentity = {
+  pid: number;
+  processStartTime?: string;
+  processStartTimeToken?: string;
+};
 
 /** Best-effort cleanup keeps primary test failures and unconfirmed daemon state. */
 export async function cleanupDaemonTestState(
@@ -23,7 +27,12 @@ export async function cleanupDaemonTestState(
   try {
     const paths = resolveDaemonPaths(stateDir);
     const identities: OwnerIdentity[] = observed
-      ? [{ pid: observed.pid, startTime: observed.processStartTime ?? null }]
+      ? [
+          {
+            pid: observed.pid,
+            startTime: observed.processStartTimeToken ?? observed.processStartTime ?? null,
+          },
+        ]
       : [];
     let registrationFailure: unknown;
     try {
