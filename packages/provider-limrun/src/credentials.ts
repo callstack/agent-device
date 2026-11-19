@@ -1,15 +1,15 @@
-import type { LimrunInstanceAccess, LimrunRuntimeOptions } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { LimrunIosModel, LimrunPlatform } from './device.ts';
+import type { LimrunInstanceAccess } from './instance-access.ts';
 
+/** The Limrun account and instance facts one host gives the provider. */
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
   region?: string;
-  iosModel?: LimrunRuntimeOptions['iosModel'];
+  iosModel?: LimrunIosModel;
   keepAlive?: boolean;
   instances?: LimrunInstanceAccess;
-  /** Directory the `--provider-network-logs` HAR files are written under. */
-  networkHarDir?: string;
 }>;
 
 const ACCOUNT_VARS = { apiKey: 'LIMRUN_API_KEY', region: 'LIMRUN_REGION' } as const;
@@ -24,40 +24,31 @@ const INSTANCE_VARS = {
 } as const;
 
 /** Every variable that selects which Limrun account or instance the credentials reach. */
-export const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
+const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
   ...Object.values(ACCOUNT_VARS),
   'LIMRUN_IOS_MODEL',
   ...INSTANCE_VARS.ios,
   ...INSTANCE_VARS.android,
 ];
 
-// Mirrors platformForLimrunLeaseBackend in provider-limrun, which exposes only its root entry, and
-// that entry loads the Limrun SDK; importing it here would load the SDK on every credential read.
-const LEASE_BACKEND_PLATFORMS: ReadonlyMap<string, 'ios' | 'android'> = new Map([
-  ['ios-instance', 'ios'],
-  ['android-instance', 'android'],
-]);
-
-/** The platform whose instance a Limrun lease backend reaches. */
-export function limrunPlatformForLeaseBackend(
-  leaseBackend: string | undefined,
-): 'ios' | 'android' | undefined {
-  return leaseBackend === undefined ? undefined : LEASE_BACKEND_PLATFORMS.get(leaseBackend);
-}
-
 /**
  * The variables a Limrun lease reads: the account variables plus the leased platform's instance
- * variables, or every variable when the lease backend names no platform.
+ * variables, or every variable when the lease backend names no platform. The per-backend narrowing
+ * is what lets a client fingerprint the credentials of the one platform its lease reaches.
  */
 export function limrunCredentialDeclaration(): Readonly<{
   variables: readonly string[];
   byBackend: Readonly<Record<string, readonly string[]>>;
 }> {
   const account = Object.values(ACCOUNT_VARS);
+  const backends: readonly [string, LimrunPlatform][] = [
+    ['ios-instance', 'ios'],
+    ['android-instance', 'android'],
+  ];
   return {
     variables: LIMRUN_CREDENTIAL_VARIABLES,
     byBackend: Object.fromEntries(
-      [...LEASE_BACKEND_PLATFORMS].map(([backend, platform]) => [
+      backends.map(([backend, platform]) => [
         backend,
         [
           ...account,
@@ -70,8 +61,25 @@ export function limrunCredentialDeclaration(): Readonly<{
 }
 
 /** The variables that give access to an existing instance of a platform. */
-export function limrunInstanceVariables(platform: 'ios' | 'android'): readonly string[] {
+export function limrunInstanceVariables(platform: LimrunPlatform): readonly string[] {
   return INSTANCE_VARS[platform];
+}
+
+/**
+ * The credentials one host must hold before Limrun can act on them: this reader's answer, or the
+ * typed refusal that names both ways in.
+ */
+export function requireLimrunCredentials(env: EnvMap): LimrunCredentials {
+  const credentials = readLimrunCredentials(env);
+  if (credentials) return credentials;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
+    {
+      reason: 'missing_provider_credentials',
+      hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
+    },
+  );
 }
 
 /**

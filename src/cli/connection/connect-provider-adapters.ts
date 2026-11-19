@@ -1,16 +1,11 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { requireResolvedProfilePlatform } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
-import { verifyLimrunConnection } from '@agent-device/provider-limrun';
-import { readVersion } from '@agent-device/host-kit/version';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { type EnvMap, type HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
-import { resolveLimrunConnectProfile } from './limrun-profile.ts';
-import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
@@ -18,9 +13,10 @@ import {
   primeProviderConnection,
   type ConnectProvider,
 } from './provider-policy.ts';
-import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
+import { builtinLimrunConnection } from '../../builtin-provider-plugins.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
+import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
@@ -52,10 +48,12 @@ type ConnectProviderAdapter = {
   verify(context: Pick<AdapterContext, 'flags' | 'env'>): Promise<ConnectVerification>;
 };
 
-/** Providers whose profile the CLI composes itself; every other provider supplies connection callbacks. */
-const CONNECT_PROVIDER_ADAPTERS: Readonly<
-  Record<'cloud' | 'proxy' | 'limrun', ConnectProviderAdapter>
-> = {
+/**
+ * The profiles the CLI composes itself: the routing identities answer with a saved connection's
+ * settings, not a provider's callbacks. Every real provider, built-in or installed, answers `resolve`
+ * and `verify` through connection callbacks.
+ */
+const CONNECT_PROVIDER_ADAPTERS: Readonly<Record<'cloud' | 'proxy', ConnectProviderAdapter>> = {
   cloud: {
     resolve: resolveCloudConnectProfile,
     verify: async () => ({
@@ -73,10 +71,6 @@ const CONNECT_PROVIDER_ADAPTERS: Readonly<
         'Proxy configuration saved. Access is checked by the first remote command.',
     }),
   },
-  limrun: {
-    resolve: resolveLimrunConnectProfile,
-    verify: verifyLimrun,
-  },
 };
 
 function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undefined {
@@ -85,13 +79,22 @@ function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undef
     : undefined;
 }
 
-/** Runs a provider's connection callbacks from its installed plugin. */
-async function withProviderConnection<T>(
+/**
+ * The connection callbacks one `connect` call runs: the built-in provider's own, composed by the
+ * root over the provider package's callbacks, or an installed plugin's through the registry. The
+ * built-in ids stay claimed against the store, so an installed plugin never answers for them.
+ */
+async function providerConnection(
   provider: string,
-  env: EnvMap,
-  run: (connection: PluginConnectionCallbacks) => Promise<T>,
-): Promise<T> {
-  return await withPluginConnection(provider, BUILTIN_PROVIDER_IDS, env, run);
+  host: HostEnvironment,
+): Promise<PluginConnectionCallbacks> {
+  if (provider === 'limrun') return await builtinLimrunConnection(host);
+  return await withPluginConnection(
+    provider,
+    BUILTIN_PROVIDER_IDS,
+    host.env,
+    async (connection) => connection,
+  );
 }
 
 export async function resolveConnectProviderProfile(options: {
@@ -131,10 +134,10 @@ export async function resolveConnectProviderProfile(options: {
   const adapter = builtinConnectAdapter(provider);
   const profile = adapter
     ? await adapter.resolve(context)
-    : await withProviderConnection(
+    : await resolveProviderConnectionProfile(
         provider,
-        env,
-        async (connection) => await resolveProviderConnectionProfile(provider, connection, context),
+        await providerConnection(provider, { env, cwd }),
+        context,
       );
   return { ...profile, provider };
 }
@@ -198,23 +201,9 @@ export async function verifyResolvedConnectProvider(
     cwd: host.cwd,
   };
   const adapter = builtinConnectAdapter(resolved.provider);
-  return adapter
-    ? await adapter.verify(context)
-    : await withProviderConnection(
-        resolved.provider,
-        context.env,
-        async (connection) => await connection.verify(context),
-      );
-}
-
-async function verifyLimrun(
-  context: Pick<AdapterContext, 'flags' | 'env'>,
-): Promise<ConnectVerification> {
-  return await verifyLimrunConnection({
-    ...readLimrunCredentials(context.env),
-    clientVersion: readVersion(),
-    platform: requireResolvedProfilePlatform(context.flags.platform, 'Limrun'),
-  });
+  if (adapter) return await adapter.verify(context);
+  const connection = await providerConnection(resolved.provider, host);
+  return await connection.verify(context);
 }
 
 function shouldUseProxyConnectShortcut(flags: CliFlags): boolean {
