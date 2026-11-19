@@ -2,7 +2,7 @@ import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { MaestroSelector } from './program-ir.ts';
-import type { MaestroPlatform } from './runtime-target-policy.ts';
+import type { MaestroRuntimePlatform } from './runtime-target-policy.ts';
 import {
   matchMaestroCandidatesWithResolver,
   rankMaestroCandidates,
@@ -18,7 +18,7 @@ import { isMaestroNodeVisible } from './snapshot-policy.ts';
 import { hasMaestroRecursiveRelations as hasRecursiveRelations } from './selector-relations.ts';
 import { orderMaestroClickableFirst, resolveMaestroClickability } from './runtime-clickability.ts';
 
-export type MaestroTargetQuery = {
+export type MaestroSnapshotTargetQuery = {
   selector: MaestroSelector;
   allowAtomicSelectorDispatch?: boolean;
 };
@@ -61,8 +61,8 @@ export type MaestroTargetResolution =
 
 export function resolveMaestroTargetFromSnapshot(
   snapshot: SnapshotState,
-  query: MaestroTargetQuery,
-  platform: MaestroPlatform,
+  query: MaestroSnapshotTargetQuery,
+  platform: MaestroRuntimePlatform,
   options: {
     interactiveBounds?: boolean;
     presentation?: MaestroInteractivePresentation;
@@ -154,7 +154,7 @@ function createPresentedNodeLookup(presentation: MaestroInteractivePresentation)
 
 function rankPresentedMaestroCandidates(
   snapshot: SnapshotState,
-  query: MaestroTargetQuery,
+  query: MaestroSnapshotTargetQuery,
   presentedNodes: ReturnType<typeof createPresentedNodeLookup>,
 ): MaestroRankedCandidates {
   const clickability = resolveMaestroClickability(snapshot, 'ios');
@@ -180,7 +180,7 @@ function rankPresentedMaestroCandidates(
 }
 
 function failedTargetResolution(
-  query: MaestroTargetQuery,
+  query: MaestroSnapshotTargetQuery,
   matches: SnapshotNode[],
   rankedMatches: SnapshotNode[],
   evidence: MaestroTargetEvidence,
@@ -241,7 +241,7 @@ function haveSameTapPoint(left: Rect, right: Rect): boolean {
 }
 
 function buildMaestroTargetEvidence(
-  query: MaestroTargetQuery,
+  query: MaestroSnapshotTargetQuery,
   matches: SnapshotNode[],
   visibleMatches: SnapshotNode[],
   target: SnapshotNode | undefined,

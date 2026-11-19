@@ -32,7 +32,7 @@ import {
 import {
   assertSupportedInteractionSurface,
   resolveInteractionTarget,
-  type InteractionTarget,
+  type InteractionRequestTarget,
   type ResolvedInteractionTarget,
 } from './resolution.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
@@ -91,7 +91,7 @@ export async function resolveGestureViewport(
 }
 
 export type LongPressCommandOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   durationMs?: number;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
@@ -100,7 +100,7 @@ export type LongPressCommandOptions = CommandContext & {
 export type { LongPressCommandResult };
 
 export type HoverCommandOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
 } & SettlePostActionObservationOptions;

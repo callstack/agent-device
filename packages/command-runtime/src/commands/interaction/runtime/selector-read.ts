@@ -17,7 +17,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
-  ElementTarget,
+  InteractionElementTarget,
   FindReadResult,
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
@@ -50,7 +50,7 @@ import {
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
 export type { WaitCommandOptions, WaitCommandResult } from './selector-wait.ts';
-export type { ElementTarget, ResolvedTarget };
+export type { InteractionElementTarget, ResolvedTarget };
 
 export type FindReadCommandOptions = CommandContext & {
   locator?: FindLocator;
@@ -64,7 +64,7 @@ export type FindReadCommandResult = FindReadResult;
 export type GetCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
     property: 'text' | 'attrs';
-    target: ElementTarget;
+    target: InteractionElementTarget;
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
   };

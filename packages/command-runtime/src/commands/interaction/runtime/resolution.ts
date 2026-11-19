@@ -10,8 +10,8 @@ import { containsPoint } from '@agent-device/kernel/rect';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
-  InteractionTarget,
-  PointTarget,
+  InteractionRequestTarget,
+  InteractionPointTarget,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
@@ -30,11 +30,11 @@ import {
   runInteractionPipelineStages,
 } from './target-visibility-stages.ts';
 
-export type { InteractionTarget, ResolvedInteractionTarget };
+export type { InteractionRequestTarget, ResolvedInteractionTarget };
 
 export async function resolveInteractionTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
+  options: CommandContext & { target: InteractionRequestTarget },
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   await assertSupportedInteractionSurface(runtime, options, params.action);
@@ -58,7 +58,7 @@ export async function resolveInteractionTarget(
 async function resolvePointTargetWarning(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: PointTarget,
+  target: InteractionPointTarget,
 ): Promise<string | undefined> {
   const session = await runtime.sessions.get(options.session ?? 'default');
   const snapshot = session?.snapshot;
@@ -87,7 +87,7 @@ async function resolvePointTargetWarning(
 async function resolvePointInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: PointTarget,
+  target: InteractionPointTarget,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   const warning = await resolvePointTargetWarning(runtime, options, target);
@@ -125,7 +125,7 @@ async function tryCaptureEvidenceBaseline(
 async function resolveSelectorInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  target: Extract<InteractionTarget, { kind: 'selector' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'selector' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   const selectorExpression = target.selector;

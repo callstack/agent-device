@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { InteractionTarget } from '@agent-device/contracts/interaction';
+import type { InteractionRequestTarget } from '@agent-device/contracts/interaction';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { asAppError } from '@agent-device/kernel/errors';
@@ -319,7 +319,7 @@ function matchingCaptureFlags(
   };
 }
 
-export function interactionTargetExtra(target: InteractionTarget): Record<string, unknown> {
+export function interactionTargetExtra(target: InteractionRequestTarget): Record<string, unknown> {
   if (target.kind === 'selector') return { selector: target.selector };
   if (target.kind === 'ref') {
     return { ref: target.ref.startsWith('@') ? target.ref.slice(1) : target.ref };

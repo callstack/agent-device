@@ -13,7 +13,7 @@ import type {
   MaestroSelectorEvidence,
   MaestroTargetMatch,
   MaestroTargetQuery,
-  MaestroTargetResolution,
+  MaestroInputTargetResolution,
 } from './runtime-port-types.ts';
 
 export async function observeMaestroCondition(
@@ -58,7 +58,7 @@ export async function resolveMaestroTarget(
   query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-): Promise<MaestroTargetResolution> {
+): Promise<MaestroInputTargetResolution> {
   const match = await operations.resolveTarget(
     { selector, ...query },
     operationContext(request, request.command),
@@ -80,7 +80,7 @@ export async function resolveMaestroTarget(
   };
 }
 
-export function observationForTarget(target: MaestroTargetResolution): MaestroObservation {
+export function observationForTarget(target: MaestroInputTargetResolution): MaestroObservation {
   const evidence: MaestroSelectorEvidence = {
     kind: 'selector',
     selector: target.selector,

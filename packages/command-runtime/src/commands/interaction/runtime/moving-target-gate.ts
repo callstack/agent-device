@@ -20,7 +20,7 @@
  */
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
-  InteractionTarget,
+  InteractionRequestTarget,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
@@ -246,7 +246,7 @@ type MovingTargetMeasurement =
  */
 export async function reObserveTarget(
   runtime: AgentDeviceRuntime,
-  options: CommandContext & { target: InteractionTarget },
+  options: CommandContext & { target: InteractionRequestTarget },
   params: ResolveInteractionTargetParams,
 ): Promise<MovingTargetObservation> {
   if (options.target.kind !== 'ref') {

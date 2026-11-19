@@ -86,7 +86,7 @@ export type OpenApplicationRuntime = BoundDeviceRuntime<typeof openApplicationRu
 export type RuntimeHintApplyOperation = BoundDeviceRuntime<
   typeof openApplicationWithRuntimeHintApplyUse
 >['operations']['applyRuntimeHints'];
-export type RuntimeHintClearOperation = BoundDeviceRuntime<
+export type OpenRuntimeHintClearOperation = BoundDeviceRuntime<
   typeof openApplicationWithRuntimeHintClearUse
 >['operations']['clearRuntimeHints'];
 
@@ -504,7 +504,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   lifecycle: OpenApplicationRuntime;
   runtimeHintPlan: ResolvedOpenRuntimeHintPlan;
   applyRuntimeHints?: RuntimeHintApplyOperation;
-  clearRuntimeHints?: RuntimeHintClearOperation;
+  clearRuntimeHints?: OpenRuntimeHintClearOperation;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   selection?: DeviceSelectionResult;
   platformServices: DaemonPlatformServices;

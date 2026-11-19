@@ -54,7 +54,7 @@ import {
   type OpenApplicationRuntime,
   type SessionOpenResult,
   type RuntimeHintApplyOperation,
-  type RuntimeHintClearOperation,
+  type OpenRuntimeHintClearOperation,
 } from './session-open-execution.ts';
 import { requireOpenSessionAdmission } from './session-open-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -99,7 +99,7 @@ type OpenRuntimeAdmission =
       type: 'runtime';
       runtime: OpenApplicationRuntime;
       applyRuntimeHints?: RuntimeHintApplyOperation;
-      clearRuntimeHints?: RuntimeHintClearOperation;
+      clearRuntimeHints?: OpenRuntimeHintClearOperation;
     }>
   | Readonly<{ type: 'response'; response: DaemonResponse }>;
 

@@ -20,7 +20,7 @@ export type SimulatorSnapshotSource = Readonly<{
 
 export function createSimulatorSnapshotSource(host: HostEnvironment): SimulatorSnapshotSource {
   let implementation:
-    | Promise<import('./snapshot-source/adapter.ts').SimulatorSnapshotSource>
+    | Promise<import('./snapshot-source/adapter.ts').SimulatorBridgeSnapshotSource>
     | undefined;
   let closed = false;
   const load = async () => {

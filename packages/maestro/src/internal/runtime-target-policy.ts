@@ -9,7 +9,7 @@ import { matchesMaestroRegex } from './selector-regex.ts';
 import { extractNodeText, normalizeText } from './shared.ts';
 import { isMaestroNodeVisible } from './snapshot-policy.ts';
 
-export type MaestroPlatform = 'ios' | 'android';
+export type MaestroRuntimePlatform = 'ios' | 'android';
 
 /**
  * Match the source-preserving selector IR directly. In particular, this does
@@ -48,7 +48,7 @@ export function matchesMaestroTypedSelector(
 export function filterVisibleMaestroMatches(params: {
   visibility: SnapshotVisibility;
   matches: SnapshotNode[];
-  platform: MaestroPlatform;
+  platform: MaestroRuntimePlatform;
 }): SnapshotNode[] {
   return params.matches.filter((node) =>
     isMaestroNodeVisible(node, params.visibility, params.platform),

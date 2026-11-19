@@ -1,5 +1,8 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import type { RefTarget, SelectorTarget } from '@agent-device/contracts/interaction';
+import type {
+  InteractionRefTarget,
+  InteractionSelectorTarget,
+} from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import type { FindLocator } from '@agent-device/selectors';
 
@@ -9,13 +12,16 @@ function shouldScopeFind(locator: string): boolean {
   return locator === 'text' || locator === 'label' || locator === 'any';
 }
 
-/** @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly. */
-export function selector(expression: string): SelectorTarget {
+/** @internal Target helper used by tests/examples; runtime callers compose `InteractionElementTarget` directly. */
+export function selector(expression: string): InteractionSelectorTarget {
   return { kind: 'selector', selector: expression };
 }
 
-/** @internal Target helper used by tests/examples; runtime callers compose `ElementTarget` directly. */
-export function ref(refInput: string, options: { fallbackLabel?: string } = {}): RefTarget {
+/** @internal Target helper used by tests/examples; runtime callers compose `InteractionElementTarget` directly. */
+export function ref(
+  refInput: string,
+  options: { fallbackLabel?: string } = {},
+): InteractionRefTarget {
   return {
     kind: 'ref',
     ref: refInput,
