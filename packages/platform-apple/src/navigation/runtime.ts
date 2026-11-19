@@ -27,8 +27,9 @@ const backVisionOsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'visionOS has no back command. Press the visible back control by its ref.',
 } as const);
-/** tvOS presses the remote's Menu button, macOS taps the window back control, and iOS and watchOS
- * press the navigation bar back button or swipe from the left edge. visionOS has no back. */
+/** tvOS presses the remote's Menu button, macOS taps the window back control, iOS presses the
+ * navigation bar back button or swipes from the left edge, and watchOS presses the navigation bar
+ * back button. visionOS has no back. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
   const os = resolveDeviceAppleOs(device);

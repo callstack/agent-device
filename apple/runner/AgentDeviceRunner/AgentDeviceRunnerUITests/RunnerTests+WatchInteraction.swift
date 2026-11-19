@@ -11,8 +11,6 @@ extension RunnerTests {
   static let watchInputSheetTimeout: TimeInterval = 3.0
   /// The input sheet's commit button. The sheet exposes no identifier for it.
   static let watchInputSheetDoneLabel = "Done"
-  /// How long the back edge swipe's pop animation may run before the screen is compared.
-  static let watchBackSettleInterval: TimeInterval = 0.6
   /// How long a crown scroll waits for its deceleration. A tap sent while the list still moves is
   /// absorbed by the scroll view instead of reaching its target.
   static let watchCrownSettleInterval: TimeInterval = 0.35
@@ -50,55 +48,27 @@ extension RunnerTests {
     return gestureResponse(message: "scrolled", timing: timing)
   }
 
-  /// Back on a watch presses the navigation bar's back button, else swipes in from the left edge,
-  /// the two ways watchOS pops a navigation stack.
+  /// Back on a watch presses the navigation bar's back button. watchOS pops a stack by edge swipe
+  /// only while that button is shown, so a screen without one has nothing back can do, and nothing
+  /// is sent.
   @MainActor
   func performWatchBack(app: XCUIApplication) throws -> InAppBackOutcome {
     // A push transition can briefly show two back buttons; only an unambiguous one is pressed.
     let buttons = app.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).allElementsBoundByIndex
-    if buttons.count == 1, let button = buttons.first, button.isHittable {
-      let frame = button.frame
-      switch try tapAt(app: app, x: frame.midX, y: frame.midY) {
-      case .performed:
-        return .performed
-      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
-        return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
-      }
-    }
-    let surface = try resolvedTouchReferenceFrame(app: app)
-    let before = watchScreenSignature(app: app)
-    var dragged: Result<RunnerInteractionOutcome, Error> = .success(.performed)
-    withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
-      dragged = Result {
-        try dragAt(
-          app: app,
-          x: surface.minX + 1,
-          y: surface.midY,
-          x2: surface.minX + surface.width * 0.8,
-          y2: surface.midY,
-          holdDuration: coordinateDragHoldDuration()
-        )
-      }
-    }
-    if case .unsupported(let message, let hint) = try dragged.get() {
-      return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
-    }
-    RunLoop.current.run(until: Date().addingTimeInterval(Self.watchBackSettleInterval))
-    guard let before, let after = watchScreenSignature(app: app) else {
-      return .unconfirmed(ErrorPayload(
-        code: RunnerWireErrorCode.backSwipeUnverified,
-        message: "The back swipe was sent, but the screen could not be read to verify it.",
-        hint: "Check the screen with snapshot before you retry."
-      ))
-    }
-    guard before != after else {
-      return .unconfirmed(ErrorPayload(
-        code: RunnerWireErrorCode.backSwipeNoChange,
-        message: "The back swipe changed nothing.",
+    guard buttons.count == 1, let button = buttons.first, button.isHittable else {
+      return .refused(ErrorPayload(
+        code: RunnerWireErrorCode.backSwipeNotDispatched,
+        message: "This screen has no navigation back button.",
         hint: "A root screen has nothing to go back to. Otherwise press the screen's close control by its ref from a fresh snapshot."
       ))
     }
-    return .performed
+    let frame = button.frame
+    switch try tapAt(app: app, x: frame.midX, y: frame.midY) {
+    case .performed:
+      return .performed
+    case .unsupported(let message, let hint), .notDispatched(let message, let hint):
+      return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
+    }
   }
 
   /// A one-finger planned gesture through the private synthesizer, which keeps the plan's timing. A
@@ -218,21 +188,6 @@ extension RunnerTests {
       y: point.map { Double($0.y) },
       textEntryRoute: "watch-input-sheet"
     ))
-  }
-
-  /// The visible screen's structure, read from one snapshot so a vanishing element cannot record an
-  /// XCTest failure: each element's type, identifier, and child count, in tree order. Labels and
-  /// frames are left out, so a ticking clock or timer cannot read as a navigation. `nil` when the
-  /// tree cannot be read.
-  private func watchScreenSignature(app: XCUIApplication) -> [String]? {
-    guard let root = try? app.snapshot() else { return nil }
-    var structure: [String] = []
-    func visit(_ node: any XCUIElementSnapshot) {
-      structure.append("\(node.elementType.rawValue)|\(node.identifier)|\(node.children.count)")
-      node.children.forEach(visit)
-    }
-    visit(root)
-    return structure
   }
 
   private func waitForWatchInputSheetToClose(app: XCUIApplication) -> Bool {
