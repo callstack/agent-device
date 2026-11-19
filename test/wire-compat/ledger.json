@@ -214,16 +214,21 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:bc620e6f98821fdfe7e65eb63404eb175ffd583730cb877fa5a5f9f4e80c9fe0",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:04d6896bb33922428758c50e03682c87b7dede328abb27f79eb76205574bee22",
-    "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
+    "packages/remote/src/session-script-destination.ts#publishScriptVersion": "sha256:03b834d0a7c9fab56a3e45bb8a318c2727f7dd43c3c0ff5f7e93e9f72708a6cc",
+    "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:1db8cbe2b7a58415c9362aec3023988bd5b17a6847a1a15e58b0856d92d69fa5",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
   },
   "compatibleChanges": [
     {
       "declaration": "packages/remote/src/session-script-destination.ts#publishScriptVersion",
-      "digest": "sha256:04d6896bb33922428758c50e03682c87b7dede328abb27f79eb76205574bee22",
-      "rationale": "#4677 changes only what the caller reports from its own disk. The caller still attempts staging cleanup if the final record-lock acquisition fails. A repeated version, found before the download or at the locked commit, and a version an interrupted commit may already have put in place, is settled and answered under the record lock, from the record read under that lock, before anything is staged, and a download that fails is decided under one final record lock that releases its staging first, reporting the committed version, a typed refusal of it, or the fetch error only when nothing matching is committed against the record as that lock settles it, the same state a commit writes: it reports the entry host-kit judges for the record's destination, without creating anything, only while that entry's content, read through one verified descriptor within the delivery cap and still the entry standing there unchanged, matches the SHA-256 the client's own record keeps for the committed version; otherwise the caller discloses a typed delivery failure (cause script_entry_changed, worded as unconfirmed when no commit ever confirmed the version, or script_entry_unverified when the newest committed version carries no digest) and the action keeps its result. A version whose staged bytes cannot be digested is not committed. The digest only verifies; it never chooses a path. Like #4565 before it, the change is local shape alone: the route, its request fields, its response fields, its status and its artifact framing are untouched, and so is the download contract this declaration consumes. A released daemon receives the same request and answers the same way, and a skewed peer parses every payload as before."
+      "digest": "sha256:03b834d0a7c9fab56a3e45bb8a318c2727f7dd43c3c0ff5f7e93e9f72708a6cc",
+      "rationale": "A repeated version, one no newer than the revision the client's own record committed, is answered from that record alone: the client reports the entry the commit created and adds a response warning that the file is not checked again, without downloading, reading, hashing or judging anything. The content digest, the script_entry_changed and script_entry_unverified causes, and the repeat-time destination walk are gone. A record that still carries a digest parses and the field is ignored. A first commit and the settlement of an interrupted commit are unchanged. The change is local shape alone: the route, its request fields, its response fields (warnings already exists), its status and its artifact framing are untouched, and so is the download contract this declaration consumes. A released daemon receives the same request and answers the same way, and a skewed peer parses every payload as before."
+    },
+    {
+      "declaration": "packages/remote/src/session-script-destination.ts#PublishOutcome",
+      "digest": "sha256:1db8cbe2b7a58415c9362aec3023988bd5b17a6847a1a15e58b0856d92d69fa5",
+      "rationale": "Adds the optional repeatedRevision number to the client-local success outcome, set when a version is answered from the client's own record. It never leaves the client: the caller turns it into an entry of the existing warnings array. No request field, response field, route, status or framing changes, so a released daemon and a skewed peer see the same payloads as before."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",

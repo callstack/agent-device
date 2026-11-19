@@ -205,7 +205,7 @@ function requireWindowsScriptDirectory(destination: string, directory: string): 
 }
 
 /** Windows reports a deleted share as a connection reset through libuv. */
-export function isWindowsShareUnavailable(file: string, error: unknown): boolean {
+function isWindowsShareUnavailable(file: string, error: unknown): boolean {
   return (
     process.platform === 'win32' &&
     /^[\\/]{2}/.test(file) &&
@@ -232,14 +232,6 @@ export type ScriptDestination = Readonly<{
   name: string;
   entry: string;
 }>;
-
-/**
- * Judges a destination that is already in place, creating nothing, and reports its entry: what a caller
- * answers about a version it published before (ADR 0016).
- */
-export function judgeScriptDestination(destination: string): ScriptDestination {
-  return scriptDestination(destination, false);
-}
 
 /**
  * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller

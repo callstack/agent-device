@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -110,10 +109,6 @@ export function soleRecord(stateDir: string) {
   if (entries.length !== 1) throw new Error(`Expected one script record, got ${entries.length}`);
   const file = path.join(recordsDirectory(stateDir), entries[0]!);
   return { file, record: JSON.parse(fs.readFileSync(file, 'utf8')) };
-}
-
-export function sha256(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
 }
 
 /** Answers a request the way the daemon does and materializes the answer like the client. */

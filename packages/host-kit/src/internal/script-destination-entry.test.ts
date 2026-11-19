@@ -12,7 +12,6 @@ import {
 } from './script-destination-host.fixtures.ts';
 import {
   confirmScriptDestination,
-  judgeScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,
 } from './script-destination.ts';
@@ -271,7 +270,6 @@ test.each([
     };
     for (const attempt of [
       () => prepareScriptDestination(destination),
-      () => judgeScriptDestination(destination),
       () => confirmScriptDestination(destination, prepared),
     ]) {
       expect(attempt).toThrow(
