@@ -53,13 +53,11 @@ export type CaptureGrant = Readonly<{
 
 /** Finite admission: at most this many grant records per state directory (prior design choice). */
 const MAX_CAPTURE_GRANTS = 64;
-/**
- * Finite admission, aggregate: the serialized metadata of ALL grant records in one state
- * directory may not exceed this TOTAL. Admission reserves room for the incoming record — the
- * store is refused once existing bytes plus the new record would pass the cap, so the budget is
- * never exceeded and there is always headroom for growth up to it. (prior design choice)
- */
+/** Aggregate serialized metadata limit per state directory. */
 const MAX_CAPTURE_GRANT_STORE_METADATA_BYTES = 8 * 1024 * 1024;
+// A transition can lengthen the state and update the timestamp. Reserve their maximum growth.
+const CAPTURE_GRANT_TRANSITION_BYTES =
+  'pending-recovery'.length - 'open'.length + String(Number.MIN_SAFE_INTEGER).length;
 /**
  * A KNOWN-FINISHED record untouched for this long is expired by the sweep. Open and
  * pending-recovery records are retained evidence and are never swept, however old.
@@ -170,7 +168,8 @@ export async function admitCaptureGrant(params: {
         hint: 'Finish or close the open captures, or clear stale records under remote-connections/capture-grants in the agent-device state directory.',
       });
     }
-    if (census.bytes + incomingBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
+    const reservedBytes = (census.count + 1) * CAPTURE_GRANT_TRANSITION_BYTES;
+    if (census.bytes + incomingBytes + reservedBytes > MAX_CAPTURE_GRANT_STORE_METADATA_BYTES) {
       throw new AppError(
         'COMMAND_FAILED',
         'The retained remote capture grant metadata exceeds the aggregate size limit.',

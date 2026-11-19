@@ -550,48 +550,46 @@ test('aggregate admission refuses beyond 64 records and the bounded sweep reclai
   }
 });
 
-test('aggregate admission refuses when TOTAL metadata would pass 8 MiB, reserving room for the new record', async (t) => {
+test('aggregate admission reserves bytes for later grant state changes', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant byte cap')) return;
   const world = makeWorld('agent-device-capture-grant-bytes-');
   const server = http.createServer((_req, res) => res.end('bytes'));
   try {
     const port = await listenOnLoopback(server);
     const baseUrl = world.endpoint(port).baseUrl;
-    const makeReq = (session: string): DaemonWireRequest => ({
+    const req: DaemonWireRequest = {
       token: 'secret',
       command: 'record',
-      session,
-      positionals: ['start', `clips/${session}`],
+      session: 'capture',
+      positionals: ['start', 'clips/demo'],
       meta: { cwd: world.root },
-    });
-    // One record whose serialized metadata nearly fills (but stays under) the 8 MiB aggregate
-    // budget, so it is admitted.
-    const bigDestination = path.join(
-      world.root,
-      'clips',
-      `big-${'x'.repeat(8 * 1024 * 1024 - 512)}`,
-    );
-    await admitCaptureGrant({
+    };
+    const options = {
       stateDir: world.stateDir,
       baseUrl,
-      req: makeReq('big'),
-      slot: 'record',
-      destination: bigDestination,
-    });
-    // The count cap is nowhere near (2 records), but the aggregate byte budget is: the next
-    // admission is refused because existing bytes plus the new record would pass 8 MiB TOTAL.
-    await expect(
-      admitCaptureGrant({
-        stateDir: world.stateDir,
-        baseUrl,
-        req: makeReq('overflow'),
-        slot: 'record',
-        destination: path.join(world.root, 'clips', 'overflow'),
-      }),
-    ).rejects.toMatchObject({
+      req,
+      slot: 'record' as const,
+      destination: path.join(world.root, 'clips', 'demo'),
+    };
+    const limit = 8 * 1024 * 1024;
+    const grantId = await admitCaptureGrant(options);
+    const file = path.join(
+      world.stateDir,
+      'remote-connections',
+      'capture-grants',
+      `${grantId}.json`,
+    );
+    const original = fs.readFileSync(file);
+    const record = JSON.parse(original.toString('utf8')) as CaptureGrant;
+    const destination = record.destination + 'x'.repeat(limit - 2 * original.byteLength);
+    fs.writeFileSync(file, `${JSON.stringify({ ...record, destination })}\n`);
+    expect(fs.statSync(file).size + original.byteLength).toBe(limit);
+
+    // The incoming record fits exactly as written, but would leave no room to settle either grant.
+    await expect(admitCaptureGrant(options)).rejects.toMatchObject({
       details: expect.objectContaining({
         reason: 'capture_grant_admission_refused',
-        limit: 8 * 1024 * 1024,
+        limit,
       }),
     });
   } finally {
