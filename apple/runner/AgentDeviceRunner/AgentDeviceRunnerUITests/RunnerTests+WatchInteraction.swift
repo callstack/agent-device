@@ -220,20 +220,19 @@ extension RunnerTests {
     ))
   }
 
-  /// A cheap identity of the visible screen: the navigation bar and the first texts, read from one
-  /// snapshot so a vanishing element cannot record an XCTest failure. `nil` when it cannot be read.
+  /// The visible screen's structure, read from one snapshot so a vanishing element cannot record an
+  /// XCTest failure: each element's type, identifier, and child count, in tree order. Labels and
+  /// frames are left out, so a ticking clock or timer cannot read as a navigation. `nil` when the
+  /// tree cannot be read.
   private func watchScreenSignature(app: XCUIApplication) -> [String]? {
     guard let root = try? app.snapshot() else { return nil }
-    var labels: [String] = []
+    var structure: [String] = []
     func visit(_ node: any XCUIElementSnapshot) {
-      guard labels.count < 8 else { return }
-      if node.elementType == .navigationBar || node.elementType == .staticText {
-        labels.append(node.label)
-      }
+      structure.append("\(node.elementType.rawValue)|\(node.identifier)|\(node.children.count)")
       node.children.forEach(visit)
     }
     visit(root)
-    return labels
+    return structure
   }
 
   private func waitForWatchInputSheetToClose(app: XCUIApplication) -> Bool {
