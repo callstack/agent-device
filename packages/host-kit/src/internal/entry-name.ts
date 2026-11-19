@@ -101,16 +101,11 @@ export function scriptEntryName(spelled: string, rules: path.PlatformPath): stri
   }
   // The raw last segment first: a normalization folds a final `.` or `..` away.
   const { base } = rules.parse(spelled);
-  if (base === '' || base === '.' || base === '..' || exceedsNameMax(base, rules)) return undefined;
+  // A name longer than one directory entry holds, 255 UTF-8 bytes on the common POSIX filesystems and 255 UTF-16
+  // units on NTFS, is refused before anything is created, instead of failing after its parent was made.
+  const length = rules.sep === '\\' ? base.length : Buffer.byteLength(base);
+  if (base === '' || base === '.' || base === '..' || length > NAME_MAX) return undefined;
   return rules.sep === '\\' ? windowsEntryName(rules.normalize(spelled), rules) : base;
-}
-
-/**
- * Whether a name is longer than one directory entry can hold: 255 UTF-8 bytes on the common POSIX filesystems,
- * 255 UTF-16 units on NTFS. Refused before anything is created, instead of failing after its parent was made.
- */
-function exceedsNameMax(name: string, rules: path.PlatformPath): boolean {
-  return (rules.sep === '\\' ? name.length : Buffer.byteLength(name)) > NAME_MAX;
 }
 
 const NAME_MAX = 255;
