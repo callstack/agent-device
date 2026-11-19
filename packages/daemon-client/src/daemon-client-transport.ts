@@ -30,7 +30,6 @@ import {
   refuseOversizedDaemonRequest,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
-import { bindCaptureRequest, type CaptureBinding } from '@agent-device/remote/daemon-artifacts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -53,8 +52,6 @@ type SendRequestOptions = {
    * how an attach client and the quiesce request itself time out.
    */
   timeoutRecovery?: 'retire-unresponsive' | 'none';
-  /** The recording grant binding of this logical request (#4518). `sendRequest` sets it. */
-  capture?: CaptureBinding;
 };
 
 /**
@@ -396,18 +393,9 @@ export async function sendRequest(
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  // #4518: one binding per logical request, made before any attempt. A canceled request binds none.
-  const capture =
-    isRemoteDaemon(info) && !options.signal?.aborted
-      ? await bindCaptureRequest(req, info, statePaths.baseDir)
-      : undefined;
   try {
-    return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, {
-      ...options,
-      capture,
-    });
+    return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, options);
   } catch (error) {
-    await settleUndispatchedCapture(capture, error);
     const failure = await recoverFromTimeout(error, info, req, statePaths, options);
     const transport = classifyTransportFailure(failure);
     if (!transport) throw failure;
@@ -415,16 +403,6 @@ export async function sendRequest(
     const { discloseRequestFailure } = await import('./daemon-client-dispatch-disclosure.ts');
     throw discloseRequestFailure(transport.failure, req, transport.sent);
   }
-}
-
-/** A request that provably never left this process settles its binding as not delivered. */
-async function settleUndispatchedCapture(
-  capture: CaptureBinding | undefined,
-  error: unknown,
-): Promise<void> {
-  if (!capture || !(error instanceof AppError)) return;
-  if (error.details?.dispatched !== 'no' && error.details?.daemonRequestSent !== false) return;
-  await capture.settle({ ok: false, error: { code: error.code, message: error.message } });
 }
 
 async function recoverFromTimeout(
@@ -857,13 +835,16 @@ async function sendHttpRequest(
       detachCallerAbort();
       reject(error);
     };
+    // Once the answer arrives, artifact delivery owns the caller abort and settles after cleanup.
+    let delivering = false;
     const handleBody = (body: string): void => {
+      delivering = true;
       handleDaemonHttpResponseBody(body, {
         info,
         req,
         stateDir: statePaths.baseDir,
         host: options.host,
-        capture: options.capture,
+        signal: callerSignal,
         resolve: resolveOnce,
         reject: rejectOnce,
       });
@@ -939,7 +920,7 @@ async function sendHttpRequest(
     // first so the `error` the destroy surfaces arrives after `settled` and cannot rewrite the
     // typed cancellation into a transport failure.
     const onCallerAbort = (): void => {
-      if (settled) return;
+      if (settled || delivering) return;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       rejectOnce(
         abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),

@@ -268,66 +268,46 @@ test('a sent request for a command without a declared effect gets no dispatch ve
   );
 });
 
-/** An abort signal that reports aborted from its second read on: a cancel that lands mid-bind. */
-function abortsAfterFirstCheck(): AbortSignal {
-  let reads = 0;
-  return {
-    get aborted() {
-      reads += 1;
-      return reads > 1;
-    },
-    reason: new Error('canceled'),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    throwIfAborted: () => {},
-  } as unknown as AbortSignal;
-}
-
-// #4518: a record start that never ran keeps no recording grant.
-test.for(['daemon rejection', 'connection refused', 'cancel during binding'] as const)(
-  'a record start drops its grant after a %s',
-  async (failure, t) => {
-    if (await skipWhenLoopbackUnavailable(t, 'record start grant settlement')) return;
-    const paths = statePaths();
-    const grantsDir = path.join(paths.baseDir, 'remote-connections', 'capture-destinations');
-    const server = http.createServer((req, res) => {
-      req.resume();
-      req.on('end', () => {
-        res.end(JSON.stringify({ jsonrpc: '2.0', error: { message: 'fixture rejection' } }));
-      });
-    });
-    const port = await listenOnLoopback(server);
-    if (failure === 'connection refused') await closeLoopbackServer(server);
-    try {
-      const start = request(PUBLIC_COMMANDS.record);
-      await assert.rejects(
-        sendRequest(
-          { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` },
-          {
-            ...start,
-            positionals: ['start'],
-            meta: {
-              ...start.meta,
-              clientArtifactPaths: { outPath: path.join(paths.baseDir, 'demo') },
-            },
-          },
-          'http',
-          paths,
-          undefined,
-          {
-            host: createTestHostEnvironment(),
-            ...(failure === 'cancel during binding' ? { signal: abortsAfterFirstCheck() } : {}),
-          },
-        ),
-        AppError,
-      );
-      const remaining = fs.existsSync(grantsDir)
-        ? fs.readdirSync(grantsDir).filter((name) => name.endsWith('.json'))
-        : [];
-      assert.deepEqual(remaining, []);
-    } finally {
-      if (server.listening) await closeLoopbackServer(server);
-      fs.rmSync(paths.baseDir, { recursive: true, force: true });
+// #4518: a caller abort after the RPC answer still stops the artifact delivery it started.
+test('a caller abort after a record stop answer stops the artifact download', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'record stop cancellation')) return;
+  const paths = statePaths();
+  const cwd = path.join(paths.baseDir, 'cwd');
+  fs.mkdirSync(cwd);
+  const controller = new AbortController();
+  const server = http.createServer((req, res) => {
+    if (req.url?.includes('/artifacts/')) {
+      res.write('video-');
+      controller.abort();
+      res.end('bytes');
+      return;
     }
-  },
-);
+    req.resume();
+    req.on('end', () => {
+      const artifact = { artifactId: 'rec', field: 'outPath', fileName: 'demo.mp4' };
+      res.end(
+        JSON.stringify({ jsonrpc: '2.0', result: { ok: true, data: { artifacts: [artifact] } } }),
+      );
+    });
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    const stop = request(PUBLIC_COMMANDS.record);
+    await assert.rejects(
+      sendRequest(
+        { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` },
+        { ...stop, positionals: ['stop'], meta: { ...stop.meta, cwd } },
+        'http',
+        paths,
+        undefined,
+        { host: createTestHostEnvironment(), signal: controller.signal },
+      ),
+      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+    // The rejection waits for cleanup, so neither the file nor its staging remains.
+    assert.deepEqual(fs.readdirSync(cwd), []);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(paths.baseDir, { recursive: true, force: true });
+  }
+});

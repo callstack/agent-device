@@ -99,9 +99,9 @@ test.for<MaterializationCase>([
     expected: 'cwd/x',
   },
   {
-    // #4518: without a destination this client saved at start, a record stop's response
-    // localPath is never trusted; it lands in cwd.
-    name: 'a record stop without a saved destination refuses the response localPath to cwd',
+    // #4518: a record stop never trusts a response localPath; without a requested destination
+    // it lands in cwd.
+    name: 'a record stop refuses the response localPath to cwd',
     command: 'record',
     localPath: 'client/clip.mp4',
     fileName: 'clip.mp4',

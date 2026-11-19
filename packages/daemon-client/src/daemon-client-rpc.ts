@@ -13,7 +13,6 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
-  type CaptureBinding,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
@@ -28,16 +27,17 @@ export function handleDaemonHttpResponseBody(
     req: DaemonWireRequest;
     stateDir: string;
     host: HostEnvironment;
-    capture?: CaptureBinding;
+    /** The caller's cancellation, which still stops artifact delivery after the answer arrived. */
+    signal?: AbortSignal;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, capture, resolve, reject } = options;
+  const { info, req, stateDir, host, signal, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, capture, reject });
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -53,7 +53,7 @@ export function handleDaemonHttpResponseBody(
       info,
       req,
       parsed.result,
-      { host, stateDir, capture },
+      { host, stateDir, signal },
       resolve,
       reject,
     );
@@ -95,7 +95,6 @@ async function rejectDaemonHttpRpcError(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
-    capture?: CaptureBinding;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
@@ -106,8 +105,6 @@ async function rejectDaemonHttpRpcError(
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  // #4518: a daemon refusal settles the recording grants this request bound before dispatch.
-  await options.capture?.settle({ ok: false, error: payload });
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,
@@ -201,7 +198,7 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  client: { host: HostEnvironment; stateDir: string; capture?: CaptureBinding },
+  client: { host: HostEnvironment; stateDir: string; signal?: AbortSignal },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
@@ -214,7 +211,7 @@ async function resolveDaemonHttpResult(
             result,
             client.host,
             client.stateDir,
-            client.capture,
+            client.signal,
           )
         : result,
     );
