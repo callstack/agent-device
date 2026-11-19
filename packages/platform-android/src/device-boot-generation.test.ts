@@ -12,7 +12,10 @@ vi.mock('@agent-device/host-kit/process', () => ({
   hostPlatform: mocks.hostPlatform,
 }));
 
-import { inspectAndroidEmulatorGeneration } from './device-boot.ts';
+import {
+  inspectAndroidEmulatorGeneration,
+  readAndroidEmulatorLaunchStartTime,
+} from './device-boot.ts';
 
 const observeAndroidEmulatorGeneration = async (
   ...args: Parameters<typeof inspectAndroidEmulatorGeneration>
@@ -116,4 +119,35 @@ test('a shared deadline caps each read and stops reads once it is spent', async 
     expect.any(Array),
     expect.objectContaining({ timeoutMs: 3_000 }),
   );
+});
+
+test('a slow launch start time read is retried once with the full budget', async () => {
+  mocks.readProcessIdentityFacts
+    .mockRejectedValueOnce(new Error('ps timed out after 5000ms'))
+    .mockResolvedValueOnce({ startTime: 'launch', zombie: false });
+  expect(await readAndroidEmulatorLaunchStartTime(4242)).toBe('launch');
+  expect(mocks.readProcessIdentityFacts.mock.calls).toEqual([
+    [4242, 5_000],
+    [4242, 5_000],
+  ]);
+});
+
+test('a zombie launch has no start time and is not read again', async () => {
+  mocks.readProcessIdentityFacts.mockResolvedValueOnce({ startTime: null, zombie: true });
+  expect(await readAndroidEmulatorLaunchStartTime(4242)).toBeNull();
+  expect(mocks.readProcessIdentityFacts).toHaveBeenCalledTimes(1);
+});
+
+test('the process read gets only what the shared deadline still has', async () => {
+  const remaining = [5_000, 1_200];
+  const deadline = {
+    remainingMs: () => remaining.shift() ?? 0,
+    elapsedMs: () => 0,
+    isExpired: () => false,
+  };
+  expect(await observeAndroidEmulatorGeneration(device, { deadline })).toEqual({
+    pid: 42,
+    startTime: 'start',
+  });
+  expect(mocks.readProcessIdentityFacts).toHaveBeenCalledWith(42, 1_200);
 });
