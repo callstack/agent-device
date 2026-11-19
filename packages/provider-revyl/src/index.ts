@@ -67,3 +67,4 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
 }
 
 export { revyl as default };
+export { revylSessionIdForLease } from './session-identity.ts';
