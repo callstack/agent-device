@@ -17,6 +17,7 @@ export type SnapshotProducer =
   | 'simulator-ax-bridge'
   | 'appium-source'
   | 'revyl-ios-tree'
+  | 'vphone-ios-tree'
   | 'revyl-android-tree'
   | 'android-uiautomator'
   | 'cdp-dom'
@@ -122,6 +123,14 @@ export const SNAPSHOT_PRODUCERS = {
     refs: 'dense',
     sparseRootWarning: 'none',
   },
+  'vphone-ios-tree': {
+    channels: ['xctest'],
+    truncation: 'unavailable',
+    residue: 'provider-derived',
+    quietMs: GENERAL_QUIET_MS,
+    refs: 'dense',
+    sparseRootWarning: 'none',
+  },
   'revyl-android-tree': {
     channels: ['android'],
     truncation: 'unavailable',
@@ -210,7 +219,7 @@ type ProducerOnChannel<Backend extends SnapshotBackend> = {
 /**
  * The channel↔producer pairs that can actually occur, derived from {@link SNAPSHOT_PRODUCERS}.
  * `xctest` trees come from the local Apple runner, the Simulator AX bridge, Appium page-source XML,
- * or a cloud provider's AX element tree (Revyl), and only the runner's output has been through its
+ * or a cloud provider's AX element tree (Revyl or vphone), and only the runner's output has been through its
  * presentation (clip fold, effective geometry, scope). Logic that assumes those guarantees must key
  * on the producer, never on the channel alone.
  *

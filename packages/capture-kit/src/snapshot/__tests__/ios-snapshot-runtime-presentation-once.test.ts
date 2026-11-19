@@ -24,6 +24,7 @@ const ACQUISITION_PRODUCERS: readonly IosAcquisitionProducer[] = [
   'simulator-ax-bridge',
   'appium-source',
   'revyl-ios-tree',
+  'vphone-ios-tree',
 ];
 const PRODUCERS: readonly IosSnapshotProducer[] = ['apple-runner', ...ACQUISITION_PRODUCERS];
 

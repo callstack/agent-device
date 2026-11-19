@@ -305,6 +305,7 @@ export const ARCHITECTURE_OWNERSHIP = {
         'packages/provider-limrun/',
         'packages/provider-revyl/',
         'packages/provider-testmu/',
+        'packages/provider-vphone/',
         'packages/provider-tizen/',
         'packages/provider-webdriver/',
         'packages/provider-webos/',

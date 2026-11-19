@@ -67,6 +67,7 @@
     { "path": "../../packages/provider-testmu" },
     { "path": "../../packages/provider-webos" },
     { "path": "../../packages/provider-tizen" },
+    { "path": "../../packages/provider-vphone" },
     { "path": "../../packages/provider-webdriver" },
     { "path": "../../packages/provision-kit" },
     { "path": "../../packages/proxy" },
