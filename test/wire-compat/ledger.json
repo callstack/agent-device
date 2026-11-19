@@ -42,7 +42,7 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
     "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:5d111b5cb758578d810f2540086d2730459a80ee56f2fb9c14555bd6fe4e1792",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:24a9fd4934a5df4960c59f8ac594f9ad8dd3d04f315e6996098cc2503f8d7c0d",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:92d6d962ef3b5deddcf91ee922ea0686a7efb11821d3d92769dc3f1f82e7e5c2",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:75226219f3d2475b59b297593346879c5211f56530a45494ff696b435e002bce",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
@@ -181,7 +181,7 @@
     "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:3b0678250f72dca4ac1709103fd4c540dedd4d488eb3299ace5ce6b7c479676c",
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:b2941b47820a15e3a78e2d4d3cb6e3cd190101e1fb7b4a756d917ab14bcc3506",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:33aa3522e2749bc7188cb5b8584f898554e900af3c6faa69db3d0c6ea5bb20b5",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:0359ad2fd9b8994604b433efda9fe1373a525097a2f95b44fa2593439c5f8ed2",
     "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:7a7e46dd2ddec3b1633583a3afd344eed759167713ae03ab3239f2905cf6f4ec",
@@ -583,8 +583,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
-      "digest": "sha256:24a9fd4934a5df4960c59f8ac594f9ad8dd3d04f315e6996098cc2503f8d7c0d",
-      "rationale": "#4518 client-side only: an error answer to a finishing capture marks the scope's persisted open grants pending-recovery (never one guessed grant), and an error answer to a capture start settles only the grant the request's own meta.captureGrantId named as finished. The JSON-RPC request and error payloads are unchanged; a released daemon's error is accepted exactly as before."
+      "digest": "sha256:92d6d962ef3b5deddcf91ee922ea0686a7efb11821d3d92769dc3f1f82e7e5c2",
+      "rationale": "#4518 client-side only: an error answer to a finishing capture marks the scope's persisted open grants pending-recovery (never one guessed grant), and an error answer to a capture start removes only the grant the request's own meta.captureGrantId named. Both updates are awaited before the caller receives the error. The JSON-RPC request and error payloads are unchanged; a released daemon's error is accepted exactly as before."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
@@ -593,7 +593,7 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:b2941b47820a15e3a78e2d4d3cb6e3cd190101e1fb7b4a756d917ab14bcc3506",
+      "digest": "sha256:33aa3522e2749bc7188cb5b8584f898554e900af3c6faa69db3d0c6ea5bb20b5",
       "rationale": "#4518 client-side only: threads the grant context into path resolution and settles the matched grant finished. Download URLs, framing, and every non-capture artifact path are unchanged."
     },
     {

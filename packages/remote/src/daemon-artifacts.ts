@@ -42,7 +42,6 @@ export type PreparedRemoteRequest = {
   installSource?: NonNullable<DaemonWireRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
   clientArtifactPaths?: Record<string, string>;
-  captureGrantId?: string;
 };
 
 export async function prepareRemoteRequestArtifacts(
@@ -50,7 +49,6 @@ export async function prepareRemoteRequestArtifacts(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
-  stateDir?: string,
 ): Promise<PreparedRemoteRequest> {
   if (!isRemoteDaemon(info)) {
     return await prepareRemoteRequestArtifactsWithinBudget(req, info, signal, host);
@@ -58,7 +56,7 @@ export async function prepareRemoteRequestArtifacts(
   return await withUploadPreparationDeadline(
     signal,
     async (preparationSignal) =>
-      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host, stateDir),
+      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host),
   );
 }
 
@@ -67,7 +65,6 @@ async function prepareRemoteRequestArtifactsWithinBudget(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
-  stateDir?: string,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
@@ -88,7 +85,6 @@ async function prepareRemoteRequestArtifactsWithinBudget(
 
   flags = prepareRemoteScriptOutput(req, flags, clientArtifactPaths, host);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
-  const captureGrantId = await admitCaptureStartGrant(req, info, stateDir, clientArtifactPaths);
   const remoteInstallSource = await prepareRemoteInstallSource(
     req,
     info,
@@ -108,7 +104,6 @@ async function prepareRemoteRequestArtifactsWithinBudget(
       installSource,
       uploadedArtifactId,
       clientArtifactPaths,
-      captureGrantId,
     });
 
   if (req.command !== 'install' && req.command !== 'reinstall') return baseResult();
@@ -238,7 +233,6 @@ function createPreparedRemoteRequest(
     ...(Object.keys(result.clientArtifactPaths).length > 0
       ? { clientArtifactPaths: result.clientArtifactPaths }
       : {}),
-    ...(result.captureGrantId === undefined ? {} : { captureGrantId: result.captureGrantId }),
   };
 }
 
@@ -307,23 +301,21 @@ async function prepareRemoteInstallSource(
  * accepted-but-answerless start still retains its matching authority in a later CLI process.
  * Returns the grant ID the transport should carry in `meta.captureGrantId`, or `undefined`.
  */
-async function admitCaptureStartGrant(
-  req: Omit<DaemonWireRequest, 'token'>,
+export async function admitCaptureStartGrant(
+  req: DaemonWireRequest,
   info: DaemonArtifactEndpoint,
-  stateDir: string | undefined,
-  clientArtifactPaths: Record<string, string>,
+  stateDir: string,
 ): Promise<string | undefined> {
-  if (stateDir === undefined || !info.baseUrl) return undefined;
+  if (!info.baseUrl || req.command !== 'record') return undefined;
+  const destination = req.meta?.clientArtifactPaths?.outPath;
+  if (!hasNonEmptyString(destination)) return undefined;
   const grants = await import('./capture-grant.ts');
   if (!grants.isCaptureStartRequest(req)) return undefined;
-  const slot = grants.captureSlotOfCommand(req.command);
-  const destination = clientArtifactPaths.outPath;
-  if (slot === undefined || !hasNonEmptyString(destination)) return undefined;
   return await grants.admitCaptureGrant({
     stateDir,
     baseUrl: info.baseUrl,
     req,
-    slot,
+    slot: 'record',
     destination,
   });
 }
@@ -534,7 +526,7 @@ export async function noteUncertainFinishingCapture(
   stateDir: string,
 ): Promise<void> {
   try {
-    if (!info.baseUrl) return;
+    if (!info.baseUrl || req.command !== 'record') return;
     const grants = await import('./capture-grant.ts');
     const slot = grants.captureSlotOfCommand(req.command);
     if (slot === undefined || !grants.finishesCaptureRequest(req)) return;
@@ -560,11 +552,8 @@ export async function noteUncertainFinishingCapture(
 }
 
 /**
- * #4518: settles the grant a REJECTED capture start named in its own request evidence
- * (`meta.captureGrantId` this process minted and sent) as finished — the start reached a known
- * negative outcome, so the sweep may reclaim the record once stale. Bounded to exactly the
- * record the request evidence names; uncertain records (no response, unknown scope) are never
- * cleared, and admission refusal remains the bounded backstop. Never throws.
+ * Releases the grant for a start known to have failed before execution. The request's own
+ * grant ID and scope identify the only record eligible for removal. Never throws.
  */
 export async function noteFailedCaptureStart(
   info: DaemonArtifactEndpoint,
@@ -572,7 +561,7 @@ export async function noteFailedCaptureStart(
   stateDir: string,
 ): Promise<void> {
   try {
-    if (!info.baseUrl) return;
+    if (!info.baseUrl || !req.meta?.captureGrantId) return;
     const grants = await import('./capture-grant.ts');
     const slot = grants.captureSlotOfCommand(req.command);
     if (slot === undefined || !grants.isCaptureStartRequest(req)) return;
@@ -582,7 +571,7 @@ export async function noteFailedCaptureStart(
       req,
       slot,
       grantId: req.meta?.captureGrantId,
-      outcome: 'finished',
+      outcome: 'discard',
     });
   } catch {
     // A settle that cannot run leaves the record open; admission caps still bound the store.
@@ -630,8 +619,8 @@ async function downloadResponseArtifacts(
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutScriptFieldOwner(response.data);
-  if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const grantContext = await resolveCaptureGrantContext(endpoint, req, response, stateDir);
+  if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   for (const artifact of artifacts) {
@@ -749,9 +738,10 @@ async function resolveCaptureGrantContext(
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
 ): Promise<CaptureGrantContext | undefined> {
+  if (req.command !== 'record') return undefined;
   const grants = await import('./capture-grant.ts');
-  const slot = grants.captureSlotOfCommand(req.command);
-  if (slot === undefined || !grants.finishesCaptureRequest(req)) return undefined;
+  if (!grants.finishesCaptureRequest(req)) return undefined;
+  const slot = 'record';
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const echoedGrantId =
     grants.readCaptureGrantId(response.data?.captureGrantId) ??
@@ -767,7 +757,7 @@ async function resolveCaptureGrantContext(
   });
   if (grant !== undefined) {
     // The producer echoed this exact grant ID: the capture reached a known outcome.
-    void grants.settleCaptureGrant({
+    await grants.settleCaptureGrant({
       stateDir,
       baseUrl: endpoint.baseUrl,
       req,

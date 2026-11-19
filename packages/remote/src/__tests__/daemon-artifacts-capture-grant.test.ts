@@ -19,7 +19,11 @@ import {
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { materializeRemoteArtifacts, prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
+import {
+  admitCaptureStartGrant,
+  materializeRemoteArtifacts,
+  prepareRemoteRequestArtifacts,
+} from '../daemon-artifacts.ts';
 import {
   admitCaptureGrant,
   listOpenCaptureGrantsInScope,
@@ -77,8 +81,7 @@ function okResponse(
 }
 
 /**
- * Runs a record start exactly as the CLI does: prepare persists the grant BEFORE any response
- * exists and returns the minted grant ID the transport would put on the wire. `answer` simulates
+ * Runs the preparation and dispatch admission seams for a record start. `answer` simulates
  * the daemon's start answer: 'withheld' never materializes a response (an accepted start whose
  * answer was lost), 'ok'/'error' materialize one.
  */
@@ -100,9 +103,18 @@ async function runStart(
     endpoint,
     signal,
     createTestHostEnvironment(),
+  );
+  const grantId = await admitCaptureStartGrant(
+    {
+      token: endpoint.token,
+      command: 'record',
+      session,
+      positionals: prepared.positionals,
+      meta: { cwd: world.root, clientArtifactPaths: prepared.clientArtifactPaths },
+    },
+    endpoint,
     world.stateDir,
   );
-  const grantId = prepared.captureGrantId;
   expect(grantId).toBeDefined();
   const granted = prepared.clientArtifactPaths?.outPath as string;
   if (answer !== 'withheld') {
@@ -219,15 +231,6 @@ test('a record start persists its grant before dispatch, and an accepted start w
     expect(fs.readFileSync(telemetryPath, 'utf8')).toBe('video-bytes');
     expect(fs.existsSync(path.join(otherCwd, 'demo.mp4'))).toBe(false);
 
-    // The matched stop settled the grant as finished.
-    await settleCaptureGrant({
-      stateDir: world.stateDir,
-      baseUrl: world.endpoint(port).baseUrl,
-      req: stopRequest(world),
-      slot: 'record',
-      grantId,
-      outcome: 'finished',
-    });
     expect(readGrant(world, port, stopRequest(world), grantId)?.state).toBe('finished');
   } finally {
     await closeLoopbackServer(server);
@@ -650,7 +653,7 @@ test('an uncertain census refuses admission instead of counting an unreadable st
   }
 });
 
-test('a rejected start settles only the grant its own request named; uncertain records stay', async (t) => {
+test('a rejected start releases only the grant its own request named; uncertain records stay', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'capture grant failed start')) return;
   const world = makeWorld('agent-device-capture-grant-failed-start-');
   const server = http.createServer((_req, res) => res.end('bytes'));
@@ -659,7 +662,7 @@ test('a rejected start settles only the grant its own request named; uncertain r
     const first = await runStart(world, port, 'clips/first', 'withheld');
     const second = await runStart(world, port, 'clips/second', 'withheld');
     // The second start's request carried its own grant ID and the daemon answered an error:
-    // exactly that record is settled finished (bounded cleanup matching the request evidence).
+    // exactly that record is released.
     const { noteFailedCaptureStart } = await import('../daemon-artifacts.ts');
     await noteFailedCaptureStart(
       world.endpoint(port),
@@ -679,8 +682,8 @@ test('a rejected start settles only the grant its own request named; uncertain r
         req: stopRequest(world),
         slot: 'record',
         grantId: second.grantId,
-      })?.state,
-    ).toBe('finished');
+      }),
+    ).toBeUndefined();
     // The unrelated withheld start's grant is untouched.
     expect(
       readCaptureGrantById({

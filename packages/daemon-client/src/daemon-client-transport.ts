@@ -557,7 +557,7 @@ async function sendRequestWithTransport(
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   return transport === 'http'
-    ? await sendHttpRequest(info, req, statePaths, timeoutMs, options)
+    ? await sendHttpRequestWithCaptureGrant(info, req, statePaths, timeoutMs, options)
     : await sendSocketRequest(info, req, timeoutMs, options);
 }
 
@@ -792,12 +792,41 @@ function isRemoteInstanceMismatchResponse(
   return statusCode === 409 && headers[DAEMON_HTTP_INSTANCE_MISMATCH_HEADER] === 'true';
 }
 
+async function sendHttpRequestWithCaptureGrant(
+  info: DaemonInfo,
+  req: DaemonWireRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number | undefined,
+  options: SendRequestOptions,
+): Promise<DaemonResponse> {
+  if (!info.baseUrl || req.command !== 'record' || !req.meta?.clientArtifactPaths?.outPath) {
+    return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
+  }
+
+  refuseAbortedRequest(options.signal, req.meta?.requestId);
+  const grants = await import('@agent-device/remote/daemon-artifacts');
+  const grantId = await grants.admitCaptureStartGrant(req, info, statePaths.baseDir);
+  if (grantId === undefined)
+    return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
+
+  const start = { ...req, meta: { ...req.meta, captureGrantId: grantId } };
+  // Once a socket connects, the daemon might receive the request even if the answer is lost.
+  const delivery = { possible: false };
+  try {
+    return await sendHttpRequest(info, start, statePaths, timeoutMs, options, delivery);
+  } catch (error) {
+    if (!delivery.possible) await grants.noteFailedCaptureStart(info, start, statePaths.baseDir);
+    throw error;
+  }
+}
+
 async function sendHttpRequest(
   info: DaemonInfo,
   req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   options: SendRequestOptions,
+  delivery?: { possible: boolean },
 ): Promise<DaemonResponse> {
   const rpcEndpoint = daemonHttpEndpoint(info, 'rpc');
   if (!rpcEndpoint) throw daemonEndpointUnavailableError('http');
@@ -856,6 +885,7 @@ async function sendHttpRequest(
       },
       (res) => {
         if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
+          if (delivery) delivery.possible = false;
           res.resume();
           if (timeoutHandle) clearTimeout(timeoutHandle);
           rejectOnce(
@@ -937,12 +967,21 @@ async function sendHttpRequest(
       rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });
 
+    if (delivery) request.on('socket', (socket) => observeCaptureDispatch(socket, delivery));
     request.on('finish', () => {
       requestSent = true;
     });
     request.write(rpcPayload);
     request.end();
   });
+}
+
+function observeCaptureDispatch(socket: net.Socket, delivery: { possible: boolean }): void {
+  const markConnected = (): void => {
+    delivery.possible = true;
+  };
+  if (socket.connecting) socket.once('connect', markConnected);
+  else markConnected();
 }
 
 // Loaded on the remote path only: a local daemon request never pays for the remote health cache.

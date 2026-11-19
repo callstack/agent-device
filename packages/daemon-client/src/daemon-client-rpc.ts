@@ -100,10 +100,9 @@ async function rejectDaemonHttpRpcError(
   }
   // #4518: an error answer to a finishing capture leaves its outcome uncertain; the scope's open
   // grants become pending-recovery and are never swept. An error answer to a capture START is a
-  // known rejection: only the grant the request itself named is settled. Neither blocks the
-  // failure the caller is about to receive.
-  void noteUncertainFinishingCapture(info, req, stateDir);
-  void noteFailedCaptureStart(info, req, stateDir);
+  // known rejection: only the grant the request itself named is released.
+  await noteUncertainFinishingCapture(info, req, stateDir);
+  await noteFailedCaptureStart(info, req, stateDir);
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,

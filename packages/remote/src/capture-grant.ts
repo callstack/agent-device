@@ -253,7 +253,8 @@ export function listOpenCaptureGrantsInScope(params: {
 /**
  * Settles a grant after the capture it covers reached a known outcome: `finished` when a matching
  * stop/report answered, `pending-recovery` when the finishing answer was uncertain. A
- * `pending-recovery` record is never swept. Never throws; an unmatched ID settles nothing.
+ * `pending-recovery` record is never swept. `discard` releases a definitively rejected or unsent
+ * start. Never throws; an unmatched ID settles nothing.
  */
 export async function settleCaptureGrant(params: {
   stateDir: string;
@@ -261,7 +262,7 @@ export async function settleCaptureGrant(params: {
   req: Omit<DaemonWireRequest, 'token'>;
   slot: CaptureSlot;
   grantId: string | undefined;
-  outcome: 'finished' | 'pending-recovery';
+  outcome: 'finished' | 'pending-recovery' | 'discard';
 }): Promise<void> {
   const grantId = readCaptureGrantId(params.grantId);
   if (grantId === undefined) return;
@@ -276,6 +277,10 @@ export async function settleCaptureGrant(params: {
         record.slot !== params.slot ||
         !scopeMatches(record.scope, params.baseUrl, params.req)
       ) {
+        return;
+      }
+      if (params.outcome === 'discard') {
+        fs.rmSync(file, { force: true });
         return;
       }
       const settled: CaptureGrant = {

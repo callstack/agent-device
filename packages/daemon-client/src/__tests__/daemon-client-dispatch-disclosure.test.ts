@@ -267,3 +267,45 @@ test('a sent request for a command without a declared effect gets no dispatch ve
     },
   );
 });
+
+test.for(['connection refused', 'daemon rejection'] as const)(
+  'record start releases its grant before returning when the %s proves it did not run',
+  async (failure, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'record start grant cleanup')) return;
+    const paths = statePaths();
+    const grantsDir = path.join(paths.baseDir, 'remote-connections', 'capture-grants');
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.end(JSON.stringify({ jsonrpc: '2.0', error: { message: 'fixture rejection' } }));
+      });
+    });
+    const port = await listenOnLoopback(server);
+    if (failure === 'connection refused') await closeLoopbackServer(server);
+    try {
+      const start = request(PUBLIC_COMMANDS.record);
+      await assert.rejects(
+        sendRequest(
+          { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` },
+          {
+            ...start,
+            positionals: ['start'],
+            meta: {
+              ...start.meta,
+              clientArtifactPaths: { outPath: path.join(paths.baseDir, 'demo') },
+            },
+          },
+          'http',
+          paths,
+          undefined,
+          { host: createTestHostEnvironment() },
+        ),
+        AppError,
+      );
+      assert.deepEqual(fs.readdirSync(grantsDir), []);
+    } finally {
+      if (server.listening) await closeLoopbackServer(server);
+      fs.rmSync(paths.baseDir, { recursive: true, force: true });
+    }
+  },
+);
