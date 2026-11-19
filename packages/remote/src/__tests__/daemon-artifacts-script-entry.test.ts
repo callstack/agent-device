@@ -248,7 +248,7 @@ test('a version delivered again is answered from the record without touching the
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
+        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, while the session is still recording, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });
@@ -532,7 +532,7 @@ test('a superseded version names the revision the record last confirmed and an i
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 1 of the recording is superseded: the record last confirmed revision 2 at ${destination}. Revision 3 may already have replaced that file; its save was interrupted. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
+        `Revision 1 of the recording is superseded: the record last confirmed revision 2 at ${destination}. Revision 3 may already have replaced that file; its save was interrupted. It is not checked again. If that file is missing, while the session is still recording, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });
@@ -556,6 +556,28 @@ test('a closing repeat names the file to record again to, quoted for a shell', a
       savedScript: destination,
       warnings: [
         `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, record again with open --save-script=${quoted} --force.`,
+      ],
+    },
+  });
+});
+
+test('a closing repeat whose path holds a newline names no command that a text line would change', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'line\nbreak.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+
+  const closed = await answer(baseUrl, stateDir, request('close'), {
+    scriptPublicationId: id,
+    artifacts: [script('v1', 1, id)],
+  });
+
+  expect(closed).toMatchObject({
+    ok: true,
+    data: {
+      savedScript: destination,
+      warnings: [
+        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, record again with open --save-script=<path> --force, with the path quoted for your shell.`,
       ],
     },
   });

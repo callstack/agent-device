@@ -209,7 +209,7 @@ test('a held download that loses to a newer commit reports it superseded and ove
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 2 of the recording is superseded: the record last confirmed revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
+        `Revision 2 of the recording is superseded: the record last confirmed revision 3 at ${destination}. It is not checked again. If that file is missing, while the session is still recording, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });

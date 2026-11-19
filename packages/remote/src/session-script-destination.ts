@@ -307,15 +307,21 @@ function noteRepeatedVersion(
   if (repeat === undefined) return;
   const recovery = closing
     ? `record again with ${recordAgainCommand(outcome.published)}.`
-    : 'the next recorded action writes the recording to the destination again.';
+    : 'while the session is still recording, the next recorded action writes the recording to the destination again.';
   data.warnings = [
     ...readResponseWarnings(data),
     `${repeatedVersionText(repeat, outcome.published)} It is not checked again. If that file is missing, ${recovery}`,
   ];
 }
 
-/** The command that records again to the same file; a bare `--save-script` would pick a new file name. */
+/**
+ * The command that records again to the same file; a bare `--save-script` would pick a new file name. A path with a
+ * control character cannot survive a rendered text line, so the command names a placeholder for it instead.
+ */
 function recordAgainCommand(destination: string): string {
+  if ([...destination].some((char) => char < ' ' || char === '\u007f')) {
+    return 'open --save-script=<path> --force, with the path quoted for your shell';
+  }
   return `open --save-script=${shellQuoteIfNeeded(destination)} --force`;
 }
 
