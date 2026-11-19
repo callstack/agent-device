@@ -35,6 +35,29 @@ export function hostPathRules(): path.PlatformPath {
   return process.platform === 'win32' ? path.win32 : path.posix;
 }
 
+/** The one pattern that splits a name: the host's own separator, so a POSIX backslash stays a filename byte. */
+function routeNames(spelled: string, platform: typeof path = path): string[] {
+  return spelled.split(platform.sep === '\\' ? /[\\/]/ : /\//);
+}
+
+/** The names a spelled route carries, counted with this host's own separator and folded by nothing. */
+export function spelledRouteNames(spelled: string, platform: typeof path = path): string[] {
+  return routeNames(spelled, platform).filter((name) => name.length > 0 && name !== '.');
+}
+
+/**
+ * Whether a spelled route carries a step back out of the directory it is in, as this host's own path rules
+ * count a separator: both `\` and `/` on Windows, where `path` folds `..\` and `../` alike, and only `/`
+ * elsewhere, where a backslash is an ordinary filename byte.
+ *
+ * This is the ONE answer to that question. A caller that resolves the route instead cannot ask it: `path.resolve`
+ * folds a `..` away, so the spelling that has to be judged is the one BEFORE any resolution, and two owners of
+ * the predicate would be two places a platform rule could drift apart.
+ */
+export function spelledRouteStepsBackOut(spelled: string, platform: typeof path = path): boolean {
+  return routeNames(spelled, platform).some((name) => name === '..');
+}
+
 /**
  * The user's `config.json`, from `AGENT_DEVICE_HOME` or `~/.agent-device`.
  *

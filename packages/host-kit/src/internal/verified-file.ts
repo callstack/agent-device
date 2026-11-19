@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
+import { spelledRouteStepsBackOut } from './path-resolution.ts';
 import {
   identityOf,
   lstatEntry,
@@ -886,18 +887,8 @@ function spelledStateTarget(stateDir: string, names: readonly string[]): string 
   const oneName = (name: string): boolean =>
     name.length > 0 && name !== '.' && name !== '..' && !name.includes('/') && !name.includes('\\');
   if (!names.every(oneName)) return undefined;
-  if (hasParentEscape(stateDir)) return undefined;
+  if (spelledRouteStepsBackOut(stateDir)) return undefined;
   return path.join(path.resolve(stateDir), ...names);
-}
-
-/**
- * Whether a spelled path names a step back out of the directory it is in, under the separator the host itself
- * honors: both on Windows, where `path` folds `..\` and `../` alike, and only `/` elsewhere, where a backslash
- * is an ordinary filename byte. Same question, and same answer, as the fold in `daemon-resolution.ts`.
- */
-function hasParentEscape(spelled: string): boolean {
-  const separator = process.platform === 'win32' ? /[\\/]/ : /\//;
-  return spelled.split(separator).some((name) => name === '..');
 }
 
 /** A chain that is not this process's own, answered with the level that made it so. */

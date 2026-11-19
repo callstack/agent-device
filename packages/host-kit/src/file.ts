@@ -42,6 +42,8 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
+  spelledRouteNames,
+  spelledRouteStepsBackOut,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

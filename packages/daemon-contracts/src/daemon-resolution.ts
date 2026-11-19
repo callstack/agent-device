@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath } from '@agent-device/host-kit/file';
+import {
+  expandUserHomePath,
+  spelledRouteNames,
+  spelledRouteStepsBackOut,
+} from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -225,13 +229,7 @@ function splitSpelledRoute(
   platform: typeof path,
 ): Readonly<{ root: string; names: string[] }> {
   const root = platform.parse(route).root;
-  const below = route.slice(root.length).split(separatorPattern(platform));
-  return { root, names: below.filter((name) => name.length > 0 && name !== '.') };
-}
-
-/** The one pattern that splits a name: the host's own separator, so a POSIX backslash stays a filename byte. */
-function separatorPattern(platform: typeof path): RegExp {
-  return platform.sep === '\\' ? /[\\/]/ : /\//;
+  return { root, names: spelledRouteNames(route.slice(root.length), platform) };
 }
 
 /** Puts names back under a platform root, which already carries its own trailing separator. */
@@ -253,7 +251,7 @@ function joinTextually(cwd: string, spelled: string): string {
 
 /** Whether a spelled path asks for a step back out of the directory it is in, on the host's own separator. */
 function stepsBackOut(spelled: string): boolean {
-  return spelled.split(separatorPattern(path)).some((name) => name === '..');
+  return spelledRouteStepsBackOut(spelled);
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {
