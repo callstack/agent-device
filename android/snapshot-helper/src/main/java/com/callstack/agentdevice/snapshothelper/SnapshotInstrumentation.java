@@ -190,6 +190,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
+      ready.putString("sessionTransport", "localabstract-peer-uid-v1");
       ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate,snapshot-short-idle"
           + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
       ready.putString("sessionPort", Integer.toString(sessionPort));
@@ -325,18 +326,26 @@ public final class SnapshotInstrumentation extends Instrumentation {
       throws IOException {
     InputStream input = socket.getInputStream();
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    while (true) {
+    byte[] chunk = new byte[8 * 1024];
+    while (bytes.size() <= maxBytes) {
       long remainingMs =
           SessionPeerPolicy.remainingBudgetMs(deadlineAtMs, SystemClock.elapsedRealtime());
       if (remainingMs <= 0) {
         throw new SocketTimeoutException("session command read deadline exceeded");
       }
       socket.setSoTimeout((int) remainingMs);
-      int next = input.read();
-      if (next < 0 && bytes.size() == 0) return null;
-      if (next < 0 || next == '\n') break;
-      bytes.write(next);
-      if (bytes.size() > maxBytes) break;
+      int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
+      if (SystemClock.elapsedRealtime() >= deadlineAtMs) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
+      }
+      if (count < 0) {
+        if (bytes.size() == 0) return null;
+        break;
+      }
+      int end = 0;
+      while (end < count && chunk[end] != '\n') end++;
+      bytes.write(chunk, 0, end);
+      if (end < count) break;
     }
     return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
   }

@@ -135,6 +135,7 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   return parseAndroidSnapshotHelperSessionSnapshotResponse(response, requestId);
 }
 
+const SESSION_TRANSPORT = 'localabstract-peer-uid-v1';
 const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
 const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
 
@@ -178,6 +179,18 @@ export function waitForAndroidSnapshotHelperSessionReady(
       ) {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
+        if (
+          !output
+            .split(/\r?\n/)
+            .includes(`INSTRUMENTATION_STATUS: sessionTransport=${SESSION_TRANSPORT}`)
+        ) {
+          reject(
+            new AppError('COMMAND_FAILED', 'Android snapshot helper lacks authenticated sessions', {
+              reason: 'android_snapshot_helper_session_transport_unsupported',
+            }),
+          );
+          return;
+        }
         const commands = output.match(/INSTRUMENTATION_STATUS: sessionCommands=([^\r\n]*)\r?\n/);
         resolve(new Set(commands?.[1]?.split(',').filter(Boolean)));
       }

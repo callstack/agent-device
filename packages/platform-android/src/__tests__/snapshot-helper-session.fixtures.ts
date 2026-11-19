@@ -156,6 +156,7 @@ export function createPersistentSnapshotHelperProvider(
             [
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
               `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionCommands?.join(',') ?? `${options.sessionInput ? 'input,' : ''}snapshot-immediate`}`,
+              'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',
@@ -181,6 +182,7 @@ export type SessionProviderOptions = {
   spawnArgs?: (readonly string[])[];
   responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
+  legacySessionTransport?: boolean;
   forceStopDelayMs?: number;
   recoveryFailure?: boolean;
   stalledCleanup?: boolean;
@@ -303,6 +305,9 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
           [
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
             'INSTRUMENTATION_STATUS: sessionCommands=snapshot-immediate',
+            ...(options.legacySessionTransport
+              ? []
+              : ['INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1']),
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

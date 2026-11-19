@@ -59,6 +59,22 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
+test('an older ready helper falls back without using or retaining its session', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
+  const options = {
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  };
+
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
+});
+
 test('a helper that never starts is not spawned again on every command', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
