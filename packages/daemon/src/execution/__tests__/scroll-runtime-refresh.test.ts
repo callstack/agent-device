@@ -495,6 +495,114 @@ test('bound scroll refresh narrows to a nested scroller whose frame runs past th
   assert.deepEqual(pullSamples(plans[0]!)[0]!.point, { x: 540, y: 459 });
 });
 
+test('bound scroll refresh starts a nested pull inside the band its ancestor shows', async () => {
+  // The reviewer's replay: an 820x1180 app, an outer scroller starting at y=650 and a nested list
+  // that starts above it at y=605. A scroller reports its own content frame, so the nested list's
+  // top 45px is not on screen at all: a pull started there lands on whatever is showing and the
+  // list never gets the first touch. The visible band is what the ancestor allows (650..1000), and
+  // the lane starts inside it, inset from that top.
+  const clippingOuter = { x: 0, y: 650, width: 820, height: 530 };
+  const nestedScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 820, height: 1180 },
+    },
+    { ref: 'e2', index: 2, parentIndex: 1, depth: 1, type: 'ScrollView', rect: clippingOuter },
+    {
+      ref: 'e3',
+      index: 3,
+      parentIndex: 2,
+      depth: 2,
+      type: 'ScrollView',
+      identifier: 'refresh-list',
+      // Top 605 is above the parent's 650; the bottom 1000 sits inside it.
+      rect: { x: 0, y: 605, width: 820, height: 395 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await runScroll(
+    ['refresh'],
+    {},
+    {
+      ...frozenCaptures([nestedScreen]),
+      scroll: async () => ({}),
+      gesture: async (plan) => {
+        plans.push(plan as PullPlanCall);
+        return {};
+      },
+    },
+    { session: sessionWithStoredScreen(nestedScreen) },
+  );
+  const start = pullSamples(plans[0]!)[0]!.point;
+  assert.deepEqual(start, { x: 410, y: 658 });
+  assert.ok(
+    start.y >= clippingOuter.y,
+    `the pull must start on pixels the clipping ancestor shows, not at ${start.y}`,
+  );
+});
+
+test('bound scroll refresh refuses when the visible band a clipping ancestor leaves is too short', async () => {
+  // Same nesting, but the ancestor shows only 200px of the list. The pull needs 320px to commit, so
+  // dispatching it would report a refresh the pull provably cannot trigger; the raw frame would have
+  // offered 383px of travel that is not on screen.
+  const nestedScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 820, height: 1180 },
+    },
+    {
+      ref: 'e2',
+      index: 2,
+      parentIndex: 1,
+      depth: 1,
+      type: 'ScrollView',
+      rect: { x: 0, y: 650, width: 820, height: 200 },
+    },
+    {
+      ref: 'e3',
+      index: 3,
+      parentIndex: 2,
+      depth: 2,
+      type: 'ScrollView',
+      identifier: 'refresh-list',
+      rect: { x: 0, y: 605, width: 820, height: 400 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        {
+          ...frozenCaptures([nestedScreen]),
+          scroll: async () => ({}),
+          gesture: async (plan) => {
+            plans.push(plan as PullPlanCall);
+            return {};
+          },
+        },
+        { session: sessionWithStoredScreen(nestedScreen) },
+      ),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      assert.equal(error.details?.reason, 'scroll_refresh_container_too_short');
+      // The bounds named in the refusal are the visible ones, not the scroller's raw frame.
+      assert.deepEqual(error.details?.containerRect, { x: 0, y: 650, width: 820, height: 200 });
+      return true;
+    },
+  );
+  assert.equal(plans.length, 0, 'a pull that cannot commit is never dispatched');
+});
+
 test('bound scroll refresh keeps the pull on the container it resolved when an unrelated scroller only overlaps its centre', async () => {
   // A dev client leaves its launcher list in the accessibility tree over the app's own. It is
   // smaller than the app's list and so sorts first at the broad container's centre, but it frames

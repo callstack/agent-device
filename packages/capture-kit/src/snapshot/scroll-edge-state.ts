@@ -26,13 +26,14 @@ export type ScrollEdgeState = {
    * reveal answer the same way, and only one of them is the end of the content (#2714).
    */
   containerRect?: Rect;
-  /**
-   * The tree position of the container `containerRect` frames. Rects alone cannot tell a nested
-   * scroller from an unrelated one that happens to cover the same pixels — a dev client's launcher
-   * list over the app's own — so a caller that has to stay INSIDE the container it resolved walks
-   * the ancestry chain, and needs the node it is a chain to.
-   */
+  /** Which tree node `containerRect` frames: membership is a tree fact a frame cannot give. */
   containerIndex?: number;
+  /**
+   * `containerRect` cut down to the pixels a touch on it can reach, per the ancestor clipping it. A
+   * nested list can report a frame starting above what shows it, and a pull planned there starts off
+   * the list. Only `readScrollPullContainer` reports it.
+   */
+  pullRect?: Rect;
   /**
    * A cheap signature of what is on screen right now. Two consecutive captures with the same
    * fingerprint but `canScroll` still true mean the scroll did not move the container — the actuator
@@ -111,6 +112,18 @@ export async function readScrollEdgeState(
 ): Promise<ScrollEdgeState> {
   const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
   return analyzeScrollEdgeState(nodes, edge, target);
+}
+
+/**
+ * The container `scroll refresh` pulls, plus `pullRect` the band of it a touch can reach. The broad
+ * edge read names the outermost scroller, where a pull starts on the header where no refresh control
+ * sees it, so this narrows to the innermost one at that centre that descends from it.
+ */
+export async function readScrollPullContainer(
+  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
+): Promise<ScrollEdgeState> {
+  const { resolveScrollPullContainer } = await import('./scroll-edge-state/selection.ts');
+  return resolveScrollPullContainer(nodes);
 }
 
 /**

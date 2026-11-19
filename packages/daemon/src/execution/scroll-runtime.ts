@@ -40,7 +40,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
-  readScrollEdgeState,
+  readScrollPullContainer,
   runScrollEdgePasses,
   scrollSurfaceFingerprint,
   type ScrollEdge,
@@ -212,14 +212,17 @@ export async function resolveBoundScrollRuntime(
               },
             );
           }
+          // The pull stays on the container's VISIBLE band, which an ancestor may cut shorter than
+          // the container's own frame; a touch outside it never reaches the list.
+          const pullBounds = topState.pullRect ?? topState.containerRect;
           const refreshOptions = resolveRefreshExecutionOptions(
             { amount, pixels, durationMs },
-            topState.containerRect,
+            pullBounds,
           );
           const pull = await performRefreshPull(
             runtime,
             refreshOptions,
-            topState.containerRect,
+            pullBounds,
             nodes,
             dispatchContext,
           );
@@ -368,14 +371,17 @@ function refreshAdmissionRefusal(
  */
 function resolveRefreshExecutionOptions(
   options: ScrollCommandOptions,
-  containerRect: Rect,
+  visibleContainer: Rect,
 ): ResolvedScrollExecutionOptions {
   const pullAmount = options.amount ?? DEFAULT_REFRESH_PULL_AMOUNT;
   // The pull distance always lands in the measured-safe band, whether it came from an explicit
   // --pixels or from the container fraction: small pulls only rubber-band, large ones stay reliable.
   const pullPixels = Math.min(
     REFRESH_PULL_MAX_PX,
-    Math.max(REFRESH_PULL_MIN_PX, options.pixels ?? Math.round(pullAmount * containerRect.height)),
+    Math.max(
+      REFRESH_PULL_MIN_PX,
+      options.pixels ?? Math.round(pullAmount * visibleContainer.height),
+    ),
   );
   return {
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
@@ -396,7 +402,7 @@ function resolveRefreshExecutionOptions(
 async function performRefreshPull(
   runtime: BoundScrollRefresh,
   options: ResolvedScrollExecutionOptions,
-  containerRect: Rect,
+  visibleContainer: Rect,
   nodes: readonly (RawSnapshotNode | SnapshotNode)[],
   context: DaemonCommandContext,
 ): Promise<ScrollDirectionResult> {
@@ -404,19 +410,20 @@ async function performRefreshPull(
   const pull = buildPullRefreshGesturePlan({
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
     pixels: options.pixels,
-    container: containerRect,
+    container: visibleContainer,
     viewport,
   });
-  // The planner keeps the lane inside the container, so a container shorter than the measured-safe
-  // floor cannot carry a pull that commits (0/5 below ~300px on an iOS RN list). Dispatching it
-  // would report a refresh the pull provably cannot trigger, so the refusal names the container.
+  // The planner keeps the lane inside the visible band, so one shorter than the measured-safe floor
+  // cannot carry a pull that commits (0/5 below ~300px on an iOS RN list). Dispatching it would
+  // report a refresh the pull provably cannot trigger, so the refusal names the band it measured:
+  // not the container's own frame once an ancestor clips it.
   if (pull.pixels < REFRESH_PULL_MIN_PX) {
     throw new AppError(
       'COMMAND_FAILED',
       `scroll refresh found a scroll container too short to pull: ${pull.pixels}px of travel is below the ${REFRESH_PULL_MIN_PX}px that commits a refresh`,
       {
         reason: 'scroll_refresh_container_too_short',
-        containerRect: containerRect,
+        containerRect: visibleContainer,
         travelPixels: pull.pixels,
         hint: 'The refresh control needs a longer list. Scroll with a direction if the content should move.',
       },
@@ -495,10 +502,10 @@ async function refreshGestureViewport(
 }
 
 /**
- * The top-edge verdict a `scroll refresh` refuses on, read off a freshly captured tree inside the
- * executor — after admission bound the runtime, before the pull dispatches. The session's stored
- * snapshot is not used: a previous gesture may have expired it (ADR 0014), and the stored tree can
- * no longer honestly answer whether the scroller still hides content above.
+ * The top-edge verdict a `scroll refresh` refuses or plans on, read off a freshly captured tree
+ * inside the executor, before the pull dispatches. The session's stored snapshot is not used: a
+ * previous gesture may have expired it (ADR 0014), and the stored tree can no longer honestly answer
+ * whether the scroller still hides content above.
  */
 async function readCapturedTopEdgeState(
   runtime: BoundScrollRefresh,
@@ -509,10 +516,10 @@ async function readCapturedTopEdgeState(
   context.signal?.throwIfAborted();
   const snapshot = await runtime.operations.captureSnapshot(scrollCaptureInput(context));
   const nodes = snapshot.nodes ?? [];
-  const broad = nodes.length === 0 ? undefined : await readScrollEdgeState(nodes, 'top');
+  const state = await readScrollPullContainer(nodes);
   // An unreadable capture is a capture failure, not "no scroller": refusing it as no_container would
   // tell the agent the app has no list when the read simply failed.
-  if (broad === undefined || broad.emptySnapshot) {
+  if (state.emptySnapshot) {
     throw new AppError(
       'COMMAND_FAILED',
       'scroll refresh could not read the screen to find the scroll container',
@@ -522,55 +529,7 @@ async function readCapturedTopEdgeState(
       },
     );
   }
-  const broadRect = broad.containerRect;
-  if (!broadRect) return { state: broad, nodes };
-  // A screen can nest scrollers (a list inside a screen-level ScrollView), and the broad read picks
-  // the outermost: anchoring the pull there starts it on the header, where it moves nothing. The
-  // pull belongs to the innermost scroller at the broad container's centre, so this refinement may
-  // only NARROW that container. A screen can also carry a scroller that merely overlaps the centre
-  // without containing it — an iOS dev client leaves its SwiftUI launcher list in the tree over the
-  // app's own — and a pull planned there drags that list while the refresh control never sees it.
-  // Membership is the TREE, not the frame: iOS rects carry sub-pixel noise and a nested list may
-  // run past its parent, so containment-of-rects would drop a real narrowing and accept an
-  // overlapping one. The candidate counts when its own ancestry chain passes through the container.
-  const centre = {
-    x: broadRect.x + broadRect.width / 2,
-    y: broadRect.y + broadRect.height / 2,
-  };
-  const inner = await readScrollEdgeState(nodes, 'top', { point: centre });
-  const innerIndex = inner.containerIndex;
-  const broadIndex = broad.containerIndex;
-  const narrows =
-    inner.containerRect !== undefined &&
-    innerIndex !== undefined &&
-    broadIndex !== undefined &&
-    innerIndex !== broadIndex &&
-    descendsFromNode(nodes, innerIndex, broadIndex);
-  if (!narrows) {
-    return { state: broad, nodes };
-  }
-  return { state: { ...inner, canScroll: inner.canScroll || broad.canScroll }, nodes };
-}
-
-/**
- * Whether the node at `index` hangs below `ancestorIndex` in the captured tree. A tree read from a
- * device carries no ordering guarantee between siblings, so the walk follows `parentIndex` links and
- * stops on a cycle or a missing parent rather than guessing membership.
- */
-function descendsFromNode(
-  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
-  index: number,
-  ancestorIndex: number,
-): boolean {
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  const visited = new Set<number>([index]);
-  let current = byIndex.get(index)?.parentIndex;
-  while (current !== undefined && !visited.has(current)) {
-    if (current === ancestorIndex) return true;
-    visited.add(current);
-    current = byIndex.get(current)?.parentIndex;
-  }
-  return false;
+  return { state, nodes };
 }
 
 /**

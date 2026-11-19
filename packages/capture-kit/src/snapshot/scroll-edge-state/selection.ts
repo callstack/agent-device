@@ -3,8 +3,10 @@ import {
   createSnapshotVisibility,
   isScrollableNodeLike,
   isViewportRootNode,
+  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { formatRole } from '@agent-device/kernel/snapshot';
+import { intersectRects } from '@agent-device/kernel/rect';
 import type {
   HiddenContentHint,
   Point,
@@ -57,6 +59,43 @@ function normalizeSnapshotNodes(
     ref: 'ref' in node && node.ref ? node.ref : `e${index + 1}`,
     kind: 'kind' in node && node.kind ? node.kind : formatRole(node.type ?? 'Element'),
   }));
+}
+
+/** The container a pull is for, plus `pullRect`: the band of it a touch can reach. */
+export function resolveScrollPullContainer(
+  inputNodes: readonly (RawSnapshotNode | SnapshotNode)[],
+): ScrollEdgeState {
+  const nodes = normalizeSnapshotNodes(inputNodes);
+  const broad = analyzeScrollEdgeState(nodes, 'top');
+  const broadRect = broad.containerRect;
+  if (!broadRect) return broad;
+  const visibility = createSnapshotVisibility(nodes);
+  const inner = analyzeScrollEdgeState(nodes, 'top', {
+    point: { x: broadRect.x + broadRect.width / 2, y: broadRect.y + broadRect.height / 2 },
+  });
+  const innerNode = nodeOf(visibility, inner.containerIndex);
+  // Only a DESCENDANT of the resolved container narrows it. One that merely overlaps its centre is a
+  // different surface — an iOS dev client leaves its launcher list in the tree over the app's own —
+  // and a pull planned there drags that list. Membership is the tree, not the frame: a nested list
+  // can report a frame running past the parent that clips it.
+  const narrows =
+    inner.containerRect !== undefined &&
+    innerNode !== undefined &&
+    inner.containerIndex !== broad.containerIndex &&
+    visibility.findAncestor(innerNode, (ancestor) =>
+      ancestor.index === broad.containerIndex ? true : null,
+    ) === true;
+  const chosen = narrows ? { ...inner, canScroll: inner.canScroll || broad.canScroll } : broad;
+  // What survives of the chosen frame once the ancestor clipping it cuts away what no touch reaches.
+  const container = nodeOf(visibility, chosen.containerIndex);
+  const rect = chosen.containerRect;
+  if (!container || !rect) return chosen;
+  const clipping = visibility.resolveEffectiveViewport(container);
+  return { ...chosen, pullRect: (clipping && intersectRects(rect, clipping)) ?? rect };
+}
+
+function nodeOf(visibility: SnapshotVisibility, index: number | undefined) {
+  return index === undefined ? undefined : visibility.nodeByIndex.get(index);
 }
 
 function selectScrollContainer(
