@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { PassThrough, finished } from 'node:stream';
+import { PassThrough, finished, type Transform, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
@@ -50,10 +50,8 @@ export async function receiveResumableTransfer(params: {
   const payloadStream = fs.createWriteStream(params.entry.payloadPath, { flags: 'a' });
   observeAcceptedWrites(payloadStream, params.onAcceptedBytes);
   let offset: number;
-  const body = new PassThrough();
-  const stopForwarding = forwardRequestBody(params.req, body);
   try {
-    await pipeline(body, limiter, payloadStream, { signal: params.signal });
+    await pipeRequestBody(params.req, limiter, payloadStream, params.signal);
     if (range && limiter.bytesSeen !== range.span) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-range');
     }
@@ -74,28 +72,37 @@ export async function receiveResumableTransfer(params: {
     const failure = resolveIngressFailure(params.signal, error);
     await rollback(params.entry.payloadPath, oldSize, failure, params.invalidate);
     throw failure;
-  } finally {
-    stopForwarding();
   }
   return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
 }
 
 /**
- * Feeds the request body into the chunk pipeline without handing the request to it. An
- * aborted or failed pipeline must not destroy the request: on a pipelined keep-alive
- * socket that would close the socket under an earlier answer. The request's owner ends
- * the exchange in response order instead. A request that fails (client disconnect) still
+ * Pipes an upload request body through `limiter` into `output` without handing the
+ * request to the pipeline. A pipeline that owns the request destroys it on any abort or
+ * failure (expiry, byte cap, length mismatch), and Node then detaches the request's
+ * socket, so the ingress owner's lingering close finds no socket and the connection
+ * closes under a client that is still sending. Keeping the request out of the pipeline
+ * keeps `req.socket` attached: the ingress owner answers and ends the exchange with its
+ * lingering close in response order. A request that fails (client disconnect) still
  * fails the pipeline.
  */
-function forwardRequestBody(req: IncomingMessage, body: PassThrough): () => void {
+export async function pipeRequestBody(
+  req: IncomingMessage,
+  limiter: Transform,
+  output: Writable,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const body = new PassThrough();
   req.pipe(body);
   const stopWatching = finished(req, (error) => {
     if (error) body.destroy(error);
   });
-  return () => {
+  try {
+    await pipeline(body, limiter, output, { signal });
+  } finally {
     req.unpipe(body);
     stopWatching();
-  };
+  }
 }
 
 /**

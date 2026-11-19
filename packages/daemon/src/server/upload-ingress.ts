@@ -127,10 +127,11 @@ export function beginUploadTransferIngress(params: {
       stopTimers();
       return;
     }
+    // The body is unread (an early answer, or a pipeline stopped by a byte cap, a length
+    // mismatch or an expired ticket): after the answer flushes, the same lingering close
+    // as an expiry discards the rest within its grace. The timers bound the wait until then.
     socket.once('close', stopTimers);
-    const closeConnection = () => {
-      if (!socket.destroyed) socket.destroySoon();
-    };
+    const closeConnection = () => lingerThenClose(req);
     if (res.writableFinished) closeConnection();
     else res.once('finish', closeConnection);
   };
@@ -221,7 +222,7 @@ function endExchange(req: IncomingMessage, res: ServerResponse, error: AppError)
   else res.once('finish', closeConnection);
 }
 
-/** How long an expired request's connection may linger to discard its unread body. */
+/** How long a connection may linger after its answer to discard an unread body. */
 const EXPIRED_BODY_LINGER_GRACE_MS = 5_000;
 
 function lingerThenClose(req: IncomingMessage): void {

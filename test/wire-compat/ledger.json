@@ -110,7 +110,7 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_REQUEST_MAX_BYTES": "sha256:4348e1d7a6d025d6d75fddf075e52fe0555ce7c7b69b4dd4d64dc28ce1f73a87",
     "packages/daemon/src/server/http/http-rpc-methods.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "packages/daemon/src/server/http/http-rpc-methods.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:fb9e27061647c54004dff224e21c6bf7067bfbce20b26a67f852b47314685560",
+    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "packages/daemon/src/server/http/http-authorization.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "packages/daemon/src/server/http/http-rpc-methods.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -128,7 +128,7 @@
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
     "packages/daemon/src/core/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
     "packages/daemon/src/core/session-tenant-scope.ts#isTenantAddressableSessionName": "sha256:cc8ae18094b7f57d4bb694678f84ba767637b1087fd28058ffd6a3c92c79f05d",
-    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:02ded2a09bfc09e5b45666ec00e72913c77a00c6118ffcff087fdceb7d1aa243",
+    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:939b227d303574f90d59f01dd1bcb99eec7c5831b8e40dc5a6412be62c673e7e",
     "packages/daemon/src/server/upload-http.ts#DIRECT_UPLOAD_PATH_PREFIX": "sha256:6fe7d42a65baceb595d96b6aa83fe9aa84527d9aa2e448d7ef47882d31a03276",
     "packages/daemon/src/server/upload-http.ts#UploadFinalizeBody": "sha256:c358aea9b3c341f51f3fa263032dfda8a3fbbf729396fcf7f2d8aa051b231b8b",
     "packages/daemon/src/server/upload-http.ts#UploadHttpRoute": "sha256:3fee66976292bedc9587e266f7f584ff27574e939329bb3ecb98f100c4c54b2e",
@@ -218,7 +218,7 @@
     "packages/remote/src/session-script-destination.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
-    "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:597cafae35f6d6fe2b18b960316ef01723cdb18cd27220cce89716b00117eb8e"
+    "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740"
   },
   "compatibleChanges": [
     {
@@ -308,8 +308,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
-      "digest": "sha256:fb9e27061647c54004dff224e21c6bf7067bfbce20b26a67f852b47314685560",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged."
+      "digest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -608,13 +608,13 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer",
-      "digest": "sha256:02ded2a09bfc09e5b45666ec00e72913c77a00c6118ffcff087fdceb7d1aa243",
-      "rationale": "#4441 adds the upload ingress signal to the internal authorizer callback the upload routes call. It is not a wire field; routes, headers, bodies and status codes are unchanged, so a released peer interoperates as before."
+      "digest": "sha256:939b227d303574f90d59f01dd1bcb99eec7c5831b8e40dc5a6412be62c673e7e",
+      "rationale": "#4441 adds the upload ingress signal to the internal authorizer callback the upload routes call. It is not a wire field; routes, headers, bodies and status codes are unchanged, so a released peer interoperates as before. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#authorizeUpload",
-      "digest": "sha256:597cafae35f6d6fe2b18b960316ef01723cdb18cd27220cce89716b00117eb8e",
-      "rationale": "#4441 moves the upload routes' existing authorize call into one helper: the same command 'upload', the same per-route positionals and the same token/auth-hook gate, now under the ingress signal. No request, response or status framing changes for a released peer."
+      "digest": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
+      "rationale": "#4441 moves the upload routes' existing authorize call into one helper: the same command 'upload', the same per-route positionals and the same token/auth-hook gate, now under the ingress signal. No request, response or status framing changes for a released peer. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     }
   ]
 }

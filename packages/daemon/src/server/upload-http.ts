@@ -43,6 +43,8 @@ type AuxiliaryHttpAuthorizer = (params: {
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
   /** The upload ingress signal: authorization stops at the same deadline or disconnect. */
   signal: AbortSignal;
+  /** The upload ingress commit gate: a refusal after the hook answers through it. */
+  commit: <T>(work: () => T) => T;
 }) => Promise<{ tenantId?: string } | null>;
 
 export function tryHandleUploadHttpRoute(params: {
@@ -112,11 +114,11 @@ async function runUploadRoute(
 ): Promise<void> {
   const ingress = beginUploadTransferIngress({ req, res });
   try {
-    const auth = await authorizeUpload(authorize, req, res, ingress.signal, positionals);
+    const auth = await authorizeUpload(authorize, req, res, ingress, positionals);
     if (!auth) return;
     await handle(auth, ingress);
   } catch (error) {
-    answerUploadFailure(res, error);
+    answerUploadFailure(res, error, ingress.commit);
   } finally {
     ingress.dispose();
   }
@@ -127,13 +129,14 @@ async function authorizeUpload(
   authorize: AuxiliaryHttpAuthorizer,
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  signal: AbortSignal,
+  ingress: { signal: AbortSignal; commit: <T>(work: () => T) => T },
   positionals: string[],
 ): Promise<{ tenantId?: string } | null> {
   return await authorize({
     req,
     res,
-    signal,
+    signal: ingress.signal,
+    commit: ingress.commit,
     daemonRequest: { command: 'upload', positionals },
   });
 }
@@ -276,9 +279,23 @@ function sendUploadedArtifactResponse(
   }
 }
 
-/** Answers a route failure unless the ingress already ended the exchange with its expiry. */
-function answerUploadFailure(res: http.ServerResponse, error: unknown): void {
+/**
+ * Answers a route failure through the same deadline check as a success: a deadline that
+ * passed first answers with its own expiry instead, and an exchange the ingress already
+ * ended gets no second answer.
+ */
+function answerUploadFailure(
+  res: http.ServerResponse,
+  error: unknown,
+  commit: <T>(work: () => T) => T,
+): void {
   if (res.headersSent) return;
+  try {
+    commit(() => undefined);
+  } catch {
+    // The ingress answered with its expiry, or the client is gone.
+    return;
+  }
   sendRestJsonError(res, normalizeError(error));
 }
 

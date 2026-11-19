@@ -675,3 +675,250 @@ test('an expired queued request with an unread body never resets the earlier ans
     await closeLoopbackServer(server);
   }
 });
+
+test('a single-shot upload expiring behind a long finalize never closes the socket under it', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const reads = holdPayloadReads((path) => String(path).endsWith('/payload'));
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const bytesA = Buffer.from('ABCD');
+    const uploadA = await withIO(preflight(port, bytesA), 'preflight A');
+    const putA = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'PUT',
+          path: `/upload/direct/${uploadA}`,
+          headers: { ...AUTH, 'content-range': 'bytes 0-3/4', 'content-length': '4' },
+        },
+        bytesA,
+      ),
+      'chunk A',
+    );
+    assert.equal(putA.status, 200);
+
+    // One keep-alive socket: a finalize for A (hash held), then a single-shot upload B
+    // whose body stalls after its first bytes.
+    const socket = net.connect(port, '127.0.0.1');
+    let received = '';
+    socket.on('data', (data: Buffer) => {
+      received += data.toString('latin1');
+    });
+    socket.on('error', () => {});
+    const finalizeBody = JSON.stringify({ uploadId: uploadA });
+    socket.write(
+      `POST /upload/finalize HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+        `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(finalizeBody)}\r\n\r\n${finalizeBody}` +
+        `POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+        `X-Artifact-Type: file\r\nX-Artifact-Filename: single.bin\r\nContent-Length: 1000\r\n\r\n0123456789`,
+    );
+    await withIO(reads.started.promise, 'the held finalize hash');
+    await flushIO();
+    // B's 120 s inactivity ceiling passes while A's in-budget hash still owns the socket.
+    await vi.advanceTimersByTimeAsync(150_000);
+    await flushIO();
+    assert.equal(socket.destroyed, false, "B's expiry does not close the socket under A");
+    reads.release.resolve();
+    const answers = async () => {
+      for (let i = 0; i < 50; i += 1) {
+        if ((received.match(/HTTP\/1\.1 /g) ?? []).length >= 2) return;
+        await flushIO();
+      }
+    };
+    await withIO(answers(), 'both answers');
+    const statuses = [...received.matchAll(/HTTP\/1\.1 (\d+)/g)].map((match) => match[1]);
+    assert.deepEqual(statuses, ['200', '500'], 'A finalizes, then B answers its typed expiry');
+    assert.match(received, /"reason":"transfer_phase_timeout"/);
+    const artifact = received.match(/"uploadId":"([^"]+)"/)?.[1];
+    if (artifact) cleanupUploadedArtifact(artifact);
+    socket.destroy();
+  } finally {
+    reads.release.resolve();
+    reads.restore();
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a single-shot upload that expires mid-body answers a client that is still sending', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    // A reset on close with unread body bytes is timing dependent, so the case repeats.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
+      let received = '';
+      let answered = false;
+      const socketErrors: unknown[] = [];
+      socket.on('error', (error) => socketErrors.push(error));
+      // Resolves once the typed answer is read completely; rejects on a reset before it.
+      const answer = new Promise<string>((resolve, reject) => {
+        socket.on('data', (data: Buffer) => {
+          received += data.toString('latin1');
+          if (!answered && /\r\n\r\n\{.*\}$/s.test(received)) {
+            answered = true;
+            resolve(received);
+          }
+        });
+        socket.on('error', (error) => {
+          if (!answered) reject(error);
+        });
+      });
+      void answer.catch(() => {});
+      socket.write(
+        `POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+          `X-Artifact-Type: file\r\nX-Artifact-Filename: single.bin\r\nContent-Length: ${64 * 1024 * 1024}\r\n\r\n`,
+      );
+      const chunk = Buffer.alloc(64 * 1024, 0x61);
+      // The body keeps making progress, so only the 600 s aggregate can end it. The last
+      // step stops 1 s past the aggregate, inside the expired request's lingering grace.
+      for (let step = 0; step < 10 && !answered; step += 1) {
+        socket.write(chunk);
+        await flushIO();
+        await vi.advanceTimersByTimeAsync(step < 9 ? 61_000 : 52_000);
+      }
+      // The client is still sending when its typed answer arrives, as the remote upload
+      // client does until it reads the answer.
+      let sent = 0;
+      const pump = () => {
+        while (!answered && sent < 16 * 1024 * 1024 && socket.writable) {
+          sent += chunk.length;
+          if (!socket.write(chunk)) {
+            socket.once('drain', pump);
+            return;
+          }
+        }
+      };
+      pump();
+      try {
+        const read = await withIO(answer, 'the typed answer to a client still sending');
+        assert.match(read, /^HTTP\/1\.1 500 /);
+        // Under load a progress write can land after the 120 s ceiling; either typed
+        // expiry is the owner's answer.
+        assert.match(read, /"reason":"transfer_(ingress_deadline_exceeded|phase_timeout)"/);
+        // The expiry did not destroy the connection: the server lingers and discards, so a
+        // client that has not read its answer yet keeps sending without a reset.
+        const sentAfterAnswer = new Promise<void>((resolve, reject) => {
+          socket.once('error', reject);
+          let more = 0;
+          const pumpMore = () => {
+            while (more < 4 * 1024 * 1024) {
+              more += chunk.length;
+              const last = more >= 4 * 1024 * 1024;
+              const flushed = socket.write(chunk, last ? () => resolve() : undefined);
+              if (!flushed && !last) {
+                socket.once('drain', pumpMore);
+                return;
+              }
+            }
+          };
+          pumpMore();
+        });
+        await withIO(sentAfterAnswer, 'the body bytes sent after the answer');
+        await flushIO();
+        assert.equal(socket.destroyed, false, 'the server did not reset the connection');
+        // The server closes cleanly: it half-closed with a FIN after the answer, and its
+        // lingering grace ends the connection without a reset.
+        await vi.advanceTimersByTimeAsync(5_000);
+        await flushIO();
+        assert.equal(socket.readableEnded, true, 'the server sent a FIN, not a reset');
+        assert.deepEqual(socketErrors, [], 'no reset reached the client');
+      } finally {
+        socket.destroy();
+      }
+    }
+  } finally {
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a hash mismatch found past the deadline answers the deadline expiry', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const reads = holdPayloadReads((path) => String(path).endsWith('/payload'));
+  const clock = skewableClock();
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    // The ticket declares the hash of different bytes, so the finalize hash mismatches.
+    const uploadId = await withIO(preflight(port, Buffer.from('WXYZ'), 4), 'the preflight');
+    const put = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'PUT',
+          path: `/upload/direct/${uploadId}`,
+          headers: { ...AUTH, 'content-range': 'bytes 0-3/4', 'content-length': '4' },
+        },
+        'ABCD',
+      ),
+      'the chunk',
+    );
+    assert.equal(put.status, 200);
+    const finalize = routeRequest(
+      port,
+      { method: 'POST', path: '/upload/finalize', headers: JSON_HEADERS },
+      JSON.stringify({ uploadId }),
+    );
+    void finalize.catch(() => {});
+    await withIO(reads.started.promise, 'the held hash read');
+    clock.skewMs = 600_001;
+    reads.release.resolve();
+    const answered = await withIO(finalize, 'the finalize answer');
+    assert.equal(answered.status, 500, 'the deadline, not the mismatch, is reported');
+    assert.equal(JSON.parse(answered.body).reason, 'transfer_ingress_deadline_exceeded');
+  } finally {
+    reads.release.resolve();
+    reads.restore();
+    clock.restore();
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a chunk refused by its byte cap lingers only for the grace, not the inactivity ceiling', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const uploadId = await withIO(preflight(port, Buffer.alloc(0), 4), 'the preflight');
+    const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
+    let received = '';
+    socket.on('data', (data: Buffer) => {
+      received += data.toString('latin1');
+    });
+    socket.on('error', () => {});
+    const ended = new Promise<void>((resolve) => socket.once('end', () => resolve()));
+    // A chunked body that overruns its 2-byte range: the limiter refuses it mid-body.
+    const chunk = Buffer.alloc(64 * 1024, 0x61);
+    socket.write(
+      `PUT /upload/direct/${uploadId} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+        `Content-Range: bytes 0-1/4\r\nTransfer-Encoding: chunked\r\n\r\n`,
+    );
+    socket.write(
+      Buffer.concat([Buffer.from(`${chunk.length.toString(16)}\r\n`), chunk, Buffer.from('\r\n')]),
+    );
+    const answer = async () => {
+      for (let i = 0; i < 50 && !/\r\n\r\n\{.*\}$/s.test(received); i += 1) await flushIO();
+    };
+    await withIO(answer(), 'the byte-cap answer');
+    assert.match(received, /^HTTP\/1\.1 400 /);
+    // The rest of the refused body is discarded for at most the grace, then the server
+    // closes its side of the connection, long before the 120 s inactivity ceiling.
+    await withIO(ended, "the server's half-close after its answer");
+    const openConnections = () =>
+      new Promise<number>((resolve, reject) =>
+        server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
+      );
+    assert.equal(await openConnections(), 1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flushIO();
+    assert.equal(await openConnections(), 0, 'the grace closed the connection');
+    socket.destroy();
+  } finally {
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});

@@ -180,6 +180,7 @@ export async function createDaemonHttpServer(options: {
             expectedToken: token,
             daemonRequest: request.daemonRequest,
             signal: request.signal,
+            commit: request.commit,
           }),
       })
     ) {

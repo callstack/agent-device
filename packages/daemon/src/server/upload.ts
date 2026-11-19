@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
-import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   MAX_ARTIFACT_COMPRESSED_BYTES,
@@ -13,7 +12,11 @@ import {
   sanitizeArtifactFilename,
   validateArtifactContentLength,
 } from './artifact-download.ts';
-import { computeUploadHash, observeAcceptedWrites } from './resumable-upload-transfer.ts';
+import {
+  computeUploadHash,
+  observeAcceptedWrites,
+  pipeRequestBody,
+} from './resumable-upload-transfer.ts';
 import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
 
 /**
@@ -87,7 +90,8 @@ export async function receiveUpload(
 
 /**
  * One joined pipeline for the request body, owned by the ingress link: the signal
- * destroys every stream with its typed reason (the earliest failure wins), each
+ * destroys every pipeline stream with its typed reason (the earliest failure wins) but
+ * never the request itself, each
  * accepted (flushed) byte renews the owner's inactivity ceiling, and the ceiling stops
  * at body completion so post-body work observes only the aggregate. The byte cap keeps
  * the later local phases (hash, extract) bounded by the same limit.
@@ -108,7 +112,7 @@ async function receiveUploadBody(
   const output = fs.createWriteStream(destPath);
   observeAcceptedWrites(output, ingress?.onBodyBytes);
   try {
-    await pipeline(req, byteLimit, output, { signal: ingress?.signal });
+    await pipeRequestBody(req, byteLimit, output, ingress?.signal);
     ingress?.onBodyComplete?.();
   } catch (error) {
     throw resolveIngressFailure(ingress?.signal, error);

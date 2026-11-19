@@ -179,8 +179,14 @@ async function authorizeAuxiliaryHttpRequest(params: {
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
   /** The request's own cancellation: the hook gets it, and a late result is not applied. */
   signal?: AbortSignal;
+  /**
+   * The request owner's commit gate: a refusal answered after the hook goes through the
+   * same deadline check as any other answer.
+   */
+  commit?: <T>(work: () => T) => T;
 }): Promise<{ tenantId?: string; sessionNamespace?: TenantSessionNamespace } | null> {
   const { req, res, authHook, expectedToken, daemonRequest, signal } = params;
+  const commit = params.commit ?? (<T>(work: () => T): T => work());
   const token = resolveToken({}, req.headers);
   const tenantId = normalizeTenantId(readHeaderValue(req.headers, DAEMON_HTTP_TENANT_HEADER));
   const tokenError = enforceDaemonToken(token, expectedToken);
@@ -208,7 +214,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
   });
   signal?.throwIfAborted();
   if (!authResult.ok) {
-    sendAuxiliaryAuthHookRejection(res, authResult);
+    commit(() => sendAuxiliaryAuthHookRejection(res, authResult));
     return null;
   }
 
@@ -218,7 +224,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
     clientDeclaredTenant: tenantId,
   });
   if (!tenantTrust.trusted) {
-    sendRestJsonError(res, tenantTrustRejectionError());
+    commit(() => sendRestJsonError(res, tenantTrustRejectionError()));
     return null;
   }
 
