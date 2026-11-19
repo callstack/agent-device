@@ -537,3 +537,63 @@ test('a superseded version names the revision the record last confirmed and an i
     },
   });
 });
+
+test('a closing repeat names the file to record again to, quoted for a shell', async () => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, "Bob's journey.ad");
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+
+  const closed = await answer(baseUrl, stateDir, request('close'), {
+    scriptPublicationId: id,
+    artifacts: [script('v1', 1, id)],
+  });
+
+  const quoted = `'${destination.replaceAll("'", String.raw`'\''`)}'`;
+  expect(closed).toMatchObject({
+    ok: true,
+    data: {
+      savedScript: destination,
+      warnings: [
+        `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, record again with open --save-script=${quoted} --force.`,
+      ],
+    },
+  });
+});
+
+test.each([
+  { name: 'retiring the record', settles: false },
+  { name: 'settling an interrupted commit', settles: true },
+])('an edited staging path is left untouched when $name', async ({ settles }) => {
+  const { root, stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const victims = [
+    path.join(root, 'victim'),
+    path.join(root, 'elsewhere', '.agent-device-script-victim'),
+  ];
+  for (const victim of victims) {
+    fs.mkdirSync(victim, { recursive: true });
+    fs.writeFileSync(path.join(victim, 'keep.txt'), 'keep\n');
+  }
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file: recordFile, record } = soleRecord(stateDir);
+  const publishing = { revision: 2, file: '0:0', staging: victims[1] };
+  fs.writeFileSync(
+    recordFile,
+    JSON.stringify({ ...record, staging: victims, ...(settles ? { publishing } : {}) }),
+  );
+
+  if (settles) {
+    await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
+    expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+    expect(soleRecord(stateDir).record.staging).toEqual(victims);
+  } else {
+    await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
+    // The record stays, retired, so no later retirement or sweep removes those paths either.
+    expect(soleRecord(stateDir).record).toMatchObject({ retired: true, staging: victims });
+  }
+  for (const victim of victims) {
+    expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe('keep\n');
+  }
+});

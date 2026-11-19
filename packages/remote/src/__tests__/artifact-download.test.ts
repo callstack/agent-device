@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -279,5 +279,41 @@ test('a private file download never recreates a removed staging directory', asyn
     assert.equal(fs.existsSync(path.dirname(destinationPath)), false);
   } finally {
     await closeLoopbackServer(server);
+  }
+});
+
+test('a cleanup that fails after a failed download keeps the download error and raises no unhandled rejection', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact download cleanup-failure coverage')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-cleanup-failure-');
+  const server = http.createServer((_req, res) => {
+    res.statusCode = 404;
+    res.end('artifact expired');
+  });
+  const port = await listenOnLoopback(server);
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  const rm = vi
+    .spyOn(fs.promises, 'rm')
+    .mockRejectedValueOnce(
+      Object.assign(new Error('The share connection dropped'), { code: 'ECONNRESET' }),
+    );
+
+  try {
+    await assert.rejects(
+      () => downloadTo(tempRoot, port),
+      (error: unknown) => {
+        assert.equal((error as { details?: { statusCode?: number } }).details?.statusCode, 404);
+        return true;
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(rm.mock.calls.length, 1);
+    assert.deepEqual(unhandled, []);
+  } finally {
+    rm.mockRestore();
+    process.off('unhandledRejection', onUnhandled);
+    await closeLoopbackServer(server);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });

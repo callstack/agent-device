@@ -11,6 +11,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import { readScriptDeliveryReceipt } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -33,6 +34,8 @@ const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
 /** A record untouched for this long is removed the next time a record is created. */
 const STALE_RECORD_MS = 7 * 24 * 60 * 60 * 1000;
 const RECORD_LOCK_TIMEOUT_MS = 30_000;
+/** Every staging directory this client allocates starts with this name, directly inside the destination's directory. */
+const STAGING_PREFIX = '.agent-device-script-';
 
 /**
  * This client's record of one remote `open --save-script`, keyed by the endpoint, tenant, session
@@ -305,12 +308,17 @@ function noteRepeatedVersion(
   const { repeat } = outcome;
   if (repeat === undefined) return;
   const recovery = closing
-    ? 'record again with open --save-script --force.'
+    ? `record again with ${recordAgainCommand(outcome.published)}.`
     : 'the next recorded action writes the recording to the destination again.';
   data.warnings = [
     ...readResponseWarnings(data),
     `${repeatedVersionText(repeat, outcome.published)} It is not checked again. If that file is missing, ${recovery}`,
   ];
+}
+
+/** The command that records again to the same file; a bare `--save-script` would pick a new file name. */
+function recordAgainCommand(destination: string): string {
+  return `open --save-script=${shellQuoteIfNeeded(destination)} --force`;
 }
 
 function repeatedVersionText(
@@ -526,7 +534,7 @@ function stageOrAnswer(
   const current = settleNamedInterruption(file, record, revision, prepared);
   const promoted = committedRepeat(current, revision);
   if (promoted) return promoted;
-  const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
+  const staging = fs.mkdtempSync(path.join(prepared.directory, STAGING_PREFIX));
   try {
     writeRecord(file, { ...current, staging: [...(current.staging ?? []), staging] });
   } catch (error) {
@@ -548,6 +556,35 @@ function releaseStaging(file: string, staging: string): void {
   fs.rmSync(staging, { recursive: true, force: true });
   const record = readRecord(file);
   if (record) writeRecord(file, withoutStaging(record, staging));
+}
+
+/**
+ * Whether a staging path read back from the record has the shape this client allocates: absolute, normalized, and
+ * named with the staging prefix, directly inside `directory`. A recorded path that does not is never removed, and
+ * stays listed.
+ */
+function isOwnStaging(staging: string, directory: string): boolean {
+  return (
+    path.isAbsolute(staging) &&
+    path.normalize(staging) === staging &&
+    path.basename(staging).startsWith(STAGING_PREFIX) &&
+    path.dirname(staging) === directory
+  );
+}
+
+/**
+ * Retirement and the sweep hold no judgment, so a listed staging directory is removed only directly inside the
+ * destination's directory as spelled or as it resolves now; one left in a directory a link has since moved stays
+ * listed, which is safe.
+ */
+function isRetirableStaging(record: ScriptRecord, staging: string): boolean {
+  const parent = path.dirname(path.resolve(record.destination));
+  if (isOwnStaging(staging, parent)) return true;
+  try {
+    return isOwnStaging(staging, fs.realpathSync(parent));
+  } catch {
+    return false;
+  }
 }
 
 function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
@@ -572,10 +609,13 @@ function removeRecord(file: string): void {
       throw error;
     }
   }
-  for (const staging of record?.staging ?? []) {
+  const listed = record?.staging ?? [];
+  const owned = record ? listed.filter((staging) => isRetirableStaging(record, staging)) : [];
+  for (const staging of owned) {
     fs.rmSync(staging, { recursive: true, force: true });
   }
-  fs.rmSync(file, { force: true });
+  // A record that lists a path that is not its own staging stays, retired, so nothing ever removes that path.
+  if (owned.length === listed.length) fs.rmSync(file, { force: true });
 }
 
 /**
@@ -585,7 +625,7 @@ function removeRecord(file: string): void {
 function removeUnretirableRecord(file: string, record: ScriptRecord): void {
   const kept = removeQuietly(file) ? undefined : record.publishing?.staging;
   for (const staging of record.staging ?? []) {
-    if (staging !== kept) removeQuietly(staging);
+    if (staging !== kept && isRetirableStaging(record, staging)) removeQuietly(staging);
   }
 }
 
@@ -749,7 +789,9 @@ function settleInterrupted(file: string, record: ScriptRecord, entry: string): S
   // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
   writeRecord(file, settled);
   // Best effort once the commit is recorded: a directory that stays listed is removed by retirement or the sweep.
-  releaseStagingQuietly(file, record.publishing.staging);
+  // Only a directory the record could have allocated in the judged directory is removed.
+  const { staging } = record.publishing;
+  if (isOwnStaging(staging, path.dirname(entry))) releaseStagingQuietly(file, staging);
   return readRecord(file) ?? settled;
 }
 
@@ -802,7 +844,7 @@ function scriptDeliveryFailure(
         cause: 'script_target_exists',
         publicationId,
         message: `A file already exists at ${destination}.`,
-        hint: 'Remove the existing file, or start a new recording with open --save-script --force.',
+        hint: `Remove the existing file, or start a new recording with ${recordAgainCommand(destination)}.`,
       }
     : {
         reason: 'script_delivery_failed',
