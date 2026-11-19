@@ -227,7 +227,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
       ...focusRuntimeOperationFacts({ focus: frozen.focus }),
       ...gestureRuntimeOperationFacts({ unsupported: frozen.gesture }),
-      ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
+      ...scrollRuntimeOperationFacts({ scroll: frozen.scroll, touchScrollSurface: frozen.scroll }),
       ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
       ...touchRuntimeOperationFacts({
         unsupported: frozen.touch,

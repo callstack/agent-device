@@ -159,7 +159,7 @@ export function revylInteractionOperationFacts(liveSession?: RuntimeOperationUna
       unsupported: liveSession ?? gestureUnavailable,
     }),
     // A scroll is one drag of the planned finger path, so it needs no gesture execution.
-    ...scrollRuntimeOperationFacts({ scroll: cell }),
+    ...scrollRuntimeOperationFacts({ scroll: cell, touchScrollSurface: cell }),
   });
 }
 

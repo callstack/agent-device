@@ -603,9 +603,9 @@ const scrollCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Scroll in a direction or to an edge',
-    searchHint: 'swipe down list pull refresh',
+    searchHint: 'swipe list reload',
     cliDetail:
-      'scroll refresh triggers pull-to-refresh: one slow downward pull anchored at the top of the scrollable area, held briefly before release, so the refresh control commits. The pull distance is the container-height fraction (default 0.4) or --pixels, clamped into the measured-safe 320-520px band. It refuses with reason scroll_refresh_not_at_top when the content is not at the top, and its movement report never says at-edge for this pull. A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture. On watchOS, scroll turns the Digital Crown: up and down only, and the amount is a fraction of the screen height. Use swipe for horizontal pages.',
+      'scroll refresh triggers pull-to-refresh: one slow downward pull anchored at the top of the scrollable area, so the refresh control commits. The pull distance is the container-height fraction (default 0.4) or --pixels, clamped into the measured-safe 320-520px band and bounded by the container height. It refuses with reason scroll_refresh_not_at_top when the content is not at the top, and its movement report never says at-edge for this pull. A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture. On watchOS, scroll turns the Digital Crown: up and down only, and the amount is a fraction of the screen height. Use swipe for horizontal pages.',
   },
   metadata: metadata('scroll'),
   run: (client, input) => client.interactions.scroll(input as ScrollOptions),

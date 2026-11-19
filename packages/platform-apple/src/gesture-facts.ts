@@ -24,6 +24,11 @@ const targetAuthoredDragUnavailable = Object.freeze({
 const scrollKindUnavailable = unsupportedAppleDeviceKind(
   'scroll is supported only for Apple simulators and devices.',
 );
+const touchScrollLeafUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'scroll refresh needs a touch scroll surface: iOS or iPadOS simulators and devices.',
+} as const);
 
 function unsupportedAppleDeviceKind(hint: string) {
   return Object.freeze({ available: false, reason: 'unsupported-device-kind', hint } as const);
@@ -40,7 +45,10 @@ export function appleGestureAndScrollFacts(device: DeviceInfo) {
       targetAuthoredDrag: appleTargetAuthoredDragFact(device),
       viewport: appleGestureViewportFact(device),
     }),
-    ...scrollRuntimeOperationFacts({ scroll: appleScrollFact(device) }),
+    ...scrollRuntimeOperationFacts({
+      scroll: appleScrollFact(device),
+      touchScrollSurface: appleTouchScrollFact(device),
+    }),
   };
 }
 
@@ -83,6 +91,17 @@ function appleGestureViewportFact(device: DeviceInfo): RuntimeOperationFact {
 
 function appleScrollFact(device: DeviceInfo): RuntimeOperationFact {
   return appleTouchKind(device) ? available : scrollKindUnavailable;
+}
+
+/**
+ * Pull-to-refresh is a touch gesture, so it is declared exactly on the touch Apple OSes — iOS and
+ * iPadOS, where it is a primary gesture — and refused on watchOS, tvOS, visionOS, and the macOS
+ * desktop, whose scroll surfaces are not finger-pulled.
+ */
+function appleTouchScrollFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!appleTouchKind(device)) return scrollKindUnavailable;
+  const appleOs = resolveDeviceAppleOs(device);
+  return appleOs === 'ios' || appleOs === 'ipados' ? available : touchScrollLeafUnavailable;
 }
 
 function appleTouchKind(device: DeviceInfo): boolean {

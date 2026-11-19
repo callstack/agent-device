@@ -165,17 +165,6 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     (i) => i.scroll('left', { amount: 0.5, releaseBehavior: 'inertial' }),
   ],
-  'ios-simulator.interactions-scroll.refresh-pull': [
-    IOS_SIMULATOR,
-    (i) =>
-      i.scroll('up', {
-        pixels: 320,
-        durationMs: 1200,
-        holdMs: 400,
-        anchorTop: true,
-        containerRect: { x: 18, y: 178, width: 366, height: 662 },
-      }),
-  ],
   'macos.desktop-scroll.amount': [
     MACOS_DEVICE,
     (i) => i.scroll('down', { amount: 0.5, durationMs: 300 }),

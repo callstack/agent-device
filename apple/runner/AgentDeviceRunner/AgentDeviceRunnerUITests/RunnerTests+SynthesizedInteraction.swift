@@ -11,8 +11,7 @@ extension RunnerTests {
     y2: Double,
     durationMs: Double,
     profile: SynthesizedDragProfile,
-    context: SynthesizedCoordinateContext? = nil,
-    holdMs: Double? = nil
+    context: SynthesizedCoordinateContext? = nil
   ) throws -> RunnerInteractionOutcome {
 #if os(iOS)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -51,8 +50,7 @@ extension RunnerTests {
       resolvedWindow: context.resolvedWindow,
       interfaceOrientation: geometry.orientation,
       drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
-                                  controlledScroll: ObjCBool(profile == .controlledScroll),
-                                  holdMs: max(0, holdMs ?? 0)),
+                                  controlledScroll: ObjCBool(profile == .controlledScroll)),
       dispatched: &dispatched
     )
     return try Self.synthesizedGestureOutcome(

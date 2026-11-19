@@ -26,7 +26,6 @@ typedef id (*RunnerDragPointerPathFactory)(
   const RunnerGestureEventBridge *,
   CGPoint,
   CGPoint,
-  double,
   double
 );
 
@@ -50,15 +49,13 @@ static id RunnerSwipePointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
   CGPoint end,
-  double durationMs,
-  double holdMs
+  double durationMs
 );
 static id RunnerControlledScrollPointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
   CGPoint end,
-  double durationMs,
-  double holdMs
+  double durationMs
 );
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
@@ -69,7 +66,6 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   double durationMs,
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory,
-  double holdMs,
   BOOL * _Nullable dispatched
 );
 static RunnerTapSynthesisStatus RunnerTrySynthesizeTap(
@@ -103,7 +99,6 @@ static id RunnerTapPointerPath(
       application, resolvedWindow, interfaceOrientation, drag.start, drag.end, drag.durationMs,
       drag.controlledScroll ? @"agent-device-controlled-scroll" : @"agent-device-swipe",
       drag.controlledScroll ? RunnerControlledScrollPointerPath : RunnerSwipePointerPath,
-      drag.holdMs,
       dispatched
     );
   } @catch (NSException *exception) {
@@ -203,7 +198,6 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   double durationMs,
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory,
-  double holdMs,
   BOOL * _Nullable dispatched
 ) {
   RunnerGestureEventBridge bridge;
@@ -211,7 +205,7 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   NSString *error = RunnerCreateEventRecord(application, resolvedWindow, interfaceOrientation, recordName, &bridge, &record);
   if (error != nil) return error;
 
-  id path = pathFactory(&bridge, start, end, durationMs, holdMs);
+  id path = pathFactory(&bridge, start, end, durationMs);
   if (path == nil) {
     return @"private XCTest event synthesis failed: could not create pointer path";
   }
@@ -371,8 +365,7 @@ static id RunnerSwipePointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
   CGPoint end,
-  double durationMs,
-  double holdMs
+  double durationMs
 ) {
   id path = RunnerNewPointerPath(bridge, start);
   if (path == nil) {
@@ -389,7 +382,7 @@ static id RunnerSwipePointerPath(
   ((RunnerMsgSendPathOffset)objc_msgSend)(
     path,
     bridge->liftSelector,
-    RunnerSwipeMovementDurationSeconds + durationSeconds + holdMs / 1000.0
+    RunnerSwipeMovementDurationSeconds + durationSeconds
   );
   return path;
 }
@@ -398,14 +391,11 @@ static id RunnerControlledScrollPointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
   CGPoint end,
-  double durationMs,
-  double holdMs
+  double durationMs
 ) {
   // A stationary hold is not a reliable zero-velocity release in XCTest. Cubic ease-out decreases
   // velocity from the first movement and reaches near zero before lift. Profiles that accelerate
-  // after pan recognition can still be classified as flings despite a slow final sample. The
-  // explicit holdMs (pull-to-refresh) keeps the contact parked at the pulled position before the
-  // lift, so the refresh control commits instead of springing back.
+  // after pan recognition can still be classified as flings despite a slow final sample.
   id path = RunnerNewPointerPath(bridge, start);
   if (path == nil) {
     return nil;
@@ -423,7 +413,7 @@ static id RunnerControlledScrollPointerPath(
     ((RunnerMsgSendPathMove)objc_msgSend)(path, bridge->moveSelector, point, durationSeconds * t);
   }
 
-  ((RunnerMsgSendPathOffset)objc_msgSend)(path, bridge->liftSelector, durationSeconds + holdMs / 1000.0);
+  ((RunnerMsgSendPathOffset)objc_msgSend)(path, bridge->liftSelector, durationSeconds);
   return path;
 }
 

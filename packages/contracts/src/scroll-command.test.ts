@@ -59,18 +59,9 @@ test('assertScrollRefreshCompatible refuses --until and --max-passes on a refres
   );
 });
 
-test('resolveScrollExecutionOptions passes the refresh hold and top anchor through', () => {
+test('resolveScrollExecutionOptions keeps a controlled release and no hold or anchor fields', () => {
   const resolved = resolveScrollExecutionOptions({ pixels: 320, durationMs: 1200 });
   assert.equal(resolved.releaseBehavior, 'controlled');
-  assert.equal(resolved.holdMs, undefined);
-  assert.equal(resolved.anchorTop, undefined);
-  const refresh = resolveScrollExecutionOptions({
-    pixels: 320,
-    durationMs: 1200,
-    holdMs: 400,
-    anchorTop: true,
-  });
-  assert.equal(refresh.holdMs, 400);
-  assert.equal(refresh.anchorTop, true);
-  assert.equal(refresh.releaseBehavior, 'controlled');
+  assert.equal('holdMs' in resolved, false);
+  assert.equal('anchorTop' in resolved, false);
 });

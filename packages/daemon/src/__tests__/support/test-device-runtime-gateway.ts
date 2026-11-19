@@ -158,6 +158,7 @@ const admittedGestureFamilyFacts = Object.freeze({
   performTargetAuthoredDrag: available,
   gestureViewport: available,
   scrollDirection: available,
+  touchScrollSurface: available,
 });
 
 const admittedSystemFamilyFacts = Object.freeze({ appSwitcher: available });

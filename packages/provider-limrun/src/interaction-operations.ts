@@ -94,7 +94,15 @@ export function limrunAndroidInteractionFacts(device: DeviceInfo) {
         ? unavailableFact('unsupported-platform-leaf', TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT)
         : available,
     }),
-    ...scrollRuntimeOperationFacts({ scroll: available }),
+    ...scrollRuntimeOperationFacts({
+      scroll: available,
+      touchScrollSurface: tv
+        ? unavailableFact(
+            'unsupported-platform-leaf',
+            'scroll refresh needs a touch screen; an Android TV target has none — drive it with tv-remote.',
+          )
+        : available,
+    }),
     ...backRuntimeOperationFacts({ back: available }),
     ...orientationRuntimeOperationFacts({ orientation: available, unlock: available }),
     ...tvRemoteRuntimeOperationFacts({

@@ -32,6 +32,14 @@ export type ScrollDirectionInput = Readonly<{
  */
 export type ScrollRuntimeOperations = Readonly<{
   scrollDirection(input: ScrollDirectionInput): Promise<ScrollDirectionResult>;
+  /**
+   * The touch-scroll surface fact `scroll refresh` admits on. Declared available exactly where a
+   * finger pull can drive the scroll surface — iOS and iPadOS, Android phone and tablet — and
+   * unavailable on a TV target, a desktop leaf, and every wheel-driven surface, so the refresh
+   * plan's `use` refuses there at admission with no inline platform check in the daemon. The
+   * daemon never invokes this operation; it exists so the fact hangs on a declared operation.
+   */
+  touchScrollSurface(): Promise<void>;
 }>;
 
 /** Validated movement evidence beside the owner's unchanged public response fields. */
@@ -67,12 +75,16 @@ function readFiniteNumber(value: unknown): number | undefined {
 
 export type ScrollRuntimeOperationFacts = Readonly<{
   scrollDirection: RuntimeOperationFact;
+  touchScrollSurface: RuntimeOperationFact;
 }>;
 
 export function scrollRuntimeOperationFacts(
-  input: Readonly<{ scroll: RuntimeOperationFact }>,
+  input: Readonly<{ scroll: RuntimeOperationFact; touchScrollSurface: RuntimeOperationFact }>,
 ): ScrollRuntimeOperationFacts {
-  return Object.freeze({ scrollDirection: input.scroll });
+  return Object.freeze({
+    scrollDirection: input.scroll,
+    touchScrollSurface: input.touchScrollSurface,
+  });
 }
 
 /**
@@ -85,6 +97,8 @@ function bindScrollDirection(
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): ScrollRuntimeOperations {
   return Object.freeze({
+    // Admission-fact only: never invoked, so the bound value carries no behavior.
+    touchScrollSurface: async () => {},
     scrollDirection: async (input: ScrollDirectionInput) => {
       signal.throwIfAborted();
       const interactor = await resolveInteractor({

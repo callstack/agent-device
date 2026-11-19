@@ -89,6 +89,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   focusPoint: 'runner',
   typeText: 'runner',
   scrollDirection: 'runner',
+  touchScrollSurface: 'runner',
   performGesturePlan: 'runner',
   performMultiTouchGesturePlan: 'runner',
   performTargetAuthoredDrag: 'runner',

@@ -80,65 +80,8 @@ func runnerScrollGesturePlan(
   }
 }
 
-// Swift port of buildPullRefreshGesturePlan from packages/contracts/src/scroll-gesture.ts —
-// the same two-place invariant as runnerScrollGesturePlan above: the daemon keeps the TS
-// implementation (Android, recording, reported pixels) and the runner places the pull with this
-// copy. Both ports are asserted against contracts/fixtures/scroll-gesture.json (`pullCases`),
-// gated XCTest in UnitTests/RunnerTests+ScrollGestureTests.swift, vitest twin in
-// packages/contracts/src/scroll-gesture.test.ts.
-private let runnerDefaultRefreshPullAmount = 0.4
+/// A swipe kept inside a container stays this far off its edges (SCROLL_CONTAINER_EDGE_INSET).
 private let runnerScrollContainerEdgeInset = 8.0
-
-/// The daemon sends the pull container in screen (accessibility) coordinates; the planner works in
-/// the plan frame's own space. On a full-screen window the two origins coincide; on iPad split view
-/// the window's on-screen origin is non-zero and must be subtracted.
-func runnerContainerInPlanFrame(_ container: CGRect, frame: CGRect) -> CGRect {
-  CGRect(
-    x: container.minX - frame.minX,
-    y: container.minY - frame.minY,
-    width: container.width,
-    height: container.height
-  )
-}
-
-/// The one pull a `scroll refresh` dispatches: a downward lane anchored just inside the TOP of the
-/// scroll container (in the plan frame's own space), not the centred lane a directional scroll
-/// runs. A pull that begins above the list lands on the header and moves nothing, and a
-/// pull-to-refresh control only arms while its scroller sits at the top.
-func runnerPullRefreshGesturePlan(
-  amount: Double?,
-  pixels: Double?,
-  frame: CGRect,
-  container: CGRect
-) -> RunnerScrollGesturePlan? {
-  if let amount, !(amount.isFinite && amount > 0) { return nil }
-  if let pixels, !(pixels.isFinite && pixels > 0) { return nil }
-  let referenceWidth = frame.width
-  let referenceHeight = frame.height
-  let axisPadding = max(1, (referenceHeight * runnerDefaultEdgePaddingFraction).rounded())
-  let crossPadding = max(1, (referenceWidth * runnerDefaultEdgePaddingFraction).rounded())
-  let band = insetRange(start: container.minY, size: container.height,
-                        paddedMin: axisPadding, paddedMax: referenceHeight - axisPadding)
-    ?? (min: axisPadding, max: referenceHeight - axisPadding)
-  let crossBand = insetRange(start: container.minX, size: container.width,
-                             paddedMin: crossPadding, paddedMax: referenceWidth - crossPadding)
-    ?? insetRange(start: container.minX, size: container.width, paddedMin: 0, paddedMax: referenceWidth)
-    ?? (min: crossPadding, max: referenceWidth - crossPadding)
-  let containerCross = (container.minX + container.width / 2).rounded()
-  let cross: Double
-  if containerCross >= crossBand.min && containerCross <= crossBand.max {
-    cross = containerCross
-  } else {
-    cross = ((crossBand.min + crossBand.max) / 2).rounded()
-  }
-  let pullAmount = amount ?? runnerDefaultRefreshPullAmount
-  let requestedPixels: Double =
-    pixels.map { max(1, $0.rounded()) } ?? (pullAmount * container.height).rounded()
-  let travelPixels = max(1, min(requestedPixels, band.max - band.min))
-  let y1 = band.min
-  let y2 = y1 + travelPixels
-  return RunnerScrollGesturePlan(x1: cross, y1: y1, x2: cross, y2: y2, travelPixels: travelPixels)
-}
 
 /// The coordinates of `[start, start + size)` an inset swipe may use inside `[paddedMin, paddedMax]`.
 private func insetRange(start: Double, size: Double, paddedMin: Double, paddedMax: Double)

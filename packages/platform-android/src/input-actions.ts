@@ -10,7 +10,6 @@ import {
   type DeviceRotation,
 } from '@agent-device/contracts/device';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
-import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
   type ScrollContainerTarget,
@@ -18,10 +17,8 @@ import {
   DEFAULT_MOBILE_SCROLL_DURATION_MS,
 } from '@agent-device/contracts/scroll-command';
 import {
-  type PullRefreshGesturePlan,
   type ScrollDirection,
   type ScrollGesturePlan,
-  buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
   clipScrollViewportAboveKeyboard,
   scrollKeyboardOccludesSurfaceError,
@@ -325,8 +322,6 @@ export async function scrollAndroid(
     pixels?: number;
     durationMs?: number;
     releaseBehavior?: ScrollReleaseBehavior;
-    holdMs?: number;
-    anchorTop?: boolean;
   } & ScrollContainerTarget &
     AndroidHelperSessionOptions,
 ): Promise<Record<string, unknown>> {
@@ -352,10 +347,7 @@ export async function scrollAndroid(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
     GESTURE_DURATION_MIN_MS,
   );
-  // The injector lifts the contact at the last sample's offset, so a stationary final sample at
-  // `durationMs + holdMs` is the hold before release a pull-to-refresh needs to commit.
-  const holdMs = options?.holdMs ?? 0;
-  const panPlan = buildGesturePlan(
+  const gesturePlan = buildGesturePlan(
     {
       intent: 'pan',
       origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
@@ -368,7 +360,6 @@ export async function scrollAndroid(
     swipeSurface.viewport,
     'android',
   );
-  const gesturePlan = withHoldBeforeRelease(panPlan, durationMs, holdMs);
   const backend = await executeAndroidTouchPlan(device, {
     ...gesturePlan,
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
@@ -378,7 +369,6 @@ export async function scrollAndroid(
     ...scrollPlan,
     ...swipeSurface.evidence,
     ...(options?.durationMs !== undefined ? { durationMs } : {}),
-    ...(holdMs > 0 ? { holdMs } : {}),
     ...backend,
   };
 }
@@ -391,28 +381,18 @@ function relativeToViewport(rect: Rect, viewport: Rect): Rect {
 type ScrollAndroidOptions = NonNullable<Parameters<typeof scrollAndroid>[2]>;
 
 /**
- * The lane one Android scroll runs, in the swipe surface's zero-origin frame. A pull-to-refresh
- * anchors its lane just inside the TOP of the container instead of running the centred lane: a
- * pull that starts above the list lands on the header and moves nothing.
+ * The lane one Android scroll runs, in the swipe surface's zero-origin frame. Snapshot rects are
+ * absolute, so a named container is re-based into that frame first.
  */
 function androidScrollLane(
   direction: ScrollDirection,
   options: ScrollAndroidOptions | undefined,
   viewport: Rect,
-): ScrollGesturePlan | PullRefreshGesturePlan {
+): ScrollGesturePlan {
   const container =
     options?.containerRect === undefined
       ? undefined
       : relativeToViewport(options.containerRect, viewport);
-  if (options?.anchorTop === true && direction === 'up' && container !== undefined) {
-    return buildPullRefreshGesturePlan({
-      amount: options?.amount,
-      pixels: options?.pixels,
-      container,
-      referenceWidth: viewport.width,
-      referenceHeight: viewport.height,
-    });
-  }
   return buildScrollGesturePlan({
     direction,
     amount: options?.amount,
@@ -421,37 +401,6 @@ function androidScrollLane(
     referenceHeight: viewport.height,
     ...(container === undefined ? {} : { container }),
   });
-}
-
-/**
- * The injector lifts the contact at the last sample's offset, so a stationary final sample at
- * `durationMs + holdMs` is the hold before release a pull-to-refresh needs to commit.
- */
-function withHoldBeforeRelease(
-  panPlan: GesturePlan,
-  durationMs: number,
-  holdMs: number,
-): GesturePlan {
-  if (holdMs <= 0 || panPlan.topology !== 'single') return panPlan;
-  // Keep the pan's interpolated samples and park the contact at the pulled end point for the
-  // hold: the injector lifts at the last sample's offset, so the appended stationary sample is the
-  // hold before release.
-  const trajectory = panPlan.pointers[0];
-  const lastSample = trajectory.samples.at(-1);
-  if (lastSample === undefined) return panPlan;
-  return {
-    ...panPlan,
-    durationMs: durationMs + holdMs,
-    pointers: [
-      {
-        ...trajectory,
-        samples: [
-          ...trajectory.samples,
-          { offsetMs: durationMs + holdMs, point: lastSample.point },
-        ],
-      },
-    ],
-  };
 }
 
 /**

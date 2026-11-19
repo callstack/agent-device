@@ -509,11 +509,19 @@ function expectLifecycleFacts(
 // `requireGestureSupported` carried on Android was the TV target, which it applied to two-contact
 // synthesis and to target-authored drag but never to a plain one-contact fling or pan.
 test.each([
-  // name, device, plan, multiTouch, drag, scroll
-  ['emulator', ANDROID_EMULATOR, true, true, true, true],
-  ['physical device', { ...ANDROID_EMULATOR, kind: 'device' as const }, true, true, true, true],
-  ['unknown kind', UNKNOWN_KIND_DEVICE, true, true, true, true],
-  ['TV target', { ...ANDROID_EMULATOR, target: 'tv' as const }, true, false, false, true],
+  // name, device, plan, multiTouch, drag, scroll, touchScrollSurface
+  ['emulator', ANDROID_EMULATOR, true, true, true, true, true],
+  [
+    'physical device',
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    true,
+    true,
+    true,
+    true,
+    true,
+  ],
+  ['unknown kind', UNKNOWN_KIND_DEVICE, true, true, true, true, true],
+  ['TV target', { ...ANDROID_EMULATOR, target: 'tv' as const }, true, false, false, true, false],
   [
     'synthetic simulator row',
     { ...ANDROID_EMULATOR, kind: 'simulator' as const },
@@ -521,10 +529,11 @@ test.each([
     false,
     false,
     false,
+    false,
   ],
 ])(
   'declares the Android %s gesture and scroll cells',
-  async (_name, runtimeDevice, plan, multiTouch, drag, scroll) => {
+  async (_name, runtimeDevice, plan, multiTouch, drag, scroll, touchScroll) => {
     const facts = await createAndroidPlatformRuntime(gestureHost()).inspectFacts(runtimeDevice);
     expect(facts.operations.performGesturePlan.available).toBe(plan);
     // Android honors a direction-authored fling's speed semantics, so it shares the plan cell.
@@ -533,8 +542,22 @@ test.each([
     expect(facts.operations.performTargetAuthoredDrag.available).toBe(drag);
     expect(facts.operations.gestureViewport.available).toBe(plan);
     expect(facts.operations.scrollDirection.available).toBe(scroll);
+    // Pull-to-refresh admits on phone and tablet touch surfaces only — never on a TV target.
+    expect(facts.operations.touchScrollSurface.available).toBe(touchScroll);
   },
 );
+
+test('the Android TV target refuses the touch-scroll surface with its own hint', async () => {
+  const facts = await createAndroidPlatformRuntime(gestureHost()).inspectFacts({
+    ...ANDROID_EMULATOR,
+    target: 'tv',
+  });
+  expect(facts.operations.touchScrollSurface).toEqual({
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'scroll refresh needs a touch screen; an Android TV target has none — drive it with tv-remote.',
+  });
+});
 
 test('carries the retired Android TV hints verbatim', async () => {
   const facts = await createAndroidPlatformRuntime(gestureHost()).inspectFacts({

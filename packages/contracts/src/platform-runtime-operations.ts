@@ -318,15 +318,25 @@ const scrollDirectionUse = defineUse({
 });
 /**
  * Every scroll that verifies against a fresh capture: `scroll top`/`scroll bottom` read hidden
- * content at the edge between passes, `scroll --until <selector>` re-reads the tree between passes
- * to decide whether the target came into view, and `scroll refresh` reads the top edge of the
- * scrollable area before its single pull to refuse or aim. All check against that capture rather
- * than a stale session snapshot, so the capture is part of the tier's requirement rather than
- * something discovered mid-run — the retired leaf's "requires snapshot support to verify hidden
- * content before scrolling" refusal, moved to admission. One declaration, because the tiers admit
- * on identical facts.
+ * content at the edge between passes, and `scroll --until <selector>` re-reads the tree between
+ * passes to decide whether the target came into view. All check against that capture rather than
+ * a stale session snapshot, so the capture is part of the tier's requirement rather than something
+ * discovered mid-run — the retired leaf's "requires snapshot support to verify hidden content
+ * before scrolling" refusal, moved to admission. One declaration, because the tiers admit on
+ * identical facts. (`scroll refresh` has its own use, which adds the touch-scroll surface fact.)
  */
 const scrollVerifiedPassUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
+
+/**
+ * `scroll refresh`'s own use: the touch-scroll surface fact first, then the pan the pull
+ * dispatches through, then the capture its pre-pull top-edge read needs. Admission refuses a
+ * device that declares no touch scroll surface (a TV target, a desktop or wheel-driven leaf)
+ * before any device work, which is what retires the daemon's inline platform check.
+ */
+const scrollRefreshUse = defineUse({
+  required: ['touchScrollSurface', 'performGesturePlan', 'captureSnapshot'],
+  preferred: ['gestureViewport'],
+});
 
 const gestureUsesByTier = Object.freeze({
   plan: gesturePlanUse,
@@ -350,6 +360,7 @@ export const swipeRuntimePlanUses = Object.freeze([gesturePlanUse] as const);
 export const scrollRuntimePlanUses = Object.freeze([
   scrollDirectionUse,
   scrollVerifiedPassUse,
+  scrollRefreshUse,
 ] as const);
 
 type GesturePlanFor<Tier extends GestureRuntimeTier> = Readonly<{
@@ -419,7 +430,7 @@ export type ScrollRuntimePlan =
   | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
   | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollVerifiedPassUse }>
   | Readonly<{ kind: 'until'; until: string; use: typeof scrollVerifiedPassUse }>
-  | Readonly<{ kind: 'refresh'; use: typeof scrollVerifiedPassUse }>;
+  | Readonly<{ kind: 'refresh'; use: typeof scrollRefreshUse }>;
 
 /**
  * `scroll top`/`scroll bottom` verify between passes, `scroll --until` re-reads the tree between
@@ -430,11 +441,12 @@ export type ScrollRuntimePlan =
 export function resolveScrollRuntimePlan(
   input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; refresh?: boolean }>,
 ): ScrollRuntimePlan {
-  // `scroll refresh` is one pass — a pull anchored at the container's top edge — but it reads the
-  // top edge of a freshly captured tree to refuse or aim, so it admits on the verified-pass facts:
-  // the swipe plus a capture that is part of the requirement, not a conditional nicety.
+  // `scroll refresh` is one pass — a slow downward pull anchored at the container's top edge,
+  // dispatched through the gesture pan planner — but it reads the top edge of a freshly captured
+  // tree to refuse or aim and admits only where the platform declares a touch scroll surface, so
+  // its use carries the touch-scroll fact, the pan, and the capture as requirements.
   if (input.refresh === true) {
-    return Object.freeze({ kind: 'refresh', use: scrollVerifiedPassUse } as const);
+    return Object.freeze({ kind: 'refresh', use: scrollRefreshUse } as const);
   }
   if (input.until !== undefined) {
     return Object.freeze({

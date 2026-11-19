@@ -122,6 +122,10 @@ function webAvailableFact(condition: boolean, unavailable: RuntimeOperationFact)
 
 /** `gesture` and `swipe` never carried a web capability bucket; the browser drives no synthesis. */
 const gestureUnavailable = unavailableFact('unsupported-platform-leaf');
+const touchScrollUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'scroll refresh needs a touch scroll surface; a web page is scrolled with the wheel or script, not a finger pull.',
+);
 const targetAuthoredDragUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
@@ -389,7 +393,10 @@ function webRuntimeFacts(
       // (`WEB_INTERACTION_COMMANDS`), so it shares focus's `{ device: true }` cell. `gesture` and
       // `swipe` never carried a web bucket, and the retired admission refused `platform === 'web'`
       // outright. Drag is the exception it checked FIRST, by naming the phases an adapter needs.
-      ...scrollRuntimeOperationFacts({ scroll: browserDevice }),
+      ...scrollRuntimeOperationFacts({
+        scroll: browserDevice,
+        touchScrollSurface: touchScrollUnavailable,
+      }),
       ...gestureRuntimeOperationFacts({
         unsupported: gestureUnavailable,
         targetAuthoredDrag: targetAuthoredDragUnavailable,

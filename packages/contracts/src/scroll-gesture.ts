@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
 // `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is
@@ -253,10 +253,10 @@ export const REFRESH_PULL_MAX_PX = 520;
 export type PullRefreshGestureOptions = {
   amount?: number;
   pixels?: number;
-  /** The vertical scroll container the pull starts inside, in the reference frame's own space. */
+  /** The vertical scroll container the pull starts inside, in the same space as `viewport`. */
   container: Rect;
-  referenceWidth: number;
-  referenceHeight: number;
+  /** The gesture viewport the pull is planned in — the same space a capture's rects use. */
+  viewport: Rect;
 };
 
 export type PullRefreshGesturePlan = {
@@ -266,8 +266,8 @@ export type PullRefreshGesturePlan = {
   y1: number;
   x2: number;
   y2: number;
-  referenceWidth: number;
-  referenceHeight: number;
+  /** The viewport the coordinates are expressed in; the pan plan takes it over verbatim. */
+  viewport: Rect;
   amount?: number;
   /** The span dispatched, which is less than `requestedPixels` when the container shortened it. */
   pixels: number;
@@ -281,26 +281,32 @@ export type PullRefreshGesturePlan = {
  * container's top edge matters twice over — a pull that begins on a header above the list lands
  * outside the scroller and moves nothing, and a pull-to-refresh control only arms while its
  * scroller sits at the top. The lane stays inside the container's intersection with the padded
- * frame (#2714), so the endpoints never land on the container's boundary row or the status bar.
+ * viewport (#2714), so the endpoints never land on the container's boundary row or the status bar.
+ * Coordinates are absolute in the viewport's own space, which is also the snapshot space, so a
+ * window with a non-zero origin (a split-view iPad) needs no conversion.
  */
 export function buildPullRefreshGesturePlan(
   options: PullRefreshGestureOptions,
 ): PullRefreshGesturePlan {
-  const { container, referenceWidth, referenceHeight } = options;
-  const axisPadding = scrollEdgePadding(referenceHeight);
-  const crossPadding = scrollEdgePadding(referenceWidth);
-  const band = insetContainerRange(container.y, container.height, {
-    min: axisPadding,
-    max: referenceHeight - axisPadding,
-  }) ?? { min: axisPadding, max: referenceHeight - axisPadding };
-  const crossBand = insetContainerRange(container.x, container.width, {
-    min: crossPadding,
-    max: referenceWidth - crossPadding,
-  }) ??
-    insetContainerRange(container.x, container.width, { min: 0, max: referenceWidth }) ?? {
-      min: crossPadding,
-      max: referenceWidth - crossPadding,
-    };
+  const { container, viewport } = options;
+  const axisPadding = scrollEdgePadding(viewport.height);
+  const crossPadding = scrollEdgePadding(viewport.width);
+  const paddedAxis = {
+    min: viewport.y + axisPadding,
+    max: viewport.y + viewport.height - axisPadding,
+  };
+  const band = insetContainerRange(container.y, container.height, paddedAxis) ?? paddedAxis;
+  const paddedCross = {
+    min: viewport.x + crossPadding,
+    max: viewport.x + viewport.width - crossPadding,
+  };
+  const crossBand =
+    insetContainerRange(container.x, container.width, paddedCross) ??
+    insetContainerRange(container.x, container.width, {
+      min: viewport.x,
+      max: viewport.x + viewport.width,
+    }) ??
+    paddedCross;
   const containerCross = Math.round(container.x + container.width / 2);
   const cross =
     containerCross >= crossBand.min && containerCross <= crossBand.max
@@ -323,8 +329,7 @@ export function buildPullRefreshGesturePlan(
     y1,
     x2: cross,
     y2,
-    referenceWidth,
-    referenceHeight,
+    viewport,
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
     pixels: travelPixels,
     ...(travelPixels < requestedPixels ? { requestedPixels } : {}),
@@ -438,7 +443,7 @@ export function buildInPageSwipeGesturePlan(
 }
 
 export function inferGestureReferenceFrame(
-  nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>,
+  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
 ): GestureReferenceFrame | undefined {
   const viewportRect = inferViewportRect(nodes);
   if (!viewportRect) return undefined;
@@ -446,6 +451,17 @@ export function inferGestureReferenceFrame(
     referenceWidth: viewportRect.width,
     referenceHeight: viewportRect.height,
   };
+}
+
+/**
+ * The gesture viewport as a rect in the capture's own (screen-origin) space, so plan coordinates
+ * computed against it need no frame conversion — a window with a non-zero origin (a split-view
+ * iPad) keeps its origin instead of being re-based.
+ */
+export function inferGestureViewportRect(
+  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
+): Rect | undefined {
+  return inferViewportRect(nodes);
 }
 
 function pointFromPercent(
@@ -476,7 +492,9 @@ export function parseScrollDirection(direction: string): ScrollDirection {
   return SCROLL_DIRECTION_ENUM.parse(direction);
 }
 
-function inferViewportRect(nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>): Rect | undefined {
+function inferViewportRect(
+  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
+): Rect | undefined {
   const candidate = nodes
     .filter((node) => isViewportRootNode(node) && isValidRect(node.rect))
     .map((node) => node.rect)

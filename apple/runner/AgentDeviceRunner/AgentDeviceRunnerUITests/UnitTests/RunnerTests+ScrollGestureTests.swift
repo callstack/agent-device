@@ -10,7 +10,6 @@ private struct ScrollGestureFixture: Decodable {
     let defaultEdgePaddingFraction: Double
     let ordinaryScrollReleaseBehavior: String
     let edgeScrollReleaseBehavior: String
-    let defaultRefreshPullAmount: Double
   }
   struct Expected: Decodable {
     let x1: Double
@@ -28,19 +27,8 @@ private struct ScrollGestureFixture: Decodable {
     let referenceHeight: Double
     let expected: Expected
   }
-  struct PullCase: Decodable {
-    let name: String
-    let container: RunnerWireRect
-    let amount: Double?
-    let pixels: Double?
-    let referenceWidth: Double
-    let referenceHeight: Double
-    let expected: Expected
-  }
-
   let constants: Constants
   let cases: [Case]
-  let pullCases: [PullCase]
 }
 
 extension RunnerTests {
@@ -89,41 +77,6 @@ extension RunnerTests {
       )
       assertPlan(plan, matches: testCase.expected, testCase.name)
     }
-  }
-
-  // The pull planner (runnerPullRefreshGesturePlan) shares the parity table's `pullCases`,
-  // asserted here AND by the TS port (buildPullRefreshGesturePlan in
-  // packages/contracts/src/scroll-gesture.test.ts).
-  func testRunnerPullRefreshGesturePlanMatchesParityTable() throws {
-    let fixture = try loadScrollGestureFixture()
-    XCTAssertFalse(fixture.pullCases.isEmpty, "pull parity table must not be empty")
-    for testCase in fixture.pullCases {
-      let plan = try XCTUnwrap(
-        runnerPullRefreshGesturePlan(
-          amount: testCase.amount,
-          pixels: testCase.pixels,
-          frame: CGRect(x: 0, y: 0, width: testCase.referenceWidth, height: testCase.referenceHeight),
-          container: testCase.container.rect
-        ),
-        testCase.name
-      )
-      assertPlan(plan, matches: testCase.expected, testCase.name)
-    }
-  }
-
-  func testRunnerContainerInPlanFrameSubtractsANonZeroWindowOrigin() {
-    // iPad split view: the window's on-screen rect starts at (400, 120), and the daemon's
-    // scrollPullContainer arrives in screen coordinates.
-    let frame = CGRect(x: 400, y: 120, width: 600, height: 900)
-    let container = CGRect(x: 420, y: 240, width: 560, height: 700)
-    let converted = runnerContainerInPlanFrame(container, frame: frame)
-    XCTAssertEqual(converted, CGRect(x: 20, y: 120, width: 560, height: 700))
-    // A full-screen window keeps the container unchanged.
-    let fullScreen = CGRect(x: 0, y: 0, width: 1000, height: 1000)
-    XCTAssertEqual(
-      runnerContainerInPlanFrame(container, frame: fullScreen),
-      container
-    )
   }
 
   // The planner constants are private on both sides; the table pins them behaviourally on a

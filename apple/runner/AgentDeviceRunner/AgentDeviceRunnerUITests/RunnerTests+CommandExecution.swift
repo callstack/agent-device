@@ -314,51 +314,11 @@ extension RunnerTests {
       }
       let viewport = try resolvedScrollViewport(app: activeApp, context: scrollContext)
       let defaults = runnerDragCommandDefaults(command)
-      // A pull-to-refresh (`scrollPullContainer` present) plans its lane anchored at the top of
-      // that container instead of the viewport-centred lane a directional scroll runs.
-      let pullGesture: ScrollGestureDispatch?
-      if let pullContainer = command.scrollPullContainer {
-        switch viewport {
-        case .occluded(let occlusionKeyboardMinY, let visibleHeight):
-          return scrollKeyboardOccludedResponse(
-            direction: direction.rawValue,
-            keyboardMinY: occlusionKeyboardMinY,
-            visibleHeight: visibleHeight
-          )
-        case .swipe(let planFrame, let keyboardMinY):
-          guard let plan = runnerPullRefreshGesturePlan(
-            amount: defaults.scrollAmount,
-            pixels: command.pixels,
-            frame: planFrame,
-            container: runnerContainerInPlanFrame(pullContainer.rect, frame: planFrame)
-          ) else {
-            return Response(
-              ok: false,
-              error: ErrorPayload(
-                code: "INVALID_ARGS",
-                message: "scroll could not compute a gesture plan"
-              )
-            )
-          }
-          pullGesture = ScrollGestureDispatch(
-            plan: plan,
-            planFrame: planFrame,
-            keyboardMinY: keyboardMinY
-          )
-        }
-      } else {
-        pullGesture = nil
-      }
-      let dispatch: ScrollGestureOutcome
-      if let pullGesture {
-        dispatch = .gesture(pullGesture)
-      } else {
-        dispatch = viewport.gestureDispatch(
-          direction: direction,
-          amount: defaults.scrollAmount,
-          pixels: command.pixels
-        )
-      }
+      let dispatch: ScrollGestureOutcome = viewport.gestureDispatch(
+        direction: direction,
+        amount: defaults.scrollAmount,
+        pixels: command.pixels
+      )
       switch dispatch {
       case .occluded(let occlusionKeyboardMinY, let visibleHeight):
         return scrollKeyboardOccludedResponse(
@@ -393,8 +353,7 @@ extension RunnerTests {
             durationMs: defaults.durationMs,
             message: "scrolled",
             context: scrollContext,
-            releaseBehavior: command.scrollReleaseBehavior,
-            holdMs: command.scrollHoldMs
+            releaseBehavior: command.scrollReleaseBehavior
           )
         )
       }

@@ -37,8 +37,7 @@ extension RunnerTests {
     durationMs: Double,
     message: String,
     context: SynthesizedCoordinateContext,
-    releaseBehavior: ScrollReleaseBehavior?,
-    holdMs: Double? = nil
+    releaseBehavior: ScrollReleaseBehavior?
   ) throws -> Response {
 #if os(iOS)
     return try executeDragGesture(
@@ -50,8 +49,7 @@ extension RunnerTests {
       durationMs: durationMs,
       message: message,
       synthesizedContext: context,
-      synthesized: (profile: scrollDragProfile(releaseBehavior: releaseBehavior), policyKind: .scroll),
-      holdMs: holdMs
+      synthesized: (profile: scrollDragProfile(releaseBehavior: releaseBehavior), policyKind: .scroll)
     )
 #else
     return try executeDragGesture(
@@ -68,8 +66,6 @@ extension RunnerTests {
 
   /// Shared coordinate drag execution. Callers that pass `synthesized` take the iOS synthesized
   /// lane with that profile and fallback policy; the rest perform an XCTest coordinate drag.
-  /// `holdMs` extends the hold at the destination before the contact lifts — the pull-to-refresh
-  /// commit hold.
   @MainActor
   func executeDragGesture(
     activeApp: XCUIApplication,
@@ -80,8 +76,7 @@ extension RunnerTests {
     durationMs: Double?,
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
-    synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil,
-    holdMs: Double? = nil
+    synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil
   ) throws -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
@@ -101,8 +96,7 @@ extension RunnerTests {
       message: message,
       context: synthesizedContext,
       policyKind: synthesized.policyKind,
-      profile: synthesized.profile,
-      holdMs: holdMs
+      profile: synthesized.profile
     ) {
       return synthesizedResponse
     }
@@ -113,8 +107,8 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       holdDuration: synthesized == nil
-        ? coordinateDragHoldDuration() + max(0, holdMs ?? 0) / 1000.0
-        : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs) + max(0, holdMs ?? 0) / 1000.0,
+        ? coordinateDragHoldDuration()
+        : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs),
       message: message
     )
   }
@@ -166,8 +160,7 @@ extension RunnerTests {
     message: String,
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind,
-    profile: SynthesizedDragProfile,
-    holdMs: Double? = nil
+    profile: SynthesizedDragProfile
   ) throws -> Response? {
 #if os(iOS)
     let context = try context ?? synthesizedCoordinateContext(app: activeApp)
@@ -207,8 +200,7 @@ extension RunnerTests {
         y2: plan.points.y2,
         durationMs: durationMs,
         profile: profile,
-        context: plan.context,
-        holdMs: holdMs
+        context: plan.context
       )
     }) {
     case .performed(let timing):
@@ -220,7 +212,7 @@ extension RunnerTests {
         y: plan.points.y,
         x2: plan.points.x2,
         y2: plan.points.y2,
-        holdDuration: synthesizedSwipeFallbackHoldDuration(durationMs: durationMs) + max(0, holdMs ?? 0),
+        holdDuration: synthesizedSwipeFallbackHoldDuration(durationMs: durationMs),
         message: message,
         fallback: GestureFallback(strategy: "xctest-coordinate-drag", message: fallbackMessage, hint: hint)
       )

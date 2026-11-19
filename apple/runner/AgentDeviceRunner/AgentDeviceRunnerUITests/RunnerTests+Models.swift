@@ -239,18 +239,6 @@ struct RunnerLitPanelFact: Codable {
   let heightPt: Double
 }
 
-/// A plain rect on the wire, in the runner's plan-frame space.
-struct RunnerWireRect: Codable {
-  let x: Double
-  let y: Double
-  let width: Double
-  let height: Double
-
-  var rect: CGRect {
-    CGRect(x: x, y: y, width: width, height: height)
-  }
-}
-
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -278,10 +266,6 @@ struct Command: Codable {
   let amount: Double?
   let pixels: Double?
   let scrollReleaseBehavior: ScrollReleaseBehavior?
-  /// `scroll` pull-to-refresh only: hold at the pulled position this long before lifting.
-  let scrollHoldMs: Double?
-  /// `scroll` pull-to-refresh only: the scroll container whose top edge the pull lane anchors to.
-  let scrollPullContainer: RunnerWireRect?
   let orientation: String?
   let gesturePlan: RunnerGesturePlan?
   let outPath: String?

@@ -16,8 +16,6 @@ typedef struct {
   CGPoint end;
   double durationMs;
   BOOL controlledScroll;
-  /// Stationary hold at `end` before the contact lifts (pull-to-refresh commit hold).
-  double holdMs;
 } RunnerSynthesizedDrag;
 
 @interface RunnerSynthesizedGesture : NSObject

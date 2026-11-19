@@ -23,7 +23,10 @@ const options = {
 
 test('builds the exact scroll operation fact catalog', () => {
   const scroll = { available: true } as const;
-  expect(scrollRuntimeOperationFacts({ scroll })).toEqual({ scrollDirection: scroll });
+  expect(scrollRuntimeOperationFacts({ scroll, touchScrollSurface: scroll })).toEqual({
+    scrollDirection: scroll,
+    touchScrollSurface: scroll,
+  });
 });
 
 test('a local binding scrolls the owner in the requested direction', async () => {

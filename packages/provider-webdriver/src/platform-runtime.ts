@@ -587,7 +587,10 @@ function webDriverFacts(
         targetAuthoredDrag: interactorCell(reachable, gestureUnavailable),
         viewport: interactorCell(reachable, gestureUnavailable),
       }),
-      ...scrollRuntimeOperationFacts({ scroll: declared('scroll', scrollUnavailable) }),
+      ...scrollRuntimeOperationFacts({
+        scroll: declared('scroll', scrollUnavailable),
+        touchScrollSurface: declared('scroll', scrollUnavailable),
+      }),
       // `back`/`home`/`orientation` ride the same reachable interactor; `tvRemote` always throws
       // unsupported in this interactor regardless of reachability (no capability declares it).
       ...backRuntimeOperationFacts({ back: declared('back', backUnavailable) }),

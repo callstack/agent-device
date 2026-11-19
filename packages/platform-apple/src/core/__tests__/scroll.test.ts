@@ -91,32 +91,27 @@ test('only the refusal code is renamed, so a generic scroll failure never reads 
   assert.equal(withAppleScrollKeyboardOcclusion(transport), transport);
 });
 
-test('scrollRunnerFields carries the refresh hold and pull container to the runner wire', () => {
+test('scrollRunnerFields carries only the directional scroll fields to the runner wire', () => {
   assert.deepEqual(
     scrollRunnerFields({
       pixels: 320,
       durationMs: 1200,
       releaseBehavior: 'controlled',
-      holdMs: 400,
-      anchorTop: true,
-      containerRect: { x: 18, y: 178, width: 366, height: 662 },
     }),
     {
       pixels: 320,
       durationMs: 1200,
       scrollReleaseBehavior: 'controlled',
-      scrollHoldMs: 400,
-      scrollPullContainer: { x: 18, y: 178, width: 366, height: 662 },
     },
   );
-  // An ordinary scroll names neither.
+  // An ordinary scroll without an explicit release behavior names neither field.
   assert.deepEqual(scrollRunnerFields({ pixels: 200, durationMs: 400 }), {
     pixels: 200,
     durationMs: 400,
   });
 });
 
-test('normalizeAppleScrollResultWithResolvedFrame recomputes a pull plan anchored at the container top', () => {
+test('normalizeAppleScrollResultWithResolvedFrame recomputes the directional plan from the resolved frame', () => {
   const result = normalizeAppleScrollResultWithResolvedFrame(
     { x: 201, y: 186, x2: 201, y2: 506, referenceWidth: 402, referenceHeight: 874 },
     'up',
@@ -124,13 +119,9 @@ test('normalizeAppleScrollResultWithResolvedFrame recomputes a pull plan anchore
       pixels: 320,
       durationMs: 1200,
       releaseBehavior: 'controlled',
-      holdMs: 400,
-      anchorTop: true,
-      containerRect: { x: 0, y: 205, width: 402, height: 640 },
     },
   );
-  // The runner's own coordinates echo back; the reported travel comes from the recomputed pull
-  // plan, whose band starts at 205+8=213 and carries the full 320px inside the container.
+  // The runner's own coordinates echo back; the reported travel comes from the recomputed plan.
   assert.equal(result.pixels, 320);
   assert.equal(result.x1, 201);
   assert.equal(result.y1, 186);

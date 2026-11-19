@@ -503,7 +503,7 @@ function sourceRuntimeFacts(
         fill: unavailable,
       }),
       ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
-      ...scrollRuntimeOperationFacts({ scroll: unavailable }),
+      ...scrollRuntimeOperationFacts({ scroll: unavailable, touchScrollSurface: unavailable }),
       readTextAtPoint: unavailable,
       back: unavailable,
       setOrientation: unavailable,

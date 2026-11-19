@@ -87,10 +87,9 @@ type ScrollGestureFixture = {
   pullCases: Array<{
     name: string;
     container: Rect;
+    viewport: Rect;
     amount?: number;
     pixels?: number;
-    referenceWidth: number;
-    referenceHeight: number;
     expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
   }>;
 };
@@ -133,9 +132,8 @@ test('buildScrollGesturePlan agrees with every scroll-gesture parity table case'
   }
 });
 
-// The pull-to-refresh planner shares the same cross-language parity table (`pullCases`), asserted
-// here AND by the Swift port (runnerPullRefreshGesturePlan in RunnerTests+ScrollGesture.swift,
-// gated XCTest in UnitTests/RunnerTests+ScrollGestureTests.swift).
+// The pull-to-refresh planner is TypeScript-only (the daemon dispatches the pull through the
+// gesture pan planner; the runner needs no pull port), so its parity table is asserted here alone.
 test('buildPullRefreshGesturePlan agrees with every scroll-gesture pull parity table case', () => {
   const { pullCases } = readScrollGestureFixture();
   assert.ok(pullCases.length > 0, 'pull parity table must not be empty');
@@ -149,8 +147,7 @@ test('buildPullRefreshGesturePlan agrees with every scroll-gesture pull parity t
       amount: fixture.amount,
       pixels: fixture.pixels,
       container: fixture.container,
-      referenceWidth: fixture.referenceWidth,
-      referenceHeight: fixture.referenceHeight,
+      viewport: fixture.viewport,
     });
     assert.deepEqual(
       { x1: plan.x1, y1: plan.y1, x2: plan.x2, y2: plan.y2, pixels: plan.pixels },
@@ -158,14 +155,15 @@ test('buildPullRefreshGesturePlan agrees with every scroll-gesture pull parity t
       fixture.name,
     );
     assert.equal(plan.direction, 'up', fixture.name);
+    assert.deepEqual(plan.viewport, fixture.viewport, fixture.name);
   }
 });
 
 test('buildPullRefreshGesturePlan rejects a non-positive amount or pixels', () => {
-  const frame = { referenceWidth: 400, referenceHeight: 800 };
+  const viewport = { x: 0, y: 0, width: 400, height: 800 };
   const container = { x: 0, y: 100, width: 400, height: 600 };
-  assert.throws(() => buildPullRefreshGesturePlan({ amount: 0, container, ...frame }), AppError);
-  assert.throws(() => buildPullRefreshGesturePlan({ pixels: -5, container, ...frame }), AppError);
+  assert.throws(() => buildPullRefreshGesturePlan({ amount: 0, container, viewport }), AppError);
+  assert.throws(() => buildPullRefreshGesturePlan({ pixels: -5, container, viewport }), AppError);
 });
 
 test('the refresh pull default amount agrees with the parity table', () => {

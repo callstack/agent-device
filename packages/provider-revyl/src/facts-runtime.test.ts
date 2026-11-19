@@ -40,6 +40,7 @@ const EXPECTED_CELLS = {
   prepareApplicationOpen: 'available',
   resolveOpenTarget: 'available',
   scrollDirection: 'available',
+  touchScrollSurface: 'available',
   setOrientation: 'available',
   setSetting: 'subjects',
   tapPoint: 'available',

@@ -12,10 +12,9 @@ export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
 /**
  * `scroll refresh` pulls slowly — a fast pull reads as a fling and rubber-bands back without
  * committing the refresh control (measured on an iOS RN list: 0/5 at the 400ms default, 5/5 at
- * 1500ms) — and holds briefly at the pulled position before releasing so the control commits.
+ * 1200ms and above, with no hold at the pulled position: 5/5 at holdMs 0 on both platforms).
  */
 export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
-export const DEFAULT_REFRESH_HOLD_MS = 400;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
@@ -64,23 +63,11 @@ export type ScrollContainerTarget = {
 export type ScrollExecutionOptions = ScrollCommandOptions &
   ScrollContainerTarget & {
     releaseBehavior?: ScrollReleaseBehavior;
-    /**
-     * Pull-to-refresh only: how long the finger holds at the pulled position before releasing, so
-     * the refresh control commits instead of springing back.
-     */
-    holdMs?: number;
-    /**
-     * Pull-to-refresh only: anchor the pull lane just inside the top of `containerRect` instead
-     * of running the centred lane a directional scroll uses.
-     */
-    anchorTop?: boolean;
   };
 
 export type ResolvedScrollExecutionOptions = ScrollCommandOptions &
   ScrollContainerTarget & {
     releaseBehavior: ScrollReleaseBehavior;
-    holdMs?: number;
-    anchorTop?: boolean;
   };
 
 export function resolveScrollExecutionOptions(
@@ -189,10 +176,11 @@ export function normalizeScrollDurationMs(
 export type ScrollCommandResult = {
   direction: ScrollDirection;
   /**
-   * Set for `scroll refresh`: the request was a pull-to-refresh, dispatched as an `up` pull
-   * anchored at the container's top edge. The `movement` field never answers `at-edge` for this
-   * mode — an unchanged surface is reported as `unchanged` instead, because "already at the top"
-   * is the mode's precondition, not news the caller needs to pull again over.
+   * Set for `scroll refresh`: the request was a pull-to-refresh, dispatched as one slow downward
+   * pan anchored just inside the top of the resolved scroll container. The `movement` field never
+   * answers `at-edge` for this mode — an unchanged surface is reported as `unchanged` instead,
+   * because "already at the top" is the mode's precondition, not news the caller needs to pull
+   * again over.
    */
   refresh?: true;
   /** Set for `top`/`bottom` requests: the extreme being scrolled to. */

@@ -218,6 +218,21 @@ function androidGestureFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? gestureKindUnavailable : available;
 }
 
+const androidTvTouchScrollUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'scroll refresh needs a touch screen; an Android TV target has none — drive it with tv-remote.',
+);
+
+/**
+ * Pull-to-refresh is a finger gesture, so it is declared on Android phone and tablet targets only:
+ * a TV target has no touch input (the D-pad adapter runs pans, but a pull does nothing there), and
+ * the synthetic `simulator` row has no device behind it at all.
+ */
+function androidTouchScrollFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind === 'simulator') return gestureKindUnavailable;
+  return device.target === 'tv' ? androidTvTouchScrollUnavailable : available;
+}
+
 /** adb drives every interaction cell the same way; only the synthetic `simulator` row lacks a device. */
 function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
@@ -330,7 +345,10 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         // `scroll` had no admission beyond its capability bucket, so its cell is that bucket
         // verbatim: every Android kind but the synthetic `simulator` row.
-        ...scrollRuntimeOperationFacts({ scroll: androidGestureFact(device) }),
+        ...scrollRuntimeOperationFacts({
+          scroll: androidGestureFact(device),
+          touchScrollSurface: androidTouchScrollFact(device),
+        }),
         // Text entry shares focus's cell: adb drives both, and only the synthetic `simulator`
         // row has no device behind it (parity with the retired `type` bucket).
         ...typeTextRuntimeOperationFacts({ type: androidTouchFact(device) }),

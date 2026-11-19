@@ -118,16 +118,20 @@
         "width": 402,
         "height": 640
       },
-      "pixels": 400,
-      "referenceWidth": 402,
-      "referenceHeight": 874,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "expected": {
         "x1": 201,
         "y1": 213,
         "x2": 201,
         "y2": 613,
         "pixels": 400
-      }
+      },
+      "pixels": 400
     },
     {
       "name": "pull default amount is 0.4 of container height: 400x800, container y=100 h=600 -> (200,108)->(200,348), travel 240",
@@ -137,8 +141,12 @@
         "width": 360,
         "height": 600
       },
-      "referenceWidth": 400,
-      "referenceHeight": 800,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 400,
+        "height": 800
+      },
       "expected": {
         "x1": 200,
         "y1": 108,
@@ -155,16 +163,20 @@
         "width": 400,
         "height": 200
       },
-      "pixels": 500,
-      "referenceWidth": 400,
-      "referenceHeight": 800,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 400,
+        "height": 800
+      },
       "expected": {
         "x1": 200,
         "y1": 108,
         "x2": 200,
         "y2": 291,
         "pixels": 183
-      }
+      },
+      "pixels": 500
     },
     {
       "name": "pull starts at the padded frame top when the container reaches into it: 400x800, container y=50 h=700, amount 0.5 -> (200,80)->(200,430)",
@@ -174,15 +186,42 @@
         "width": 400,
         "height": 700
       },
-      "amount": 0.5,
-      "referenceWidth": 400,
-      "referenceHeight": 800,
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 400,
+        "height": 800
+      },
       "expected": {
         "x1": 200,
         "y1": 80,
         "x2": 200,
         "y2": 430,
         "pixels": 350
+      },
+      "amount": 0.5
+    },
+    {
+      "name": "pull in a split-view window keeps the window origin: viewport x=400 y=120 600x900, container (420,240,560,700), 400px -> (700,248)->(700,648)",
+      "container": {
+        "x": 420,
+        "y": 240,
+        "width": 560,
+        "height": 700
+      },
+      "viewport": {
+        "x": 400,
+        "y": 120,
+        "width": 600,
+        "height": 900
+      },
+      "pixels": 400,
+      "expected": {
+        "x1": 700,
+        "y1": 248,
+        "x2": 700,
+        "y2": 648,
+        "pixels": 400
       }
     }
   ]

@@ -146,7 +146,13 @@ function tvFacts(platform: TvPlatform, device: DeviceInfo, owner: Owner) {
     ...touchFacts,
     ...focusRuntimeOperationFacts({ focus: available }),
     ...typeTextRuntimeOperationFacts({ type: available }),
-    ...scrollRuntimeOperationFacts({ scroll: available }),
+    ...scrollRuntimeOperationFacts({
+      scroll: available,
+      touchScrollSurface: unavailableFact(
+        'unsupported-device-kind',
+        'scroll refresh needs a touch screen; a TV target has none — drive it with tv-remote.',
+      ),
+    }),
     ...backRuntimeOperationFacts({ back: available }),
     ...tvRemoteRuntimeOperationFacts({
       tvRemote: available,

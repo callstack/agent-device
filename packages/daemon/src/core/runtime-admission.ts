@@ -19,9 +19,14 @@ import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
-/** Builds the failure a command reports when its exact device cell does not admit an operation. */
+/**
+ * Builds the failure a command reports when its exact device cell does not admit an operation.
+ * The operation name rides along so a command whose use mixes differently-flavored requirements
+ * (a capability fact beside an execution operation) can word each refusal for the cell that failed.
+ */
 export type UnavailableRuntimeResponse = (
   unavailable: RuntimeOperationUnavailability,
+  operation: RuntimeOperationKey<PlatformRuntimeOperations>,
 ) => DaemonFailureResponse;
 
 export type AdmittedRuntimeGateway =
@@ -87,7 +92,7 @@ export async function admitRuntimeOperations(
         : runtimeSubjectFact(operationFact, request.subject);
     if (fact.available) continue;
     const response = request.unavailableResponse
-      ? request.unavailableResponse(fact)
+      ? request.unavailableResponse(fact, operation)
       : unsupportedOperationResponse(request.command, fact);
     return { type: 'response', response };
   }

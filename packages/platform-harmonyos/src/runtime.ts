@@ -229,7 +229,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           targetAuthoredDrag: targetAuthoredDragUnavailable,
           viewport: harmonyGestureFact(device),
         }),
-        ...scrollRuntimeOperationFacts({ scroll: harmonyGestureFact(device) }),
+        ...scrollRuntimeOperationFacts({
+          scroll: harmonyGestureFact(device),
+          touchScrollSurface: harmonyGestureFact(device),
+        }),
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         ...touchRuntimeOperationFacts({

@@ -63,6 +63,10 @@ const scrollKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'scroll is supported only for the Linux desktop device.',
 );
+const touchScrollUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'scroll refresh needs a touch scroll surface; this desktop scrolls with a wheel.',
+);
 /**
  * The drag primitive preserves a coordinate fling's endpoints but not a direction-authored
  * fling's speed semantics, which is the one gesture the retired admission refused BY PLATFORM
@@ -264,7 +268,10 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
         targetAuthoredDrag: targetAuthoredDragUnavailable,
         viewport: gestureViewportUnavailable,
       }),
-      ...scrollRuntimeOperationFacts({ scroll: linuxDesktopFact(device, scrollKindUnavailable) }),
+      ...scrollRuntimeOperationFacts({
+        scroll: linuxDesktopFact(device, scrollKindUnavailable),
+        touchScrollSurface: touchScrollUnavailable,
+      }),
       ...typeTextRuntimeOperationFacts({ type: linuxDesktopFact(device, typeKindUnavailable) }),
       ...linuxTouchFacts(device),
       // The Linux read is value-first (AXValue/title/description) where the captured tree is
