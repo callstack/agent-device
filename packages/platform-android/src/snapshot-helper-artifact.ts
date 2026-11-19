@@ -7,7 +7,6 @@ import {
   ANDROID_SNAPSHOT_HELPER_NAME,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
-  ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
   type AndroidSnapshotHelperManifest,
 } from './snapshot-helper-types.ts';
 
@@ -43,36 +42,7 @@ export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnaps
       'statusProtocol',
       ANDROID_SNAPSHOT_HELPER_PROTOCOL,
     ),
-    // An absent or unrecognised mode is "this build cannot serve a session", not a malformed
-    // manifest: an older release manifest must still install and capture one-shot.
-    sessionMode:
-      record.sessionMode === ANDROID_SNAPSHOT_HELPER_SESSION_MODE
-        ? ANDROID_SNAPSHOT_HELPER_SESSION_MODE
-        : undefined,
   };
-}
-
-/**
- * Whether the helper build behind a manifest may serve a persistent session at all. The answer comes
- * from the artifact the host ships or resolves, never from what a running helper says about itself: a
- * build that cannot serve an authenticated session must never be asked to start one. A manifest that
- * does not declare the session mode is an older or provider-supplied build, and unknown is one-shot
- * (#4519).
- */
-export function androidSnapshotHelperArtifactSupportsSession(
-  manifest: AndroidSnapshotHelperManifest,
-): boolean {
-  return (
-    androidSnapshotHelperSessionModeSupportsSession(manifest.sessionMode) &&
-    manifest.statusProtocol === ANDROID_SNAPSHOT_HELPER_PROTOCOL
-  );
-}
-
-/** Whether a session mode an artifact declares is the authenticated one this host can launch. */
-export function androidSnapshotHelperSessionModeSupportsSession(
-  sessionMode: AndroidSnapshotHelperManifest['sessionMode'],
-): boolean {
-  return sessionMode === ANDROID_SNAPSHOT_HELPER_SESSION_MODE;
 }
 
 function readNumber(value: unknown, field: string): number {

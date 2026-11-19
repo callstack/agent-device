@@ -17,7 +17,6 @@ import {
 } from './snapshot-helper-session.fixtures.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 import type { AndroidSnapshotHelperCaptureOptions } from '../snapshot-helper-types.ts';
-import { ANDROID_SNAPSHOT_HELPER_SESSION_MODE } from '../snapshot-helper-types.ts';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
@@ -42,7 +41,6 @@ test('returns undefined when persistent sessions are disabled', async () => {
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
   });
 
   assert.equal(output, undefined);
@@ -62,49 +60,6 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('an artifact that does not declare the session mode is never asked to start a session', async () => {
-  const calls: (readonly string[])[] = [];
-  const spawnArgs: (readonly string[])[] = [];
-  const provider = createSessionProvider({ calls, spawnArgs });
-
-  // An older or provider-supplied artifact whose manifest does not declare the authenticated session
-  // mode is unknown, and unknown is one-shot: the host does not forward, does not launch, and gives
-  // the helper nothing to answer (#4519).
-  const output = await captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
-    helperVersionCode: 21040,
-    helperSha256: 'older-build',
-  });
-
-  assert.equal(output, undefined);
-  assert.deepEqual(spawnArgs, []);
-  assert.deepEqual(calls, []);
-});
-
-test('an undeclared artifact earns no backoff, so the next session-capable artifact starts at once', async () => {
-  const spawnArgs: (readonly string[])[] = [];
-  const provider = createSessionProvider({ calls: [], spawnArgs });
-  const common = {
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
-    helperVersionCode: 21040,
-  };
-
-  assert.equal(await captureAndroidSnapshotWithHelperSession(common), undefined);
-  // No backoff window may skip a verified replacement: the command right after the skipped one
-  // carries an artifact that declares the mode, and it starts on its first try (#4519 review).
-  const output = await captureAndroidSnapshotWithHelperSession({
-    ...common,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
-  });
-
-  assert.equal(output?.metadata.transport, 'persistent-session');
-  assert.equal(spawnArgs.length, 1);
-});
-
 test('a session-capable helper that never answers readiness earns only finite backoff', async () => {
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls: [], spawnArgs });
@@ -120,7 +75,6 @@ test('a session-capable helper that never answers readiness earns only finite ba
   const options: AndroidSnapshotHelperCaptureOptions = {
     adb: provider.exec,
     adbProvider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     commandTimeoutMs: 50,
   };
@@ -152,7 +106,6 @@ test('a helper that never starts is not spawned again on every command', async (
     const output = await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
       commandTimeoutMs: 50,
     });
@@ -169,7 +122,6 @@ test('a helper that never starts is not spawned again on every command', async (
   const otherBuild = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     commandTimeoutMs: 50,
     waitForIdleTimeoutMs: 40,
@@ -195,7 +147,6 @@ test('a session start waits only as long as the caller budgeted for one helper c
         return new FakeAndroidProcess();
       },
     },
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     commandTimeoutMs: 50,
   });
@@ -255,7 +206,6 @@ test('a session that reaches ready settles a release the device could not confir
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey,
     commandTimeoutMs: 400,
   });
@@ -264,7 +214,6 @@ test('a session that reaches ready settles a release the device could not confir
   const started = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey,
     commandTimeoutMs: 400,
   });
@@ -277,7 +226,6 @@ test('a session that reaches ready settles a release the device could not confir
   const reused = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey,
     commandTimeoutMs: 400,
   });
@@ -298,7 +246,6 @@ test('a session whose capture timed out is not restarted by the next command', a
     captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
       commandTimeoutMs: 400,
     });
@@ -327,7 +274,6 @@ test('a reused session whose capture times out keeps the helper build one-shot u
     captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey,
       commandTimeoutMs: 400,
     });
@@ -367,7 +313,6 @@ test('a first capture that times out on a fresh session only earns the ordinary 
     captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
       commandTimeoutMs: 400,
     });
@@ -409,7 +354,6 @@ test('a retirement whose forward removal stalls still falls back to one-shot', a
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
-        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5554',
         commandTimeoutMs: 400,
       }),
@@ -437,7 +381,6 @@ test('starts and reuses a persistent Android snapshot helper session', async () 
   const first = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     helperVersion: '0.16.2',
     helperVersionCode: 16002,
@@ -445,7 +388,6 @@ test('starts and reuses a persistent Android snapshot helper session', async () 
   const second = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     helperVersion: '0.16.2',
     helperVersionCode: 16002,
@@ -482,14 +424,12 @@ test('restarts the helper session when capture options change', async () => {
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     waitForIdleTimeoutMs: 25,
   });
   const restarted = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     waitForIdleTimeoutMs: 50,
   });
@@ -511,7 +451,6 @@ test('a session whose helper process died is not written to again', async () => 
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   processes[0]!.emitExit(137, null);
@@ -519,7 +458,6 @@ test('a session whose helper process died is not written to again', async () => 
   const restarted = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
 
@@ -539,7 +477,6 @@ test('a quit acknowledged and followed by process exit skips the force-stop roun
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   await resetAndroidSnapshotHelperSessions();
@@ -563,7 +500,6 @@ test('a quit acknowledged by a helper the host then killed still force-stops the
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   await resetAndroidSnapshotHelperSessions();
@@ -582,7 +518,6 @@ test('a quit acknowledged after the host process already died still force-stops 
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   // The host `am instrument` child is gone before the teardown starts, yet the device-side helper
@@ -601,7 +536,6 @@ test('force terminates the helper when quit is not acknowledged', async () => {
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   await resetAndroidSnapshotHelperSessions();
@@ -620,7 +554,6 @@ test('keeps the device-side stop when the transport cannot prove the device exit
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   await resetAndroidSnapshotHelperSessions();
@@ -639,7 +572,6 @@ test('keeps the device-side stop when the transport capability is unknown', asyn
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   await resetAndroidSnapshotHelperSessions();
@@ -657,7 +589,6 @@ test('probes the adb transport once per device instead of once per teardown', as
     await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey,
     });
     await stopAndroidSnapshotHelperSession(deviceKey);
@@ -679,7 +610,6 @@ test('whole-module reset clears a release the last teardown left pending', async
   await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey,
   });
   await resetAndroidSnapshotHelperSessions();

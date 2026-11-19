@@ -1,7 +1,6 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import java.io.IOException;
-import java.net.SocketTimeoutException;
 
 /**
  * Writes one response frame under one monotonic deadline. Every send is nonblocking, and the writer
@@ -53,18 +52,17 @@ final class SessionFrameWriter implements SessionResponseWriter.FrameSink {
   private void sendAll(byte[] data, long deadlineAtMs) throws IOException {
     int offset = 0;
     while (offset < data.length) {
-      long remainingMs = deadlineAtMs - clock.nowMs();
-      if (remainingMs <= 0) {
-        throw new SocketTimeoutException("session response write deadline exceeded");
-      }
+      // Each wait measures its own remaining time as it starts, so a pause before the wait cannot
+      // make it poll with a duration measured before the pause.
+      SessionPeerPolicy.remainingBeforeDeadline(clock, deadlineAtMs);
       int count = channel.send(data, offset, data.length - offset);
       if (count > 0) {
         offset += count;
         continue;
       }
-      // The wait gets the deadline itself, so a pause before it cannot make it poll with a
-      // duration measured before the pause.
-      SessionPeerPolicy.awaitBeforeDeadline(clock, deadlineAtMs, channel::awaitWritable);
+      // Measured again as the wait starts: a send that used up the budget must not start a poll.
+      SessionPeerPolicy.remainingBeforeDeadline(clock, deadlineAtMs);
+      channel.awaitWritable(deadlineAtMs);
     }
   }
 }

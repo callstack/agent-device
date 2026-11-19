@@ -12,7 +12,6 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
-import { ANDROID_SNAPSHOT_HELPER_SESSION_MODE } from '../snapshot-helper-types.ts';
 
 beforeEach(async () => {
   await resetAndroidSnapshotHelperSessions();
@@ -50,7 +49,6 @@ test('selects supported idle commands and keeps one helper across full, short an
       const output = await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
-        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: `android:idle-policy-${index}`,
         idleWait,
       });
@@ -72,7 +70,6 @@ test('allows a persistent session snapshot to use the helper command budget', as
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     timeoutMs: 10,
     commandTimeoutMs: 4_000,
@@ -90,7 +87,6 @@ test('retires a persistent session that exceeds the helper command budget', asyn
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     timeoutMs: 10,
     commandTimeoutMs: 20,
@@ -127,7 +123,6 @@ for (const cancelPoint of ['before the helper is ready', 'while the helper stall
           return process;
         },
       },
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
       signal: controller.signal,
     });
@@ -142,7 +137,6 @@ for (const cancelPoint of ['before the helper is ready', 'while the helper stall
     const next = await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
     });
     assert.match(next?.xml ?? '', /snapshot 1/);
@@ -165,7 +159,6 @@ test('canceled capture joins canceled external cleanup before returning', async 
   const capture = captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
     signal: controller.signal,
   });
@@ -200,7 +193,6 @@ test('release the transport could not confirm falls back instead of failing the 
     const output = await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
     });
     assert.equal(output, undefined, `attempt ${attempt}`);
@@ -223,7 +215,6 @@ test('capture refuses a device the previous teardown found the helper still runn
   const failed = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
   assert.equal(failed, undefined);
@@ -232,7 +223,6 @@ test('capture refuses a device the previous teardown found the helper still runn
     captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5554',
     }),
     isAndroidSnapshotHelperRuntimeOccupiedError,
@@ -252,7 +242,6 @@ test('allows device retirement beyond host-process grace before falling back', a
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
 
@@ -267,7 +256,6 @@ test('invalidates and falls back from the helper session after a malformed respo
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey: 'android:emulator-5554',
   });
 
@@ -300,7 +288,6 @@ test('the session fallback diagnostic reads the typed timeout reason', async () 
         const output = await captureAndroidSnapshotWithHelperSession({
           adb: provider.exec,
           adbProvider: provider,
-          helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
           deviceKey: 'android:emulator-5554',
         });
         assert.equal(output, undefined);

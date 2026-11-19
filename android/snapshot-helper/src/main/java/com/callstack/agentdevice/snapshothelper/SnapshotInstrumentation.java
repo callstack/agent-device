@@ -12,7 +12,6 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -27,9 +26,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
   private static final int SESSION_COMMAND_READ_BASE_TIMEOUT_MS = 2_000;
   private static final int SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS = 8_000;
-  // A response deadline grows with the frame at this floor rate, like the command read deadline.
-  private static final int SESSION_RESPONSE_MIN_BYTES_PER_SECOND =
-      SessionPeerPolicy.MIN_COMMAND_BYTES_PER_SECOND;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
@@ -187,10 +183,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
       int maxDepth,
       int maxNodes)
       throws IOException {
-    // Android's LocalServerSocket(String) binds in the abstract namespace. The host reaches it
-    // through `adb forward tcp:<port> localabstract:<name>`; the forwarded peer is adbd, and its uid
-    // is checked before any command byte is read. The name comes from the host's `sessionSocket`
-    // argument and carries no secret — admission is the peer uid, not name secrecy.
+    // LocalServerSocket(String) binds in the abstract namespace, which the host reaches through
+    // `adb forward tcp:<port> localabstract:<name>`.
     try (LocalServerSocket server =
         new LocalServerSocket(SessionPeerPolicy.sessionSocketName(launchedSocketName))) {
       Bundle ready = new Bundle();
@@ -204,44 +198,36 @@ public final class SnapshotInstrumentation extends Instrumentation {
 
       while (!Thread.currentThread().isInterrupted()) {
         try (LocalSocket socket = server.accept()) {
-          long baseDeadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS;
-          // Positive peer identity first: a peer that is not adbd (shell uid 2000, or root uid 0
-          // under `adb root`) — or whose credentials cannot be read at all — is rejected before
-          // any command byte is read and before any response is written.
+          // Positive peer identity first: a peer that is not adbd, or whose credentials cannot be
+          // read at all, is rejected before any command byte is read or any response is written.
           if (!admitSessionPeer(socket)) {
             continue;
           }
+          // A response sink, set as soon as the frame can be answered. A read that fails before it
+          // closes the connection without a reply: a peer that never reads could otherwise hold the
+          // only accept loop with the reply.
+          SessionResponseWriter.FrameSink sink = null;
+          String requestId = "";
           try {
-            // An expired, incomplete or failed read closes the connection without a reply: a peer
-            // that never reads could otherwise hold the only accept loop with the reply.
             LocalSocketSessionChannel channel =
                 new LocalSocketSessionChannel(socket, SystemClock::elapsedRealtime);
-            SessionPeerPolicy.CommandFrame command =
-                SessionPeerPolicy.readSessionCommand(
-                    channel,
-                    SystemClock::elapsedRealtime,
-                    baseDeadlineAtMs,
-                    SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             // Each response goes out in nonblocking sends under one deadline from its first byte.
-            SessionResponseWriter.FrameSink sink =
+            sink =
                 new SessionFrameWriter(
                     channel,
                     SystemClock::elapsedRealtime,
                     SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
-                    SESSION_RESPONSE_MIN_BYTES_PER_SECOND);
-            if (command.decision() == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
-              sink.write(SessionResponseWriter.errorFrame("", new EOFException("empty command")));
-              continue;
-            }
-            if (command.decision() == SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-              sink.write(
-                  SessionResponseWriter.errorFrame(
-                      "", new IllegalArgumentException("session command over the byte limit")));
-              continue;
-            }
-            String[] parts = command.line().trim().split("\\s+", 3);
+                    SessionPeerPolicy.MIN_COMMAND_BYTES_PER_SECOND);
+            String[] parts =
+                SessionPeerPolicy.readSessionCommand(
+                        channel,
+                        SystemClock::elapsedRealtime,
+                        SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS,
+                        SessionPeerPolicy.MAX_COMMAND_LINE_BYTES)
+                    .trim()
+                    .split("\\s+", 3);
             String action = parts.length > 0 ? parts[0] : "";
-            String requestId = parts.length > 1 ? parts[1] : "";
+            requestId = parts.length > 1 ? parts[1] : "";
             if ("quit".equals(action)) {
               writeSessionOkQuietly(sink, requestId);
               return;
@@ -286,6 +272,13 @@ public final class SnapshotInstrumentation extends Instrumentation {
                 timeoutMs,
                 maxDepth,
                 maxNodes);
+          } catch (SessionPeerPolicy.CommandRejected rejection) {
+            // The frame cannot be dispatched, but the peer is entitled to one answer.
+            try {
+              sink.write(SessionResponseWriter.errorFrame(requestId, rejection));
+            } catch (IOException ignored) {
+              // A peer that will not take the error frame gets a closed connection.
+            }
           } catch (IOException ignored) {
             // Close the failed connection without appending another frame to a partial response.
           }
@@ -295,9 +288,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   /**
-   * Reads the peer's kernel credentials and admits only adbd. A credential read that fails, or that
-   * answers with nothing, is a peer that cannot be positively identified, so it is rejected: the
-   * session never serves a peer it could not verify.
+   * Admits only a peer positively identified as adbd: a credential read that fails, or answers with
+   * nothing, rejects.
    */
   private static boolean admitSessionPeer(LocalSocket socket) {
     Credentials credentials;
@@ -306,9 +298,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
     } catch (Throwable error) {
       return false;
     }
-    return credentials != null
-        && SessionPeerPolicy.admitPeer(credentials.getUid())
-            == SessionPeerPolicy.Admission.ADMITTED;
+    return credentials != null && SessionPeerPolicy.isAdmittedPeer(credentials.getUid());
   }
 
   private static void writeSessionOkQuietly(

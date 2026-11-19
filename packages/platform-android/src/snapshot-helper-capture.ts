@@ -178,7 +178,6 @@ export function buildAndroidSnapshotHelperCaptureOptions(params: {
     helperSha256: params.artifact.manifest.sha256,
     packageName: params.artifact.manifest.packageName,
     instrumentationRunner: params.artifact.manifest.instrumentationRunner,
-    helperSessionMode: params.artifact.manifest.sessionMode,
     waitForIdleTimeoutMs: ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
     timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
     commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,

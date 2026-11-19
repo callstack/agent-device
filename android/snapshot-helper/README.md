@@ -112,11 +112,10 @@ server closes that connection; the process stays alive for the next connection.
 The host owns the socket name and declares it in the launch; the helper binds it unchanged and
 refuses a name outside the `agentdevice-snapshot-helper-` namespace. The ready record repeats that
 name in `sessionSocket`, and the host refuses a record that names any other socket. The versioned
-mode is what makes an old build safe: a helper that does not implement `authenticated-session-v1`
+mode is the whole answer to an old build: a helper that does not implement `authenticated-session-v1`
 rejects the launch before it binds anything, and it reads no `sessionPort` argument, so no launch can
-talk it into an open loopback TCP listener. Whether a session may be started at all is decided by the
-host from the artifact it ships, whose manifest declares `sessionMode`; an artifact that declares
-nothing stays on the one-shot transport.
+talk it into an open loopback TCP listener. The host then fails that start and keeps the device on the
+one-shot transport.
 
 Each accepted connection is admitted before any command byte is read: the helper reads the
 forwarded peer's kernel credentials with `LocalSocket.getPeerCredentials()` and serves only adbd —

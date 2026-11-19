@@ -4,9 +4,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
-  androidSnapshotHelperSessionForwardTarget,
   androidSnapshotHelperSessionLaunchArgs,
-  androidSnapshotHelperSessionSocketName,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   parseAndroidSnapshotHelperSessionTouchResponse,
   parseAndroidSnapshotHelperSessionSnapshotResponse,
@@ -16,17 +14,20 @@ import {
   ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX,
 } from '../snapshot-helper-types.ts';
 
-test('the session forward targets the abstract socket named from the host port', () => {
+test('a session launch owns one abstract socket name and the forward targets it', () => {
   // The name is a routing label derived from the port, never a credential: the helper admits a
   // connection only on the forwarded peer's adbd uid (#4519).
-  assert.equal(androidSnapshotHelperSessionSocketName(18093), 'agentdevice-snapshot-helper-18093');
   assert.equal(
-    androidSnapshotHelperSessionForwardTarget(androidSnapshotHelperSessionLaunchArgs(18093)),
+    androidSnapshotHelperSessionLaunchArgs(18093).socketName,
+    'agentdevice-snapshot-helper-18093',
+  );
+  assert.equal(
+    androidSnapshotHelperSessionLaunchArgs(18093).forwardTarget,
     'localabstract:agentdevice-snapshot-helper-18093',
   );
   assert.notEqual(
-    androidSnapshotHelperSessionForwardTarget(androidSnapshotHelperSessionLaunchArgs(1)),
-    androidSnapshotHelperSessionForwardTarget(androidSnapshotHelperSessionLaunchArgs(2)),
+    androidSnapshotHelperSessionLaunchArgs(1).forwardTarget,
+    androidSnapshotHelperSessionLaunchArgs(2).forwardTarget,
   );
 });
 
@@ -49,7 +50,7 @@ test('the host socket namespace, session mode and byte cap agree with the Androi
   assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX, prefix[1]);
   assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_MODE, mode[1]);
   assert.equal(
-    androidSnapshotHelperSessionForwardTarget(androidSnapshotHelperSessionLaunchArgs(18093)),
+    androidSnapshotHelperSessionLaunchArgs(18093).forwardTarget,
     `localabstract:${prefix[1]}18093`,
   );
   assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES, Number(cap[1]) * Number(cap[2]));

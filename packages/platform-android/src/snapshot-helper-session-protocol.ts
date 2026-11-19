@@ -42,31 +42,23 @@ export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
 // bytes, and the action and request id follow; SessionPeerPolicy.java owns the full derivation.
 export const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 513 * 1024;
 
-/** The abstract socket name a session helper binds for a host port. */
-export function androidSnapshotHelperSessionSocketName(port: number): string {
-  return `${ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX}${port}`;
-}
-
 /**
- * What this host launched one session with: the abstract socket name the helper was told to bind.
- * Readiness has to report the same name for the session to be this launch's session.
+ * What this host launched one session with: the abstract socket the helper was told to bind, named
+ * from the host's forward port. The name is a routing label, not a credential — the helper admits a
+ * connection on the forwarded peer's adbd uid — and readiness has to report it for the session to be
+ * this launch's session.
  */
 export type AndroidSnapshotHelperSessionLaunch = {
   socketName: string;
+  forwardTarget: `localabstract:${string}`;
 };
 
-/** The launch arguments for a persistent session, in the shape `buildAndroidSnapshotHelperArgs` takes. */
+/** The one socket name a session launch owns, in the shape `buildAndroidSnapshotHelperArgs` takes. */
 export function androidSnapshotHelperSessionLaunchArgs(
   port: number,
 ): AndroidSnapshotHelperSessionLaunch {
-  return { socketName: androidSnapshotHelperSessionSocketName(port) };
-}
-
-/** The device-side end of the session forward: the helper's abstract socket, not a device TCP port. */
-export function androidSnapshotHelperSessionForwardTarget(
-  launch: AndroidSnapshotHelperSessionLaunch,
-): `localabstract:${string}` {
-  return `localabstract:${launch.socketName}`;
+  const socketName = `${ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX}${port}`;
+  return { socketName, forwardTarget: `localabstract:${socketName}` };
 }
 const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
 

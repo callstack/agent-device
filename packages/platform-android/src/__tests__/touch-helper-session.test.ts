@@ -29,7 +29,6 @@ import {
   readAndroidTouchHelperViewportReading,
 } from '../touch-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
-import { ANDROID_SNAPSHOT_HELPER_SESSION_MODE } from '../snapshot-helper-types.ts';
 import {
   ANDROID_TOUCH_HELPER_MANIFEST as manifest,
   androidTouchHelperResultRecord as resultRecord,
@@ -81,7 +80,6 @@ test('touch helper does not run one-shot while the device still runs the helper'
   const failed = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
     deviceKey,
   });
   assert.equal(failed, undefined);
@@ -229,7 +227,6 @@ async function startFakeTouchHelperSession(
     await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
-      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey,
       ...helperIdentity,
     });
@@ -721,7 +718,6 @@ test('input actions reuse the live automation socket without adb input calls', a
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
-        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
         packageName: manifest.packageName,
         instrumentationRunner: manifest.instrumentationRunner,
@@ -772,7 +768,6 @@ test('a failed helper input is not resent through adb', async () => {
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
-        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
         packageName: manifest.packageName,
         instrumentationRunner: manifest.instrumentationRunner,
@@ -821,7 +816,6 @@ test('fresh helper focus answers app guards while system windows retain ANR diag
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
-        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
         packageName: manifest.packageName,
         instrumentationRunner: manifest.instrumentationRunner,

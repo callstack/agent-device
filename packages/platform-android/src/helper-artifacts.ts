@@ -35,12 +35,6 @@ export type AndroidSnapshotHelperManifest = {
   targetSdk?: number;
   outputFormat: 'uiautomator-xml';
   statusProtocol: 'android-snapshot-helper-v1';
-  /**
-   * The persistent-session transport this build implements, as declared by the artifact that ships
-   * it. Absent means the build predates authenticated sessions, and the host keeps it on the one-shot
-   * transport instead of asking it to start a session (#4519).
-   */
-  sessionMode?: 'authenticated-session-v1';
 };
 
 export type AndroidSnapshotHelperArtifact = {

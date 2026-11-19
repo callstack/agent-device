@@ -1,5 +1,4 @@
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-executor.ts';
-import type { AndroidSnapshotHelperManifest } from './helper-artifacts.ts';
 
 export type AndroidSnapshotHelperTransport = 'instrumentation' | 'persistent-session';
 export type AndroidSnapshotCaptureMode = 'interactive-windows' | 'active-window';
@@ -26,9 +25,9 @@ export const ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
 /**
  * The `mode` argument that starts a persistent session, and the only one the host ever sends for one.
- * A helper build that does not implement it rejects the launch instead of serving a session, which is
- * what keeps an unverified build off the session path (#4519). `SessionPeerPolicy.java` and the
- * packaged artifact manifest carry the same value.
+ * A helper build that does not implement it rejects the launch in `onStart`, before it binds
+ * anything, so no launch can put an unverified build in session service (#4519).
+ * `SessionPeerPolicy.java` carries the same value.
  */
 export const ANDROID_SNAPSHOT_HELPER_SESSION_MODE = 'authenticated-session-v1';
 /**
@@ -89,12 +88,6 @@ export type AndroidSnapshotHelperCaptureOptions = {
   helperSha256?: string;
   packageName?: string;
   instrumentationRunner?: string;
-  /**
-   * The persistent-session transport the helper artifact declares (`AndroidSnapshotHelperManifest.sessionMode`).
-   * Only an artifact that declares the authenticated mode may be started as a session; anything else
-   * is one-shot (#4519).
-   */
-  helperSessionMode?: AndroidSnapshotHelperManifest['sessionMode'];
   waitForIdleTimeoutMs?: number;
   waitForIdleQuietMs?: number;
   timeoutMs?: number;

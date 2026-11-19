@@ -81,7 +81,6 @@ async function helperNotCurrentError(): Promise<unknown> {
           targetSdk: 36,
           outputFormat: 'uiautomator-xml',
           statusProtocol: 'android-snapshot-helper-v1',
-          sessionMode: 'authenticated-session-v1',
         },
       },
       deviceKey: 'android:emulator-5554',

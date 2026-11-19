@@ -31,13 +31,11 @@ import {
 } from './snapshot-helper-capture.ts';
 import {
   allocateAndroidSnapshotHelperSessionPort,
-  androidSnapshotHelperSessionForwardTarget,
   androidSnapshotHelperSessionLaunchArgs,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
-import { androidSnapshotHelperSessionModeSupportsSession } from './snapshot-helper-artifact.ts';
 import {
   type AndroidSnapshotHelperProcessExit,
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
@@ -142,11 +140,6 @@ export async function acquireAndroidSnapshotHelperSession(
     return undefined;
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
-  // Capability comes from the artifact, never from the running helper: a build that does not declare
-  // the authenticated session mode is not asked to start one (#4519).
-  if (!androidSnapshotHelperSessionModeSupportsSession(options.helperSessionMode)) {
-    return undefined;
-  }
   const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(callerResolved);
   const build = {
     deviceKey,
@@ -335,14 +328,11 @@ async function startAndroidSnapshotHelperSession(params: {
   // The host names the abstract socket the helper binds, so the forward and the helper cannot end up
   // describing different sockets, and nothing is left for a helper to derive (#4519).
   const launch = androidSnapshotHelperSessionLaunchArgs(port);
-  await params.options.adb(
-    ['forward', `tcp:${port}`, androidSnapshotHelperSessionForwardTarget(launch)],
-    {
-      allowFailure: false,
-      timeoutMs: FORWARD_TIMEOUT_MS,
-      signal: params.options.signal,
-    },
-  );
+  await params.options.adb(['forward', `tcp:${port}`, launch.forwardTarget], {
+    allowFailure: false,
+    timeoutMs: FORWARD_TIMEOUT_MS,
+    signal: params.options.signal,
+  });
   const sessionArgs = buildAndroidSnapshotHelperArgs(
     { ...params.resolved, emitChunks: false },
     launch,

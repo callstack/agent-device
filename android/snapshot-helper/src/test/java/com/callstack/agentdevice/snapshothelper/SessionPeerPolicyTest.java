@@ -18,6 +18,7 @@ public final class SessionPeerPolicyTest {
     incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
+    eofBeforeTheNewlineIsAnIncompleteFrame();
     overLimitFrameIsDecidedFromRawBytesBeforeTheNewline();
     malformedUtf8AtTheCapIsRejectedNotDecoded();
     aCompleteFrameWithMalformedUtf8NeverReachesTheParser();
@@ -32,14 +33,18 @@ public final class SessionPeerPolicyTest {
   }
 
   private static void admitsTheAdbdUids() {
-    expectAdmitted(SessionPeerPolicy.PEER_UID_ROOT);
-    expectAdmitted(SessionPeerPolicy.PEER_UID_SHELL);
+    // adbd with `adb root`, and adbd in its default shell configuration.
+    for (int uid : new int[] {0, 2000}) {
+      if (!SessionPeerPolicy.isAdmittedPeer(uid)) {
+        throw new AssertionError("Expected uid " + uid + " to be admitted");
+      }
+    }
   }
 
   private static void rejectsNonAdbdUids() {
     int[] rejected = {1, 1000, 1001, 10_212, 10_999, -1};
     for (int uid : rejected) {
-      if (SessionPeerPolicy.admitPeer(uid) != SessionPeerPolicy.Admission.REJECTED_UNAUTHORIZED_PEER) {
+      if (SessionPeerPolicy.isAdmittedPeer(uid)) {
         throw new AssertionError("Expected uid " + uid + " to be rejected");
       }
     }
@@ -47,13 +52,14 @@ public final class SessionPeerPolicyTest {
 
   private static void commandCompletedAtDeadlineIsAccepted() throws Exception {
     long[] nowMs = {100};
-    ByteArrayInputStream input = new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        nowMs[0] = 110;
-        return super.read(data, offset, length);
-      }
-    };
+    ByteArrayInputStream input =
+        new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            nowMs[0] = 110;
+            return super.read(data, offset, length);
+          }
+        };
     String command = read(source(input), () -> nowMs[0], 110, 8);
     if (!"ab".equals(command)) {
       throw new AssertionError("Expected a complete command returned at the deadline");
@@ -62,13 +68,14 @@ public final class SessionPeerPolicyTest {
 
   private static void incompleteCommandAtDeadlineCannotStartAnotherRead() throws Exception {
     long[] nowMs = {100};
-    ByteArrayInputStream input = new ByteArrayInputStream("a\n".getBytes(StandardCharsets.UTF_8)) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        nowMs[0] = 110;
-        return super.read(data, offset, Math.min(1, length));
-      }
-    };
+    ByteArrayInputStream input =
+        new ByteArrayInputStream("a\n".getBytes(StandardCharsets.UTF_8)) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            nowMs[0] = 110;
+            return super.read(data, offset, Math.min(1, length));
+          }
+        };
     try {
       read(source(input), () -> nowMs[0], 110, 8);
       throw new AssertionError("Expected the deadline to stop an unfinished command");
@@ -78,13 +85,14 @@ public final class SessionPeerPolicyTest {
 
   private static void dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline() throws Exception {
     long[] nowMs = {100};
-    ByteArrayInputStream drip = new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        nowMs[0] += 4;
-        return super.read(data, offset, Math.min(1, length));
-      }
-    };
+    ByteArrayInputStream drip =
+        new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            nowMs[0] += 4;
+            return super.read(data, offset, Math.min(1, length));
+          }
+        };
     try {
       read(source(drip), () -> nowMs[0], 110, 8);
       throw new AssertionError("A command completed after its absolute deadline was accepted");
@@ -97,24 +105,29 @@ public final class SessionPeerPolicyTest {
       throw new AssertionError("Expected a newline after exactly maxBytes to be accepted");
     }
     // The cap is reached before the newline, so no decode of the capped prefix decides anything.
-    if (decideFixture("abcde\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected the reader to reject maxBytes + 1 raw bytes");
+    for (String overCap : new String[] {"abcde\n", "abcdefg\n"}) {
+      try {
+        readFixture(overCap, 4);
+        throw new AssertionError("Expected the reader to reject more than maxBytes raw bytes");
+      } catch (SessionPeerPolicy.CommandRejected expected) {
+      }
     }
-    if (decideFixture("abcdefg\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected a longer over-cap frame to be rejected too");
+    try {
+      readFixture("\n", 4);
+      throw new AssertionError("Expected an empty line to be rejected");
+    } catch (SessionPeerPolicy.CommandRejected expected) {
     }
-    if (decideFixture("\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
-      throw new AssertionError("Expected an empty line to be rejected as empty");
-    }
-    if (decideFixture("snapshot req-1\n", 64) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+    if (!"snapshot req-1".equals(readFixture("snapshot req-1\n", 64))) {
       throw new AssertionError("Expected a command at the limit to be accepted");
     }
     // Two '€' chars are two chars but six UTF-8 bytes: the cap counts the bytes.
-    if (decideFixture("€€\n", 6) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+    if (!"€€".equals(readFixture("€€\n", 6))) {
       throw new AssertionError("Expected six bytes at a limit of six to be accepted");
     }
-    if (decideFixture("€€\n", 5) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+    try {
+      readFixture("€€\n", 5);
       throw new AssertionError("Expected six bytes at a limit of five to be rejected");
+    } catch (SessionPeerPolicy.CommandRejected expected) {
     }
   }
 
@@ -126,18 +139,13 @@ public final class SessionPeerPolicyTest {
   private static void overLimitFrameIsDecidedFromRawBytesBeforeTheNewline() throws Exception {
     byte[] frame = new byte[5];
     Arrays.fill(frame, (byte) 'a');
-    SessionPeerPolicy.CommandFrame overLimit =
-        SessionPeerPolicy.readSessionCommand(
-            source(new ByteArrayInputStream(frame)), () -> 100, 110, 4);
-    if (overLimit.decision() != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected the raw byte count to decide an over-cap frame");
-    }
-    // The reader stopped as soon as the cap was crossed, without waiting for the newline, and keeps
+    // The reader stops as soon as the cap is crossed, without waiting for the newline, and keeps
     // nothing that could be decoded and dispatched.
     try {
-      overLimit.line();
-      throw new AssertionError("Expected an over-cap frame to carry nothing to decode");
-    } catch (IllegalStateException expected) {
+      SessionPeerPolicy.readSessionCommand(
+          source(new ByteArrayInputStream(frame)), () -> 100, 110, 4);
+      throw new AssertionError("Expected the raw byte count to decide an over-cap frame");
+    } catch (SessionPeerPolicy.CommandRejected expected) {
     }
   }
 
@@ -146,27 +154,23 @@ public final class SessionPeerPolicyTest {
     // '€' is three bytes; each broken sequence below is one byte that no platform decodes to a
     // whole character. Six raw bytes at a cap of five is over the cap whatever decoding does.
     byte[] frame = new byte[] {'a', 'b', (byte) 0xC3, (byte) 0x28, (byte) 0xA0, 0x00, '\n'};
-    SessionPeerPolicy.CommandSource input = source(new ByteArrayInputStream(frame));
-    SessionPeerPolicy.CommandFrame frameResult =
-        SessionPeerPolicy.readSessionCommand(input, () -> 100, 110, 5);
-    if (frameResult.decision() != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError(
-          "Expected a capped malformed frame to be over the limit, got " + frameResult.decision());
+    try {
+      SessionPeerPolicy.readSessionCommand(
+          source(new ByteArrayInputStream(frame)), () -> 100, 110, 5);
+      throw new AssertionError("Expected a capped malformed frame to be over the limit");
+    } catch (SessionPeerPolicy.CommandRejected expected) {
     }
   }
 
   /** A complete frame whose bytes are not UTF-8 fails closed instead of reaching the parser. */
   private static void aCompleteFrameWithMalformedUtf8NeverReachesTheParser() throws Exception {
     byte[] frame = new byte[] {'s', 'n', (byte) 0xC3, (byte) 0x28, '\n'};
-    SessionPeerPolicy.CommandFrame decoded =
-        SessionPeerPolicy.readSessionCommand(
-            source(new ByteArrayInputStream(frame)), () -> 100, 110, 64);
-    if (decoded.decision() != SessionPeerPolicy.LineDecision.ACCEPTED) {
-      throw new AssertionError("Expected a frame within the cap to be accepted for decoding");
-    }
     try {
-      decoded.line();
+      SessionPeerPolicy.readSessionCommand(
+          source(new ByteArrayInputStream(frame)), () -> 100, 110, 64);
       throw new AssertionError("Expected malformed bytes to be refused instead of replaced");
+    } catch (SessionPeerPolicy.CommandRejected unexpected) {
+      throw new AssertionError("Expected malformed bytes to fail as a decode error", unexpected);
     } catch (java.io.IOException expected) {
       // The connection closes without dispatch.
     }
@@ -183,8 +187,6 @@ public final class SessionPeerPolicyTest {
       }
     }
   }
-
-
 
   /** The largest fill frame over a slow remote adb link: 80 KiB/s, slower than 2 s allows. */
   private static void maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline() throws Exception {
@@ -211,15 +213,16 @@ public final class SessionPeerPolicyTest {
     Arrays.fill(chunk, (byte) 'A');
     chunk[2] = '\n';
     long[] nowMs = {0};
-    ByteArrayInputStream late = new ByteArrayInputStream(chunk) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        // The chunk lands 50 ms after the base deadline: inside a whole chunk's credit (125 ms),
-        // outside the credit of the two command bytes.
-        nowMs[0] = 150;
-        return super.read(data, offset, length);
-      }
-    };
+    ByteArrayInputStream late =
+        new ByteArrayInputStream(chunk) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            // The chunk lands 50 ms after the base deadline: inside a whole chunk's credit (125 ms),
+            // outside the credit of the two command bytes.
+            nowMs[0] = 150;
+            return super.read(data, offset, length);
+          }
+        };
     try {
       read(source(late), () -> nowMs[0], 100, 100_000);
       throw new AssertionError("Bytes after the newline extended the read deadline");
@@ -234,13 +237,14 @@ public final class SessionPeerPolicyTest {
    */
   private static void lateBytesEarnNoTimeBeforeTheExpiryCheck() throws Exception {
     long[] nowMs = {100};
-    ByteArrayInputStream late = new ByteArrayInputStream("snapshot req-1\n".getBytes(StandardCharsets.UTF_8)) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        nowMs[0] = 5_100;
-        return super.read(data, offset, length);
-      }
-    };
+    ByteArrayInputStream late =
+        new ByteArrayInputStream("snapshot req-1\n".getBytes(StandardCharsets.UTF_8)) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            nowMs[0] = 5_100;
+            return super.read(data, offset, length);
+          }
+        };
     try {
       read(source(late), () -> nowMs[0], 2_000, 4_096);
       throw new AssertionError("A late receive extended the read deadline");
@@ -255,34 +259,37 @@ public final class SessionPeerPolicyTest {
     Arrays.fill(frame, (byte) 'A');
     frame[frameBytes] = '\n';
     long[] nowMs = {0};
-    ByteArrayInputStream paced = new ByteArrayInputStream(frame) {
-      @Override
-      public int read(byte[] data, int offset, int length) {
-        nowMs[0] += msPerChunk;
-        return super.read(data, offset, Math.min(chunkBytes, length));
-      }
-    };
-    return read(source(paced), () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+    ByteArrayInputStream paced =
+        new ByteArrayInputStream(frame) {
+          @Override
+          public int read(byte[] data, int offset, int length) {
+            nowMs[0] += msPerChunk;
+            return super.read(data, offset, Math.min(chunkBytes, length));
+          }
+        };
+    return read(
+        source(paced), () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
   }
 
   /** A peer that sends nothing: one wait, for exactly what the deadline has left. */
   private static void silentPeerIsWaitedForOnlyUntilTheDeadline() throws Exception {
     long[] nowMs = {100};
     List<Long> waits = new ArrayList<>();
-    SessionPeerPolicy.CommandSource silent = new SessionPeerPolicy.CommandSource() {
-      @Override
-      public int receive(byte[] data, int offset, int length) {
-        return 0;
-      }
+    SessionPeerPolicy.CommandSource silent =
+        new SessionPeerPolicy.CommandSource() {
+          @Override
+          public int receive(byte[] data, int offset, int length) {
+            return 0;
+          }
 
-      @Override
-      public void awaitReadable(long deadlineAtMs) {
-        waits.add(deadlineAtMs - nowMs[0]);
-        nowMs[0] = deadlineAtMs;
-      }
-    };
+          @Override
+          public void awaitReadable(long deadlineAtMs) {
+            waits.add(deadlineAtMs - nowMs[0]);
+            nowMs[0] = deadlineAtMs;
+          }
+        };
     try {
-      readSession(silent, () -> nowMs[0], 2_100, 64);
+      SessionPeerPolicy.readSessionCommand(silent, () -> nowMs[0], 2_100, 64);
       throw new AssertionError("Expected a silent peer to expire");
     } catch (SocketTimeoutException expected) {
       if (!waits.equals(Arrays.asList(2_000L)) || nowMs[0] != 2_100) {
@@ -294,21 +301,22 @@ public final class SessionPeerPolicyTest {
   /** The reader is paused after a receive that found nothing, past the deadline: no wait may start. */
   private static void pauseBeforeTheWaitNeverPollsPastTheDeadline() throws Exception {
     long[] nowMs = {100};
-    SessionPeerPolicy.CommandSource paused = new SessionPeerPolicy.CommandSource() {
-      @Override
-      public int receive(byte[] data, int offset, int length) {
-        nowMs[0] = 4_100;
-        return 0;
-      }
+    SessionPeerPolicy.CommandSource paused =
+        new SessionPeerPolicy.CommandSource() {
+          @Override
+          public int receive(byte[] data, int offset, int length) {
+            nowMs[0] = 4_100;
+            return 0;
+          }
 
-      @Override
-      public void awaitReadable(long deadlineAtMs) {
-        throw new AssertionError(
-            "Waited until " + deadlineAtMs + " after the deadline, at " + nowMs[0]);
-      }
-    };
+          @Override
+          public void awaitReadable(long deadlineAtMs) {
+            throw new AssertionError(
+                "Waited until " + deadlineAtMs + " after the deadline, at " + nowMs[0]);
+          }
+        };
     try {
-      readSession(paused, () -> nowMs[0], 2_100, 64);
+      SessionPeerPolicy.readSessionCommand(paused, () -> nowMs[0], 2_100, 64);
       throw new AssertionError("Expected the used-up deadline to end the read");
     } catch (SocketTimeoutException expected) {
       // The read closed without waiting.
@@ -322,27 +330,31 @@ public final class SessionPeerPolicyTest {
   private static void waitTakesTheDeadlineNotAnEarlierDuration() throws Exception {
     long[] nowMs = {1_000};
     long[] askedToWaitUntil = {0};
-    SessionPeerPolicy.CommandSource pausing = new SessionPeerPolicy.CommandSource() {
-      @Override
-      public int receive(byte[] data, int offset, int length) {
-        return 0;
-      }
+    SessionPeerPolicy.CommandSource pausing =
+        new SessionPeerPolicy.CommandSource() {
+          @Override
+          public int receive(byte[] data, int offset, int length) {
+            return 0;
+          }
 
-      @Override
-      public void awaitReadable(long deadlineAtMs) throws java.io.IOException {
-        askedToWaitUntil[0] = deadlineAtMs;
-        // A pause before the poll would make a duration sampled earlier wait past the deadline.
-        nowMs[0] += 3_000;
-        long remainingMs = SessionPeerPolicy.remainingBeforeDeadline(() -> nowMs[0], deadlineAtMs);
-        throw new IllegalStateException("Expected the deadline to have expired, left " + remainingMs);
-      }
-    };
+          @Override
+          public void awaitReadable(long deadlineAtMs) throws java.io.IOException {
+            askedToWaitUntil[0] = deadlineAtMs;
+            // A pause before the poll would make a duration sampled earlier wait past the deadline.
+            nowMs[0] += 3_000;
+            long remainingMs =
+                SessionPeerPolicy.remainingBeforeDeadline(() -> nowMs[0], deadlineAtMs);
+            throw new IllegalStateException(
+                "Expected the deadline to have expired, left " + remainingMs);
+          }
+        };
     try {
-      readSession(pausing, () -> nowMs[0], 2_000, 64);
+      SessionPeerPolicy.readSessionCommand(pausing, () -> nowMs[0], 2_000, 64);
       throw new AssertionError("Expected the expired deadline to end the wait");
     } catch (SocketTimeoutException expected) {
       if (askedToWaitUntil[0] != 2_000) {
-        throw new AssertionError("Expected the wait to be given the deadline: " + askedToWaitUntil[0]);
+        throw new AssertionError(
+            "Expected the wait to be given the deadline: " + askedToWaitUntil[0]);
       }
     }
   }
@@ -368,30 +380,15 @@ public final class SessionPeerPolicyTest {
       long baseDeadlineAtMs,
       int maxBytes)
       throws Exception {
-    return readSession(source, clock, baseDeadlineAtMs, maxBytes).line();
-  }
-
-  private static SessionPeerPolicy.CommandFrame readSession(
-      SessionPeerPolicy.CommandSource source,
-      SessionPeerPolicy.MonotonicClock clock,
-      long baseDeadlineAtMs,
-      int maxBytes)
-      throws Exception {
     return SessionPeerPolicy.readSessionCommand(source, clock, baseDeadlineAtMs, maxBytes);
   }
 
   private static String readFixture(String input, int maxBytes) throws Exception {
-    return read(source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))), () -> 100, 110, maxBytes);
-  }
-
-  private static SessionPeerPolicy.LineDecision decideFixture(String input, int maxBytes)
-      throws Exception {
-    return readSession(
-            source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))),
-            () -> 100,
-            110,
-            maxBytes)
-        .decision();
+    return read(
+        source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))),
+        () -> 100,
+        110,
+        maxBytes);
   }
 
   private static void socketNameComesFromTheLaunchedSocketName() {
@@ -416,12 +413,6 @@ public final class SessionPeerPolicyTest {
     }
     if (!"authenticated-session-v1".equals(SessionPeerPolicy.AUTHENTICATED_SESSION_MODE)) {
       throw new AssertionError("Expected the activation mode the host launches with");
-    }
-  }
-
-  private static void expectAdmitted(int uid) {
-    if (SessionPeerPolicy.admitPeer(uid) != SessionPeerPolicy.Admission.ADMITTED) {
-      throw new AssertionError("Expected uid " + uid + " to be admitted");
     }
   }
 }

@@ -7,7 +7,6 @@ import android.system.OsConstants;
 import android.system.StructPollfd;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.net.SocketTimeoutException;
 
 /**
  * Nonblocking reads and sends on an accepted LocalSocket, with poll for readiness. API 21 and later.
@@ -67,12 +66,9 @@ final class LocalSocketSessionChannel
   }
 
   private void pollUntil(int events, long deadlineAtMs, int failures) throws IOException {
-    // Sample the clock here, not at the caller: the duration must be what the deadline has left
-    // when Os.poll starts, or a pause before this call would extend it.
-    long remainingMs = deadlineAtMs - clock.nowMs();
-    if (remainingMs <= 0) {
-      throw new SocketTimeoutException("session socket deadline exceeded");
-    }
+    // Measure here, not at the caller: the duration must be what the deadline has left when Os.poll
+    // starts, or a pause before this call would extend it.
+    long remainingMs = SessionPeerPolicy.remainingBeforeDeadline(clock, deadlineAtMs);
     StructPollfd pollfd = new StructPollfd();
     pollfd.fd = fd;
     pollfd.events = (short) events;

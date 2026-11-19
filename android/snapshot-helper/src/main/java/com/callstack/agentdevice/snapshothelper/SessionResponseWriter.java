@@ -44,10 +44,9 @@ final class SessionResponseWriter {
   }
 
   /**
-   * Writes exactly one frame. Command execution and frame encoding can turn into the error frame.
-   * The write is outside that boundary: a failed write reaches the socket owner, which closes the
-   * connection without another frame. An error frame that cannot be encoded closes the connection
-   * the same way.
+   * Writes exactly one frame. Command execution and frame encoding can turn into the error frame;
+   * the write is outside that boundary, so a failed write reaches the socket owner, which closes the
+   * connection without another frame.
    */
   static void respondOnce(FrameSink sink, FrameSource source, FailureFrame failure)
       throws IOException {
@@ -84,8 +83,8 @@ final class SessionResponseWriter {
 
   /**
    * A minimal error frame built from fresh headers, so it never carries a success payload such as
-   * screenshot bytes. `errorType` is the class the helper threw, which the host classifies on. A
-   * null message repeats it; an empty message stays empty. Extra headers come in key, value pairs.
+   * screenshot bytes. `errorType` is the class the helper threw, which the host classifies on; a null
+   * message repeats it. Extra headers come in key, value pairs.
    */
   static Frame errorFrame(String requestId, Throwable error, String... extraHeaders) {
     StringBuilder head = protocolHeaders(requestId);
