@@ -65,14 +65,20 @@ extension RunnerTests {
     }
     // The edge swipe is not verified: on a root screen it changes nothing and still reports success.
     let surface = try resolvedTouchReferenceFrame(app: app)
-    _ = try dragAt(
-      app: app,
-      x: surface.minX + 1,
-      y: surface.midY,
-      x2: surface.minX + surface.width * 0.8,
-      y2: surface.midY,
-      holdDuration: coordinateDragHoldDuration()
-    )
+    var dragged: Result<RunnerInteractionOutcome, Error> = .success(.performed)
+    withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
+      dragged = Result {
+        try dragAt(
+          app: app,
+          x: surface.minX + 1,
+          y: surface.midY,
+          x2: surface.minX + surface.width * 0.8,
+          y2: surface.midY,
+          holdDuration: coordinateDragHoldDuration()
+        )
+      }
+    }
+    _ = try dragged.get()
     return .performed
   }
 
@@ -98,14 +104,22 @@ extension RunnerTests {
       let edgeX = first.point.x < Double(resolved.frame.midX)
         ? Double(resolved.frame.minX) + 1
         : Double(resolved.frame.maxX) - 1
-      return try dragAt(
-        app: app,
-        x: edgeX,
-        y: first.point.y,
-        x2: last.point.x,
-        y2: last.point.y,
-        holdDuration: coordinateDragHoldDuration()
-      )
+      // The coordinate drag would otherwise wait for the app to idle first, which an animating
+      // screen never does inside the command's watchdog.
+      var outcome: Result<RunnerInteractionOutcome, Error> = .success(.performed)
+      withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
+        outcome = Result {
+          try dragAt(
+            app: app,
+            x: edgeX,
+            y: first.point.y,
+            x2: last.point.x,
+            y2: last.point.y,
+            holdDuration: coordinateDragHoldDuration()
+          )
+        }
+      }
+      return try outcome.get()
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
