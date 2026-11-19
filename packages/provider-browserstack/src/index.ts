@@ -7,12 +7,6 @@ export type BrowserStackOptions = {
   credentials?: { username?: string; accessKey?: string };
 };
 
-// The connection and WebDriver code load when they are first used, so importing the package for its
-// declaration stays small.
-async function loadConnection(host: ProviderPluginHost) {
-  return (await import('./connection.ts')).createBrowserStackConnection(host);
-}
-
 /**
  * BrowserStack as a plugin. The credentials come from `options.credentials`, with the
  * `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` environment variables as the fallback for
@@ -44,6 +38,10 @@ function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlu
     ...(credentials?.username !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.username]),
     ...(credentials?.accessKey !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]),
   ];
+  // The connection code loads when `connect` runs it, so importing the package for its declaration
+  // stays small.
+  const loadBrowserStackConnection = async (host: ProviderPluginHost) =>
+    (await import('./connection.ts')).createBrowserStackConnection(withCredentials(host));
   return {
     apiVersion: 3,
     contributes: [
@@ -54,9 +52,15 @@ function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlu
         connection: {
           capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
           resolve: async (context) =>
-            (await loadConnection(withCredentials(context.host))).resolve(context),
+            (await import('@agent-device/provider-webdriver/plugin')).resolveHostedConnection(
+              context,
+              loadBrowserStackConnection,
+            ),
           verify: async (context) =>
-            await (await loadConnection(withCredentials(context.host))).verify(context),
+            (await import('@agent-device/provider-webdriver/plugin')).verifyHostedConnection(
+              context,
+              loadBrowserStackConnection,
+            ),
         },
         setup: async (host) => ({
           webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(

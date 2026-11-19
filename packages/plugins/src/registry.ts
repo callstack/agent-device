@@ -212,22 +212,7 @@ export async function startProviderRegistry(
   policy: PluginRegistryPolicy,
   scope: 'all' | 'replay-backends' = 'all',
 ): Promise<ProviderRegistry> {
-  for (const slot of resolved.slots) {
-    for (const claim of slot.claims) {
-      if (claim.failure !== undefined) continue;
-      try {
-        if (claim.space === 'provider') {
-          if (scope === 'all') await setUpProviderClaim(claim, host, policy);
-        } else {
-          await setUpReplayClaim(claim);
-        }
-      } catch (error) {
-        claim.failure = asPluginFailure(error, 'plugin_setup_failed');
-        claim.registration = undefined;
-        claim.replaySetup = undefined;
-      }
-    }
-  }
+  await setUpClaims(resolved.slots, host, policy, scope);
   const registrations = resolved.slots.flatMap(({ claims }) =>
     claims.flatMap(({ registration }) => (registration ? [registration] : [])),
   );
@@ -264,22 +249,7 @@ export async function startProviderRegistry(
         packageName,
         policy.assertReplaySelectionCurrent,
       );
-      if (claim.failure !== undefined) throw replayClaimError(claim);
-      const execution = (claim.replaySetup as ReplayExecutionSetup | undefined)?.execution;
-      if (!execution) throw invalidPlugin('Native replay plugin must provide execution.create()');
-      return await (claim.executionLoading ??= Promise.resolve().then(async () => {
-        try {
-          const runtime = validateReplayExecution(await execution.create());
-          claim.replayFailure = undefined;
-          refreshInventory();
-          return runtime;
-        } catch (error) {
-          claim.executionLoading = undefined;
-          claim.replayFailure = asPluginFailure(error, 'plugin_load_failed');
-          refreshInventory();
-          throw replayClaimError(claim);
-        }
-      }));
+      return await resolveRegisteredReplayExecution(claim, refreshInventory);
     },
     close: once(async () => {
       closed = true;
@@ -394,6 +364,43 @@ function assertDeclaredClaims(candidate: PluginCandidate, plugin: AgentDevicePlu
   }
 }
 
+/**
+ * Sets up every claim of every slot that has not already failed, in candidate order. The provider
+ * path sets up provider claims only; the replay path sets up replay claims only.
+ */
+async function setUpClaims(
+  slots: readonly Slot[],
+  host: HostEnvironment,
+  policy: PluginRegistryPolicy,
+  scope: 'all' | 'replay-backends',
+): Promise<void> {
+  for (const slot of slots) {
+    for (const claim of slot.claims) {
+      if (claim.failure !== undefined) continue;
+      try {
+        await setUpClaim(claim, host, policy, scope);
+      } catch (error) {
+        claim.failure = asPluginFailure(error, 'plugin_setup_failed');
+        claim.registration = undefined;
+        claim.replaySetup = undefined;
+      }
+    }
+  }
+}
+
+async function setUpClaim(
+  claim: Claim,
+  host: HostEnvironment,
+  policy: PluginRegistryPolicy,
+  scope: 'all' | 'replay-backends',
+): Promise<void> {
+  if (claim.space !== 'provider') {
+    await setUpReplayClaim(claim);
+    return;
+  }
+  if (scope === 'all') await setUpProviderClaim(claim, host, policy);
+}
+
 async function setUpReplayClaim(claim: Claim): Promise<void> {
   const contribution = claim.contribution;
   if (contribution.kind === 'provider') return;
@@ -433,6 +440,52 @@ async function resolveRegisteredReplayBackend(
   }));
 }
 
+async function resolveRegisteredReplayExecution(
+  claim: Claim,
+  refreshInventory: () => void,
+): Promise<ReplayExecution> {
+  if (claim.failure !== undefined) throw replayClaimError(claim);
+  const execution = (claim.replaySetup as ReplayExecutionSetup | undefined)?.execution;
+  if (!execution) throw invalidPlugin('Native replay plugin must provide execution.create()');
+  return await (claim.executionLoading ??= Promise.resolve().then(async () => {
+    try {
+      const runtime = validateReplayExecution(await execution.create());
+      claim.replayFailure = undefined;
+      refreshInventory();
+      return runtime;
+    } catch (error) {
+      claim.executionLoading = undefined;
+      claim.replayFailure = asPluginFailure(error, 'plugin_load_failed');
+      refreshInventory();
+      throw replayClaimError(claim);
+    }
+  }));
+}
+
+/**
+ * A selected package that failed before it could claim still answers for its own name. The first
+ * candidate to name a claim owns what a resolution surfaces.
+ */
+function failedLoadClaimFor(slot: Slot, space: ClaimSpace, id: string): Claim | undefined {
+  if (slot.claims.length > 0 || slot.failure === undefined || slot.backend !== id) return undefined;
+  return {
+    slot,
+    space,
+    key: id,
+    contribution: undefined as unknown as Contribution,
+    failure: slot.failure,
+  };
+}
+
+/** The store selection owns a store-sourced slot's claim, whatever its outcome. */
+function assertStoreSelectionCurrent(
+  slot: Slot,
+  assertSelectionCurrent: ((packageName: string) => void) | undefined,
+): void {
+  if (slot.candidate.source !== 'store' || slot.candidate.package === undefined) return;
+  assertSelectionCurrent?.(slot.candidate.package);
+}
+
 function requireReplayClaim(
   resolved: ResolvedProviderPlugins,
   space: ClaimSpace,
@@ -445,39 +498,30 @@ function requireReplayClaim(
   for (const slot of resolved.slots) {
     const claim = slot.claims.find((claim) => claim.space === space && claim.key === id);
     if (claim) {
-      if (slot.candidate.source === 'store' && slot.candidate.package)
-        assertSelectionCurrent?.(slot.candidate.package);
+      assertStoreSelectionCurrent(slot, assertSelectionCurrent);
       return claim;
     }
-    if (slot.claims.length === 0 && slot.failure !== undefined && slot.backend === id) {
-      if (slot.candidate.source === 'store' && slot.candidate.package)
-        assertSelectionCurrent?.(slot.candidate.package);
-      return {
-        slot,
-        space,
-        key: id,
-        contribution: undefined as unknown as Contribution,
-        failure: slot.failure,
-      } satisfies Claim;
+    const failedLoad = failedLoadClaimFor(slot, space, id);
+    if (failedLoad) {
+      assertStoreSelectionCurrent(slot, assertSelectionCurrent);
+      return failedLoad;
     }
   }
-  // A selected package that failed before it could claim still answers for its own name.
-  const failed = resolved.slots.find(
+  const failedSlot = resolved.slots.find(
     (slot) =>
       packageName !== undefined &&
       slot.candidate.package === packageName &&
       slot.claims.length === 0 &&
       slot.failure !== undefined,
   );
-  if (failed) {
-    if (failed.candidate.source === 'store' && failed.candidate.package)
-      assertSelectionCurrent?.(failed.candidate.package);
+  if (failedSlot) {
+    assertStoreSelectionCurrent(failedSlot, assertSelectionCurrent);
     return {
-      slot: failed,
+      slot: failedSlot,
       space,
       key: id,
       contribution: undefined as unknown as Contribution,
-      failure: failed.failure,
+      failure: failedSlot.failure,
     } satisfies Claim;
   }
   if (packageName) assertSelectionCurrent?.(packageName);

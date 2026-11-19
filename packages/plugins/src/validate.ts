@@ -12,7 +12,6 @@ import {
   PLUGIN_API_VERSION,
   ROUTING_PROVIDER_IDENTITIES,
   type AgentDevicePlugin,
-  type Contribution,
   type ProviderContribution,
 } from './contract.ts';
 
@@ -40,7 +39,7 @@ export function validateAgentDevicePlugin(value: unknown): AgentDevicePlugin {
 }
 
 /** A factory result on an older contract gets the typed incompatibility, without a shim. */
-export function incompatiblePluginApi(declared: unknown): AppError {
+function incompatiblePluginApi(declared: unknown): AppError {
   return new AppError('INVALID_ARGS', 'Plugin does not declare a compatible contract version', {
     reason: 'incompatible-plugin-api',
     apiVersion: PLUGIN_API_VERSION,
@@ -74,11 +73,6 @@ export function claimKeyOfContribution(value: unknown): string {
     default:
       throw invalidPlugin(`Unknown contribution kind: ${String(value.kind)}`);
   }
-}
-
-/** The claim keys a validated declaration expands into, in declaration order. */
-export function claimKeysOf(plugin: AgentDevicePlugin): string[] {
-  return plugin.contributes.map((contribution) => claimKeyOfContribution(contribution));
 }
 
 /** The `provider` contribution of a validated declaration; the registry claims it in the provider space. */
@@ -259,5 +253,3 @@ export function validateReplayBackend(id: string, value: unknown): ReplayBackend
   }
   return value as ReplayBackend;
 }
-
-export type { Contribution };

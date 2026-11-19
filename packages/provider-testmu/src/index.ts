@@ -5,12 +5,6 @@ export type TestmuOptions = {
   credentials?: { username: string; accessKey: string };
 };
 
-// The connection and WebDriver code load when they are first used, so importing the package for its
-// declaration stays small.
-async function loadConnection(host: ProviderPluginHost) {
-  return (await import('./connection.ts')).createTestMuConnection(host);
-}
-
 /**
  * TestMu AI as a plugin. The credentials come from `options.credentials`, with the
  * `LT_USERNAME` and `LT_ACCESS_KEY` environment variables as the fallback for each key the options
@@ -37,6 +31,10 @@ function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
     ...(credentials?.username ? [] : ['LT_USERNAME']),
     ...(credentials?.accessKey ? [] : ['LT_ACCESS_KEY']),
   ];
+  // The connection code loads when `connect` runs it, so importing the package for its declaration
+  // stays small.
+  const loadTestMuConnection = async (host: ProviderPluginHost) =>
+    (await import('./connection.ts')).createTestMuConnection(withCredentials(host));
   return {
     apiVersion: 3,
     contributes: [
@@ -55,9 +53,15 @@ function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
             usesCloudWebDriverLease: true,
           },
           resolve: async (context) =>
-            (await loadConnection(withCredentials(context.host))).resolve(context),
+            (await import('@agent-device/provider-webdriver/plugin')).resolveHostedConnection(
+              context,
+              loadTestMuConnection,
+            ),
           verify: async (context) =>
-            await (await loadConnection(withCredentials(context.host))).verify(context),
+            (await import('@agent-device/provider-webdriver/plugin')).verifyHostedConnection(
+              context,
+              loadTestMuConnection,
+            ),
         },
         setup: async (host) => ({
           webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(

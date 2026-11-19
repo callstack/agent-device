@@ -20,60 +20,69 @@ export function isProviderId(value: unknown): value is string {
 export function readAgentDeviceClaims(manifest: Record<string, unknown>): readonly string[] {
   const field = manifest['agent-device'];
   if (!isRecord(field) || field.apiVersion !== PLUGIN_API_VERSION) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Plugin package does not declare a compatible contract version',
-      {
-        reason: 'incompatible-plugin-api',
-        apiVersion: PLUGIN_API_VERSION,
-        ...(isRecord(field) && field.apiVersion !== undefined
-          ? { declaredApiVersion: field.apiVersion }
-          : {}),
-        hint: `Install a plugin release supporting plugin contract apiVersion ${PLUGIN_API_VERSION}.`,
-      },
-    );
+    throw incompatiblePackageApi(field);
   }
   const claims: string[] = [];
-  if (field.provider !== undefined) {
-    if (!isProviderId(field.provider)) {
-      throw new AppError('INVALID_ARGS', 'Plugin metadata provider must be a lowercase id', {
-        reason: 'invalid_plugin',
-      });
-    }
-    if (ROUTING_PROVIDER_IDENTITIES.includes(field.provider)) {
-      throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${field.provider}`, {
-        reason: 'reserved_provider',
-        provider: field.provider,
-      });
-    }
-    claims.push(`provider:${field.provider}`);
-  }
-  if (field.replayBackend !== undefined) {
-    if (!isProviderId(field.replayBackend)) {
-      throw new AppError('INVALID_ARGS', 'Plugin metadata replayBackend must be a lowercase id', {
-        reason: 'invalid_plugin',
-      });
-    }
-    if (field.replayBackend === NATIVE_REPLAY_BACKEND) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Replay backend id is reserved for native execution: ${NATIVE_REPLAY_BACKEND}`,
-        { reason: 'reserved_replay_backend', backend: NATIVE_REPLAY_BACKEND },
-      );
-    }
-    claims.push(`replay-backend:${field.replayBackend}`);
-  }
-  if (field.replayExecution !== undefined) {
-    if (field.replayExecution !== true && field.replayExecution !== NATIVE_REPLAY_BACKEND) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Plugin metadata replayExecution must be true or "${NATIVE_REPLAY_BACKEND}"`,
-        { reason: 'invalid_plugin' },
-      );
-    }
-    claims.push(`replay-execution:${NATIVE_REPLAY_BACKEND}`);
-  }
+  if (field.provider !== undefined) claims.push(providerClaim(field.provider));
+  if (field.replayBackend !== undefined) claims.push(replayBackendClaim(field.replayBackend));
+  if (field.replayExecution !== undefined) claims.push(replayExecutionClaim(field.replayExecution));
   return claims;
+}
+
+function incompatiblePackageApi(field: unknown): AppError {
+  const declared = isRecord(field) ? field.apiVersion : undefined;
+  return new AppError(
+    'INVALID_ARGS',
+    'Plugin package does not declare a compatible contract version',
+    {
+      reason: 'incompatible-plugin-api',
+      apiVersion: PLUGIN_API_VERSION,
+      ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
+      hint: `Install a plugin release supporting plugin contract apiVersion ${PLUGIN_API_VERSION}.`,
+    },
+  );
+}
+
+function providerClaim(provider: unknown): string {
+  if (!isProviderId(provider)) {
+    throw new AppError('INVALID_ARGS', 'Plugin metadata provider must be a lowercase id', {
+      reason: 'invalid_plugin',
+    });
+  }
+  if (ROUTING_PROVIDER_IDENTITIES.includes(provider)) {
+    throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${provider}`, {
+      reason: 'reserved_provider',
+      provider,
+    });
+  }
+  return `provider:${provider}`;
+}
+
+function replayBackendClaim(backend: unknown): string {
+  if (!isProviderId(backend)) {
+    throw new AppError('INVALID_ARGS', 'Plugin metadata replayBackend must be a lowercase id', {
+      reason: 'invalid_plugin',
+    });
+  }
+  if (backend === NATIVE_REPLAY_BACKEND) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Replay backend id is reserved for native execution: ${NATIVE_REPLAY_BACKEND}`,
+      { reason: 'reserved_replay_backend', backend: NATIVE_REPLAY_BACKEND },
+    );
+  }
+  return `replay-backend:${backend}`;
+}
+
+function replayExecutionClaim(replayExecution: unknown): string {
+  if (replayExecution !== true && replayExecution !== NATIVE_REPLAY_BACKEND) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Plugin metadata replayExecution must be true or "${NATIVE_REPLAY_BACKEND}"`,
+      { reason: 'invalid_plugin' },
+    );
+  }
+  return `replay-execution:${NATIVE_REPLAY_BACKEND}`;
 }
 
 /**
@@ -97,8 +106,8 @@ export function assertNodeFloor(manifest: Record<string, unknown>): void {
 
 type Version = readonly [number, number, number];
 
-/** The lowest version a semver range can admit, as `nodeRangeFloor` computes it. */
-export function nodeRangeFloor(range: string): string | undefined {
+/** The lowest version a semver range can admit, as `assertNodeFloor` reads it. */
+function nodeRangeFloor(range: string): string | undefined {
   let lowest: Version | undefined;
   for (const branch of range.split('||')) {
     let branchFloor: Version | undefined;
