@@ -579,7 +579,7 @@ extension RunnerTests {
           error: ErrorPayload(
             code: RunnerWireErrorCode.hardwareControlUnavailable,
             message: "actionButton requires a device model with an Action Button",
-            hint: "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
+            hint: Self.actionButtonUnavailableHint
           )
         )
       }

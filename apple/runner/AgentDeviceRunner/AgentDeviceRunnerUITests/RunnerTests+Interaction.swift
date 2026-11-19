@@ -243,6 +243,12 @@ extension RunnerTests {
 #endif
   }
 
+#if os(watchOS)
+  static let actionButtonUnavailableHint = "The Action Button is on Apple Watch Ultra. Open an Apple Watch Ultra simulator."
+#else
+  static let actionButtonUnavailableHint = "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
+#endif
+
   /// Presses the iPhone Action Button, returning false when this device cannot express the press.
   ///
   /// `XCUIDevice.press(_:)` has no hold-duration overload, so a single press is the whole gesture
